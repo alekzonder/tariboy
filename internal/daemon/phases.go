@@ -46,6 +46,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/telegramplugin"
 	"github.com/alekzonder/tariboy/internal/telemetry"
+	"github.com/alekzonder/tariboy/internal/tidy"
 	"github.com/alekzonder/tariboy/internal/userpath"
 	"github.com/alekzonder/tariboy/internal/version"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
@@ -197,7 +198,7 @@ func openStore(ctx context.Context, proc *process, stack *shutdownStack) (*coreP
 		// ctx is already canceled when the stack runs.
 		fctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = tel.Shutdown(fctx)
+		tidy.Log("best effort: tel.Shutdown", tel.Shutdown(fctx))
 	})
 	metrics, err := telemetry.NewMetrics(otel.Meter("tariboy"))
 	if err != nil {
@@ -352,7 +353,7 @@ func buildProxy(ctx context.Context, o Options, proc *process, c *coreParts) (*p
 	})
 	// Cache reads are local and strictly size-bounded. A rejected cache is
 	// diagnostic-only: fallback/manual pricing and proxy startup remain live.
-	_ = pricingCatalog.LoadCache(ctx)
+	tidy.Log("best effort: pricingCatalog.LoadCache", pricingCatalog.LoadCache(ctx))
 	router, err := aiproxy.LoadRouter(st, os.Getenv)
 	if err != nil {
 		return nil, fmt.Errorf("load router: %w", err)
@@ -360,7 +361,7 @@ func buildProxy(ctx context.Context, o Options, proc *process, c *coreParts) (*p
 	aiStore := aiproxy.NewStore(st, time.Now)
 	ingester := aiproxy.NewIngester(aiStore, log)
 	budgetCache := aiproxy.NewBudgetCache(aiStore, time.Now)
-	_ = budgetCache.Refresh()
+	tidy.Log("best effort: budgetCache.Refresh", budgetCache.Refresh())
 	if o.wireHook != nil {
 		o.wireHook(ingester, aiStore)
 	}
@@ -676,7 +677,7 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 	})
 	// Register the observable gauges exactly once (spec §14): bus queue depth,
 	// healthy plugins, active agent loops. No-op instruments when OTel is off.
-	_ = c.metrics.RegisterGauges(telemetry.GaugeSource{
+	_ = c.metrics.RegisterGauges(telemetry.GaugeSource{ // gauges are optional telemetry; registration failure must not stop the daemon
 		QueueDepth: func(context.Context) int64 {
 			n, _ := c.bus.PendingTotal()
 			return int64(n)
@@ -833,7 +834,7 @@ func serve(ctx context.Context, o Options, proc *process, c *coreParts, tk *task
 		// ctx is already canceled when the stack runs.
 		shctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = px.proxy.Shutdown(shctx)
+		tidy.Log("best effort: px.proxy.Shutdown", px.proxy.Shutdown(shctx))
 		proxyServe.Wait()
 	})
 

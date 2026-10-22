@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 const (
@@ -167,18 +169,26 @@ func (c *Catalog) Refresh(ctx context.Context) error {
 	return nil
 }
 
+// refreshLogged runs Refresh in the background loop, where nobody can act on the
+// error. Refresh already emits the diagnostic event; this adds the log line.
+func (c *Catalog) refreshLogged(ctx context.Context) {
+	if err := c.Refresh(ctx); err != nil {
+		slog.Warn("pricing catalog refresh failed", "err", err)
+	}
+}
+
 // Run refreshes once when the cache is absent or stale, then checks every day
 // until daemon cancellation.
 func (c *Catalog) Run(ctx context.Context) {
 	if c.cacheStale() {
-		_ = c.Refresh(ctx)
+		c.refreshLogged(ctx)
 	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-c.after(RefreshInterval):
-			_ = c.Refresh(ctx)
+			c.refreshLogged(ctx)
 		}
 	}
 }
@@ -256,8 +266,8 @@ func writeAtomicCache(path string, data []byte) error {
 	}
 	tmpName := tmp.Name()
 	cleanup := func() {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
+		tidy.Close(tmp)
+		tidy.Remove(tmpName)
 	}
 	if err := tmp.Chmod(0o600); err != nil {
 		cleanup()
@@ -272,11 +282,11 @@ func writeAtomicCache(path string, data []byte) error {
 		return fmt.Errorf("sync LiteLLM pricing cache temporary file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
+		tidy.Remove(tmpName)
 		return fmt.Errorf("close LiteLLM pricing cache temporary file: %w", err)
 	}
 	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
+		tidy.Remove(tmpName)
 		return fmt.Errorf("publish LiteLLM pricing cache: %w", err)
 	}
 	return nil

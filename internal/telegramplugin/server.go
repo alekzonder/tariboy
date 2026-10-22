@@ -255,5 +255,5 @@ func int64Value(value any) (int64, error) {
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	_ = json.NewEncoder(w).Encode(value) // headers are sent; a write error means the client went away
 }

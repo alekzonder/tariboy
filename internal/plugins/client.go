@@ -149,7 +149,7 @@ func (c *Client) doJSON(req *http.Request) (map[string]any, error) {
 	raw, _ := io.ReadAll(resp.Body)
 	var out map[string]any
 	if len(raw) > 0 {
-		_ = json.Unmarshal(raw, &out)
+		_ = json.Unmarshal(raw, &out) // best effort: keep the zero value of an unparsable error body
 	}
 	if resp.StatusCode/100 != 2 {
 		code := ""

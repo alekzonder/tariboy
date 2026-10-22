@@ -264,7 +264,7 @@ func runHelpJSON(ctx context.Context, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	_ = ctx
+	_ = ctx // ctx is accepted for the command signature; this command needs none
 	tree := reg.Tree()
 	entries := taskHelpEntries(reg)
 	for _, command := range reg.Commands() {

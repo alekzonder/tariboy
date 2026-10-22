@@ -25,6 +25,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 const (
@@ -318,10 +319,10 @@ func readAllowedSourceWithHook(
 		}
 		openedParentInfo, err := child.Stat(".")
 		if err != nil || !os.SameFile(parentInfo, openedParentInfo) {
-			_ = child.Close()
+			tidy.Close(child)
 			return nil, "not_regular", nil
 		}
-		_ = root.Close()
+		tidy.Close(root)
 		root = child
 		current = filepath.Join(current, part)
 		if afterParent != nil {
@@ -407,11 +408,11 @@ func (a preparedArchive) WriteZIP(output io.Writer) error {
 		header.Modified = time.Unix(0, 0).UTC()
 		file, err := writer.CreateHeader(header)
 		if err != nil {
-			_ = writer.Close()
+			tidy.Close(writer)
 			return err
 		}
 		if _, err := file.Write(item.Body); err != nil {
-			_ = writer.Close()
+			tidy.Close(writer)
 			return err
 		}
 	}

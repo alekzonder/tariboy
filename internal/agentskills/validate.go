@@ -15,6 +15,7 @@ import (
 	"syscall"
 
 	"github.com/alekzonder/tariboy/internal/imagefile"
+	"github.com/alekzonder/tariboy/internal/tidy"
 	"golang.org/x/sys/unix"
 )
 
@@ -67,7 +68,7 @@ func readRegular(path string, before os.FileInfo) ([]byte, os.FileInfo, error) {
 	}
 	f := os.NewFile(uintptr(fd), path)
 	if f == nil {
-		_ = syscall.Close(fd)
+		tidy.Log("best effort: syscall.Close", syscall.Close(fd))
 		return nil, nil, errors.New("open regular skill file")
 	}
 	defer f.Close()
@@ -99,7 +100,7 @@ func openSkillMember(parent *os.File, name, displayPath string) (*os.File, error
 	}
 	f := os.NewFile(uintptr(fd), displayPath)
 	if f == nil {
-		_ = syscall.Close(fd)
+		tidy.Log("best effort: syscall.Close", syscall.Close(fd))
 		return nil, errors.New("open skill member")
 	}
 	return f, nil
@@ -131,7 +132,7 @@ func openPinnedSkillRoot(root string) (*os.File, error) {
 		}
 		next := os.NewFile(uintptr(fd), walked)
 		if next == nil {
-			_ = unix.Close(fd)
+			tidy.Log("best effort: unix.Close", unix.Close(fd))
 			current.Close()
 			return nil, errors.New("open skill source component")
 		}

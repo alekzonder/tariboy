@@ -5,6 +5,8 @@
 package telemetry
 
 import (
+	"github.com/alekzonder/tariboy/internal/tidy"
+
 	"context"
 	"log/slog"
 	"os"
@@ -116,7 +118,7 @@ func Setup(ctx context.Context, cfg Config, log *slog.Logger) (*Providers, error
 		otlpmetrichttp.WithEndpoint(cfg.Endpoint), otlpmetrichttp.WithInsecure())
 	restoreEnv()
 	if err != nil {
-		_ = tp.Shutdown(ctx)
+		tidy.Log("best effort: tp.Shutdown", tp.Shutdown(ctx))
 		return nil, err
 	}
 	mp := sdkmetric.NewMeterProvider(

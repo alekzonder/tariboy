@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 type OperationStep struct {
@@ -52,7 +53,7 @@ func (s Service) TouchLease(importID string) error {
 
 func (s Service) RemoveLease(importID string) {
 	if path, err := s.leasePath(importID); err == nil {
-		_ = os.Remove(path)
+		tidy.Remove(path)
 	}
 }
 

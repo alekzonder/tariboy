@@ -22,6 +22,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/logrotate"
 	"github.com/alekzonder/tariboy/internal/paths"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // LogMaxBytes is the size from which a new daemon start moves tariboyd.log to
@@ -150,7 +151,7 @@ func GetStatus(cfg Config) StatusInfo {
 		Pid     int    `json:"pid"`
 		Version string `json:"version"`
 	}
-	_ = json.Unmarshal(raw, &body)
+	_ = json.Unmarshal(raw, &body) // best effort: an unparsable error body falls back to the HTTP status
 	si.Pid, si.Version = body.Pid, body.Version
 	return si
 }
@@ -189,7 +190,7 @@ func Down(ctx context.Context, cfg Config, out io.Writer) error {
 	deadline := time.Now().Add(cfg.ReadyTimeout)
 	for syscall.Kill(pid, 0) == nil {
 		if time.Now().After(deadline) {
-			_ = syscall.Kill(pid, syscall.SIGKILL)
+			tidy.Log("best effort: syscall.Kill", syscall.Kill(pid, syscall.SIGKILL))
 			break
 		}
 		select {

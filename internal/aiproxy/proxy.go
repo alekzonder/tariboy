@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // Exchange carries one request through the middleware chain.
@@ -278,7 +279,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ex.Provider = providerFor(r.URL.Path)
 	if ex.Provider != "cursor" {
 		body, err := io.ReadAll(io.LimitReader(r.Body, 32<<20))
-		_ = r.Body.Close()
+		tidy.Close(r.Body)
 		if err != nil {
 			ex.Status = "upstream_error"
 			w.Header().Set("Content-Type", "application/json")
@@ -289,7 +290,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		ex.ReqBody = body
 	}
-	_ = p.chain(ex)
+	_ = p.chain(ex) // the chain writes its own error response to the client
 	ex.LatencyMs = int(p.cfg.Clock().Sub(ex.Start).Milliseconds())
 }
 
@@ -503,7 +504,13 @@ func (p *Proxy) auth(next Handler) Handler {
 }
 
 func (p *Proxy) Mint(a Attribution) (string, error) { return p.cfg.Tokens.Mint(a) }
-func (p *Proxy) Revoke(token string)                { p.cfg.Tokens.Revoke(token) }
+func (p *Proxy) Revoke(token string) {
+	attr, _ := p.cfg.Tokens.Resolve(token)
+	if err := p.cfg.Tokens.Revoke(token); err != nil {
+		p.cfg.Log.Error("revoke token: removal not persisted, token may return after restart",
+			"agent", attr.Agent, "iteration", attr.Iteration, "err", err)
+	}
+}
 
 // --- loop.ProxyBinder adapter ---
 
@@ -521,7 +528,10 @@ func (p *Proxy) MintToken(agent, iteration, imageName, imageTag, imageDigest str
 func (p *Proxy) RevokeToken(token string) { p.Revoke(token) }
 
 func (p *Proxy) RevokeIteration(iteration string) {
-	p.cfg.Tokens.RevokeIteration(iteration)
+	if err := p.cfg.Tokens.RevokeIteration(iteration); err != nil {
+		p.cfg.Log.Error("revoke iteration tokens: removal not persisted, tokens may return after restart",
+			"iteration", iteration, "err", err)
+	}
 }
 
 // UpdateTask stamps native task/root attribution onto the live token(s) matching
@@ -881,7 +891,7 @@ func modelFromBody(body []byte) string {
 	var r struct {
 		Model string `json:"model"`
 	}
-	_ = json.Unmarshal(body, &r)
+	tidy.Log("best effort: ignored malformed JSON", json.Unmarshal(body, &r))
 	return r.Model
 }
 

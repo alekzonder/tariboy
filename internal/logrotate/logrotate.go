@@ -3,6 +3,8 @@
 package logrotate
 
 import (
+	"github.com/alekzonder/tariboy/internal/tidy"
+
 	"fmt"
 	"os"
 	"sync"
@@ -74,9 +76,9 @@ func Rotate(path string, keep int) error {
 	if keep < 1 {
 		return os.Remove(path)
 	}
-	_ = os.Remove(fmt.Sprintf("%s.%d", path, keep))
+	tidy.Remove(fmt.Sprintf("%s.%d", path, keep))
 	for i := keep - 1; i >= 1; i-- {
-		_ = os.Rename(fmt.Sprintf("%s.%d", path, i), fmt.Sprintf("%s.%d", path, i+1))
+		tidy.Log("best effort: os.Rename", os.Rename(fmt.Sprintf("%s.%d", path, i), fmt.Sprintf("%s.%d", path, i+1)))
 	}
 	if err := os.Rename(path, path+".1"); err != nil && !os.IsNotExist(err) {
 		return err

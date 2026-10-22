@@ -19,6 +19,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/script"
+	"github.com/alekzonder/tariboy/internal/tidy"
 	"github.com/alekzonder/tariboy/internal/version"
 )
 
@@ -1158,7 +1159,7 @@ func (s *Server) groupLoop(w http.ResponseWriter, r *http.Request) {
 // synchronously (surfacing a bind failure as an error) before serving in a
 // goroutine, instead of losing the error inside a fire-and-forget Serve.
 func (s *Server) Listen(sock string) (net.Listener, error) {
-	_ = os.Remove(sock)
+	tidy.Remove(sock)
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		return nil, err

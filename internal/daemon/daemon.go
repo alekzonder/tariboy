@@ -20,6 +20,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/pricingcatalog"
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tidy"
 	"github.com/alekzonder/tariboy/internal/userpath"
 )
 
@@ -374,7 +375,7 @@ func ensureLocalBin(home string) {
 	if path != "" {
 		dir = path + string(os.PathListSeparator) + dir
 	}
-	_ = os.Setenv("PATH", dir)
+	_ = os.Setenv("PATH", dir) // fails only on invalid names or ENOMEM; PATH is valid
 }
 
 func applyUserPath(ctx context.Context, log *slog.Logger, resolve UserPathResolver) {
@@ -427,7 +428,7 @@ func listenProxyWithHandoff(
 		return "", err
 	}
 	if err := tokens.SetListenAddr(addr); err != nil {
-		_ = proxy.CloseListener()
+		tidy.Log("best effort: proxy.CloseListener", proxy.CloseListener())
 		return "", fmt.Errorf("persist AI proxy listen address: %w", err)
 	}
 	return addr, nil

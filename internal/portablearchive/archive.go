@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/safefs"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // archivePath applies safefs.CleanRel plus this format's path length limit.
@@ -42,7 +43,7 @@ func Stage(r io.Reader, compressedSize int64, destination string, limits Limits)
 	published := false
 	defer func() {
 		if !published {
-			_ = os.RemoveAll(stage)
+			tidy.RemoveAll(stage)
 		}
 	}()
 	limited := &io.LimitedReader{R: r, N: limits.MaxCompressedBytes + 1}

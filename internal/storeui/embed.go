@@ -5,6 +5,8 @@
 package storeui
 
 import (
+	"github.com/alekzonder/tariboy/internal/tidy"
+
 	"embed"
 	"io/fs"
 	"net/http"
@@ -44,7 +46,7 @@ func Handler() (http.Handler, error) {
 		}
 		if f, err := sub.Open(clean); err == nil {
 			st, serr := f.Stat()
-			_ = f.Close()
+			tidy.Close(f)
 			if serr == nil && !st.IsDir() {
 				r2 := r.Clone(r.Context())
 				r2.URL.Path = "/" + clean

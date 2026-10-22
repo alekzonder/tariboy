@@ -1,6 +1,8 @@
 package workflowrun
 
 import (
+	"github.com/alekzonder/tariboy/internal/tidy"
+
 	"context"
 	"errors"
 	"fmt"
@@ -61,7 +63,7 @@ func Execute(ctx context.Context, spec Spec) Result {
 		res.Finished = now
 		if logFile != nil {
 			_, _ = fmt.Fprintf(logFile, "error: %s\n", res.Verdict.Message)
-			_ = logFile.Close()
+			tidy.Close(logFile)
 		}
 		return res
 	}
@@ -153,14 +155,14 @@ func Execute(ctx context.Context, spec Spec) Result {
 		if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 			_, _ = fmt.Fprintf(logFile, "error: cannot kill the process group %d: %v\n", pid, err)
 		}
-		_ = cmd.Wait()
+		tidy.Log("best effort: cmd.Wait", cmd.Wait())
 		res.Finished = time.Now()
 	}
 	if !callOnStart(spec.OnStart, pid) {
 		proc.signal(syscall.SIGKILL)
 		reap()
 		_, _ = fmt.Fprintln(logFile, "error: run bookkeeping failed")
-		_ = logFile.Close()
+		tidy.Close(logFile)
 		res.Verdict = failure("run bookkeeping failed")
 		return res
 	}
@@ -182,7 +184,7 @@ func Execute(ctx context.Context, spec Spec) Result {
 		}
 	}
 	reap()
-	_ = logFile.Close()
+	tidy.Close(logFile)
 
 	if st := cmd.ProcessState; st != nil && st.Exited() {
 		code := st.ExitCode()
@@ -238,7 +240,7 @@ func (p *process) signal(sig syscall.Signal) bool {
 	if p.done {
 		return false
 	}
-	_ = syscall.Kill(-p.pid, sig)
+	tidy.Log("best effort: syscall.Kill", syscall.Kill(-p.pid, sig))
 	return true
 }
 
@@ -271,11 +273,11 @@ func writeOwnerFile(path string, data []byte) error {
 		return err
 	}
 	if err := f.Chmod(0o600); err != nil {
-		_ = f.Close()
+		tidy.Close(f)
 		return err
 	}
 	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
+		tidy.Close(f)
 		return err
 	}
 	return f.Close()

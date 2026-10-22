@@ -1,6 +1,8 @@
 package shim
 
 import (
+	"github.com/alekzonder/tariboy/internal/tidy"
+
 	"bufio"
 	"encoding/json"
 	"errors"
@@ -242,7 +244,7 @@ func runProcessWithStop(
 			defer close(forceStopDone)
 			select {
 			case <-forceStop:
-				_ = syscall.Kill(-pid, syscall.SIGKILL)
+				tidy.Log("best effort: syscall.Kill", syscall.Kill(-pid, syscall.SIGKILL))
 			case <-processDone:
 			}
 		}()
@@ -251,11 +253,11 @@ func runProcessWithStop(
 		s.mu.Lock()
 		s.terminationReason = "hard_timeout"
 		s.mu.Unlock()
-		_ = syscall.Kill(-pid, syscall.SIGTERM)
+		tidy.Log("best effort: syscall.Kill", syscall.Kill(-pid, syscall.SIGTERM))
 		select {
 		case <-processDone:
 		case <-time.After(grace):
-			_ = syscall.Kill(-pid, syscall.SIGKILL)
+			tidy.Log("best effort: syscall.Kill", syscall.Kill(-pid, syscall.SIGKILL))
 		}
 	})
 
@@ -342,7 +344,7 @@ func runTmux(o Options, sample time.Duration) error {
 		s.mu.Lock()
 		s.terminationReason = "hard_timeout"
 		s.mu.Unlock()
-		_ = KillTmuxSession(o.TmuxSession)
+		tidy.Log("best effort: KillTmuxSession", KillTmuxSession(o.TmuxSession))
 	})
 	defer s.watchdog.Stop()
 
@@ -844,7 +846,7 @@ func (s *tmuxShim) Attach(conn net.Conn, p AttachParams) error {
 	}
 
 	// Most-recently-active client dictates geometry.
-	_ = execCommand("tmux", "set-option", "-t", s.session, "window-size", "latest").Run()
+	_ = execCommand("tmux", "set-option", "-t", s.session, "window-size", "latest").Run() // convenience only; tmux without the option still works
 	cmd := execCommand("tmux", "-u", "attach-session", "-t", s.session)
 	cmd.Env = envWithOverride(os.Environ(), "TERM", "xterm-256color")
 	// Keep attach-client diagnostics out of the terminal byte stream. Pane
@@ -882,9 +884,9 @@ func (s *tmuxShim) Attach(conn net.Conn, p AttachParams) error {
 		// Closing the ptmx unblocks whichever io.Copy is still running so
 		// neither goroutine leaks. Kill the attach client (detach); never
 		// kill-session.
-		_ = ptmx.Close()
+		tidy.Close(ptmx)
 		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
+			tidy.Log("best effort: cmd.Process.Kill", cmd.Process.Kill())
 			_, _ = cmd.Process.Wait()
 		}
 	}()
@@ -964,7 +966,7 @@ func (s *tmuxShim) Report() ReportResult {
 // result.json for completion) but it costs live control (kill/screen/reattach),
 // so it is logged loudly to logs/shim.log rather than silently swallowed.
 func serveRPC(iterDir, sockPath string, h Handler) func() {
-	_ = os.Remove(sockPath)
+	tidy.Remove(sockPath)
 	l, err := netListenUnix(sockPath)
 	if err != nil {
 		logShim(iterDir, "ERROR bind shim rpc socket %q: %v (continuing without live control; completion via result.json)", sockPath, err)
@@ -973,7 +975,7 @@ func serveRPC(iterDir, sockPath string, h Handler) func() {
 	go Serve(l, h)
 	return func() {
 		l.Close()
-		_ = os.Remove(sockPath)
+		tidy.Remove(sockPath)
 	}
 }
 

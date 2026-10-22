@@ -1,6 +1,10 @@
 package safefs
 
-import "os"
+import (
+	"os"
+
+	"github.com/alekzonder/tariboy/internal/tidy"
+)
 
 // SwapDir moves dir aside to backup and, when stage is non-empty, renames stage
 // into dir. A stale backup is discarded first; a missing dir means there is
@@ -10,7 +14,7 @@ import "os"
 // stage only moves dir aside so the caller can rebuild it in place. dir, backup
 // and stage must be siblings on one filesystem so every move is one rename.
 func SwapDir(dir, backup, stage string) (commit, rollback func(), err error) {
-	_ = os.RemoveAll(backup)
+	tidy.RemoveAll(backup)
 	hadOld := false
 	if err := os.Rename(dir, backup); err == nil {
 		hadOld = true
@@ -19,7 +23,7 @@ func SwapDir(dir, backup, stage string) (commit, rollback func(), err error) {
 	}
 	restore := func() {
 		if hadOld {
-			_ = os.Rename(backup, dir)
+			tidy.Log("best effort: os.Rename", os.Rename(backup, dir))
 		}
 	}
 	if stage != "" {
@@ -30,7 +34,7 @@ func SwapDir(dir, backup, stage string) (commit, rollback func(), err error) {
 	}
 	commit = func() { _ = os.RemoveAll(backup) }
 	rollback = func() {
-		_ = os.RemoveAll(dir)
+		tidy.RemoveAll(dir)
 		restore()
 	}
 	return commit, rollback, nil

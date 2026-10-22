@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -210,6 +212,16 @@ func teamImportArchivePlan() registry.Command {
 	}}
 }
 
+// saveImportOperation persists the import operation before the step it records.
+// An unsaved state would make resume repeat or skip that step, so a failure
+// stops the import.
+func saveImportOperation(service teamportable.Service, operation teamportable.Operation, step string) error {
+	if err := service.SaveOperation(operation); err != nil {
+		return api.UserError{Code: "import_state_unsaved", Msg: fmt.Sprintf("import %s: could not save operation state at step %q: %v", operation.ImportID, step, err)}
+	}
+	return nil
+}
+
 func teamImportArchiveApply() registry.Command {
 	return registry.Command{Path: "team.import.archive.apply", Summary: "Build images and create a staged portable team", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/team-imports/{id}/apply"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		service := teamportable.Service{StagingRoot: filepath.Join(c.BaseDir, "team-imports")}
@@ -278,7 +290,9 @@ func teamImportArchiveApply() registry.Command {
 		operation.ResolvedRefs = resolvedRefs
 		operation.UpdateExisting = updateExisting
 		operation.Status, operation.Error = "running", ""
-		_ = service.SaveOperation(operation)
+		if err := saveImportOperation(service, operation, "running"); err != nil {
+			return nil, err
+		}
 		if err := service.TouchLease(preview.ImportID); err != nil {
 			return nil, err
 		}
@@ -291,7 +305,9 @@ func teamImportArchiveApply() registry.Command {
 			for {
 				select {
 				case <-ticker.C:
-					_ = service.TouchLease(preview.ImportID)
+					if err := service.TouchLease(preview.ImportID); err != nil {
+						slog.Warn("team import: lease heartbeat failed", "import", preview.ImportID, "err", err)
+					}
 				case <-heartbeatDone:
 					return
 				}
@@ -300,7 +316,9 @@ func teamImportArchiveApply() registry.Command {
 		result, err := registry.Call(c, p.Ctx, teamApplyYAML(), map[string]any{"yaml": string(preview.ComposeYAML)})
 		if err != nil {
 			operation.Status, operation.Error = "failed", err.Error()
-			_ = service.SaveOperation(operation)
+			if saveErr := saveImportOperation(service, operation, "failed"); saveErr != nil {
+				return nil, errors.Join(err, saveErr)
+			}
 			return nil, err
 		}
 		if mapped, ok := result.(map[string]any); ok {
@@ -319,7 +337,9 @@ func teamImportArchiveApply() registry.Command {
 			} else {
 				operation.Status = "failed"
 			}
-			_ = service.SaveOperation(operation)
+			if err := saveImportOperation(service, operation, operation.Status); err != nil {
+				return nil, err
+			}
 			mapped["operation"] = operation
 		}
 		return result, nil

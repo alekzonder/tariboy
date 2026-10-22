@@ -17,6 +17,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tidy"
 	"gopkg.in/yaml.v3"
 )
 
@@ -271,7 +272,7 @@ func (s *Store) ImportTree(name, incoming string) (Source, error) {
 	if err := os.Rename(stage, target); err != nil {
 		return Source{}, err
 	}
-	_ = syncDir(s.Root)
+	tidy.Log("best effort: syncDir", syncDir(s.Root))
 	return source, nil
 }
 
@@ -456,8 +457,8 @@ func (s *Store) writeAtomic(path string, content []byte, perm fs.FileMode) (err 
 	}
 	tmpName := tmp.Name()
 	defer func() {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
+		tidy.Close(tmp)
+		tidy.Remove(tmpName)
 	}()
 	if err := tmp.Chmod(perm); err != nil {
 		return err
@@ -486,7 +487,7 @@ func (s *Store) writeAtomic(path string, content []byte, perm fs.FileMode) (err 
 	if syncDirectory == nil {
 		syncDirectory = syncDir
 	}
-	_ = syncDirectory(dir)
+	tidy.Log("best effort: syncDirectory", syncDirectory(dir))
 	return nil
 }
 

@@ -20,6 +20,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/safefs"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 var (
@@ -448,12 +449,12 @@ func PrepareImageBridge(imageSkillsDir, finalDir string, expected []agentskills.
 	}
 	if err := renameBridge(stage, finalDir); err != nil {
 		if backup != "" {
-			_ = renameBridge(backup, finalDir)
+			tidy.Log("best effort: renameBridge", renameBridge(backup, finalDir))
 		}
 		return err
 	}
 	if backup != "" {
-		_ = os.RemoveAll(backup)
+		tidy.RemoveAll(backup)
 	}
 	return validatePublishedBridge(finalDir, expected, plan)
 }
