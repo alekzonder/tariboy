@@ -327,8 +327,7 @@ func prepareWithHook(resolved imagefile.ResolvedDirectory, beforeDescend func(st
 	if err != nil {
 		return Prepared{}, err
 	}
-	rootInfo, err := os.Lstat(root)
-	if err != nil {
+	if _, err := os.Lstat(root); err != nil {
 		return Prepared{}, err
 	}
 	canonicalRoot, err := filepath.EvalSymlinks(root)
@@ -348,7 +347,7 @@ func prepareWithHook(resolved imagefile.ResolvedDirectory, beforeDescend func(st
 	if err != nil {
 		return Prepared{}, err
 	}
-	rootInfo, err = os.Lstat(root)
+	rootInfo, err := os.Lstat(root)
 	if err != nil {
 		return Prepared{}, err
 	}

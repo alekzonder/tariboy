@@ -267,16 +267,6 @@ func storeManifest(t *testing.T, svc *Service, m workflowimage.Manifest) {
 	}
 }
 
-// resolveStoredImage resolves name[:version] or a digest to the newest stored
-// image, as the image store's resolver does.
-func resolveStoredImage(svc *Service, name, tag string) (string, error) {
-	var digest string
-	err := svc.db.QueryRow(`SELECT digest FROM task_workflow_images
-		WHERE (name = ? AND (? = '' OR version = ?)) OR digest = ? ORDER BY built_at DESC, rowid DESC LIMIT 1`,
-		name, tag, tag, tag).Scan(&digest)
-	return digest, err
-}
-
 // editManifest rewrites a published image in place. Published images are
 // immutable, so no API does this; tests use it to change the definition a
 // task already pinned.

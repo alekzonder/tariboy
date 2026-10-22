@@ -27,12 +27,12 @@ TAURI_BUNDLE_VERBOSITY = $(if $(filter 1,$(DESKTOP_BUNDLE_VERBOSE)),--verbose,)
 
 # `go list ./...` descends into a Go package shipped by one UI dependency.
 # Test only packages owned by this module; node_modules is prepared tooling, not
-# Go source covered by Tariboy's quality gates. Keep enumeration in the three
+# Go source covered by Tariboy's quality gates. Keep enumeration in the four
 # recipes that need it, so a failed `go list` is never hidden by the filter.
 
 export CGO_ENABLED=0
 
-.PHONY: build install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+.PHONY: build install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build:
 	$(GO) build -trimpath -o $(BINDIR)/tariboyd ./cmd/tariboyd
@@ -155,6 +155,28 @@ vet:
 	@packages=$$($(GO) list ./...) || exit $$?; \
 	packages=$$(printf '%s\n' "$$packages" | sed '/\/node_modules\//d'); \
 	$(GO) vet -tags=tmux $$packages
+
+# Linter versions are pinned in tools.mod, a separate module file, so the
+# linters' dependencies never raise the product's own in go.mod.
+GOTOOL := $(GO) tool -modfile=tools.mod
+
+staticcheck:
+	@packages=$$($(GO) list ./...) || exit $$?; \
+	packages=$$(printf '%s\n' "$$packages" | sed '/\/node_modules\//d'); \
+	$(GOTOOL) staticcheck -tags=tmux $$packages
+
+# Ratchet: the most complex non-test function today. Lower it when a task
+# simplifies that function; never raise it. The target for new code is 25.
+# Tests are excluded: table tests and fakes with a large switch are their
+# normal shape.
+GOCYCLO_OVER := 46
+GOCYCLO_IGNORE := (^|/)node_modules/|_test\.go$$
+
+gocyclo:
+	$(GOTOOL) gocyclo -over $(GOCYCLO_OVER) -ignore '$(GOCYCLO_IGNORE)' .
+
+gocyclo-report:
+	@$(GOTOOL) gocyclo -top 30 -avg -ignore '$(GOCYCLO_IGNORE)' . || true
 
 e2e: build
 	./scripts/e2e.sh
@@ -568,9 +590,12 @@ endef
 
 backend-check:
 	$(GO) mod download
+	$(GO) mod download -modfile=tools.mod
 	@$(STEP_RUNNER); \
 	run_step "fmt-check"    '$(SUBMAKE) fmt-check'; \
 	run_step "vet"          '$(SUBMAKE) vet'; \
+	run_step "staticcheck"  '$(SUBMAKE) staticcheck'; \
+	run_step "gocyclo"      '$(SUBMAKE) gocyclo'; \
 	run_step "test"         '$(SUBMAKE) test'; \
 	run_step "tariboy-tasks-e2e" '$(SUBMAKE) tariboy-tasks-e2e'; \
 	run_step "smoke-contract" '$(SUBMAKE) smoke-contract-test'; \

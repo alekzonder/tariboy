@@ -126,12 +126,12 @@ func parseFrontmatter(body []byte) (frontmatter, error) {
 		return frontmatter{}, fmt.Errorf("invalid Agent Skill name %q", out.Name)
 	}
 	if out.Description == "" || utf8.RuneCountInString(out.Description) > maxDescriptionLength {
-		return frontmatter{}, errors.New("Agent Skill description must contain 1 to 1024 characters")
+		return frontmatter{}, errors.New("invalid Agent Skill description: must contain 1 to 1024 characters")
 	}
 	if out.Compatibility != nil {
 		compatibility := strings.TrimSpace(*out.Compatibility)
 		if compatibility == "" || utf8.RuneCountInString(compatibility) > maxCompatibilityLength {
-			return frontmatter{}, errors.New("Agent Skill compatibility must contain 1 to 500 characters")
+			return frontmatter{}, errors.New("invalid Agent Skill compatibility: must contain 1 to 500 characters")
 		}
 		out.Compatibility = &compatibility
 	}

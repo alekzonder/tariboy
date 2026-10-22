@@ -80,7 +80,6 @@ func (t *TokenRegistry) UpdateTask(key, taskID, epicID string) int {
 	if a, ok := t.tokens[key]; ok {
 		a.TaskID, a.EpicID = taskID, epicID
 		t.tokens[key] = a
-		n++
 		if err := t.persistLocked(); err != nil {
 			t.tokens = old
 			return 0

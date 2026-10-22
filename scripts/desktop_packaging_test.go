@@ -415,7 +415,7 @@ func TestGoQualityTargetsFailWhenPackageEnumerationFails(t *testing.T) {
 		t.Fatalf("write failing Go wrapper: %v", err)
 	}
 
-	for _, target := range []string{"test", "vet", "fmt-check"} {
+	for _, target := range []string{"test", "vet", "staticcheck", "fmt-check"} {
 		cmd := exec.Command("make", "GO="+fakeGo, target)
 		cmd.Dir = root
 		output, err := cmd.CombinedOutput()

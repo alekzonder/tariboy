@@ -331,7 +331,7 @@ func installTasksAlias(exeDir, runtimeDir string) (string, error) {
 		return "", err
 	}
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-		return "", errors.New("Tasks payload is not executable")
+		return "", errors.New("payload of tariboy-tasks is not executable")
 	}
 	binDir := filepath.Join(runtimeDir, "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil {

@@ -76,7 +76,8 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   `make backend-check` for backend-only changes and `make frontend-check` for
   frontend- or documentation-only changes. Run `make check`, which runs both,
   for mixed changes or whenever ownership is unclear. Backend checks cover
-  `fmt-check`, `go vet`, Go unit tests, Store skills, and smoke contracts;
+  `fmt-check`, `go vet`, `staticcheck`, the `gocyclo` complexity threshold,
+  Go unit tests, Store skills, and smoke contracts;
   frontend checks cover UI typecheck, lint, unit tests, branding, and the
   documentation `doctor` plus `build`. Before checking, they download Go
   modules and install locked UI and documentation dependencies with `npm ci`.

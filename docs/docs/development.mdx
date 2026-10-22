@@ -163,10 +163,11 @@ make full-check      # heavy, tens of minutes, includes check
 
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
-when ownership is unclear. The backend target runs `fmt-check`, `vet`, `test`,
-Go unit tests and smoke contracts. The frontend target runs UI
-typecheck, lint, unit tests, branding, and the documentation checks. Before
-checking, `backend-check` runs `go mod download`, and `frontend-check` runs
+when ownership is unclear. The backend target runs `fmt-check`, `vet`,
+`staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. The
+frontend target runs UI typecheck, lint, unit tests, branding, and the
+documentation checks. Before checking, `backend-check` runs `go mod download`
+for the module and for `tools.mod`, and `frontend-check` runs
 locked `npm ci` installs under both `ui/` and `docs/`. They do not write into
 `bin/` or dirty `git status`. Each step reports its result and duration as it
 finishes.
@@ -216,11 +217,14 @@ git clean -ndx
 
 ### Go control plane and plugins
 
-`make backend-check` covers this subsystem with `fmt-check`, `vet`, and `test`.
-To run one of them from the repository root while iterating:
+`make backend-check` covers this subsystem with `fmt-check`, `vet`,
+`staticcheck`, `gocyclo`, and `test`. To run one of them from the repository
+root while iterating:
 
 ```bash
 make vet
+make staticcheck
+make gocyclo
 make test
 make fmt-check
 ```
@@ -228,6 +232,25 @@ make fmt-check
 Those targets enumerate the module's packages and exclude `node_modules`; a Go
 fixture embedded in an npm dependency is not Tariboy source and must not extend
 the Go quality gate.
+
+The versions of `staticcheck` and `gocyclo` are pinned in `tools.mod` and
+`tools.sum` at the repository root. This separate module file keeps the
+dependencies of the linters out of `go.mod`. The targets run each tool with
+`go tool -modfile=tools.mod NAME`, so you do not install anything into
+`$GOPATH/bin`. To move a tool to a new version, run
+`go get -modfile=tools.mod -tool PACKAGE@VERSION` and commit both files.
+
+`make staticcheck` runs the default checks plus `ST1005`, as `staticcheck.conf`
+sets, with `-tags=tmux`. Fix a new finding in the same change. If a finding
+depends on separate work, disable only that check in `staticcheck.conf` with a
+comment that names the task.
+
+`make gocyclo` fails when a non-test function has a cyclomatic complexity
+over `GOCYCLO_OVER` in the `Makefile`. The value is a ratchet: it is the
+current maximum, and a change that simplifies the most complex function lowers
+it. Do not raise it. The target for new code is 25. Test files are not
+measured. `make gocyclo-report` prints the 30 most complex functions and the
+average, and it never fails.
 
 `make fmt` is not a check: it rewrites files. Only `fmt-check` is part of
 `backend-check`; run `make fmt` yourself when it reports drift.
