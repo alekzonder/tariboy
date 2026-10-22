@@ -166,8 +166,9 @@ prompt. Queue secret values appear in no prompt. See
 the same OS user as the agents. A workflow gate protects against a skipped
 step, not against an agent that deliberately works around the process: an
 agent can read the task directory, the unpacked image, and the run files, and
-can reach the daemon socket at its default path. Run workflows only with agents
-you trust that far.</p>
+can reach the daemon socket at its default path; <code>tariboy tasks</code> uses that
+socket in operator mode, so an agent that runs it sees and changes every task
+as the customer. Run workflows only with agents you trust that far.</p>
 <ul>
 <li>A script receives no agent tools socket and no daemon API variables:
 <code>TARIBOY_TOOLS_SOCKET</code>, <code>TARIBOY_DAEMON_SOCKET</code>, <code>TARIBOY_PLUGIN_SOCKET</code>, and
@@ -237,7 +238,7 @@ any other support-bundle exclusion. See <a href="/tariboy/docs/architecture/ai-p
 audit</a> for its
 runtime lifecycle.</p>
 <h2 id="alpha-signing-and-gatekeeper"><a class="blume-heading-anchor" href="#alpha-signing-and-gatekeeper">Alpha signing and Gatekeeper</a></h2>
-<p><code>0.91.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
+<p><code>0.92.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
 <code>SHA256SUMS</code> before opening it. If Gatekeeper blocks it, Control-click only the
 named <code>/Applications/Tariboy.app</code>, choose <strong>Open</strong>, and confirm.
 If Control-click Open is unavailable, use <strong>System Settings → Privacy &amp;
@@ -288,14 +289,24 @@ allowlisted lifecycle/error lines from <code>tariboyd.log</code>. The per-reques
 files for the newest 10 iterations of each agent on that host. It reads only
 <code>result.json</code>, <code>logs/shim.log</code>, <code>logs/harness.stdout.log</code>, and
 <code>logs/harness.stderr.log</code>; it never recursively walks an agent directory.</p>
-<p>The collector never includes credentials or environment values (including
-<code>PATH</code>), SSH aliases/configuration, <code>PROMPT.md</code>, context, transcripts, audit,
-workdirs, configured cwd contents, global or agent shell scripts, image/plugin
-state, provisioning replies, or user files. It does not open agent environment
-configuration. Harness output can
-nevertheless contain arbitrary private natural language, so inspect the ZIP
-before sending it under your organization’s support data policy. Export does
-not upload anything automatically.</p>
+<p>Redaction of agent files classifies each daemon environment variable by its
+name. Values of secret-looking names (<code>*_TOKEN</code>, <code>*_SECRET*</code>, <code>*_API_KEY</code>,
+<code>*PASSWORD*</code>) are removed from 4 characters, <code>USER</code>, <code>LOGNAME</code>, and <code>HOSTNAME</code>
+from 3 characters, and any unknown name from 8 characters. A short allowlist of
+harmless names (<code>SHELL</code>, <code>TERM</code>, <code>LANG</code>, <code>LANGUAGE</code>, <code>LC_*</code>, <code>PATH</code>, <code>GOPATH</code>,
+<code>GOROOT</code>, <code>PWD</code>, <code>TMPDIR</code>, <code>EDITOR</code>, <code>VISUAL</code>, <code>COLORTERM</code>, <code>TERM_PROGRAM</code>,
+<code>SHLVL</code>) keeps its values. The collector does not export the environment; an
+allowlisted value that already appears in collected text is kept on purpose,
+and home directory prefixes are still rewritten. A
+secret-looking name is never allowlisted, and the unknown-name rule is
+unchanged from policy version 1. <code>diagnostics.json</code> reports policy version 2.</p>
+<p>The collector never includes credentials or environment values, SSH
+aliases/configuration, <code>PROMPT.md</code>, context, transcripts, audit, workdirs,
+configured cwd contents, global or agent shell scripts, image/plugin state,
+provisioning replies, or user files. It does not open agent environment
+configuration. Harness output can nevertheless contain arbitrary private natural
+language, so inspect the ZIP before sending it under your organization’s support
+data policy. Export does not upload anything automatically.</p>
 <p>Activity audit export is a separate, explicit operator action and is not a
 support bundle. It can export one iteration or all retained iterations and may
 contain prompts, reasoning, commands, tool arguments and results, model

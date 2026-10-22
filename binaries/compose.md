@@ -46,6 +46,77 @@ agents:
 
 `wait_customer_timeout` must be a positive whole-second duration.
 
+## How `up` converges
+
+`compose up` builds the declared images and reads the live state once: the
+groups, agents, budgets, task queues and their pools, the queue workflow
+bindings, and the pending image of each running agent whose image differs from
+the file. It then plans the actions that move the daemon toward the file and
+applies them in this order: groups, agents, budgets, task queues, and queue
+workflows. A setting that already matches makes no call, so running `up` again
+on a converged file changes nothing and reports every resource `ok`.
+Subscriptions are the one exception: `up` sends each one again, and the daemon
+reports an existing subscription as unchanged.
+
+An existing agent converges in place:
+
+- **Image.** A different `image` is set as the agent's pending image
+  (`POST /api/agents/{name}/image`). The agent keeps running and adopts the
+  image on its next iteration; there is no restart. A bare name means
+  `NAME:latest`.
+- **Harness.** A different `harness.type` is stored
+  (`POST /api/agents/{name}/harness`), and a running agent is then stopped and
+  started so the new harness takes effect. The restart runs after the agent's
+  other changes, so the restarted iteration also uses the new image, CWD, loop,
+  and Goal settings. The restart interrupts the current iteration, as a manual
+  restart does. A stopped agent is re-provisioned
+  instead (see below), which starts it with the new harness. An agent whose
+  file sets `loop.enabled: false` is not restarted; its next start uses the new
+  harness.
+- **Stopped agent.** An agent left stopped by a data-preserving `down` is
+  re-provisioned in place with the file's image, keeping its context,
+  iterations, and audit log, and then converges as above.
+- Group membership, CWD, timeout, loop settings, and the Goal settings the file
+  sets converge to the file's values. Subscriptions are sent on every run; the
+  daemon ignores a duplicate and reports it unchanged, so it does not make the
+  agent `changed`.
+
+Model, effort, environment, and plugins are applied only when compose creates
+an agent; `up` does not change them on an existing agent.
+
+A failed action does not stop the run. The actions that depend on it are
+skipped: for example, a failed agent create skips that agent's start and its
+budget, and a failed harness change skips the restart. Independent actions,
+including the other agents, still run. When the run ends, `up` prints one line
+per resource with its outcome:
+
+```text
+changed  group:research-team
+failed   agent:writer: create agent writer: ...
+skipped  budget:agent:writer: an action it depends on failed
+ok       agent:scout
+up: 1 ok, 1 changed, 1 failed, 1 skipped
+```
+
+| Outcome | Meaning |
+| --- | --- |
+| `ok` | Already matched the file; nothing was done. |
+| `changed` | Every planned action succeeded. |
+| `failed` | An action failed; the line shows the first error. |
+| `skipped` | An action it depends on failed, so it was not attempted. |
+
+If any resource failed, `up` exits non-zero and prints a one-line summary such
+as `compose up: 1 resource failed` to standard error; the report above already
+shows each error. The resources that succeeded stay
+applied, so the daemon can be partly converged; fix the cause and run `up`
+again to converge the rest.
+
+`compose status` reads the same plan without applying it. It prints one line
+per group, agent, budget, task queue, and pool, then `drift: N`. An agent's line
+lists each setting `up` would change; an image that is already pending shows as
+`image pending` until the agent adopts it. Model, environment, and plugins are
+not checked, and status says so on its last line.
+
 ## Task queues and pools
 
 Compose can declare task queues and the explicit agent pools of each queue.

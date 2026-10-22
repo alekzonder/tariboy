@@ -504,7 +504,12 @@ The agent row remains authoritative during crash recovery. An incomplete local
 image swap is either rolled back to the DB-active backup or completed when the
 already-promoted image digest matches the row. Each unpacked image records the
 ref it was materialized for and a daemon-owned id marker, so two generations of
-one ref cannot be confused. Generations are kept by id under
+one ref cannot be confused. Provisioning unpacks an image atomically: it writes
+a staging directory next to the agent's `image/`, syncs it, and renames it into
+place, so a failed unpack leaves no partial `image/` and a repeated provision
+keeps no stale files. A crash while the staging directory is written, or
+between the two renames, can leave `.unpack-*` staging or backup directories
+under the agent root; the next provisioning of that agent removes them. Generations are kept by id under
 `images/<name>/refs/`, so active and pending assignments survive a moved tag.
 Harness, model, effort, environment, CWD, context, workdir, messages, history,
 group, and subscriptions are not image assignment fields.
@@ -521,11 +526,15 @@ rebuilding any non-reserved ref is always allowed, so no build path can be
 refused for a ref that already exists. A store written before this model is
 migrated once at daemon startup, keeping each archive's content digest as its
 ref id so pinned digests keep resolving.
-One publication gate spans ordinary, editable-source, team-import,
-agent-authored, compose, and controlled-release publication plus assignment,
-activation, provisioning, reprovisioning, import, and removal, so none can
-persist an uncommitted generation. Compose publishes through the daemon rather
-than writing its image store from the client process.
+Image locks keep every reader off an uncommitted generation. Ordinary,
+editable-source, agent-authored, compose, and import publication take the lock
+of the one image name they write, so publications of different names run in
+parallel and publications of one name run one at a time. Assignment,
+activation, provisioning, reprovisioning, removal, and migration read or
+change several names, so they take the store-wide lock, which excludes every
+name lock. The locks are in-process: `tariboyd` is the one process that writes
+the image store. Compose publishes through the daemon rather than writing its
+image store from the client process.
 
 ## Restart handoff
 

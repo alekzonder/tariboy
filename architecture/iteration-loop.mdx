@@ -313,7 +313,7 @@ retained digest recorded on the agent, including assignments that were pending
 when the daemon was upgraded or the ordinary ref was rebuilt.
 
 The agent image read API projects the same selection order under the image
-publication gate: explicit pending digest, ordinary mutable active ref, then
+store lock: explicit pending digest, ordinary mutable active ref, then
 current pinned image. Current version metadata always comes from pinned
 inspection. This read does not stage or promote an assignment; next is a
 preview at read time and can change before the launch gate runs. A changed
@@ -332,7 +332,7 @@ facade over these parts:
 | Script supervisor (`scripts.go`) | Durable script runs: claim, start as the agent, cancel, and record the result. |
 | Tools facade (`tools_facade.go`) | The per-agent tools socket API. It reaches the manager only through narrow interfaces, so the API does not depend on a loop engine. |
 | Image activation (`image_activation.go`) | Pending image activation, the Reprovision swap, the skill bridge, and crash recovery of an interrupted swap. |
-| Iteration watcher (`iteration_watcher.go`) | The one polling loop that waits for `result.json`. It resyncs the hard deadline, enforces the soft deadline and the done grace with at most one Kill, and, for adoption, probes the shim. The runner and adoption both use it. |
+| Iteration watcher (`iteration_watcher.go`) | The one polling loop that waits for `result.json`. It resyncs the hard deadline, enforces the soft deadline and the done grace with at most one Kill, and, for adoption, probes the shim. For a shim the runner launched, it also ends the wait when the reaped shim process left no `result.json`, which the runner records as `harness_error`. The runner and adoption both use it. |
 
 The manager takes its locks in one order:
 
@@ -340,16 +340,21 @@ The manager takes its locks in one order:
    start, Stop, Remove, Reprovision, and a Restart launch after adoption from
    its decision until its iteration row exists. A wait for it ends when the
    daemon shuts down.
-2. The image **publication gate**. Image builds, image activation, Run, and
-   Reprovision take it.
+2. An image lock. Each image name has its own **name lock**; a build or an
+   image detail read takes the lock of the one name it touches, so builds of
+   different names run in parallel. The **store lock** covers the whole image
+   store: image activation, Run, Reprovision, agent image assignment, image
+   removal, and migration take it for writing, and it excludes every name
+   lock. A name lock holds the store lock for reading, so the store lock is
+   always taken first, and neither lock is taken twice.
 3. The registry lock. It guards only the registry maps. No database call,
    socket operation, or callback runs while it is held.
 
 A path that holds a later lock never waits for an earlier one. For example,
-Reprovision takes the agent's lifecycle gate before the publication gate, the
+Reprovision takes the agent's lifecycle gate before the image store lock, the
 same order as a Restart launch that activates an image. Run never starts an
-agent, so it never takes a lifecycle gate while it holds the publication gate.
-A normal iteration launch takes only the publication gate. The agent's handoff
+agent, so it never takes a lifecycle gate while it holds the image store lock.
+A normal iteration launch takes only the image store lock. The agent's handoff
 lock (see [the shim](/docs/architecture/shim)) is taken while no gate is held.
 
 Image activation can take long: it unpacks the image, prepares the skill

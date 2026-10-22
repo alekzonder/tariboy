@@ -270,7 +270,9 @@ optional per image:</p>
 <p><code>tariboy-tasks</code> is installed globally as <code>ttasks</code>; it uses identity-bound agent
 mode only when <code>TARIBOY_TOOLS_SOCKET</code> is non-empty and otherwise uses the host
 Unix daemon socket as the customer actor. Agent mode fails closed rather than
-falling back to operator access. When enabled, the <code>tasks</code> capability also
+falling back to operator access. <code>tariboy tasks …</code> runs the same client and
+always uses operator mode, also when an agent runs it, so it sees every task.
+When enabled, the <code>tasks</code> capability also
 provisions the bare legacy <code>tasks</code> shim. Schema-v2 images must still package the
 Tasks image skill; capability selection never packages instructions
 automatically. See the <a href="/tariboy/docs/plugins/built-in/tasks">Tasks built-in reference</a>

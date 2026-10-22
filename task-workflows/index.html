@@ -820,6 +820,20 @@ schedule is cleared, a pending run is cancelled, and a running one is killed.</p
 <p>The worker runs up to four scripts at once. Pending checks start before
 pending watch runs, because an agent waits for a check, and one slot is always
 left for a check.</p>
+<p>The watch runs of one workflow start one at a time, across every task, status,
+and queue that uses a workflow of that name. The next one starts only after the
+one before it has finished and at least <code>watch_spacing</code> after it started. The
+default is <code>5s</code>, and it applies when <code>Workflowfile.yaml</code> sets no
+<code>watch_spacing</code>; a workflow sets another value from <code>1s</code> to <code>10m</code>. So ten tasks
+in one status that check a pull request every minute call the service one after
+another, five seconds apart, and not at the same time. Because each task runs
+again <code>every</code> after its own run ends, the tasks stay spread out after the first
+round. With many tasks a watch runs less often than <code>every</code>: 30 tasks with the
+default spacing take 150 seconds for one round. The worker checks every two
+seconds, so a start can be up to two seconds late. Checks and sources never
+wait for the spacing, and watch runs of other workflows do not wait for it. The
+worker keeps the last start time in memory, so after a daemon restart the first
+watch of each workflow starts at once.</p>
 <h2 id="script-protocol"><a class="blume-heading-anchor" href="#script-protocol">Script protocol</a></h2>
 <p>A script is an executable file inside the unpacked workflow image. The daemon
 runs it directly, with no arguments, no shell wrapper, and stdin from
@@ -2173,6 +2187,11 @@ the key, and the run id. A failed source run records the queue event
 <td>The workflow image store is not available.</td>
 </tr>
 <tr>
+<td><code>workflow_not_found</code></td>
+<td>409</td>
+<td>The image a task or binding pins is not published.</td>
+</tr>
+<tr>
 <td><code>queue_workflow_not_found</code></td>
 <td>404</td>
 <td>The queue has no binding.</td>
@@ -2289,6 +2308,13 @@ the key, and the run id. A failed source run records the queue event
 </tr>
 </tbody>
 </table></div>
+<p>A missing resource has one of two statuses. If the request addresses the
+resource (the task, queue, run, artifact, or secret in the path or body), the
+code is <code>&lt;resource&gt;_not_found</code> (or plain <code>not_found</code> for a task, request,
+image, or queue secret) and the status is 404. If the request only refers to
+the resource, the status is 409. For example, <code>workflow_not_found</code> is 409: the
+bound image is not published, and the request itself is well formed. The codes
+are part of the public contract and do not change.</p>
 <p><code>rejected</code> and <code>failed</code> are not error codes: they are states of a transition
 request, and <code>workflow.transition_rejected</code> and <code>workflow.transition_failed</code> are
 the events that record them. The advance call itself succeeds and returns the
@@ -2353,16 +2379,16 @@ pending request.</p>
 </tbody>
 </table></div>
 <h2 id="official-workflows"><a class="blume-heading-anchor" href="#official-workflows">Official workflows</a></h2>
-<p>The official Store (<code>official</code>) holds two workflow sources. A <code>pr-review</code>
+<p>The official Store (<code>tariboy</code>) holds two workflow sources. A <code>pr-review</code>
 workflow, which turns pull requests that request a review into review tasks
 through a <a href="#sources">source</a>, is planned for the Store once a release with
 sources is out. Build one with
-<code>tariboy workflow build official/NAME</code>, then bind a queue as shown in
+<code>tariboy workflow build tariboy/NAME</code>, then bind a queue as shown in
 <a href="/tariboy/docs/workflow-images#official-workflow-images">Workflow images</a>.</p>
 <h3 id="development"><a class="blume-heading-anchor" href="#development"><code>development</code></a></h3>
 <p>The pull request flow, version <code>0.1.0</code>. It requires the queue secret <code>GH_TOKEN</code>
 and a <code>developers</code> pool, and declares the artifacts <code>plan</code>, <code>pull_request</code>, and
-<code>merge_commit</code>. The pool’s agents run <code>official/tariboy-developer</code> with their
+<code>merge_commit</code>. The pool’s agents run <code>tariboy/tariboy-developer</code> with their
 own <code>GH_TOKEN</code> agent secret; see
 <a href="/tariboy/docs/workflow-images#official-workflow-images">Official workflow images</a>.</p>
 <div class="blume-table-scroll" tabIndex="0"><table>
@@ -2420,7 +2446,7 @@ an argument, a file, or a message.</p>
 with the outcome <code>reported</code> to <code>done</code>. It needs the artifact <code>report</code>, the
 research report as Markdown, and has no scripts and no secrets. The status
 allows 6 idle iterations. It runs on any image with the <code>tasks</code> plugin, such as
-<code>official/basic</code>.</p>
+<code>tariboy/basic</code>.</p>
 <h2 id="agent-pools"><a class="blume-heading-anchor" href="#agent-pools">Agent pools</a></h2>
 <p>A pool is a named, explicit list of existing agent names attached to a queue.
 One member models a dedicated role; several members model a shared pool. Group

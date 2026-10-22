@@ -209,7 +209,9 @@ maps forum updates, then publishes ordinary text through the authenticated
 plugin API onto <code>chat:telegram:&lt;agent&gt;</code>. Agent replies return through the
 existing channel-sink outbox, so bus persistence, wake coalescing,
 acknowledgement, redelivery, and DLQ behavior remain authoritative; Telegram
-does not introduce a second agent-delivery path.</p>
+does not introduce a second agent-delivery path. The sink drainer does not poll
+on a short interval: the bus wakes it after a committed delivery, and a
+5-second fallback timer retries failed deliveries.</p>
 <h2 id="agent-goal-delivery"><a class="blume-heading-anchor" href="#agent-goal-delivery">Agent goal delivery</a></h2>
 <p>The per-agent Goal reconciler publishes <code>task.goal</code> to the agent’s service
 chat, <code>chat:service:&lt;name&gt;</code>, with the selected task key and <code>selected</code> or

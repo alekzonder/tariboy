@@ -145,6 +145,15 @@ running as `agent` with defaults, `team` lives at
 `/home/agent/.tariboy/stores/team/`, and its reviewer source is
 `/home/agent/.tariboy/stores/team/images/reviewer/Tariboyfile.yaml`.
 `TARIBOY_BASE_DIR` or the daemon's `--base-dir` changes that root.
+
+The Stores page offers the public Tariboy Store as one button. **Add tariboy
+Store** registers `https://github.com/alekzonder/tariboy-store.git` under the
+name `tariboy` on the selected server and opens its detail; it is the same
+request as `tariboy store add tariboy
+https://github.com/alekzonder/tariboy-store.git`. The button is hidden when the
+server already has a Store named `tariboy` or a Store with that source. The
+server needs HTTPS access to github.com; a failed clone registers nothing and
+shows the daemon error.
 A local source such as `/srv/company-images` is used in place, without a copy.
 Stores are the source of canonical agent images and skills; the daemon no
 longer installs a separate built-in Store tree.
@@ -542,12 +551,14 @@ for this operation, not source backup or persistent state.
   terminal-only behavior is runtime policy.
 - The official Store's `basic` source explicitly declares every plugin,
   packaged skill, runtime placeholder, and mandatory finish prompt it uses.
-  Register and refresh `tariboy-store`, then build `official/basic`; daemon
+  Add the `tariboy` Store, then build `tariboy/basic`; daemon
   upgrades do not publish or replace that image.
 - New build and validation requests require schema v2. Existing self-contained
   schema-v1 runnable archives remain readable and runnable only when they carry
   every byte their historical contract requires; they are not valid editable
   sources for a new build.
+- Schema v1 is legacy: v1 archives are read and run, cannot be built, and get
+  no new manifest fields.
 
 Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and package
 `../../skills/tasks` when a Store image should expose its agent command and

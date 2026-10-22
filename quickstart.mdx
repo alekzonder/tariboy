@@ -6,13 +6,13 @@ sidebar:
   icon: rocket
 ---
 
-This path is for the `0.91.0` alpha on an Apple Silicon Mac.
+This path is for the `0.92.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.91.0_aarch64.dmg`;
+- a verified `Tariboy_0.92.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -75,8 +75,11 @@ handoff; legacy daemons fail closed when active work cannot be preserved.
 
 Open **Images**:
 
-- register `git@github.com:alekzonder/tariboy-store.git` as a Store named
-  `official`, refresh it, then build `official/basic`; or
+- on **Stores**, click **Add tariboy Store**, which registers
+  `https://github.com/alekzonder/tariboy-store.git` as the Store `tariboy`,
+  then build `tariboy/basic` from its detail (or run
+  `tariboy store add tariboy https://github.com/alekzonder/tariboy-store.git`
+  and `tariboy image build tariboy/basic`); or
 - choose an existing built image; or
 - enter the path to an original directory containing `Tariboyfile.yaml`, set a
   required name such as `reviewer`, validate the exact plugin/prompt template,
@@ -101,6 +104,9 @@ enables Terminal; turn it off for a headless agent.
 For the first walkthrough, keep Interactive on and use a non-bare image. From
 the CLI, `tariboy agent run IMAGE:TAG` creates an
 interactive agent too; pass `--interactive=false` for a headless one.
+A `--cwd` that does not exist is rejected; add `--create-cwd` to make the
+directory first. `tariboy agent cwd NAME PATH --create` does the same for an
+existing agent.
 
 ## 5. Use Terminal
 

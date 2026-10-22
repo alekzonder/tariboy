@@ -16,6 +16,16 @@ iteration under a watchdog**. The daemon hands it:
 
 Everything after `--` is the harness command it supervises.
 
+The shim binds its RPC socket before it starts the harness or creates the tmux
+session. A bind failure is fatal: the shim writes the error to `shim.log` and
+exits without `result.json`. The daemon reaps the shim process it launched;
+when the shim exits and no `result.json` exists, the daemon ends the iteration
+as `harness_error` with the reason `shim exited before writing result (see
+shim.log)`. A shim launched by a previous daemon is not watched this way. Until
+the harness process or harness window exists, a `Kill` RPC answers
+`harness not started yet` instead of reporting a stop that did not happen, so
+the caller can retry.
+
 For tmux-backed interactive iterations, the pane command is a hidden supervisor
 mode of the same shim binary. That supervisor starts one directly owned harness
 process group and places it in the pane terminal's foreground before exec, so
@@ -46,9 +56,25 @@ exits immediately after recording the result.
 After successful observation, group cleanup, and the exact leader reap, the
 supervisor captures the harness's real numeric status, writes it to an
 owner-private temporary file, and atomically renames it within the iteration's
-private logs directory. After the tmux session ends, the outer shim validates
-and removes that transient status file before writing
-`result.json`. A non-zero harness status is preserved; a missing, malformed, or
+private logs directory. It then reports the exit to the outer shim with the
+`harness_exited` RPC on the shim socket. The shim passes that socket path only
+to the harness window, and the supervisor removes it from the harness
+environment. The report is best-effort and bounded to one second.
+
+The outer shim waits for the first of three events: the supervisor's exit
+report, its own cancellation, or a fallback `tmux has-session` check every ten
+seconds that finds the session gone. The fallback covers a session killed from
+outside before the supervisor could report, and a supervisor from an older shim
+build that does not send the report; a newer supervisor that reaches an older
+shim gets an unknown-method error and ignores it. `SIGTERM`, `SIGINT`, and the
+hard-deadline watchdog cancel the wait. After a report, the shim lets tmux
+close the pane on its own for up to one second, which keeps the end of the
+pane log, and then removes the exact session if it is still there. After a
+cancellation it removes the session at once. The session never outlives
+`result.json`. A cancelled shim writes no termination reason other than the
+existing `hard_timeout`; without a recorded status the exit code is `-1`.
+The outer shim then validates and removes the transient status file before
+writing `result.json`. A non-zero harness status is preserved; a missing, malformed, or
 unreadable status becomes unknown failure (`-1`), never success. Timeout and
 explicit termination reasons still take precedence. The status file is not in
 the support-bundle allowlist.

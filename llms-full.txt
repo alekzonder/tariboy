@@ -40,7 +40,7 @@ An image packages **plugins, Agent Skills, and an ordered prompt template**.
 Build it from an original directory containing `Tariboyfile.yaml`, inspect
 exactly what the agent will receive, and reuse it across agents.
 
-Register the official `tariboy-store` repository and build `official/basic`,
+Add the `tariboy` Store with one click and build `tariboy/basic`,
 or build one for a specific role. Export runnable images to other hosts; keep
 the original source for rebuilds.
 Harness, model, and effort belong to agent configuration.
@@ -1301,7 +1301,7 @@ retained digest recorded on the agent, including assignments that were pending
 when the daemon was upgraded or the ordinary ref was rebuilt.
 
 The agent image read API projects the same selection order under the image
-publication gate: explicit pending digest, ordinary mutable active ref, then
+store lock: explicit pending digest, ordinary mutable active ref, then
 current pinned image. Current version metadata always comes from pinned
 inspection. This read does not stage or promote an assignment; next is a
 preview at read time and can change before the launch gate runs. A changed
@@ -1320,7 +1320,7 @@ facade over these parts:
 | Script supervisor (`scripts.go`) | Durable script runs: claim, start as the agent, cancel, and record the result. |
 | Tools facade (`tools_facade.go`) | The per-agent tools socket API. It reaches the manager only through narrow interfaces, so the API does not depend on a loop engine. |
 | Image activation (`image_activation.go`) | Pending image activation, the Reprovision swap, the skill bridge, and crash recovery of an interrupted swap. |
-| Iteration watcher (`iteration_watcher.go`) | The one polling loop that waits for `result.json`. It resyncs the hard deadline, enforces the soft deadline and the done grace with at most one Kill, and, for adoption, probes the shim. The runner and adoption both use it. |
+| Iteration watcher (`iteration_watcher.go`) | The one polling loop that waits for `result.json`. It resyncs the hard deadline, enforces the soft deadline and the done grace with at most one Kill, and, for adoption, probes the shim. For a shim the runner launched, it also ends the wait when the reaped shim process left no `result.json`, which the runner records as `harness_error`. The runner and adoption both use it. |
 
 The manager takes its locks in one order:
 
@@ -1328,16 +1328,21 @@ The manager takes its locks in one order:
    start, Stop, Remove, Reprovision, and a Restart launch after adoption from
    its decision until its iteration row exists. A wait for it ends when the
    daemon shuts down.
-2. The image **publication gate**. Image builds, image activation, Run, and
-   Reprovision take it.
+2. An image lock. Each image name has its own **name lock**; a build or an
+   image detail read takes the lock of the one name it touches, so builds of
+   different names run in parallel. The **store lock** covers the whole image
+   store: image activation, Run, Reprovision, agent image assignment, image
+   removal, and migration take it for writing, and it excludes every name
+   lock. A name lock holds the store lock for reading, so the store lock is
+   always taken first, and neither lock is taken twice.
 3. The registry lock. It guards only the registry maps. No database call,
    socket operation, or callback runs while it is held.
 
 A path that holds a later lock never waits for an earlier one. For example,
-Reprovision takes the agent's lifecycle gate before the publication gate, the
+Reprovision takes the agent's lifecycle gate before the image store lock, the
 same order as a Restart launch that activates an image. Run never starts an
-agent, so it never takes a lifecycle gate while it holds the publication gate.
-A normal iteration launch takes only the publication gate. The agent's handoff
+agent, so it never takes a lifecycle gate while it holds the image store lock.
+A normal iteration launch takes only the image store lock. The agent's handoff
 lock (see [the shim](/docs/architecture/shim)) is taken while no gate is held.
 
 Image activation can take long: it unpacks the image, prepares the skill
@@ -1560,7 +1565,9 @@ maps forum updates, then publishes ordinary text through the authenticated
 plugin API onto `chat:telegram:<agent>`. Agent replies return through the
 existing channel-sink outbox, so bus persistence, wake coalescing,
 acknowledgement, redelivery, and DLQ behavior remain authoritative; Telegram
-does not introduce a second agent-delivery path.
+does not introduce a second agent-delivery path. The sink drainer does not poll
+on a short interval: the bus wakes it after a committed delivery, and a
+5-second fallback timer retries failed deliveries.
 
 ## Agent goal delivery
 
@@ -1609,6 +1616,16 @@ iteration under a watchdog**. The daemon hands it:
 
 Everything after `--` is the harness command it supervises.
 
+The shim binds its RPC socket before it starts the harness or creates the tmux
+session. A bind failure is fatal: the shim writes the error to `shim.log` and
+exits without `result.json`. The daemon reaps the shim process it launched;
+when the shim exits and no `result.json` exists, the daemon ends the iteration
+as `harness_error` with the reason `shim exited before writing result (see
+shim.log)`. A shim launched by a previous daemon is not watched this way. Until
+the harness process or harness window exists, a `Kill` RPC answers
+`harness not started yet` instead of reporting a stop that did not happen, so
+the caller can retry.
+
 For tmux-backed interactive iterations, the pane command is a hidden supervisor
 mode of the same shim binary. That supervisor starts one directly owned harness
 process group and places it in the pane terminal's foreground before exec, so
@@ -1639,9 +1656,25 @@ exits immediately after recording the result.
 After successful observation, group cleanup, and the exact leader reap, the
 supervisor captures the harness's real numeric status, writes it to an
 owner-private temporary file, and atomically renames it within the iteration's
-private logs directory. After the tmux session ends, the outer shim validates
-and removes that transient status file before writing
-`result.json`. A non-zero harness status is preserved; a missing, malformed, or
+private logs directory. It then reports the exit to the outer shim with the
+`harness_exited` RPC on the shim socket. The shim passes that socket path only
+to the harness window, and the supervisor removes it from the harness
+environment. The report is best-effort and bounded to one second.
+
+The outer shim waits for the first of three events: the supervisor's exit
+report, its own cancellation, or a fallback `tmux has-session` check every ten
+seconds that finds the session gone. The fallback covers a session killed from
+outside before the supervisor could report, and a supervisor from an older shim
+build that does not send the report; a newer supervisor that reaches an older
+shim gets an unknown-method error and ignores it. `SIGTERM`, `SIGINT`, and the
+hard-deadline watchdog cancel the wait. After a report, the shim lets tmux
+close the pane on its own for up to one second, which keeps the end of the
+pane log, and then removes the exact session if it is still there. After a
+cancellation it removes the session at once. The session never outlives
+`result.json`. A cancelled shim writes no termination reason other than the
+existing `hard_timeout`; without a recorded status the exit code is `-1`.
+The outer shim then validates and removes the transient status file before
+writing `result.json`. A non-zero harness status is preserved; a missing, malformed, or
 unreadable status becomes unknown failure (`-1`), never success. Timeout and
 explicit termination reasons still take precedence. The status file is not in
 the support-bundle allowlist.
@@ -2226,7 +2259,12 @@ The agent row remains authoritative during crash recovery. An incomplete local
 image swap is either rolled back to the DB-active backup or completed when the
 already-promoted image digest matches the row. Each unpacked image records the
 ref it was materialized for and a daemon-owned id marker, so two generations of
-one ref cannot be confused. Generations are kept by id under
+one ref cannot be confused. Provisioning unpacks an image atomically: it writes
+a staging directory next to the agent's `image/`, syncs it, and renames it into
+place, so a failed unpack leaves no partial `image/` and a repeated provision
+keeps no stale files. A crash while the staging directory is written, or
+between the two renames, can leave `.unpack-*` staging or backup directories
+under the agent root; the next provisioning of that agent removes them. Generations are kept by id under
 `images/<name>/refs/`, so active and pending assignments survive a moved tag.
 Harness, model, effort, environment, CWD, context, workdir, messages, history,
 group, and subscriptions are not image assignment fields.
@@ -2243,11 +2281,15 @@ rebuilding any non-reserved ref is always allowed, so no build path can be
 refused for a ref that already exists. A store written before this model is
 migrated once at daemon startup, keeping each archive's content digest as its
 ref id so pinned digests keep resolving.
-One publication gate spans ordinary, editable-source, team-import,
-agent-authored, compose, and controlled-release publication plus assignment,
-activation, provisioning, reprovisioning, import, and removal, so none can
-persist an uncommitted generation. Compose publishes through the daemon rather
-than writing its image store from the client process.
+Image locks keep every reader off an uncommitted generation. Ordinary,
+editable-source, agent-authored, compose, and import publication take the lock
+of the one image name they write, so publications of different names run in
+parallel and publications of one name run one at a time. Assignment,
+activation, provisioning, reprovisioning, removal, and migration read or
+change several names, so they take the store-wide lock, which excludes every
+name lock. The locks are in-process: `tariboyd` is the one process that writes
+the image store. Compose publishes through the daemon rather than writing its
+image store from the client process.
 
 ## Restart handoff
 
@@ -2403,6 +2445,14 @@ explicit target. Older daemons that do not expose the complete clone projection
 must be updated. **Start now** remains a separate retryable lifecycle request
 after creation.
 
+The daemon rejects a **cwd** that does not exist with `bad_cwd`, so a typo
+never creates a stray directory. Under the field, **Create directory if
+missing** is off by default and is enabled only when **cwd** is not empty. When
+it is on, the create request sends `create_cwd: true` and the daemon makes the
+directory and its parents (mode `0755`, owned by the daemon user) before it
+validates the path. A path that exists as a file still fails. A clone always
+starts with the switch off.
+
 While **Create agent** is disabled, the dialog footer names the first unmet
 condition next to it: the source configuration, the target host's image list,
 an unselected or unbuilt image, or the image manifest still loading. A failed
@@ -2483,7 +2533,7 @@ history entry.
 Under the period bar, cards total the work on tasks in the period: tasks,
 completed tasks, status changes, comments, iterations, and cost. They come from
 one `GET /api/task-activity?since=&until=[&agent=]` response
-(`tariboy tasks activity`), polled every 10 seconds; a response for an older
+(`ttasks activity`), polled every 10 seconds; a response for an older
 period or host never replaces the current one. The daemon builds it from AI
 requests tagged with a task and from task events in the window: per task the
 iterations, requests, tokens, and cost, the comments, the outcomes an agent
@@ -2620,7 +2670,10 @@ until the one download completes, after which cancellation only skips
 unstarted destinations.
 
 The **Stores** workspace registers Git URLs or local absolute source directories
-on the route-selected daemon. Its detail shows the current disk-backed image
+on the route-selected daemon. Above the form, **Add tariboy Store** registers
+`https://github.com/alekzonder/tariboy-store.git` as the Store `tariboy` with
+the same add request and opens its detail; the block is hidden once the daemon
+lists a Store with that name or source. Its detail shows the current disk-backed image
 inventory, each source `image_version`, and the `image_version` read directly
 from that image's `latest` manifest. It distinguishes missing latest,
 unversioned source or latest, source validation errors, and latest inspection
@@ -3252,7 +3305,8 @@ once the host is back. Drafts live in tab memory only and are not queued for
 later delivery.
 
 Configuration is one column of blocks in a fixed order: **General** (agent
-image, image digest, working directory), **Runtime** (harness, model, effort,
+image, image digest, working directory and, while the agent is stopped,
+**Create directory if missing**), **Runtime** (harness, model, effort,
 Interactive), **Loop and timeouts** (the scheduling and timeout
 fields, including **Schedule (RRULE)** with the daemon's next scheduled start
 under it, which follows Save, and an emptied field clears the schedule; there
@@ -3277,7 +3331,11 @@ values after a reload, while the failed field (with the server's reason beside
 it) and the ones never attempted stay dirty drafts, so the next Save sends only
 them. There is no batch endpoint, so a Save is not atomic. Harness and
 Interactive are saved with the page like every other field; they take effect the
-next time the agent starts and never restart it.
+next time the agent starts and never restart it. **Create directory if
+missing** is saved with the working directory as one request: when it is on,
+Save sends the path with `create: true`, and the daemon makes a missing
+directory before it validates the path. After a successful Save the switch is
+off again.
 
 A search box above the blocks filters by block: a case-insensitive match of
 every query word against a block's title, description, field labels, helpers
@@ -3613,8 +3671,9 @@ The daemon installs or refreshes the Telegram plugin from its sibling binary at
 startup. Optional external plugins are built and distributed independently.
 
 `make build` does not embed agent image sources or skills. Register a Store such
-as `git@github.com:alekzonder/tariboy-store.git`, refresh it, and build the
-desired image on each daemon that needs it. The daemon synthesizes only the
+as the `tariboy` Store (**Add tariboy Store** on the Stores page, or
+`tariboy store add tariboy https://github.com/alekzonder/tariboy-store.git`)
+and build the desired image on each daemon that needs it. The daemon synthesizes only the
 reserved empty `bare:latest` image.
 
 ## Client/daemon version drift
@@ -3822,6 +3881,77 @@ agents:
 
 `wait_customer_timeout` must be a positive whole-second duration.
 
+## How `up` converges
+
+`compose up` builds the declared images and reads the live state once: the
+groups, agents, budgets, task queues and their pools, the queue workflow
+bindings, and the pending image of each running agent whose image differs from
+the file. It then plans the actions that move the daemon toward the file and
+applies them in this order: groups, agents, budgets, task queues, and queue
+workflows. A setting that already matches makes no call, so running `up` again
+on a converged file changes nothing and reports every resource `ok`.
+Subscriptions are the one exception: `up` sends each one again, and the daemon
+reports an existing subscription as unchanged.
+
+An existing agent converges in place:
+
+- **Image.** A different `image` is set as the agent's pending image
+  (`POST /api/agents/{name}/image`). The agent keeps running and adopts the
+  image on its next iteration; there is no restart. A bare name means
+  `NAME:latest`.
+- **Harness.** A different `harness.type` is stored
+  (`POST /api/agents/{name}/harness`), and a running agent is then stopped and
+  started so the new harness takes effect. The restart runs after the agent's
+  other changes, so the restarted iteration also uses the new image, CWD, loop,
+  and Goal settings. The restart interrupts the current iteration, as a manual
+  restart does. A stopped agent is re-provisioned
+  instead (see below), which starts it with the new harness. An agent whose
+  file sets `loop.enabled: false` is not restarted; its next start uses the new
+  harness.
+- **Stopped agent.** An agent left stopped by a data-preserving `down` is
+  re-provisioned in place with the file's image, keeping its context,
+  iterations, and audit log, and then converges as above.
+- Group membership, CWD, timeout, loop settings, and the Goal settings the file
+  sets converge to the file's values. Subscriptions are sent on every run; the
+  daemon ignores a duplicate and reports it unchanged, so it does not make the
+  agent `changed`.
+
+Model, effort, environment, and plugins are applied only when compose creates
+an agent; `up` does not change them on an existing agent.
+
+A failed action does not stop the run. The actions that depend on it are
+skipped: for example, a failed agent create skips that agent's start and its
+budget, and a failed harness change skips the restart. Independent actions,
+including the other agents, still run. When the run ends, `up` prints one line
+per resource with its outcome:
+
+```text
+changed  group:research-team
+failed   agent:writer: create agent writer: ...
+skipped  budget:agent:writer: an action it depends on failed
+ok       agent:scout
+up: 1 ok, 1 changed, 1 failed, 1 skipped
+```
+
+| Outcome | Meaning |
+| --- | --- |
+| `ok` | Already matched the file; nothing was done. |
+| `changed` | Every planned action succeeded. |
+| `failed` | An action failed; the line shows the first error. |
+| `skipped` | An action it depends on failed, so it was not attempted. |
+
+If any resource failed, `up` exits non-zero and prints a one-line summary such
+as `compose up: 1 resource failed` to standard error; the report above already
+shows each error. The resources that succeeded stay
+applied, so the daemon can be partly converged; fix the cause and run `up`
+again to converge the rest.
+
+`compose status` reads the same plan without applying it. It prints one line
+per group, agent, budget, task queue, and pool, then `drift: N`. An agent's line
+lists each setting `up` would change; an image that is already pending shows as
+`image pending` until the agent adopts it. Model, environment, and plugins are
+not checked, and status says so on its last line.
+
 ## Task queues and pools
 
 Compose can declare task queues and the explicit agent pools of each queue.
@@ -3933,7 +4063,7 @@ when the daemon is down.
 | `plugin` | `install`, `ls`, `inspect`, `logs`, `rm` |
 | `telegram` | contributed by the running bundled plugin: `configure`, `chat setup`, `status` |
 | `schedule` | `ls` |
-| `tasks queue create` | Create a native task queue with owners and an optional responsible agent |
+| `tasks` | the [`ttasks`](/docs/reference/commands#native-tasks-ttasks-) client in operator mode: the same commands, for example `queue create` and `activity` |
 | `secret` | `set`, `ls`, `rm` |
 | `budget` | `set`, `ls`, `status` |
 | `usage` / `logs` / `iteration` | AI usage/cost, event stream, iteration inspect/logs/ls |
@@ -4168,10 +4298,11 @@ make full-check      # heavy, tens of minutes, includes check
 
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
-when ownership is unclear. The backend target runs `fmt-check`, `vet`, `test`,
-Go unit tests and smoke contracts. The frontend target runs UI
-typecheck, lint, unit tests, branding, and the documentation checks. Before
-checking, `backend-check` runs `go mod download`, and `frontend-check` runs
+when ownership is unclear. The backend target runs `fmt-check`, `vet`,
+`staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. The
+frontend target runs UI typecheck, lint, unit tests, branding, and the
+documentation checks. Before checking, `backend-check` runs `go mod download`
+for the module and for `tools.mod`, and `frontend-check` runs
 locked `npm ci` installs under both `ui/` and `docs/`. They do not write into
 `bin/` or dirty `git status`. Each step reports its result and duration as it
 finishes.
@@ -4221,11 +4352,14 @@ git clean -ndx
 
 ### Go control plane and plugins
 
-`make backend-check` covers this subsystem with `fmt-check`, `vet`, and `test`.
-To run one of them from the repository root while iterating:
+`make backend-check` covers this subsystem with `fmt-check`, `vet`,
+`staticcheck`, `gocyclo`, and `test`. To run one of them from the repository
+root while iterating:
 
 ```bash
 make vet
+make staticcheck
+make gocyclo
 make test
 make fmt-check
 ```
@@ -4233,6 +4367,25 @@ make fmt-check
 Those targets enumerate the module's packages and exclude `node_modules`; a Go
 fixture embedded in an npm dependency is not Tariboy source and must not extend
 the Go quality gate.
+
+The versions of `staticcheck` and `gocyclo` are pinned in `tools.mod` and
+`tools.sum` at the repository root. This separate module file keeps the
+dependencies of the linters out of `go.mod`. The targets run each tool with
+`go tool -modfile=tools.mod NAME`, so you do not install anything into
+`$GOPATH/bin`. To move a tool to a new version, run
+`go get -modfile=tools.mod -tool PACKAGE@VERSION` and commit both files.
+
+`make staticcheck` runs the default checks plus `ST1005`, as `staticcheck.conf`
+sets, with `-tags=tmux`. Fix a new finding in the same change. If a finding
+depends on separate work, disable only that check in `staticcheck.conf` with a
+comment that names the task.
+
+`make gocyclo` fails when a non-test function has a cyclomatic complexity
+over `GOCYCLO_OVER` in the `Makefile`. The value is a ratchet: it is the
+current maximum, and a change that simplifies the most complex function lowers
+it. Do not raise it. The target for new code is 25. Test files are not
+measured. `make gocyclo-report` prints the 30 most complex functions and the
+average, and it never fails.
 
 `make fmt` is not a check: it rewrites files. Only `fmt-check` is part of
 `backend-check`; run `make fmt` yourself when it reports drift.
@@ -4961,6 +5114,15 @@ running as `agent` with defaults, `team` lives at
 `/home/agent/.tariboy/stores/team/`, and its reviewer source is
 `/home/agent/.tariboy/stores/team/images/reviewer/Tariboyfile.yaml`.
 `TARIBOY_BASE_DIR` or the daemon's `--base-dir` changes that root.
+
+The Stores page offers the public Tariboy Store as one button. **Add tariboy
+Store** registers `https://github.com/alekzonder/tariboy-store.git` under the
+name `tariboy` on the selected server and opens its detail; it is the same
+request as `tariboy store add tariboy
+https://github.com/alekzonder/tariboy-store.git`. The button is hidden when the
+server already has a Store named `tariboy` or a Store with that source. The
+server needs HTTPS access to github.com; a failed clone registers nothing and
+shows the daemon error.
 A local source such as `/srv/company-images` is used in place, without a copy.
 Stores are the source of canonical agent images and skills; the daemon no
 longer installs a separate built-in Store tree.
@@ -5358,12 +5520,14 @@ for this operation, not source backup or persistent state.
   terminal-only behavior is runtime policy.
 - The official Store's `basic` source explicitly declares every plugin,
   packaged skill, runtime placeholder, and mandatory finish prompt it uses.
-  Register and refresh `tariboy-store`, then build `official/basic`; daemon
+  Add the `tariboy` Store, then build `tariboy/basic`; daemon
   upgrades do not publish or replace that image.
 - New build and validation requests require schema v2. Existing self-contained
   schema-v1 runnable archives remain readable and runnable only when they carry
   every byte their historical contract requires; they are not valid editable
   sources for a new build.
+- Schema v1 is legacy: v1 archives are read and run, cannot be built, and get
+  no new manifest fields.
 
 Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and package
 `../../skills/tasks` when a Store image should expose its agent command and
@@ -5955,9 +6119,11 @@ Types are defined in `internal/plugins`:
 - **`channel-source`** publishes inbound events through
   `POST /api/plugin/publish`.
 - **`channel-sink`** receives subscribed bus messages at `POST /deliver`, with
-  durable redelivery and a dead-letter queue.
-- **`tool`** advertises an agent-facing capability out of band.
-- **`harness`** is recognized, but its runtime wiring is deferred.
+  durable redelivery and a dead-letter queue. The bus wakes the sink's drainer
+  when a new delivery is committed; a 5-second fallback timer retries failed
+  deliveries.
+- **`tool`** and **`harness`** are accepted in a manifest, but the daemon
+  connects nothing to them yet.
 
 ### Providers and parameterized channels
 
@@ -6870,6 +7036,9 @@ database.
 output. With a non-empty `TARIBOY_TOOLS_SOCKET`, `ttasks` uses only that
 identity-bound agent socket and fails closed when it is unavailable. With no
 such variable, it uses the host Unix daemon socket as the customer actor.
+`tariboy tasks …` is the same client in operator mode only: it ignores
+`TARIBOY_TOOLS_SOCKET`, so an agent that runs it sees and changes every task as
+the customer.
 
 The bare `tasks` command is a legacy, capability-controlled compatibility shim:
 when the image enables `tasks`, provisioning writes it into the agent bin
@@ -7103,13 +7272,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.91.0` alpha on an Apple Silicon Mac.
+This path is for the `0.92.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.91.0_aarch64.dmg`;
+- a verified `Tariboy_0.92.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -7172,8 +7341,11 @@ handoff; legacy daemons fail closed when active work cannot be preserved.
 
 Open **Images**:
 
-- register `git@github.com:alekzonder/tariboy-store.git` as a Store named
-  `official`, refresh it, then build `official/basic`; or
+- on **Stores**, click **Add tariboy Store**, which registers
+  `https://github.com/alekzonder/tariboy-store.git` as the Store `tariboy`,
+  then build `tariboy/basic` from its detail (or run
+  `tariboy store add tariboy https://github.com/alekzonder/tariboy-store.git`
+  and `tariboy image build tariboy/basic`); or
 - choose an existing built image; or
 - enter the path to an original directory containing `Tariboyfile.yaml`, set a
   required name such as `reviewer`, validate the exact plugin/prompt template,
@@ -7198,6 +7370,9 @@ enables Terminal; turn it off for a headless agent.
 For the first walkthrough, keep Interactive on and use a non-bare image. From
 the CLI, `tariboy agent run IMAGE:TAG` creates an
 interactive agent too; pass `--interactive=false` for a headless one.
+A `--cwd` that does not exist is rejected; add `--create-cwd` to make the
+directory first. `tariboy agent cwd NAME PATH --create` does the same for an
+existing agent.
 
 ## 5. Use Terminal
 
@@ -7403,6 +7578,10 @@ tariboy agent unsubscribe worker chat:ops
 tariboy agent subscriptions worker
 ```
 
+The operator subscribe is idempotent: a repeated subscribe with the same
+channel, type filter, matcher, and params returns the existing row. Its
+response includes `changed`, which is `false` when the subscription was
+already active and `true` otherwise.
 The operator path lists subscriptions by distinct channel, not by raw
 subscription id. Protected subscriptions cannot be removed through the operator
 unsubscribe command:
@@ -7528,7 +7707,11 @@ Clearing `acked_at` matters — `Pending` drains only rows where it is NULL.
 
 Plugin sinks are the one component that still acks directly: the sink drainer
 acks after the plugin accepts a delivery, acks-and-skips its own inbound echo,
-and leaves a failed delivery unacked for ordinary redelivery and DLQ.
+and leaves a failed delivery unacked for ordinary redelivery and DLQ. The
+drainer does not poll on a short interval. The bus wakes it after a committed
+publish, a `Requeue`, or an `Announce` gives the sink a new delivery, and many
+deliveries collapse into one wake. A 5-second fallback timer retries failed
+deliveries and covers a missed wake.
 
 ## Groups
 
@@ -7844,7 +8027,8 @@ tariboy has three command surfaces:
    `scripts/*.sh` launcher, run *inside* an agent over `$TARIBOY_TOOLS_SOCKET`.
 3. **Native Tasks** — `tariboy-tasks`, installed as `ttasks`, runs shared task
    verbs for an operator or an identity-bound agent. `ttasks --version` reports
-   its build and `ttasks --json …` requests JSON output.
+   its build and `ttasks --json …` requests JSON output. `tariboy tasks …` runs
+   the same client, always in operator mode; the table below does not list it.
 
 ## Operator commands
 
@@ -8035,8 +8219,6 @@ tariboy has three command surfaces:
 | `tariboy store refresh NAME` | Refresh a Store |
 | `tariboy store remove NAME` | Remove a Store registration |
 | `tariboy store show NAME` | Show a Store and its images |
-| `tariboy tasks activity` | Summarize work on tasks in a time window |
-| `tariboy tasks queue create` | Create a task queue |
 | `tariboy team compose NAME` | Render a group as tariboy-compose.yaml |
 | `tariboy team import archive apply ID` | Build images and create a staged portable team |
 | `tariboy team import archive plan ID` | Validate and plan a staged portable team import |
@@ -8154,6 +8336,12 @@ and fails closed if it cannot connect. Without the variable, the client uses
 the host Unix daemon socket as the customer actor. The bare `tasks` command is
 only the optional capability-controlled legacy agent shim.
 
+`tariboy tasks …` is the same client with the same commands, flags, output,
+and exit codes. It always runs in operator mode on the daemon socket
+(`--socket` or the default path) and ignores `TARIBOY_TOOLS_SOCKET`, so an
+agent that runs it sees every task and acts as the customer. Its help names
+`tariboy tasks`; `tariboy tasks --help-json` prints the `ttasks` tree.
+
 These shared verbs are available in both modes; in agent mode every mutation
 derives identity from the socket.
 
@@ -8215,8 +8403,10 @@ checks and watch statuses.
 
 The following administration roots are operator-only and are documented by
 `ttasks --help-json`: `queue` (including pools and triggers; see
-[Task workflows](/docs/task-workflows)), `events`, `principals`, and
-`notifications`. They are unavailable to agent mode.
+[Task workflows](/docs/task-workflows)), `events`, `principals`,
+`notifications`, and `activity` (`GET /api/task-activity`: the work on tasks in
+a `--since`/`--until` window, optionally for one `--agent`). They are
+unavailable to agent mode.
 
 Resource identifiers are positional (or named flags), for example:
 
@@ -8759,8 +8949,9 @@ The daemon runs the check, watch, and source scripts of a queue's
 the same OS user as the agents. A workflow gate protects against a skipped
 step, not against an agent that deliberately works around the process: an
 agent can read the task directory, the unpacked image, and the run files, and
-can reach the daemon socket at its default path. Run workflows only with agents
-you trust that far.
+can reach the daemon socket at its default path; `tariboy tasks` uses that
+socket in operator mode, so an agent that runs it sees and changes every task
+as the customer. Run workflows only with agents you trust that far.
 
 - A script receives no agent tools socket and no daemon API variables:
   `TARIBOY_TOOLS_SOCKET`, `TARIBOY_DAEMON_SOCKET`, `TARIBOY_PLUGIN_SOCKET`, and
@@ -8836,7 +9027,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.91.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.92.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -8897,14 +9088,25 @@ files for the newest 10 iterations of each agent on that host. It reads only
 `result.json`, `logs/shim.log`, `logs/harness.stdout.log`, and
 `logs/harness.stderr.log`; it never recursively walks an agent directory.
 
-The collector never includes credentials or environment values (including
-`PATH`), SSH aliases/configuration, `PROMPT.md`, context, transcripts, audit,
-workdirs, configured cwd contents, global or agent shell scripts, image/plugin
-state, provisioning replies, or user files. It does not open agent environment
-configuration. Harness output can
-nevertheless contain arbitrary private natural language, so inspect the ZIP
-before sending it under your organization's support data policy. Export does
-not upload anything automatically.
+Redaction of agent files classifies each daemon environment variable by its
+name. Values of secret-looking names (`*_TOKEN`, `*_SECRET*`, `*_API_KEY`,
+`*PASSWORD*`) are removed from 4 characters, `USER`, `LOGNAME`, and `HOSTNAME`
+from 3 characters, and any unknown name from 8 characters. A short allowlist of
+harmless names (`SHELL`, `TERM`, `LANG`, `LANGUAGE`, `LC_*`, `PATH`, `GOPATH`,
+`GOROOT`, `PWD`, `TMPDIR`, `EDITOR`, `VISUAL`, `COLORTERM`, `TERM_PROGRAM`,
+`SHLVL`) keeps its values. The collector does not export the environment; an
+allowlisted value that already appears in collected text is kept on purpose,
+and home directory prefixes are still rewritten. A
+secret-looking name is never allowlisted, and the unknown-name rule is
+unchanged from policy version 1. `diagnostics.json` reports policy version 2.
+
+The collector never includes credentials or environment values, SSH
+aliases/configuration, `PROMPT.md`, context, transcripts, audit, workdirs,
+configured cwd contents, global or agent shell scripts, image/plugin state,
+provisioning replies, or user files. It does not open agent environment
+configuration. Harness output can nevertheless contain arbitrary private natural
+language, so inspect the ZIP before sending it under your organization's support
+data policy. Export does not upload anything automatically.
 
 Activity audit export is a separate, explicit operator action and is not a
 support bundle. It can export one iteration or all retained iterations and may
@@ -8939,7 +9141,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.91.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.92.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -9005,13 +9207,35 @@ truncates one of those selected files: agent data above 128 MiB is rejected,
 and Desktop bounds a daemon response at 160 MiB.
 
 The collector never includes `PROMPT.md`, model/proxy transcripts,
-`audit.jsonl`, secrets, environment configuration or values (including
-`PATH`), `CONTEXT.md`, workdirs, configured cwd contents, image/plugin state,
-SSH aliases/configuration, provisioning replies, or user files, and it does
-not open agent environment configuration. The transient tmux exit-status file
-is also outside the allowlist. Harness output is still arbitrary,
-sensitive text; automatic redaction cannot prove it contains no private
-business data. Inspect the ZIP before sending it.
+`audit.jsonl`, secrets, environment configuration or values, `CONTEXT.md`,
+workdirs, configured cwd contents, image/plugin state, SSH
+aliases/configuration, provisioning replies, or user files, and it does not open
+agent environment configuration. It does not export the process environment. A
+value of an allowlisted variable (see below) that already appears in collected
+text is kept on purpose. The transient tmux exit-status file is also outside the
+allowlist. Harness output is still arbitrary, sensitive text; automatic
+redaction cannot prove it contains no private business data. Inspect the ZIP
+before sending it.
+
+Redaction decides by the name of each environment variable of the daemon
+process (policy version 2, shown as `redaction_policy_version` in
+`diagnostics.json`). Text that holds a value is cleaned as follows:
+
+- A variable whose name looks like a secret (for example `*_TOKEN`,
+  `*_SECRET*`, `*_API_KEY`, or `*PASSWORD*`) has its value removed when the
+  value is 4 or more characters long.
+- `USER`, `LOGNAME`, and `HOSTNAME` have their value removed when it is 3 or
+  more characters long.
+- Common harmless variables keep their value so a report stays readable:
+  `SHELL`, `TERM`, `LANG`, `LANGUAGE`, `LC_*`, `PATH`, `GOPATH`, `GOROOT`,
+  `PWD`, `TMPDIR`, `EDITOR`, `VISUAL`, `COLORTERM`, `TERM_PROGRAM`, and
+  `SHLVL`.
+- Any other variable has its value removed when it is 8 or more characters
+  long.
+
+A secret written as `KEY=value` is removed whatever its length when the key
+name looks like a secret. Home directory paths become `$HOME`, also inside
+allowlisted values.
 
 No upload is automatic. Send the inspected bundle only to the release owner
 through an approved internal channel.
@@ -9708,6 +9932,21 @@ schedule is cleared, a pending run is cancelled, and a running one is killed.
 The worker runs up to four scripts at once. Pending checks start before
 pending watch runs, because an agent waits for a check, and one slot is always
 left for a check.
+
+The watch runs of one workflow start one at a time, across every task, status,
+and queue that uses a workflow of that name. The next one starts only after the
+one before it has finished and at least `watch_spacing` after it started. The
+default is `5s`, and it applies when `Workflowfile.yaml` sets no
+`watch_spacing`; a workflow sets another value from `1s` to `10m`. So ten tasks
+in one status that check a pull request every minute call the service one after
+another, five seconds apart, and not at the same time. Because each task runs
+again `every` after its own run ends, the tasks stay spread out after the first
+round. With many tasks a watch runs less often than `every`: 30 tasks with the
+default spacing take 150 seconds for one round. The worker checks every two
+seconds, so a start can be up to two seconds late. Checks and sources never
+wait for the spacing, and watch runs of other workflows do not wait for it. The
+worker keeps the last start time in memory, so after a daemon restart the first
+watch of each workflow starts at once.
 
 ## Script protocol
 
@@ -10514,6 +10753,7 @@ the key, and the run id. A failed source run records the queue event
 | `workflow_pool_empty` | 409 | A pool the image names is missing or has no agents. |
 | `workflow_secret_missing` | 409 | A secret the image requires has no value in the queue or the global env, or `secret rm` would remove a secret the bound image requires and the global env does not hold. |
 | `workflow_unavailable` | 503 | The workflow image store is not available. |
+| `workflow_not_found` | 409 | The image a task or binding pins is not published. |
 | `queue_workflow_not_found` | 404 | The queue has no binding. |
 | `not_holder` | 403 | The caller does not own the current status. |
 | `forbidden` | 403 | A caller that is not the customer used an operator-only route (move, cancel, resume), or a caller that may not read a run log asked for it. |
@@ -10537,6 +10777,14 @@ the key, and the run id. A failed source run records the queue event
 | `reason_required` | 400 | A move needs a reason. |
 | `invalid_message` | 400 | The transition message exceeds 4 KiB. |
 | `revision_conflict` | 409 | The binding, pool, or task revision is not the current one. |
+
+A missing resource has one of two statuses. If the request addresses the
+resource (the task, queue, run, artifact, or secret in the path or body), the
+code is `<resource>_not_found` (or plain `not_found` for a task, request,
+image, or queue secret) and the status is 404. If the request only refers to
+the resource, the status is 409. For example, `workflow_not_found` is 409: the
+bound image is not published, and the request itself is well formed. The codes
+are part of the public contract and do not change.
 
 `rejected` and `failed` are not error codes: they are states of a transition
 request, and `workflow.transition_rejected` and `workflow.transition_failed` are
@@ -10562,18 +10810,18 @@ pending request.
 
 ## Official workflows
 
-The official Store (`official`) holds two workflow sources. A `pr-review`
+The official Store (`tariboy`) holds two workflow sources. A `pr-review`
 workflow, which turns pull requests that request a review into review tasks
 through a [source](#sources), is planned for the Store once a release with
 sources is out. Build one with
-`tariboy workflow build official/NAME`, then bind a queue as shown in
+`tariboy workflow build tariboy/NAME`, then bind a queue as shown in
 [Workflow images](/docs/workflow-images#official-workflow-images).
 
 ### `development`
 
 The pull request flow, version `0.1.0`. It requires the queue secret `GH_TOKEN`
 and a `developers` pool, and declares the artifacts `plan`, `pull_request`, and
-`merge_commit`. The pool's agents run `official/tariboy-developer` with their
+`merge_commit`. The pool's agents run `tariboy/tariboy-developer` with their
 own `GH_TOKEN` agent secret; see
 [Official workflow images](/docs/workflow-images#official-workflow-images).
 
@@ -10595,7 +10843,7 @@ Version `0.1.0`. One pool status, `research`, owned by the pool `researchers`,
 with the outcome `reported` to `done`. It needs the artifact `report`, the
 research report as Markdown, and has no scripts and no secrets. The status
 allows 6 idle iterations. It runs on any image with the `tasks` plugin, such as
-`official/basic`.
+`tariboy/basic`.
 
 ## Agent pools
 
@@ -11137,7 +11385,9 @@ plugins:
 `tariboy-tasks` is installed globally as `ttasks`; it uses identity-bound agent
 mode only when `TARIBOY_TOOLS_SOCKET` is non-empty and otherwise uses the host
 Unix daemon socket as the customer actor. Agent mode fails closed rather than
-falling back to operator access. When enabled, the `tasks` capability also
+falling back to operator access. `tariboy tasks …` runs the same client and
+always uses operator mode, also when an agent runs it, so it sees every task.
+When enabled, the `tasks` capability also
 provisions the bare legacy `tasks` shim. Schema-v2 images must still package the
 Tasks image skill; capability selection never packages instructions
 automatically. See the [Tasks built-in reference](/docs/plugins/built-in/tasks)
@@ -11402,6 +11652,7 @@ statuses:
 | `requires_secrets` | no | Names of secrets the scripts need; each matches `^[A-Za-z_][A-Za-z0-9_]*$`, must not start with `TARIBOY_`, and is listed once. |
 | `env` | no | Non-secret environment defaults for scripts. A name matches `^[A-Za-z_][A-Za-z0-9_]*$` and must not start with `TARIBOY_`. |
 | `limits` | no | Workflow-wide defaults; see [Limits](#limits). |
+| `watch_spacing` | no | Least time between the starts of two watch runs of this workflow, from `1s` to `10m`; default `5s`. See [Watch scripts](/docs/task-workflows#watch-scripts). |
 | `sources` | no | Queue-level scripts that create tasks; see [Sources](#sources). |
 
 Status IDs, outcome names (`on`), artifact names, and pool names match
@@ -11471,7 +11722,8 @@ are described under [Sources](/docs/task-workflows#sources).
 A path in `instructions`, `watch.script`, `checks[].script`, or
 `sources[].script`:
 
-- starts with `./`, is not absolute, and stays inside the source directory;
+- starts with `./`, is not absolute, contains no backslash or NUL byte, and
+  stays inside the source directory;
 - is not inside the top-level `.git` directory, which a build does not store;
 - names a regular file; a symlink anywhere on the path is rejected;
 - for a script, has an executable bit.
@@ -11723,8 +11975,8 @@ The graphs are in [Task workflows](/docs/task-workflows#official-workflows).
 To use `development` on a queue `DEV`:
 
 ```bash
-tariboy store refresh official
-tariboy workflow build official/development
+tariboy store refresh tariboy
+tariboy workflow build tariboy/development
 ttasks queue pool set DEV developers --agents dev-1,dev-2 --revision 0 --idempotency-key dev-pool
 printf '%s' "$GH_TOKEN" | ttasks queue secret set DEV GH_TOKEN
 ttasks queue workflow set DEV development:0.1.0 --revision 0
@@ -11732,9 +11984,9 @@ ttasks queue workflow set DEV development:0.1.0 --revision 0
 
 The secret is read from standard input so it never shows in the process list.
 The bind is refused with `workflow_pool_empty` or `workflow_secret_missing`
-until the pool and the secret exist. For `research`, build `official/research`,
+until the pool and the secret exist. For `research`, build `tariboy/research`,
 create a `researchers` pool, and bind `research:0.1.0`; it needs no secret and
-runs on any image that enables the `tasks` plugin, such as `official/basic`.
+runs on any image that enables the `tasks` plugin, such as `tariboy/basic`.
 
 The queue secret and the agents' tokens are independent. The queue secret
 `GH_TOKEN` is what the workflow's scripts (`pr-monitor.py`, `pr-open.py`) read.
@@ -11746,7 +11998,7 @@ request. Only github.com is supported.
 
 Every agent of the `developers` pool must:
 
-- run the image `official/tariboy-developer`;
+- run the image `tariboy/tariboy-developer`;
 - have its own `GH_TOKEN` agent secret, as above;
 - have git push credentials for the repository;
 - have the repository checkout as its working directory;

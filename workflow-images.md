@@ -137,6 +137,7 @@ statuses:
 | `requires_secrets` | no | Names of secrets the scripts need; each matches `^[A-Za-z_][A-Za-z0-9_]*$`, must not start with `TARIBOY_`, and is listed once. |
 | `env` | no | Non-secret environment defaults for scripts. A name matches `^[A-Za-z_][A-Za-z0-9_]*$` and must not start with `TARIBOY_`. |
 | `limits` | no | Workflow-wide defaults; see [Limits](#limits). |
+| `watch_spacing` | no | Least time between the starts of two watch runs of this workflow, from `1s` to `10m`; default `5s`. See [Watch scripts](/docs/task-workflows#watch-scripts). |
 | `sources` | no | Queue-level scripts that create tasks; see [Sources](#sources). |
 
 Status IDs, outcome names (`on`), artifact names, and pool names match
@@ -206,7 +207,8 @@ are described under [Sources](/docs/task-workflows#sources).
 A path in `instructions`, `watch.script`, `checks[].script`, or
 `sources[].script`:
 
-- starts with `./`, is not absolute, and stays inside the source directory;
+- starts with `./`, is not absolute, contains no backslash or NUL byte, and
+  stays inside the source directory;
 - is not inside the top-level `.git` directory, which a build does not store;
 - names a regular file; a symlink anywhere on the path is rejected;
 - for a script, has an executable bit.
@@ -458,8 +460,8 @@ The graphs are in [Task workflows](/docs/task-workflows#official-workflows).
 To use `development` on a queue `DEV`:
 
 ```bash
-tariboy store refresh official
-tariboy workflow build official/development
+tariboy store refresh tariboy
+tariboy workflow build tariboy/development
 ttasks queue pool set DEV developers --agents dev-1,dev-2 --revision 0 --idempotency-key dev-pool
 printf '%s' "$GH_TOKEN" | ttasks queue secret set DEV GH_TOKEN
 ttasks queue workflow set DEV development:0.1.0 --revision 0
@@ -467,9 +469,9 @@ ttasks queue workflow set DEV development:0.1.0 --revision 0
 
 The secret is read from standard input so it never shows in the process list.
 The bind is refused with `workflow_pool_empty` or `workflow_secret_missing`
-until the pool and the secret exist. For `research`, build `official/research`,
+until the pool and the secret exist. For `research`, build `tariboy/research`,
 create a `researchers` pool, and bind `research:0.1.0`; it needs no secret and
-runs on any image that enables the `tasks` plugin, such as `official/basic`.
+runs on any image that enables the `tasks` plugin, such as `tariboy/basic`.
 
 The queue secret and the agents' tokens are independent. The queue secret
 `GH_TOKEN` is what the workflow's scripts (`pr-monitor.py`, `pr-open.py`) read.
@@ -481,7 +483,7 @@ request. Only github.com is supported.
 
 Every agent of the `developers` pool must:
 
-- run the image `official/tariboy-developer`;
+- run the image `tariboy/tariboy-developer`;
 - have its own `GH_TOKEN` agent secret, as above;
 - have git push credentials for the repository;
 - have the repository checkout as its working directory;

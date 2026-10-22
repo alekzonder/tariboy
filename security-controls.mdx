@@ -181,8 +181,9 @@ The daemon runs the check, watch, and source scripts of a queue's
 the same OS user as the agents. A workflow gate protects against a skipped
 step, not against an agent that deliberately works around the process: an
 agent can read the task directory, the unpacked image, and the run files, and
-can reach the daemon socket at its default path. Run workflows only with agents
-you trust that far.
+can reach the daemon socket at its default path; `tariboy tasks` uses that
+socket in operator mode, so an agent that runs it sees and changes every task
+as the customer. Run workflows only with agents you trust that far.
 
 - A script receives no agent tools socket and no daemon API variables:
   `TARIBOY_TOOLS_SOCKET`, `TARIBOY_DAEMON_SOCKET`, `TARIBOY_PLUGIN_SOCKET`, and
@@ -258,7 +259,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.91.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.92.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -319,14 +320,25 @@ files for the newest 10 iterations of each agent on that host. It reads only
 `result.json`, `logs/shim.log`, `logs/harness.stdout.log`, and
 `logs/harness.stderr.log`; it never recursively walks an agent directory.
 
-The collector never includes credentials or environment values (including
-`PATH`), SSH aliases/configuration, `PROMPT.md`, context, transcripts, audit,
-workdirs, configured cwd contents, global or agent shell scripts, image/plugin
-state, provisioning replies, or user files. It does not open agent environment
-configuration. Harness output can
-nevertheless contain arbitrary private natural language, so inspect the ZIP
-before sending it under your organization's support data policy. Export does
-not upload anything automatically.
+Redaction of agent files classifies each daemon environment variable by its
+name. Values of secret-looking names (`*_TOKEN`, `*_SECRET*`, `*_API_KEY`,
+`*PASSWORD*`) are removed from 4 characters, `USER`, `LOGNAME`, and `HOSTNAME`
+from 3 characters, and any unknown name from 8 characters. A short allowlist of
+harmless names (`SHELL`, `TERM`, `LANG`, `LANGUAGE`, `LC_*`, `PATH`, `GOPATH`,
+`GOROOT`, `PWD`, `TMPDIR`, `EDITOR`, `VISUAL`, `COLORTERM`, `TERM_PROGRAM`,
+`SHLVL`) keeps its values. The collector does not export the environment; an
+allowlisted value that already appears in collected text is kept on purpose,
+and home directory prefixes are still rewritten. A
+secret-looking name is never allowlisted, and the unknown-name rule is
+unchanged from policy version 1. `diagnostics.json` reports policy version 2.
+
+The collector never includes credentials or environment values, SSH
+aliases/configuration, `PROMPT.md`, context, transcripts, audit, workdirs,
+configured cwd contents, global or agent shell scripts, image/plugin state,
+provisioning replies, or user files. It does not open agent environment
+configuration. Harness output can nevertheless contain arbitrary private natural
+language, so inspect the ZIP before sending it under your organization's support
+data policy. Export does not upload anything automatically.
 
 Activity audit export is a separate, explicit operator action and is not a
 support bundle. It can export one iteration or all retained iterations and may

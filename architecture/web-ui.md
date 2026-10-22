@@ -100,6 +100,14 @@ explicit target. Older daemons that do not expose the complete clone projection
 must be updated. **Start now** remains a separate retryable lifecycle request
 after creation.
 
+The daemon rejects a **cwd** that does not exist with `bad_cwd`, so a typo
+never creates a stray directory. Under the field, **Create directory if
+missing** is off by default and is enabled only when **cwd** is not empty. When
+it is on, the create request sends `create_cwd: true` and the daemon makes the
+directory and its parents (mode `0755`, owned by the daemon user) before it
+validates the path. A path that exists as a file still fails. A clone always
+starts with the switch off.
+
 While **Create agent** is disabled, the dialog footer names the first unmet
 condition next to it: the source configuration, the target host's image list,
 an unselected or unbuilt image, or the image manifest still loading. A failed
@@ -180,7 +188,7 @@ history entry.
 Under the period bar, cards total the work on tasks in the period: tasks,
 completed tasks, status changes, comments, iterations, and cost. They come from
 one `GET /api/task-activity?since=&until=[&agent=]` response
-(`tariboy tasks activity`), polled every 10 seconds; a response for an older
+(`ttasks activity`), polled every 10 seconds; a response for an older
 period or host never replaces the current one. The daemon builds it from AI
 requests tagged with a task and from task events in the window: per task the
 iterations, requests, tokens, and cost, the comments, the outcomes an agent
@@ -317,7 +325,10 @@ until the one download completes, after which cancellation only skips
 unstarted destinations.
 
 The **Stores** workspace registers Git URLs or local absolute source directories
-on the route-selected daemon. Its detail shows the current disk-backed image
+on the route-selected daemon. Above the form, **Add tariboy Store** registers
+`https://github.com/alekzonder/tariboy-store.git` as the Store `tariboy` with
+the same add request and opens its detail; the block is hidden once the daemon
+lists a Store with that name or source. Its detail shows the current disk-backed image
 inventory, each source `image_version`, and the `image_version` read directly
 from that image's `latest` manifest. It distinguishes missing latest,
 unversioned source or latest, source validation errors, and latest inspection
@@ -949,7 +960,8 @@ once the host is back. Drafts live in tab memory only and are not queued for
 later delivery.
 
 Configuration is one column of blocks in a fixed order: **General** (agent
-image, image digest, working directory), **Runtime** (harness, model, effort,
+image, image digest, working directory and, while the agent is stopped,
+**Create directory if missing**), **Runtime** (harness, model, effort,
 Interactive), **Loop and timeouts** (the scheduling and timeout
 fields, including **Schedule (RRULE)** with the daemon's next scheduled start
 under it, which follows Save, and an emptied field clears the schedule; there
@@ -974,7 +986,11 @@ values after a reload, while the failed field (with the server's reason beside
 it) and the ones never attempted stay dirty drafts, so the next Save sends only
 them. There is no batch endpoint, so a Save is not atomic. Harness and
 Interactive are saved with the page like every other field; they take effect the
-next time the agent starts and never restart it.
+next time the agent starts and never restart it. **Create directory if
+missing** is saved with the working directory as one request: when it is on,
+Save sends the path with `create: true`, and the daemon makes a missing
+directory before it validates the path. After a successful Save the switch is
+off again.
 
 A search box above the blocks filters by block: a case-insensitive match of
 every query word against a block's title, description, field labels, helpers

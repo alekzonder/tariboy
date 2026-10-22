@@ -622,6 +622,21 @@ The worker runs up to four scripts at once. Pending checks start before
 pending watch runs, because an agent waits for a check, and one slot is always
 left for a check.
 
+The watch runs of one workflow start one at a time, across every task, status,
+and queue that uses a workflow of that name. The next one starts only after the
+one before it has finished and at least `watch_spacing` after it started. The
+default is `5s`, and it applies when `Workflowfile.yaml` sets no
+`watch_spacing`; a workflow sets another value from `1s` to `10m`. So ten tasks
+in one status that check a pull request every minute call the service one after
+another, five seconds apart, and not at the same time. Because each task runs
+again `every` after its own run ends, the tasks stay spread out after the first
+round. With many tasks a watch runs less often than `every`: 30 tasks with the
+default spacing take 150 seconds for one round. The worker checks every two
+seconds, so a start can be up to two seconds late. Checks and sources never
+wait for the spacing, and watch runs of other workflows do not wait for it. The
+worker keeps the last start time in memory, so after a daemon restart the first
+watch of each workflow starts at once.
+
 ## Script protocol
 
 A script is an executable file inside the unpacked workflow image. The daemon
@@ -1427,6 +1442,7 @@ the key, and the run id. A failed source run records the queue event
 | `workflow_pool_empty` | 409 | A pool the image names is missing or has no agents. |
 | `workflow_secret_missing` | 409 | A secret the image requires has no value in the queue or the global env, or `secret rm` would remove a secret the bound image requires and the global env does not hold. |
 | `workflow_unavailable` | 503 | The workflow image store is not available. |
+| `workflow_not_found` | 409 | The image a task or binding pins is not published. |
 | `queue_workflow_not_found` | 404 | The queue has no binding. |
 | `not_holder` | 403 | The caller does not own the current status. |
 | `forbidden` | 403 | A caller that is not the customer used an operator-only route (move, cancel, resume), or a caller that may not read a run log asked for it. |
@@ -1450,6 +1466,14 @@ the key, and the run id. A failed source run records the queue event
 | `reason_required` | 400 | A move needs a reason. |
 | `invalid_message` | 400 | The transition message exceeds 4 KiB. |
 | `revision_conflict` | 409 | The binding, pool, or task revision is not the current one. |
+
+A missing resource has one of two statuses. If the request addresses the
+resource (the task, queue, run, artifact, or secret in the path or body), the
+code is `<resource>_not_found` (or plain `not_found` for a task, request,
+image, or queue secret) and the status is 404. If the request only refers to
+the resource, the status is 409. For example, `workflow_not_found` is 409: the
+bound image is not published, and the request itself is well formed. The codes
+are part of the public contract and do not change.
 
 `rejected` and `failed` are not error codes: they are states of a transition
 request, and `workflow.transition_rejected` and `workflow.transition_failed` are
@@ -1475,18 +1499,18 @@ pending request.
 
 ## Official workflows
 
-The official Store (`official`) holds two workflow sources. A `pr-review`
+The official Store (`tariboy`) holds two workflow sources. A `pr-review`
 workflow, which turns pull requests that request a review into review tasks
 through a [source](#sources), is planned for the Store once a release with
 sources is out. Build one with
-`tariboy workflow build official/NAME`, then bind a queue as shown in
+`tariboy workflow build tariboy/NAME`, then bind a queue as shown in
 [Workflow images](/docs/workflow-images#official-workflow-images).
 
 ### `development`
 
 The pull request flow, version `0.1.0`. It requires the queue secret `GH_TOKEN`
 and a `developers` pool, and declares the artifacts `plan`, `pull_request`, and
-`merge_commit`. The pool's agents run `official/tariboy-developer` with their
+`merge_commit`. The pool's agents run `tariboy/tariboy-developer` with their
 own `GH_TOKEN` agent secret; see
 [Official workflow images](/docs/workflow-images#official-workflow-images).
 
@@ -1508,7 +1532,7 @@ Version `0.1.0`. One pool status, `research`, owned by the pool `researchers`,
 with the outcome `reported` to `done`. It needs the artifact `report`, the
 research report as Markdown, and has no scripts and no secrets. The status
 allows 6 idle iterations. It runs on any image with the `tasks` plugin, such as
-`official/basic`.
+`tariboy/basic`.
 
 ## Agent pools
 

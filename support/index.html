@@ -15,7 +15,7 @@ blume-panel-tabs pre.astro-code{background:0 0!important;border:0!important;bord
 selected harness on the remote host.</li>
 <li>For a daemon older than <code>0.10.1</code>, finish active work before updating it.</li>
 </ol>
-<p>The app and bundled daemons must report <code>0.91.0</code>. Resolve a local mismatch with
+<p>The app and bundled daemons must report <code>0.92.0</code>. Resolve a local mismatch with
 the menu-bar <strong>Install/Update CLI</strong> action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.</p>
 <p>The first local update from a daemon older than <code>0.10.1</code> is intentionally
@@ -70,13 +70,34 @@ adds complete redacted <code>result.json</code>, <code>logs/shim.log</code>,
 truncates one of those selected files: agent data above 128 MiB is rejected,
 and Desktop bounds a daemon response at 160 MiB.</p>
 <p>The collector never includes <code>PROMPT.md</code>, model/proxy transcripts,
-<code>audit.jsonl</code>, secrets, environment configuration or values (including
-<code>PATH</code>), <code>CONTEXT.md</code>, workdirs, configured cwd contents, image/plugin state,
-SSH aliases/configuration, provisioning replies, or user files, and it does
-not open agent environment configuration. The transient tmux exit-status file
-is also outside the allowlist. Harness output is still arbitrary,
-sensitive text; automatic redaction cannot prove it contains no private
-business data. Inspect the ZIP before sending it.</p>
+<code>audit.jsonl</code>, secrets, environment configuration or values, <code>CONTEXT.md</code>,
+workdirs, configured cwd contents, image/plugin state, SSH
+aliases/configuration, provisioning replies, or user files, and it does not open
+agent environment configuration. It does not export the process environment. A
+value of an allowlisted variable (see below) that already appears in collected
+text is kept on purpose. The transient tmux exit-status file is also outside the
+allowlist. Harness output is still arbitrary, sensitive text; automatic
+redaction cannot prove it contains no private business data. Inspect the ZIP
+before sending it.</p>
+<p>Redaction decides by the name of each environment variable of the daemon
+process (policy version 2, shown as <code>redaction_policy_version</code> in
+<code>diagnostics.json</code>). Text that holds a value is cleaned as follows:</p>
+<ul>
+<li>A variable whose name looks like a secret (for example <code>*_TOKEN</code>,
+<code>*_SECRET*</code>, <code>*_API_KEY</code>, or <code>*PASSWORD*</code>) has its value removed when the
+value is 4 or more characters long.</li>
+<li><code>USER</code>, <code>LOGNAME</code>, and <code>HOSTNAME</code> have their value removed when it is 3 or
+more characters long.</li>
+<li>Common harmless variables keep their value so a report stays readable:
+<code>SHELL</code>, <code>TERM</code>, <code>LANG</code>, <code>LANGUAGE</code>, <code>LC_*</code>, <code>PATH</code>, <code>GOPATH</code>, <code>GOROOT</code>,
+<code>PWD</code>, <code>TMPDIR</code>, <code>EDITOR</code>, <code>VISUAL</code>, <code>COLORTERM</code>, <code>TERM_PROGRAM</code>, and
+<code>SHLVL</code>.</li>
+<li>Any other variable has its value removed when it is 8 or more characters
+long.</li>
+</ul>
+<p>A secret written as <code>KEY=value</code> is removed whatever its length when the key
+name looks like a secret. Home directory paths become <code>$HOME</code>, also inside
+allowlisted values.</p>
 <p>No upload is automatic. Send the inspected bundle only to the release owner
 through an approved internal channel.
 Repository owner and alpha incident lead: GitHub user

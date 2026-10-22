@@ -317,7 +317,7 @@ ordinary mutable-build refs, both inspection and staging resolve the exact
 retained digest recorded on the agent, including assignments that were pending
 when the daemon was upgraded or the ordinary ref was rebuilt.</p>
 <p>The agent image read API projects the same selection order under the image
-publication gate: explicit pending digest, ordinary mutable active ref, then
+store lock: explicit pending digest, ordinary mutable active ref, then
 current pinned image. Current version metadata always comes from pinned
 inspection. This read does not stage or promote an assignment; next is a
 preview at read time and can change before the launch gate runs. A changed
@@ -353,7 +353,7 @@ facade over these parts:</p>
 </tr>
 <tr>
 <td>Iteration watcher (<code>iteration_watcher.go</code>)</td>
-<td>The one polling loop that waits for <code>result.json</code>. It resyncs the hard deadline, enforces the soft deadline and the done grace with at most one Kill, and, for adoption, probes the shim. The runner and adoption both use it.</td>
+<td>The one polling loop that waits for <code>result.json</code>. It resyncs the hard deadline, enforces the soft deadline and the done grace with at most one Kill, and, for adoption, probes the shim. For a shim the runner launched, it also ends the wait when the reaped shim process left no <code>result.json</code>, which the runner records as <code>harness_error</code>. The runner and adoption both use it.</td>
 </tr>
 </tbody>
 </table></div>
@@ -363,16 +363,21 @@ facade over these parts:</p>
 start, Stop, Remove, Reprovision, and a Restart launch after adoption from
 its decision until its iteration row exists. A wait for it ends when the
 daemon shuts down.</li>
-<li>The image <strong>publication gate</strong>. Image builds, image activation, Run, and
-Reprovision take it.</li>
+<li>An image lock. Each image name has its own <strong>name lock</strong>; a build or an
+image detail read takes the lock of the one name it touches, so builds of
+different names run in parallel. The <strong>store lock</strong> covers the whole image
+store: image activation, Run, Reprovision, agent image assignment, image
+removal, and migration take it for writing, and it excludes every name
+lock. A name lock holds the store lock for reading, so the store lock is
+always taken first, and neither lock is taken twice.</li>
 <li>The registry lock. It guards only the registry maps. No database call,
 socket operation, or callback runs while it is held.</li>
 </ol>
 <p>A path that holds a later lock never waits for an earlier one. For example,
-Reprovision takes the agent’s lifecycle gate before the publication gate, the
+Reprovision takes the agent’s lifecycle gate before the image store lock, the
 same order as a Restart launch that activates an image. Run never starts an
-agent, so it never takes a lifecycle gate while it holds the publication gate.
-A normal iteration launch takes only the publication gate. The agent’s handoff
+agent, so it never takes a lifecycle gate while it holds the image store lock.
+A normal iteration launch takes only the image store lock. The agent’s handoff
 lock (see <a href="/tariboy/docs/architecture/shim">the shim</a>) is taken while no gate is held.</p>
 <p>Image activation can take long: it unpacks the image, prepares the skill
 bridge, and probes the harness. While a Restart launch waits in it, only the

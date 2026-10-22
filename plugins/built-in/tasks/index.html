@@ -13,7 +13,10 @@ database.</p>
 <p><code>ttasks --version</code> reports its build, and <code>ttasks --json …</code> requests JSON
 output. With a non-empty <code>TARIBOY_TOOLS_SOCKET</code>, <code>ttasks</code> uses only that
 identity-bound agent socket and fails closed when it is unavailable. With no
-such variable, it uses the host Unix daemon socket as the customer actor.</p>
+such variable, it uses the host Unix daemon socket as the customer actor.
+<code>tariboy tasks …</code> is the same client in operator mode only: it ignores
+<code>TARIBOY_TOOLS_SOCKET</code>, so an agent that runs it sees and changes every task as
+the customer.</p>
 <p>The bare <code>tasks</code> command is a legacy, capability-controlled compatibility shim:
 when the image enables <code>tasks</code>, provisioning writes it into the agent bin
 directory; removing the capability removes it. New examples use <code>ttasks</code>.</p>

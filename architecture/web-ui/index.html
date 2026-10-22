@@ -89,6 +89,13 @@ and image remain editable, and every follow-up request stays pinned to that
 explicit target. Older daemons that do not expose the complete clone projection
 must be updated. <strong>Start now</strong> remains a separate retryable lifecycle request
 after creation.</p>
+<p>The daemon rejects a <strong>cwd</strong> that does not exist with <code>bad_cwd</code>, so a typo
+never creates a stray directory. Under the field, <strong>Create directory if
+missing</strong> is off by default and is enabled only when <strong>cwd</strong> is not empty. When
+it is on, the create request sends <code>create_cwd: true</code> and the daemon makes the
+directory and its parents (mode <code>0755</code>, owned by the daemon user) before it
+validates the path. A path that exists as a file still fails. A clone always
+starts with the switch off.</p>
 <p>While <strong>Create agent</strong> is disabled, the dialog footer names the first unmet
 condition next to it: the source configuration, the target host’s image list,
 an unselected or unbuilt image, or the image manifest still loading. A failed
@@ -163,7 +170,7 @@ history entry.</p>
 <p>Under the period bar, cards total the work on tasks in the period: tasks,
 completed tasks, status changes, comments, iterations, and cost. They come from
 one <code>GET /api/task-activity?since=&amp;until=[&amp;agent=]</code> response
-(<code>tariboy tasks activity</code>), polled every 10 seconds; a response for an older
+(<code>ttasks activity</code>), polled every 10 seconds; a response for an older
 period or host never replaces the current one. The daemon builds it from AI
 requests tagged with a task and from task events in the window: per task the
 iterations, requests, tokens, and cost, the comments, the outcomes an agent
@@ -287,7 +294,10 @@ archive has its own <strong>Exporting</strong> phase: controls and cancellation 
 until the one download completes, after which cancellation only skips
 unstarted destinations.</p>
 <p>The <strong>Stores</strong> workspace registers Git URLs or local absolute source directories
-on the route-selected daemon. Its detail shows the current disk-backed image
+on the route-selected daemon. Above the form, <strong>Add tariboy Store</strong> registers
+<code>https://github.com/alekzonder/tariboy-store.git</code> as the Store <code>tariboy</code> with
+the same add request and opens its detail; the block is hidden once the daemon
+lists a Store with that name or source. Its detail shows the current disk-backed image
 inventory, each source <code>image_version</code>, and the <code>image_version</code> read directly
 from that image’s <code>latest</code> manifest. It distinguishes missing latest,
 unversioned source or latest, source validation errors, and latest inspection
@@ -872,7 +882,8 @@ still reports its failure. Its draft stays in the form, ready to send again
 once the host is back. Drafts live in tab memory only and are not queued for
 later delivery.</p>
 <p>Configuration is one column of blocks in a fixed order: <strong>General</strong> (agent
-image, image digest, working directory), <strong>Runtime</strong> (harness, model, effort,
+image, image digest, working directory and, while the agent is stopped,
+<strong>Create directory if missing</strong>), <strong>Runtime</strong> (harness, model, effort,
 Interactive), <strong>Loop and timeouts</strong> (the scheduling and timeout
 fields, including <strong>Schedule (RRULE)</strong> with the daemon’s next scheduled start
 under it, which follows Save, and an emptied field clears the schedule; there
@@ -896,7 +907,11 @@ values after a reload, while the failed field (with the server’s reason beside
 it) and the ones never attempted stay dirty drafts, so the next Save sends only
 them. There is no batch endpoint, so a Save is not atomic. Harness and
 Interactive are saved with the page like every other field; they take effect the
-next time the agent starts and never restart it.</p>
+next time the agent starts and never restart it. <strong>Create directory if
+missing</strong> is saved with the working directory as one request: when it is on,
+Save sends the path with <code>create: true</code>, and the daemon makes a missing
+directory before it validates the path. After a successful Save the switch is
+off again.</p>
 <p>A search box above the blocks filters by block: a case-insensitive match of
 every query word against a block’s title, description, field labels, helpers
 and keywords (for example <code>cwd</code>, <code>tmux</code>, <code>dlq</code>, <code>usd</code>) shows that whole block

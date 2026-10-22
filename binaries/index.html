@@ -44,8 +44,9 @@ blume-panel-tabs pre.astro-code{background:0 0!important;border:0!important;bord
 <p>The daemon installs or refreshes the Telegram plugin from its sibling binary at
 startup. Optional external plugins are built and distributed independently.</p>
 <p><code>make build</code> does not embed agent image sources or skills. Register a Store such
-as <code>git@github.com:alekzonder/tariboy-store.git</code>, refresh it, and build the
-desired image on each daemon that needs it. The daemon synthesizes only the
+as the <code>tariboy</code> Store (<strong>Add tariboy Store</strong> on the Stores page, or
+<code>tariboy store add tariboy https://github.com/alekzonder/tariboy-store.git</code>)
+and build the desired image on each daemon that needs it. The daemon synthesizes only the
 reserved empty <code>bare:latest</code> image.</p>
 <h2 id="clientdaemon-version-drift"><a class="blume-heading-anchor" href="#clientdaemon-version-drift">Client/daemon version drift</a></h2>
 <p><code>tariboy</code> and the <a href="/tariboy/docs/binaries/agent-tools">agent tool scripts</a> read the

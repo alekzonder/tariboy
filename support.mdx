@@ -15,7 +15,7 @@ sidebar:
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.91.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.92.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -81,13 +81,35 @@ truncates one of those selected files: agent data above 128 MiB is rejected,
 and Desktop bounds a daemon response at 160 MiB.
 
 The collector never includes `PROMPT.md`, model/proxy transcripts,
-`audit.jsonl`, secrets, environment configuration or values (including
-`PATH`), `CONTEXT.md`, workdirs, configured cwd contents, image/plugin state,
-SSH aliases/configuration, provisioning replies, or user files, and it does
-not open agent environment configuration. The transient tmux exit-status file
-is also outside the allowlist. Harness output is still arbitrary,
-sensitive text; automatic redaction cannot prove it contains no private
-business data. Inspect the ZIP before sending it.
+`audit.jsonl`, secrets, environment configuration or values, `CONTEXT.md`,
+workdirs, configured cwd contents, image/plugin state, SSH
+aliases/configuration, provisioning replies, or user files, and it does not open
+agent environment configuration. It does not export the process environment. A
+value of an allowlisted variable (see below) that already appears in collected
+text is kept on purpose. The transient tmux exit-status file is also outside the
+allowlist. Harness output is still arbitrary, sensitive text; automatic
+redaction cannot prove it contains no private business data. Inspect the ZIP
+before sending it.
+
+Redaction decides by the name of each environment variable of the daemon
+process (policy version 2, shown as `redaction_policy_version` in
+`diagnostics.json`). Text that holds a value is cleaned as follows:
+
+- A variable whose name looks like a secret (for example `*_TOKEN`,
+  `*_SECRET*`, `*_API_KEY`, or `*PASSWORD*`) has its value removed when the
+  value is 4 or more characters long.
+- `USER`, `LOGNAME`, and `HOSTNAME` have their value removed when it is 3 or
+  more characters long.
+- Common harmless variables keep their value so a report stays readable:
+  `SHELL`, `TERM`, `LANG`, `LANGUAGE`, `LC_*`, `PATH`, `GOPATH`, `GOROOT`,
+  `PWD`, `TMPDIR`, `EDITOR`, `VISUAL`, `COLORTERM`, `TERM_PROGRAM`, and
+  `SHLVL`.
+- Any other variable has its value removed when it is 8 or more characters
+  long.
+
+A secret written as `KEY=value` is removed whatever its length when the key
+name looks like a secret. Home directory paths become `$HOME`, also inside
+allowlisted values.
 
 No upload is automatic. Send the inspected bundle only to the release owner
 through an approved internal channel.

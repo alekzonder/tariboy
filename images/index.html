@@ -116,7 +116,14 @@ sources at <code>images/&lt;image_name&gt;/Tariboyfile.yaml</code>.</p>
 running as <code>agent</code> with defaults, <code>team</code> lives at
 <code>/home/agent/.tariboy/stores/team/</code>, and its reviewer source is
 <code>/home/agent/.tariboy/stores/team/images/reviewer/Tariboyfile.yaml</code>.
-<code>TARIBOY_BASE_DIR</code> or the daemon’s <code>--base-dir</code> changes that root.
+<code>TARIBOY_BASE_DIR</code> or the daemon’s <code>--base-dir</code> changes that root.</p>
+<p>The Stores page offers the public Tariboy Store as one button. <strong>Add tariboy
+Store</strong> registers <code>https://github.com/alekzonder/tariboy-store.git</code> under the
+name <code>tariboy</code> on the selected server and opens its detail; it is the same
+request as <code>tariboy store add tariboy https://github.com/alekzonder/tariboy-store.git</code>. The button is hidden when the
+server already has a Store named <code>tariboy</code> or a Store with that source. The
+server needs HTTPS access to github.com; a failed clone registers nothing and
+shows the daemon error.
 A local source such as <code>/srv/company-images</code> is used in place, without a copy.
 Stores are the source of canonical agent images and skills; the daemon no
 longer installs a separate built-in Store tree.</p>
@@ -507,12 +514,14 @@ for this operation, not source backup or persistent state.</p>
 terminal-only behavior is runtime policy.</li>
 <li>The official Store’s <code>basic</code> source explicitly declares every plugin,
 packaged skill, runtime placeholder, and mandatory finish prompt it uses.
-Register and refresh <code>tariboy-store</code>, then build <code>official/basic</code>; daemon
+Add the <code>tariboy</code> Store, then build <code>tariboy/basic</code>; daemon
 upgrades do not publish or replace that image.</li>
 <li>New build and validation requests require schema v2. Existing self-contained
 schema-v1 runnable archives remain readable and runnable only when they carry
 every byte their historical contract requires; they are not valid editable
 sources for a new build.</li>
+<li>Schema v1 is legacy: v1 archives are read and run, cannot be built, and get
+no new manifest fields.</li>
 </ul>
 <p>Native Tasks remains daemon-owned. Add <code>plugins: [{name: tasks}]</code> and package
 <code>../../skills/tasks</code> when a Store image should expose its agent command and

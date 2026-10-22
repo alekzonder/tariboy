@@ -16,6 +16,9 @@ database.
 output. With a non-empty `TARIBOY_TOOLS_SOCKET`, `ttasks` uses only that
 identity-bound agent socket and fails closed when it is unavailable. With no
 such variable, it uses the host Unix daemon socket as the customer actor.
+`tariboy tasks …` is the same client in operator mode only: it ignores
+`TARIBOY_TOOLS_SOCKET`, so an agent that runs it sees and changes every task as
+the customer.
 
 The bare `tasks` command is a legacy, capability-controlled compatibility shim:
 when the image enables `tasks`, provisioning writes it into the agent bin
