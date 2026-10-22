@@ -205,22 +205,6 @@ func runReady(parsed request, caller Caller, jsonOut bool, stdout, stderr io.Wri
 	return printResult(parsed, result, jsonOut, stdout, stderr)
 }
 
-func firstTask(raw json.RawMessage) (string, int64, error) {
-	var value struct {
-		Tasks []struct {
-			Key      string `json:"key"`
-			Revision int64  `json:"revision"`
-		} `json:"tasks"`
-	}
-	if err := json.Unmarshal(raw, &value); err != nil {
-		return "", 0, err
-	}
-	if len(value.Tasks) == 0 {
-		return "", 0, fmt.Errorf("tasks ready: no eligible task to claim")
-	}
-	return value.Tasks[0].Key, value.Tasks[0].Revision, nil
-}
-
 func operatorError(err error, stderr io.Writer) int { return operatorErrorFor(err, "", stderr) }
 
 // operatorErrorFor is operatorError for a command on task key, so a

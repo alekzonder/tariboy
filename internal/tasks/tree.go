@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
-	"sort"
 	"strings"
 )
 
@@ -377,14 +376,4 @@ func (s *TaskService) ClaimReady(ctx context.Context, actor Actor, filter ReadyF
 	}
 	s.signal()
 	return task, nil
-}
-
-// Keep map iteration from influencing SQL argument order in future extensions.
-func sortedIDs(ids map[int64]string) []int64 {
-	out := make([]int64, 0, len(ids))
-	for id := range ids {
-		out = append(out, id)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
-	return out
 }

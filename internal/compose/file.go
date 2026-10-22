@@ -62,7 +62,7 @@ func ParseWorkflowRef(s string) (WorkflowRef, error) {
 	}
 	rest := s
 	if strings.Count(rest, "/") > 1 || strings.Count(rest, ":") > 1 {
-		return ref, fmt.Errorf("want [STORE/]NAME[:TAG] with at most one / and one :")
+		return ref, fmt.Errorf("want [STORE/]NAME[:TAG] with at most one '/' and one ':'")
 	}
 	if i := strings.Index(rest, "/"); i >= 0 {
 		ref.Store, rest = rest[:i], rest[i+1:]

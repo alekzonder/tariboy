@@ -290,9 +290,3 @@ func commandFlags(spec tasks.Spec) map[string]bool {
 	}
 	return out
 }
-
-// commandName is the command as the user types it: "artifacts set" for the
-// action artifact_set.
-func commandName(action string) string {
-	return strings.Join(sharedHelpPath(action), " ")
-}
