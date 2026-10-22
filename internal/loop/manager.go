@@ -855,7 +855,7 @@ func (m *Manager) ensureRunGroup(group string) error {
 // the settings the spec leaves unset.
 func newRunAgent(spec registry.RunSpec, name string, ref image.Ref, man image.Manifest, resolvedPlugins []string) agent.Agent {
 	harnessType, model, effort, env := pick(spec.Harness, "", "claude"), spec.Model, spec.Effort, spec.Env
-	if man.SchemaVersion == 1 {
+	if image.IsLegacyV1(man) {
 		harnessType = pick(spec.Harness, man.Harness.Type, "claude")
 		model = pick(spec.Model, man.Harness.Model, "")
 		effort = pick(spec.Effort, man.Harness.Effort, "")

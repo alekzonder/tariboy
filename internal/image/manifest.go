@@ -4,6 +4,10 @@ import "github.com/alekzonder/tariboy/internal/agentskills"
 
 const ManifestSchemaVersion = 2
 
+// IsLegacyV1 reports whether man is a schema v1 manifest. v1 archives stay
+// readable and runnable; they cannot be built and gain no new fields.
+func IsLegacyV1(man Manifest) bool { return man.SchemaVersion == 1 }
+
 type ManifestPlugin struct {
 	Name    string `json:"name"`
 	Version string `json:"version,omitempty"`
@@ -42,14 +46,14 @@ type Manifest struct {
 	Tag                  string                 `json:"tag,omitempty"`
 	Digest               string                 `json:"digest,omitempty"`
 	BuiltAt              string                 `json:"built_at"`
-	Parents              []string               `json:"parents"`
+	Parents              []string               `json:"parents"` // schema v1 only; build_v2 never writes it
 	Plugins              []ManifestPlugin       `json:"plugins"`
 	Skills               []agentskills.Metadata `json:"skills,omitempty"`
-	RequiresSecrets      []string               `json:"requires_secrets"`
-	Harness              ManifestHarness        `json:"harness"`
-	Env                  map[string]string      `json:"env"`
-	Policy               ManifestPolicy         `json:"policy"`
-	Layers               []Layer                `json:"layers"`
+	RequiresSecrets      []string               `json:"requires_secrets"` // schema v1 only; build_v2 never writes it
+	Harness              ManifestHarness        `json:"harness"`          // schema v1 only; build_v2 never writes it, run reads it only for v1
+	Env                  map[string]string      `json:"env"`              // schema v1 only; build_v2 never writes it, run reads it only for v1
+	Policy               ManifestPolicy         `json:"policy"`           // schema v1 only; build_v2 never writes it
+	Layers               []Layer                `json:"layers"`           // schema v1 only; build_v2 never writes it (v2 uses the prompt template); read for display
 	PromptTemplateSHA256 string                 `json:"prompt_template_sha256,omitempty"`
 	// Bare marks an instructions-free image: the runner launches the harness
 	// with no assembled prompt, no bin shims on PATH and no i-am-done tooling.

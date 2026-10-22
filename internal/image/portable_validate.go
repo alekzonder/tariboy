@@ -185,7 +185,7 @@ func validatePortableMembers(archive []byte, members map[string]portableImageMem
 	if err := json.Unmarshal(manifestBody, &manifest); err != nil {
 		return Manifest{}, fmt.Errorf("parse manifest of %s: %w", ref.String(), err)
 	}
-	if manifest.SchemaVersion != 1 && manifest.SchemaVersion != 2 {
+	if !IsLegacyV1(manifest) && manifest.SchemaVersion != ManifestSchemaVersion {
 		return Manifest{}, fmt.Errorf("unsupported image schema_version %d", manifest.SchemaVersion)
 	}
 	if manifest.Name != ref.Name {
