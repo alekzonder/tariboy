@@ -18,6 +18,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/refstore"
 	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tidy"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 )
 
@@ -675,7 +676,7 @@ func (s *Store) removeTagLocked(name, tag string) (string, bool, error) {
 func makeWritable(root string) {
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error { // best effort: unreadable entries are skipped and removal reports the failure
 		if d != nil && d.IsDir() {
-			_ = os.Chmod(p, 0o700) // best effort: removal reports a still-locked tree
+			tidy.Log(nil, "make stored tree writable", os.Chmod(p, 0o700), "path", p)
 		}
 		return nil
 	})

@@ -836,7 +836,7 @@ func (s *Server) BindUnix(sock string) (func() error, error) {
 	// Rebuild the handler so a SetEventSource that ran after NewServer (which
 	// cached a handler built without the SSE route) takes effect.
 	handler := s.Handler()
-	_ = os.Remove(sock) // stale socket from a previous run
+	tidy.Remove(s.cctx.Log, sock) // stale socket from a previous run
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		return nil, err
