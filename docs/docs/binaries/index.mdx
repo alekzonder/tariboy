@@ -21,8 +21,9 @@ The daemon installs or refreshes the Telegram plugin from its sibling binary at
 startup. Optional external plugins are built and distributed independently.
 
 `make build` does not embed agent image sources or skills. Register a Store such
-as `git@github.com:alekzonder/tariboy-store.git`, refresh it, and build the
-desired image on each daemon that needs it. The daemon synthesizes only the
+as the `tariboy` Store (**Add tariboy Store** on the Stores page, or
+`tariboy store add tariboy https://github.com/alekzonder/tariboy-store.git`)
+and build the desired image on each daemon that needs it. The daemon synthesizes only the
 reserved empty `bare:latest` image.
 
 ## Client/daemon version drift

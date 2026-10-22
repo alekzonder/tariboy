@@ -41,7 +41,7 @@ An image packages **plugins, Agent Skills, and an ordered prompt template**.
 Build it from an original directory containing `Tariboyfile.yaml`, inspect
 exactly what the agent will receive, and reuse it across agents.
 
-Register the official `tariboy-store` repository and build `official/basic`,
+Add the `tariboy` Store with one click and build `tariboy/basic`,
 or build one for a specific role. Export runnable images to other hosts; keep
 the original source for rebuilds.
 Harness, model, and effort belong to agent configuration.

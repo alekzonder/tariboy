@@ -599,3 +599,62 @@ describe("Store reconnect", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+
+describe("Tariboy Store button", () => {
+  const tariboyStore = { name: "tariboy", source: "https://github.com/alekzonder/tariboy-store.git" };
+  const target = { id: "remote", label: "Remote", baseURL: "https://store.example", token: "store-token" };
+
+  const renderList = () => render(
+    <MemoryRouter initialEntries={["/servers/remote/stores"]}>
+      <Routes>
+        <Route path="/servers/remote/stores" element={<StoresPage target={target} basePath="/servers/remote/stores" />} />
+        <Route path="/servers/remote/stores/:name" element={<h1>Opened Store detail</h1>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+
+  const stubStores = (stores: unknown[], post: () => Response) => {
+    const calls: Call[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init: RequestInit = {}) => {
+      const method = init.method ?? "GET";
+      calls.push({ url: String(input), method, body: typeof init.body === "string" ? init.body : undefined });
+      return Promise.resolve(method === "POST" ? post() : envelope(stores));
+    }));
+    return calls;
+  };
+
+  it("adds the tariboy Store with one click and opens it", async () => {
+    const calls = stubStores([], () => envelope({ ...tariboyStore, path: "/stores/tariboy" }));
+    renderList();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add tariboy Store" }));
+
+    expect(await screen.findByRole("heading", { name: "Opened Store detail" })).toBeInTheDocument();
+    expect(calls).toContainEqual({
+      url: "https://store.example/api/stores",
+      method: "POST",
+      body: JSON.stringify(tariboyStore),
+    });
+  });
+
+  it("shows the daemon error and enables the button again", async () => {
+    stubStores([], () => envelope("clone Store: git failed", false));
+    renderList();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add tariboy Store" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("clone Store: git failed");
+    expect(screen.getByRole("button", { name: "Add tariboy Store" })).toBeEnabled();
+  });
+
+  it.each([
+    ["the name is taken", { name: "tariboy", source: "/srv/other" }],
+    ["the source is registered", { name: "official", source: tariboyStore.source }],
+  ])("is hidden when %s", async (_case, store) => {
+    stubStores([{ ...store, path: "/stores/x" }], () => envelope({}));
+    renderList();
+
+    expect(await screen.findByText(store.source)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add tariboy Store" })).toBeNull();
+  });
+});
