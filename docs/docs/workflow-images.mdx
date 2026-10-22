@@ -137,6 +137,7 @@ statuses:
 | `requires_secrets` | no | Names of secrets the scripts need; each matches `^[A-Za-z_][A-Za-z0-9_]*$`, must not start with `TARIBOY_`, and is listed once. |
 | `env` | no | Non-secret environment defaults for scripts. A name matches `^[A-Za-z_][A-Za-z0-9_]*$` and must not start with `TARIBOY_`. |
 | `limits` | no | Workflow-wide defaults; see [Limits](#limits). |
+| `watch_spacing` | no | Least time between the starts of two watch runs of this workflow, from `1s` to `10m`; default `5s`. See [Watch scripts](/docs/task-workflows#watch-scripts). |
 | `sources` | no | Queue-level scripts that create tasks; see [Sources](#sources). |
 
 Status IDs, outcome names (`on`), artifact names, and pool names match

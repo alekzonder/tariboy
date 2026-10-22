@@ -31,6 +31,7 @@ type File struct {
 	RequiresSecrets []string          `yaml:"requires_secrets,omitempty" json:"requires_secrets,omitempty"`
 	Env             map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
 	Limits          *Limits           `yaml:"limits,omitempty" json:"limits,omitempty"`
+	WatchSpacing    string            `yaml:"watch_spacing,omitempty" json:"watch_spacing,omitempty"`
 	Artifacts       []Artifact        `yaml:"artifacts,omitempty" json:"artifacts,omitempty"`
 	Sources         []Source          `yaml:"sources,omitempty" json:"sources,omitempty"`
 	Statuses        []Status          `yaml:"statuses" json:"statuses"`

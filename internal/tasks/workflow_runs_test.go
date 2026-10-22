@@ -973,6 +973,23 @@ func TestPendingRunJobs(t *testing.T) {
 	}
 }
 
+func TestPendingRunJobsCarryWatchSpacing(t *testing.T) {
+	svc, actor, task := watchFixture(t)
+	ctx := context.Background()
+	scheduleWatch(t, svc, actor, task)
+	jobs, err := svc.PendingRunJobs(ctx)
+	if err != nil || len(jobs) != 1 || jobs[0].WatchSpacing != workflowfile.DefaultWatchSpacing {
+		t.Fatalf("jobs = %#v, %v", jobs, err)
+	}
+	def := runDefinition()
+	def.WatchSpacing = "12s"
+	rewriteDefinition(t, svc, task, def)
+	jobs, err = svc.PendingRunJobs(ctx)
+	if err != nil || len(jobs) != 1 || jobs[0].WatchSpacing != 12*time.Second {
+		t.Fatalf("jobs = %#v, %v", jobs, err)
+	}
+}
+
 func TestWatchSnapshotCarriesTheOpenVisit(t *testing.T) {
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()

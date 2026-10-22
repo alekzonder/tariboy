@@ -79,6 +79,7 @@ type Supervisor struct {
 type activeRun struct {
 	task            string
 	kind            tasks.RunKind
+	workflow        string
 	cancel          context.CancelFunc
 	cancelRequested atomic.Bool
 }
@@ -109,6 +110,12 @@ type worker struct {
 	sourceRetry map[int64]unrecordedSource // source completions to record again
 	quietDirs   map[string][]string        // task key or "source:QUEUE/NAME" -> directories of its newest quiet runs, oldest first
 	recovered   bool                       // RecoverScriptRuns has succeeded
+
+	// The watch runs of one workflow start one at a time, each at least its
+	// WatchSpacing after the one before it, so many tasks in one status do
+	// not call the same service at once. Both maps are keyed by workflow name.
+	watchStarted map[string]time.Time
+	watchRunning map[string]bool
 }
 
 // Run executes pending runs until ctx ends. It first terminates the scripts a
@@ -124,6 +131,7 @@ func (s *Supervisor) Run(ctx context.Context) {
 		running:  map[int64]*activeRun{}, busy: map[string]bool{},
 		retry: map[int64]unrecorded{}, quietDirs: map[string][]string{},
 		sources: map[string]*activeRun{}, sourceRetry: map[int64]unrecordedSource{},
+		watchStarted: map[string]time.Time{}, watchRunning: map[string]bool{},
 	}
 	if w.log == nil {
 		w.log = slog.Default()
@@ -257,16 +265,39 @@ func (w *worker) passScripts(ctx context.Context) {
 		full := all >= w.parallel
 		_, running := w.running[job.Run.ID]
 		busy := w.busy[job.Run.TaskKey]
+		spaced := w.watchSpacedLocked(job)
 		w.mu.Unlock()
 		if full {
 			return
 		}
 		// With more than one slot, one is always left for a check.
-		if running || busy || (job.Run.Kind != tasks.RunKindCheck && w.parallel > 1 && watches >= w.parallel-1) {
+		if running || busy || spaced || (job.Run.Kind != tasks.RunKindCheck && w.parallel > 1 && watches >= w.parallel-1) {
 			continue
 		}
 		w.start(ctx, job)
 	}
+}
+
+// watchSpacedLocked reports whether a watch job must wait because another
+// watch of its workflow runs or started less than WatchSpacing ago.
+func (w *worker) watchSpacedLocked(job tasks.RunJob) bool {
+	if job.Run.Kind != tasks.RunKindWatch {
+		return false
+	}
+	if w.watchRunning[job.WorkflowName] {
+		return true
+	}
+	last, ok := w.watchStarted[job.WorkflowName]
+	return ok && w.clock().Sub(last) < job.WatchSpacing
+}
+
+// releaseLocked frees the slot of run id and lets the next watch of its
+// workflow start.
+func (w *worker) releaseLocked(id int64) {
+	if active := w.running[id]; active != nil && active.kind == tasks.RunKindWatch {
+		delete(w.watchRunning, active.workflow)
+	}
+	delete(w.running, id)
 }
 
 // start claims one job and executes it in the background. A job that cannot
@@ -291,10 +322,14 @@ func (w *worker) start(ctx context.Context, job tasks.RunJob) {
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
-	active := &activeRun{task: job.Run.TaskKey, kind: job.Run.Kind, cancel: cancel}
+	active := &activeRun{task: job.Run.TaskKey, kind: job.Run.Kind, workflow: job.WorkflowName, cancel: cancel}
 	w.mu.Lock()
 	w.running[id] = active
 	w.busy[active.task] = true
+	if active.kind == tasks.RunKindWatch {
+		w.watchRunning[active.workflow] = true
+		w.watchStarted[active.workflow] = w.clock()
+	}
 	w.mu.Unlock()
 	w.wg.Add(1)
 	go func() {
@@ -357,7 +392,7 @@ func (w *worker) start(ctx context.Context, job tasks.RunJob) {
 func (w *worker) finish(ctx context.Context, id int64, job tasks.RunJob, done tasks.RunCompletion, runDir string, cancelled bool) {
 	err := w.complete(ctx, id, done)
 	w.mu.Lock()
-	delete(w.running, id)
+	w.releaseLocked(id)
 	if err != nil && ctx.Err() == nil {
 		w.retry[id] = unrecorded{job: job, done: done, runDir: runDir, cancelled: cancelled}
 		w.mu.Unlock()
@@ -459,7 +494,7 @@ func (w *worker) removeRunDir(dir string) {
 // forget frees the slot of a run left for recovery at shutdown.
 func (w *worker) forget(id int64, task string) {
 	w.mu.Lock()
-	delete(w.running, id)
+	w.releaseLocked(id)
 	delete(w.busy, task)
 	w.mu.Unlock()
 	w.notify()

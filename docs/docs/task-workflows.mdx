@@ -622,6 +622,21 @@ The worker runs up to four scripts at once. Pending checks start before
 pending watch runs, because an agent waits for a check, and one slot is always
 left for a check.
 
+The watch runs of one workflow start one at a time, across every task, status,
+and queue that uses a workflow of that name. The next one starts only after the
+one before it has finished and at least `watch_spacing` after it started. The
+default is `5s`, and it applies when `Workflowfile.yaml` sets no
+`watch_spacing`; a workflow sets another value from `1s` to `10m`. So ten tasks
+in one status that check a pull request every minute call the service one after
+another, five seconds apart, and not at the same time. Because each task runs
+again `every` after its own run ends, the tasks stay spread out after the first
+round. With many tasks a watch runs less often than `every`: 30 tasks with the
+default spacing take 150 seconds for one round. The worker checks every two
+seconds, so a start can be up to two seconds late. Checks and sources never
+wait for the spacing, and watch runs of other workflows do not wait for it. The
+worker keeps the last start time in memory, so after a daemon restart the first
+watch of each workflow starts at once.
+
 ## Script protocol
 
 A script is an executable file inside the unpacked workflow image. The daemon
