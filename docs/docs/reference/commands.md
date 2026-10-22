@@ -373,6 +373,7 @@ socket; operator mode calls the REST routes as the customer.
 | `ttasks workflow move KEY --to STATUS --reason TEXT` | operator only | `POST /api/tasks/{key}/workflow/move` |
 | `ttasks workflow resume KEY --decision continue\|release` (resolves the pause of a task the daemon paused: `continue` keeps the holder and zeroes the counters; `release` takes a pool task from its holder and dispatches it to another member, or leaves it `open` and unassigned; errors `invalid_decision`, `workflow_not_paused`, `forbidden`) | operator only | `POST /api/tasks/{key}/workflow/resume` |
 | `ttasks cancel KEY` | operator only | `POST /api/tasks/{key}/cancel` |
+| `ttasks requeue KEY --queue QUEUE [--revision N]` (creates a new task in `QUEUE` and cancels this one; errors `task_closed`, `same_queue`, `queue_not_found`, `requeue_has_children`) | operator only | `POST /api/tasks/{key}/requeue` |
 | `ttasks queue workflow set QUEUE REF [--revision N]` | operator only | `PUT /api/task-queues/{queue}/workflow` |
 | `ttasks queue workflow get QUEUE` | operator only | `GET /api/task-queues/{queue}/workflow` |
 | `ttasks queue workflow clear QUEUE --revision N` | operator only | `DELETE /api/task-queues/{queue}/workflow` |

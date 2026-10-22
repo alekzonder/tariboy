@@ -281,7 +281,7 @@ func TestHelpJSONCoversRunnableTaskRootsWithoutSocket(t *testing.T) {
 	if err := json.Unmarshal([]byte(out.String()), &tree); err != nil {
 		t.Fatalf("help = %q, tree = %#v, err = %v", out.String(), tree, err)
 	}
-	for _, root := range []string{"list", "mine", "ready", "show", "assign", "ask", "queue", "events", "principals", "notifications", "advance", "artifacts", "workflow", "cancel"} {
+	for _, root := range []string{"list", "mine", "ready", "show", "assign", "ask", "queue", "events", "principals", "notifications", "advance", "artifacts", "workflow", "cancel", "requeue"} {
 		if tree[root] == nil {
 			t.Fatalf("help tree missing runnable root %q: %#v", root, tree)
 		}

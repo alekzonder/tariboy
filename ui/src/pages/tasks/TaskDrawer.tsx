@@ -14,6 +14,7 @@ import {
   listTaskEvents,
   listTaskPrincipals,
   listTasks,
+  requeueTask,
   transferTask,
   updateTask,
   type Task,
@@ -224,6 +225,13 @@ export default function TaskDrawer({
         const label = host.label || host.id
         await transferTask(detail.task.key, target, host, label, idempotencyKey())
         toast.success(`${detail.task.key} moved to ${label}`)
+        await load()
+      }}
+      onRequeue={async (queue: string) => {
+        // The drawer shows the key its owner chose, so it stays on the
+        // cancelled task, whose comment links the new one.
+        const moved = await requeueTask(detail.task.key, queue, detail.task.revision, target)
+        toast.success(`${detail.task.key} moved to ${queue} as ${moved.key}`)
         await load()
       }}
       onSave={async (input: TaskEdit) => {

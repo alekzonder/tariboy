@@ -81,6 +81,10 @@ func (s *workflowStub) CancelWorkflowTask(_ context.Context, a tasks.Actor, key 
 	s.record(a, "cancel %s", key)
 	return tasks.Task{Key: key, Status: tasks.StatusCancelled}, s.err
 }
+func (s *workflowStub) RequeueTask(_ context.Context, a tasks.Actor, key string, in tasks.RequeueInput) (tasks.Task, error) {
+	s.record(a, "requeue %s %s %d", key, in.Queue, in.Revision)
+	return tasks.Task{Key: in.Queue + "-2", Queue: in.Queue, Status: tasks.StatusOpen}, s.err
+}
 func (s *workflowStub) SetQueueWorkflow(_ context.Context, a tasks.Actor, queue, ref string, revision int64) (tasks.QueueWorkflow, error) {
 	s.record(a, "queue_workflow_set %s %s %d", queue, ref, revision)
 	return tasks.QueueWorkflow{Queue: queue, Name: "flow", Version: "1.0.0", Revision: revision + 1}, s.err
@@ -177,6 +181,8 @@ func TestWorkflowRoutesCallTheServiceAsTheCustomer(t *testing.T) {
 		{"workflow resume", "POST", "/api/tasks/DEV-1/workflow/resume", map[string]any{"decision": "release"},
 			`workflow_resume DEV-1 release`, `"category":"in_progress"`},
 		{"cancel", "POST", "/api/tasks/DEV-1/cancel", nil, `cancel DEV-1`, `"category":"cancelled"`},
+		{"requeue", "POST", "/api/tasks/DEV-1/requeue", map[string]any{"queue": "OPS", "revision": 3},
+			`requeue DEV-1 OPS 3`, `"key":"OPS-2"`},
 		{"queue workflow set", "PUT", "/api/task-queues/DEV/workflow", map[string]any{"ref": "flow:1.0.0", "revision": 2},
 			`queue_workflow_set DEV flow:1.0.0 2`, `"revision":3`},
 		{"queue workflow get", "GET", "/api/task-queues/DEV/workflow", nil, `queue_workflow_get DEV`, `"queue":"DEV"`},
@@ -286,6 +292,7 @@ func TestWorkflowOpenAPIDescribesRoutesAndSchemas(t *testing.T) {
 
 		"/api/tasks/{key}/workflow/requests/{id}/retry": "post",
 		"/api/tasks/{key}/cancel":                       "post",
+		"/api/tasks/{key}/requeue":                      "post",
 		"/api/task-queues/{queue}/workflow":             "delete",
 	} {
 		if _, ok := doc.Paths[path][method]; !ok {

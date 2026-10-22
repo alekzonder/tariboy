@@ -74,6 +74,7 @@ var specs = []Spec{
 	{Action: "workflow_resume", Words: []string{"workflow", "resume"}, Request: &ResumeRequest{}, Method: "POST", Path: "/api/tasks/{key}/workflow/resume", OperatorOnly: true},
 	{Action: "workflow_retry", Words: []string{"workflow", "retry"}, Request: &RetryRequest{}, Method: "POST", Path: "/api/tasks/{key}/workflow/requests/{id}/retry", OperatorOnly: true},
 	{Action: "cancel", Words: []string{"cancel"}, Request: &KeyRequest{}, Method: "POST", Path: "/api/tasks/{key}/cancel", OperatorOnly: true},
+	{Action: "requeue", Words: []string{"requeue"}, Request: &RequeueRequest{}, Method: "POST", Path: "/api/tasks/{key}/requeue", OperatorOnly: true},
 }
 
 // Specs returns the native task commands in their help order.

@@ -55,6 +55,7 @@ func TestParseGoldenPayloads(t *testing.T) {
 		{[]string{"workflow", "retry", "DEV-1"}, "workflow_retry", `{"key":"DEV-1"}`, false},
 		{[]string{"workflow", "retry", "DEV-1", "41"}, "workflow_retry", `{"id":41,"key":"DEV-1"}`, false},
 		{[]string{"cancel", "DEV-1"}, "cancel", `{"key":"DEV-1"}`, false},
+		{[]string{"requeue", "DEV-1", "--queue", "OPS"}, "requeue", `{"key":"DEV-1","queue":"OPS"}`, false},
 		// A word with one dash is text, as it always was; after -- every
 		// argument is positional.
 		{[]string{"artifacts", "set", "T-1", "delta", "-42"}, "artifact_set", `{"key":"T-1","name":"delta","value":"-42"}`, false},
@@ -143,6 +144,7 @@ func TestParseGoldenErrors(t *testing.T) {
 		{[]string{"workflow", "retry", "DEV-1", "x"}, `tasks workflow retry: request id must be a positive number, got "x"`},
 		{[]string{"workflow", "retry", "DEV-1", "7", "8"}, "tasks workflow retry: unexpected argument: 8"},
 		{[]string{"cancel"}, "tasks cancel: task key is required"},
+		{[]string{"requeue", "DEV-1"}, "tasks requeue: --queue is required"},
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.argv, " "), func(t *testing.T) {
