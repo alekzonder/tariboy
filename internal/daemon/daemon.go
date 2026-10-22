@@ -411,7 +411,7 @@ func listenProxyWithHandoff(
 ) (string, error) {
 	if err := tokens.Prune(func(attr aiproxy.Attribution) bool {
 		it, err := agents.GetIteration(attr.Agent, attr.Iteration)
-		return err == nil && it.Status == "running"
+		return err == nil && it.Status == agent.IterationRunning
 	}); err != nil {
 		return "", fmt.Errorf("prune AI proxy handoff leases: %w", err)
 	}

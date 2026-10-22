@@ -54,7 +54,7 @@ func (j SourceJob) Key() string { return j.Queue + "/" + j.Source }
 // SourceCompletion is the result of a finished source run as the worker
 // reports it. Verdict is items, quiet, or failure.
 type SourceCompletion struct {
-	Verdict  string
+	Verdict  Verdict
 	Message  string
 	Items    []SourceItem
 	ExitCode *int
@@ -66,18 +66,18 @@ type SourceCompletion struct {
 
 // SourceRun is the durable record of one source run.
 type SourceRun struct {
-	ID           int64  `json:"id"`
-	Queue        string `json:"queue"`
-	Source       string `json:"source"`
-	Script       string `json:"script"`
-	State        string `json:"state"`
-	Verdict      string `json:"verdict,omitempty"`
-	ExitCode     *int   `json:"exit_code,omitempty"`
-	Message      string `json:"message,omitempty"`
-	TasksCreated int    `json:"tasks_created"`
-	StartedAt    string `json:"started_at"`
-	FinishedAt   string `json:"finished_at,omitempty"`
-	LogPath      string `json:"log_path,omitempty"`
+	ID           int64    `json:"id"`
+	Queue        string   `json:"queue"`
+	Source       string   `json:"source"`
+	Script       string   `json:"script"`
+	State        RunState `json:"state"`
+	Verdict      Verdict  `json:"verdict,omitempty"`
+	ExitCode     *int     `json:"exit_code,omitempty"`
+	Message      string   `json:"message,omitempty"`
+	TasksCreated int      `json:"tasks_created"`
+	StartedAt    string   `json:"started_at"`
+	FinishedAt   string   `json:"finished_at,omitempty"`
+	LogPath      string   `json:"log_path,omitempty"`
 	// PID is the process of a running run, for the worker's recovery after a
 	// restart; it is never marshalled.
 	PID *int `json:"-"`
@@ -221,7 +221,7 @@ func nextSourceRun(src workflowfile.Source, last SourceRun, found bool, now time
 	if !found {
 		return now
 	}
-	if last.State == "running" {
+	if last.State == RunStateRunning {
 		return time.Time{}
 	}
 	finished, err := store.ParseTime(last.FinishedAt)
@@ -313,7 +313,7 @@ func (s *RunService) RecoverSourceRuns(ctx context.Context) error {
 // creates nothing. Completing a run that is no longer running is a no-op.
 func (s *RunService) CompleteSourceRun(ctx context.Context, id int64, done SourceCompletion) error {
 	switch done.Verdict {
-	case verdictItems, verdictQuiet, verdictFailure:
+	case VerdictItems, VerdictQuiet, VerdictFailure:
 	default:
 		return fmt.Errorf("source run %d: unknown verdict %q", id, done.Verdict)
 	}
@@ -333,7 +333,7 @@ func (s *RunService) CompleteSourceRun(ctx context.Context, id int64, done Sourc
 		return sourceRunNotFound(id)
 	}
 	run := runs[0]
-	if run.State != "running" {
+	if run.State != RunStateRunning {
 		return nil
 	}
 	finishedAt := store.FormatTime(done.FinishedAt)
@@ -341,7 +341,7 @@ func (s *RunService) CompleteSourceRun(ctx context.Context, id int64, done Sourc
 	if done.ExitCode != nil {
 		exit = *done.ExitCode
 	}
-	state, verdict, message, created := "finished", done.Verdict, boundRunMessage(done.Message), 0
+	state, verdict, message, created := RunStateFinished, done.Verdict, boundRunMessage(done.Message), 0
 
 	bound, err := boundSourcesTx(ctx, tx, run.Queue)
 	if err != nil {
@@ -355,12 +355,12 @@ func (s *RunService) CompleteSourceRun(ctx context.Context, id int64, done Sourc
 	}
 	switch {
 	case current == nil:
-		state = "cancelled"
-	case verdict == verdictItems:
+		state = RunStateCancelled
+	case verdict == VerdictItems:
 		created, err = s.createSourceTasksTx(ctx, tx, *current, run, done.Items)
 		var invalid *invalidSourceItem
 		if errors.As(err, &invalid) {
-			verdict, message = verdictFailure, boundRunMessage(invalid.Error())
+			verdict, message = VerdictFailure, boundRunMessage(invalid.Error())
 		} else if err != nil {
 			return err
 		}
@@ -371,9 +371,9 @@ func (s *RunService) CompleteSourceRun(ctx context.Context, id int64, done Sourc
 		WHERE id = ?`, state, verdict, exit, message, created, finishedAt, done.LogPath, id); err != nil {
 		return err
 	}
-	if state == "finished" {
+	if state == RunStateFinished {
 		switch verdict {
-		case verdictQuiet:
+		case VerdictQuiet:
 			if _, err := tx.ExecContext(ctx, `
 				DELETE FROM task_queue_source_runs
 				WHERE queue_prefix = ? AND source = ? AND state = 'finished' AND verdict = 'quiet' AND id NOT IN (
@@ -382,7 +382,7 @@ func (s *RunService) CompleteSourceRun(ctx context.Context, id int64, done Sourc
 				run.Queue, run.Source, run.Queue, run.Source, workflowViewRuns); err != nil {
 				return err
 			}
-		case verdictFailure:
+		case VerdictFailure:
 			revision, err := queueSecretRevision(ctx, tx, run.Queue)
 			if err != nil {
 				return err
@@ -500,10 +500,10 @@ func (s *RunService) ListQueueSources(ctx context.Context, actor Actor, queue st
 			item.NextRunAt = store.FormatTime(next)
 		}
 		for _, run := range recent {
-			if run.State == "running" {
+			if run.State == RunStateRunning {
 				continue
 			}
-			if run.State != "interrupted" && run.Verdict != verdictFailure {
+			if run.State != RunStateInterrupted && run.Verdict != VerdictFailure {
 				break
 			}
 			item.Failures++

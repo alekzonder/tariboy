@@ -258,17 +258,17 @@ func mergeSkillLaunchEnv(base, overlay []string) ([]string, error) {
 }
 
 // Classify maps the shim result to an iteration status (spec §5).
-func Classify(exitCode int, done, softTimeout, hardTimeout bool) string {
+func Classify(exitCode int, done, softTimeout, hardTimeout bool) agent.IterationStatus {
 	if softTimeout || hardTimeout {
-		return "timeout"
+		return agent.IterationTimeout
 	}
 	if done {
-		return "done"
+		return agent.IterationDone
 	}
 	if exitCode != 0 {
-		return "harness_error"
+		return agent.IterationHarnessError
 	}
-	return "no_i_am_done"
+	return agent.IterationNoIAmDone
 }
 
 // Spawner starts the shim process; the seam lets tests avoid real processes.
@@ -569,7 +569,7 @@ func (r *ShimRunner) Run(ctx context.Context, ag agent.Agent, trigger, iteration
 		return Outcome{}, err
 	}
 	if ctx.Err() != nil {
-		if it, loadErr := r.cfg.Store.GetIteration(ag.Name, iterationID); loadErr == nil && it.Status != "running" {
+		if it, loadErr := r.cfg.Store.GetIteration(ag.Name, iterationID); loadErr == nil && it.Status != agent.IterationRunning {
 			r.terminateCanceledLaunch(ag, l, iterationID, terminate)
 			return Outcome{}, ctx.Err()
 		}
@@ -585,7 +585,7 @@ func (r *ShimRunner) Run(ctx context.Context, ag agent.Agent, trigger, iteration
 	if errors.Is(err, ErrIterationDetached) {
 		detached = true
 	}
-	if err == nil && outcome.Status == "harness_error" {
+	if err == nil && outcome.Status == agent.IterationHarnessError {
 		outcome.Error = harnessExitReason(outcome.ExitCode, l.HarnessStderr(iterationID), ag.Interactive)
 	}
 	// No auto-ack of the message batch here (spec §3.2). Deliveries are drained
@@ -1157,7 +1157,7 @@ func (r *ShimRunner) await(ctx context.Context, ag agent.Agent, l agentdir.Layou
 	if err != nil {
 		var ok bool
 		if res.result, ok = readResult(l.ResultPath(iterationID)); !ok {
-			if it, err := r.cfg.Store.GetIteration(ag.Name, iterationID); err == nil && it.Status == "running" {
+			if it, err := r.cfg.Store.GetIteration(ag.Name, iterationID); err == nil && it.Status == agent.IterationRunning {
 				return Outcome{}, ErrIterationDetached
 			}
 			return Outcome{}, ctx.Err()

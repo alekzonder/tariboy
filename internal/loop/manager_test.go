@@ -1421,7 +1421,7 @@ func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 			completed <- "lookup error: " + err.Error()
 			return
 		}
-		completed <- agentName + "/" + iterationID + "/" + it.Status
+		completed <- agentName + "/" + iterationID + "/" + string(it.Status)
 	}
 	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}, OnTimeout: "stop"}); err != nil {
 		t.Fatal(err)
@@ -1919,7 +1919,7 @@ func TestRecordAdoptedSignalsGoalCompletionAfterFinalStatus(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got = agentName + "/" + iterationID + "/" + it.Status
+		got = agentName + "/" + iterationID + "/" + string(it.Status)
 	}
 	l := agentdir.New(agentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
 	if err := l.EnsureIteration(id); err != nil {

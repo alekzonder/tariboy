@@ -18,18 +18,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
 
-// Verdicts of a finished run. They are the verdict names of
-// internal/workflowrun, which this package cannot import: its worker imports
-// this package.
-const (
-	verdictPass    = "pass"    // check: the condition holds
-	verdictReject  = "reject"  // check: the condition does not hold
-	verdictOutcome = "outcome" // watch: an outcome is ready
-	verdictQuiet   = "quiet"   // watch or source: nothing changed
-	verdictItems   = "items"   // source: the items it found
-	verdictFailure = "failure" // anything else
-)
-
 // maxRunMessageBytes bounds the message stored from a run.
 const maxRunMessageBytes = 4 << 10
 
@@ -38,19 +26,19 @@ const workflowViewRuns = 20
 
 // ScriptRun is the durable record of one workflow script run.
 type ScriptRun struct {
-	ID         int64  `json:"id"`
-	TaskKey    string `json:"task_key"`
-	Kind       string `json:"kind"`
-	Script     string `json:"script"`
-	RunAs      string `json:"run_as"`
-	State      string `json:"state"`
-	Verdict    string `json:"verdict,omitempty"`
-	ExitCode   *int   `json:"exit_code,omitempty"`
-	Message    string `json:"message,omitempty"`
-	CreatedAt  string `json:"created_at"`
-	StartedAt  string `json:"started_at,omitempty"`
-	FinishedAt string `json:"finished_at,omitempty"`
-	LogPath    string `json:"log_path,omitempty"`
+	ID         int64    `json:"id"`
+	TaskKey    string   `json:"task_key"`
+	Kind       RunKind  `json:"kind"`
+	Script     string   `json:"script"`
+	RunAs      string   `json:"run_as"`
+	State      RunState `json:"state"`
+	Verdict    Verdict  `json:"verdict,omitempty"`
+	ExitCode   *int     `json:"exit_code,omitempty"`
+	Message    string   `json:"message,omitempty"`
+	CreatedAt  string   `json:"created_at"`
+	StartedAt  string   `json:"started_at,omitempty"`
+	FinishedAt string   `json:"finished_at,omitempty"`
+	LogPath    string   `json:"log_path,omitempty"`
 	// Holder is the agent a run_as agent check ran as, fixed when the run was
 	// created; "" for queue and watch runs.
 	Holder string `json:"holder,omitempty"`
@@ -85,9 +73,9 @@ type RunJob struct {
 
 // RunCompletion is the result of a finished run as the worker reports it.
 type RunCompletion struct {
-	// Verdict is one of pass, reject, outcome, quiet, or failure, the verdict
-	// names of internal/workflowrun. CompleteScriptRun refuses any other value.
-	Verdict   string
+	// Verdict is one of pass, reject, outcome, quiet, or failure.
+	// CompleteScriptRun refuses any other value.
+	Verdict   Verdict
 	Outcome   string
 	Message   string
 	Artifacts map[string]string
@@ -198,7 +186,7 @@ func (s *RunService) runJob(ctx context.Context, run scriptRunRecord) (RunJob, e
 	}
 	var message string
 	switch run.Kind {
-	case "check":
+	case RunKindCheck:
 		if err := s.db.QueryRowContext(ctx, `SELECT outcome, message FROM task_transition_requests WHERE id = ?`,
 			run.requestID).Scan(&job.Outcome, &message); err != nil {
 			return RunJob{}, err
@@ -306,7 +294,7 @@ func (s *RunService) GetScriptRun(ctx context.Context, actor Actor, key string, 
 // has no further effect.
 func (s *RunService) CompleteScriptRun(ctx context.Context, id int64, done RunCompletion) error {
 	switch done.Verdict {
-	case verdictPass, verdictReject, verdictOutcome, verdictQuiet, verdictFailure:
+	case VerdictPass, VerdictReject, VerdictOutcome, VerdictQuiet, VerdictFailure:
 	default:
 		return fmt.Errorf("script run %d: unknown verdict %q", id, done.Verdict)
 	}
@@ -325,7 +313,7 @@ func (s *RunService) CompleteScriptRun(ctx context.Context, id int64, done RunCo
 	if err != nil {
 		return err
 	}
-	if run.State != "pending" && run.State != "running" {
+	if run.State != RunStatePending && run.State != RunStateRunning {
 		return nil
 	}
 	now := s.now()
@@ -336,9 +324,9 @@ func (s *RunService) CompleteScriptRun(ctx context.Context, id int64, done RunCo
 		logPath = run.LogPath
 	}
 	message := boundRunMessage(done.Message)
-	state := "finished"
+	state := RunStateFinished
 	if run.cancelRequested {
-		state = "cancelled"
+		state = RunStateCancelled
 	}
 	var exit any
 	if done.ExitCode != nil {
@@ -353,7 +341,7 @@ func (s *RunService) CompleteScriptRun(ctx context.Context, id int64, done RunCo
 	if err != nil {
 		return err
 	}
-	if run.Kind == "watch" && done.Verdict == verdictQuiet && state == "finished" {
+	if run.Kind == RunKindWatch && done.Verdict == VerdictQuiet && state == RunStateFinished {
 		// A quiet watch run says nothing happened: it leaves no event, and only
 		// the newest quiet runs of the visit are kept. A run cancelled while it
 		// went quiet is not one of them.
@@ -371,9 +359,9 @@ func (s *RunService) CompleteScriptRun(ctx context.Context, id int64, done RunCo
 	}, now); err != nil {
 		return err
 	}
-	if state == "finished" {
+	if state == RunStateFinished {
 		switch run.Kind {
-		case "check":
+		case RunKindCheck:
 			err = s.finishCheckTx(ctx, tx, &task, run, done.Verdict, done.Artifacts, message, logPath)
 		default:
 			err = s.finishWatchTx(ctx, tx, &task, run, done, message, logPath, finished)
@@ -390,7 +378,7 @@ func (s *RunService) CompleteScriptRun(ctx context.Context, id int64, done RunCo
 }
 
 // finishCheckTx applies the verdict of a finished check run to its request.
-func (s *RunService) finishCheckTx(ctx context.Context, tx *sql.Tx, task *Task, run scriptRunRecord, verdict string, artifacts map[string]string, message, logPath string) error {
+func (s *RunService) finishCheckTx(ctx context.Context, tx *sql.Tx, task *Task, run scriptRunRecord, verdict Verdict, artifacts map[string]string, message, logPath string) error {
 	request, live, err := liveCheckRequestTx(ctx, tx, run)
 	if err != nil || !live {
 		return err
@@ -400,7 +388,7 @@ func (s *RunService) finishCheckTx(ctx context.Context, tx *sql.Tx, task *Task, 
 		return err
 	}
 	switch verdict {
-	case verdictPass:
+	case VerdictPass:
 		status, _ := currentStatus(manifest, task.WorkflowStatus)
 		transition, ok := statusTransition(status, request.outcome)
 		if !ok {
@@ -418,7 +406,7 @@ func (s *RunService) finishCheckTx(ctx context.Context, tx *sql.Tx, task *Task, 
 		}
 		if next := run.checkIndex + 1; next < len(transition.Checks) {
 			check := transition.Checks[next]
-			return insertScriptRunTx(ctx, tx, task.ID, request.visitID, request.id, "check", check.Script,
+			return insertScriptRunTx(ctx, tx, task.ID, request.visitID, request.id, RunKindCheck, check.Script,
 				checkRunAs(check), checkHolder(check, task.Assignee), next, s.now())
 		}
 		// The last check passed. Required artifacts were present when the
@@ -432,7 +420,7 @@ func (s *RunService) finishCheckTx(ctx context.Context, tx *sql.Tx, task *Task, 
 				"outcome "+request.outcome+" requires artifacts with no value: "+strings.Join(missing, ", "), "", false)
 		}
 		return s.engine.applyTransitionTx(ctx, tx, task, manifest, request.id, transition, request.actor, request.message)
-	case verdictReject:
+	case VerdictReject:
 		now := s.now()
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE task_transition_requests SET state = 'rejected', result_message = ?, finished_at = ? WHERE id = ?`,
@@ -556,11 +544,11 @@ func (s *RunService) finishWatchTx(ctx context.Context, tx *sql.Tx, task *Task, 
 	status, _ := currentStatus(manifest, task.WorkflowStatus)
 	next := store.FormatTime(finished.Add(watchEvery(status)))
 	switch done.Verdict {
-	case verdictQuiet:
+	case VerdictQuiet:
 		_, err := tx.ExecContext(ctx, `
 			UPDATE task_status_visits SET next_watch_at = ?, script_failures = 0 WHERE id = ?`, next, run.visitID)
 		return err
-	case verdictOutcome:
+	case VerdictOutcome:
 		transition, ok := statusTransition(status, done.Outcome)
 		if !ok {
 			return s.failWatchTx(ctx, tx, *task, manifest, run, done.Verdict,
@@ -610,7 +598,7 @@ func (s *RunService) applyWatchOutcomeTx(ctx context.Context, tx *sql.Tx, task *
 		return err
 	}
 	if _, err := appendEventTx(ctx, tx, *task, "workflow.transition_requested", Actor{Principal: author}, map[string]any{
-		"request_id": requestID, "status": task.WorkflowStatus, "outcome": transition.On, "actor": author, "state": "applied",
+		"request_id": requestID, "status": task.WorkflowStatus, "outcome": transition.On, "actor": author, "state": RequestStateApplied,
 	}, now); err != nil {
 		return err
 	}
@@ -619,7 +607,7 @@ func (s *RunService) applyWatchOutcomeTx(ctx context.Context, tx *sql.Tx, task *
 
 // failWatchTx counts a failed watch run and schedules the next run at next.
 // At the limit it pauses the task, which clears that schedule again.
-func (s *RunService) failWatchTx(ctx context.Context, tx *sql.Tx, task Task, manifest workflowimage.Manifest, run scriptRunRecord, verdict, message, logPath, next string) error {
+func (s *RunService) failWatchTx(ctx context.Context, tx *sql.Tx, task Task, manifest workflowimage.Manifest, run scriptRunRecord, verdict Verdict, message, logPath, next string) error {
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE task_status_visits SET script_failures = script_failures + 1, next_watch_at = ? WHERE id = ?`,
 		next, run.visitID); err != nil {
@@ -687,7 +675,7 @@ func (s *RunService) forceInterruptRun(ctx context.Context, run scriptRunRecord,
 		now, message, run.ID); err != nil {
 		return err
 	}
-	if run.Kind == "check" && run.requestID != 0 {
+	if run.Kind == RunKindCheck && run.requestID != 0 {
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE task_transition_requests SET state = 'failed', result_message = ?, finished_at = ? WHERE id = ? AND state = 'pending'`,
 			message, now, run.requestID); err != nil {
@@ -696,7 +684,7 @@ func (s *RunService) forceInterruptRun(ctx context.Context, run scriptRunRecord,
 	}
 	// A watch of a visit still open runs again after the shortest every, so
 	// the status is not left without its watch.
-	if run.Kind == "watch" {
+	if run.Kind == RunKindWatch {
 		if _, err := tx.ExecContext(ctx, `UPDATE task_status_visits SET next_watch_at = ? WHERE id = ? AND left_at = ''`,
 			store.FormatTime(s.clock().Add(workflowfile.MinWatchEvery)), run.visitID); err != nil {
 			return err
@@ -716,7 +704,7 @@ func (s *RunService) interruptRun(ctx context.Context, id int64) error {
 	if err != nil {
 		return err
 	}
-	if run.State != "running" {
+	if run.State != RunStateRunning {
 		return nil
 	}
 	now := s.now()
@@ -729,13 +717,13 @@ func (s *RunService) interruptRun(ctx context.Context, id int64) error {
 		return err
 	}
 	if _, err := appendEventTx(ctx, tx, task, "workflow.script_run", Actor{Principal: workflowActor}, map[string]any{
-		"run_id": run.ID, "kind": run.Kind, "script": run.Script, "state": "interrupted",
+		"run_id": run.ID, "kind": run.Kind, "script": run.Script, "state": RunStateInterrupted,
 		"verdict": "", "exit_code": nil,
 	}, now); err != nil {
 		return err
 	}
 	switch run.Kind {
-	case "check":
+	case RunKindCheck:
 		request, live, err := liveCheckRequestTx(ctx, tx, run)
 		if err != nil {
 			return err
@@ -860,7 +848,7 @@ func (s *RunService) scheduleWatch(ctx context.Context, visitID int64, cutoff st
 	status, ok := currentStatus(manifest, task.WorkflowStatus)
 	created := ok && !status.Terminal && status.Owner.Kind == workflowfile.OwnerScript && status.Watch != nil
 	if created {
-		if err := insertScriptRunTx(ctx, tx, task.ID, visitID, 0, "watch", status.Watch.Script,
+		if err := insertScriptRunTx(ctx, tx, task.ID, visitID, 0, RunKindWatch, status.Watch.Script,
 			workflowfile.RunAsQueue, "", 0, s.now()); err != nil {
 			return false, err
 		}

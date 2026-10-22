@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
@@ -41,7 +42,7 @@ func newFixture(t *testing.T, body string) fixture {
 	return f
 }
 
-func (f fixture) spec(kind string) Spec {
+func (f fixture) spec(kind tasks.RunKind) Spec {
 	return Spec{
 		RunID:      "r1",
 		Kind:       kind,
@@ -81,8 +82,8 @@ func readLog(t *testing.T, r Result) string {
 func TestExecuteCheckPass(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, `echo hello; echo oops >&2; cat "$TARIBOY_TASK_FILE" > "$FIXTURE_DIR/seen.json"; exit 0`+"\n")
-	r := Execute(context.Background(), f.spec(KindCheck))
-	if r.Verdict.Kind != VerdictPass {
+	r := Execute(context.Background(), f.spec(tasks.RunKindCheck))
+	if r.Verdict.Kind != tasks.VerdictPass {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 	requireExit(t, r, 0)
@@ -109,8 +110,8 @@ func TestExecuteCheckPass(t *testing.T) {
 func TestExecuteCheckRejectWithMessage(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, `printf '{"message":"tests fail"}' > "$TARIBOY_RESULT_FILE"; exit 112`+"\n")
-	r := Execute(context.Background(), f.spec(KindCheck))
-	if r.Verdict.Kind != VerdictReject || r.Verdict.Message != "tests fail" {
+	r := Execute(context.Background(), f.spec(tasks.RunKindCheck))
+	if r.Verdict.Kind != tasks.VerdictReject || r.Verdict.Message != "tests fail" {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 	requireExit(t, r, 112)
@@ -119,8 +120,8 @@ func TestExecuteCheckRejectWithMessage(t *testing.T) {
 func TestExecuteWatchOutcomeWithArtifact(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, `printf '{"outcome":"merged","artifacts":{"merge_commit":"9f2c"}}' > "$TARIBOY_RESULT_FILE"; exit 0`+"\n")
-	r := Execute(context.Background(), f.spec(KindWatch))
-	if r.Verdict.Kind != VerdictOutcome || r.Verdict.Outcome != "merged" || r.Verdict.Artifacts["merge_commit"] != "9f2c" {
+	r := Execute(context.Background(), f.spec(tasks.RunKindWatch))
+	if r.Verdict.Kind != tasks.VerdictOutcome || r.Verdict.Outcome != "merged" || r.Verdict.Artifacts["merge_commit"] != "9f2c" {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 }
@@ -128,8 +129,8 @@ func TestExecuteWatchOutcomeWithArtifact(t *testing.T) {
 func TestExecuteWatchQuiet(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, "exit 111\n")
-	r := Execute(context.Background(), f.spec(KindWatch))
-	if r.Verdict.Kind != VerdictQuiet {
+	r := Execute(context.Background(), f.spec(tasks.RunKindWatch))
+	if r.Verdict.Kind != tasks.VerdictQuiet {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 	requireExit(t, r, 111)
@@ -138,8 +139,8 @@ func TestExecuteWatchQuiet(t *testing.T) {
 func TestExecuteCrash(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, "echo boom >&2; exit 3\n")
-	r := Execute(context.Background(), f.spec(KindCheck))
-	if r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "exit 3") {
+	r := Execute(context.Background(), f.spec(tasks.RunKindCheck))
+	if r.Verdict.Kind != tasks.VerdictFailure || !strings.Contains(r.Verdict.Message, "exit 3") {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 	requireExit(t, r, 3)
@@ -151,8 +152,8 @@ func TestExecuteCrash(t *testing.T) {
 func TestExecuteKilledBySignal(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, "kill -9 $$\n")
-	r := Execute(context.Background(), f.spec(KindCheck))
-	if r.Verdict.Kind != VerdictFailure || r.ExitCode != nil {
+	r := Execute(context.Background(), f.spec(tasks.RunKindCheck))
+	if r.Verdict.Kind != tasks.VerdictFailure || r.ExitCode != nil {
 		t.Fatalf("result = %+v", r)
 	}
 }
@@ -160,14 +161,14 @@ func TestExecuteKilledBySignal(t *testing.T) {
 func TestExecuteTimeoutKillsGroup(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, `sleep 30 & echo $! > "$FIXTURE_DIR/child.pid"; wait`+"\n")
-	spec := f.spec(KindCheck)
+	spec := f.spec(tasks.RunKindCheck)
 	spec.Timeout = 300 * time.Millisecond
 	start := time.Now()
 	r := Execute(context.Background(), spec)
 	if elapsed := time.Since(start); elapsed > 4*time.Second {
 		t.Fatalf("took %v", elapsed)
 	}
-	if !r.TimedOut || r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "timed out") {
+	if !r.TimedOut || r.Verdict.Kind != tasks.VerdictFailure || !strings.Contains(r.Verdict.Message, "timed out") {
 		t.Fatalf("result = %+v", r)
 	}
 	requireGone(t, readPID(t, filepath.Join(f.dir, "child.pid")))
@@ -178,7 +179,7 @@ func TestExecuteCancelIsNotTimeout(t *testing.T) {
 	f := newFixture(t, `echo started > "$FIXTURE_DIR/started"; sleep 30`+"\n")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	spec := f.spec(KindCheck)
+	spec := f.spec(tasks.RunKindCheck)
 	spec.OnStart = func(int) {
 		go func() {
 			// Cancel once the script is running, not while it is starting.
@@ -190,7 +191,7 @@ func TestExecuteCancelIsNotTimeout(t *testing.T) {
 		}()
 	}
 	r := Execute(ctx, spec)
-	if r.TimedOut || r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "cancelled") {
+	if r.TimedOut || r.Verdict.Kind != tasks.VerdictFailure || !strings.Contains(r.Verdict.Message, "cancelled") {
 		t.Fatalf("result = %+v", r)
 	}
 }
@@ -202,12 +203,12 @@ func TestExecuteCancelIsNotTimeout(t *testing.T) {
 func TestExecuteExitBeforeTheTimeoutSignalIsJudgedByItsCode(t *testing.T) {
 	// Sequential: it sets the package-level testHookTimeout that every Execute reads.
 	f := newFixture(t, "sleep 0.3; exit 0\n")
-	spec := f.spec(KindCheck)
+	spec := f.spec(tasks.RunKindCheck)
 	spec.Timeout = 50 * time.Millisecond
 	testHookTimeout = func(exited <-chan struct{}) { <-exited }
 	t.Cleanup(func() { testHookTimeout = nil })
 	r := Execute(context.Background(), spec)
-	if r.TimedOut || r.Verdict.Kind != VerdictPass {
+	if r.TimedOut || r.Verdict.Kind != tasks.VerdictPass {
 		t.Fatalf("result = %+v", r)
 	}
 	requireExit(t, r, 0)
@@ -235,7 +236,7 @@ func TestExecuteOnStartPanicKillsTheRun(t *testing.T) {
 	// The rename publishes child.pid only once it holds the PID: OnStart
 	// waits for the file to exist, and the panic kills the shell right after.
 	f := newFixture(t, `sleep 30 & echo $! > "$FIXTURE_DIR/child.tmp"; mv "$FIXTURE_DIR/child.tmp" "$FIXTURE_DIR/child.pid"; sleep 30`+"\n")
-	spec := f.spec(KindCheck)
+	spec := f.spec(tasks.RunKindCheck)
 	childFile := filepath.Join(f.dir, "child.pid")
 	spec.OnStart = func(int) {
 		testutil.WaitFor(2*time.Second, func() bool {
@@ -249,7 +250,7 @@ func TestExecuteOnStartPanicKillsTheRun(t *testing.T) {
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
 		t.Fatalf("took %v", elapsed)
 	}
-	if r.Verdict.Kind != VerdictFailure || r.Verdict.Message != "run bookkeeping failed" {
+	if r.Verdict.Kind != tasks.VerdictFailure || r.Verdict.Message != "run bookkeeping failed" {
 		t.Fatalf("result = %+v", r)
 	}
 	requireGone(t, readPID(t, childFile))
@@ -260,8 +261,8 @@ func TestExecuteCancelledBeforeStart(t *testing.T) {
 	f := newFixture(t, `touch "$FIXTURE_DIR/ran"`+"\n")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	r := Execute(ctx, f.spec(KindCheck))
-	if r.TimedOut || r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "cancelled") {
+	r := Execute(ctx, f.spec(tasks.RunKindCheck))
+	if r.TimedOut || r.Verdict.Kind != tasks.VerdictFailure || !strings.Contains(r.Verdict.Message, "cancelled") {
 		t.Fatalf("result = %+v", r)
 	}
 }
@@ -269,8 +270,8 @@ func TestExecuteCancelledBeforeStart(t *testing.T) {
 func TestExecuteKillsOrphanedChild(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, `sleep 30 & echo $! > "$FIXTURE_DIR/child.pid"; exit 0`+"\n")
-	r := Execute(context.Background(), f.spec(KindCheck))
-	if r.Verdict.Kind != VerdictPass {
+	r := Execute(context.Background(), f.spec(tasks.RunKindCheck))
+	if r.Verdict.Kind != tasks.VerdictPass {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 	requireGone(t, readPID(t, filepath.Join(f.dir, "child.pid")))
@@ -283,9 +284,9 @@ func TestExecuteLargeOutputGoesToDisk(t *testing.T) {
 	var before, after runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&before)
-	r := Execute(context.Background(), f.spec(KindCheck))
+	r := Execute(context.Background(), f.spec(tasks.RunKindCheck))
 	runtime.ReadMemStats(&after)
-	if r.Verdict.Kind != VerdictPass {
+	if r.Verdict.Kind != tasks.VerdictPass {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 	info, err := os.Stat(r.LogPath)
@@ -300,8 +301,8 @@ func TestExecuteLargeOutputGoesToDisk(t *testing.T) {
 func TestExecuteResultTooLarge(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, `head -c 70000 /dev/zero | tr '\0' ' ' > "$TARIBOY_RESULT_FILE"; exit 0`+"\n")
-	r := Execute(context.Background(), f.spec(KindCheck))
-	if r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "larger than") {
+	r := Execute(context.Background(), f.spec(tasks.RunKindCheck))
+	if r.Verdict.Kind != tasks.VerdictFailure || !strings.Contains(r.Verdict.Message, "larger than") {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 }
@@ -309,8 +310,8 @@ func TestExecuteResultTooLarge(t *testing.T) {
 func TestExecuteResultSymlinkIsFailure(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, `printf '{"message":"x"}' > "$FIXTURE_DIR/real.json"; ln -s "$FIXTURE_DIR/real.json" "$TARIBOY_RESULT_FILE"; exit 0`+"\n")
-	r := Execute(context.Background(), f.spec(KindCheck))
-	if r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "result file") {
+	r := Execute(context.Background(), f.spec(tasks.RunKindCheck))
+	if r.Verdict.Kind != tasks.VerdictFailure || !strings.Contains(r.Verdict.Message, "result file") {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 }
@@ -318,8 +319,8 @@ func TestExecuteResultSymlinkIsFailure(t *testing.T) {
 func TestExecuteResultDirectoryIsFailure(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, `mkdir "$TARIBOY_RESULT_FILE"; exit 0`+"\n")
-	r := Execute(context.Background(), f.spec(KindCheck))
-	if r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "result file") {
+	r := Execute(context.Background(), f.spec(tasks.RunKindCheck))
+	if r.Verdict.Kind != tasks.VerdictFailure || !strings.Contains(r.Verdict.Message, "result file") {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 }
@@ -333,8 +334,8 @@ func TestExecuteRemovesStaleResult(t *testing.T) {
 	if err := os.WriteFile(f.resultFile, []byte(`{"outcome":"merged"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	r := Execute(context.Background(), f.spec(KindWatch))
-	if r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "without an outcome") {
+	r := Execute(context.Background(), f.spec(tasks.RunKindWatch))
+	if r.Verdict.Kind != tasks.VerdictFailure || !strings.Contains(r.Verdict.Message, "without an outcome") {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 }
@@ -342,10 +343,10 @@ func TestExecuteRemovesStaleResult(t *testing.T) {
 func TestExecuteMissingScript(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, "exit 0\n")
-	spec := f.spec(KindCheck)
+	spec := f.spec(tasks.RunKindCheck)
 	spec.ScriptPath = filepath.Join(f.dir, "image", "absent.sh")
 	r := Execute(context.Background(), spec)
-	if r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "absent.sh") || r.ExitCode != nil {
+	if r.Verdict.Kind != tasks.VerdictFailure || !strings.Contains(r.Verdict.Message, "absent.sh") || r.ExitCode != nil {
 		t.Fatalf("result = %+v", r)
 	}
 	if r.LogPath == "" || r.Started.IsZero() || !r.Started.Equal(r.Finished) {
@@ -359,8 +360,8 @@ func TestExecuteNonExecutableScript(t *testing.T) {
 	if err := os.Chmod(f.script, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	r := Execute(context.Background(), f.spec(KindCheck))
-	if r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "not executable") {
+	r := Execute(context.Background(), f.spec(tasks.RunKindCheck))
+	if r.Verdict.Kind != tasks.VerdictFailure || !strings.Contains(r.Verdict.Message, "not executable") {
 		t.Fatalf("result = %+v", r)
 	}
 }
@@ -368,12 +369,12 @@ func TestExecuteNonExecutableScript(t *testing.T) {
 func TestExecuteMissingCwd(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, `touch "$FIXTURE_DIR/ran"`+"\n")
-	spec := f.spec(KindCheck)
+	spec := f.spec(tasks.RunKindCheck)
 	spec.Cwd = filepath.Join(f.dir, "nowhere")
 	called := false
 	spec.OnStart = func(int) { called = true }
 	r := Execute(context.Background(), spec)
-	if r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "nowhere") || called {
+	if r.Verdict.Kind != tasks.VerdictFailure || !strings.Contains(r.Verdict.Message, "nowhere") || called {
 		t.Fatalf("result = %+v", r)
 	}
 	if _, err := os.Stat(filepath.Join(f.dir, "ran")); !errors.Is(err, os.ErrNotExist) {
@@ -390,8 +391,8 @@ func TestExecuteExistingLogFails(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(f.runDir, "run.log"), []byte("old"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	r := Execute(context.Background(), f.spec(KindCheck))
-	if r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "run.log") {
+	r := Execute(context.Background(), f.spec(tasks.RunKindCheck))
+	if r.Verdict.Kind != tasks.VerdictFailure || !strings.Contains(r.Verdict.Message, "run.log") {
 		t.Fatalf("result = %+v", r)
 	}
 	if _, err := os.Stat(filepath.Join(f.dir, "ran")); !errors.Is(err, os.ErrNotExist) {
@@ -409,8 +410,8 @@ func TestExecuteModes(t *testing.T) {
 	if err := os.Chmod(f.taskDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	r := Execute(context.Background(), f.spec(KindCheck))
-	if r.Verdict.Kind != VerdictPass {
+	r := Execute(context.Background(), f.spec(tasks.RunKindCheck))
+	if r.Verdict.Kind != tasks.VerdictPass {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 	for path, want := range map[string]os.FileMode{
@@ -432,7 +433,7 @@ func TestExecuteModes(t *testing.T) {
 func TestExecuteOnStartOnceWithLivePID(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, `echo $$ > "$FIXTURE_DIR/self.pid"; sleep 0.2`+"\n")
-	spec := f.spec(KindCheck)
+	spec := f.spec(tasks.RunKindCheck)
 	var pids []int
 	var alive []bool
 	spec.OnStart = func(pid int) {
@@ -440,7 +441,7 @@ func TestExecuteOnStartOnceWithLivePID(t *testing.T) {
 		alive = append(alive, syscall.Kill(pid, 0) == nil)
 	}
 	r := Execute(context.Background(), spec)
-	if r.Verdict.Kind != VerdictPass {
+	if r.Verdict.Kind != tasks.VerdictPass {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 	if len(pids) != 1 || !alive[0] {
@@ -455,9 +456,9 @@ func TestExecuteEnvironmentIsExactlySpecEnv(t *testing.T) {
 	// Sequential: t.Setenv.
 	t.Setenv("WORKFLOWRUN_LEAK_SENTINEL", "1")
 	f := newFixture(t, `env > "$FIXTURE_DIR/env.txt"`+"\n")
-	spec := f.spec(KindCheck)
+	spec := f.spec(tasks.RunKindCheck)
 	r := Execute(context.Background(), spec)
-	if r.Verdict.Kind != VerdictPass {
+	if r.Verdict.Kind != tasks.VerdictPass {
 		t.Fatalf("verdict = %+v", r.Verdict)
 	}
 	b, err := os.ReadFile(filepath.Join(f.dir, "env.txt"))

@@ -32,15 +32,15 @@ type StatusVisit struct {
 
 // TransitionRequest is a request to leave a status with an outcome.
 type TransitionRequest struct {
-	ID            int64  `json:"id"`
-	TaskKey       string `json:"task_key"`
-	Outcome       string `json:"outcome"`
-	Message       string `json:"message,omitempty"`
-	Actor         string `json:"actor"`
-	State         string `json:"state"`
-	ResultMessage string `json:"result_message,omitempty"`
-	CreatedAt     string `json:"created_at"`
-	FinishedAt    string `json:"finished_at,omitempty"`
+	ID            int64        `json:"id"`
+	TaskKey       string       `json:"task_key"`
+	Outcome       string       `json:"outcome"`
+	Message       string       `json:"message,omitempty"`
+	Actor         string       `json:"actor"`
+	State         RequestState `json:"state"`
+	ResultMessage string       `json:"result_message,omitempty"`
+	CreatedAt     string       `json:"created_at"`
+	FinishedAt    string       `json:"finished_at,omitempty"`
 	// WaitSeconds is how long a caller may wait for a pending request: the
 	// timeouts of the transition's checks plus a margin. It is computed from
 	// the pinned manifest, never stored, and set only while pending.
@@ -146,16 +146,16 @@ type scannedVisit struct {
 	Rejected int `json:"rejected"`
 	Failures int `json:"failures"`
 	Request  *struct {
-		ID      int64  `json:"id"`
-		State   string `json:"state"`
-		Message string `json:"message"`
+		ID      int64        `json:"id"`
+		State   RequestState `json:"state"`
+		Message string       `json:"message"`
 	} `json:"request"`
 	Run *struct {
-		ID        int64  `json:"id"`
-		Kind      string `json:"kind"`
-		Verdict   string `json:"verdict"`
-		RequestID int64  `json:"request_id"`
-		Message   string `json:"message"`
+		ID        int64   `json:"id"`
+		Kind      RunKind `json:"kind"`
+		Verdict   Verdict `json:"verdict"`
+		RequestID int64   `json:"request_id"`
+		Message   string  `json:"message"`
 	} `json:"run"`
 }
 
@@ -229,19 +229,19 @@ func workflowAttention(t *Task, visit scannedVisit) *WorkflowAttention {
 	run := visit.Run
 	if request := visit.Request; request != nil {
 		attention := &WorkflowAttention{Message: attentionLine(request.Message), RequestID: request.ID}
-		if run != nil && run.Kind == "check" && run.RequestID == request.ID {
+		if run != nil && run.Kind == RunKindCheck && run.RequestID == request.ID {
 			attention.RunID = run.ID
 		}
 		switch request.State {
-		case "failed":
+		case RequestStateFailed:
 			attention.Kind, attention.Count = AttentionFailed, visit.Failures
 			return attention
-		case "rejected":
+		case RequestStateRejected:
 			attention.Kind, attention.Count = AttentionRejected, visit.Rejected
 			return attention
 		}
 	}
-	if run != nil && run.Kind == "watch" && run.Verdict == "failure" {
+	if run != nil && run.Kind == RunKindWatch && run.Verdict == VerdictFailure {
 		return &WorkflowAttention{Kind: AttentionScriptFailed, Message: attentionLine(run.Message), Count: visit.Failures, RunID: run.ID}
 	}
 	if visit.Idle > 0 {

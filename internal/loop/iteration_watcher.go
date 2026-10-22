@@ -129,7 +129,7 @@ func hasRunningIteration(st *agent.Store, name string) bool {
 		return false
 	}
 	for _, it := range its {
-		if it.Status == "running" {
+		if it.Status == agent.IterationRunning {
 			return true
 		}
 	}

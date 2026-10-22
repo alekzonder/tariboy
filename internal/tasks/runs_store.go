@@ -97,7 +97,7 @@ func scriptRunsTx(ctx context.Context, q queryer, taskID int64, limit int) ([]Sc
 }
 
 // insertScriptRunTx records a pending run. requestID is 0 for a watch run.
-func insertScriptRunTx(ctx context.Context, tx *sql.Tx, taskID, visitID, requestID int64, kind, script, runAs, holder string, checkIndex int, now string) error {
+func insertScriptRunTx(ctx context.Context, tx *sql.Tx, taskID, visitID, requestID int64, kind RunKind, script, runAs, holder string, checkIndex int, now string) error {
 	var request any
 	if requestID != 0 {
 		request = requestID
@@ -148,7 +148,7 @@ type checkRequest struct {
 // otherwise, and the run then changes nothing.
 func liveCheckRequestTx(ctx context.Context, tx *sql.Tx, run scriptRunRecord) (checkRequest, bool, error) {
 	var request checkRequest
-	var state string
+	var state RequestState
 	err := tx.QueryRowContext(ctx, `
 		SELECT id, visit_id, outcome, message, actor, state FROM task_transition_requests WHERE id = ?`, run.requestID).
 		Scan(&request.id, &request.visitID, &request.outcome, &request.message, &request.actor, &state)
@@ -158,7 +158,7 @@ func liveCheckRequestTx(ctx context.Context, tx *sql.Tx, run scriptRunRecord) (c
 	if err != nil {
 		return checkRequest{}, false, err
 	}
-	if state != "pending" {
+	if state != RequestStatePending {
 		return checkRequest{}, false, nil
 	}
 	open, err := visitIsOpenTx(ctx, tx, run.taskID, request.visitID)

@@ -219,7 +219,7 @@ func (c Collector) collectAgents(ctx context.Context, limit int, environ []strin
 			iterSegment := archiveSegment(iteration.ID, map[string]bool{})
 			base := "agents/" + segment + "/iterations/" + iterSegment
 			meta := iterationDiagnostic{
-				ID: iteration.ID, Trigger: iteration.Trigger, Status: iteration.Status,
+				ID: iteration.ID, Trigger: iteration.Trigger, Status: string(iteration.Status),
 				StartedAt: iteration.StartedAt, EndedAt: iteration.EndedAt,
 				ExitCode: iteration.ExitCode, Done: iteration.DoneFlag,
 				Productive: iteration.Productive, CPUMs: iteration.CPUMs,

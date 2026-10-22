@@ -134,7 +134,7 @@ func (p *Pruner) selectVictims(name string, its []agent.Iteration, pol Policy) [
 	}
 	protected := map[string]bool{nf[0].ID: true}
 	for _, it := range nf {
-		if it.Status == "running" || !safeID(it.ID) {
+		if it.Status == agent.IterationRunning || !safeID(it.ID) {
 			protected[it.ID] = true
 		}
 	}

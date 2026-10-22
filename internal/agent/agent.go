@@ -111,11 +111,26 @@ type Agent struct {
 	ScheduleRRule string
 }
 
+// IterationStatus is the recorded outcome of an iteration; the stored column
+// holds the same string.
+type IterationStatus string
+
+// The statuses of an iteration.
+const (
+	IterationRunning      IterationStatus = "running"
+	IterationDone         IterationStatus = "done"
+	IterationNoIAmDone    IterationStatus = "no_i_am_done"
+	IterationHarnessError IterationStatus = "harness_error"
+	IterationTimeout      IterationStatus = "timeout"
+	IterationKilled       IterationStatus = "killed"
+	IterationFailed       IterationStatus = "failed"
+)
+
 type Iteration struct {
 	ID        string
 	Agent     string
-	Trigger   string // interval | schedule | message | manual
-	Status    string // running | done | no_i_am_done | harness_error | timeout | killed
+	Trigger   string          // interval | schedule | message | manual
+	Status    IterationStatus // running | done | no_i_am_done | harness_error | timeout | killed | failed
 	StartedAt string
 	EndedAt   string
 	ExitCode  *int
@@ -740,7 +755,7 @@ func (s *Store) ExtendIterationTimeout(agentName, id string, now time.Time) (Ite
 	if err != nil {
 		return Iteration{}, err
 	}
-	if it.Status != "running" || it.TimeoutTriggeredAt != nil {
+	if it.Status != IterationRunning || it.TimeoutTriggeredAt != nil {
 		return Iteration{}, ErrTimeoutNotExtendable
 	}
 	if it.TimeoutPeriodS == nil {

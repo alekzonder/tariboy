@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/script"
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 var sourceDeclared = Declared{Artifacts: []string{"pull_request"}}
@@ -16,8 +17,8 @@ func TestClassifySourceItems(t *testing.T) {
 		{"key":"org/repo#42@3f2a9c1","title":"Review org/repo#42","description":"https://x/42","priority":"P1",
 		 "artifacts":{"pull_request":"https://github.com/org/repo/pull/42"}},
 		{"key":"b","title":"Second"}]}`
-	v := Classify(KindSource, ip(0), false, []byte(raw), nil, sourceDeclared)
-	if v.Kind != VerdictItems || len(v.Items) != 2 {
+	v := Classify(tasks.RunKindSource, ip(0), false, []byte(raw), nil, sourceDeclared)
+	if v.Kind != tasks.VerdictItems || len(v.Items) != 2 {
 		t.Fatalf("got %+v", v)
 	}
 	first := v.Items[0]
@@ -33,13 +34,13 @@ func TestClassifySourceExitCodes(t *testing.T) {
 		name   string
 		exit   int
 		result string
-		want   string
+		want   tasks.Verdict
 	}{
-		{"quiet ignores the file", script.QuietExit, "garbage", VerdictQuiet},
-		{"0 without a file is no items", 0, "", VerdictItems},
-		{"0 with an empty list", 0, `{"items":[]}`, VerdictItems},
-		{"reject code", script.RejectExit, "", VerdictFailure},
-		{"other code", 2, `{"items":[]}`, VerdictFailure},
+		{"quiet ignores the file", script.QuietExit, "garbage", tasks.VerdictQuiet},
+		{"0 without a file is no items", 0, "", tasks.VerdictItems},
+		{"0 with an empty list", 0, `{"items":[]}`, tasks.VerdictItems},
+		{"reject code", script.RejectExit, "", tasks.VerdictFailure},
+		{"other code", 2, `{"items":[]}`, tasks.VerdictFailure},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -47,12 +48,12 @@ func TestClassifySourceExitCodes(t *testing.T) {
 			if c.result != "" {
 				raw = []byte(c.result)
 			}
-			if v := Classify(KindSource, ip(c.exit), false, raw, nil, sourceDeclared); v.Kind != c.want || len(v.Items) != 0 {
+			if v := Classify(tasks.RunKindSource, ip(c.exit), false, raw, nil, sourceDeclared); v.Kind != c.want || len(v.Items) != 0 {
 				t.Fatalf("got %+v, want %s", v, c.want)
 			}
 		})
 	}
-	if v := Classify(KindSource, nil, true, nil, nil, sourceDeclared); v.Kind != VerdictFailure {
+	if v := Classify(tasks.RunKindSource, nil, true, nil, nil, sourceDeclared); v.Kind != tasks.VerdictFailure {
 		t.Fatalf("timeout = %+v", v)
 	}
 }
@@ -84,8 +85,8 @@ func TestClassifySourceRejectsInvalidResults(t *testing.T) {
 	}
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {
-			v := Classify(KindSource, ip(0), false, []byte(raw), nil, sourceDeclared)
-			if v.Kind != VerdictFailure || v.Message == "" || len(v.Items) != 0 {
+			v := Classify(tasks.RunKindSource, ip(0), false, []byte(raw), nil, sourceDeclared)
+			if v.Kind != tasks.VerdictFailure || v.Message == "" || len(v.Items) != 0 {
 				t.Fatalf("got %+v", v)
 			}
 			if len(v.Message) > MaxMessageBytes {

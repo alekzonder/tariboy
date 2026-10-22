@@ -604,7 +604,7 @@ func agentStatus() registry.Command {
 			its, _ := agentStore(c).ListIterations(a.Name)
 			last, lastID := "", ""
 			if n := len(its); n > 0 {
-				last = its[n-1].Status
+				last = string(its[n-1].Status)
 				lastID = its[n-1].ID
 			}
 			out := map[string]any{"name": a.Name, "state": state, "enabled": a.Enabled,
@@ -622,7 +622,7 @@ func agentStatus() registry.Command {
 			addHaltReason(out, a)
 			for i := len(its) - 1; i >= 0; i-- {
 				it := its[i]
-				if it.Status != "running" {
+				if it.Status != agent.IterationRunning {
 					continue
 				}
 				active := map[string]any{"id": it.ID, "started_at": it.StartedAt,

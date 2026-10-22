@@ -18,23 +18,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
-// Kinds of script a run executes.
-const (
-	KindCheck  = "check"
-	KindWatch  = "watch"
-	KindSource = "source"
-)
-
-// Verdicts a finished run can have.
-const (
-	VerdictPass    = "pass"    // check: condition holds
-	VerdictReject  = "reject"  // check: condition does not hold
-	VerdictOutcome = "outcome" // watch: an outcome is ready
-	VerdictQuiet   = "quiet"   // watch or source: nothing changed
-	VerdictItems   = "items"   // source: the items it found
-	VerdictFailure = "failure" // anything else
-)
-
 // Bounds on what a script may write to its result file.
 const (
 	MaxResultBytes   = 64 << 10
@@ -52,11 +35,11 @@ type Declared struct {
 
 // Verdict is what a finished run means.
 type Verdict struct {
-	Kind      string             // one of the Verdict* constants
-	Outcome   string             // set for VerdictOutcome
+	Kind      tasks.Verdict      // one of the tasks.Verdict* constants
+	Outcome   string             // set for tasks.VerdictOutcome
 	Message   string             // script message, or the failure reason
-	Artifacts map[string]string  // set for VerdictPass and VerdictOutcome
-	Items     []tasks.SourceItem // set for VerdictItems
+	Artifacts map[string]string  // set for tasks.VerdictPass and tasks.VerdictOutcome
+	Items     []tasks.SourceItem // set for tasks.VerdictItems
 }
 
 // resultFile is the JSON object a script may write.
@@ -67,14 +50,14 @@ type resultFile struct {
 }
 
 func failure(format string, args ...any) Verdict {
-	return Verdict{Kind: VerdictFailure, Message: fmt.Sprintf(format, args...)}
+	return Verdict{Kind: tasks.VerdictFailure, Message: fmt.Sprintf(format, args...)}
 }
 
 // Classify turns a finished process into a verdict. exit is nil when the
 // process did not exit normally; timedOut and rawResult describe the rest.
 // rawResult is nil, with a nil resultErr, when the script wrote no result file.
-func Classify(kind string, exit *int, timedOut bool, rawResult []byte, resultErr error, declared Declared) Verdict {
-	if kind != KindCheck && kind != KindWatch && kind != KindSource {
+func Classify(kind tasks.RunKind, exit *int, timedOut bool, rawResult []byte, resultErr error, declared Declared) Verdict {
+	if kind != tasks.RunKindCheck && kind != tasks.RunKindWatch && kind != tasks.RunKindSource {
 		return failure("unknown script kind %q", kind)
 	}
 	if timedOut {
@@ -84,13 +67,13 @@ func Classify(kind string, exit *int, timedOut bool, rawResult []byte, resultErr
 		return failure("the script did not exit normally")
 	}
 	code := *exit
-	if kind == KindSource {
+	if kind == tasks.RunKindSource {
 		return classifySource(code, rawResult, resultErr, declared)
 	}
 
 	// A quiet watch run publishes nothing, so its result file is not read.
-	if kind == KindWatch && code == script.QuietExit {
-		return Verdict{Kind: VerdictQuiet}
+	if kind == tasks.RunKindWatch && code == script.QuietExit {
+		return Verdict{Kind: tasks.VerdictQuiet}
 	}
 
 	res, err := readResult(rawResult, resultErr)
@@ -101,7 +84,7 @@ func Classify(kind string, exit *int, timedOut bool, rawResult []byte, resultErr
 			return failure("%v", err)
 		}
 		return classifySuccess(kind, res, declared)
-	case kind == KindCheck && code == script.RejectExit:
+	case kind == tasks.RunKindCheck && code == script.RejectExit:
 		if err != nil {
 			return failure("%v", err)
 		}
@@ -112,28 +95,28 @@ func Classify(kind string, exit *int, timedOut bool, rawResult []byte, resultErr
 		if msg == "" {
 			msg = defaultRejectMessage
 		}
-		return Verdict{Kind: VerdictReject, Message: msg}
-	case kind == KindCheck && code == script.QuietExit:
+		return Verdict{Kind: tasks.VerdictReject, Message: msg}
+	case kind == tasks.RunKindCheck && code == script.QuietExit:
 		return failure("exit %d is the quiet code and is not valid for a check", code)
-	case kind == KindWatch && code == script.RejectExit:
+	case kind == tasks.RunKindWatch && code == script.RejectExit:
 		return failure("exit %d is the reject code and is not valid for a watch script", code)
 	}
 	msg := "the script failed with exit " + strconv.Itoa(code)
 	if err == nil && res.Message != "" {
 		msg += ": " + res.Message
 	}
-	return Verdict{Kind: VerdictFailure, Message: cutRunes(msg, MaxMessageBytes)}
+	return Verdict{Kind: tasks.VerdictFailure, Message: cutRunes(msg, MaxMessageBytes)}
 }
 
-func classifySuccess(kind string, res resultFile, declared Declared) Verdict {
+func classifySuccess(kind tasks.RunKind, res resultFile, declared Declared) Verdict {
 	if err := checkMessage(res.Message); err != nil {
 		return failure("%v", err)
 	}
 	if err := checkArtifacts(res.Artifacts, declared.Artifacts); err != nil {
 		return failure("%v", err)
 	}
-	if kind == KindCheck {
-		return Verdict{Kind: VerdictPass, Message: res.Message, Artifacts: res.Artifacts}
+	if kind == tasks.RunKindCheck {
+		return Verdict{Kind: tasks.VerdictPass, Message: res.Message, Artifacts: res.Artifacts}
 	}
 	if res.Outcome == "" {
 		return failure("the watch script exited 0 without an outcome")
@@ -141,7 +124,7 @@ func classifySuccess(kind string, res resultFile, declared Declared) Verdict {
 	if !contains(declared.Outcomes, res.Outcome) {
 		return failure("the watch script reported undeclared outcome %q", res.Outcome)
 	}
-	return Verdict{Kind: VerdictOutcome, Outcome: res.Outcome, Message: res.Message, Artifacts: res.Artifacts}
+	return Verdict{Kind: tasks.VerdictOutcome, Outcome: res.Outcome, Message: res.Message, Artifacts: res.Artifacts}
 }
 
 // readResult parses the result file. A missing or blank file is an empty

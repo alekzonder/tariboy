@@ -46,7 +46,7 @@ const (
 
 // Outcome is what the runner reports for one iteration.
 type Outcome struct {
-	Status   string // done | no_i_am_done | harness_error | timeout | killed
+	Status   agent.IterationStatus // done | no_i_am_done | harness_error | timeout | killed
 	ExitCode int
 	DoneFlag bool
 	// Productive carries the iteration's productive flag (see agent.Iteration).
@@ -217,12 +217,12 @@ func (e *Engine) emitState() {
 	}
 }
 
-func (e *Engine) emitIteration(id, trigger, status, phase string) {
+func (e *Engine) emitIteration(id string, trigger Trigger, status agent.IterationStatus, phase Phase) {
 	if e.emit == nil {
 		return
 	}
 	e.emit(events.Event{Agent: e.ag.Name, Type: "iteration", Time: store.FormatTime(e.clock()),
-		Data: map[string]any{"id": id, "trigger": trigger, "status": status, "phase": phase}})
+		Data: map[string]any{"id": id, "trigger": string(trigger), "status": string(status), "phase": string(phase)}})
 }
 
 func (e *Engine) CurrentIterationID() string {
@@ -307,7 +307,7 @@ func (e *Engine) Run(ctx context.Context) {
 			// (stop); WakeMessage additionally runs a message iteration above.
 		case m := <-e.manualCh:
 			stopTimer()
-			e.runOnceGuarded(ctx, "manual", m.oneShot, m.launchGate)
+			e.runOnceGuarded(ctx, TriggerManual, m.oneShot, m.launchGate)
 		case <-timerC:
 			// The timer fired and drained its channel; no Stop needed.
 			e.timerFired(ctx, armedRule)
@@ -339,9 +339,9 @@ func (e *Engine) timerFired(ctx context.Context, armedRule string) {
 	switch {
 	case !e.iterates():
 	case armedRule != "" && armedRule == e.ag.ScheduleRRule:
-		e.runOnce(ctx, "schedule", "")
+		e.runOnce(ctx, TriggerSchedule, "")
 	case armedRule == "" && e.ag.IntervalS > 0:
-		e.runOnce(ctx, "interval", "")
+		e.runOnce(ctx, TriggerInterval, "")
 	}
 }
 
@@ -363,7 +363,7 @@ func (e *Engine) tryMessage(ctx context.Context) {
 		w.clear()
 		return
 	}
-	result := e.runOnce(ctx, "message", "")
+	result := e.runOnce(ctx, TriggerMessage, "")
 	if result == TickSkipped && e.hasPending() {
 		w.block(e.newTimer)
 		return
@@ -425,7 +425,7 @@ func (e *Engine) nextWait() time.Duration {
 	return remaining
 }
 
-func (e *Engine) runOnce(ctx context.Context, trigger, oneShot string) TickResult {
+func (e *Engine) runOnce(ctx context.Context, trigger Trigger, oneShot string) TickResult {
 	return e.runOnceGuarded(ctx, trigger, oneShot, nil)
 }
 
@@ -465,7 +465,7 @@ type launch struct {
 
 func (e *Engine) runOnceGuarded(
 	ctx context.Context,
-	trigger, oneShot string,
+	trigger Trigger, oneShot string,
 	launchGate func() (release func(), ok bool),
 ) TickResult {
 	guard := &launchGuard{gate: launchGate}
@@ -488,7 +488,7 @@ func (e *Engine) runOnceGuarded(
 // second iteration on top: a loop-triggered tick is skipped, a manual one is
 // failed with a visible reason. It reports true when the launch must not
 // proceed, with the tick result to return.
-func (e *Engine) launchBlocked(trigger string, guard *launchGuard) (TickResult, bool) {
+func (e *Engine) launchBlocked(trigger Trigger, guard *launchGuard) (TickResult, bool) {
 	b, ok := e.runner.(interface {
 		SessionBlocked(agent.Agent) bool
 	})
@@ -513,7 +513,7 @@ func (e *Engine) launchBlocked(trigger string, guard *launchGuard) (TickResult, 
 			map[string]any{"reason": "orphan_before_launch"})
 		return "", false
 	}
-	if trigger == "manual" {
+	if trigger == TriggerManual {
 		return e.failManualCollision(trigger, guard), true
 	}
 	e.log.Info("loop iteration skipped: tmux session still alive", "agent", e.ag.Name)
@@ -524,7 +524,7 @@ func (e *Engine) launchBlocked(trigger string, guard *launchGuard) (TickResult, 
 
 // failManualCollision records a manual trigger that collided with a live tmux
 // session as a failed iteration row.
-func (e *Engine) failManualCollision(trigger string, guard *launchGuard) TickResult {
+func (e *Engine) failManualCollision(trigger Trigger, guard *launchGuard) TickResult {
 	if !guard.acquire() {
 		return TickDisabled
 	}
@@ -536,7 +536,7 @@ func (e *Engine) failManualCollision(trigger string, guard *launchGuard) TickRes
 	}
 	ts := store.FormatTime(now)
 	it := agent.Iteration{
-		ID: id, Agent: e.ag.Name, Trigger: trigger, Status: "failed",
+		ID: id, Agent: e.ag.Name, Trigger: string(trigger), Status: agent.IterationFailed,
 		StartedAt: ts, EndedAt: ts,
 	}
 	if err := e.store.CreateIteration(it); err != nil {
@@ -548,7 +548,7 @@ func (e *Engine) failManualCollision(trigger string, guard *launchGuard) TickRes
 		"agent", e.ag.Name, "id", id)
 	e.recordAudit("iteration_failed", "system", id,
 		map[string]any{"reason": "tmux_session_exists"})
-	e.emitIteration(id, trigger, "failed", "finish")
+	e.emitIteration(id, trigger, agent.IterationFailed, PhaseFinish)
 	if e.iterationCompleted != nil {
 		e.iterationCompleted(e.ag.Name, id)
 	}
@@ -558,7 +558,7 @@ func (e *Engine) failManualCollision(trigger string, guard *launchGuard) TickRes
 // prepareLaunch acquires the launch gate, activates the image and creates the
 // running iteration row. It reports false with the tick result to return when
 // the launch cannot proceed.
-func (e *Engine) prepareLaunch(trigger string, guard *launchGuard) (launch, TickResult, bool) {
+func (e *Engine) prepareLaunch(trigger Trigger, guard *launchGuard) (launch, TickResult, bool) {
 	if !guard.acquire() {
 		return launch{}, TickDisabled, false
 	}
@@ -573,7 +573,7 @@ func (e *Engine) prepareLaunch(trigger string, guard *launchGuard) (launch, Tick
 			// tick. Halt with the cause in error_reason, which the agent status
 			// surfaces as halt_reason; Start/Restart clears it.
 			e.log.Error("prepare image activation", "agent", e.ag.Name, "err", err)
-			e.disableLoop("image activation failed: " + err.Error())
+			e.disableLoop(StopReason("image activation failed: " + err.Error()))
 			e.recordAudit("iteration_failed", "system", "", map[string]any{
 				"reason": "image_activation_failed", "error": err.Error(),
 			})
@@ -587,7 +587,7 @@ func (e *Engine) prepareLaunch(trigger string, guard *launchGuard) (launch, Tick
 		return launch{}, TickError, false
 	}
 	it := agent.Iteration{
-		ID: id, Agent: e.ag.Name, Trigger: trigger, Status: "running",
+		ID: id, Agent: e.ag.Name, Trigger: string(trigger), Status: agent.IterationRunning,
 		StartedAt: store.FormatTime(now), ImageRef: e.ag.ImageRef,
 		ImageVersion: activated.ImageVersion, ImageDigest: e.ag.ImageDigest, PromptTemplateSHA256: activated.PromptTemplateSHA256,
 	}
@@ -600,7 +600,7 @@ func (e *Engine) prepareLaunch(trigger string, guard *launchGuard) (launch, Tick
 
 // runIteration makes the created row current, releases the launch gate, runs
 // the harness and records the outcome.
-func (e *Engine) runIteration(ctx context.Context, trigger, oneShot string, l launch, guard *launchGuard) TickResult {
+func (e *Engine) runIteration(ctx context.Context, trigger Trigger, oneShot string, l launch, guard *launchGuard) TickResult {
 	id, activated := l.it.ID, l.activated
 	// Root iteration span (spec §14). OTel-off installs a no-op tracer, so span
 	// start/end and attribute-setting are free and never alter iteration
@@ -617,9 +617,9 @@ func (e *Engine) runIteration(ctx context.Context, trigger, oneShot string, l la
 	defer cancel()
 	guard.done()
 	e.log.Info("iteration started", "agent", e.ag.Name, "id", id, "trigger", trigger)
-	e.emitIteration(id, trigger, "running", "start")
+	e.emitIteration(id, trigger, agent.IterationRunning, PhaseStart)
 	e.recordAudit("iteration_started", "system", id, map[string]any{
-		"trigger": trigger, "image_ref": e.ag.ImageRef,
+		"trigger": string(trigger), "image_ref": e.ag.ImageRef,
 		"image_version": activated.ImageVersion, "image_digest": e.ag.ImageDigest,
 	})
 	tr := otel.Tracer("tariboy/loop")
@@ -627,7 +627,7 @@ func (e *Engine) runIteration(ctx context.Context, trigger, oneShot string, l la
 	runCtx, span := tr.Start(runCtx, "iteration", oteltrace.WithAttributes(
 		attribute.String("agent", e.ag.Name),
 		attribute.String("iteration_id", id),
-		attribute.String("trigger", trigger),
+		attribute.String("trigger", string(trigger)),
 		attribute.String("image_ref", e.ag.ImageRef),
 	))
 	defer span.End()
@@ -646,7 +646,7 @@ func (e *Engine) runIteration(ctx context.Context, trigger, oneShot string, l la
 		}
 	}()
 
-	outcome, runErr := e.runner.Run(runCtx, e.ag, trigger, id, oneShot)
+	outcome, runErr := e.runner.Run(runCtx, e.ag, string(trigger), id, oneShot)
 
 	e.mu.Lock()
 	e.current = ""
@@ -661,14 +661,14 @@ func (e *Engine) runIteration(ctx context.Context, trigger, oneShot string, l la
 	}
 	if runErr != nil {
 		e.finishHarnessError(id, trigger, end, runErr)
-		e.finishSpan(span, spanStart, id, "harness_error", 0, 0)
+		e.finishSpan(span, spanStart, id, agent.IterationHarnessError, 0, 0)
 		return TickError
 	}
 	return e.finishOutcome(l.it, trigger, end, outcome, span, spanStart)
 }
 
 // finishHarnessError finalizes the row of an iteration whose runner failed.
-func (e *Engine) finishHarnessError(id, trigger, end string, runErr error) {
+func (e *Engine) finishHarnessError(id string, trigger Trigger, end string, runErr error) {
 	e.log.Error("iteration runner failed", "agent", e.ag.Name, "id", id, "err", runErr)
 	// A manager-side stale-shim recovery may have finalized this row while
 	// the runner was unwinding its cancelled context. Do not erase that
@@ -677,7 +677,7 @@ func (e *Engine) finishHarnessError(id, trigger, end string, runErr error) {
 	if err != nil {
 		return
 	}
-	current.Status = "harness_error"
+	current.Status = agent.IterationHarnessError
 	current.EndedAt = end
 	committed, err := e.store.FinalizeRunningIteration(current)
 	if err != nil {
@@ -687,8 +687,8 @@ func (e *Engine) finishHarnessError(id, trigger, end string, runErr error) {
 	if !committed {
 		return
 	}
-	e.emitIteration(id, trigger, "harness_error", "finish")
-	e.recordAudit("iteration_finished", "system", id, map[string]any{"status": "harness_error", "error": runErr.Error()})
+	e.emitIteration(id, trigger, agent.IterationHarnessError, PhaseFinish)
+	e.recordAudit("iteration_finished", "system", id, map[string]any{"status": string(agent.IterationHarnessError), "error": runErr.Error()})
 	if e.iterationCompleted != nil {
 		e.iterationCompleted(e.ag.Name, id)
 	}
@@ -696,7 +696,7 @@ func (e *Engine) finishHarnessError(id, trigger, end string, runErr error) {
 
 // finishOutcome persists the runner's outcome, applies the on_timeout/on_error
 // policy and signals completion.
-func (e *Engine) finishOutcome(it agent.Iteration, trigger, end string, outcome Outcome,
+func (e *Engine) finishOutcome(it agent.Iteration, trigger Trigger, end string, outcome Outcome,
 	span oteltrace.Span, spanStart time.Time) TickResult {
 	id := it.ID
 	ec := outcome.ExitCode
@@ -725,8 +725,8 @@ func (e *Engine) finishOutcome(it agent.Iteration, trigger, end string, outcome 
 		}
 	}
 	e.log.Info("iteration finished", "agent", e.ag.Name, "id", id, "status", outcome.Status)
-	e.emitIteration(id, trigger, outcome.Status, "finish")
-	finished := map[string]any{"status": outcome.Status}
+	e.emitIteration(id, trigger, outcome.Status, PhaseFinish)
+	finished := map[string]any{"status": string(outcome.Status)}
 	if outcome.Error != "" {
 		finished["error"] = outcome.Error
 	}
@@ -747,10 +747,10 @@ func (e *Engine) finishOutcome(it agent.Iteration, trigger, end string, outcome 
 // accounting view remains usage/budget (the DB). Every step here is nil-safe
 // and cannot fail the iteration: a no-op tracer yields no-op spans, and a nil
 // usageLookup/metrics is skipped.
-func (e *Engine) finishSpan(span oteltrace.Span, start time.Time, id, outcome string, cpu, mem int) {
+func (e *Engine) finishSpan(span oteltrace.Span, start time.Time, id string, outcome agent.IterationStatus, cpu, mem int) {
 	dur := float64(e.clock().Sub(start).Milliseconds())
 	span.SetAttributes(
-		attribute.String("outcome", outcome),
+		attribute.String("outcome", string(outcome)),
 		attribute.Int("cpu_ms", cpu),
 		attribute.Int("mem_peak_kb", mem),
 	)
@@ -765,32 +765,32 @@ func (e *Engine) finishSpan(span oteltrace.Span, start time.Time, id, outcome st
 			attribute.Float64("cost_usd", cost),
 		)
 	}
-	if outcome == "harness_error" || outcome == "timeout" {
-		span.SetStatus(codes.Error, outcome)
+	if outcome == agent.IterationHarnessError || outcome == agent.IterationTimeout {
+		span.SetStatus(codes.Error, string(outcome))
 	} else {
 		span.SetStatus(codes.Ok, "")
 	}
-	e.metrics.RecordIteration(context.Background(), outcome, dur)
+	e.metrics.RecordIteration(context.Background(), string(outcome), dur)
 }
 
 func (e *Engine) applyPolicy(o Outcome) TickResult {
 	switch o.Status {
-	case "done", "no_i_am_done":
+	case agent.IterationDone, agent.IterationNoIAmDone:
 		if res, stopped := e.maybeIdleStop(); stopped {
 			return res
 		}
 		return TickCompletedWaiting
-	case "killed":
+	case agent.IterationKilled:
 		return TickProcessDied
-	case "timeout":
+	case agent.IterationTimeout:
 		if e.ag.OnTimeout == "stop" {
-			e.disableLoop("timeout")
+			e.disableLoop(StopReasonTimeout)
 			return TickTimeoutStop
 		}
 		return TickTimeoutRestart
-	case "harness_error":
+	case agent.IterationHarnessError:
 		if e.ag.OnError == "stop" {
-			e.disableLoop("harness_error")
+			e.disableLoop(StopReasonHarnessError)
 			return TickErrorHalt
 		}
 		return TickRestarted
@@ -803,8 +803,8 @@ func (e *Engine) applyPolicy(o Outcome) TickResult {
 // fires. SetError records the halt reason, which stops further iterations until
 // Start clears it, so the agent surfaces as state=error (derived).
 // The engine goroutine itself stays alive, blocked on a manual trigger.
-func (e *Engine) disableLoop(reason string) {
-	e.ag.ErrorReason = "halted: " + reason
+func (e *Engine) disableLoop(reason StopReason) {
+	e.ag.ErrorReason = "halted: " + string(reason)
 	if err := e.store.SetError(e.ag.Name, e.ag.ErrorReason); err != nil {
 		e.log.Error("disable loop", "agent", e.ag.Name, "err", err)
 	}

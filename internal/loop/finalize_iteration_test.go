@@ -37,7 +37,7 @@ func (s *stubIterationStore) FinalizeRunningIteration(it agent.Iteration) (bool,
 	s.updates++
 	_, err := os.Stat(s.sockPath)
 	s.sockAtCommit = err == nil
-	s.attemptedStat = it.Status
+	s.attemptedStat = string(it.Status)
 	if s.beforeCAS != nil {
 		s.beforeCAS()
 	}
@@ -48,7 +48,7 @@ func (s *stubIterationStore) FinalizeRunningIteration(it agent.Iteration) (bool,
 		return false, nil
 	}
 	s.it = it
-	s.committedStat = it.Status
+	s.committedStat = string(it.Status)
 	return true, nil
 }
 

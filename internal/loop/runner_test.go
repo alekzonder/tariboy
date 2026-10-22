@@ -168,7 +168,7 @@ func TestClassify(t *testing.T) {
 		exit   int
 		done   bool
 		softTO bool
-		want   string
+		want   agent.IterationStatus
 	}{
 		{0, true, false, "done"},
 		{143, true, false, "done"},

@@ -190,7 +190,7 @@ func printRuns(raw json.RawMessage, stdout io.Writer) bool {
 			exit = fmt.Sprint(*run.ExitCode)
 		}
 		fmt.Fprintf(table, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", run.ID, run.Kind, preview(run.Script), run.State,
-			dash(run.Verdict), exit, dash(run.StartedAt), runDuration(run))
+			dash(string(run.Verdict)), exit, dash(run.StartedAt), runDuration(run))
 	}
 	table.Flush()
 	return true

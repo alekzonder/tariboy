@@ -440,7 +440,7 @@ func TestRunOnceGoalIterationCompletedAfterFinalStatus(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		calls = append(calls, agentName+"/"+iterationID+"/"+it.Status)
+		calls = append(calls, agentName+"/"+iterationID+"/"+string(it.Status))
 	})
 
 	if got := e.runOnce(context.Background(), "interval", ""); got != TickCompletedWaiting {
@@ -1236,7 +1236,7 @@ func TestRunOnceManualSessionConflictSignalsGoalAfterFailedRow(t *testing.T) {
 			calls = append(calls, "lookup error: "+err.Error())
 			return
 		}
-		calls = append(calls, agentName+"/"+iterationID+"/"+it.Status)
+		calls = append(calls, agentName+"/"+iterationID+"/"+string(it.Status))
 	})
 
 	if got := e.runOnce(context.Background(), "manual", ""); got != TickError {

@@ -881,7 +881,7 @@ func TestIdleStreak(t *testing.T) {
 			status = "no_i_am_done"
 		}
 		if err := st.CreateIteration(Iteration{ID: id, Agent: "smoke", Trigger: "interval",
-			Status: status, StartedAt: now.Format(time.RFC3339)}); err != nil {
+			Status: IterationStatus(status), StartedAt: now.Format(time.RFC3339)}); err != nil {
 			t.Fatal(err)
 		}
 		switch kind {
