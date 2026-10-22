@@ -57,7 +57,7 @@ func (wr *watchRecorder) reset() {
 	wr.mu.Unlock()
 }
 
-// TestHostPushWatchesReachesRunningPlugin is the §6.2 push integration: a
+// TestHostPushWatchesReachesRunningPlugin is the push integration: a
 // running provider plugin receives POST /watches carrying the channel's full
 // current watch list.
 func TestHostPushWatchesReachesRunningPlugin(t *testing.T) {

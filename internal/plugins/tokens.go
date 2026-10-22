@@ -7,12 +7,12 @@ import (
 	"sync"
 )
 
-// Identity is the scoped identity a valid plugin-token resolves to (spec §13).
+// Identity is the scoped identity a valid plugin-token resolves to.
 type Identity struct {
 	Name      string
 	Publish   []string // channel globs the plugin may publish to
 	Subscribe []string // channel globs the plugin drains as a sink
-	Provide   []string // provided channel names the plugin owns (spec §6.2)
+	Provide   []string // provided channel names the plugin owns
 	// Sink holds the declared sink subscribe patterns, populated ONLY for a
 	// channel-sink plugin (empty for every other type). It is what the publish
 	// handler matches a concrete target channel against to decide whether to seed

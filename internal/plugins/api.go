@@ -13,7 +13,7 @@ import (
 
 // API is the plugin-facing daemon surface: channel-source publish + subscription
 // read, authenticated by a plugin-token header and scoped to the plugin's
-// declared channels (spec §7.2/§13).
+// declared channels.
 type API struct {
 	tokens *TokenRegistry
 	bus    *bus.Bus
@@ -156,7 +156,7 @@ func (a *API) subscriptions(w http.ResponseWriter, r *http.Request) {
 	api.WriteOK(w, map[string]any{"channels": chans})
 }
 
-// watches is the pull path (spec §6.2): it returns the full current watch list
+// watches is the pull path: it returns the full current watch list
 // for every channel this plugin provides, so a plugin that (re)started and lost
 // its in-memory state can reconcile from scratch. Same structure the daemon
 // pushes per-channel on subscribe/unsubscribe. Replaces the misleading static

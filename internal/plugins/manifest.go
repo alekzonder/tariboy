@@ -6,14 +6,29 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 )
 
-// ProtocolVersion is the plugin protocol this daemon speaks (spec §7). A
+// ProtocolVersion is the plugin protocol this daemon speaks. A
 // manifest/handshake with a different value is rejected.
 const ProtocolVersion = 1
+
+// Entries a plugin's name directory keeps beside its version directories.
+const (
+	activeVersionFile = "active-version"
+	logsDirName       = "logs"
+	workdirName       = "workdir"
+	socketFileName    = "plugin.sock"
+)
+
+// reservedDirNames lists the entries above. A manifest version may not use
+// one of them, and a layout migration never copies them into a version.
+var reservedDirNames = []string{activeVersionFile, logsDirName, workdirName, socketFileName}
+
+func reservedDirName(name string) bool { return slices.Contains(reservedDirNames, name) }
 
 var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 
@@ -26,12 +41,12 @@ func ValidName(name string) bool { return nameRE.MatchString(name) }
 var knownTypes = map[string]bool{
 	"channel-source": true,
 	"channel-sink":   true,
-	"harness":        true, // recognised; deep wiring deferred to Phase 2
-	"tool":           true, // recognised; deep wiring deferred to Phase 2
+	"harness":        true, // accepted; the daemon connects nothing to it yet
+	"tool":           true, // accepted; the daemon connects nothing to it yet
 }
 
 // Provided is one channel a plugin fulfils for parameterized (query-like)
-// subscriptions (spec §6.1). The daemon validates a subscriber's params against
+// subscriptions. The daemon validates a subscriber's params against
 // ParamsSchema at subscribe time; Help is surfaced by the Messages skill / UI
 // so an agent can discover how to subscribe. A provided channel must lie inside
 // the plugin's Publish scope (enforced by Manifest.Validate).
@@ -108,7 +123,7 @@ func matchesAnyGlob(patterns []string, channel string) bool {
 	return false
 }
 
-// Manifest is <plugin-dir>/plugin.json (spec §7.2).
+// Manifest is <plugin-dir>/plugin.json.
 type Manifest struct {
 	Name             string                `json:"name"`
 	Version          string                `json:"version"`
@@ -135,12 +150,12 @@ func ParseManifest(b []byte) (Manifest, error) {
 	return m, nil
 }
 
-// Validate is the security gate for what the daemon will spawn (spec §13).
+// Validate is the security gate for what the daemon will spawn.
 func (m Manifest) Validate() error {
 	if !ValidName(m.Name) {
 		return fmt.Errorf("invalid plugin name %q (want ^[a-z0-9][a-z0-9_-]*$)", m.Name)
 	}
-	if m.Version == "" || strings.ContainsAny(m.Version, `/\\`) || m.Version == "." || m.Version == ".." || m.Version == "active-version" || m.Version == "logs" || m.Version == "workdir" || m.Version == "plugin.sock" {
+	if m.Version == "" || strings.ContainsAny(m.Version, `/\\`) || m.Version == "." || m.Version == ".." || reservedDirName(m.Version) {
 		return fmt.Errorf("plugin %s has invalid version %q", m.Name, m.Version)
 	}
 	if m.ProtocolVersion != ProtocolVersion {
@@ -176,7 +191,7 @@ func (m Manifest) Validate() error {
 			return fmt.Errorf("plugin %s prompt escapes the plugin dir: %q", m.Name, m.Prompt)
 		}
 	}
-	// Provided channels (spec §6.1): each must be a concrete channel name inside
+	// Provided channels: each must be a concrete channel name inside
 	// the plugin's own publish scope — a plugin may only offer to fulfil demand
 	// on channels it is already allowed to publish to — and any declared
 	// params_schema must be a well-formed JSON Schema document.
@@ -461,7 +476,7 @@ func resolveInstalled(pluginsDir string, loadPrompt bool) plugincaps.ExternalRes
 		}
 		nameDir := filepath.Join(pluginsDir, name)
 		dir := nameDir
-		if active, readErr := os.ReadFile(filepath.Join(nameDir, "active-version")); readErr == nil {
+		if active, readErr := os.ReadFile(filepath.Join(nameDir, activeVersionFile)); readErr == nil {
 			version := strings.TrimSpace(string(active))
 			if version == "" || strings.ContainsAny(version, `/\\`) {
 				return ResolvedPlugin{}, fmt.Errorf("plugin %s has invalid active version", name)

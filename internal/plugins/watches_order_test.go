@@ -137,8 +137,8 @@ func startProvider(t *testing.T, h *Host, ps *Store, name string, srv interface 
 	waitRunning(t, h, name)
 }
 
-// TestPushWatchesDeliversInEventOrder is the regression guard for dev-t-arn.7
-// (review finding #1): a subscribe (push [w]) immediately followed by an
+// TestPushWatchesDeliversInEventOrder guards push ordering:
+// a subscribe (push [w]) immediately followed by an
 // unsubscribe (push []) must leave the provider reconciled to the FINAL state —
 // the empty list — even when the [w] delivery is much slower than the []
 // delivery. The serialized per-(plugin,channel) push guarantees this; the old

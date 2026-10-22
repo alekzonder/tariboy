@@ -12,7 +12,7 @@ import (
 )
 
 // MessageDTO is the wire form of a bus.Message the daemon delivers to a
-// channel-sink plugin (spec §7.3). Kept here so bus gains no HTTP knowledge.
+// channel-sink plugin. Kept here so bus gains no HTTP knowledge.
 type MessageDTO struct {
 	ID                  string         `json:"id"`
 	Channel             string         `json:"channel"`
@@ -25,8 +25,8 @@ type MessageDTO struct {
 	ProducedByAgent     string         `json:"produced_by_agent,omitempty"`
 	ProducedInIteration string         `json:"produced_in_iteration,omitempty"`
 	ProducedByPlugin    string         `json:"produced_by_plugin,omitempty"`
-	// Routing fields (spec §4) — carried so a channel-sink can implement the
-	// reply-forwarding contract (§6.4): a kind=reply delivery on the plugin's own
+	// Routing fields, carried so a channel-sink can implement reply
+	// forwarding: a kind=reply delivery on the plugin's own
 	// channel is mapped back to its external entity via in_reply_to/correlation_id.
 	Kind          string `json:"kind,omitempty"`
 	CorrelationID string `json:"correlation_id,omitempty"`
@@ -37,7 +37,7 @@ type MessageDTO struct {
 
 // WatchDTO is the wire form of one unit of provider demand on a channel: the
 // watch fingerprint, the params that produced it, and the subscribing agents
-// (spec §6.2). Carried by both the push (POST /watches) and pull
+// Carried by both the push (POST /watches) and pull
 // (GET /api/plugin/watches) paths so a provider always sees full current state.
 type WatchDTO struct {
 	Watch       string         `json:"watch"`
@@ -162,7 +162,7 @@ func (c *Client) doJSON(req *http.Request) (map[string]any, error) {
 }
 
 // PushWatches POSTs the full current watch list for a provided channel to the
-// plugin's /watches (spec §6.2). A non-2xx is an error so the daemon can retry.
+// plugin's /watches. A non-2xx is an error so the daemon can retry.
 func (c *Client) PushWatches(ctx context.Context, channel string, watches []WatchDTO) error {
 	body, err := json.Marshal(ChannelWatchesDTO{Channel: channel, Watches: watches})
 	if err != nil {

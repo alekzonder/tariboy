@@ -899,8 +899,8 @@ func TestStartRefusesSymlinkEscapeExec(t *testing.T) {
 	}
 }
 
-// TestHostInstallRejectsSymlinkInTree proves the install-time defense layer
-// (carry-forward from Task 2/7 review): a plugin source tree containing a
+// TestHostInstallRejectsSymlinkInTree proves the install-time defense layer:
+// a plugin source tree containing a
 // symlink ANYWHERE (not just at the top level) must be refused whole, whether
 // it points outside the tree or even at an in-tree file — install is a
 // whole-tree reject, not a per-symlink resolve. Nothing must land in

@@ -14,7 +14,7 @@ type fakeLister struct {
 
 func (f fakeLister) List() ([]Record, error) { return f.recs, f.err }
 
-// TestParamsValidatorForSwallowsListError proves review finding #2: when the
+// TestParamsValidatorForSwallowsListError proves that when the
 // plugin store's List() fails, a subscribe to a core (non-provider) channel must
 // still succeed — the store-read failure must not propagate to every subscribe —
 // while a readable store still enforces a provided channel's required-params

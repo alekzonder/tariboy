@@ -68,7 +68,7 @@ func TestSinkDrainDeliversAndAcks(t *testing.T) {
 
 // A kind=reply delivery must carry its routing fields (kind, in_reply_to,
 // correlation_id) through to the plugin, so a channel-sink can implement the
-// reply-forwarding contract (spec §6.4) — map the reply back to its external
+// reply-forwarding contract — map the reply back to its external
 // entity. Guards toDTO against silently dropping those fields.
 func TestSinkDrainForwardsReplyRoutingFields(t *testing.T) {
 	t.Parallel()

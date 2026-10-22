@@ -1,4 +1,4 @@
-// Package plugins is the external plugin host (spec §7): tariboyd owns the
+// Package plugins is the external plugin host: tariboyd owns the
 // lifecycle of executable plugins installed under <base>/plugins/<name>/. It
 // starts, supervises (health/backoff/graceful stop), and drains the two
 // bus-facing plugin types (channel-source publishes in, channel-sink delivers
