@@ -526,11 +526,15 @@ rebuilding any non-reserved ref is always allowed, so no build path can be
 refused for a ref that already exists. A store written before this model is
 migrated once at daemon startup, keeping each archive's content digest as its
 ref id so pinned digests keep resolving.
-One publication gate spans ordinary, editable-source, team-import,
-agent-authored, compose, and controlled-release publication plus assignment,
-activation, provisioning, reprovisioning, import, and removal, so none can
-persist an uncommitted generation. Compose publishes through the daemon rather
-than writing its image store from the client process.
+Image locks keep every reader off an uncommitted generation. Ordinary,
+editable-source, agent-authored, compose, and import publication take the lock
+of the one image name they write, so publications of different names run in
+parallel and publications of one name run one at a time. Assignment,
+activation, provisioning, reprovisioning, removal, and migration read or
+change several names, so they take the store-wide lock, which excludes every
+name lock. The locks are in-process: `tariboyd` is the one process that writes
+the image store. Compose publishes through the daemon rather than writing its
+image store from the client process.
 
 ## Restart handoff
 

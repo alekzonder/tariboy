@@ -12,7 +12,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/alekzonder/tariboy/internal/refstore"
 )
@@ -28,17 +27,6 @@ import (
 // the requested tags onto it, so every ref can be rebuilt at any time and by
 // any caller. Agents and the operator CLI share this one mechanism.
 type Store struct{ Dir string }
-
-// ponytail: global lock, use per-ref locks if image publication becomes a bottleneck.
-var publicationGate sync.Mutex
-
-// WithPublicationGate serializes publication against concurrent readers that
-// resolve a tag and then open its content.
-func WithPublicationGate(fn func() error) error {
-	publicationGate.Lock()
-	defer publicationGate.Unlock()
-	return fn()
-}
 
 // RefID derives a ref's identity from its image name and the image_version
 // declared in Tariboyfile.yaml. Rebuilding the same version rewrites the same

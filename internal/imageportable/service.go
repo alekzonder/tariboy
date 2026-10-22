@@ -161,9 +161,32 @@ func (s Service) Preview(ctx context.Context, r io.Reader, compressedSize int64)
 	return preview, nil
 }
 
+// Apply installs a staged import. Migration walks every image name, and
+// MigrateOnce takes the store lock for it once; the install then takes only
+// the lock of the target name, the one name it writes. The source name is
+// never read from the store: a renamed import retags the staged archive bytes.
 func (s Service) Apply(ctx context.Context, importID, refOverride string) (Result, error) {
+	if err := ctx.Err(); err != nil {
+		return Result{}, err
+	}
+	// Read without a lock only to choose the name to lock; apply reads and
+	// validates the preview again under it.
+	preview, err := s.readPreview(importID)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := s.imageStore().MigrateOnce(); err != nil {
+		return Result{}, err
+	}
+	targetName := preview.Ref
+	if refOverride != "" {
+		targetName = refOverride
+	}
+	if target, err := image.ParseRef(targetName); err == nil {
+		targetName = target.Name
+	}
 	var result Result
-	err := image.WithPublicationGate(func() error {
+	err = image.WithRefLock(targetName, func() error {
 		var err error
 		result, err = s.apply(ctx, importID, refOverride)
 		return err
@@ -171,22 +194,31 @@ func (s Service) Apply(ctx context.Context, importID, refOverride string) (Resul
 	return result, err
 }
 
+// readPreview reads and checks the preview recorded for a staged import.
+func (s Service) readPreview(importID string) (Preview, error) {
+	if importID == "" || filepath.Base(importID) != importID || s.BaseDir == "" {
+		return Preview{}, errors.New("image portable: invalid apply request")
+	}
+	data, err := os.ReadFile(filepath.Join(s.StagingRoot, importID, ".preview.json"))
+	if err != nil {
+		return Preview{}, errors.New("image portable: import preview not found")
+	}
+	var preview Preview
+	if json.Unmarshal(data, &preview) != nil || preview.ImportID != importID {
+		return Preview{}, errors.New("image portable: invalid import preview")
+	}
+	return preview, nil
+}
+
 func (s Service) apply(ctx context.Context, importID, refOverride string) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
 	}
-	if importID == "" || filepath.Base(importID) != importID || s.BaseDir == "" {
-		return Result{}, errors.New("image portable: invalid apply request")
+	preview, err := s.readPreview(importID)
+	if err != nil {
+		return Result{}, err
 	}
 	stage := filepath.Join(s.StagingRoot, importID)
-	data, err := os.ReadFile(filepath.Join(stage, ".preview.json"))
-	if err != nil {
-		return Result{}, errors.New("image portable: import preview not found")
-	}
-	var preview Preview
-	if json.Unmarshal(data, &preview) != nil || preview.ImportID != importID {
-		return Result{}, errors.New("image portable: invalid import preview")
-	}
 	targetText := preview.Ref
 	if refOverride != "" {
 		targetText = refOverride
@@ -215,9 +247,6 @@ func (s Service) apply(ctx context.Context, importID, refOverride string) (Resul
 		}
 	}
 	store := s.imageStore()
-	if err := store.Migrate(); err != nil {
-		return Result{}, err
-	}
 	targetExists := store.Exists(target)
 	previousDigest := ""
 	if targetExists {

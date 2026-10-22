@@ -81,7 +81,10 @@ func addErrorReason(v map[string]any, a agent.Agent, state string) {
 func agentImageSet() registry.Command {
 	return registry.Command{Path: "agent.image.set", Summary: "Select an image for the agent's next iteration", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "image", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		var result any
-		err := image.WithPublicationGate(func() error {
+		// Agent image commands take the store lock: they read the agent's
+		// current and pending images, which can have different names, and
+		// change the assignment that removal and activation check.
+		err := image.WithStoreLock(func() error {
 			name := p.String("name")
 			if _, err := getAgent(c, name); err != nil {
 				return err
@@ -110,7 +113,7 @@ type agentImageProjection struct {
 	Reason       string `json:"reason,omitempty"`
 }
 
-// The caller holds the publication gate, including when set returns its preview.
+// The caller holds the image store lock, including when set returns its preview.
 func agentImageStatusValue(c *registry.Ctx, name string) (map[string]any, error) {
 	a, err := getAgent(c, name)
 	if err != nil {
@@ -156,7 +159,7 @@ func agentImageStatusValue(c *registry.Ctx, name string) (map[string]any, error)
 func agentImageStatus() registry.Command {
 	return registry.Command{Path: "agent.image.status", Summary: "Show current, pending, and next agent image", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		var result any
-		err := image.WithPublicationGate(func() error {
+		err := image.WithStoreLock(func() error {
 			var err error
 			result, err = agentImageStatusValue(c, p.String("name"))
 			return err
@@ -168,7 +171,7 @@ func agentImageStatus() registry.Command {
 func agentImageCancel() registry.Command {
 	return registry.Command{Path: "agent.image.cancel", Summary: "Cancel a pending agent image", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodDelete, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		var result any
-		err := image.WithPublicationGate(func() error {
+		err := image.WithStoreLock(func() error {
 			name := p.String("name")
 			if err := agentStore(c).ClearPendingImage(name); err != nil {
 				return err

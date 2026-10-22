@@ -142,7 +142,7 @@ func TestAgentImageProjection(t *testing.T) {
 	}
 }
 
-func TestAgentImageReadWaitsForPublicationGate(t *testing.T) {
+func TestAgentImageReadWaitsForPublication(t *testing.T) {
 	t.Parallel()
 	for _, command := range []string{"agent.image.status", "agent.image.cancel"} {
 		t.Run(command, func(t *testing.T) {
@@ -158,7 +158,7 @@ func TestAgentImageReadWaitsForPublicationGate(t *testing.T) {
 			}
 			published, release, finished := make(chan error, 1), make(chan struct{}), make(chan error, 1)
 			go func() {
-				finished <- image.WithPublicationGate(func() error {
+				finished <- image.WithRefLock(ref.Name, func() error {
 					spec.ImageVersion = "9.0.0"
 					_, err := image.BuildV2(spec, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
 					published <- err
@@ -196,7 +196,7 @@ func TestAgentImageReadWaitsForPublicationGate(t *testing.T) {
 				select {
 				case result = <-read:
 				case <-time.After(2 * time.Second):
-					t.Fatal("image read did not release publication gate")
+					t.Fatal("image read did not release the image store lock")
 				}
 			}
 			if early || result.err != nil {

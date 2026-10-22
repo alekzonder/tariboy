@@ -27,7 +27,10 @@ type activatedImage struct {
 
 func (m *Manager) activatePendingImage(ag *agent.Agent) (activatedImage, error) {
 	var activated activatedImage
-	err := image.WithPublicationGate(func() error {
+	// The store lock, not a name lock: activation reads the agent's current
+	// and pending images, which can have different names, and the pending
+	// assignment can move to another name while it runs.
+	err := image.WithStoreLock(func() error {
 		var err error
 		activated, err = m.activatePendingImageLocked(ag)
 		return err
