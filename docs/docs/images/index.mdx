@@ -548,6 +548,8 @@ for this operation, not source backup or persistent state.
   schema-v1 runnable archives remain readable and runnable only when they carry
   every byte their historical contract requires; they are not valid editable
   sources for a new build.
+- Schema v1 is legacy: v1 archives are read and run, cannot be built, and get
+  no new manifest fields.
 
 Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and package
 `../../skills/tasks` when a Store image should expose its agent command and

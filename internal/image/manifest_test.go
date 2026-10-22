@@ -39,3 +39,14 @@ func TestManifestRoundTrip(t *testing.T) {
 		t.Fatalf("round trip mismatch:\n%+v\n%+v", m, got)
 	}
 }
+
+func TestIsLegacyV1(t *testing.T) {
+	for _, tc := range []struct {
+		version int
+		want    bool
+	}{{0, false}, {1, true}, {2, false}, {3, false}} {
+		if got := IsLegacyV1(Manifest{SchemaVersion: tc.version}); got != tc.want {
+			t.Errorf("IsLegacyV1(schema_version %d) = %v, want %v", tc.version, got, tc.want)
+		}
+	}
+}
