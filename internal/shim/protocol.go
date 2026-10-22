@@ -42,6 +42,10 @@ const (
 	MethodSetHardDeadline = "set_hard_deadline"
 	MethodAttach          = "attach"
 	MethodResize          = "resize"
+	// MethodHarnessExited is sent by the tmux pane supervisor after it records
+	// the harness exit status. A shim without the method answers -32601; the
+	// supervisor ignores that and the shim's has-session fallback applies.
+	MethodHarnessExited = "harness_exited"
 )
 
 type Request struct {
@@ -117,6 +121,10 @@ type Handler interface {
 // HardDeadlineSetter is implemented by live shims whose watchdog can be
 // resynchronised after an operator extends an iteration.
 type HardDeadlineSetter interface{ SetHardDeadline(string) error }
+
+// HarnessExitNotifier is implemented by shims that wait for the tmux pane
+// supervisor's harness exit report.
+type HarnessExitNotifier interface{ HarnessExited() }
 
 // AttachParams carries the initial terminal size for a streaming attach.
 type AttachParams struct {
@@ -267,6 +275,13 @@ func dispatch(h Handler, req Request) (any, *RPCError) {
 			return nil, &RPCError{Code: -32602, Message: err.Error()}
 		}
 		return map[string]bool{"ok": true}, nil
+	case MethodHarnessExited:
+		n, ok := h.(HarnessExitNotifier)
+		if !ok {
+			return nil, &RPCError{Code: -32601, Message: "harness exit report unsupported"}
+		}
+		n.HarnessExited()
+		return map[string]bool{"ok": true}, nil
 	default:
 		return nil, &RPCError{Code: -32601, Message: "unknown method " + req.Method}
 	}
@@ -358,6 +373,10 @@ func (c *Client) Status() (StatusResult, error) {
 }
 
 func (c *Client) Kill() error { return c.call(MethodKill, nil, nil) }
+
+// NotifyHarnessExited reports that the tmux pane supervisor recorded the
+// harness exit status.
+func (c *Client) NotifyHarnessExited() error { return c.call(MethodHarnessExited, nil, nil) }
 
 func (c *Client) Screen() (string, error) {
 	var out ScreenResult
