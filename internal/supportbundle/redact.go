@@ -10,13 +10,33 @@ import (
 
 const sensitiveKeyPattern = `(?:[a-z][a-z0-9]*[_-])*(?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|password|passwd|credential)`
 
+// RedactionPolicyVersion is written to diagnostics.json. Version 2 classifies
+// environment values by key instead of one length rule for every key.
+const RedactionPolicyVersion = 2
+
+const (
+	sensitiveEnvMinLength = 4 // keys that match sensitiveKeyPattern
+	identityEnvMinLength  = 3 // USER, LOGNAME, HOSTNAME
+	unknownEnvMinLength   = 8 // every other key
+)
+
+var identityEnvKeys = map[string]bool{"USER": true, "LOGNAME": true, "HOSTNAME": true}
+
+// allowlistedEnvKeys hold values that are not private, so they stay readable.
+var allowlistedEnvKeys = map[string]bool{
+	"SHELL": true, "TERM": true, "LANG": true, "LANGUAGE": true, "PATH": true,
+	"GOPATH": true, "GOROOT": true, "PWD": true, "TMPDIR": true, "EDITOR": true,
+	"VISUAL": true, "COLORTERM": true, "TERM_PROGRAM": true, "SHLVL": true,
+}
+
 var (
-	authorizationPattern = regexp.MustCompile(`(?i)(["']?authorization["']?\s*:\s*["']?(?:bearer|basic)\s+)[^"'\s,;}]+`)
-	assignmentPattern    = regexp.MustCompile(`(?i)\b(` + sensitiveKeyPattern + `)\s*([=:]\s*)("[^"]*"|'[^']*'|[^\s,;]+)`)
-	jsonSecretPattern    = regexp.MustCompile(`(?i)(["']` + sensitiveKeyPattern + `["']\s*:\s*["'])[^"']*`)
-	urlUserinfoPattern   = regexp.MustCompile(`(https?://)[^/@\s]+@`)
-	querySecretPattern   = regexp.MustCompile(`(?i)([?&](?:api[_-]?key|access[_-]?key|secret|token|password)=)[^&#\s]+`)
-	providerTokenPattern = regexp.MustCompile(`\b(?:sk|ghp|github_pat|xox[baprs])[-_][A-Za-z0-9_-]{8,}\b`)
+	sensitiveEnvKeyPattern = regexp.MustCompile(`(?i)` + sensitiveKeyPattern)
+	authorizationPattern   = regexp.MustCompile(`(?i)(["']?authorization["']?\s*:\s*["']?(?:bearer|basic)\s+)[^"'\s,;}]+`)
+	assignmentPattern      = regexp.MustCompile(`(?i)\b(` + sensitiveKeyPattern + `)\s*([=:]\s*)("[^"]*"|'[^']*'|[^\s,;]+)`)
+	jsonSecretPattern      = regexp.MustCompile(`(?i)(["']` + sensitiveKeyPattern + `["']\s*:\s*["'])[^"']*`)
+	urlUserinfoPattern     = regexp.MustCompile(`(https?://)[^/@\s]+@`)
+	querySecretPattern     = regexp.MustCompile(`(?i)([?&](?:api[_-]?key|access[_-]?key|secret|token|password)=)[^&#\s]+`)
+	providerTokenPattern   = regexp.MustCompile(`\b(?:sk|ghp|github_pat|xox[baprs])[-_][A-Za-z0-9_-]{8,}\b`)
 )
 
 func redactText(body []byte, roots, environ []string) []byte {
@@ -35,8 +55,8 @@ func redactText(body []byte, roots, environ []string) []byte {
 		}
 	}
 	for _, item := range environ {
-		_, value, ok := strings.Cut(item, "=")
-		if ok && len(value) >= 8 {
+		key, value, ok := strings.Cut(item, "=")
+		if ok && envValueRedacted(key, value) {
 			replacements = append(replacements, value)
 		}
 	}
@@ -49,6 +69,22 @@ func redactText(body []byte, roots, environ []string) []byte {
 	output = redactHomePath(output, "/Users/")
 	output = redactHomePath(output, "/home/")
 	return []byte(output)
+}
+
+// envValueRedacted reports whether an environment value must be replaced in
+// text. Sensitive keys win over the allowlist; unknown keys keep the old rule.
+func envValueRedacted(key, value string) bool {
+	upper := strings.ToUpper(key)
+	switch {
+	case sensitiveEnvKeyPattern.MatchString(key):
+		return len(value) >= sensitiveEnvMinLength
+	case identityEnvKeys[upper]:
+		return len(value) >= identityEnvMinLength
+	case allowlistedEnvKeys[upper] || strings.HasPrefix(upper, "LC_"):
+		return false
+	default:
+		return len(value) >= unknownEnvMinLength
+	}
 }
 
 func redactHomePath(input, prefix string) string {

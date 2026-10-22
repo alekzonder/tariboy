@@ -89,6 +89,24 @@ is also outside the allowlist. Harness output is still arbitrary,
 sensitive text; automatic redaction cannot prove it contains no private
 business data. Inspect the ZIP before sending it.
 
+Redaction decides by the name of each environment variable of the daemon
+process (policy version 2, shown as `redaction_policy_version` in
+`diagnostics.json`). Text that holds a value is cleaned as follows:
+
+- A variable whose name looks like a secret (for example `*_TOKEN`,
+  `*_SECRET*`, `*_API_KEY`, or `*PASSWORD*`) has its value removed when the
+  value is 4 or more characters long.
+- `USER`, `LOGNAME`, and `HOSTNAME` have their value removed when it is 3 or
+  more characters long.
+- Common harmless variables keep their value so a report stays readable:
+  `SHELL`, `TERM`, `LANG`, `LC_*`, `PATH`, `GOPATH`, `PWD`, `TMPDIR`, `EDITOR`,
+  `COLORTERM`, `TERM_PROGRAM`, and `SHLVL`.
+- Any other variable has its value removed when it is 8 or more characters
+  long.
+
+Short secrets written as `KEY=value` are removed whatever their length, and
+home directory paths become `$HOME`.
+
 No upload is automatic. Send the inspected bundle only to the release owner
 through an approved internal channel.
 Repository owner and alpha incident lead: GitHub user

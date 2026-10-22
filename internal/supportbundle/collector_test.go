@@ -435,3 +435,18 @@ func mapKeys(files map[string][]byte) []string {
 	}
 	return keys
 }
+
+func TestDiagnosticsReportsRedactionPolicyVersion2(t *testing.T) {
+	collector, _ := collectorFixture(t, 1)
+	archive, err := collector.Prepare(context.Background(), Options{IterationLimit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var diagnostics map[string]any
+	if err := json.Unmarshal(archiveFiles(t, archive)["diagnostics.json"], &diagnostics); err != nil {
+		t.Fatal(err)
+	}
+	if got := diagnostics["redaction_policy_version"]; got != float64(2) {
+		t.Fatalf("redaction_policy_version = %v, want 2", got)
+	}
+}

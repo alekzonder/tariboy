@@ -138,7 +138,7 @@ func (c Collector) Prepare(ctx context.Context, opts Options) (Archive, error) {
 		Architecture:     runtime.GOARCH,
 		AgentData:        opts.IncludeAgentData,
 		IterationLimit:   opts.IterationLimit,
-		RedactionVersion: 1,
+		RedactionVersion: RedactionPolicyVersion,
 	}
 	entries := make([]entry, 0, 4)
 	daemonLog, logIssue := readDaemonLogTail(c.LogFile)
