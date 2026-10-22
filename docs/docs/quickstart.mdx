@@ -104,6 +104,9 @@ enables Terminal; turn it off for a headless agent.
 For the first walkthrough, keep Interactive on and use a non-bare image. From
 the CLI, `tariboy agent run IMAGE:TAG` creates an
 interactive agent too; pass `--interactive=false` for a headless one.
+A `--cwd` that does not exist is rejected; add `--create-cwd` to make the
+directory first. `tariboy agent cwd NAME PATH --create` does the same for an
+existing agent.
 
 ## 5. Use Terminal
 

@@ -294,6 +294,7 @@ func agentRun() registry.Command {
 			{Name: "image", Type: registry.String, Required: true, Help: "image ref name:tag"},
 			{Name: "name", Flag: "name", Type: registry.String, Help: "agent name (default: generated)"},
 			{Name: "cwd", Flag: "cwd", Type: registry.String, Help: "working directory"},
+			{Name: "create_cwd", Flag: "create-cwd", Type: registry.Bool, Help: "create the working directory if it does not exist"},
 			{Name: "harness", Flag: "harness", Short: "a", Type: registry.String, Help: "harness: claude|codex|opencode|cursor|stub"},
 			{Name: "model", Flag: "model", Short: "m", Type: registry.String, Help: "model"},
 			{Name: "effort", Flag: "effort", Short: "e", Type: registry.String, Help: "effort"},
@@ -447,8 +448,8 @@ func agentRun() registry.Command {
 				return nil, api.UserError{Code: "bad_cwd", Msg: err.Error()}
 			}
 			spec.Cwd = resolvedCwd
-			if err := agent.ValidateCwd(spec.Cwd); err != nil {
-				return nil, api.UserError{Code: "bad_cwd", Msg: err.Error()}
+			if err := ensureCwd(spec.Cwd, p.Bool("create_cwd")); err != nil {
+				return nil, err
 			}
 			name, err := c.Control.Run(spec)
 			if err != nil {

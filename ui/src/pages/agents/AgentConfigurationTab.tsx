@@ -370,15 +370,18 @@ function GeneralBlock({ draft, matched, sources, target, name, stopped, refresh 
         <span className="text-muted-foreground">Image</span> <span className="break-all">{view?.image}</span>
       </div>
       {stopped ? (
-        <FieldFrame field={cwdField} draft={draft} matched={matched.has("cwd")}>
-          <PathAutocomplete
-            id="cwd"
-            value={draft.values.cwd ?? ""}
-            onChange={(value) => draft.setField("cwd", value)}
-            daemon={target}
-            aria-label="Working directory"
-          />
-        </FieldFrame>
+        <>
+          <FieldFrame field={cwdField} draft={draft} matched={matched.has("cwd")}>
+            <PathAutocomplete
+              id="cwd"
+              value={draft.values.cwd ?? ""}
+              onChange={(value) => draft.setField("cwd", value)}
+              daemon={target}
+              aria-label="Working directory"
+            />
+          </FieldFrame>
+          <DraftField field={field("cwd-create")} draft={draft} matched={matched.has("cwd-create")} />
+        </>
       ) : (
         <div data-field="cwd" className="space-y-1 text-sm">
           <div className="font-medium">Working directory</div>

@@ -32,6 +32,7 @@ export function readBaseline(sources: {
   if (view) {
     Object.assign(raw, {
       cwd: text(view.cwd),
+      "cwd-create": "false",
       harness: text(view.harness),
       model: text(view.model),
       effort: text(view.effort),
@@ -88,7 +89,11 @@ export function buildUnits(target: ApiTarget, name: string): CommitUnit[] {
   const loopText = (field: string) => one(field, (value) => post(`loop/${field}`, { value }));
   return [
     one("image", (value) => agentImageSetOn(target, name, value)),
-    one("cwd", (value) => setAgentCwdOn(target, name, value)),
+    {
+      id: "cwd",
+      keys: ["cwd", "cwd-create"],
+      submit: (values) => setAgentCwdOn(target, name, values.cwd, values["cwd-create"] === "true"),
+    },
     one("harness", (value) => post("harness", { value })),
     one("model", async (value, values) => {
       await post("model", { value });
