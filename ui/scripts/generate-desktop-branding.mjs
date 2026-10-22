@@ -105,7 +105,7 @@ async function expectedOutputs() {
     ["ic13", sizes.get(256)],
     ["ic14", sizes.get(512)],
   ]);
-  return new Map([
+  const expected = new Map([
     [outputs.icon, sizes.get(512)],
     [outputs.icon32, sizes.get(32)],
     [outputs.icon64, sizes.get(64)],
@@ -113,6 +113,29 @@ async function expectedOutputs() {
     [outputs.icon256, sizes.get(256)],
     [outputs.icns, icns],
   ]);
+  const androidRes = path.join(repoRoot, "desktop/src-tauri/gen/android/app/src/main/res");
+  for (const [density, size, canvas] of [
+    ["mdpi", 48, 108],
+    ["hdpi", 72, 162],
+    ["xhdpi", 96, 216],
+    ["xxhdpi", 144, 324],
+    ["xxxhdpi", 192, 432],
+  ]) {
+    const directory = path.join(androidRes, `mipmap-${density}`);
+    const launcher = await pngFromRgba(icon, size);
+    expected.set(path.join(directory, "ic_launcher.png"), launcher);
+    expected.set(path.join(directory, "ic_launcher_round.png"), launcher);
+    const inset = canvas / 6;
+    const foreground = await sharp(await pngFromRgba(icon, canvas * 2 / 3))
+      .extend({
+        top: inset, bottom: inset, left: inset, right: inset,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .png(pngOptions)
+      .toBuffer();
+    expected.set(path.join(directory, "ic_launcher_foreground.png"), foreground);
+  }
+  return expected;
 }
 
 async function atomicWrite(destination, data) {

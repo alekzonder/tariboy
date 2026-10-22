@@ -752,7 +752,11 @@ The two UI targets have different Git contracts:
 - `desktop/branding/tariboy-logo-source.svg` is the repository-owned logo
   source: a white dancer mark on a dark rounded tile.
   `ui/scripts/generate-desktop-branding.mjs` validates its native
-  transparency and generates the Tauri PNG icons and `icon.icns`. Run
+  transparency and generates the Tauri PNG icons, `icon.icns`, and Android
+  launcher PNGs under `desktop/src-tauri/gen/android/app/src/main/res/mipmap-*`.
+  Android adaptive icons use transparent padding around the logo and a
+  matching `#111214` background in `res/values/ic_launcher_background.xml`.
+  Regenerate the PNGs after changing the source or regenerating the Android project. Run
   `npm run branding:check` from `ui/`; do not hand-edit generated branding.
   `ui/public/favicon.svg` and `docs/public/favicon.svg` are copies of the same
   source; the documentation site uses its copy as the favicon and header logo.
