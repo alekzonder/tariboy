@@ -366,15 +366,15 @@ func runTmux(ctx context.Context, o Options, fallback time.Duration) error {
 	if bootstrapWindow == "" {
 		return errors.New("tmux new-session: empty bootstrap window id")
 	}
-	if err := execCommand("tmux", "set-option", "-t", o.TmuxSession, "history-limit", strconv.Itoa(defaultTmuxHistoryLimit)).Run(); err != nil {
+	if err := execCommand("tmux", "set-option", "-t", tmuxPaneTarget(o.TmuxSession), "history-limit", strconv.Itoa(defaultTmuxHistoryLimit)).Run(); err != nil {
 		logShim(o.IterationDir, "ERROR tmux set-option session=%s: %v", o.TmuxSession, err)
 		return fmt.Errorf("tmux set-option: %w", err)
 	}
-	if err := execCommand("tmux", "set-option", "-t", o.TmuxSession, "mouse", "off").Run(); err != nil {
+	if err := execCommand("tmux", "set-option", "-t", tmuxPaneTarget(o.TmuxSession), "mouse", "off").Run(); err != nil {
 		logShim(o.IterationDir, "ERROR tmux set-option session=%s: %v", o.TmuxSession, err)
 		return fmt.Errorf("tmux set-option: %w", err)
 	}
-	if err := execCommand("tmux", "new-window", "-e", tmuxSupervisorSockEnv+"="+sockPath, "-t", o.TmuxSession, cmdStr).Run(); err != nil {
+	if err := execCommand("tmux", "new-window", "-e", tmuxSupervisorSockEnv+"="+sockPath, "-t", tmuxPaneTarget(o.TmuxSession), cmdStr).Run(); err != nil {
 		logShim(o.IterationDir, "ERROR tmux new-window session=%s: %v", o.TmuxSession, err)
 		return fmt.Errorf("tmux new-window: %w", err)
 	}
@@ -437,7 +437,7 @@ func endTmuxSession(iterDir, session string, end tmuxWaitEnd) {
 		// close the session itself.
 		deadline := time.Now().Add(tmuxPaneCloseWait)
 		for {
-			if execCommand("tmux", "has-session", "-t", session).Run() != nil {
+			if !TmuxHasSession(session) {
 				return
 			}
 			if !time.Now().Before(deadline) {
@@ -472,7 +472,7 @@ func waitTmuxEnd(ctx context.Context, session string, harnessExited <-chan struc
 		case <-ctx.Done():
 			return tmuxEndCanceled
 		case <-fallback:
-			if execCommand("tmux", "has-session", "-t", session).Run() != nil {
+			if !TmuxHasSession(session) {
 				return tmuxEndSessionGone
 			}
 		}
@@ -694,7 +694,7 @@ func readTmuxExitStatus(path string) (int, error) {
 
 func pipeTmuxLogs(session, path string) error {
 	cmd := "cat >> " + shellQuote(path)
-	return execCommand("tmux", "pipe-pane", "-o", "-t", session, cmd).Run()
+	return execCommand("tmux", "pipe-pane", "-o", "-t", tmuxPaneTarget(session), cmd).Run()
 }
 
 type tmuxShim struct {
@@ -747,6 +747,15 @@ func (s *tmuxShim) Kill() error {
 	return KillTmuxSession(s.session)
 }
 
+func tmuxSessionTarget(name string) string { return "=" + name }
+
+func tmuxPaneTarget(name string) string { return "=" + name + ":" }
+
+// TmuxHasSession reports whether the exact named session exists.
+func TmuxHasSession(name string) bool {
+	return execCommand("tmux", "has-session", "-t", tmuxSessionTarget(name)).Run() == nil
+}
+
 // KillTmuxSession removes exactly session. The pane supervisor owns harness
 // termination; this process never looks up or signals a reusable pane PID.
 func KillTmuxSession(session string) error {
@@ -757,7 +766,7 @@ func KillTmuxSession(session string) error {
 	if !exists {
 		return nil
 	}
-	output, err := execCommand("tmux", "kill-session", "-t", "="+session).CombinedOutput()
+	output, err := execCommand("tmux", "kill-session", "-t", tmuxSessionTarget(session)).CombinedOutput()
 	if err == nil {
 		return nil
 	}
@@ -1003,14 +1012,14 @@ func (s *tmuxShim) Attach(conn net.Conn, p AttachParams) error {
 	// tunnel for a transport failure. A session can still disappear after this
 	// check, but the daemon reports the resulting PTY EOF as a terminal outcome,
 	// so the frontend will not retry it.
-	if err := execCommand("tmux", "has-session", "-t", s.session).Run(); err != nil {
+	if err := execCommand("tmux", "has-session", "-t", tmuxSessionTarget(s.session)).Run(); err != nil {
 		logShim(s.iterationDir, "ERROR terminal attach category=session_missing session=%s", s.session)
 		return fmt.Errorf("tmux session %s is not running: %w", s.session, err)
 	}
 
 	// Most-recently-active client dictates geometry.
-	_ = execCommand("tmux", "set-option", "-t", s.session, "window-size", "latest").Run() // convenience only; tmux without the option still works
-	cmd := execCommand("tmux", "-u", "attach-session", "-t", s.session)
+	_ = execCommand("tmux", "set-option", "-t", tmuxPaneTarget(s.session), "window-size", "latest").Run() // convenience only; tmux without the option still works
+	cmd := execCommand("tmux", "-u", "attach-session", "-t", tmuxSessionTarget(s.session))
 	cmd.Env = envWithOverride(os.Environ(), "TERM", "xterm-256color")
 	// Keep attach-client diagnostics out of the terminal byte stream. Pane
 	// output still arrives on the attach client's stdout through the PTY, but
@@ -1078,7 +1087,7 @@ func envWithOverride(base []string, key, value string) []string {
 // captureArgs builds `tmux capture-pane` args: -e keeps SGR escapes so the UI
 // can render color; -p prints to stdout; -S -<n> includes n lines of scrollback.
 func captureArgs(session string, scrollback int) []string {
-	return []string{"capture-pane", "-e", "-p", "-S", "-" + strconv.Itoa(scrollback), "-t", session}
+	return []string{"capture-pane", "-e", "-p", "-S", "-" + strconv.Itoa(scrollback), "-t", tmuxPaneTarget(session)}
 }
 
 func (s *tmuxShim) Screen() (string, error) {
@@ -1098,14 +1107,14 @@ func sendKeysCommands(session string, p SendKeysParams) [][]string {
 		out := make([][]string, 0, len(p.Items))
 		for _, it := range p.Items {
 			if it.Key != "" {
-				out = append(out, []string{"send-keys", "-t", session, "--", it.Key})
+				out = append(out, []string{"send-keys", "-t", tmuxPaneTarget(session), "--", it.Key})
 			} else {
-				out = append(out, []string{"send-keys", "-t", session, "-l", "--", it.Text})
+				out = append(out, []string{"send-keys", "-t", tmuxPaneTarget(session), "-l", "--", it.Text})
 			}
 		}
 		return out
 	}
-	return [][]string{{"send-keys", "-t", session, "--", p.Keys, "Enter"}}
+	return [][]string{{"send-keys", "-t", tmuxPaneTarget(session), "--", p.Keys, "Enter"}}
 }
 
 func (s *tmuxShim) SendKeys(p SendKeysParams) error {

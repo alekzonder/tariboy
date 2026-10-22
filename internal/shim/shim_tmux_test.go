@@ -6,6 +6,7 @@
 package shim
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -275,4 +276,75 @@ while [ "$i" -lt 120 ]; do /bin/sleep 0.05; i=$((i + 1)); done
 	data, statusErr := os.ReadFile(statusPath)
 	_, intErr := os.Stat(intPath)
 	t.Fatalf("terminal C-c did not reach harness (status=%q, status_error=%v, int_error=%v)", data, statusErr, intErr)
+}
+
+func TestTmuxOperationsPreservePrefixedSession(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux unavailable")
+	}
+	root, err := os.MkdirTemp("/tmp", "tariboy-exact-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(root)
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_TMPDIR", root)
+	t.Setenv("TARIBOY_BASE_DIR", filepath.Join(root, "base"))
+	t.Setenv("TARIBOY_RUNTIME_DIR", filepath.Join(root, "runtime"))
+	defer exec.Command("tmux", "kill-server").Run()
+	managed, decoy := "image-creator", "image-creator-sam"
+	if out, err := exec.Command("tmux", "-f", "/dev/null", "new-session", "-d", "-s", decoy, "printf DECOY; exec /bin/cat").CombinedOutput(); err != nil {
+		t.Fatalf("decoy: %v: %s", err, out)
+	}
+	if TmuxHasSession(managed) || !TmuxHasSession(decoy) {
+		t.Fatal("session lookup matched prefix or missed exact name")
+	}
+	s := &tmuxShim{session: managed, harnessWindow: true}
+	t.Run("missing screen", func(t *testing.T) {
+		if out, err := s.Screen(); err == nil {
+			t.Fatalf("captured absent session: %q", out)
+		}
+	})
+	t.Run("missing input", func(t *testing.T) {
+		if err := s.SendKeys(SendKeysParams{Keys: "WRONG"}); err == nil {
+			t.Fatal("sent input to absent session")
+		}
+	})
+	t.Run("fallback", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		ticks := make(chan time.Time, 1)
+		ticks <- time.Now()
+		if got := waitTmuxEnd(ctx, managed, nil, ticks); got != tmuxEndSessionGone {
+			t.Fatalf("fallback = %s, want session_gone", got)
+		}
+	})
+	bin := buildShimBinary(t, root)
+	iter := filepath.Join(root, "iteration")
+	if err := os.MkdirAll(filepath.Join(iter, "logs"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin, "--iteration-dir", iter, "--agent", managed, "--iteration-id", "exact-1", "--tmux-session", managed, "--", "/bin/sh", "-c", "printf MANAGED; IFS= read -r input; [ \"$input\" = FINISH ]")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	defer func() { _ = cmd.Process.Kill(); <-done }()
+	if !testutil.WaitFor(3*time.Second, func() bool { out, err := s.Screen(); return err == nil && strings.Contains(out, "MANAGED") }) {
+		t.Fatal("shim did not start beside prefixed session")
+	}
+	if err := s.SendKeys(SendKeysParams{Keys: "FINISH"}); err != nil {
+		t.Fatal(err)
+	}
+	if !testutil.WaitFor(3*time.Second, func() bool { _, err := os.Stat(filepath.Join(iter, "result.json")); return err == nil }) {
+		t.Fatal("shim did not finish while prefixed session remained")
+	}
+	if err := s.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("tmux", "capture-pane", "-p", "-t", "=image-creator-sam:").Output()
+	if err != nil || !strings.Contains(string(out), "DECOY") || strings.Contains(string(out), "WRONG") || strings.Contains(string(out), "FINISH") {
+		t.Fatalf("decoy affected: %q, %v", out, err)
+	}
 }

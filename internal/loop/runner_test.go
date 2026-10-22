@@ -2022,3 +2022,57 @@ func TestRunRejectsMissingAgentCwd(t *testing.T) {
 		t.Fatalf("err = %v starts = %d, want missing cwd rejected before spawn", err, cs.starts)
 	}
 }
+
+func TestTmuxHasSessionDoesNotBlockPrefixedAgent(t *testing.T) {
+	dir := t.TempDir()
+	// Emulate tmux lookup with only image-creator-sam present.
+	script := "#!/bin/sh\n[ \"$1\" = has-session ] || exit 2\ncase \"$3\" in image-creator|image-creator-sam|=image-creator-sam) exit 0;; *) exit 1;; esac\n"
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	r := NewShimRunner(RunnerConfig{})
+	if r.SessionBlocked(agent.Agent{Name: "image-creator", Interactive: true}) {
+		t.Fatal("prefixed session blocked image-creator")
+	}
+	if !r.SessionBlocked(agent.Agent{Name: "image-creator-sam", Interactive: true}) {
+		t.Fatal("exact session must still block launch")
+	}
+}
+
+type exactSessionRunner struct {
+	*ShimRunner
+	fakeRunner
+}
+
+func (r *exactSessionRunner) Run(ctx context.Context, ag agent.Agent, trigger, id, prompt string) (Outcome, error) {
+	return r.fakeRunner.Run(ctx, ag, trigger, id, prompt)
+}
+
+func TestEngineLaunchWithExactSessionLookup(t *testing.T) {
+	for _, live := range []string{"image-creator-sam", "image-creator"} {
+		t.Run(live, func(t *testing.T) {
+			ag := baseAgent()
+			ag.Name = "image-creator"
+			ag.Interactive = true
+			r := &exactSessionRunner{fakeRunner: fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}}
+			e, as := newEngine(t, ag, r)
+			kills := 0
+			r.ShimRunner = NewShimRunner(RunnerConfig{Store: as, HasTmuxSession: func(name string) bool { return name == live }, KillTmuxSession: func(string) error { kills++; return nil }})
+			reaped := 0
+			e.SetAudit(func(typ, _, _ string, _ map[string]any) {
+				if typ == "session_reaped" {
+					reaped++
+				}
+			})
+			e.runOnce(context.Background(), "manual", "")
+			want := 0
+			if live == ag.Name {
+				want = 1
+			}
+			if r.calls != 1 || kills != want || reaped != want {
+				t.Fatalf("launches=%d kills=%d reaped=%d, want 1/%d/%d", r.calls, kills, reaped, want, want)
+			}
+		})
+	}
+}
