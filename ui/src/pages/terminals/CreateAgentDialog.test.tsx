@@ -965,3 +965,27 @@ describe("Create agent blocker", () => {
     expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
   });
 });
+
+it("sends create_cwd only when the create directory switch is on", async () => {
+  renderDialog();
+  await screen.findByDisplayValue("o3");
+  const createCwd = screen.getByRole("switch", {
+    name: "Create directory if missing",
+  });
+  expect(createCwd).not.toBeChecked();
+  expect(createCwd).toBeDisabled();
+
+  fireEvent.change(screen.getByLabelText("cwd"), {
+    target: { value: "/work/new" },
+  });
+  expect(createCwd).toBeEnabled();
+  fireEvent.click(createCwd);
+  expect(createCwd).toBeChecked();
+  fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+
+  await waitFor(() => expect(createAgent).toHaveBeenCalled());
+  expect(createAgent).toHaveBeenCalledWith(
+    completeOrdinarySpec({ cwd: "/work/new", create_cwd: true }),
+    targetFor("d1"),
+  );
+});

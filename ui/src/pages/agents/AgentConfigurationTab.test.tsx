@@ -563,6 +563,29 @@ it("refreshes the image projection on status and build events without replacing 
   expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/draft");
 });
 
+it("creates a missing working directory only when its switch is on", async () => {
+  const refresh = vi.fn();
+  const server = fakeServer();
+  render(tree(remote, "worker", null, refresh));
+  const input = await screen.findByLabelText("Working directory");
+  const create = screen.getByRole("switch", { name: "Create directory if missing" });
+  expect(create).not.toBeChecked();
+  fireEvent.change(input, { target: { value: "/srv/new" } });
+  fireEvent.click(create);
+  save();
+  await waitFor(() => expect(refresh).toHaveBeenCalled());
+  const write = server.calls.find((c) => c.method === "POST" && c.path.endsWith("/cwd"))!;
+  expect(write.body).toEqual({ value: "/srv/new", create: true });
+  await waitFor(() => expect(screen.getByRole("switch", { name: "Create directory if missing" })).not.toBeChecked());
+});
+
+it("hides the create directory switch while the agent is active", async () => {
+  fakeServer({ view: { state: "running", enabled: true } });
+  render(tree());
+  expect(await screen.findByText("/srv/old")).toBeInTheDocument();
+  expect(screen.queryByRole("switch", { name: "Create directory if missing" })).not.toBeInTheDocument();
+});
+
 // --- Goal, budgets -----------------------------------------------------------
 
 it("renders the current Goal task read-only with its help", async () => {

@@ -1,6 +1,9 @@
 package commands
 
 import (
+	"errors"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -47,10 +50,28 @@ func resolveCwd(raw string) (string, error) {
 	return filepath.Clean(filepath.Join(root, p)), nil
 }
 
+// ensureCwd validates a resolved cwd as agent.ValidateCwd does. With create it
+// first makes a missing absolute path (and its parents); a path that exists as
+// a file still fails validation. Errors are bad_cwd.
+func ensureCwd(path string, create bool) error {
+	if create && path != "" && filepath.IsAbs(path) {
+		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+			if err := os.MkdirAll(path, 0o755); err != nil {
+				return api.UserError{Code: "bad_cwd", Msg: err.Error()}
+			}
+		}
+	}
+	if err := agent.ValidateCwd(path); err != nil {
+		return api.UserError{Code: "bad_cwd", Msg: err.Error()}
+	}
+	return nil
+}
+
 // agentCwd gets or sets the agent working directory. Omitting `value` reads it;
 // an empty value clears it (falls back to the workdir). The value must be a
-// fully-resolved absolute path to an existing directory ($CWD/$HOME/~ are the
-// caller's to expand). A new value applies on the next iteration.
+// fully-resolved absolute path to an existing directory, or a missing one with
+// create set ($CWD/$HOME/~ are the caller's to expand). A new value applies on
+// the next iteration.
 func agentCwd() registry.Command {
 	return registry.Command{
 		Path:    "agent.cwd",
@@ -58,6 +79,7 @@ func agentCwd() registry.Command {
 		Args: []registry.Arg{
 			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
 			{Name: "value", Type: registry.String, Help: "new cwd, absolute path (omit to read, empty to clear)"},
+			{Name: "create", Flag: "create", Type: registry.Bool, Help: "create the directory if it does not exist"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/cwd"},
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
@@ -70,8 +92,8 @@ func agentCwd() registry.Command {
 				if err != nil {
 					return nil, api.UserError{Code: "bad_cwd", Msg: err.Error()}
 				}
-				if err := agent.ValidateCwd(v); err != nil {
-					return nil, api.UserError{Code: "bad_cwd", Msg: err.Error()}
+				if err := ensureCwd(v, p.Bool("create")); err != nil {
+					return nil, err
 				}
 				a.Cwd = v
 				if err := agentStore(c).Update(a); err != nil {

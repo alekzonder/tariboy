@@ -521,6 +521,7 @@ function CreateAgentDialogForm({
       color: draft.color.trim(),
     };
     if (draft.name.trim()) spec.name = draft.name.trim();
+    if (spec.cwd && draft.createCwd) spec.create_cwd = true;
     if (!schemaV2) spec.plugins = [...draft.plugins];
 
     setBusy(true);
@@ -790,6 +791,14 @@ function CreateAgentDialogForm({
                 </Field>
               </div>
             </div>
+            <SwitchRow
+              label="Create directory if missing"
+              id="create-agent-create-cwd"
+              checked={draft.createCwd}
+              onCheckedChange={(value) => updateDraft("createCwd", value)}
+              disabled={formDisabled || !draft.cwd.trim()}
+              help="Make the cwd directory and its parents when it does not exist."
+            />
             <SwitchRow
               label="Interactive"
               id="create-agent-interactive"

@@ -426,6 +426,7 @@ export interface CreateAgentSpec {
   image: string;
   name?: string;
   cwd?: string;
+  create_cwd?: boolean;
   harness?: string;
   model?: string;
   effort?: string;
@@ -497,8 +498,18 @@ export const listGroups = () =>
 export const getAgent = (name: string) => agentGet<AgentView>(name, "");
 export const getAgentStatus = (name: string) =>
   agentGet<AgentStatus>(name, "status");
-export const setAgentCwdOn = (target: ApiTarget, name: string, value: string) =>
-  agentPostOn<{ name: string; cwd: string }>(target, name, "cwd", { value });
+export const setAgentCwdOn = (
+  target: ApiTarget,
+  name: string,
+  value: string,
+  create = false,
+) =>
+  agentPostOn<{ name: string; cwd: string }>(
+    target,
+    name,
+    "cwd",
+    create ? { value, create: true } : { value },
+  );
 export interface TimeoutExtension {
   id: string;
   timeout_deadline: string;

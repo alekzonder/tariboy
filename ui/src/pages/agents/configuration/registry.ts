@@ -52,6 +52,7 @@ export const BLOCKS: readonly ConfigBlock[] = [
       { key: "image", label: "Agent image", kind: "image", helper: "Select an already-built image. It becomes active before the next iteration and does not change runtime settings.", keywords: "version pending build" },
       { key: "image-digest", label: "Image digest", kind: "readonly", helper: "Read only.", keywords: "sha hash" },
       { key: "cwd", label: "Working directory", kind: "path", helper: "Takes effect on the next start. Existing files stay where they are.", keywords: "cwd path folder directory location" },
+      { key: "cwd-create", label: "Create directory if missing", kind: "switch", helper: "Make the working directory and its parents when it does not exist.", keywords: "cwd mkdir folder directory" },
     ],
   },
   {

@@ -6,6 +6,7 @@ export interface AgentCreateDraft {
   image: string;
   name: string;
   cwd: string;
+  createCwd: boolean;
   harness: string;
   model: string;
   effort: string;
@@ -37,6 +38,7 @@ export function newAgentDraft(image = ""): AgentCreateDraft {
     image,
     name: "",
     cwd: "",
+    createCwd: false,
     harness: "",
     model: "",
     effort: "",
@@ -80,6 +82,7 @@ export function cloneAgentDraft(source: AgentView): AgentCreateDraft {
     image: source.image,
     name: "",
     cwd: source.configured_cwd,
+    createCwd: false,
     harness: source.harness,
     model: source.model,
     effort: source.effort,

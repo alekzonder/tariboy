@@ -100,6 +100,14 @@ explicit target. Older daemons that do not expose the complete clone projection
 must be updated. **Start now** remains a separate retryable lifecycle request
 after creation.
 
+The daemon rejects a **cwd** that does not exist with `bad_cwd`, so a typo
+never creates a stray directory. Under the field, **Create directory if
+missing** is off by default and is enabled only when **cwd** is not empty. When
+it is on, the create request sends `create_cwd: true` and the daemon makes the
+directory and its parents (mode `0755`, owned by the daemon user) before it
+validates the path. A path that exists as a file still fails. A clone always
+starts with the switch off.
+
 While **Create agent** is disabled, the dialog footer names the first unmet
 condition next to it: the source configuration, the target host's image list,
 an unselected or unbuilt image, or the image manifest still loading. A failed
@@ -949,7 +957,8 @@ once the host is back. Drafts live in tab memory only and are not queued for
 later delivery.
 
 Configuration is one column of blocks in a fixed order: **General** (agent
-image, image digest, working directory), **Runtime** (harness, model, effort,
+image, image digest, working directory and, while the agent is stopped,
+**Create directory if missing**), **Runtime** (harness, model, effort,
 Interactive), **Loop and timeouts** (the scheduling and timeout
 fields, including **Schedule (RRULE)** with the daemon's next scheduled start
 under it, which follows Save, and an emptied field clears the schedule; there
@@ -974,7 +983,11 @@ values after a reload, while the failed field (with the server's reason beside
 it) and the ones never attempted stay dirty drafts, so the next Save sends only
 them. There is no batch endpoint, so a Save is not atomic. Harness and
 Interactive are saved with the page like every other field; they take effect the
-next time the agent starts and never restart it.
+next time the agent starts and never restart it. **Create directory if
+missing** is saved with the working directory as one request: when it is on,
+Save sends the path with `create: true`, and the daemon makes a missing
+directory before it validates the path. After a successful Save the switch is
+off again.
 
 A search box above the blocks filters by block: a case-insensitive match of
 every query word against a block's title, description, field labels, helpers
