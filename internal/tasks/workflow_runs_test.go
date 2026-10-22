@@ -280,7 +280,7 @@ func TestCompleteScriptRunFailureClosesTheRequestWithTheLog(t *testing.T) {
 			svc, actor, task, goals := runFixture(t)
 			request, first := advanceApprove(t, svc, actor, task)
 			before := goals.Load()
-			complete(t, svc, first.ID, RunCompletion{Verdict: verdict, Message: "exit status 3", ExitCode: exitCode(3),
+			complete(t, svc, first.ID, RunCompletion{Verdict: Verdict(verdict), Message: "exit status 3", ExitCode: exitCode(3),
 				LogPath: "/base/tasks/DEV/runs/1/run.log"})
 			state, result := requestRow(t, svc, task, request.ID)
 			if state != "failed" || !strings.Contains(result, "exit status 3") || !strings.Contains(result, "/base/tasks/DEV/runs/1/run.log") {
@@ -542,7 +542,7 @@ func TestWatchFailureCountsAndReschedules(t *testing.T) {
 			svc, actor, task := watchFixture(t)
 			run := scheduleWatch(t, svc, actor, task)
 			finished := time.Date(2026, 7, 31, 12, 3, 0, 0, time.UTC)
-			complete(t, svc, run.ID, RunCompletion{Verdict: verdict, Message: "boom", ExitCode: exitCode(1),
+			complete(t, svc, run.ID, RunCompletion{Verdict: Verdict(verdict), Message: "boom", ExitCode: exitCode(1),
 				LogPath: "/log", FinishedAt: finished})
 			status, _, failures, next := openVisit(t, svc, task)
 			if status != "merge" || failures != 1 || next != store.FormatTime(finished.Add(5*time.Minute)) {
@@ -1078,7 +1078,7 @@ func TestQuietWatchRunsLeaveNoEventAndOnlyTheNewestAreKept(t *testing.T) {
 			t.Fatalf("scheduled = %d, %v", n, err)
 		}
 		run := listRuns(t, svc, actor, task)[0]
-		complete(t, svc, run.ID, RunCompletion{Verdict: verdict, ExitCode: exitCode(111), FinishedAt: at})
+		complete(t, svc, run.ID, RunCompletion{Verdict: Verdict(verdict), ExitCode: exitCode(111), FinishedAt: at})
 		at = at.Add(5 * time.Minute)
 		return run
 	}

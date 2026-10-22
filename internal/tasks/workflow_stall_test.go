@@ -287,7 +287,7 @@ func TestEveryVerdictButAFailureResetsScriptFailures(t *testing.T) {
 			svc, actor, task, _ := runFixture(t)
 			forceScriptFailures(t, svc, task, 2)
 			_, run := advanceApprove(t, svc, actor, task)
-			complete(t, svc, run.ID, RunCompletion{Verdict: verdict, ExitCode: exitCode(0)})
+			complete(t, svc, run.ID, RunCompletion{Verdict: Verdict(verdict), ExitCode: exitCode(0)})
 			if _, _, failures, _ := openVisit(t, svc, task); failures != 0 {
 				t.Fatalf("failures = %d", failures)
 			}

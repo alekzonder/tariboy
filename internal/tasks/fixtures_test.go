@@ -85,14 +85,14 @@ func transitionRequest(t *testing.T, svc *Service, task Task, id int64) Transiti
 
 func requestState(t *testing.T, svc *Service, task Task, id int64) string {
 	t.Helper()
-	return transitionRequest(t, svc, task, id).State
+	return string(transitionRequest(t, svc, task, id).State)
 }
 
 // requestRow returns the request's state and result message.
 func requestRow(t *testing.T, svc *Service, task Task, id int64) (string, string) {
 	t.Helper()
 	request := transitionRequest(t, svc, task, id)
-	return request.State, request.ResultMessage
+	return string(request.State), request.ResultMessage
 }
 
 // runState returns the run's state, verdict, and whether a running run has a
@@ -112,7 +112,7 @@ func runState(t *testing.T, svc *Service, task Task, id int64) (string, string, 
 	for _, r := range toKill {
 		cancel = cancel || r.ID == id
 	}
-	return run.State, run.Verdict, cancel
+	return string(run.State), string(run.Verdict), cancel
 }
 
 // taskEvents returns every event of task, oldest first.
@@ -602,7 +602,7 @@ func countRuns(t *testing.T, svc *Service, task Task, verdict, state string) int
 	t.Helper()
 	n := 0
 	for _, run := range listRuns(t, svc, operatorOf(svc), task) {
-		if run.Verdict == verdict && (state == "" || run.State == state) {
+		if string(run.Verdict) == verdict && (state == "" || string(run.State) == state) {
 			n++
 		}
 	}

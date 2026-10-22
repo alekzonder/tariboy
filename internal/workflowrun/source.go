@@ -34,15 +34,15 @@ type sourceResult struct {
 func classifySource(code int, raw []byte, readErr error, declared Declared) Verdict {
 	switch {
 	case code == script.QuietExit:
-		return Verdict{Kind: VerdictQuiet}
+		return Verdict{Kind: tasks.VerdictQuiet}
 	case code != 0:
 		return failure("the script failed with exit %d", code)
 	}
 	items, err := readSourceResult(raw, readErr, declared)
 	if err != nil {
-		return Verdict{Kind: VerdictFailure, Message: cutRunes(err.Error(), MaxMessageBytes)}
+		return Verdict{Kind: tasks.VerdictFailure, Message: cutRunes(err.Error(), MaxMessageBytes)}
 	}
-	return Verdict{Kind: VerdictItems, Items: items}
+	return Verdict{Kind: tasks.VerdictItems, Items: items}
 }
 
 // readSourceResult parses and checks the items of a source result file. A

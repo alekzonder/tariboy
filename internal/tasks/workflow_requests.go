@@ -111,9 +111,9 @@ func (s *WorkflowEngine) advance(ctx context.Context, actor Actor, key string, i
 		return TransitionRequest{}, err
 	}
 	request := TransitionRequest{ID: id, TaskKey: task.Key, Outcome: in.Outcome, Message: in.Message,
-		Actor: requester, State: "applied", CreatedAt: now, FinishedAt: now}
+		Actor: requester, State: RequestStateApplied, CreatedAt: now, FinishedAt: now}
 	if len(transition.Checks) > 0 {
-		request.State, request.FinishedAt = "pending", ""
+		request.State, request.FinishedAt = RequestStatePending, ""
 		request.WaitSeconds = checkWaitSeconds(transition)
 	}
 	payload := map[string]any{
@@ -129,7 +129,7 @@ func (s *WorkflowEngine) advance(ctx context.Context, actor Actor, key string, i
 	// and CompleteScriptRun moves the request on.
 	if len(transition.Checks) > 0 {
 		check := transition.Checks[0]
-		if err := insertScriptRunTx(ctx, tx, task.ID, visitID, id, "check", check.Script, checkRunAs(check), checkHolder(check, task.Assignee), 0, now); err != nil {
+		if err := insertScriptRunTx(ctx, tx, task.ID, visitID, id, RunKindCheck, check.Script, checkRunAs(check), checkHolder(check, task.Assignee), 0, now); err != nil {
 			return TransitionRequest{}, err
 		}
 		if err := tx.Commit(); err != nil {
@@ -247,7 +247,8 @@ func advanceInsertRequestTx(ctx context.Context, tx *sql.Tx, task Task, in Advan
 // an earlier visit.
 func retriedRequestTx(ctx context.Context, tx *sql.Tx, task Task, id int64) (AdvanceInput, string, error) {
 	var in AdvanceInput
-	var requester, state string
+	var requester string
+	var state RequestState
 	var latest, current bool
 	err := tx.QueryRowContext(ctx, `
 		SELECT r.outcome, r.message, r.actor, r.state,
@@ -263,7 +264,7 @@ func retriedRequestTx(ctx context.Context, tx *sql.Tx, task Task, id int64) (Adv
 	if err != nil {
 		return in, "", err
 	}
-	if state != "failed" {
+	if state != RequestStateFailed {
 		return in, "", newError(http.StatusConflict, "request_not_failed",
 			fmt.Sprintf("transition request %d of %s is %s; only a failed request can be retried", id, task.Key, state))
 	}
@@ -326,7 +327,7 @@ func (s *WorkflowEngine) GetTransitionRequest(ctx context.Context, actor Actor, 
 	if err != nil {
 		return TransitionRequest{}, err
 	}
-	if request.State == "pending" {
+	if request.State == RequestStatePending {
 		var statusID string
 		if err := s.db.QueryRowContext(ctx, `SELECT status_id FROM task_status_visits WHERE id = ?`, visitID).
 			Scan(&statusID); err != nil {

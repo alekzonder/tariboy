@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/alekzonder/tariboy/internal/script"
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 func ip(n int) *int { return &n }
@@ -17,25 +18,25 @@ func TestClassifyExitTable(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name   string
-		kind   string
+		kind   tasks.RunKind
 		exit   int
 		result string
-		want   string
+		want   tasks.Verdict
 		out    string
 	}{
-		{"check 0", KindCheck, 0, "", VerdictPass, ""},
-		{"check 0 ignores outcome", KindCheck, 0, `{"outcome":"nope"}`, VerdictPass, ""},
-		{"check 111", KindCheck, script.QuietExit, "", VerdictFailure, ""},
-		{"check 112", KindCheck, script.RejectExit, "", VerdictReject, ""},
-		{"check other", KindCheck, 3, "", VerdictFailure, ""},
-		{"watch 0 outcome", KindWatch, 0, `{"outcome":"merged"}`, VerdictOutcome, "merged"},
-		{"watch 0 no file", KindWatch, 0, "", VerdictFailure, ""},
-		{"watch 0 no outcome", KindWatch, 0, `{"message":"x"}`, VerdictFailure, ""},
-		{"watch 0 undeclared", KindWatch, 0, `{"outcome":"lost"}`, VerdictFailure, ""},
-		{"watch 111", KindWatch, script.QuietExit, "garbage", VerdictQuiet, ""},
-		{"watch 112", KindWatch, script.RejectExit, "", VerdictFailure, ""},
-		{"watch other", KindWatch, 1, "", VerdictFailure, ""},
-		{"unknown kind", "other", 0, "", VerdictFailure, ""},
+		{"check 0", tasks.RunKindCheck, 0, "", tasks.VerdictPass, ""},
+		{"check 0 ignores outcome", tasks.RunKindCheck, 0, `{"outcome":"nope"}`, tasks.VerdictPass, ""},
+		{"check 111", tasks.RunKindCheck, script.QuietExit, "", tasks.VerdictFailure, ""},
+		{"check 112", tasks.RunKindCheck, script.RejectExit, "", tasks.VerdictReject, ""},
+		{"check other", tasks.RunKindCheck, 3, "", tasks.VerdictFailure, ""},
+		{"watch 0 outcome", tasks.RunKindWatch, 0, `{"outcome":"merged"}`, tasks.VerdictOutcome, "merged"},
+		{"watch 0 no file", tasks.RunKindWatch, 0, "", tasks.VerdictFailure, ""},
+		{"watch 0 no outcome", tasks.RunKindWatch, 0, `{"message":"x"}`, tasks.VerdictFailure, ""},
+		{"watch 0 undeclared", tasks.RunKindWatch, 0, `{"outcome":"lost"}`, tasks.VerdictFailure, ""},
+		{"watch 111", tasks.RunKindWatch, script.QuietExit, "garbage", tasks.VerdictQuiet, ""},
+		{"watch 112", tasks.RunKindWatch, script.RejectExit, "", tasks.VerdictFailure, ""},
+		{"watch other", tasks.RunKindWatch, 1, "", tasks.VerdictFailure, ""},
+		{"unknown kind", "other", 0, "", tasks.VerdictFailure, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -47,7 +48,7 @@ func TestClassifyExitTable(t *testing.T) {
 			if v.Kind != c.want || v.Outcome != c.out {
 				t.Fatalf("got %+v, want kind %s outcome %q", v, c.want, c.out)
 			}
-			if v.Kind == VerdictFailure && v.Message == "" {
+			if v.Kind == tasks.VerdictFailure && v.Message == "" {
 				t.Fatal("failure without a reason")
 			}
 		})
@@ -56,32 +57,32 @@ func TestClassifyExitTable(t *testing.T) {
 
 func TestClassifyCheckPassKeepsMessageAndArtifacts(t *testing.T) {
 	t.Parallel()
-	v := Classify(KindCheck, ip(0), false, []byte(`{"message":"ok","artifacts":{"notes":"n"}}`), nil, declared)
-	if v.Kind != VerdictPass || v.Message != "ok" || v.Artifacts["notes"] != "n" {
+	v := Classify(tasks.RunKindCheck, ip(0), false, []byte(`{"message":"ok","artifacts":{"notes":"n"}}`), nil, declared)
+	if v.Kind != tasks.VerdictPass || v.Message != "ok" || v.Artifacts["notes"] != "n" {
 		t.Fatalf("got %+v", v)
 	}
 }
 
 func TestClassifyRejectMessage(t *testing.T) {
 	t.Parallel()
-	v := Classify(KindCheck, ip(112), false, []byte(`{"message":"tests fail","artifacts":{"notes":"n"}}`), nil, declared)
-	if v.Kind != VerdictReject || v.Message != "tests fail" || v.Artifacts != nil {
+	v := Classify(tasks.RunKindCheck, ip(112), false, []byte(`{"message":"tests fail","artifacts":{"notes":"n"}}`), nil, declared)
+	if v.Kind != tasks.VerdictReject || v.Message != "tests fail" || v.Artifacts != nil {
 		t.Fatalf("got %+v", v)
 	}
-	v = Classify(KindCheck, ip(112), false, nil, nil, declared)
-	if v.Kind != VerdictReject || v.Message != "the check's condition does not hold" {
+	v = Classify(tasks.RunKindCheck, ip(112), false, nil, nil, declared)
+	if v.Kind != tasks.VerdictReject || v.Message != "the check's condition does not hold" {
 		t.Fatalf("got %+v", v)
 	}
-	v = Classify(KindCheck, ip(112), false, []byte("  \n"), nil, declared)
-	if v.Kind != VerdictReject || v.Message == "" {
+	v = Classify(tasks.RunKindCheck, ip(112), false, []byte("  \n"), nil, declared)
+	if v.Kind != tasks.VerdictReject || v.Message == "" {
 		t.Fatalf("got %+v", v)
 	}
 }
 
 func TestClassifyWatchOutcomeArtifacts(t *testing.T) {
 	t.Parallel()
-	v := Classify(KindWatch, ip(0), false, []byte(`{"outcome":"merged","message":"m","artifacts":{"merge_commit":"9f"}}`), nil, declared)
-	if v.Kind != VerdictOutcome || v.Message != "m" || v.Artifacts["merge_commit"] != "9f" {
+	v := Classify(tasks.RunKindWatch, ip(0), false, []byte(`{"outcome":"merged","message":"m","artifacts":{"merge_commit":"9f"}}`), nil, declared)
+	if v.Kind != tasks.VerdictOutcome || v.Message != "m" || v.Artifacts["merge_commit"] != "9f" {
 		t.Fatalf("got %+v", v)
 	}
 }
@@ -122,8 +123,8 @@ func TestClassifyFailureReasons(t *testing.T) {
 			if c.raw != "" {
 				raw = []byte(c.raw)
 			}
-			v := Classify(KindCheck, c.exit, c.timedOut, raw, c.resultErr, declared)
-			if v.Kind != VerdictFailure || !strings.Contains(v.Message, c.contains) {
+			v := Classify(tasks.RunKindCheck, c.exit, c.timedOut, raw, c.resultErr, declared)
+			if v.Kind != tasks.VerdictFailure || !strings.Contains(v.Message, c.contains) {
 				t.Fatalf("got %+v, want failure containing %q", v, c.contains)
 			}
 		})
@@ -144,13 +145,13 @@ func TestClassifyMatchesResultKeysExactly(t *testing.T) {
 		"artifacts not an object":     `{"outcome":"merged","artifacts":["notes"]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			if v := Classify(KindWatch, ip(0), false, []byte(raw), nil, declared); v.Kind != VerdictFailure {
+			if v := Classify(tasks.RunKindWatch, ip(0), false, []byte(raw), nil, declared); v.Kind != tasks.VerdictFailure {
 				t.Fatalf("got %+v, want a failure", v)
 			}
 		})
 	}
-	v := Classify(KindWatch, ip(0), false, []byte(`{"artifacts":null,"message":"m","outcome":"merged"}`), nil, declared)
-	if v.Kind != VerdictOutcome || v.Outcome != "merged" || v.Message != "m" || v.Artifacts != nil {
+	v := Classify(tasks.RunKindWatch, ip(0), false, []byte(`{"artifacts":null,"message":"m","outcome":"merged"}`), nil, declared)
+	if v.Kind != tasks.VerdictOutcome || v.Outcome != "merged" || v.Message != "m" || v.Artifacts != nil {
 		t.Fatalf("got %+v", v)
 	}
 }
@@ -158,21 +159,21 @@ func TestClassifyMatchesResultKeysExactly(t *testing.T) {
 func TestClassifyBoundsEveryMessageOnARuneBoundary(t *testing.T) {
 	t.Parallel()
 	long := "a" + strings.Repeat("ж", MaxMessageBytes)
-	v := Classify(KindCheck, ip(7), false, []byte(`{"message":"`+long+`"}`), nil, declared)
-	if v.Kind != VerdictFailure || len(v.Message) > MaxMessageBytes || !utf8.ValidString(v.Message) || !strings.Contains(v.Message, "exit 7") {
+	v := Classify(tasks.RunKindCheck, ip(7), false, []byte(`{"message":"`+long+`"}`), nil, declared)
+	if v.Kind != tasks.VerdictFailure || len(v.Message) > MaxMessageBytes || !utf8.ValidString(v.Message) || !strings.Contains(v.Message, "exit 7") {
 		t.Fatalf("exit failure message: %d bytes, valid %v", len(v.Message), utf8.ValidString(v.Message))
 	}
 	// A decoder error quotes the input; only 256 bytes of its text are kept.
 	key := strings.Repeat("k", 1000)
 	for _, raw := range []string{`{"` + key + `":1}`, `{"message":` + strings.Repeat("9", 1000) + `}`} {
-		v = Classify(KindCheck, ip(0), false, []byte(raw), nil, declared)
-		if v.Kind != VerdictFailure || len(v.Message) > len("the result file is not valid: ")+256 {
+		v = Classify(tasks.RunKindCheck, ip(0), false, []byte(raw), nil, declared)
+		if v.Kind != tasks.VerdictFailure || len(v.Message) > len("the result file is not valid: ")+256 {
 			t.Fatalf("decoder failure = %d bytes: %q", len(v.Message), v.Message)
 		}
 	}
 	// An undeclared artifact name comes from the script and is cut too.
-	v = Classify(KindCheck, ip(0), false, []byte(`{"artifacts":{"`+key+`":"v"}}`), nil, declared)
-	if v.Kind != VerdictFailure || strings.Contains(v.Message, strings.Repeat("k", 65)) {
+	v = Classify(tasks.RunKindCheck, ip(0), false, []byte(`{"artifacts":{"`+key+`":"v"}}`), nil, declared)
+	if v.Kind != tasks.VerdictFailure || strings.Contains(v.Message, strings.Repeat("k", 65)) {
 		t.Fatalf("undeclared artifact failure = %q", v.Message)
 	}
 }

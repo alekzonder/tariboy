@@ -139,7 +139,7 @@ func newFakeJobs(jobs ...tasks.RunJob) *fakeJobs {
 	}
 }
 
-func (f *fakeJobs) kindOf(id int64) string {
+func (f *fakeJobs) kindOf(id int64) tasks.RunKind {
 	for _, j := range f.jobs {
 		if j.Run.ID == id {
 			return j.Run.Kind
@@ -215,7 +215,7 @@ func (f *fakeJobs) SetScriptRunPID(_ context.Context, id int64, pid int) error {
 	f.activeAll++
 	f.maxTask = max(f.maxTask, f.active[task])
 	f.maxAll = max(f.maxAll, f.activeAll)
-	if f.kindOf(id) == KindWatch {
+	if f.kindOf(id) == tasks.RunKindWatch {
 		f.activeWatches++
 		f.maxWatches = max(f.maxWatches, f.activeWatches)
 	}
@@ -243,7 +243,7 @@ func (f *fakeJobs) CompleteScriptRun(_ context.Context, id int64, done tasks.Run
 	if _, ok := f.pids[id]; ok {
 		f.active[f.taskOf(id)]--
 		f.activeAll--
-		if f.kindOf(id) == KindWatch {
+		if f.kindOf(id) == tasks.RunKindWatch {
 			f.activeWatches--
 		}
 	}
@@ -392,7 +392,7 @@ func (h *harness) awaitStart(id int64) {
 
 func checkJob(id int64, key, script string) tasks.RunJob {
 	return tasks.RunJob{
-		Run:    tasks.ScriptRun{ID: id, TaskKey: key, Kind: KindCheck, Script: script, RunAs: workflowfile.RunAsQueue, State: "pending"},
+		Run:    tasks.ScriptRun{ID: id, TaskKey: key, Kind: tasks.RunKindCheck, Script: script, RunAs: workflowfile.RunAsQueue, State: "pending"},
 		Queue:  "DEV",
 		Status: "work", Outcome: "done", Timeout: 10 * time.Second,
 		WorkflowEnv: map[string]string{}, QueueSecrets: map[string]string{},
@@ -438,7 +438,7 @@ func TestSupervisorRunsACheckAndCompletesIt(t *testing.T) {
 	h := newHarness(t, checkJob(1, "DEV-1", "scripts/pass.sh"))
 	h.start()
 	done := h.awaitCompletion(1, 5*time.Second)
-	if done.Verdict != VerdictPass || done.ExitCode == nil || *done.ExitCode != 0 {
+	if done.Verdict != tasks.VerdictPass || done.ExitCode == nil || *done.ExitCode != 0 {
 		t.Fatalf("completion = %+v, want a pass with exit 0", done)
 	}
 	want := filepath.Join(h.base, "tasks", "DEV-1", "runs", "1", "run.log")
@@ -475,7 +475,7 @@ func TestSupervisorQueueModeEnvironmentAndCwd(t *testing.T) {
 		return "", nil, errors.New("unexpected")
 	}
 	h.start()
-	if done := h.awaitCompletion(1, 5*time.Second); done.Verdict != VerdictPass {
+	if done := h.awaitCompletion(1, 5*time.Second); done.Verdict != tasks.VerdictPass {
 		t.Fatalf("completion = %+v", done)
 	}
 	state := filepath.Join(h.base, "tasks", "DEV-1", "state")
@@ -515,7 +515,7 @@ func TestSupervisorAgentModeEnvironmentAndCwd(t *testing.T) {
 			"AGENT_ONLY=a", "AGENT_WF=agent", "TARIBOY_TOOLS_SOCKET=/agent/tools.sock"}, nil
 	}
 	h.start()
-	if done := h.awaitCompletion(1, 5*time.Second); done.Verdict != VerdictPass {
+	if done := h.awaitCompletion(1, 5*time.Second); done.Verdict != tasks.VerdictPass {
 		t.Fatalf("completion = %+v", done)
 	}
 	if asked != "worker" {
@@ -544,14 +544,14 @@ func TestSupervisorAgentModeEnvironmentAndCwd(t *testing.T) {
 func TestSupervisorWatchRunIsAlwaysQueueMode(t *testing.T) {
 	t.Parallel()
 	job := checkJob(1, "DEV-1", "scripts/quiet.sh")
-	job.Run.Kind, job.Run.RunAs, job.Holder, job.Outcome = KindWatch, workflowfile.RunAsAgent, "worker", ""
+	job.Run.Kind, job.Run.RunAs, job.Holder, job.Outcome = tasks.RunKindWatch, workflowfile.RunAsAgent, "worker", ""
 	h := newHarness(t, job)
 	h.sup.AgentRuntime = func(string) (string, []string, error) {
 		t.Error("a watch run asked for an agent runtime")
 		return "", nil, errors.New("unexpected")
 	}
 	h.start()
-	if done := h.awaitCompletion(1, 5*time.Second); done.Verdict != VerdictQuiet {
+	if done := h.awaitCompletion(1, 5*time.Second); done.Verdict != tasks.VerdictQuiet {
 		t.Fatalf("completion = %+v, want quiet", done)
 	}
 }
@@ -582,7 +582,7 @@ func TestSupervisorPreExecutionFailures(t *testing.T) {
 		want string
 	}{{1, "holder"}, {2, "broken"}, {3, "../../../../bin/true"}, {4, "scripts/pass.sh"}, {5, "scripts/absent.sh"}} {
 		done := h.awaitCompletion(tc.id, 5*time.Second)
-		if done.Verdict != VerdictFailure || !strings.Contains(done.Message, tc.want) {
+		if done.Verdict != tasks.VerdictFailure || !strings.Contains(done.Message, tc.want) {
 			t.Fatalf("run %d completion = %+v, want a failure naming %q", tc.id, done, tc.want)
 		}
 		if strings.Contains(done.Message, secret) {
@@ -611,7 +611,7 @@ func TestSupervisorRunsDifferentTasksConcurrentlyUpToParallel(t *testing.T) {
 	h.sup.Parallel = 2
 	h.start()
 	for id := int64(1); id <= 3; id++ {
-		if done := h.awaitCompletion(id, 10*time.Second); done.Verdict != VerdictPass {
+		if done := h.awaitCompletion(id, 10*time.Second); done.Verdict != tasks.VerdictPass {
 			t.Fatalf("run %d completion = %+v", id, done)
 		}
 	}
@@ -681,7 +681,7 @@ func TestSupervisorCancelRequestKillsAStubbornScript(t *testing.T) {
 	if elapsed := time.Since(asked); elapsed > killGrace+3*time.Second {
 		t.Fatalf("cancellation took %v", elapsed)
 	}
-	if done.Verdict != VerdictFailure {
+	if done.Verdict != tasks.VerdictFailure {
 		t.Fatalf("completion = %+v, want a failure recorded for the cancelled run", done)
 	}
 	groupGone(t, pid)
@@ -730,7 +730,7 @@ func TestSupervisorRedactsQueueSecretsFromWhatAScriptReturns(t *testing.T) {
 	h := newHarness(t, job)
 	h.start()
 	done := h.awaitCompletion(1, 5*time.Second)
-	if done.Verdict != VerdictPass {
+	if done.Verdict != tasks.VerdictPass {
 		t.Fatalf("completion = %+v, want a pass", done)
 	}
 	if done.Message != "token [redacted] and abc" {
@@ -743,7 +743,7 @@ func TestSupervisorRedactsQueueSecretsFromWhatAScriptReturns(t *testing.T) {
 
 func watchJob(id int64, key, script string) tasks.RunJob {
 	job := checkJob(id, key, script)
-	job.Run.Kind, job.Outcome = KindWatch, ""
+	job.Run.Kind, job.Outcome = tasks.RunKindWatch, ""
 	return job
 }
 
@@ -752,7 +752,7 @@ func TestSupervisorRetriesAFailedCompletionAndKeepsTheTaskBusy(t *testing.T) {
 	h := newHarness(t, checkJob(1, "DEV-1", "scripts/pass.sh"), checkJob(2, "DEV-1", "scripts/pass.sh"))
 	h.jobs.completeFail[1] = 3
 	h.start()
-	if done := h.awaitCompletion(1, 5*time.Second); done.Verdict != VerdictPass {
+	if done := h.awaitCompletion(1, 5*time.Second); done.Verdict != tasks.VerdictPass {
 		t.Fatalf("completion = %+v", done)
 	}
 	h.awaitCompletion(2, 5*time.Second)
@@ -816,7 +816,7 @@ func TestSupervisorCompletesAPreStartFailureInTheBackground(t *testing.T) {
 		t.Fatalf("pre-start failure claimed with log path %q", path)
 	}
 	close(release)
-	if done := h.awaitCompletion(1, 5*time.Second); done.Verdict != VerdictFailure {
+	if done := h.awaitCompletion(1, 5*time.Second); done.Verdict != tasks.VerdictFailure {
 		t.Fatalf("completion = %+v", done)
 	}
 }
@@ -864,8 +864,8 @@ func TestSupervisorTerminatesOnlyProvenOrphans(t *testing.T) {
 	stranger := orphan(t, "TARIBOY_RESULT_FILE="+filepath.Join(h.base, "tasks", "DEV-8", "runs", "9", "result.json"))
 	oursPID, strangerPID := ours.Process.Pid, stranger.Process.Pid
 	h.jobs.running = []tasks.ScriptRun{
-		{ID: 7, TaskKey: "DEV-7", Kind: KindCheck, State: "running", PID: &oursPID},
-		{ID: 8, TaskKey: "DEV-8", Kind: KindWatch, State: "running", PID: &strangerPID},
+		{ID: 7, TaskKey: "DEV-7", Kind: tasks.RunKindCheck, State: "running", PID: &oursPID},
+		{ID: 8, TaskKey: "DEV-8", Kind: tasks.RunKindWatch, State: "running", PID: &strangerPID},
 	}
 	h.start()
 	groupGone(t, oursPID)
@@ -890,7 +890,7 @@ func TestSupervisorSignalsNothingWithoutProc(t *testing.T) {
 	resultFile := filepath.Join(h.base, "tasks", "DEV-7", "runs", "7", "result.json")
 	ours := orphan(t, "TARIBOY_RESULT_FILE="+resultFile)
 	pid := ours.Process.Pid
-	h.jobs.running = []tasks.ScriptRun{{ID: 7, TaskKey: "DEV-7", Kind: KindCheck, State: "running", PID: &pid}}
+	h.jobs.running = []tasks.ScriptRun{{ID: 7, TaskKey: "DEV-7", Kind: tasks.RunKindCheck, State: "running", PID: &pid}}
 	h.start()
 	h.awaitRecovered()
 	if err := syscall.Kill(pid, 0); err != nil {
@@ -911,7 +911,7 @@ func TestRecordUnrecordedStopsAtTheFirstFailureOfAPass(t *testing.T) {
 	for id := int64(1); id <= 3; id++ {
 		h.jobs.completeFail[id] = 1
 		w.retry[id] = unrecorded{job: checkJob(id, "DEV-"+strconv.FormatInt(id, 10), "scripts/pass.sh"),
-			done: tasks.RunCompletion{Verdict: VerdictPass}}
+			done: tasks.RunCompletion{Verdict: tasks.VerdictPass}}
 	}
 	attempts := func() int {
 		h.jobs.mu.Lock()
@@ -971,8 +971,8 @@ func TestSupervisorNeverSignalsInitOrItself(t *testing.T) {
 	t.Cleanup(func() { procRoot = "/proc" })
 	initPID, self := 1, os.Getpid()
 	h.jobs.running = []tasks.ScriptRun{
-		{ID: 7, TaskKey: "DEV-7", Kind: KindCheck, State: "running", PID: &initPID},
-		{ID: 8, TaskKey: "DEV-8", Kind: KindWatch, State: "running", PID: &self},
+		{ID: 7, TaskKey: "DEV-7", Kind: tasks.RunKindCheck, State: "running", PID: &initPID},
+		{ID: 8, TaskKey: "DEV-8", Kind: tasks.RunKindWatch, State: "running", PID: &self},
 	}
 	h.start()
 	h.awaitRecovered()
@@ -1078,7 +1078,7 @@ func TestSupervisorKeepsTheNewestQuietRunDirectories(t *testing.T) {
 func TestRememberQuietKeepsARingPerTaskAndSkipsCancelledRuns(t *testing.T) {
 	t.Parallel()
 	w := &worker{quietDirs: map[string][]string{}}
-	quiet := tasks.RunCompletion{Verdict: VerdictQuiet}
+	quiet := tasks.RunCompletion{Verdict: tasks.VerdictQuiet}
 	dir := func(task string, i int) string { return "/runs/" + task + "/" + strconv.Itoa(i) }
 	for i := 1; i <= keptQuietRunDirs; i++ {
 		if stale := w.rememberQuietLocked(watchJob(int64(i), "DEV-1", "q"), quiet, dir("DEV-1", i), false); stale != "" {
@@ -1105,7 +1105,7 @@ func TestRememberQuietKeepsARingPerTaskAndSkipsCancelledRuns(t *testing.T) {
 		t.Fatalf("stale = %q", stale)
 	}
 	// Other runs keep their files and do not enter the ring.
-	if stale := w.rememberQuietLocked(checkJob(53, "DEV-1", "c"), tasks.RunCompletion{Verdict: VerdictPass}, dir("DEV-1", 53), false); stale != "" {
+	if stale := w.rememberQuietLocked(checkJob(53, "DEV-1", "c"), tasks.RunCompletion{Verdict: tasks.VerdictPass}, dir("DEV-1", 53), false); stale != "" {
 		t.Fatalf("stale = %q", stale)
 	}
 }

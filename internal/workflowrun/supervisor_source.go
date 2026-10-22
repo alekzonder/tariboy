@@ -103,7 +103,7 @@ func (w *worker) startSource(ctx context.Context, job tasks.SourceJob) {
 		return
 	}
 	runCtx, cancel := context.WithCancel(ctx)
-	active := &activeRun{task: key, kind: KindSource, cancel: cancel}
+	active := &activeRun{task: key, kind: tasks.RunKindSource, cancel: cancel}
 	w.mu.Lock()
 	w.sources[key] = active
 	w.mu.Unlock()
@@ -116,7 +116,7 @@ func (w *worker) startSource(ctx context.Context, job tasks.SourceJob) {
 			reason = tasks.RedactSecrets(reason, secretValues(job.QueueSecrets))
 			w.log.Warn("workflow source run failed before it started", "run_id", id, "source", key, "reason", reason)
 			w.finishSource(ctx, id, key, tasks.SourceCompletion{
-				Verdict: VerdictFailure, Message: reason, FinishedAt: w.clock(),
+				Verdict: tasks.VerdictFailure, Message: reason, FinishedAt: w.clock(),
 			}, "", false)
 			return
 		}
@@ -162,7 +162,7 @@ func (w *worker) finishSource(ctx context.Context, id int64, key string, done ta
 		return
 	}
 	stale := ""
-	if err == nil && done.Verdict == VerdictQuiet && !cancelled && runDir != "" {
+	if err == nil && done.Verdict == tasks.VerdictQuiet && !cancelled && runDir != "" {
 		stale = w.ringLocked("source:"+key, runDir)
 	}
 	w.mu.Unlock()
@@ -241,7 +241,7 @@ func (w *worker) prepareSource(job tasks.SourceJob, id int64) (Spec, string) {
 		env = append(env, defaultPath)
 	}
 	return Spec{
-		RunID: strconv.FormatInt(id, 10), Kind: KindSource, ScriptPath: scriptPath, Cwd: stateDir, Env: env,
+		RunID: strconv.FormatInt(id, 10), Kind: tasks.RunKindSource, ScriptPath: scriptPath, Cwd: stateDir, Env: env,
 		Timeout: job.Timeout, RunDir: runDir, TaskDir: stateDir,
 		Declared: Declared{Artifacts: job.Artifacts},
 	}, ""
@@ -256,7 +256,7 @@ func redactSourceCompletion(done tasks.SourceCompletion, secrets map[string]stri
 	items := make([]tasks.SourceItem, 0, len(done.Items))
 	for i, item := range done.Items {
 		if tasks.RedactSecrets(item.Key, values) != item.Key {
-			done.Verdict, done.Items = VerdictFailure, nil
+			done.Verdict, done.Items = tasks.VerdictFailure, nil
 			done.Message = fmt.Sprintf("item %d: the key holds a queue secret", i)
 			return done
 		}

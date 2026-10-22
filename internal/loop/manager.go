@@ -303,7 +303,7 @@ func (m *Manager) recordIterationEnd(agentName, iterationID string) {
 	}
 	// A harness that could not be launched or died before producing output
 	// did no work and left none undone: it is not an idle iteration.
-	if goal.key != "" && m.iterationStatus(agentName, iterationID) == "harness_error" {
+	if goal.key != "" && m.iterationStatus(agentName, iterationID) == agent.IterationHarnessError {
 		return
 	}
 	end := tasks.IterationEnd{Agent: agentName, IterationID: iterationID, GoalTaskKey: goal.key,
@@ -315,7 +315,7 @@ func (m *Manager) recordIterationEnd(agentName, iterationID string) {
 
 // iterationStatus returns the recorded status of an iteration, or "" when it
 // cannot be read.
-func (m *Manager) iterationStatus(agentName, iterationID string) string {
+func (m *Manager) iterationStatus(agentName, iterationID string) agent.IterationStatus {
 	if m.cfg.iterationStore == nil && m.cfg.Store == nil {
 		return ""
 	}
@@ -667,7 +667,7 @@ func (m *Manager) finalizeIteration(
 	if err != nil {
 		return false, false, fmt.Errorf("%w: %v", errIterationLookup, err)
 	}
-	if it.Status != "running" {
+	if it.Status != agent.IterationRunning {
 		return false, true, nil
 	}
 	apply(&it)
@@ -693,14 +693,14 @@ func (m *Manager) finalizeIteration(
 // when a shim disappears without ever writing a result.
 func (m *Manager) terminalHarnessError(it *agent.Iteration) {
 	ec := -1
-	it.Status = "harness_error"
+	it.Status = agent.IterationHarnessError
 	it.EndedAt = store.FormatTime(m.cfg.Clock())
 	it.ExitCode = &ec
 }
 
 // recordAdopted persists a completed adopted iteration from its result.json.
 func (m *Manager) recordAdopted(l agentdir.Layout, li agentdir.LiveIteration, res shim.IterationResult) {
-	status := ""
+	var status agent.IterationStatus
 	committed, _, err := m.finalizeIteration(l, li.Agent, li.ID, func(it *agent.Iteration) {
 		ec, cpu, mem := res.ExitCode, res.CPUMs, res.MemPeakKB
 		it.Status = Classify(res.ExitCode, it.DoneFlag, it.TimeoutTriggeredAt != nil, res.TerminationReason == "hard_timeout")

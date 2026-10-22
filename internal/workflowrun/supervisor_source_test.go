@@ -119,7 +119,7 @@ func TestSupervisorRunsASourceAndReportsItsItems(t *testing.T) {
 	h.sup.Sources = sources
 	h.start()
 	done := sources.await(t, 1)
-	if done.Verdict != VerdictItems || len(done.Items) != 1 {
+	if done.Verdict != tasks.VerdictItems || len(done.Items) != 1 {
 		t.Fatalf("completion = %+v", done)
 	}
 	item := done.Items[0]
@@ -181,7 +181,7 @@ func TestSupervisorKillsASourceTheQueueNoLongerBinds(t *testing.T) {
 	}
 	sources.setJobs()
 	h.nudge()
-	if done := sources.await(t, 1); done.Verdict != VerdictFailure || done.Message != "the run was cancelled" {
+	if done := sources.await(t, 1); done.Verdict != tasks.VerdictFailure || done.Message != "the run was cancelled" {
 		t.Fatalf("completion = %+v", done)
 	}
 }
@@ -189,17 +189,17 @@ func TestSupervisorKillsASourceTheQueueNoLongerBinds(t *testing.T) {
 func TestRedactSourceCompletionFailsAKeyWithASecret(t *testing.T) {
 	t.Parallel()
 	secrets := map[string]string{"TOKEN": "secret-token"}
-	done := redactSourceCompletion(tasks.SourceCompletion{Verdict: VerdictItems, Items: []tasks.SourceItem{
+	done := redactSourceCompletion(tasks.SourceCompletion{Verdict: tasks.VerdictItems, Items: []tasks.SourceItem{
 		{Key: "ok", Title: "a secret-token", Description: "secret-token", Artifacts: map[string]string{"x": "secret-token"}},
 	}}, secrets)
 	item := done.Items[0]
-	if done.Verdict != VerdictItems || item.Title != "a [redacted]" || item.Description != "[redacted]" || item.Artifacts["x"] != "[redacted]" {
+	if done.Verdict != tasks.VerdictItems || item.Title != "a [redacted]" || item.Description != "[redacted]" || item.Artifacts["x"] != "[redacted]" {
 		t.Fatalf("redacted = %+v", done)
 	}
-	done = redactSourceCompletion(tasks.SourceCompletion{Verdict: VerdictItems, Items: []tasks.SourceItem{
+	done = redactSourceCompletion(tasks.SourceCompletion{Verdict: tasks.VerdictItems, Items: []tasks.SourceItem{
 		{Key: "k-secret-token", Title: "t"},
 	}}, secrets)
-	if done.Verdict != VerdictFailure || len(done.Items) != 0 || strings.Contains(done.Message, "secret-token") {
+	if done.Verdict != tasks.VerdictFailure || len(done.Items) != 0 || strings.Contains(done.Message, "secret-token") {
 		t.Fatalf("completion = %+v", done)
 	}
 }

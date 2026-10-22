@@ -78,7 +78,7 @@ type Supervisor struct {
 // activeRun is a run this worker is executing.
 type activeRun struct {
 	task            string
-	kind            string
+	kind            tasks.RunKind
 	cancel          context.CancelFunc
 	cancelRequested atomic.Bool
 }
@@ -203,7 +203,7 @@ func (w *worker) pass(ctx context.Context) {
 // checks.
 func (w *worker) loadLocked() (all, nonCheck int) {
 	for _, active := range w.running {
-		if active.kind != KindCheck {
+		if active.kind != tasks.RunKindCheck {
 			nonCheck++
 		}
 	}
@@ -245,7 +245,9 @@ func (w *worker) passScripts(ctx context.Context) {
 		return
 	}
 	// A check holds up an agent waiting for its request; a watch can wait.
-	sort.SliceStable(jobs, func(i, j int) bool { return jobs[i].Run.Kind == KindCheck && jobs[j].Run.Kind != KindCheck })
+	sort.SliceStable(jobs, func(i, j int) bool {
+		return jobs[i].Run.Kind == tasks.RunKindCheck && jobs[j].Run.Kind != tasks.RunKindCheck
+	})
 	for _, job := range jobs {
 		if ctx.Err() != nil {
 			return
@@ -260,7 +262,7 @@ func (w *worker) passScripts(ctx context.Context) {
 			return
 		}
 		// With more than one slot, one is always left for a check.
-		if running || busy || (job.Run.Kind != KindCheck && w.parallel > 1 && watches >= w.parallel-1) {
+		if running || busy || (job.Run.Kind != tasks.RunKindCheck && w.parallel > 1 && watches >= w.parallel-1) {
 			continue
 		}
 		w.start(ctx, job)
@@ -311,7 +313,7 @@ func (w *worker) start(ctx context.Context, job tasks.RunJob) {
 			w.log.Warn("workflow script run failed before it started", "run_id", id, "task", job.Run.TaskKey,
 				"script", job.Run.Script, "reason", reason)
 			w.finish(ctx, id, job, tasks.RunCompletion{
-				Verdict: VerdictFailure, Message: reason,
+				Verdict: tasks.VerdictFailure, Message: reason,
 				FinishedAt: w.clock(),
 			}, "", false)
 			return
@@ -423,7 +425,7 @@ const keptQuietRunDirs = 20
 // files stay. Other runs keep their files, and so do directories left from
 // before a restart: nightly retention removes the task directory.
 func (w *worker) rememberQuietLocked(job tasks.RunJob, done tasks.RunCompletion, runDir string, cancelled bool) string {
-	if job.Run.Kind != KindWatch || done.Verdict != VerdictQuiet || runDir == "" || cancelled {
+	if job.Run.Kind != tasks.RunKindWatch || done.Verdict != tasks.VerdictQuiet || runDir == "" || cancelled {
 		return ""
 	}
 	return w.ringLocked(job.Run.TaskKey, runDir)
@@ -497,7 +499,7 @@ func (w *worker) prepare(job tasks.RunJob) (Spec, string) {
 	var cwd string
 	var baseline []string
 	// A watch run is always a queue run, whatever its record says.
-	agentMode := run.Kind == KindCheck && run.RunAs == workflowfile.RunAsAgent
+	agentMode := run.Kind == tasks.RunKindCheck && run.RunAs == workflowfile.RunAsAgent
 	if agentMode {
 		if job.Holder == "" {
 			return Spec{}, fmt.Sprintf("check %s runs as the agent, but the task has no agent holder", run.Script)
@@ -519,7 +521,7 @@ func (w *worker) prepare(job tasks.RunJob) (Spec, string) {
 	}
 
 	outcome := ""
-	if run.Kind == KindCheck {
+	if run.Kind == tasks.RunKindCheck {
 		outcome = job.Outcome
 	}
 	protocol := ProtocolEnv(EnvValues{

@@ -236,20 +236,20 @@ func goalArtifacts(key string, view tasks.WorkflowView) string {
 // when it was rejected or failed; any other state needs no word.
 func goalLastRequest(key string, view tasks.WorkflowView) string {
 	req := view.LastRequest
-	if req == nil || (req.State != "rejected" && req.State != "failed") || !inCurrentVisit(view, req.CreatedAt) {
+	if req == nil || (req.State != tasks.RequestStateRejected && req.State != tasks.RequestStateFailed) || !inCurrentVisit(view, req.CreatedAt) {
 		return ""
 	}
 	message := req.ResultMessage
 	if message == "" {
 		message = "(no message)"
 	}
-	if req.State == "rejected" {
+	if req.State == tasks.RequestStateRejected {
 		return fmt.Sprintf("Your request for outcome `%s` was rejected. A check script found that the condition does not hold; the message below says what to fix.\n%s",
 			req.Outcome, fenced(message, maxGoalValueRunes, ""))
 	}
 	text := fmt.Sprintf("Your request for outcome `%s` failed: a check could not run. Repeating the request unchanged will not help.", req.Outcome)
 	for _, run := range view.Runs {
-		if run.Kind == "check" && run.RequestID == req.ID {
+		if run.Kind == tasks.RunKindCheck && run.RequestID == req.ID {
 			text += fmt.Sprintf(" Read the log with `ttasks workflow log %s %d`; retry once if the cause was transient; otherwise tell the customer.", key, run.ID)
 			break
 		}

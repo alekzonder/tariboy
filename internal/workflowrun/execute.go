@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
@@ -24,7 +25,7 @@ const killGrace = 2 * time.Second
 // Spec describes one run of one workflow script.
 type Spec struct {
 	RunID      string
-	Kind       string
+	Kind       tasks.RunKind
 	ScriptPath string // absolute path inside the unpacked image
 	Cwd        string
 	Env        []string // complete environment, protocol entries included
@@ -88,7 +89,7 @@ func Execute(ctx context.Context, spec Spec) Result {
 	}
 
 	// A source run has no task, so it has no snapshot.
-	if spec.Kind != KindSource {
+	if spec.Kind != tasks.RunKindSource {
 		taskFile := filepath.Join(spec.RunDir, "task.json")
 		if err := writeOwnerFile(taskFile, spec.Snapshot); err != nil {
 			return fail("cannot write %s: %v", taskFile, err)

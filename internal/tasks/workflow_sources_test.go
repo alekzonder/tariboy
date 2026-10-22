@@ -70,7 +70,7 @@ func completeSource(t *testing.T, svc *Service, id int64, done SourceCompletion)
 }
 
 func itemsDone(at time.Time, items ...SourceItem) SourceCompletion {
-	return SourceCompletion{Verdict: verdictItems, Items: items, FinishedAt: at}
+	return SourceCompletion{Verdict: VerdictItems, Items: items, FinishedAt: at}
 }
 
 func devTasks(t *testing.T, svc *Service) []Task {
@@ -89,7 +89,7 @@ func sourceRunRow(t *testing.T, svc *Service, id int64) (state, verdict, message
 	for _, source := range sources {
 		for _, run := range source.Runs {
 			if run.ID == id {
-				return run.State, run.Verdict, run.Message, run.TasksCreated
+				return string(run.State), string(run.Verdict), run.Message, run.TasksCreated
 			}
 		}
 	}
@@ -101,7 +101,7 @@ func TestCompleteSourceRunRefusesAMissingFinishTime(t *testing.T) {
 	svc, _ := sourceFixture(t)
 	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	id := startSource(t, svc, sourceJobs(t, svc, now)[0], now)
-	err := svc.CompleteSourceRun(context.Background(), id, SourceCompletion{Verdict: verdictItems,
+	err := svc.CompleteSourceRun(context.Background(), id, SourceCompletion{Verdict: VerdictItems,
 		Items: []SourceItem{{Key: "pr-1", Title: "PR 1"}}})
 	if ErrorCode(err) != "invalid_completion" || ErrorStatus(err) != http.StatusBadRequest {
 		t.Fatalf("complete without a finish time: %v", err)
@@ -133,7 +133,7 @@ func TestSourceJobsScheduleOneRunAtATime(t *testing.T) {
 	if _, err := svc.StartSourceRun(context.Background(), job, now); err == nil {
 		t.Fatal("a second run of a running source started")
 	}
-	completeSource(t, svc, id, SourceCompletion{Verdict: verdictQuiet, FinishedAt: now.Add(time.Second)})
+	completeSource(t, svc, id, SourceCompletion{Verdict: VerdictQuiet, FinishedAt: now.Add(time.Second)})
 	if jobs := sourceJobs(t, svc, now.Add(2*time.Minute)); jobs[0].Due {
 		t.Fatal("due before every has passed since the run finished")
 	}
@@ -172,7 +172,7 @@ func TestSourceItemsCreateOneTaskPerKey(t *testing.T) {
 	if len(artifacts) != 1 || artifacts[0].Value != "https://github.com/org/repo/pull/42" || artifacts[0].Author != "script:"+sourceScript {
 		t.Fatalf("artifacts = %+v", artifacts)
 	}
-	if state, verdict, _, n := sourceRunRow(t, svc, id); state != "finished" || verdict != verdictItems || n != 2 {
+	if state, verdict, _, n := sourceRunRow(t, svc, id); state != "finished" || verdict != string(VerdictItems) || n != 2 {
 		t.Fatalf("run = %s %s %d", state, verdict, n)
 	}
 
@@ -213,7 +213,7 @@ func TestSourceRunWithAnInvalidItemCreatesNothing(t *testing.T) {
 	if got := devTasks(t, svc); len(got) != 0 {
 		t.Fatalf("tasks = %+v", got)
 	}
-	if state, verdict, message, _ := sourceRunRow(t, svc, id); state != "finished" || verdict != verdictFailure || !strings.Contains(message, "plan") {
+	if state, verdict, message, _ := sourceRunRow(t, svc, id); state != "finished" || verdict != string(VerdictFailure) || !strings.Contains(message, "plan") {
 		t.Fatalf("run = %s %s %q", state, verdict, message)
 	}
 	events := len(queueEvents(t, svc, "DEV", "queue.source_failed"))
@@ -284,7 +284,7 @@ func TestSourceKeepsOnlyTheNewestQuietRuns(t *testing.T) {
 	at := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	for i := 0; i < workflowViewRuns+5; i++ {
 		id := startSource(t, svc, sourceJobs(t, svc, at)[0], at)
-		completeSource(t, svc, id, SourceCompletion{Verdict: verdictQuiet, FinishedAt: at})
+		completeSource(t, svc, id, SourceCompletion{Verdict: VerdictQuiet, FinishedAt: at})
 		at = at.Add(time.Hour)
 	}
 	// A storage check: the API lists only the newest runs, so only the table
@@ -317,7 +317,7 @@ func TestListQueueSourcesAndLog(t *testing.T) {
 		if err := os.WriteFile(logPath, []byte("token secret-value-1\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		completeSource(t, svc, id, SourceCompletion{Verdict: verdictFailure, Message: "boom " + strconv.Itoa(i),
+		completeSource(t, svc, id, SourceCompletion{Verdict: VerdictFailure, Message: "boom " + strconv.Itoa(i),
 			LogPath: logPath, FinishedAt: at})
 	}
 	if _, err := svc.ListQueueSources(context.Background(), AgentActor("dev-1"), "DEV"); ErrorCode(err) != "forbidden" {

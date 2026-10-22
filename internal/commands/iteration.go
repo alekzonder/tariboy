@@ -76,7 +76,7 @@ func iterationLs() registry.Command {
 			rows := make([]map[string]any, 0, len(its))
 			for _, it := range its {
 				rows = append(rows, map[string]any{
-					"id": it.ID, "trigger": it.Trigger, "status": it.Status,
+					"id": it.ID, "trigger": it.Trigger, "status": string(it.Status),
 					"started_at": it.StartedAt, "done": it.DoneFlag,
 					"productive": it.Productive, "tags": tags[it.ID],
 				})
@@ -149,7 +149,7 @@ func iterationInspect() registry.Command {
 				return nil, err
 			}
 			out := map[string]any{
-				"id": it.ID, "agent": it.Agent, "trigger": it.Trigger, "status": it.Status,
+				"id": it.ID, "agent": it.Agent, "trigger": it.Trigger, "status": string(it.Status),
 				"started_at": it.StartedAt, "ended_at": it.EndedAt, "done": it.DoneFlag,
 				"productive":  it.Productive,
 				"prompt_path": it.PromptPath,
