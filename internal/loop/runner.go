@@ -471,10 +471,10 @@ func (d *doneGraceTracker) observe(done bool, now time.Time, grace time.Duration
 	_ = kill() // the watcher's kill callback already logs its failure
 }
 
-// tmuxHasSession is the production HasTmuxSession: `tmux has-session -t <name>`
+// tmuxHasSession is the production HasTmuxSession: `tmux has-session -t =<name>`
 // exits 0 iff the session exists.
 func tmuxHasSession(session string) bool {
-	return exec.Command("tmux", "has-session", "-t", session).Run() == nil
+	return shim.TmuxHasSession(session)
 }
 
 // tmuxKillSession is the production KillTmuxSession.

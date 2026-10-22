@@ -396,7 +396,11 @@ func TestTmuxShimAttachSetsChildTerminalWithoutMutatingParent(t *testing.T) {
 func TestTmuxShimAttachForcesUTF8Client(t *testing.T) {
 	old := execCommand
 	var attachArgs []string
+	var optionArgs []string
 	execCommand = func(_ string, args ...string) *exec.Cmd {
+		if len(args) > 0 && args[0] == "set-option" {
+			optionArgs = append([]string(nil), args...)
+		}
 		for _, arg := range args {
 			if arg == "attach-session" {
 				attachArgs = append([]string(nil), args...)
@@ -420,7 +424,10 @@ func TestTmuxShimAttachForcesUTF8Client(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := []string{"-u", "attach-session", "-t", "sess"}
+	if !reflect.DeepEqual(optionArgs, []string{"set-option", "-t", "=sess:", "window-size", "latest"}) {
+		t.Fatalf("attach option args = %q", optionArgs)
+	}
+	want := []string{"-u", "attach-session", "-t", "=sess"}
 	if !reflect.DeepEqual(attachArgs, want) {
 		t.Fatalf("attach args = %#v, want %#v", attachArgs, want)
 	}
@@ -504,9 +511,9 @@ func TestSendKeysArgs_ItemsRawNoEnter(t *testing.T) {
 	items := []KeyItem{{Text: "hello world"}, {Key: "Enter"}, {Key: "C-c"}}
 	got := sendKeysCommands("sess", SendKeysParams{Items: items})
 	want := [][]string{
-		{"send-keys", "-t", "sess", "-l", "--", "hello world"},
-		{"send-keys", "-t", "sess", "--", "Enter"},
-		{"send-keys", "-t", "sess", "--", "C-c"},
+		{"send-keys", "-t", "=sess:", "-l", "--", "hello world"},
+		{"send-keys", "-t", "=sess:", "--", "Enter"},
+		{"send-keys", "-t", "=sess:", "--", "C-c"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("items path:\n got %v\nwant %v", got, want)
@@ -516,7 +523,7 @@ func TestSendKeysArgs_ItemsRawNoEnter(t *testing.T) {
 func TestSendKeysArgs_LegacyKeysAppendEnter(t *testing.T) {
 	t.Parallel()
 	got := sendKeysCommands("sess", SendKeysParams{Keys: "ls -la"})
-	want := [][]string{{"send-keys", "-t", "sess", "--", "ls -la", "Enter"}}
+	want := [][]string{{"send-keys", "-t", "=sess:", "--", "ls -la", "Enter"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("legacy path:\n got %v\nwant %v", got, want)
 	}
@@ -525,7 +532,7 @@ func TestSendKeysArgs_LegacyKeysAppendEnter(t *testing.T) {
 func TestCaptureArgs_AnsiScrollback(t *testing.T) {
 	t.Parallel()
 	got := captureArgs("sess", 200)
-	want := []string{"capture-pane", "-e", "-p", "-S", "-200", "-t", "sess"}
+	want := []string{"capture-pane", "-e", "-p", "-S", "-200", "-t", "=sess:"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v want %v", got, want)
 	}
@@ -1365,7 +1372,7 @@ func TestRunTmuxCreatesHarnessWindowAfterSettingSessionHistoryLimit(t *testing.T
 		}
 		switch call[0] {
 		case "set-option":
-			if reflect.DeepEqual(call, []string{"set-option", "-t", opts.TmuxSession, "history-limit", "10000"}) {
+			if reflect.DeepEqual(call, []string{"set-option", "-t", "=managed-history:", "history-limit", "10000"}) {
 				historyIndex = i
 			}
 		case "new-window":
@@ -1375,8 +1382,12 @@ func TestRunTmuxCreatesHarnessWindowAfterSettingSessionHistoryLimit(t *testing.T
 				t.Fatal(err)
 			}
 			wantCommand := shellJoin(tmuxSupervisorCommand(executable, opts.TmuxSession, filepath.Join(dir, "logs", tmuxExitStatusFilename), opts.HarnessArgv))
-			if !reflect.DeepEqual(call, []string{"new-window", "-e", tmuxSupervisorSockEnv + "=" + filepath.Join(dir, "shim.sock"), "-t", opts.TmuxSession, wantCommand}) {
+			if !reflect.DeepEqual(call, []string{"new-window", "-e", tmuxSupervisorSockEnv + "=" + filepath.Join(dir, "shim.sock"), "-t", "=managed-history:", wantCommand}) {
 				t.Fatalf("new-window args = %#v, want harness command byte-identical to prior new-session command", call)
+			}
+		case "pipe-pane":
+			if len(call) < 4 || call[3] != "=managed-history:" {
+				t.Fatalf("pipe target = %q", call)
 			}
 		case "kill-window":
 			killIndex = i
@@ -1491,7 +1502,7 @@ func TestRunTmuxDisablesMouseForEachManagedSession(t *testing.T) {
 			targets = append(targets, call[2])
 		}
 	}
-	if !reflect.DeepEqual(targets, []string{"managed-alpha", "managed-beta"}) {
+	if !reflect.DeepEqual(targets, []string{"=managed-alpha:", "=managed-beta:"}) {
 		t.Fatalf("set-option targets = %#v, want distinct managed sessions", targets)
 	}
 }
@@ -1803,5 +1814,30 @@ esac
 				}
 			}
 		})
+	}
+}
+
+func TestTmuxSessionChecksUseExactTarget(t *testing.T) {
+	old := execCommand
+	defer func() { execCommand = old }()
+	execCommand = func(_ string, args ...string) *exec.Cmd {
+		if !reflect.DeepEqual(args, []string{"has-session", "-t", "=image-creator"}) {
+			t.Errorf("session check = %q, want exact session target", args)
+		}
+		return exec.Command("false")
+	}
+	if TmuxHasSession("image-creator") {
+		t.Fatal("absent session exists")
+	}
+	ticks := make(chan time.Time, 1)
+	ticks <- time.Now()
+	if got := waitTmuxEnd(context.Background(), "image-creator", nil, ticks); got != tmuxEndSessionGone {
+		t.Fatalf("wait = %s", got)
+	}
+	endTmuxSession("", "image-creator", tmuxEndHarnessExited)
+	client, server := net.Pipe()
+	defer client.Close()
+	if err := (&tmuxShim{session: "image-creator"}).Attach(server, AttachParams{}); err == nil {
+		t.Fatal("Attach accepted absent session")
 	}
 }
