@@ -8,10 +8,10 @@ import { useApiQuery, useApiTarget } from "./useApiQuery"
 
 const host = { id: "remote", label: "Remote", baseURL: "https://first.test", token: "secret-one" }
 
-function Resource({ target: input, read }: { target?: ApiTarget; read: (target: ApiTarget, signal: AbortSignal) => Promise<string> }) {
+function Resource({ target: input, read, filter }: { target?: ApiTarget; filter?: string; read: (target: ApiTarget, signal: AbortSignal) => Promise<string> }) {
   const target = useApiTarget(input)
-  const result = useApiQuery({ queryKey: [...apiServerKey(target), "example"], queryFn: ({ signal }) => read(target, signal), placeholderData: keepPreviousData }, target)
-  return <div>{result.data ?? result.error?.message ?? "Loading"}</div>
+  const result = useApiQuery({ queryKey: [...apiServerKey(target), "example", ...(filter ? [filter] : [])], queryFn: ({ signal }) => read(target, signal), placeholderData: keepPreviousData }, target)
+  return <div data-placeholder={result.isPlaceholderData}>{result.data ?? result.error?.message ?? "Loading"}</div>
 }
 
 it("keeps server identity across a new port and cancels the old endpoint's read", async () => {
@@ -106,4 +106,33 @@ it("restarts the new account read after credentials change while unavailable", a
   await waitFor(() => expect(reads.at(-1)!.signal.aborted).toBe(false))
   await act(async () => reads.at(-1)!.resolve("New"))
   expect(await screen.findByText("New")).toBeInTheDocument()
+})
+
+it.each(["registry", "direct"] as const)("clears an already active filter placeholder on %s credential rotation", async (path) => {
+  const meta = await addDaemon({ label: "Placeholder account", baseURL: "https://placeholder.test", token: "old" })
+  const original = (await resolveDaemon(meta.id))!
+  const read = vi.fn().mockResolvedValueOnce("Private previous account").mockImplementation(() => new Promise(() => {}))
+  const view = (target: ApiTarget, filter?: string) => <QueryClientProvider client={queryClient}><Resource target={target} read={read} filter={filter} /></QueryClientProvider>
+  const mounted = render(view(original))
+  try {
+    await screen.findByText("Private previous account")
+    mounted.rerender(view(original, "pending-filter"))
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+    expect(screen.getByText("Private previous account")).toHaveAttribute("data-placeholder", "true")
+    mounted.rerender(view({ ...original, baseURL: "" }, "pending-filter"))
+    expect(screen.getByText("Private previous account")).toHaveAttribute("data-placeholder", "true")
+    mounted.rerender(view(original, "pending-filter"))
+    await waitFor(() => expect(read.mock.calls.length).toBeGreaterThan(2))
+    expect(screen.getByText("Private previous account")).toHaveAttribute("data-placeholder", "true")
+    if (path === "registry") await act(async () => { await setDaemonToken(meta.id, "new") })
+    const changed = path === "registry" ? (await resolveDaemon(meta.id))! : { ...original, token: "new" }
+    mounted.rerender(view(changed, "pending-filter"))
+    await act(async () => {})
+    for (let render = 0; render < 3; render++) {
+      mounted.rerender(view(changed, "pending-filter"))
+      await act(async () => {})
+      expect(screen.queryByText("Private previous account")).not.toBeInTheDocument()
+    }
+    expect(queryClient.getQueryData([...apiServerKey(changed), "example", "pending-filter"])).toBeUndefined()
+  } finally { mounted.unmount(); queryClient.clear() }
 })

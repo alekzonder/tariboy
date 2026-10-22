@@ -23,6 +23,8 @@ export function useApiQuery<T, K extends QueryKey>(options: UseQueryOptions<T, E
   const changedAccount = ready && previous !== undefined && previous.token !== token
   const result = useQuery<T, Error, T, K>({
     ...options,
+    // Clear the observer's memoized placeholder too, not only its query cache.
+    placeholderData: changedAccount ? undefined : options.placeholderData,
     enabled: ready && options.enabled !== false,
   })
 
