@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ApiError, setActiveDaemon } from "@/lib/api"
 import type { Task, TaskDetail, TaskNotification, TaskQueue } from "@/lib/tasks"
+import { taskKeys } from "./taskQueries"
 import TasksWorkspace from "./TasksWorkspace"
 import { customerView } from "./workflowFixtures"
 
@@ -197,6 +198,9 @@ describe("TasksWorkspace", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     const approve = await screen.findByRole("button", { name: "approved" })
     const listed = api.listTasks.mock.calls.length
+    const inboxReads = api.listTaskNotifications.mock.calls.length
+    const workflowReads = api.getTaskWorkflow.mock.calls.length
+    const detailReads = api.getTask.mock.calls.length
     api.listTasks.mockResolvedValue({ tasks: [approved, child], sequence: 10 })
     api.getTask.mockResolvedValue({ ...detail, task: approved })
     await userEvent.click(approve)
@@ -204,6 +208,11 @@ describe("TasksWorkspace", () => {
     // No socket hint was delivered: the drawer action alone refreshed the row.
     const row = screen.getByTestId(`task-row-${root.key}`)
     await waitFor(() => expect(row).toHaveTextContent("Done"))
+    await act(async () => {})
+    expect(api.listTasks).toHaveBeenCalledTimes(listed + 1)
+    expect(api.listTaskNotifications).toHaveBeenCalledTimes(inboxReads + 1)
+    expect(api.getTask).toHaveBeenCalledTimes(detailReads + 1)
+    expect(api.getTaskWorkflow).toHaveBeenCalledTimes(workflowReads + 1)
   })
 
   it("uploads files without an agent to the task host and appends only to the selected draft", async () => {
@@ -314,6 +323,40 @@ describe("TasksWorkspace", () => {
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     expect(row).toHaveFocus()
+  })
+
+  it("keeps a newer authoritative revision after saving an older mutation result", async () => {
+    const mounted = render(<TasksWorkspace />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Saved" } })
+    api.updateTask.mockResolvedValue({ ...root, title: "Saved", revision: 3 })
+    api.getTask.mockResolvedValue({ ...detail, task: { ...root, title: "Newer", revision: 4 } })
+    api.listTasks.mockResolvedValue({ tasks: [{ ...root, title: "Newer", revision: 4 }], sequence: 12 })
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Task updated"))
+    expect(mounted.client.getQueryData<TaskDetail>(taskKeys.detail(null, root.key))?.task.revision).toBe(4)
+    const lists = mounted.client.getQueriesData<{ tasks: Task[] }>({ queryKey: [...taskKeys.server(null), "list"] })
+    expect(lists[0][1]?.tasks[0].revision).toBe(4)
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Next edit" } })
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+    expect(api.updateTask).toHaveBeenLastCalledWith(root.key, expect.objectContaining({ revision: 4 }), null)
+  })
+
+  it("does not restore unread notifications from a read started during mark-read", async () => {
+    const pendingWrite = deferred<TaskNotification>()
+    const staleInbox = deferred<{ notifications: TaskNotification[]; count: number }>()
+    api.markTaskNotificationRead.mockReturnValue(pendingWrite.promise)
+    const mounted = render(<TasksWorkspace />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    await waitFor(() => expect(api.markTaskNotificationRead).toHaveBeenCalledTimes(1))
+    api.listTaskNotifications.mockReturnValueOnce(staleInbox.promise)
+    await act(async () => { void mounted.client.invalidateQueries({ queryKey: taskKeys.notifications(null) }) })
+    api.listTaskNotifications.mockResolvedValue({ notifications: [{ ...notification, read_at: "now" }], count: 1 })
+    await act(async () => pendingWrite.resolve({ ...notification, read_at: "now" }))
+    await waitFor(() => expect(mounted.client.getQueryData<{ notifications: TaskNotification[] }>(taskKeys.notifications(null))?.notifications[0].read_at).toBeTruthy())
+    await act(async () => staleInbox.resolve({ notifications: [notification], count: 1 }))
+    expect(mounted.client.getQueryData<{ notifications: TaskNotification[] }>(taskKeys.notifications(null))?.notifications[0].read_at).toBeTruthy()
+    expect(api.markTaskNotificationRead).toHaveBeenCalledTimes(1)
   })
 
   it("keeps unsaved fields through a remote revision and failed save", async () => {

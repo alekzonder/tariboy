@@ -26,4 +26,11 @@ export function createQueryClient() {
   return client
 }
 
+/** Clear observer-held snapshots before removing the cache entries. */
+export function clearServerQueries(client: QueryClient, server: string) {
+  const queryKey = ["server", server]
+  for (const query of client.getQueryCache().findAll({ queryKey })) query.reset()
+  client.removeQueries({ queryKey })
+}
+
 export const queryClient = createQueryClient()

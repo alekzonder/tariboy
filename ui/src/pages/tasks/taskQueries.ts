@@ -1,7 +1,7 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query"
 import type { ApiTarget } from "@/lib/api"
 import { apiServerKey } from "@/lib/queryClient"
-import { getTask, getTaskWorkflow, listTaskEvents, listTaskNotifications, listTaskPrincipals, listTaskQueues, listTasks, type TaskEvent, type TaskFilters } from "@/lib/tasks"
+import { getTask, getTaskWorkflow, listTaskEvents, listTaskNotifications, listTaskPrincipals, listTaskQueues, listTasks, type Task, type TaskDetail, type TaskEvent, type TaskFilters } from "@/lib/tasks"
 import { listAllTasks } from "./useAllServersTasks"
 
 type Target = Exclude<ApiTarget, undefined>
@@ -66,4 +66,15 @@ export async function writeTask<T>(client: QueryClient, target: Target, write: (
   await client.cancelQueries({ queryKey: taskKeys.server(target) })
   try { return await write() }
   finally { await refreshTasks(client, target) }
+}
+
+/** A mutation response can fill an older snapshot, but never lower a revision. */
+export function retainTaskRevision(client: QueryClient, target: Target, updated: Task): Task {
+  const detailKey = taskKeys.detail(target, updated.key)
+  client.setQueryData<TaskDetail>(detailKey, (current) => current && current.task.revision < updated.revision
+    ? { ...current, task: updated } : current)
+  client.setQueriesData<{ tasks: Task[] }>({ queryKey: [...taskKeys.server(target), "list"] }, (page) => page ? {
+    ...page, tasks: page.tasks.map((task) => task.key === updated.key && task.revision < updated.revision ? updated : task),
+  } : page)
+  return client.getQueryData<TaskDetail>(detailKey)?.task ?? updated
 }

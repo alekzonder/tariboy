@@ -36,6 +36,7 @@ export * from "@/components/AliasEditor";
 export * from "@/components/AttachButton";
 export * from "@/components/AuditExportActions";
 export * from "@/components/AuditRow";
+export * from "@/components/CodexApprovalSettings";
 export * from "@/components/ComboField";
 export * from "@/components/CustomerQuestionNotifications";
 export * from "@/components/DaemonBanner";
@@ -51,17 +52,15 @@ export * from "@/components/HostSwitcher";
 export * from "@/components/ImageLayout";
 export * from "@/components/InboxComposer";
 export * from "@/components/IterationAuditLog";
-export * from "@/components/IterationTimeoutControl";
-export * from "@/components/LoopControls";
+export * from "@/components/MaintenanceSettings";
 export * from "@/components/NotesEditor";
 export * from "@/components/PathAutocomplete";
 export * from "@/components/ProxyCallRow";
-export * from "@/components/RetentionPanel";
-export * from "@/components/SecretsPanel";
 export * from "@/components/SendFilesButton";
 export * from "@/components/ShellScriptEditor";
 export * from "@/components/StatusChatHistory";
 export * from "@/components/SupportBundle";
+export * from "@/components/TabPage";
 export * from "@/components/ThemeToggle";
 export * from "@/components/TuiScreen";
 export * from "@/components/theme-provider";
@@ -81,6 +80,7 @@ export * from "@/pages/StoresPage";
 // default-exported component has to be named explicitly or it never reaches
 // the bundle (validate catches this as [BUNDLE_EXPORT]).
 export { default as FileBrowser } from "@/components/FileBrowser";
+export { default as TabPage } from "@/components/TabPage";
 export { default as TerminalsPage } from "@/pages/terminals/TerminalsPage";
 export { default as AgentWorkspace } from "@/pages/agents/AgentWorkspace";
 export { default as TasksWorkspace } from "@/pages/tasks/TasksWorkspace";
@@ -96,6 +96,9 @@ export { default as StoresPage } from "@/pages/StoresPage";
 // source in the preview (that would create a second, unrelated context).
 export { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 export { CustomerQuestionNotificationsContext } from "@/components/customerQuestionNotificationsContext";
+
+export { QueryClientProvider } from "@tanstack/react-query";
+export { createQueryClient } from "@/lib/queryClient";
 
 // Router context for previews of components that use react-router links.
 // Excluded from the component list via cfg.componentSrcMap.

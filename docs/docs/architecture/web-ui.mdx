@@ -448,7 +448,8 @@ server's cached data and shows the access error.
 
 HTTP responses remain authoritative. The task socket opens after HTTP supplies
 its starting sequence. The event adapter combines a burst into one refresh
-cycle, including one notification read. An event during a cycle requests a
+cycle per server and query client, including one notification read. Multiple
+subscribers deduplicate the same event sequence. An event during a cycle requests a
 trailing cycle. Socket frames never replace task records.
 
 Writes cancel competing reads before and after the operation. They then
@@ -456,7 +457,10 @@ invalidate the same server's task queries, so lists, details, history,
 notifications, and workflows refresh together. An optimistic tree move restores
 the previous rows on failure and reads the server again. A rejected save keeps
 its draft, including after a revision conflict. Writes do not retry or queue
-for an offline host.
+for an offline host. WorkflowPanel owns workflow-action refreshes; its parent
+does not start a second cycle. A successful notification-read write cancels
+intervening inbox reads before updating the read marker. It marks the inbox
+stale for the next socket, manual, or mount refresh.
 
 For another Tasks reader, reuse its typed query options:
 
