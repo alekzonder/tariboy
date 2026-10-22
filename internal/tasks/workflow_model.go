@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alekzonder/tariboy/internal/tidy"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
 
@@ -121,14 +122,14 @@ func WorkflowScanTargets(t *Task) ([]any, func()) {
 		finishWorkflowFields(t, owner)
 		var step scannedStep
 		if position.Valid {
-			_ = json.Unmarshal([]byte(position.String), &step)
+			tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(position.String), &step))
 		}
 		if position.Valid && step.Total > 0 {
 			t.WorkflowStep = &WorkflowStep{Index: step.Index + 1, Total: step.Total}
 		}
 		var open scannedVisit
 		if visit.Valid {
-			_ = json.Unmarshal([]byte(visit.String), &open)
+			tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(visit.String), &open))
 		}
 		t.WorkflowAttention = workflowAttention(t, open)
 	}

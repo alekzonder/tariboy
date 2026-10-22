@@ -155,7 +155,7 @@ func serveConn(conn net.Conn, h Handler) {
 	// is cleared below on the attach path once we're committed to a
 	// long-lived stream; the one-shot path keeps (and re-sets) it through to
 	// the response write.
-	_ = conn.SetDeadline(time.Now().Add(serverConnTimeout()))
+	_ = conn.SetDeadline(time.Now().Add(serverConnTimeout())) // a failure surfaces on the next read or write
 	dec := json.NewDecoder(conn)
 	var req Request
 	if err := dec.Decode(&req); err != nil {
@@ -172,10 +172,10 @@ func serveConn(conn net.Conn, h Handler) {
 			return
 		}
 		var p AttachParams
-		_ = json.Unmarshal(req.Params, &p)
+		_ = json.Unmarshal(req.Params, &p) // optional params: defaults apply when absent or malformed
 		// Clear the deadline before the ACK/Attach: the attach stream is
 		// long-lived and must have no deadline once Attach owns the conn.
-		_ = conn.SetDeadline(time.Time{})
+		_ = conn.SetDeadline(time.Time{})                     // clearing the deadline; a failure surfaces on the next I/O
 		writeResp(conn, Response{JSONRPC: "2.0", ID: req.ID}) // ACK
 		defer conn.Close()
 		// dec's internal buffer may already hold bytes read past the
@@ -185,17 +185,14 @@ func serveConn(conn net.Conn, h Handler) {
 		// Strip the framing newline, then replay whatever's left so
 		// Attach sees a contiguous, uncorrupted stream.
 		streamConn := newPrefixedConn(conn, bytes.NewReader(trimEncoderNewline(dec.Buffered())))
-		if err := sh.Attach(streamConn, p); err != nil {
-			// Stream ended; nothing more to write on a raw tunnel.
-			_ = err
-		}
+		_ = sh.Attach(streamConn, p) // stream ended; nothing more to write on a raw tunnel
 		return
 	}
 
 	// One-shot path (existing behavior): bound the round-trip and always
 	// close the conn when done.
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(serverConnTimeout()))
+	_ = conn.SetDeadline(time.Now().Add(serverConnTimeout())) // a failure surfaces on the next read or write
 	resp := Response{JSONRPC: "2.0", ID: req.ID}
 	result, rpcErr := dispatch(h, req)
 	if rpcErr != nil {
@@ -276,7 +273,7 @@ func dispatch(h Handler, req Request) (any, *RPCError) {
 }
 
 func writeResp(conn net.Conn, resp Response) {
-	_ = json.NewEncoder(conn).Encode(resp)
+	_ = json.NewEncoder(conn).Encode(resp) // the peer may have disconnected; nobody can act on it
 }
 
 // Client is a connection to a running shim's JSON-RPC socket.

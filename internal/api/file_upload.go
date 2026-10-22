@@ -1,6 +1,8 @@
 package api
 
 import (
+	"github.com/alekzonder/tariboy/internal/tidy"
+
 	"crypto/rand"
 	"io"
 	"net/http"
@@ -44,8 +46,8 @@ func SaveUploadedFile(baseDir, name string, body io.Reader, maxBytes int64) (res
 	saved := false
 	defer func() {
 		if !saved {
-			_ = root.Remove(path)
-			_ = root.Remove(dir)
+			tidy.Log("best effort: root.Remove", root.Remove(path))
+			tidy.Log("best effort: root.Remove", root.Remove(dir))
 		}
 	}()
 	file, err := root.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)

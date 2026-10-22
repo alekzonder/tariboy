@@ -11,6 +11,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 const maxImageUploadBytes int64 = 256 << 20
@@ -101,7 +102,7 @@ func (s *Server) ListenAndServeTLS() error {
 // second db.Close() returns an error that is ignored).
 func (s *Server) Shutdown(ctx context.Context) error {
 	err := s.http.Shutdown(ctx)
-	_ = s.db.Close()
+	tidy.Close(s.db)
 	return err
 }
 

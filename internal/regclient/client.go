@@ -156,7 +156,7 @@ func decodeErr(resp *http.Response) error {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	_ = json.NewDecoder(resp.Body).Decode(&env)
+	_ = json.NewDecoder(resp.Body).Decode(&env) // best effort: an unparsable error body falls back to the HTTP status
 	if env.Error != nil {
 		return fmt.Errorf("%s: %s", env.Error.Code, env.Error.Message)
 	}

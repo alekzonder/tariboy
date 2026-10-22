@@ -18,6 +18,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/portablearchive"
 	"github.com/alekzonder/tariboy/internal/safefs"
+	"github.com/alekzonder/tariboy/internal/tidy"
 	"gopkg.in/yaml.v3"
 )
 
@@ -113,7 +114,7 @@ func (s Service) PreviewYAML(team string, composeYAML []byte) (Preview, error) {
 	remove := true
 	defer func() {
 		if remove {
-			_ = os.RemoveAll(destination)
+			tidy.RemoveAll(destination)
 		}
 	}()
 	stored, err := json.Marshal(metadata{Team: team, Images: []json.RawMessage{}})
@@ -270,7 +271,7 @@ func (s Service) Preview(ctx context.Context, r io.Reader, compressedSize int64)
 	remove := true
 	defer func() {
 		if remove {
-			_ = os.RemoveAll(destination)
+			tidy.RemoveAll(destination)
 		}
 	}()
 	if manifest.Kind != "team" {

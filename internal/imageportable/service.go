@@ -21,6 +21,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/portablearchive"
 	"github.com/alekzonder/tariboy/internal/safefs"
+	"github.com/alekzonder/tariboy/internal/tidy"
 	"github.com/alekzonder/tariboy/internal/version"
 )
 
@@ -115,7 +116,7 @@ func (s Service) Preview(ctx context.Context, r io.Reader, compressedSize int64)
 	remove := true
 	defer func() {
 		if remove {
-			_ = os.RemoveAll(dest)
+			tidy.RemoveAll(dest)
 		}
 	}()
 	if manifest.Kind != "image-artifact" || len(manifest.Files) != 1 || manifest.Files[0].Path != "image.tar.gz" {
@@ -256,7 +257,7 @@ func (s Service) apply(ctx context.Context, importID, refOverride string) (Resul
 		}
 		previousDigest = manifest.Digest
 		if target.String() == preview.Ref && manifest.Digest == preview.Digest {
-			_ = os.RemoveAll(stage)
+			tidy.RemoveAll(stage)
 			return Result{Ref: target.String(), Digest: manifest.Digest, Reused: true}, nil
 		}
 	}
@@ -272,6 +273,6 @@ func (s Service) apply(ctx context.Context, importID, refOverride string) (Resul
 	if published.Digest != candidate.Digest {
 		return Result{}, errors.New("image portable: installed digest mismatch")
 	}
-	_ = os.RemoveAll(stage)
+	tidy.RemoveAll(stage)
 	return Result{Ref: target.String(), Digest: published.Digest, Reused: targetExists && previousDigest == published.Digest}, nil
 }

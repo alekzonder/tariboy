@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // Publisher is the slice of the bus the scheduler needs.
@@ -122,7 +123,7 @@ func renderTemplate(sch Schedule) bus.Message {
 		Text    string         `json:"text"`
 		Data    map[string]any `json:"data"`
 	}
-	_ = json.Unmarshal([]byte(sch.MessageTemplate), &tpl)
+	tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(sch.MessageTemplate), &tpl))
 	if tpl.Type == "" {
 		tpl.Type = "schedule.fire"
 	}

@@ -673,9 +673,9 @@ func (s *Store) removeTagLocked(name, tag string) (string, bool, error) {
 // makeWritable restores owner write permission on a stored tree so it can be
 // deleted.
 func makeWritable(root string) {
-	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error { // best effort: unreadable entries are skipped and removal reports the failure
 		if d != nil && d.IsDir() {
-			_ = os.Chmod(p, 0o700)
+			_ = os.Chmod(p, 0o700) // best effort: removal reports a still-locked tree
 		}
 		return nil
 	})

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/tasks"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // orphanPoll is how often the worker checks whether a terminated orphan's
@@ -112,7 +113,7 @@ func isRunScript(pid int, resultFile string) bool {
 // environment, or the leader is gone while the group lives on, which keeps its
 // id from being reused.
 func terminateOrphan(pid int, resultFile string) {
-	_ = syscall.Kill(-pid, syscall.SIGTERM)
+	tidy.Log("best effort: syscall.Kill", syscall.Kill(-pid, syscall.SIGTERM))
 	deadline := time.Now().Add(killGrace)
 	for time.Now().Before(deadline) {
 		if errors.Is(syscall.Kill(-pid, 0), syscall.ESRCH) {
@@ -125,6 +126,6 @@ func terminateOrphan(pid int, resultFile string) {
 	}
 	leaderGone := errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
 	if leaderGone || isRunScript(pid, resultFile) {
-		_ = syscall.Kill(-pid, syscall.SIGKILL)
+		tidy.Log("best effort: syscall.Kill", syscall.Kill(-pid, syscall.SIGKILL))
 	}
 }

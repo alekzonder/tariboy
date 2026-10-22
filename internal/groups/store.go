@@ -12,6 +12,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // ErrInvalidName marks a group name that fails agent.ValidName (the shared
@@ -112,7 +113,7 @@ func scanGroup(row rowScanner) (Group, error) {
 		return Group{}, err
 	}
 	if settings != "" && settings != "{}" {
-		_ = json.Unmarshal([]byte(settings), &g.Settings)
+		tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(settings), &g.Settings))
 	}
 	return g, nil
 }

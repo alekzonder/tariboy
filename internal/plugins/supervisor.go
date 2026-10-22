@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // SpawnSpec is everything the runner needs to launch one plugin process.
@@ -95,7 +96,7 @@ func (execRunner) Start(spec SpawnSpec, logw io.Writer) (ProcHandle, error) {
 	}
 	go h.readHandshake(stdout, safe)
 	go func() {
-		_ = cmd.Wait()
+		tidy.Log("best effort: cmd.Wait", cmd.Wait())
 		close(h.done)
 	}()
 	return h, nil
@@ -142,7 +143,7 @@ func (h *execHandle) Stop(grace time.Duration) error {
 	if h.pid <= 0 {
 		return nil
 	}
-	_ = syscall.Kill(-h.pid, syscall.SIGTERM)
+	tidy.Log("best effort: syscall.Kill", syscall.Kill(-h.pid, syscall.SIGTERM))
 	select {
 	case <-h.done:
 		return nil

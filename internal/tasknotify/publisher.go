@@ -11,6 +11,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 type MessagePublisher interface {
@@ -71,8 +72,8 @@ func (p *Publisher) Flush(ctx context.Context) error {
 	for _, row := range pending {
 		subject := map[string]any{}
 		data := map[string]any{}
-		_ = json.Unmarshal([]byte(row.subject), &subject)
-		_ = json.Unmarshal([]byte(row.data), &data)
+		tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(row.subject), &subject))
+		tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(row.data), &data))
 		message, publishErr := p.bus.Publish(bus.Message{
 			IdempotencyKey: row.id,
 			Channel:        row.channel,
@@ -110,7 +111,7 @@ func (p *Publisher) Flush(ctx context.Context) error {
 }
 
 func (p *Publisher) Run(ctx context.Context) {
-	_ = p.Flush(ctx)
+	tidy.Log("best effort: p.Flush", p.Flush(ctx))
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {

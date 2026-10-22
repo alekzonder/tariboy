@@ -2,6 +2,8 @@ package aiproxy
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -56,5 +58,37 @@ func TestMintUnique(t *testing.T) {
 	}
 	if reg.Count() != 100 {
 		t.Fatalf("count = %d", reg.Count())
+	}
+}
+
+func TestRevokeFailingPersistReturnsErrorAndInvalidatesInMemory(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	reg := NewTokenRegistry(nil)
+	tok, err := reg.Mint(Attribution{Agent: "a", Iteration: "a-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok2, err := reg.Mint(Attribution{Agent: "b", Iteration: "b-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Persisting now fails: the parent of the state file is a regular file.
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reg.persistPath = filepath.Join(blocker, "tokens.json")
+	if err := reg.Revoke(tok); err == nil {
+		t.Fatal("Revoke hid the persist failure")
+	}
+	if _, ok := reg.Resolve(tok); ok {
+		t.Fatal("revoked token still valid in memory")
+	}
+	if err := reg.RevokeIteration("b-1"); err == nil {
+		t.Fatal("RevokeIteration hid the persist failure")
+	}
+	if _, ok := reg.Resolve(tok2); ok {
+		t.Fatal("revoked iteration token still valid in memory")
 	}
 }

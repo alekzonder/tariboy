@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 func (s *Admin) requireCustomer(actor Actor) error {
@@ -339,7 +340,7 @@ func (s *Admin) ListEvents(ctx context.Context, actor Actor, key string, after i
 			return nil, err
 		}
 		event.Payload = map[string]any{}
-		_ = json.Unmarshal([]byte(payload), &event.Payload)
+		tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(payload), &event.Payload))
 		out = append(out, event)
 	}
 	return out, rows.Err()

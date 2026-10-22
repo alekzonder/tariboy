@@ -16,6 +16,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/aiproxy/session"
 	"github.com/alekzonder/tariboy/internal/audit"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // WriteZIP writes audit.md for human review and audit.jsonl for lossless
@@ -28,20 +29,20 @@ func WriteZIP(ctx context.Context, dst io.Writer, agentsDir, agent, iteration st
 	zw := zip.NewWriter(dst)
 	markdown, err := createZipFile(zw, "audit.md")
 	if err != nil {
-		_ = zw.Close()
+		tidy.Close(zw)
 		return err
 	}
 	if err := writeMarkdown(ctx, markdown, agentsDir, agent, events, iterations); err != nil {
-		_ = zw.Close()
+		tidy.Close(zw)
 		return err
 	}
 	jsonl, err := createZipFile(zw, "audit.jsonl")
 	if err != nil {
-		_ = zw.Close()
+		tidy.Close(zw)
 		return err
 	}
 	if err := writeJSONL(ctx, jsonl, agentsDir, agent, events, iterations); err != nil {
-		_ = zw.Close()
+		tidy.Close(zw)
 		return err
 	}
 	return zw.Close()

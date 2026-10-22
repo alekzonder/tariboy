@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/teamportable"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // composeArchive writes the portable team archive of a compose file.
@@ -22,13 +23,13 @@ func composeArchive(file, output string, out, errOut io.Writer) int {
 		return 1
 	}
 	if err := teamportable.CreateFromCompose(file, archiveOut); err != nil {
-		_ = archiveOut.Close()
-		_ = os.Remove(output)
+		tidy.Close(archiveOut)
+		tidy.Remove(output)
 		fmt.Fprintf(errOut, "compose archive: %v\n", err)
 		return 1
 	}
 	if err := archiveOut.Close(); err != nil {
-		_ = os.Remove(output)
+		tidy.Remove(output)
 		fmt.Fprintf(errOut, "compose archive: %v\n", err)
 		return 1
 	}

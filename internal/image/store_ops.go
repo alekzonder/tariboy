@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/safefs"
+	"github.com/alekzonder/tariboy/internal/tidy"
 
 	"github.com/alekzonder/tariboy/internal/refstore"
 )
@@ -221,7 +222,7 @@ func unpackReplacing(archivePath string, ref Ref, destDir string) (err error) {
 	}
 	defer func() {
 		if err != nil {
-			_ = os.RemoveAll(stage)
+			tidy.RemoveAll(stage)
 		}
 	}()
 	if err := unpackArchive(archivePath, ref, stage); err != nil {

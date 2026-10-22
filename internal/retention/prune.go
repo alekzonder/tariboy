@@ -340,7 +340,7 @@ func (p *Pruner) archive(id, dir, dest string) error {
 
 func dirSize(dir string) int64 {
 	var n int64
-	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error { // size is advisory: unreadable entries count as zero
 		if err == nil && !info.IsDir() {
 			n += info.Size()
 		}

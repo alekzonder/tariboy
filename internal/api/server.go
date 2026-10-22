@@ -26,6 +26,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/teamportable"
+	"github.com/alekzonder/tariboy/internal/tidy"
 	"github.com/coder/websocket"
 )
 
@@ -309,13 +310,13 @@ func (s *Server) serveTeamImportPreview(w http.ResponseWriter, r *http.Request) 
 	}
 	planner, ok := s.reg.Get("team.import.archive.plan")
 	if !ok {
-		_ = os.RemoveAll(preview.StagedDir)
+		tidy.RemoveAll(preview.StagedDir)
 		WriteErr(w, http.StatusInternalServerError, "internal", "team import planner unavailable")
 		return
 	}
 	plan, err := registry.Call(s.cctx, r.Context(), planner, map[string]any{"id": preview.ImportID})
 	if err != nil {
-		_ = os.RemoveAll(preview.StagedDir)
+		tidy.RemoveAll(preview.StagedDir)
 		WriteErr(w, http.StatusBadRequest, "bad_compose", err.Error())
 		return
 	}
@@ -654,7 +655,7 @@ func (s *Server) serveTerminal(w http.ResponseWriter, r *http.Request) {
 		if typ == websocket.MessageText {
 			var m struct{ Cols, Rows int }
 			if json.Unmarshal(data, &m) == nil && m.Cols > 0 && m.Rows > 0 {
-				_ = s.cctx.Control.Resize(name, m.Cols, m.Rows)
+				tidy.Log("best effort: s.cctx.Control.Resize", s.cctx.Control.Resize(name, m.Cols, m.Rows))
 			}
 			continue
 		}
@@ -857,7 +858,7 @@ func (s *Server) bound(hs *http.Server, handler http.Handler, ln net.Listener) f
 		s.serveMu.Lock()
 		if s.stopping {
 			s.serveMu.Unlock()
-			_ = ln.Close()
+			tidy.Close(ln)
 			return nil
 		}
 		hs.Handler = handler
@@ -1051,14 +1052,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	listeners := s.listeners
 	s.serveMu.Unlock()
 	if webSrv != nil {
-		_ = webSrv.Shutdown(ctx)
+		tidy.Log("best effort: webSrv.Shutdown", webSrv.Shutdown(ctx))
 	}
 	err := s.http.Shutdown(ctx)
 	// http.Server.Shutdown closes only the listeners it serves; also release
 	// the ones bound but never served. Closing after Shutdown makes a Serve
 	// that is still starting see ErrServerClosed, not a closed listener.
 	for _, ln := range listeners {
-		_ = ln.Close()
+		tidy.Close(ln)
 	}
 	return err
 }

@@ -149,23 +149,28 @@ func (t *TokenRegistry) SetTaskIfEmpty(key, taskID, epicID string) (int, bool) {
 	return len(matched), changed
 }
 
-func (t *TokenRegistry) Revoke(token string) {
+// Revoke removes token from memory unconditionally (fail closed) and returns
+// the error from persisting the removal. A persist failure means a restart can
+// bring the revoked token back from disk, so callers must report it.
+func (t *TokenRegistry) Revoke(token string) error {
 	t.mu.Lock()
+	defer t.mu.Unlock()
 	delete(t.tokens, token)
-	_ = t.persistLocked()
-	t.mu.Unlock()
+	return t.persistLocked()
 }
 
 // RevokeIteration removes every lease that attributes requests to iteration.
-func (t *TokenRegistry) RevokeIteration(iteration string) {
+// Like Revoke, the in-memory removal is unconditional and the persist error is
+// returned.
+func (t *TokenRegistry) RevokeIteration(iteration string) error {
 	t.mu.Lock()
+	defer t.mu.Unlock()
 	for token, attr := range t.tokens {
 		if attr.Iteration == iteration {
 			delete(t.tokens, token)
 		}
 	}
-	_ = t.persistLocked()
-	t.mu.Unlock()
+	return t.persistLocked()
 }
 
 func (t *TokenRegistry) Count() int {

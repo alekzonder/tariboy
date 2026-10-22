@@ -1,6 +1,8 @@
 package aiproxy
 
 import (
+	"github.com/alekzonder/tariboy/internal/tidy"
+
 	"context"
 	"log/slog"
 	"sync/atomic"
@@ -89,18 +91,18 @@ func (i *Ingester) Run(ctx context.Context) {
 		case <-ctx.Done():
 			// Drain what is buffered, then flush and return.
 			i.drain(&batch)
-			_ = flush()
+			tidy.Log("best effort: flush", flush())
 			return
 		case r := <-i.ch:
 			batch = append(batch, r)
 			if len(batch) >= ingestFlushN {
-				_ = flush()
+				tidy.Log("best effort: flush", flush())
 			}
 		case done := <-i.flush:
 			i.drain(&batch)
 			done <- flush()
 		case <-tk.C:
-			_ = flush()
+			tidy.Log("best effort: flush", flush())
 		}
 	}
 }

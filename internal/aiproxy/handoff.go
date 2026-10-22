@@ -1,6 +1,8 @@
 package aiproxy
 
 import (
+	"github.com/alekzonder/tariboy/internal/tidy"
+
 	"encoding/json"
 	"fmt"
 	"io"
@@ -52,8 +54,8 @@ func (t *TokenRegistry) persistLocked() error {
 	}
 	tmpName := tmp.Name()
 	cleanup := func() {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
+		tidy.Close(tmp)
+		tidy.Remove(tmpName)
 	}
 	if err := tmp.Chmod(0o600); err != nil {
 		cleanup()
@@ -70,11 +72,11 @@ func (t *TokenRegistry) persistLocked() error {
 		return fmt.Errorf("sync AI proxy handoff temporary file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
+		tidy.Remove(tmpName)
 		return fmt.Errorf("close AI proxy handoff temporary file: %w", err)
 	}
 	if err := os.Rename(tmpName, t.persistPath); err != nil {
-		_ = os.Remove(tmpName)
+		tidy.Remove(tmpName)
 		return fmt.Errorf("publish AI proxy handoff state: %w", err)
 	}
 	parent, err := os.Open(dir)

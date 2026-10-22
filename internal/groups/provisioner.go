@@ -8,6 +8,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // ProvisionerConfig wires the provisioner to the group store, the agent store
@@ -215,7 +216,7 @@ func (p *Provisioner) Rename(oldName, newName string) error {
 	rollbackDir := true
 	defer func() {
 		if rollbackDir {
-			_ = os.Rename(newRoot, oldRoot)
+			tidy.Log("best effort: os.Rename", os.Rename(newRoot, oldRoot))
 		}
 	}()
 	tx, err := p.groups.db.Begin()
@@ -226,7 +227,7 @@ func (p *Provisioner) Rename(oldName, newName string) error {
 		_, err = tx.Exec(`UPDATE agents SET "group"=? WHERE "group"=?`, newName, oldName)
 	}
 	if err != nil {
-		_ = tx.Rollback()
+		tidy.Log("best effort: tx.Rollback", tx.Rollback())
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -243,10 +244,10 @@ func (p *Provisioner) Rename(oldName, newName string) error {
 		if err := p.unsubscribeFrom(member.Name, bus.GroupDirect(oldName, member.Name)); err != nil {
 			return err
 		}
-		_ = p.bus.DeleteChannel(bus.GroupDirect(oldName, member.Name))
+		tidy.Log("best effort: p.bus.DeleteChannel", p.bus.DeleteChannel(bus.GroupDirect(oldName, member.Name)))
 	}
-	_ = p.bus.DeleteChannel(bus.GroupBroadcast(oldName))
-	_ = p.bus.DeleteChannel(bus.GroupInbox(oldName))
+	tidy.Log("best effort: p.bus.DeleteChannel", p.bus.DeleteChannel(bus.GroupBroadcast(oldName)))
+	tidy.Log("best effort: p.bus.DeleteChannel", p.bus.DeleteChannel(bus.GroupInbox(oldName)))
 	return p.Reconcile(newName)
 }
 

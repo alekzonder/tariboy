@@ -23,6 +23,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/stores"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 var gitCommitPattern = regexp.MustCompile(`^[0-9a-fA-F]{7,64}$`)
@@ -533,7 +534,7 @@ func imageLs() registry.Command {
 				for rows.Next() {
 					var name, currentRef, pendingRef string
 					if scanErr := rows.Scan(&name, &currentRef, &pendingRef); scanErr != nil {
-						_ = rows.Close()
+						tidy.Close(rows)
 						return nil, scanErr
 					}
 					currentAgents[currentRef] = append(currentAgents[currentRef], name)
@@ -542,7 +543,7 @@ func imageLs() registry.Command {
 					}
 				}
 				if rowsErr := rows.Err(); rowsErr != nil {
-					_ = rows.Close()
+					tidy.Close(rows)
 					return nil, rowsErr
 				}
 				if closeErr := rows.Close(); closeErr != nil {
