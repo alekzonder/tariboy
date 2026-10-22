@@ -345,6 +345,43 @@ transcripts are sensitive data and support bundles intentionally exclude them.
   it. `--web-addr` remains a deprecated compatibility alias.
 - `--log-level`, `--version`.
 
+## Command registry
+
+Every operator command is one `registry.Command` in `internal/commands`. The
+CLI parser, the daemon HTTP router, `--help-json` and `/api/openapi.json` are
+all derived from it.
+
+- **Arguments are bound once.** `registry.Call` runs `registry.Bind` before a
+  handler: a missing required argument is answered `400 missing_param`, and a
+  value of the wrong type (`"abc"` for a number, a number for a string) is
+  answered `400 invalid_param`. The HTTP router, the CLI, plugin commands and
+  internal callers all go through it. An empty query value such as `?limit=`
+  counts as omitted for a number or a boolean. An argument with an OpenAPI
+  `Schema` keeps the shape it was sent in, and undeclared keys pass through.
+- **Handlers read typed values.** A handler receives `registry.Request` with
+  the transport context and the bound `Params`, and reads them through the
+  accessors in `internal/registry/params.go` (`String`, `Trimmed`, `Int`,
+  `Bool`, `Strings`, `Has`, `Decode` and the optional forms). A guard test
+  keeps raw map assertions and local coercion helpers out of
+  `internal/commands`.
+- **Errors map once.** `internal/api/errors.go` maps a domain error to its
+  HTTP answer for both the operator API and the per-agent capability socket:
+  `api.UserError` and `*tasks.Error` carry their own status, a parameter error
+  is `400`, not-found sentinels are `404`, script state conflicts are `409`.
+  Any other error is `500 internal` with a fixed text, and its detail goes only
+  to the daemon log. Both servers decode JSON bodies with the same size limit
+  and a fixed `bad_json` text.
+- **Some commands run in the CLI.** A command with `Local` runs in the CLI
+  process instead of over HTTP: `daemon start|stop|restart|status|logs`,
+  `update` and the `compose` verbs. `daemon status` also keeps its HTTP route.
+  `AbsPathArgs` names the path arguments the CLI makes absolute, and
+  `ExitCodeFrom` derives the CLI exit code from a result.
+
+Native task commands have one more table: `internal/tasks/wire.go` declares
+each task action's request struct, CLI words, flags and operator route. The
+`ttasks` parser, the operator HTTP decoder and the agent socket decoder are
+all built from it, so a new flag is one tagged field.
+
 ## Version reporting
 
 Every HTTP response from the daemon — the operator API and per-agent capability

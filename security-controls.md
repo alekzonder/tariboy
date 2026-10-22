@@ -35,6 +35,13 @@ persisted `otlp_endpoint` daemon setting.
   uploads, queue secrets (512 KiB), and the two text-file editors (the agent
   file editor and image source files), whose limit fits their largest file
   after JSON escaping. The agent tools API limits every body to 1 MiB.
+- The operator API and the agent tools API map a domain error to an HTTP
+  status and code in one place, so both give the same answer. For example, an
+  unknown script is 404 `not_found` and an active script is 409
+  `script_active` on both. Any other error is HTTP 500 `internal` with the
+  fixed text "internal error, see daemon log", and its detail goes only to the
+  daemon log. A body that is not valid JSON gets 400 `bad_json` with a fixed
+  text, not the text of the JSON decoder.
 - Every websocket route (Tasks, message and agent-state hints, and the agent
   terminal) checks the browser `Origin` when the request has no bearer token:
   only the web listener's allowed origins above may open it, and any other
@@ -251,7 +258,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.90.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.91.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

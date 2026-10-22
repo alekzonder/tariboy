@@ -13,8 +13,9 @@ blume-panel-tabs pre.astro-code{background:0 0!important;border:0!important;bord
 convenience alias you define yourself, e.g. <code>alias sa=tariboy</code>; the build
 ships no such symlink), run by a
 human or CI against the daemon. Global flags: <code>--json</code>, <code>--help</code>,
-<code>--help-json</code>, <code>--version</code>. This is the authoritative list, generated from the
-binary’s registry (<code>tariboy --help-json</code>).</li>
+<code>--help-json</code>, <code>--version</code>. <code>--json</code> counts as the global flag wherever a
+flag may appear, but not as the value of another flag. The list below is
+generated from the binary’s registry (<code>tariboy --help-json</code>).</li>
 <li><strong>Agent capability scripts</strong> — the applicable packaged skill’s
 <code>scripts/*.sh</code> launcher, run <em>inside</em> an agent over <code>$TARIBOY_TOOLS_SOCKET</code>.</li>
 <li><strong>Native Tasks</strong> — <code>tariboy-tasks</code>, installed as <code>ttasks</code>, runs shared task
@@ -31,63 +32,219 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 </thead>
 <tbody>
 <tr>
-<td><code>tariboy agent exec</code></td>
+<td><code>tariboy agent alias get NAME</code></td>
+<td>Read the agent display alias</td>
+</tr>
+<tr>
+<td><code>tariboy agent alias set NAME</code></td>
+<td>Get or set the agent display alias (omit value to read, empty to clear)</td>
+</tr>
+<tr>
+<td><code>tariboy agent budget get NAME</code></td>
+<td>Show an agent’s calendar USD budget</td>
+</tr>
+<tr>
+<td><code>tariboy agent budget set NAME HOUR-USD DAY-USD WEEK-USD MONTH-USD</code></td>
+<td>Set an agent’s calendar USD budget</td>
+</tr>
+<tr>
+<td><code>tariboy agent color get NAME</code></td>
+<td>Read the agent accent color</td>
+</tr>
+<tr>
+<td><code>tariboy agent color set NAME</code></td>
+<td>Get or set the agent accent color (omit value to read, empty to clear)</td>
+</tr>
+<tr>
+<td><code>tariboy agent cwd NAME</code></td>
+<td>Get or set the agent working directory (omit value to read, empty to clear); applies next iteration</td>
+</tr>
+<tr>
+<td><code>tariboy agent effort NAME</code></td>
+<td>Get or set the agent effort (omit value to read); applies next iteration</td>
+</tr>
+<tr>
+<td><code>tariboy agent exec NAME</code></td>
 <td>Run a manual iteration now, with an optional one-shot prompt</td>
 </tr>
 <tr>
-<td><code>tariboy agent inspect</code></td>
+<td><code>tariboy agent file create NAME PATH</code></td>
+<td>Create a file or folder in an agent’s cwd (jailed)</td>
+</tr>
+<tr>
+<td><code>tariboy agent file delete NAME PATH</code></td>
+<td>Delete a file or folder in an agent’s cwd (jailed)</td>
+</tr>
+<tr>
+<td><code>tariboy agent file list NAME</code></td>
+<td>List a directory in an agent’s cwd (jailed)</td>
+</tr>
+<tr>
+<td><code>tariboy agent file read NAME PATH</code></td>
+<td>Read a file from an agent’s cwd (text; binary/large =&gt; marker)</td>
+</tr>
+<tr>
+<td><code>tariboy agent file rename NAME FROM TO</code></td>
+<td>Rename/move a file within an agent’s cwd (jailed)</td>
+</tr>
+<tr>
+<td><code>tariboy agent file write NAME PATH CONTENT</code></td>
+<td>Overwrite/save a file in an agent’s cwd (jailed)</td>
+</tr>
+<tr>
+<td><code>tariboy agent goal-delivery-cooldown NAME SECONDS</code></td>
+<td>Set the Goal delivery cooldown</td>
+</tr>
+<tr>
+<td><code>tariboy agent goal-enabled NAME</code></td>
+<td>Enable or disable Native Task goal selection</td>
+</tr>
+<tr>
+<td><code>tariboy agent goal-wait-customer-timeout NAME</code></td>
+<td>Set the Goal customer-wait grace period</td>
+</tr>
+<tr>
+<td><code>tariboy agent harness NAME</code></td>
+<td>Get or set the agent harness type (omit value to read); restart the agent to apply</td>
+</tr>
+<tr>
+<td><code>tariboy agent image cancel NAME</code></td>
+<td>Cancel a pending agent image</td>
+</tr>
+<tr>
+<td><code>tariboy agent image set NAME IMAGE</code></td>
+<td>Select an image for the agent’s next iteration</td>
+</tr>
+<tr>
+<td><code>tariboy agent image status NAME</code></td>
+<td>Show current, pending, and next agent image</td>
+</tr>
+<tr>
+<td><code>tariboy agent inbox clear NAME</code></td>
+<td>Physically clear an agent’s pending inbox queue</td>
+</tr>
+<tr>
+<td><code>tariboy agent inbox ls NAME</code></td>
+<td>List an agent’s inbox (operator), newest first</td>
+</tr>
+<tr>
+<td><code>tariboy agent inbox processed NAME ID</code></td>
+<td>Mark an inbox message processed (operator ack)</td>
+</tr>
+<tr>
+<td><code>tariboy agent inbox reply NAME ID</code></td>
+<td>Reply to an inbox message (operator); auto-processes the row</td>
+</tr>
+<tr>
+<td><code>tariboy agent inbox requeue NAME ID</code></td>
+<td>Requeue a DLQ’d inbox message (operator)</td>
+</tr>
+<tr>
+<td><code>tariboy agent inspect NAME</code></td>
 <td>Show one agent’s full config</td>
 </tr>
 <tr>
-<td><code>tariboy agent kill</code></td>
+<td><code>tariboy agent interactive NAME</code></td>
+<td>Get or set interactive mode (bool); restart the agent to apply</td>
+</tr>
+<tr>
+<td><code>tariboy agent kill NAME</code></td>
 <td>Kill the current iteration via its shim</td>
+</tr>
+<tr>
+<td><code>tariboy agent messages batch NAME VALUE</code></td>
+<td>Set the agent messages batch</td>
+</tr>
+<tr>
+<td><code>tariboy agent messages max-queue NAME VALUE</code></td>
+<td>Set the agent messages max queue</td>
+</tr>
+<tr>
+<td><code>tariboy agent model NAME</code></td>
+<td>Get or set the agent model (omit value to read); applies next iteration</td>
+</tr>
+<tr>
+<td><code>tariboy agent notes get NAME</code></td>
+<td>Read the agent notes</td>
+</tr>
+<tr>
+<td><code>tariboy agent notes set NAME</code></td>
+<td>Get or set the agent notes (omit value to read, empty to clear)</td>
 </tr>
 <tr>
 <td><code>tariboy agent ps</code></td>
 <td>List agents</td>
 </tr>
 <tr>
-<td><code>tariboy agent pull</code></td>
+<td><code>tariboy agent pull NAME PATH</code></td>
 <td>Read a base64 file from an agent’s cwd (used by ‘cp’)</td>
 </tr>
 <tr>
-<td><code>tariboy agent restart</code></td>
+<td><code>tariboy agent reprovision NAME</code></td>
+<td>Re-unpack an agent’s image tree in place and restart its loop, keeping its data</td>
+</tr>
+<tr>
+<td><code>tariboy agent restart NAME</code></td>
 <td>Restart an agent and run one iteration now</td>
 </tr>
 <tr>
-<td><code>tariboy agent rm</code></td>
+<td><code>tariboy agent rm NAME</code></td>
 <td>Remove an agent (stop it first, or –force)</td>
 </tr>
 <tr>
-<td><code>tariboy agent run</code></td>
-<td>Create and start an agent from an image (image:tag); interactive by default, <code>--interactive=false</code> for headless</td>
+<td><code>tariboy agent run IMAGE</code></td>
+<td>Create an agent from an image (image:tag); starts stopped — enable with ‘agent start’</td>
 </tr>
 <tr>
-<td><code>tariboy agent screen</code></td>
+<td><code>tariboy agent screen NAME</code></td>
 <td>Capture the interactive screen (tmux capture-pane)</td>
 </tr>
 <tr>
-<td><code>tariboy agent send-keys</code></td>
-<td>Send keys into the interactive session (tmux send-keys)</td>
+<td><code>tariboy agent send-keys NAME</code></td>
+<td>Send keys into the interactive session (raw items, or a line+Enter)</td>
 </tr>
 <tr>
-<td><code>tariboy agent start</code></td>
+<td><code>tariboy agent shell-script get NAME</code></td>
+<td>Read an agent shell script</td>
+</tr>
+<tr>
+<td><code>tariboy agent shell-script set NAME</code></td>
+<td>Set an agent shell script</td>
+</tr>
+<tr>
+<td><code>tariboy agent start NAME</code></td>
 <td>Start (enable) an agent’s loop</td>
 </tr>
 <tr>
-<td><code>tariboy agent status history</code></td>
-<td>List newest-first status messages from the audit log, including each event’s iteration ID when present</td>
+<td><code>tariboy agent status history NAME</code></td>
+<td>List an agent’s status-message history (from the audit log)</td>
 </tr>
 <tr>
-<td><code>tariboy agent status show</code></td>
+<td><code>tariboy agent status show NAME</code></td>
 <td>Show one agent’s runtime status</td>
 </tr>
 <tr>
-<td><code>tariboy agent stop</code></td>
+<td><code>tariboy agent stop NAME</code></td>
 <td>Stop an agent’s loop (current iteration lives)</td>
 </tr>
 <tr>
-<td><code>tariboy backup</code></td>
+<td><code>tariboy agent subscribe NAME CHANNEL</code></td>
+<td>Subscribe an agent to a channel (operator)</td>
+</tr>
+<tr>
+<td><code>tariboy agent subscriptions NAME</code></td>
+<td>List the channels one agent is subscribed to</td>
+</tr>
+<tr>
+<td><code>tariboy agent unsubscribe NAME CHANNEL</code></td>
+<td>Unsubscribe an agent from a channel (operator)</td>
+</tr>
+<tr>
+<td><code>tariboy agent usage NAME</code></td>
+<td>Per-agent AI usage: grouped rows + time-bucketed series</td>
+</tr>
+<tr>
+<td><code>tariboy backup TARGET</code></td>
 <td>Back up an agent (or ‘all’) to a portable tar.gz</td>
 </tr>
 <tr>
@@ -103,7 +260,7 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 <td>Show current spend vs limit for each budget</td>
 </tr>
 <tr>
-<td><code>tariboy channel inspect</code></td>
+<td><code>tariboy channel inspect CHANNEL</code></td>
 <td>Show a channel’s kind and message count</td>
 </tr>
 <tr>
@@ -111,95 +268,219 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 <td>List channels</td>
 </tr>
 <tr>
-<td><code>tariboy channel tail</code></td>
+<td><code>tariboy channel tail CHANNEL</code></td>
 <td>Print recent messages on a channel (-f to follow)</td>
+</tr>
+<tr>
+<td><code>tariboy channel watches CHANNEL</code></td>
+<td>List a channel’s distinct watches (watch, params, subscribers)</td>
+</tr>
+<tr>
+<td><code>tariboy chat create ID</code></td>
+<td>Create a chat and put the customer and the named principals in it</td>
+</tr>
+<tr>
+<td><code>tariboy chat join CHAT PRINCIPAL</code></td>
+<td>Add a principal to a chat</td>
+</tr>
+<tr>
+<td><code>tariboy chat leave CHAT PRINCIPAL</code></td>
+<td>Remove a principal from a chat, keeping its outstanding deliveries</td>
+</tr>
+<tr>
+<td><code>tariboy chat ls</code></td>
+<td>List the customer’s chats, most recently active first</td>
+</tr>
+<tr>
+<td><code>tariboy chat messages AGENT</code></td>
+<td>Read one chat, oldest first, by chat id or agent name</td>
+</tr>
+<tr>
+<td><code>tariboy chat participants CHAT</code></td>
+<td>List the principals taking part in a chat</td>
+</tr>
+<tr>
+<td><code>tariboy chat read AGENT</code></td>
+<td>Mark a chat read up to a message timestamp, by chat id or agent name</td>
+</tr>
+<tr>
+<td><code>tariboy chat unanswered CHAT</code></td>
+<td>List the chat messages a principal has not answered yet</td>
 </tr>
 <tr>
 <td><code>tariboy compose archive</code></td>
 <td>Create a compose-only portable team archive; transfer runnable images separately</td>
 </tr>
 <tr>
+<td><code>tariboy compose build</code></td>
+<td>Build the file’s images</td>
+</tr>
+<tr>
+<td><code>tariboy compose down</code></td>
+<td>Remove the file’s agents and groups; –volumes also deletes their data</td>
+</tr>
+<tr>
+<td><code>tariboy compose exec MEMBER [PROMPT...]</code></td>
+<td>Run an iteration of one of the file’s agents now, with an optional prompt</td>
+</tr>
+<tr>
 <td><code>tariboy compose import</code></td>
 <td>Preview and import compose-only team/runtime configuration</td>
 </tr>
 <tr>
-<td><code>tariboy files upload</code></td>
-<td>Upload up to 16 MiB of base64 content to the server and return its absolute path</td>
+<td><code>tariboy compose kill [MEMBERS...]</code></td>
+<td>Kill the current iteration of the file’s agents, or the named agents and groups</td>
 </tr>
 <tr>
-<td><code>tariboy cp</code></td>
-<td>Stream a file up to 1 GiB to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST</td>
+<td><code>tariboy compose logs [MEMBERS...]</code></td>
+<td>Print recent events of the file’s agents, or the named agents and groups</td>
+</tr>
+<tr>
+<td><code>tariboy compose ps</code></td>
+<td>List the file’s agents and their live state</td>
+</tr>
+<tr>
+<td><code>tariboy compose restart [MEMBERS...]</code></td>
+<td>Restart the file’s agents, or the named agents and groups</td>
+</tr>
+<tr>
+<td><code>tariboy compose rm [MEMBERS...]</code></td>
+<td>Remove the file’s stopped agents, or the named agents and groups</td>
+</tr>
+<tr>
+<td><code>tariboy compose start [MEMBERS...]</code></td>
+<td>Start the file’s agents, or the named agents and groups</td>
+</tr>
+<tr>
+<td><code>tariboy compose status</code></td>
+<td>Compare the file with the daemon and report drift</td>
+</tr>
+<tr>
+<td><code>tariboy compose stop [MEMBERS...]</code></td>
+<td>Stop the file’s agents, or the named agents and groups</td>
+</tr>
+<tr>
+<td><code>tariboy compose up</code></td>
+<td>Build, create and start the file’s images, groups and agents; start the daemon first</td>
+</tr>
+<tr>
+<td><code>tariboy context get NAME</code></td>
+<td>Read the agent’s CONTEXT.md</td>
+</tr>
+<tr>
+<td><code>tariboy context set NAME</code></td>
+<td>Overwrite the agent’s CONTEXT.md</td>
+</tr>
+<tr>
+<td><code>tariboy cp SRC</code></td>
+<td>Upload a file to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST</td>
+</tr>
+<tr>
+<td><code>tariboy daemon agent-shell-script get</code></td>
+<td>Read the global agent shell script</td>
+</tr>
+<tr>
+<td><code>tariboy daemon agent-shell-script set</code></td>
+<td>Set the global agent shell script</td>
 </tr>
 <tr>
 <td><code>tariboy daemon config get</code></td>
 <td>Read daemon config (all keys, or one with –key)</td>
 </tr>
 <tr>
-<td><code>tariboy daemon config set</code></td>
+<td><code>tariboy daemon config set KEY VALUE</code></td>
 <td>Set a daemon config key (runtime-mutable)</td>
+</tr>
+<tr>
+<td><code>tariboy daemon logs</code></td>
+<td>Tail ~/.tariboyd/tariboyd.log</td>
 </tr>
 <tr>
 <td><code>tariboy daemon reindex</code></td>
 <td>Rebuild ai_requests metadata from proxy-transcript.jsonl files</td>
 </tr>
 <tr>
-<td><code>tariboy daemon status</code></td>
-<td>Show daemon version, uptime, base directory and missing host tools</td>
+<td><code>tariboy daemon restart</code></td>
+<td>Restart the daemon (stop then start)</td>
 </tr>
 <tr>
-<td><code>tariboy group assign</code></td>
+<td><code>tariboy daemon start</code></td>
+<td>Start tariboyd detached (no-op if already running)</td>
+</tr>
+<tr>
+<td><code>tariboy daemon status</code></td>
+<td>Show whether the daemon runs (exit 0) or is stopped (exit 1); –json prints its full status</td>
+</tr>
+<tr>
+<td><code>tariboy daemon stop</code></td>
+<td>Stop the daemon (SIGTERM, then SIGKILL on timeout)</td>
+</tr>
+<tr>
+<td><code>tariboy files upload NAME CONTENT</code></td>
+<td>Upload a file to the server and return its absolute path</td>
+</tr>
+<tr>
+<td><code>tariboy fs list</code></td>
+<td>List directories under the daemon filesystem root ($HOME-jailed)</td>
+</tr>
+<tr>
+<td><code>tariboy group assign NAME AGENT</code></td>
 <td>Assign an agent to a group (empty group leaves)</td>
 </tr>
 <tr>
-<td><code>tariboy group create</code></td>
+<td><code>tariboy group create NAME</code></td>
 <td>Create (or update) a group with an optional lead</td>
 </tr>
 <tr>
-<td><code>tariboy group inspect</code></td>
+<td><code>tariboy group inspect NAME</code></td>
 <td>Show a group’s lead, members, channels and shared dir</td>
+</tr>
+<tr>
+<td><code>tariboy group lead set NAME LEAD</code></td>
+<td>Set a group’s lead to a current member</td>
 </tr>
 <tr>
 <td><code>tariboy group ls</code></td>
 <td>List groups (name/lead/member count)</td>
 </tr>
 <tr>
-<td><code>tariboy group rm</code></td>
+<td><code>tariboy group member rm NAME AGENT</code></td>
+<td>Remove an agent from a group without deleting it</td>
+</tr>
+<tr>
+<td><code>tariboy group rename NAME NEW-NAME</code></td>
+<td>Rename a group without deleting its agents</td>
+</tr>
+<tr>
+<td><code>tariboy group rm NAME</code></td>
 <td>Remove a group (detach members, delete channels; –volumes drops the shared dir)</td>
 </tr>
 <tr>
 <td><code>tariboy harness codex-approval get</code></td>
-<td>Show how this daemon starts codex: <code>yolo</code> (default, <code>--yolo</code>) or <code>approve-for-me</code> (<code>--approve-for-me</code>)</td>
+<td>Read the codex approval mode of this daemon (yolo|approve-for-me)</td>
 </tr>
 <tr>
 <td><code>tariboy harness codex-approval set MODE</code></td>
-<td>Set the codex approval mode (<code>yolo</code> or <code>approve-for-me</code>) for this daemon’s next codex iterations</td>
+<td>Set the codex approval mode of this daemon for the next iterations</td>
 </tr>
 <tr>
-<td><code>tariboy harness models TYPE [--refresh]</code></td>
-<td>List the models and efforts the harness CLI on the daemon host supports; CLI failures are reported in <code>error</code></td>
+<td><code>tariboy harness models TYPE</code></td>
+<td>List the models and efforts a harness supports on the daemon host</td>
 </tr>
 <tr>
-<td><code>tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]</code></td>
-<td>Build one ref and move every requested tag onto it, plus a frozen source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); an existing tag is moved, not refused; Git provenance must be paired</td>
+<td><code>tariboy image build</code></td>
+<td>Build an agent image from a Tariboyfile.yaml</td>
 </tr>
 <tr>
-<td><code>tariboy image build STORE/IMAGE [--name NAME] [--tag TAG]</code></td>
-<td>Restore available skill locks and build from the selected daemon’s Store; default name is IMAGE and an omitted tag publishes image_version plus latest, or only latest when unversioned</td>
+<td><code>tariboy image file REF PATH</code></td>
+<td>Read a single file packed into an image</td>
 </tr>
 <tr>
-<td><code>tariboy image validate --path DIR --name NAME [--tag TAG]</code></td>
-<td>Validate the source and target ref without publishing; tag defaults to <code>latest</code>; prints the result and exits 1 when it is invalid</td>
+<td><code>tariboy image files REF</code></td>
+<td>List the files packed into an image</td>
 </tr>
 <tr>
-<td><code>tariboy image version get [--path FILE_OR_DIR]</code></td>
-<td>Print the local image_version; defaults to ./Tariboyfile.yaml; no daemon required</td>
-</tr>
-<tr>
-<td><code>tariboy image version update &lt;major|minor|patch&gt; [--path FILE_OR_DIR]</code></td>
-<td>Increment the local SemVer, reset lower components and remove suffixes; preserve YAML fields/comments</td>
-</tr>
-<tr>
-<td><code>tariboy image inspect</code></td>
+<td><code>tariboy image inspect REF</code></td>
 <td>Show an image manifest</td>
 </tr>
 <tr>
@@ -207,71 +488,131 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 <td>List built agent images</td>
 </tr>
 <tr>
-<td><code>tariboy image prompt</code></td>
+<td><code>tariboy image prompt REF</code></td>
 <td>Print an image’s assembled prompt</td>
 </tr>
 <tr>
 <td><code>tariboy image provenance REF</code></td>
-<td>Show local source and frozen snapshot Git provenance</td>
+<td>Show local image source provenance</td>
 </tr>
 <tr>
-<td><code>tariboy image template</code></td>
-<td>Show the ordered schema-v2 static/runtime template</td>
-</tr>
-<tr>
-<td><code>tariboy image rm</code></td>
+<td><code>tariboy image rm REF</code></td>
 <td>Remove a built image</td>
 </tr>
 <tr>
-<td><code>tariboy iteration inspect</code></td>
-<td>Show one iteration, including its snapshotted image ref, source version, digest, prompt-template hash, and tags</td>
+<td><code>tariboy image source build NAME</code></td>
+<td>Build an image from an editable image source</td>
 </tr>
 <tr>
-<td><code>tariboy iteration logs</code></td>
+<td><code>tariboy image source create NAME</code></td>
+<td>Create an editable image source</td>
+</tr>
+<tr>
+<td><code>tariboy image source file get NAME PATH</code></td>
+<td>Read an editable image source file</td>
+</tr>
+<tr>
+<td><code>tariboy image source files NAME</code></td>
+<td>List editable files in an image source</td>
+</tr>
+<tr>
+<td><code>tariboy image source inspect NAME</code></td>
+<td>Show editable image source metadata</td>
+</tr>
+<tr>
+<td><code>tariboy image source ls</code></td>
+<td>List editable image sources</td>
+</tr>
+<tr>
+<td><code>tariboy image source rm NAME</code></td>
+<td>Remove an editable image source without removing built images</td>
+</tr>
+<tr>
+<td><code>tariboy image source validate NAME</code></td>
+<td>Validate an editable image source</td>
+</tr>
+<tr>
+<td><code>tariboy image template REF</code></td>
+<td>Show an image prompt template</td>
+</tr>
+<tr>
+<td><code>tariboy image validate</code></td>
+<td>Validate an image source directory</td>
+</tr>
+<tr>
+<td><code>tariboy image version get</code></td>
+<td>Print image_version from a local Tariboyfile.yaml</td>
+</tr>
+<tr>
+<td><code>tariboy image version update PART</code></td>
+<td>Bump image_version in a local Tariboyfile.yaml</td>
+</tr>
+<tr>
+<td><code>tariboy iteration extend-timeout NAME ID</code></td>
+<td>Extend a running iteration timeout</td>
+</tr>
+<tr>
+<td><code>tariboy iteration inspect NAME ID</code></td>
+<td>Show one iteration</td>
+</tr>
+<tr>
+<td><code>tariboy iteration logs NAME ID</code></td>
 <td>Print an iteration’s harness logs</td>
 </tr>
 <tr>
-<td><code>tariboy iteration ls</code></td>
-<td>List an agent’s iterations; <code>--tag</code>, <code>--started-after</code> and <code>--started-before</code> narrow the list</td>
+<td><code>tariboy iteration ls NAME</code></td>
+<td>List an agent’s iterations</td>
 </tr>
 <tr>
-<td><code>tariboy iteration tag add</code></td>
+<td><code>tariboy iteration tag add NAME</code></td>
 <td>Add tags to one or more iterations</td>
 </tr>
 <tr>
-<td><code>tariboy iteration tag rm</code></td>
+<td><code>tariboy iteration tag rm NAME</code></td>
 <td>Remove tags from one or more iterations</td>
 </tr>
 <tr>
-<td><code>tariboy iteration tag set</code></td>
+<td><code>tariboy iteration tag set NAME</code></td>
 <td>Replace the tags of one or more iterations</td>
 </tr>
 <tr>
-<td><code>tariboy logs</code></td>
+<td><code>tariboy login REGISTRY</code></td>
+<td>Store a bearer token for a tariboy-store registry</td>
+</tr>
+<tr>
+<td><code>tariboy logs NAME</code></td>
 <td>Stream or print an agent’s events (-f to follow)</td>
 </tr>
 <tr>
-<td><code>tariboy loop hard-timeout</code></td>
+<td><code>tariboy loop ai-stall-timeout NAME</code></td>
+<td>Get or set loop ai-stall-timeout (seconds); omit value to read</td>
+</tr>
+<tr>
+<td><code>tariboy loop hard-timeout NAME</code></td>
 <td>Get or set loop hard-timeout (seconds); omit value to read</td>
 </tr>
 <tr>
-<td><code>tariboy loop interval</code></td>
+<td><code>tariboy loop interval NAME</code></td>
 <td>Get or set loop interval (seconds); omit value to read</td>
 </tr>
 <tr>
-<td><code>tariboy loop on-error</code></td>
+<td><code>tariboy loop max-idle NAME</code></td>
+<td>Get or set loop max-idle (seconds); omit value to read</td>
+</tr>
+<tr>
+<td><code>tariboy loop on-error NAME</code></td>
 <td>Get or set loop on-error policy; omit value to read</td>
 </tr>
 <tr>
-<td><code>tariboy loop on-timeout</code></td>
+<td><code>tariboy loop on-timeout NAME</code></td>
 <td>Get or set loop on-timeout policy; omit value to read</td>
 </tr>
 <tr>
-<td><code>tariboy loop schedule</code></td>
+<td><code>tariboy loop schedule NAME</code></td>
 <td>Get, set or clear the loop schedule (RFC 5545 RRULE, whole minutes); omit value to read</td>
 </tr>
 <tr>
-<td><code>tariboy loop timeout</code></td>
+<td><code>tariboy loop timeout NAME</code></td>
 <td>Get or set loop timeout (seconds); omit value to read</td>
 </tr>
 <tr>
@@ -291,15 +632,23 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 <td>Publish a message to a channel (operator)</td>
 </tr>
 <tr>
-<td><code>tariboy plugin inspect</code></td>
+<td><code>tariboy plugin action NAME ACTION</code></td>
+<td>Invoke a generic action on a running plugin</td>
+</tr>
+<tr>
+<td><code>tariboy plugin contributions</code></td>
+<td>List enabled plugin CLI and settings contributions</td>
+</tr>
+<tr>
+<td><code>tariboy plugin inspect NAME</code></td>
 <td>Show one plugin’s manifest, state and socket</td>
 </tr>
 <tr>
-<td><code>tariboy plugin install</code></td>
+<td><code>tariboy plugin install PATH</code></td>
 <td>Install and start a plugin from a directory with plugin.json</td>
 </tr>
 <tr>
-<td><code>tariboy plugin logs</code></td>
+<td><code>tariboy plugin logs NAME</code></td>
 <td>Show captured plugin stdout/stderr</td>
 </tr>
 <tr>
@@ -307,144 +656,228 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 <td>List installed plugins (name/version/types/state/health)</td>
 </tr>
 <tr>
-<td><code>tariboy plugin rm</code></td>
+<td><code>tariboy plugin restart NAME</code></td>
+<td>Restart a single plugin in place (stop + start) without touching others</td>
+</tr>
+<tr>
+<td><code>tariboy plugin rm NAME</code></td>
 <td>Stop and remove a plugin</td>
 </tr>
 <tr>
-<td><code>tariboy prune</code></td>
+<td><code>tariboy plugin routes NAME</code></td>
+<td>Show a plugin’s external channel routes</td>
+</tr>
+<tr>
+<td><code>tariboy prompt get NAME</code></td>
+<td>Preview the agent’s assembled next-iteration prompt</td>
+</tr>
+<tr>
+<td><code>tariboy prune AGENT</code></td>
 <td>Prune old iterations for an agent now (or ‘all’); –dry-run lists victims</td>
 </tr>
 <tr>
-<td><code>tariboy restore</code></td>
+<td><code>tariboy pull REF</code></td>
+<td>Pull an image from a tariboy-store registry into the local image store</td>
+</tr>
+<tr>
+<td><code>tariboy push REF</code></td>
+<td>Push a local image to a tariboy-store registry</td>
+</tr>
+<tr>
+<td><code>tariboy restore FILE</code></td>
 <td>Restore an agent from a backup tar.gz (optionally under a new name)</td>
 </tr>
 <tr>
-<td><code>tariboy retention get</code></td>
+<td><code>tariboy retention get AGENT</code></td>
 <td>Show the effective retention policy for an agent, with its own override and the default (or ‘default’)</td>
 </tr>
 <tr>
-<td><code>tariboy retention set</code></td>
+<td><code>tariboy retention set AGENT</code></td>
 <td>Set the retention policy for an agent (0 = use the default) or ‘default’ (0 = unlimited)</td>
 </tr>
 <tr>
-<td><code>tariboy schedule ls</code></td>
+<td><code>tariboy schedule ls NAME</code></td>
 <td>List an agent’s schedules (read-only)</td>
 </tr>
 <tr>
-<td><code>tariboy secret ls</code></td>
+<td><code>tariboy script cancel NAME ID</code></td>
+<td>Cancel a script or one run</td>
+</tr>
+<tr>
+<td><code>tariboy script logs NAME ID</code></td>
+<td>Read a bounded script run log tail</td>
+</tr>
+<tr>
+<td><code>tariboy script ls NAME</code></td>
+<td>List an agent’s local scripts</td>
+</tr>
+<tr>
+<td><code>tariboy script rerun NAME ID</code></td>
+<td>Run a stored script now, resuming a stopped schedule</td>
+</tr>
+<tr>
+<td><code>tariboy script rm NAME ID</code></td>
+<td>Remove an inactive script</td>
+</tr>
+<tr>
+<td><code>tariboy script run NAME DESCRIPTION COMMAND</code></td>
+<td>Run a local command once</td>
+</tr>
+<tr>
+<td><code>tariboy script run-get NAME ID</code></td>
+<td>Get one script run</td>
+</tr>
+<tr>
+<td><code>tariboy script runs NAME ID</code></td>
+<td>List a script’s runs</td>
+</tr>
+<tr>
+<td><code>tariboy script schedule NAME DESCRIPTION COMMAND</code></td>
+<td>Schedule a fixed-interval local command</td>
+</tr>
+<tr>
+<td><code>tariboy secret ls NAME</code></td>
 <td>List secret keys (values are never shown)</td>
 </tr>
 <tr>
-<td><code>tariboy secret rm</code></td>
+<td><code>tariboy secret rm NAME KEY</code></td>
 <td>Remove a secret</td>
 </tr>
 <tr>
-<td><code>tariboy secret set</code></td>
+<td><code>tariboy secret set NAME KEY</code></td>
 <td>Set a secret; value from –value or stdin</td>
 </tr>
 <tr>
 <td><code>tariboy store add NAME SOURCE</code></td>
-<td>Register a Git URL or absolute local directory on the daemon host</td>
+<td>Register a local or Git Store</td>
+</tr>
+<tr>
+<td><code>tariboy store auto NAME</code></td>
+<td>Set a Store’s automatic refresh and build policy</td>
 </tr>
 <tr>
 <td><code>tariboy store list</code></td>
-<td>List this daemon’s Store registrations</td>
-</tr>
-<tr>
-<td><code>tariboy store show NAME</code></td>
-<td>Read current images, versions and diagnostics from disk</td>
+<td>List registered Stores</td>
 </tr>
 <tr>
 <td><code>tariboy store refresh NAME</code></td>
-<td>Reset a managed Git clone to its upstream, discarding local changes; fast-forward pull a local Git checkout; or reread a non-Git local directory</td>
-</tr>
-<tr>
-<td><code>tariboy store auto NAME [--interval MINUTES] [--image IMAGE]</code></td>
-<td>Set the automatic refresh-and-build policy; the daemon refreshes every interval and rebuilds the selected images that need an update, and <code>--interval 0</code> disables it</td>
+<td>Refresh a Store</td>
 </tr>
 <tr>
 <td><code>tariboy store remove NAME</code></td>
-<td>Unregister a Store and remove only its managed clone; preserve local sources and built images</td>
+<td>Remove a Store registration</td>
 </tr>
 <tr>
-<td><code>tariboy workflow validate [STORE/NAME] [--path DIR]</code></td>
-<td>Validate a workflow source directory without building it; reports every error with a stable code and path, and exits 1 when the source is invalid</td>
-</tr>
-<tr>
-<td><code>tariboy workflow build [STORE/NAME] [--path DIR]</code></td>
-<td>Validate and publish a workflow image under its <code>workflow_version</code> and <code>latest</code>; an identical rebuild is a no-op, different content for a published version fails with <code>workflow_version_published</code></td>
-</tr>
-<tr>
-<td><code>tariboy workflow ls</code></td>
-<td>List built workflow images, one row per tag</td>
-</tr>
-<tr>
-<td><code>tariboy workflow inspect NAME [TAG]</code></td>
-<td>Show a workflow image manifest; TAG is a tag or full digest and defaults to <code>latest</code></td>
-</tr>
-<tr>
-<td><code>tariboy workflow rm NAME TAG</code></td>
-<td>Remove one tag, and the stored content when no tag remains</td>
-</tr>
-<tr>
-<td><code>tariboy workflow version get [--path FILE_OR_DIR]</code></td>
-<td>Print the local workflow_version; defaults to the current directory; no daemon required</td>
-</tr>
-<tr>
-<td><code>tariboy workflow version update &lt;major|minor|patch&gt; [--path FILE_OR_DIR]</code></td>
-<td>Increment the local SemVer, reset lower components and remove suffixes; no daemon required</td>
-</tr>
-<tr>
-<td><code>ttasks queue create</code></td>
-<td>Create a task queue</td>
+<td><code>tariboy store show NAME</code></td>
+<td>Show a Store and its images</td>
 </tr>
 <tr>
 <td><code>tariboy tasks activity</code></td>
-<td>Summarize work on tasks in a time window (<code>--since</code>, <code>--until</code> RFC3339; <code>--agent</code> for one agent)</td>
+<td>Summarize work on tasks in a time window</td>
+</tr>
+<tr>
+<td><code>tariboy tasks queue create</code></td>
+<td>Create a task queue</td>
+</tr>
+<tr>
+<td><code>tariboy team compose NAME</code></td>
+<td>Render a group as tariboy-compose.yaml</td>
+</tr>
+<tr>
+<td><code>tariboy team import archive apply ID</code></td>
+<td>Build images and create a staged portable team</td>
+</tr>
+<tr>
+<td><code>tariboy team import archive plan ID</code></td>
+<td>Validate and plan a staged portable team import</td>
+</tr>
+<tr>
+<td><code>tariboy team import archive status ID</code></td>
+<td>Inspect portable team import progress</td>
+</tr>
+<tr>
+<td><code>tariboy team import yaml YAML</code></td>
+<td>Preview pasted tariboy-compose.yaml</td>
+</tr>
+<tr>
+<td><code>tariboy transcript NAME ID</code></td>
+<td>Show the AI proxy transcript for an iteration (parsed; ?raw=1 for bytes)</td>
+</tr>
+<tr>
+<td><code>tariboy update</code></td>
+<td>Install a published release over this installer-managed installation</td>
 </tr>
 <tr>
 <td><code>tariboy usage</code></td>
 <td>Aggregate AI usage and cost from ai_requests</td>
 </tr>
 <tr>
-<td><code>tariboy user-prompt get</code></td>
+<td><code>tariboy user-prompt get NAME</code></td>
 <td>Read the agent’s standing user-prompt</td>
 </tr>
 <tr>
-<td><code>tariboy user-prompt set</code></td>
+<td><code>tariboy user-prompt set NAME TEXT</code></td>
 <td>Set the agent’s standing user-prompt</td>
 </tr>
 <tr>
 <td><code>tariboy version</code></td>
-<td>Print the Tariboy version locally without a daemon</td>
+<td>Print the Tariboy version</td>
+</tr>
+<tr>
+<td><code>tariboy workflow build</code></td>
+<td>Build a workflow image from a Workflowfile.yaml</td>
+</tr>
+<tr>
+<td><code>tariboy workflow inspect NAME</code></td>
+<td>Show a workflow image manifest</td>
+</tr>
+<tr>
+<td><code>tariboy workflow ls</code></td>
+<td>List built workflow images</td>
+</tr>
+<tr>
+<td><code>tariboy workflow rm NAME TAG</code></td>
+<td>Remove a workflow image tag, and its content when no tag remains</td>
+</tr>
+<tr>
+<td><code>tariboy workflow validate</code></td>
+<td>Validate a workflow source directory without building it</td>
+</tr>
+<tr>
+<td><code>tariboy workflow version get</code></td>
+<td>Print workflow_version from a local Workflowfile.yaml</td>
+</tr>
+<tr>
+<td><code>tariboy workflow version update PART</code></td>
+<td>Bump workflow_version in a local Workflowfile.yaml</td>
 </tr>
 </tbody>
 </table></div>
-<blockquote>
-<p>Regenerate after adding/removing a command: <code>make build &amp;&amp; ./bin/tariboy --help-json</code>.</p>
-</blockquote>
+<p>A test keeps this table equal to <code>tariboy --help-json</code>. Each row shows the
+command’s required positional arguments; <code>tariboy COMMAND --help</code> lists its
+flags. After adding, removing or renaming a command, regenerate the table:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e; overflow-x: auto;" tabindex="0" data-language="bash" data-icon=""><svg aria-hidden="true" class="blume-lang-icon" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M21.038,4.9l-7.577-4.498C13.009,0.134,12.505,0,12,0c-0.505,0-1.009,0.134-1.462,0.403L2.961,4.9 C2.057,5.437,1.5,6.429,1.5,7.503v8.995c0,1.073,0.557,2.066,1.462,2.603l7.577,4.497C10.991,23.866,11.495,24,12,24 c0.505,0,1.009-0.134,1.461-0.402l7.577-4.497c0.904-0.537,1.462-1.529,1.462-2.603V7.503C22.5,6.429,21.943,5.437,21.038,4.9z M15.17,18.946l0.013,0.646c0.001,0.078-0.05,0.167-0.111,0.198l-0.383,0.22c-0.061,0.031-0.111-0.007-0.112-0.085L14.57,19.29 c-0.328,0.136-0.66,0.169-0.872,0.084c-0.04-0.016-0.057-0.075-0.041-0.142l0.139-0.584c0.011-0.046,0.036-0.092,0.069-0.121 c0.012-0.011,0.024-0.02,0.036-0.026c0.022-0.011,0.043-0.014,0.062-0.006c0.229,0.077,0.521,0.041,0.802-0.101 c0.357-0.181,0.596-0.545,0.592-0.907c-0.003-0.328-0.181-0.465-0.613-0.468c-0.55,0.001-1.064-0.107-1.072-0.917 c-0.007-0.667,0.34-1.361,0.889-1.8l-0.007-0.652c-0.001-0.08,0.048-0.168,0.111-0.2l0.37-0.236 c0.061-0.031,0.111,0.007,0.112,0.087l0.006,0.653c0.273-0.109,0.511-0.138,0.726-0.088c0.047,0.012,0.067,0.076,0.048,0.151 l-0.144,0.578c-0.011,0.044-0.036,0.088-0.065,0.116c-0.012,0.012-0.025,0.021-0.038,0.028c-0.019,0.01-0.038,0.013-0.057,0.009 c-0.098-0.022-0.332-0.073-0.699,0.113c-0.385,0.195-0.52,0.53-0.517,0.778c0.003,0.297,0.155,0.387,0.681,0.396 c0.7,0.012,1.003,0.318,1.01,1.023C16.105,17.747,15.736,18.491,15.17,18.946z M19.143,17.859c0,0.06-0.008,0.116-0.058,0.145 l-1.916,1.164c-0.05,0.029-0.09,0.004-0.09-0.056v-0.494c0-0.06,0.037-0.093,0.087-0.122l1.887-1.129 c0.05-0.029,0.09-0.004,0.09,0.056V17.859z M20.459,6.797l-7.168,4.427c-0.894,0.523-1.553,1.109-1.553,2.187v8.833 c0,0.645,0.26,1.063,0.66,1.184c-0.131,0.023-0.264,0.039-0.398,0.039c-0.42,0-0.833-0.114-1.197-0.33L3.226,18.64 c-0.741-0.44-1.201-1.261-1.201-2.142V7.503c0-0.881,0.46-1.702,1.201-2.142l7.577-4.498c0.363-0.216,0.777-0.33,1.197-0.33 c0.419,0,0.833,0.114,1.197,0.33l7.577,4.498c0.624,0.371,1.046,1.013,1.164,1.732C21.686,6.557,21.12,6.411,20.459,6.797z"></path></svg><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">go</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> test</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ./cmd/tariboy</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> -run</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> TestCommandsDocMatchesHelpJSON</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> -update</span></span></code></pre>
 <h3 id="host-local-commands"><a class="blume-heading-anchor" href="#host-local-commands">Host-local commands</a></h3>
-<p>These verbs never route through the daemon, so they are absent from the
-registry listing above. They act on the host the CLI runs on and work while the
-daemon is down.</p>
-<div class="blume-table-scroll" tabindex="0"><table>
-<thead>
-<tr>
-<th>Command</th>
-<th>Summary</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>tariboy daemon start|stop|restart|status|logs</code></td>
-<td>Control and inspect the local daemon process</td>
-</tr>
-<tr>
-<td><code>tariboy update [VERSION|latest] [--force] [--cleanup [--keep N]]</code></td>
-<td>Install a published release over this installer-managed installation, restart a running daemon, and with <code>--cleanup</code> delete all but the newest N releases (default 5)</td>
-</tr>
-</tbody>
-</table></div>
+<p>Some of the commands above run in the CLI process instead of calling the
+daemon API. They act on the host the CLI runs on and work while the daemon is
+down:</p>
+<ul>
+<li><code>tariboy daemon start|stop|restart|status|logs</code> control and inspect the local
+daemon process. <code>daemon status</code> prints <code>running (pid N, version V)</code> and exits
+0, or prints <code>stopped</code> and exits 1; with <code>--json</code> it prints the daemon’s full
+status, or <code>{"running":false}</code>. The API still serves
+<code>GET /api/daemon/status</code>. <code>daemon logs [-f] [--tail N]</code> prints the last N
+lines (default 200) of <code>~/.tariboyd/tariboyd.log</code>.</li>
+<li><code>tariboy update [VERSION|latest] [--force] [--cleanup [--keep N]]</code> installs a
+published release over this installer-managed installation, restarts a
+running daemon, and with <code>--cleanup</code> deletes all but the newest N releases
+(default 5).</li>
+<li><code>tariboy compose VERB</code> reads a compose file (<code>-f FILE</code>, default
+<code>tariboy-compose.yaml</code>) and drives the daemon API; <code>compose up</code> starts the
+daemon first unless <code>--no-start</code> or <code>TARIBOY_NO_AUTOSTART</code> is set. The
+compose flags may also come before the verb, as in
+<code>tariboy compose -f FILE up</code>.</li>
+</ul>
 <p><code>tariboy update</code> updates only an installer-managed <code>linux-x86_64</code> or
 <code>linux-aarch64</code> installation
 and is described in <a href="/tariboy/docs/remote-hosts#update-a-host-from-its-own-shell">Remote hosts</a>.</p>

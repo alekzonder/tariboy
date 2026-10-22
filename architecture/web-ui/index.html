@@ -959,14 +959,18 @@ width and hidden state persist in the WebView localStorage record
 the removed terminal canvas under <code>terminals:workspace:v1</code>. The 72px gap kept
 for the traffic lights exists only in the Desktop app.</p>
 <h3 id="compact-screens"><a class="blume-heading-anchor" href="#compact-screens">Compact screens</a></h3>
-<p>Below 1024 CSS pixels (Tailwind’s <code>lg</code>, the <code>COMPACT_QUERY</code> of
-<code>useMediaQuery</code>) the window is compact: phones and most tablets. The agent list
-then takes no room beside the island. The titlebar’s sidebar toggle becomes a
-<strong>Open menu</strong> button that opens the same list as a drawer from the left, at
-most 85% of the width. Picking an agent, a server or a team, <strong>New agent</strong>,
+<p>Below 1024 CSS pixels (Tailwind’s <code>lg</code>) the window is compact: phones and
+most tablets. Below 768 CSS pixels (Tailwind’s <code>md</code>, the <code>DRAWER_QUERY</code> of
+<code>useMediaQuery</code>) the agent list takes no room beside the island. The
+titlebar’s sidebar toggle becomes a <strong>Open menu</strong> button that opens the same
+list as a drawer from the left, at most 85% of the width. The drawer opens
+without focus in <strong>Search agents</strong>, so a phone does not raise its keyboard;
+the first Tab moves focus into it. From 768 to 1023 CSS pixels the agent list
+stays a column, and the titlebar’s <strong>Hide agents</strong> / <strong>Show agents</strong> toggle
+collapses it as on a wide window, saved in <code>terminals:sidebar:v1</code>. Picking an agent, a server or a team, <strong>New agent</strong>,
 <strong>Add server</strong>, editing a server or cloning an agent closes it, and so do a tap
 outside, Escape, and any route change, Back included: the drawer belongs to the
-history entry it opened on. A window that grows past the threshold drops it, so
+history entry it opened on. A window that grows past 768 CSS pixels drops it, so
 it does not come back when the tablet turns again. It has no resize handle and
 is never stored:
 the wide layout’s width and hidden state in <code>terminals:sidebar:v1</code> stay as

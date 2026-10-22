@@ -34,6 +34,13 @@ websockets, terminals and model responses stay open for a long time.</li>
 uploads, queue secrets (512 KiB), and the two text-file editors (the agent
 file editor and image source files), whose limit fits their largest file
 after JSON escaping. The agent tools API limits every body to 1 MiB.</li>
+<li>The operator API and the agent tools API map a domain error to an HTTP
+status and code in one place, so both give the same answer. For example, an
+unknown script is 404 <code>not_found</code> and an active script is 409
+<code>script_active</code> on both. Any other error is HTTP 500 <code>internal</code> with the
+fixed text “internal error, see daemon log”, and its detail goes only to the
+daemon log. A body that is not valid JSON gets 400 <code>bad_json</code> with a fixed
+text, not the text of the JSON decoder.</li>
 <li>Every websocket route (Tasks, message and agent-state hints, and the agent
 terminal) checks the browser <code>Origin</code> when the request has no bearer token:
 only the web listener’s allowed origins above may open it, and any other
@@ -230,7 +237,7 @@ any other support-bundle exclusion. See <a href="/tariboy/docs/architecture/ai-p
 audit</a> for its
 runtime lifecycle.</p>
 <h2 id="alpha-signing-and-gatekeeper"><a class="blume-heading-anchor" href="#alpha-signing-and-gatekeeper">Alpha signing and Gatekeeper</a></h2>
-<p><code>0.90.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
+<p><code>0.91.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
 <code>SHA256SUMS</code> before opening it. If Gatekeeper blocks it, Control-click only the
 named <code>/Applications/Tariboy.app</code>, choose <strong>Open</strong>, and confirm.
 If Control-click Open is unavailable, use <strong>System Settings → Privacy &amp;
