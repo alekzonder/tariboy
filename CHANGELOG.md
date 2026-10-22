@@ -1,3 +1,69 @@
+## [0.92.0] - 2026-10-22
+
+### Added
+
+- `agent.run` takes `create_cwd` (`--create-cwd`) and `agent.cwd` takes
+  `create` (`--create`): a missing absolute working directory and its parents
+  are created before validation. The create dialog and the Configuration
+  working directory field have a "Create directory if missing" switch, off by
+  default. Without it a missing directory still fails with `bad_cwd`.
+- The Stores page has an "Add tariboy Store" button that registers
+  `https://github.com/alekzonder/tariboy-store.git` as the Store `tariboy`. It
+  is hidden once a Store with that name or source exists. The documentation
+  now names its images `tariboy/basic`, `tariboy/development` and so on.
+- Workflowfile `watch_spacing` (1s to 10m, default 5s): the watch runs of one
+  workflow start one at a time, spaced apart, instead of all at once.
+- `ttasks activity` (operator-only) summarizes work on tasks in a
+  `--since`/`--until` window, optionally for one `--agent`.
+
+### Changed
+
+- `tariboy tasks …` is now the `ttasks` client in operator mode, with the same
+  commands, flags, output and exit codes. It always uses the daemon socket and
+  ignores `TARIBOY_TOOLS_SOCKET`, so an agent that runs it sees every task and
+  acts as the customer.
+- `compose up` plans every action from one read of the live state and no
+  longer stops at the first failure: dependent actions are skipped and
+  independent resources still converge. It prints one line per resource (ok,
+  changed, failed, skipped) and exits non-zero when any failed. Existing agents
+  now converge image drift (adopted on the next iteration) and harness drift (a
+  single restart after the agent's other changes), and an existing
+  subscription reports ok.
+- Support-bundle redaction decides by the name of each daemon environment
+  variable (policy version 2, `redaction_policy_version` in
+  `diagnostics.json`). The bundle does not export the process environment.
+- Image builds and reads lock one image name at a time, so builds of
+  different images run in parallel.
+- The plugin sink drainer wakes when the bus delivers, with a 5 s fallback
+  retry, instead of polling every 500 ms.
+
+### Fixed
+
+- An iteration whose shim exits without writing a result now finishes as
+  `harness_error` ("shim exited before writing result (see shim.log)")
+  instead of staying running. The shim binds its RPC socket before it starts
+  the harness, and a kill before the harness starts returns "harness not
+  started yet" so callers retry.
+- A failed image unpack leaves the destination as it was. Provision no longer
+  leaves an empty `image/` or stale files, and it removes `.unpack-` leftovers.
+- The file browser containment check works with a filesystem root of `/`.
+- Workflow image tag writes are synced to disk like image tags.
+- A script whose secret map fails stops before it starts, with the error in
+  its run log. Rollback and cleanup failures that were discarded are now
+  logged or returned.
+
+### Security
+
+- Image refs with `.` or `..` as name or tag are refused before anything is
+  written outside the images directory.
+- A bare `..` image bridge path is refused. The agent skill copy and image
+  source import refuse symlinks and FIFOs instead of skipping them or
+  blocking, and walked files are read without following links.
+- Portable archive manifests and workflow image metadata reject trailing data
+  after the JSON value.
+
+[0.92.0]: https://github.com/alekzonder/tariboy/compare/v0.91.0...v0.92.0
+
 ## [0.91.0] - 2026-10-22
 
 ### Changed
