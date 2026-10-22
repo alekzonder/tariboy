@@ -81,10 +81,11 @@ truncates one of those selected files: agent data above 128 MiB is rejected,
 and Desktop bounds a daemon response at 160 MiB.
 
 The collector never includes `PROMPT.md`, model/proxy transcripts,
-`audit.jsonl`, secrets, environment configuration or values (including
-`PATH`), `CONTEXT.md`, workdirs, configured cwd contents, image/plugin state,
+`audit.jsonl`, secrets, environment configuration or values, `CONTEXT.md`, workdirs, configured cwd contents, image/plugin state,
 SSH aliases/configuration, provisioning replies, or user files, and it does
-not open agent environment configuration. The transient tmux exit-status file
+not open agent environment configuration. It does not export the process
+environment. A value of an allowlisted variable (see below) that already
+appears in collected text is kept on purpose. The transient tmux exit-status file
 is also outside the allowlist. Harness output is still arbitrary,
 sensitive text; automatic redaction cannot prove it contains no private
 business data. Inspect the ZIP before sending it.
@@ -99,13 +100,15 @@ process (policy version 2, shown as `redaction_policy_version` in
 - `USER`, `LOGNAME`, and `HOSTNAME` have their value removed when it is 3 or
   more characters long.
 - Common harmless variables keep their value so a report stays readable:
-  `SHELL`, `TERM`, `LANG`, `LC_*`, `PATH`, `GOPATH`, `PWD`, `TMPDIR`, `EDITOR`,
-  `COLORTERM`, `TERM_PROGRAM`, and `SHLVL`.
+  `SHELL`, `TERM`, `LANG`, `LANGUAGE`, `LC_*`, `PATH`, `GOPATH`, `GOROOT`,
+  `PWD`, `TMPDIR`, `EDITOR`, `VISUAL`, `COLORTERM`, `TERM_PROGRAM`, and
+  `SHLVL`.
 - Any other variable has its value removed when it is 8 or more characters
   long.
 
-Short secrets written as `KEY=value` are removed whatever their length, and
-home directory paths become `$HOME`.
+A secret written as `KEY=value` is removed whatever its length when the key
+name looks like a secret. Home directory paths become `$HOME`, also inside
+allowlisted values.
 
 No upload is automatic. Send the inspected bundle only to the release owner
 through an approved internal channel.
