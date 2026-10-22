@@ -35,6 +35,9 @@ export interface StoreDetail extends Store {
   auto?: StoreAuto;
 }
 
+// The public Tariboy Store, offered on the Stores page as a one-click registration.
+export const TARIBOY_STORE = { name: "tariboy", source: "https://github.com/alekzonder/tariboy-store.git" };
+
 type Target = Daemon | null;
 const storePath = (name: string) => `/api/stores/${encodeURIComponent(name)}`;
 

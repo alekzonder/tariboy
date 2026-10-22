@@ -15,6 +15,7 @@ import {
   type StoreDetail,
   type StoreImage,
   type StoreWorkflow,
+  TARIBOY_STORE,
 } from "@/lib/stores";
 import { listWorkflowImages, type WorkflowImage } from "@/lib/tasks";
 import { Button } from "@/components/ui/button";
@@ -117,10 +118,9 @@ export default function StoresPage({ target, name, basePath }: {
     return () => { current = false; };
   }, [name, target]);
 
-  const add = async () => {
-    const input = { name: storeName.trim(), source: source.trim() };
+  const add = async (input: { name: string; source: string }, busyKey = "add") => {
     if (!input.name || !input.source) return;
-    setBusy("add");
+    setBusy(busyKey);
     setError("");
     setStatus("");
     try {
@@ -414,12 +414,25 @@ export default function StoresPage({ target, name, basePath }: {
         <h1 className="text-lg font-semibold">Stores</h1>
         <p className="text-sm text-muted-foreground">Register image source repositories and directories on this server.</p>
       </div>
+      {!loading && !stores.some((store) => store.name === TARIBOY_STORE.name || store.source === TARIBOY_STORE.source) &&
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded border p-4">
+          <div className="min-w-0 space-y-1">
+            <h2 className="font-medium">Tariboy Store</h2>
+            <p className="break-all text-sm text-muted-foreground">
+              Images and workflows published by Tariboy, registered as <span className="font-mono">{TARIBOY_STORE.name}</span> from{" "}
+              <span className="font-mono">{TARIBOY_STORE.source}</span>.
+            </p>
+          </div>
+          <Button disabled={Boolean(busy)} onClick={() => void add(TARIBOY_STORE, "add-tariboy")}>
+            {busy === "add-tariboy" ? "Adding…" : "Add tariboy Store"}
+          </Button>
+        </section>}
       <section className="space-y-3 rounded border p-4">
         <h2 className="font-medium">Add Store</h2>
         <div className="grid gap-3 md:grid-cols-[14rem_minmax(0,1fr)_auto]">
           <Input aria-label="Store name" required placeholder="name" value={storeName} disabled={Boolean(busy)} onChange={(event) => setStoreName(event.target.value)} />
           <Input aria-label="Store source" required placeholder="Git URL or absolute directory" value={source} disabled={Boolean(busy)} onChange={(event) => setSource(event.target.value)} />
-          <Button disabled={Boolean(busy) || !storeName.trim() || !source.trim()} onClick={() => void add()}>
+          <Button disabled={Boolean(busy) || !storeName.trim() || !source.trim()} onClick={() => void add({ name: storeName.trim(), source: source.trim() })}>
             {busy === "add" ? "Adding…" : "Add store"}
           </Button>
         </div>

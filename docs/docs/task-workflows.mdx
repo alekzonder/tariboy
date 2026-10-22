@@ -1475,18 +1475,18 @@ pending request.
 
 ## Official workflows
 
-The official Store (`official`) holds two workflow sources. A `pr-review`
+The official Store (`tariboy`) holds two workflow sources. A `pr-review`
 workflow, which turns pull requests that request a review into review tasks
 through a [source](#sources), is planned for the Store once a release with
 sources is out. Build one with
-`tariboy workflow build official/NAME`, then bind a queue as shown in
+`tariboy workflow build tariboy/NAME`, then bind a queue as shown in
 [Workflow images](/docs/workflow-images#official-workflow-images).
 
 ### `development`
 
 The pull request flow, version `0.1.0`. It requires the queue secret `GH_TOKEN`
 and a `developers` pool, and declares the artifacts `plan`, `pull_request`, and
-`merge_commit`. The pool's agents run `official/tariboy-developer` with their
+`merge_commit`. The pool's agents run `tariboy/tariboy-developer` with their
 own `GH_TOKEN` agent secret; see
 [Official workflow images](/docs/workflow-images#official-workflow-images).
 
@@ -1508,7 +1508,7 @@ Version `0.1.0`. One pool status, `research`, owned by the pool `researchers`,
 with the outcome `reported` to `done`. It needs the artifact `report`, the
 research report as Markdown, and has no scripts and no secrets. The status
 allows 6 idle iterations. It runs on any image with the `tasks` plugin, such as
-`official/basic`.
+`tariboy/basic`.
 
 ## Agent pools
 

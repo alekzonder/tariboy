@@ -317,7 +317,10 @@ until the one download completes, after which cancellation only skips
 unstarted destinations.
 
 The **Stores** workspace registers Git URLs or local absolute source directories
-on the route-selected daemon. Its detail shows the current disk-backed image
+on the route-selected daemon. Above the form, **Add tariboy Store** registers
+`https://github.com/alekzonder/tariboy-store.git` as the Store `tariboy` with
+the same add request and opens its detail; the block is hidden once the daemon
+lists a Store with that name or source. Its detail shows the current disk-backed image
 inventory, each source `image_version`, and the `image_version` read directly
 from that image's `latest` manifest. It distinguishes missing latest,
 unversioned source or latest, source validation errors, and latest inspection
