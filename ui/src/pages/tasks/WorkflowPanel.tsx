@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { ApiTarget } from "@/lib/api"
-import { cancelWorkflowTask, getTaskWorkflow, moveTaskWorkflow, type Task, type WorkflowView } from "@/lib/tasks"
+import { cancelWorkflowTask, getTaskWorkflow, moveTaskWorkflow, type Task, upgradeTaskWorkflow, type WorkflowView } from "@/lib/tasks"
 import { cn } from "@/lib/utils"
 import { EMPTY, FIELD, LABEL, MONO, QUIET_ACTION, ROW, SelectShell } from "./panelStyles"
 import ReturnToAgent from "./ReturnToAgent"
 import { formatTaskTime } from "./taskTime"
 import WorkflowArtifacts from "./WorkflowArtifacts"
 import { useWorkflowConfirm } from "./WorkflowConfirm"
-import { canReturnToAgent, isClosed, requiredBy, stepArtifacts, stepOf } from "./workflowGraph"
+import { canReturnToAgent, canUpgrade, isClosed, requiredBy, stepArtifacts, stepOf } from "./workflowGraph"
 import WorkflowOutcomes from "./WorkflowOutcomes"
 import WorkflowPauseBanner from "./WorkflowPauseBanner"
 import WorkflowProblem from "./WorkflowProblem"
@@ -20,7 +20,7 @@ import { errorText, useMounted } from "./workflowShared"
 /** A mono value that may be a 64-character ID: it wraps rather than overflows. */
 const MONO_ID = cn(MONO, "min-w-0 break-all")
 
-type OpenForm = "move" | "return" | null
+type OpenForm = "move" | "return" | "upgrade" | null
 
 /**
  * The workflow of a task, in the task detail: what is wrong, where it is,
@@ -109,6 +109,15 @@ export function WorkflowPanel({ task, eventSequence = 0, target, onTaskChanged }
     onCancel: () => resolve(false),
     run: () => { moveTaskWorkflow(task.key, to, reason, target).then(() => { resolve(true); changed() }, reject) },
   }))
+  const upgradeTo = `${view.name}@${view.queue_version ?? ""}`
+  // Resolves true once upgraded, false when the confirmation is declined.
+  const upgrade = (reason: string) => new Promise<boolean>((resolve, reject) => confirm({
+    title: `Upgrade this task to ${upgradeTo}?`,
+    description: `The task starts again at the first status of ${upgradeTo}. The current status ends, its scripts stop, and a pending request is cancelled. Artifacts stay.`,
+    action: "Upgrade task",
+    onCancel: () => resolve(false),
+    run: () => { upgradeTaskWorkflow(task.key, reason, target).then(() => { resolve(true); changed() }, reject) },
+  }))
   const open = (next: OpenForm) => { setCancelError(""); setForm(form === next ? null : next) }
 
   return (
@@ -132,6 +141,8 @@ export function WorkflowPanel({ task, eventSequence = 0, target, onTaskChanged }
         {editable && <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
           {canReturnToAgent(view) && <Button type="button" variant="ghost" size="sm" className="h-7"
             onClick={() => open("return")}>Return to agent…</Button>}
+          {canUpgrade(view) && <Button type="button" variant="ghost" size="sm" className="h-7"
+            onClick={() => open("upgrade")}>Upgrade to {upgradeTo}…</Button>}
           <Button type="button" variant="ghost" size="sm" className="h-7"
             onClick={() => open("move")}>Move to status…</Button>
           {!closed && <Button type="button" variant="ghost" size="sm" className="h-7 text-destructive hover:text-destructive"
@@ -141,6 +152,7 @@ export function WorkflowPanel({ task, eventSequence = 0, target, onTaskChanged }
       {failure}
       {cancelError && <p role="alert" className="text-[12px] text-status-failed">{cancelError}</p>}
       {form === "move" && <MoveForm view={view} onDone={() => setForm(null)} onMove={move} />}
+      {form === "upgrade" && <UpgradeForm onDone={() => setForm(null)} onUpgrade={upgrade} />}
       {form === "return" && <ReturnToAgent taskKey={task.key} view={view} target={target} onChanged={changed} onDone={() => setForm(null)} />}
       <WorkflowOutcomes taskKey={task.key} view={view} target={target} onChanged={changed} onRefresh={refresh} />
       <WorkflowArtifacts taskKey={task.key} artifacts={view.artifacts} declared={view.declared_artifacts ?? []}
@@ -153,6 +165,8 @@ export function WorkflowPanel({ task, eventSequence = 0, target, onTaskChanged }
           {[...view.visits].sort((a, b) => a.sequence - b.sequence).map((visit) => (
             <li key={visit.id} className={cn(ROW, "flex-wrap py-1")}>
               <span className={cn(MONO_ID, "font-medium")}>{visit.status}</span>
+              {visit.workflow_digest && visit.workflow_digest !== view.digest && visit.workflow_version &&
+                <span className={cn(MONO, "text-muted-foreground")} title={visit.workflow_digest}>@{visit.workflow_version}</span>}
               <span className={cn(MONO, "text-muted-foreground")}>{formatTaskTime(visit.entered_at)} · {visit.entered_by}</span>
               {visit.left_at
                 ? <span className="text-[12px] text-muted-foreground">
@@ -212,6 +226,36 @@ function MoveForm({ view, onMove, onDone }: {
         <Input aria-label="Reason" placeholder="Reason (required)" value={reason}
           className={cn(FIELD, "h-[26px] min-w-[160px] flex-1")} onChange={(event) => setReason(event.target.value)} />
         <Button type="submit" size="sm" className="h-[26px]" disabled={busy || !to || !reason.trim()}>Move</Button>
+        <Button type="button" variant="ghost" size="sm" className="h-[26px]" onClick={onDone}>Close</Button>
+      </div>
+      {error && <p role="alert" className="text-[12px] text-status-failed">{error}</p>}
+    </form>
+  )
+}
+
+function UpgradeForm({ onUpgrade, onDone }: {
+  onUpgrade: (reason: string) => Promise<boolean>
+  onDone: () => void
+}) {
+  const [reason, setReason] = useState("")
+  const [error, setError] = useState("")
+  const [busy, setBusy] = useState(false)
+  const mountedRef = useMounted()
+  const submit = () => {
+    setError("")
+    setBusy(true)
+    onUpgrade(reason.trim())
+      .then((upgraded) => { if (upgraded && mountedRef.current) onDone() }, (failure) => { if (mountedRef.current) setError(errorText(failure)) })
+      .finally(() => { if (mountedRef.current) setBusy(false) })
+  }
+  return (
+    <form className="flex min-w-0 flex-col gap-1.5 rounded-[8px] bg-muted/50 p-2.5"
+      onSubmit={(event) => { event.preventDefault(); submit() }}>
+      <span className={LABEL}>Upgrade workflow</span>
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <Input autoFocus aria-label="Upgrade reason" placeholder="Reason (optional)" value={reason}
+          className={cn(FIELD, "h-[26px] min-w-[160px] flex-1")} onChange={(event) => setReason(event.target.value)} />
+        <Button type="submit" size="sm" className="h-[26px]" disabled={busy}>Upgrade</Button>
         <Button type="button" variant="ghost" size="sm" className="h-[26px]" onClick={onDone}>Close</Button>
       </div>
       {error && <p role="alert" className="text-[12px] text-status-failed">{error}</p>}

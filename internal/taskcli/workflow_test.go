@@ -70,6 +70,8 @@ func TestOperatorWorkflowCommandsUseRestRoutes(t *testing.T) {
 		{[]string{"artifacts", "show", "DEV-1", "plan"}, "GET", "/api/tasks/DEV-1/artifacts/plan", map[string]string{}},
 		{[]string{"workflow", "get", "DEV-1"}, "GET", "/api/tasks/DEV-1/workflow", map[string]string{}},
 		{[]string{"workflow", "move", "DEV-1", "--to", "develop", "--reason", "regression"}, "POST", "/api/tasks/DEV-1/workflow/move", map[string]any{"to": "develop", "reason": "regression"}},
+		{[]string{"workflow", "upgrade", "DEV-1"}, "POST", "/api/tasks/DEV-1/workflow/upgrade", map[string]any{}},
+		{[]string{"workflow", "upgrade", "DEV-1", "--reason", "new rules"}, "POST", "/api/tasks/DEV-1/workflow/upgrade", map[string]any{"reason": "new rules"}},
 		{[]string{"workflow", "resume", "DEV-1", "--decision", "continue"}, "POST", "/api/tasks/DEV-1/workflow/resume", map[string]any{"decision": "continue"}},
 		{[]string{"workflow", "resume", "DEV-1", "--decision", " release "}, "POST", "/api/tasks/DEV-1/workflow/resume", map[string]any{"decision": "release"}},
 		{[]string{"workflow", "retry", "DEV-1", "7"}, "POST", "/api/tasks/DEV-1/workflow/requests/7/retry", map[string]any{}},

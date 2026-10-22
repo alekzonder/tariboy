@@ -24,6 +24,22 @@ describe("stepOf and stepMarks", () => {
     ])
   })
 
+  it("reads only the visits of the task's current workflow version", () => {
+    const view: WorkflowView = {
+      ...customerView,
+      status: "draft",
+      visits: [
+        { id: 1, sequence: 1, status: "draft", entered_at: "2026-10-01T10:00:00Z", entered_by: "u", left_at: "2026-10-01T10:01:00Z", outcome: "drafted", workflow_digest: "sha256:old" },
+        { id: 2, sequence: 2, status: "review", entered_at: "2026-10-01T10:01:00Z", entered_by: "u", left_at: "2026-10-01T10:02:00Z", workflow_digest: "sha256:old" },
+        { id: 3, sequence: 3, status: "draft", entered_at: "2026-10-01T10:02:00Z", entered_by: "u", workflow_digest: "sha256:abc" },
+      ],
+    }
+    // The upgrade restarted the task: review is ahead again and draft has no return.
+    expect(stepMarks(view).map((mark) => [mark.status.id, mark.state, mark.returns]).slice(0, 2)).toEqual([
+      ["draft", "current", 0], ["review", "ahead", 0],
+    ])
+  })
+
   it("has no current step on a closed task", () => {
     const marks = stepMarks({ ...customerView, status: "done", category: "done" })
     expect(marks.find((mark) => mark.status.id === "done")?.state).toBe("ahead")
@@ -114,6 +130,15 @@ describe("returnTargets", () => {
         { id: 3, sequence: 3, status: "publish", entered_at: "2026-10-01T10:06:00Z", entered_by: "u" }] }
     expect(returnTargets(view)).toEqual([{ status: "draft", via: "move", reason: "visited" }])
     expect(canReturnToAgent(view)).toBe(true)
+  })
+
+  it("does not offer a pool status visited only under an earlier workflow version", () => {
+    const view: WorkflowView = { ...customerView, status: "publish", owner: "script", waiting_on: "script", outcomes: [{ on: "published", to: "done" }],
+      visits: [
+        { id: 1, sequence: 1, status: "draft", entered_at: "2026-10-01T10:00:00Z", entered_by: "u", left_at: "2026-10-01T10:01:00Z", workflow_digest: "sha256:old" },
+        { id: 2, sequence: 2, status: "publish", entered_at: "2026-10-01T10:01:00Z", entered_by: "u", workflow_digest: "sha256:abc" },
+      ] }
+    expect(returnTargets(view)).toEqual([])
   })
 
   it("offers the status itself to a paused pool status, and uses a move for its outcomes", () => {

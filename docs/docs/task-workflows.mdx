@@ -34,8 +34,10 @@ operations.
 3. A task created in the bound queue **pins** the image version (its digest)
    and enters the image's `initial_status`. A binding made by a tag, such as
    `latest`, follows that tag: when a new build moves the tag, tasks created
-   after it pin the new version. Existing tasks keep their version, and a task
-   is never migrated to another version.
+   after it pin the new version. Existing tasks keep their version. Only an
+   explicit [upgrade](#upgrading-a-task-to-the-queue-version) by the operator
+   moves a task to the queue's current version, and it starts the task again
+   at that version's `initial_status`.
 4. Every non-terminal **status** has one owner, who leaves it by naming an
    **outcome**; the status declares a **transition** per outcome.
    - A **pool** status is worked by one agent, the **holder**, which the daemon
@@ -952,7 +954,8 @@ Sources poll; for events pushed by a plugin, use a
 
 The operator (acting as the customer) can override a workflow. These commands
 are operator-only. An agent that tries `ttasks workflow move`,
-`ttasks workflow retry`, `ttasks cancel`, or `ttasks requeue` gets the CLI's "unknown command",
+`ttasks workflow upgrade`, `ttasks workflow retry`, `ttasks cancel`, or
+`ttasks requeue` gets the CLI's "unknown command",
 because no agent action exists for them; a caller of the REST route that is not
 the customer receives `forbidden` (403).
 
@@ -984,6 +987,54 @@ pending request, closes the current visit, enters the target as an ordinary
 status entry (so it dispatches, opens a customer wait, or starts a watch just as
 an advance would), and records `workflow.moved` with the reason. A move out of a
 terminal status reopens the task.
+
+### Upgrading a task to the queue version
+
+A task stays on the workflow version it was created with, even after its queue
+is bound to a newer one. `workflow upgrade` moves one task to the version its
+queue is bound to now and starts the workflow again from the beginning:
+
+```bash
+ttasks workflow upgrade DEV-ab12 --reason 'adopt the new review step'
+```
+
+The `--reason` is optional. The daemon, in one transaction:
+
+1. Reads the queue binding and, for a binding made by a tag, follows the tag to
+   the version it names now, as a new task does.
+2. Refuses the upgrade when the task is closed (`workflow_closed`), the queue has
+   no binding (`workflow_unbound`), the task already pins the queue's digest
+   (`workflow_current`), or the new version needs a pool or secret the queue
+   lacks (`workflow_pool_empty`, `workflow_secret_missing`). A refusal changes
+   nothing.
+3. Cancels a pending request, clears a pause (recording `workflow.resumed` with
+   the decision `upgrade`), deletes released holder rows, and resolves the
+   workflow's own wait and the current holder's questions to the customer.
+4. Pins the task to the new digest and enters the new version's
+   `initial_status` as an ordinary status entry: the current visit closes with
+   the message `workflow upgraded from OLD to NEW: REASON`, the old status's
+   scripts stop, and the new status dispatches, opens a customer wait, or starts
+   a watch.
+5. Records `workflow.upgraded` with `from_version`, `to_version`,
+   `from_digest`, `to_digest`, the `status` the task left, `actor`, and
+   `reason`.
+
+Artifacts and pool holders stay. A holder of a pool the new version also uses
+gets the task back (the sticky rule), so an agent finds its `branch` and
+`pull_request` artifacts and does not open a second branch or pull request. The
+statuses of the new version set their own artifacts again; until then an old
+value stays visible. Work outside the daemon, such as a branch or an open pull
+request, is not undone.
+
+Each visit records the digest the task was pinned to when it entered the status
+(`workflow_digest` and `workflow_version` in the task view). The visits before an
+upgrade stay as history; the Desktop counts steps, returns, and return targets
+only from the visits of the current version. An upgrade always targets the
+queue's current binding: to reach another version, bind the queue to it first.
+The Desktop shows **Upgrade to NAME@VERSION…** in the workflow panel of an open
+task whose queue is bound to another version, and asks for confirmation.
+
+### Cancel
 
 `cancel` closes any unfinished task as `cancelled` (`workflow_closed` when it is
 already closed). It stops the scripts of the current status, cancels a pending
@@ -1315,6 +1366,7 @@ and what it may do next. Agents and the operator can read it.
 | Field | Meaning |
 | --- | --- |
 | `name`, `version`, `digest` | The pinned image. |
+| `queue_version`, `queue_digest` | The image the task's queue is bound to now; absent for an unbound queue. Another digest than `digest` means the task can be [upgraded](#upgrading-a-task-to-the-queue-version). |
 | `status`, `category`, `waiting_on` | As described in [Status and category](#status-and-category). |
 | `paused_reason` | The reason the task is paused; absent otherwise. |
 | `owner` | `pool:<name>`, `customer`, `script`, or empty for a finished task. |
@@ -1322,7 +1374,7 @@ and what it may do next. Agents and the operator can read it.
 | `instructions_path` | The status instruction file inside the image. |
 | `outcomes` | Each outcome with `to`, `requires`, `missing` (required artifacts with no value), `checks` (script paths), and `check_details`: the same checks, in order, each with `script`, `description` (when the image gives one), and the resolved `run_as` and `timeout`. A finished task has none. |
 | `artifacts` | The current value of each artifact. |
-| `visits` | Every stay in a status with who entered it, when it was left, and by which outcome and message, plus the visit's counters `idle_iterations`, `rejected_requests`, and `script_failures` (absent when zero); compare them with the `limits` of the status to see how close the task is to a pause. |
+| `visits` | Every stay in a status with who entered it, when it was left, and by which outcome and message, the `workflow_digest` and `workflow_version` the task was pinned to on entry, plus the visit's counters `idle_iterations`, `rejected_requests`, and `script_failures` (absent when zero); compare them with the `limits` of the status to see how close the task is to a pause. |
 | `last_request` | The latest transition request: `id`, `outcome`, `message`, `actor`, `state`, `result_message`, times, and `wait_seconds` while pending. |
 | `runs` | The 20 most recent script runs, newest first. A check run carries the `request_id` of the transition request it belongs to. |
 | `declared_artifacts` | Every artifact the manifest declares, in manifest order, as `name` and `description`, whether or not it has a value. |
@@ -1353,6 +1405,7 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks workflow runs KEY` | agent, operator | List script runs. |
 | `ttasks workflow log KEY RUN [--max-bytes N]` | holder, operator | Read a run log. |
 | `ttasks workflow move KEY --to STATUS --reason TEXT` | operator | Move without checks. |
+| `ttasks workflow upgrade KEY [--reason TEXT]` | operator | Restart the task at the queue's current workflow version. |
 | `ttasks workflow resume KEY --decision continue\|release` | operator | Resolve a pause. |
 | `ttasks workflow retry KEY [REQUEST]` | operator | Run a failed request's checks again and wait for them. |
 | `ttasks cancel KEY` | operator | Cancel the task. |
@@ -1390,6 +1443,7 @@ generated OpenAPI document is the authority for request and response schemas.
 | `GET` | `/api/tasks/{key}/workflow/runs/{id}` | one run | agent, operator |
 | `GET` | `/api/tasks/{key}/workflow/runs/{id}/log` | the redacted log tail (`max_bytes`); returns `run_id`, `text`, `truncated` | holder, operator |
 | `POST` | `/api/tasks/{key}/workflow/move` | move to a status (`to`, `reason`) | operator |
+| `POST` | `/api/tasks/{key}/workflow/upgrade` | restart at the queue's current version (`reason`, optional); returns the task | operator |
 | `POST` | `/api/tasks/{key}/workflow/resume` | resolve a pause (`decision`: `continue` or `release`); returns the task | operator |
 | `POST` | `/api/tasks/{key}/cancel` | cancel | operator |
 | `POST` | `/api/tasks/{key}/requeue` | move to another queue (`queue`, optional `revision`); returns the new task | operator |
@@ -1412,7 +1466,7 @@ See [State model](/docs/architecture/state-model) for the tables.
 | `task_queue_workflows` | One binding per queue: digest, the tag it follows (`workflow_tag`, empty when pinned), revision, update time. |
 | `task_queue_secrets` | Queue secret values in plaintext, per queue and key (migration `0056`). |
 | `task_workflow_holders` | The last holder of each task and pool, with the dispatch time, `released` (set by a `release` decision; migration `0060`), and `unavailable_since`, when the holder was first seen unable to work (migration `0061`). |
-| `task_status_visits` | One row per stay in a status, with its outcome and message, the `rejected_requests`, `script_failures`, and `idle_iterations` counters, `next_watch_at`, when a script status's watch runs next (migration `0057`), and `resumed_at`, when a pause of the visit was last resumed (migration `0062`). |
+| `task_status_visits` | One row per stay in a status, with its outcome and message, the `rejected_requests`, `script_failures`, and `idle_iterations` counters, `next_watch_at`, when a script status's watch runs next (migration `0057`), `resumed_at`, when a pause of the visit was last resumed (migration `0062`), and `workflow_digest`, the digest the task was pinned to on entry (migration `0071`). |
 | `task_transition_requests` | Each request, with its state and `result_message`; at most one is `pending` per task. |
 | `task_artifacts` | Every artifact value with its author and time. |
 | `task_queue_source_runs` | Every source run: queue, source, script, image digest, state, verdict, exit code, message, number of tasks created, process id, times, and log path (migration `0063`). At most one run of a source of a queue is `running`. |
@@ -1444,6 +1498,7 @@ Events recorded on a workflow task: `workflow.transition_requested`,
 message), `workflow.transition_failed` (with the reason and log path),
 `workflow.script_run` (every run that ended, with its state, verdict, and exit
 code), `workflow.script_failed` (a failed watch run), `workflow.moved`,
+`workflow.upgraded`,
 `workflow.cancelled`, `workflow.paused`, `workflow.resumed`, and `artifact.set`.
 A task created by a source also records `workflow.source_item` with the source,
 the key, and the run id. A failed source run records the queue event
@@ -1457,6 +1512,8 @@ the key, and the run id. A failed source run records the queue event
 | `workflow_not_bound` | 409 | The task has no workflow. |
 | `workflow_closed` | 409 | The task is `done` or `cancelled`. |
 | `workflow_paused` | 409 | The task is paused: `advance` and `artifacts set` are refused until the customer decides. |
+| `workflow_unbound` | 409 | `workflow upgrade` of a task whose queue has no binding. |
+| `workflow_current` | 409 | `workflow upgrade` of a task that already pins the queue's version. |
 | `workflow_not_paused` | 409 | `workflow resume` on a task that is not paused. |
 | `request_not_failed` | 409 | `workflow retry` of a request that did not fail. |
 | `request_superseded` | 409 | `workflow retry` of a request that is not the task's latest one in its current status. |
@@ -1468,7 +1525,7 @@ the key, and the run id. A failed source run records the queue event
 | `workflow_not_found` | 409 | The image a task or binding pins is not published. |
 | `queue_workflow_not_found` | 404 | The queue has no binding. |
 | `not_holder` | 403 | The caller does not own the current status. |
-| `forbidden` | 403 | A caller that is not the customer used an operator-only route (move, cancel, resume), or a caller that may not read a run log asked for it. |
+| `forbidden` | 403 | A caller that is not the customer used an operator-only route (move, upgrade, cancel, resume), or a caller that may not read a run log asked for it. |
 | `status_changed` | 409 | An advance named `from`, and the task is in another status. |
 | `outcome_unknown` | 400 | The status does not declare that outcome. |
 | `status_unknown` | 400, 409 | The image does not declare that status (400 for a move, 409 for a task in an undeclared status). |
@@ -1670,8 +1727,8 @@ sections:
   checks (script, `description`, `run_as`, and timeout), and the effective
   limits. The row wraps on a narrow screen.
 - **Header.** `name@version`, `step k of n`, the status, the owner, and the
-  holder, with the labeled actions **Return to agent…**, **Move to status…**,
-  and **Cancel task**; see below.
+  holder, with the labeled actions **Return to agent…**, **Upgrade to
+  NAME@VERSION…**, **Move to status…**, and **Cancel task**; see below.
 - **Outcomes.** Each outcome shows its target status, the artifacts it
   requires (a set one ticked, a missing one highlighted), and its checks with
   what each verifies, when the image describes it, and the resolved `run_as`
@@ -1702,7 +1759,8 @@ sections:
   running, an open log has **Refresh**. Who may read a log is described in
   [Runs and logs](#runs-and-logs); a refusal is shown in place of the log.
 - **Visits.** Every stay in a status, with who entered it, when it was left and
-  by which outcome, and the message.
+  by which outcome, and the message. A visit made under an earlier workflow
+  version carries that version, as `@VERSION`.
 - **Return to agent.** Sends the task back to a pool status with a message
   the agent reads in its Goal as the transition message. The targets are the
   pool statuses a declared outcome of the current status leads to, the pool
@@ -1717,8 +1775,16 @@ sections:
   the current one, terminal statuses grouped last, and needs a reason; a move
   to a terminal status closes the task. **Cancel task** is hidden once the
   task is closed. Both ask for confirmation, because they skip outcomes,
-  checks, and required artifacts and stop the current scripts. The three
+  checks, and required artifacts and stop the current scripts. The header
   actions are shown only to a principal that may edit the task.
+- **Upgrade.** **Upgrade to NAME@VERSION…** is shown on an open task whose
+  queue is bound to another version than the task's. It takes an optional
+  reason and asks for confirmation, then restarts the task at the first status
+  of that version; see
+  [Upgrading a task to the queue version](#upgrading-a-task-to-the-queue-version).
+  A refusal shows the daemon's message in the form. The step marks, the return
+  counts, and the targets of **Return to agent…** read only the visits of the
+  task's current version.
 
 Messages and logs are text; Desktop never interprets them as Markdown or HTML.
 Artifact values render as Markdown without raw HTML, or as text when switched. After an action in the sheet the task list reloads as well,

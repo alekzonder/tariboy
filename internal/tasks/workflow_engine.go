@@ -89,8 +89,9 @@ func (s *WorkflowEngine) enterStatusTx(ctx context.Context, tx *sql.Tx, task *Ta
 		nextWatch = store.FormatTime(s.clock())
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO task_status_visits(task_id, sequence, status_id, entered_at, entered_by, next_watch_at)
-		VALUES (?, ?, ?, ?, ?, ?)`, task.ID, last+1, statusID, now, via, nextWatch); err != nil {
+		INSERT INTO task_status_visits(task_id, sequence, status_id, entered_at, entered_by, next_watch_at, workflow_digest)
+		VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT workflow_digest FROM tasks WHERE id = ?), ''))`,
+		task.ID, last+1, statusID, now, via, nextWatch, task.ID); err != nil {
 		return err
 	}
 

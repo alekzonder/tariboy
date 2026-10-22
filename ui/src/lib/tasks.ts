@@ -435,6 +435,9 @@ export interface WorkflowVisit {
   left_at?: string
   outcome?: string
   message?: string
+  /** The workflow image the task was pinned to when it entered the status. */
+  workflow_digest?: string
+  workflow_version?: string
   /** The visit's counters, compared with the status limits; absent when zero. */
   idle_iterations?: number
   rejected_requests?: number
@@ -505,6 +508,9 @@ export interface WorkflowView {
   name: string
   version: string
   digest: string
+  /** The workflow the task's queue is bound to now; absent for an unbound queue. */
+  queue_version?: string
+  queue_digest?: string
   status: string
   category: TaskCategory
   waiting_on?: string
@@ -653,6 +659,9 @@ export const getTaskScriptRunLog = async (
 }
 export const moveTaskWorkflow = (key: string, to: string, reason: string, target?: ApiTarget) =>
   call<Task>(target, "POST", `${taskPath(key)}/workflow/move`, { to, reason })
+/** Restarts the task at the initial status of the workflow version its queue is bound to. */
+export const upgradeTaskWorkflow = (key: string, reason: string, target?: ApiTarget) =>
+  call<Task>(target, "POST", `${taskPath(key)}/workflow/upgrade`, reason ? { reason } : {})
 export const cancelWorkflowTask = (key: string, target?: ApiTarget) =>
   call<Task>(target, "POST", `${taskPath(key)}/cancel`)
 /** Moves a task to another queue; the daemon returns the new task there. */

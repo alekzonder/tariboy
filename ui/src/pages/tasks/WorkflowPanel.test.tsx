@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   getTaskWorkflow: vi.fn(),
   advanceTask: vi.fn(),
   moveTaskWorkflow: vi.fn(),
+  upgradeTaskWorkflow: vi.fn(),
   cancelWorkflowTask: vi.fn(),
   resumeTaskWorkflow: vi.fn(),
 }))
@@ -23,6 +24,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   api.getTaskWorkflow.mockResolvedValue(customerView)
   api.moveTaskWorkflow.mockResolvedValue(workflowTask)
+  api.upgradeTaskWorkflow.mockResolvedValue(workflowTask)
   api.cancelWorkflowTask.mockResolvedValue(workflowTask)
 })
 
@@ -334,4 +336,64 @@ it("offers no cancel for a closed task", async () => {
   renderPanel({ ...workflowTask, status: "publish", category: "done", waiting_on: undefined })
   expect(await screen.findByRole("button", { name: "Move to status…" })).toBeInTheDocument()
   expect(screen.queryByRole("button", { name: "Cancel task" })).not.toBeInTheDocument()
+})
+
+/** customerView whose queue is bound to release@1.3.0 now. */
+const upgradable = { ...customerView, queue_version: "1.3.0", queue_digest: "sha256:new" }
+
+it("offers no upgrade while the task follows its queue's version or the queue is unbound", async () => {
+  api.getTaskWorkflow.mockResolvedValue({ ...customerView, queue_version: "1.2.0", queue_digest: "sha256:abc" })
+  const { unmount } = renderPanel()
+  await screen.findByText("release@1.2.0")
+  expect(screen.queryByRole("button", { name: /Upgrade to/ })).not.toBeInTheDocument()
+  unmount()
+  api.getTaskWorkflow.mockResolvedValue(customerView)
+  renderPanel()
+  await screen.findByText("release@1.2.0")
+  expect(screen.queryByRole("button", { name: /Upgrade to/ })).not.toBeInTheDocument()
+})
+
+it("offers no upgrade on a closed task", async () => {
+  api.getTaskWorkflow.mockResolvedValue({ ...upgradable, status: "done", category: "done" })
+  renderPanel({ ...workflowTask, status: "done", category: "done" })
+  await screen.findByText("release@1.2.0")
+  expect(screen.queryByRole("button", { name: /Upgrade to/ })).not.toBeInTheDocument()
+})
+
+it("upgrades to the queue's version with an optional reason after confirmation", async () => {
+  api.getTaskWorkflow.mockResolvedValue(upgradable)
+  const { onTaskChanged } = renderPanel()
+  await openAction("Upgrade to release@1.3.0…")
+  await userEvent.type(screen.getByLabelText("Upgrade reason"), "new review step")
+  await userEvent.click(screen.getByRole("button", { name: "Upgrade" }))
+  const dialog = await screen.findByRole("alertdialog")
+  expect(dialog).toHaveTextContent(/first status of release@1.3.0/)
+  await userEvent.click(within(dialog).getByRole("button", { name: "Upgrade task" }))
+  await waitFor(() => expect(api.upgradeTaskWorkflow).toHaveBeenCalledWith("REL-1", "new review step", target))
+  await waitFor(() => expect(onTaskChanged).toHaveBeenCalledTimes(1))
+  expect(api.getTaskWorkflow).toHaveBeenCalledTimes(2)
+})
+
+it("shows a refused upgrade inline", async () => {
+  api.getTaskWorkflow.mockResolvedValue(upgradable)
+  api.upgradeTaskWorkflow.mockRejectedValue(new ApiError(409, "workflow_secret_missing", "workflow secrets have no value: GH_TOKEN"))
+  const { onTaskChanged } = renderPanel()
+  await openAction("Upgrade to release@1.3.0…")
+  await userEvent.click(screen.getByRole("button", { name: "Upgrade" }))
+  await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Upgrade task" }))
+  expect(await screen.findByRole("alert")).toHaveTextContent("workflow secrets have no value: GH_TOKEN")
+  expect(api.upgradeTaskWorkflow).toHaveBeenCalledWith("REL-1", "", target)
+  expect(onTaskChanged).not.toHaveBeenCalled()
+})
+
+it("labels the visits of an earlier workflow version", async () => {
+  api.getTaskWorkflow.mockResolvedValue({ ...customerView, visits: [
+    { ...customerView.visits[0], workflow_digest: "sha256:old", workflow_version: "1.1.0" },
+    { ...customerView.visits[1], workflow_digest: "sha256:abc", workflow_version: "1.2.0" },
+  ] })
+  renderPanel()
+  const visits = (await screen.findByText("Visits")).closest("section")!
+  const [old, current] = within(visits).getAllByRole("listitem")
+  expect(old).toHaveTextContent("@1.1.0")
+  expect(current).not.toHaveTextContent("@1.2.0")
 })

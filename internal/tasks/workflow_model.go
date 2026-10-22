@@ -23,6 +23,11 @@ type StatusVisit struct {
 	LeftAt    string `json:"left_at,omitempty"`
 	Outcome   string `json:"outcome,omitempty"`
 	Message   string `json:"message,omitempty"`
+	// WorkflowDigest and WorkflowVersion name the workflow image the task was
+	// pinned to when it entered the status; an upgrade starts a new run of
+	// visits under the new digest.
+	WorkflowDigest  string `json:"workflow_digest,omitempty"`
+	WorkflowVersion string `json:"workflow_version,omitempty"`
 	// The visit's counters, compared with the status limits to pause the
 	// task; see Limits in the documentation.
 	IdleIterations   int `json:"idle_iterations,omitempty"`
