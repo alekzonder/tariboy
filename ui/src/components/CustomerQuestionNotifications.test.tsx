@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@/test/queryRender"
 import { useLayoutEffect, useRef } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { MemoryRouter, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom"

@@ -1,3 +1,4 @@
+import { queryClient } from "./queryClient";
 // Async host registry facade. The desktop app persists metadata in native
 // hosts.json and HTTPS tokens in macOS Keychain; browser development keeps the
 // historical localStorage/sessionStorage implementation as a fallback.
@@ -220,11 +221,13 @@ export async function removeDaemon(id: string): Promise<void> {
     await ensureDesktopMigration();
     await hostRemove(id);
   }
+  queryClient.removeQueries({ queryKey: ["server", id] });
   sessionCache.delete(id);
   if ((await getActiveId()) === id) await setActiveId("");
 }
 
 export async function setDaemonToken(id: string, token: string): Promise<void> {
+  queryClient.removeQueries({ queryKey: ["server", id] });
   if (!isDesktop()) {
     sessionStorage.setItem(TOKEN_PREFIX + id, token);
     const meta = loadBrowserMeta().find((item) => item.id === id);
@@ -255,6 +258,7 @@ export async function getDaemonToken(id: string): Promise<string> {
 }
 
 export async function clearDaemonToken(id: string): Promise<void> {
+  queryClient.removeQueries({ queryKey: ["server", id] });
   if (!isDesktop()) {
     sessionStorage.removeItem(TOKEN_PREFIX + id);
     const meta = loadBrowserMeta().find((item) => item.id === id);
@@ -296,6 +300,7 @@ export async function setActiveId(id: string): Promise<void> {
 // does not restart every load on the page.
 function remember(daemon: Daemon): Daemon {
   const cached = sessionCache.get(daemon.id);
+  if (cached && daemon.baseURL && cached.token !== daemon.token) queryClient.removeQueries({ queryKey: ["server", daemon.id] });
   if (cached && JSON.stringify(cached) === JSON.stringify(daemon)) return cached;
   sessionCache.set(daemon.id, daemon);
   return daemon;

@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect } from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { useApiQuery, useApiTarget } from "@/hooks/useApiQuery"
+import { errorText as errorMessage, isAccessError } from "@/lib/queryClient"
+import { taskKeys, taskQueries, refreshTasks, writeTask } from "./taskQueries"
+import { useTaskQueryEvents } from "./useTaskQueryEvents"
 import { toast } from "sonner"
-import { useTasksSocket } from "@/hooks/useTasksSocket"
-import { isConnectionError, targetReady, type ApiTarget } from "@/lib/api"
+import { isConnectionError, type ApiTarget } from "@/lib/api"
 import { resolveDaemon } from "@/lib/daemons"
 import { targetFor } from "@/lib/terminalsHost"
 import {
@@ -11,16 +15,11 @@ import {
   exportTask,
   getTask,
   importTask,
-  listTaskEvents,
-  listTaskPrincipals,
-  listTasks,
   requeueTask,
   transferTask,
   updateTask,
   type Task,
   type TaskDetail as Detail,
-  type TaskEvent,
-  type TaskPrincipals,
   type TaskPriority,
   type TaskRelationType,
   type TaskStatus,
@@ -32,10 +31,6 @@ import "./tasks.css"
 
 function idempotencyKey(): string {
   return globalThis.crypto?.randomUUID?.() ?? `task-action-${Date.now()}-${Math.random()}`
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 type TaskEdit = {
@@ -61,13 +56,11 @@ export interface AssigneeChoice {
 
 /**
  * One task, opened where it was mentioned. It is the same panel the Tasks
- * workspace shows, but it owns its own load and its own writes, so a chat — or
- * anything else that names a task key — can open it without navigating to
- * Tasks and without borrowing that workspace's tree state.
+ * workspace shows, with shared server queries and independent selection.
  */
-export default function TaskDrawer({
+function TaskDrawerContent({
   taskKey,
-  target,
+  target: inputTarget,
   onClose,
   assignees,
   onMoved,
@@ -79,6 +72,8 @@ export default function TaskDrawer({
   /** The task now lives on `hostId`; the owner reopens it there. */
   onMoved?: (hostId: string) => void
 }) {
+  const target = useApiTarget(inputTarget)
+  const client = useQueryClient()
   // The same stored width and grip as the Tasks tab, so the panel is one size
   // wherever it opens; the drawer spans the window rather than a workspace.
   const { detailWidth, setDetailWidth } = useTaskPanelWidths()
@@ -87,87 +82,22 @@ export default function TaskDrawer({
     maximum={clampTaskDetailWidth(Infinity)}
     onResize={setDetailWidth}
   />
-  const [detail, setDetail] = useState<Detail | null>(null)
-  const [events, setEvents] = useState<TaskEvent[]>([])
-  const [principals, setPrincipals] = useState<TaskPrincipals | null>(null)
-  const mountedRef = useRef(true)
+  const detailQuery = useApiQuery(taskQueries.detail(target, taskKey), target)
+  const historyQuery = useApiQuery(taskQueries.history(target, taskKey, "first"), target)
+  const peopleQuery = useApiQuery(taskQueries.principals(target), target)
+  const sequenceQuery = useApiQuery(taskQueries.sequence(target), target)
+  const detail = detailQuery.data
+  const events = historyQuery.data ?? []
+  const principals = peopleQuery.data ?? null
+  useTaskQueryEvents(target, sequenceQuery.data?.sequence, taskKey)
+  const load = () => refreshTasks(client, target)
+  const write = <T,>(operation: () => Promise<T>) => writeTask(client, target, operation)
   useEffect(() => {
-    mountedRef.current = true
-    return () => { mountedRef.current = false }
-  }, [])
-
-  // Once a task is on screen a failed re-read keeps it there, with its
-  // drafts; only a task that never opened closes on an error.
-  const loadedRef = useRef("")
-  const load = useCallback(async () => {
-    const loaded = loadedRef.current === taskKey
-    if (loaded && !targetReady(target)) return
-    try {
-      const [next, history] = await Promise.all([
-        getTask(taskKey, target),
-        listTaskEvents(taskKey, 0, 200, target),
-      ])
-      if (!mountedRef.current) return
-      loadedRef.current = taskKey
-      setDetail(next)
-      setEvents(history.events ?? [])
-    } catch (error) {
-      if (!mountedRef.current) return
-      if (loaded) {
-        if (!isConnectionError(error)) toast.error(errorMessage(error))
-        return
-      }
-      toast.error(errorMessage(error))
-      onClose()
-    }
-  }, [onClose, target, taskKey])
-
-  useEffect(() => { void Promise.resolve().then(load) }, [load])
-  useEffect(() => {
-    // The assignee picker needs the host's principals; without them the panel
-    // still edits everything else.
-    listTaskPrincipals(target)
-      .then((people) => { if (mountedRef.current) setPrincipals(people) })
-      .catch(() => {})
-  }, [target])
-
-  // The socket replays everything after the sequence it is given, so it opens
-  // only once the current one is known: from zero it would replay the host's
-  // whole task log and reload this panel once per event.
-  const [sequence, setSequence] = useState(0)
-  const [live, setLive] = useState(false)
-  // The last hint about this task. The drawer's history holds only the oldest
-  // events, so the workflow panel follows this instead of the newest event.
-  const [taskHint, setTaskHint] = useState(0)
-  useEffect(() => {
-    listTasks({ limit: 1 }, target)
-      .then((page) => {
-        if (!mountedRef.current) return
-        setSequence(page.sequence ?? 0)
-        setLive(true)
-      })
-      .catch(() => {})
-  }, [target])
-  useTasksSocket({
-    target,
-    after: sequence,
-    enabled: live,
-    onHint: (hint) => {
-      setSequence(hint.sequence)
-      // Every task on the host shares this stream; only this one's events
-      // change what the panel shows.
-      if (!hint.task_key || hint.task_key === taskKey) {
-        setTaskHint((current) => Math.max(current, hint.sequence))
-        void load()
-      }
-    },
-    // A reset says the host pruned events this panel may have missed; the
-    // reload covers that, and the stream stays where it is.
-    onReset: (resetSequence: number) => {
-      setTaskHint((current) => Math.max(current + 1, resetSequence))
-      void load()
-    },
-  })
+    const error = detailQuery.error ?? historyQuery.error
+    if (!error || isConnectionError(error)) return
+    toast.error(errorMessage(error))
+    if (!detailQuery.data && !isAccessError(error)) onClose()
+  }, [detailQuery.error, detailQuery.data, historyQuery.error, onClose])
 
   // An agent on another server can only work a task that lives there. Other
   // edits are saved here first; then the tree is exported and imported with
@@ -198,12 +128,14 @@ export default function TaskDrawer({
     } catch (error) {
       toast.error(`${key} moved to ${label}, but the move did not finish: ${errorMessage(error)}`)
     }
+    await refreshTasks(client, destination)
     onMoved?.(hostId)
     return result
   }
 
-  if (detail?.task.key !== taskKey) {
-    return <TaskDetailLoading taskKey={taskKey} width={detailWidth} resizeHandle={resizeHandle} onClose={onClose} />
+  if (detail?.task.key !== taskKey || !historyQuery.data) {
+    return <TaskDetailLoading taskKey={taskKey} width={detailWidth} resizeHandle={resizeHandle} onClose={onClose}
+      error={detailQuery.error || historyQuery.error ? errorMessage(detailQuery.error ?? historyQuery.error) : undefined} />
   }
 
   return (
@@ -213,7 +145,6 @@ export default function TaskDrawer({
       detail={detail}
       principals={principals}
       events={events}
-      liveSequence={taskHint}
       width={detailWidth}
       resizeHandle={resizeHandle}
       onClose={onClose}
@@ -223,16 +154,15 @@ export default function TaskDrawer({
         const host = await resolveDaemon(hostID)
         if (!host) throw new Error("That server is no longer registered")
         const label = host.label || host.id
-        await transferTask(detail.task.key, target, host, label, idempotencyKey())
+        await write(() => transferTask(detail.task.key, target, host, label, idempotencyKey()))
+        await refreshTasks(client, host)
         toast.success(`${detail.task.key} moved to ${label}`)
-        await load()
       }}
       onRequeue={async (queue: string) => {
         // The drawer shows the key its owner chose, so it stays on the
         // cancelled task, whose comment links the new one.
-        const moved = await requeueTask(detail.task.key, queue, detail.task.revision, target)
+        const moved = await write(() => requeueTask(detail.task.key, queue, detail.task.revision, target))
         toast.success(`${detail.task.key} moved to ${queue} as ${moved.key}`)
-        await load()
       }}
       onSave={async (input: TaskEdit) => {
         const task = detail.task
@@ -247,39 +177,40 @@ export default function TaskDrawer({
         }
         try {
           if (remote?.hostId !== undefined) {
-            return await moveToAgent(task, input, remote)
+            return await write(() => moveToAgent(task, input, remote))
           }
-          const updated = await updateTask(detail.task.key, input, target)
-          setDetail((current) => current ? { ...current, task: updated } : current)
+          const updated = await write(() => updateTask(detail.task.key, input, target))
+          client.setQueryData(taskKeys.detail(target, taskKey), (current: Detail | undefined) => current ? { ...current, task: updated } : current)
           toast.success("Task updated")
           return updated
         } catch (error) {
           toast.error(errorMessage(error))
-          await load()
           throw error
         }
       }}
       onComment={async (body: string, key: string) => {
         try {
-          await addTaskComment(detail.task.key, body, target, key)
-          await load()
+          await write(() => addTaskComment(detail.task.key, body, target, key))
         } catch (error) {
           toast.error(errorMessage(error))
           throw error
         }
       }}
       onAddRelation={async (targetKey: string, type: TaskRelationType) => {
-        await addTaskRelation(
+        await write(() => addTaskRelation(
           detail.task.key, targetKey, type, detail.task.revision, target, idempotencyKey(),
-        )
-        await load()
+        ))
       }}
       onDeleteRelation={async (relationID: number) => {
-        await deleteTaskRelation(
+        await write(() => deleteTaskRelation(
           detail.task.key, relationID, detail.task.revision, target, idempotencyKey(),
-        )
-        await load()
+        ))
       }}
     />
   )
+}
+
+export default function TaskDrawer(props: Parameters<typeof TaskDrawerContent>[0]) {
+  const target = useApiTarget(props.target)
+  return <TaskDrawerContent key={JSON.stringify([target?.id ?? "local", props.taskKey])} {...props} target={target} />
 }

@@ -1,3 +1,5 @@
+import { useMutation } from "@tanstack/react-query"
+import { errorText } from "@/lib/queryClient"
 import { AlertCircle, HelpCircle, MoreHorizontal, X } from "lucide-react"
 import { type ComponentProps, type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react"
 import type {
@@ -109,8 +111,11 @@ export default function TaskDetail({
   const pending = saving || uploadingDescription || uploadingComment
   const [relationType, setRelationType] = useState<TaskRelationType>("blocks")
   const [relationTarget, setRelationTarget] = useState("")
-  const [relationBusy, setRelationBusy] = useState(false)
-  const [relationError, setRelationError] = useState("")
+  const relationMutation = useMutation({
+    mutationFn: (input: { key: string; type: TaskRelationType } | { id: number }) =>
+      "id" in input ? onDeleteRelation(input.id) : onAddRelation(input.key, input.type),
+    onSuccess: (_, input) => { if ("key" in input) setRelationTarget("") },
+  })
   const [commentOrder, setCommentOrder] = useState<"newest" | "oldest">("newest")
   const [historyOpen, setHistoryOpen] = useState(true)
   const [transferOpen, setTransferOpen] = useState(false)
@@ -159,13 +164,7 @@ export default function TaskDetail({
   }
   const comments = commentOrder === "newest" ? [...detail.comments].reverse() : detail.comments
   const submitRelation = () => {
-    if (!relationTarget.trim()) return
-    setRelationBusy(true)
-    setRelationError("")
-    void onAddRelation(relationTarget.trim(), relationType)
-      .then(() => setRelationTarget(""))
-      .catch((error) => setRelationError(error instanceof Error ? error.message : String(error)))
-      .finally(() => setRelationBusy(false))
+    if (relationTarget.trim()) relationMutation.mutate({ key: relationTarget.trim(), type: relationType })
   }
 
   const save = async () => {
@@ -391,11 +390,7 @@ export default function TaskDetail({
                   {otherStatus && <StatusPill tone={taskTone(otherStatus)}>{flexibleStatusLabel(otherStatus)}</StatusPill>}
                   <Button type="button" variant="ghost" size="icon-xs" aria-label={`Remove relation to ${other}`}
                     className="size-6 shrink-0 rounded-[7px] text-muted-foreground hover:bg-accent hover:text-destructive"
-                    onClick={() => {
-                      setRelationError("")
-                      void onDeleteRelation(relation.id).catch((error) =>
-                        setRelationError(error instanceof Error ? error.message : String(error)))
-                    }}><X className="size-3" /></Button>
+                    onClick={() => relationMutation.mutate({ id: relation.id })}><X className="size-3" /></Button>
                 </div>
               )
             })}
@@ -409,10 +404,10 @@ export default function TaskDetail({
               <Input name="target_key" aria-label="Related task key" placeholder="TEST-2" value={relationTarget}
                 className={cn(FIELD, FIELD_MONO, "h-[26px] w-[118px]")}
                 onChange={(event) => setRelationTarget(event.target.value)} />
-              <Button type="button" variant="ghost" onClick={submitRelation} disabled={relationBusy || !relationTarget.trim()}
+              <Button type="button" variant="ghost" onClick={submitRelation} disabled={relationMutation.isPending || !relationTarget.trim()}
                 className="h-[26px] rounded-[7px] bg-accent px-2.5 text-[12px] hover:bg-secondary">Add relation</Button>
             </form>
-            {relationError && <p role="alert" className="text-[12px] text-status-failed">{relationError}</p>}
+            {relationMutation.error && <p role="alert" className="text-[12px] text-status-failed">{errorText(relationMutation.error)}</p>}
           </section>
           </> : <div className="flex min-w-0 flex-col gap-2">
             {/* No second title here: the sticky header already carries it, and
@@ -455,7 +450,8 @@ export default function TaskDetail({
  * at once. It takes no focus: the element that opened it stays the one the
  * loaded panel returns focus to.
  */
-export function TaskDetailLoading({ taskKey, width, resizeHandle, onClose }: {
+export function TaskDetailLoading({ taskKey, width, resizeHandle, onClose, error }: {
+  error?: string
   taskKey: string
   width: number
   resizeHandle: ReactNode
@@ -470,7 +466,7 @@ export function TaskDetailLoading({ taskKey, width, resizeHandle, onClose }: {
       onOpenAutoFocus={(event) => event.preventDefault()}
       onCloseAutoFocus={(event) => event.preventDefault()}>
     {resizeHandle}
-    <div className="task-detail-panel" aria-busy="true">
+    <div className="task-detail-panel" aria-busy={!error}>
       <header className="sticky top-0 z-[3] flex items-start gap-2.5 bg-card px-3.5 pt-[11px] pb-2.5 shadow-[var(--raise)]">
         <div className="flex min-w-0 flex-1 items-center gap-[9px]">
           {/* Names the dialog without being the task heading, which marks a loaded task. */}
@@ -482,7 +478,7 @@ export function TaskDetailLoading({ taskKey, width, resizeHandle, onClose }: {
           className="size-7 shrink-0 rounded-[8px] text-muted-foreground hover:bg-accent hover:text-foreground"><X className="size-3.5" /></Button>
       </header>
       <div className="task-detail-body px-4 pt-3.5 pb-7">
-        <span className={EMPTY} role="status">Loading task…</span>
+        {error ? <p role="alert" className="text-status-failed">{error}</p> : <span className={EMPTY} role="status">Loading task…</span>}
       </div>
     </div>
     </DialogContent>

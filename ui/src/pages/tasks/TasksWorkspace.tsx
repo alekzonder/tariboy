@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { useOptionalDaemons } from "@/components/DaemonProvider"
-import { useTasksSocket } from "@/hooks/useTasksSocket"
+import { keepPreviousData, useMutation, useQueries, useQueryClient } from "@tanstack/react-query"
+import { useApiQuery, useApiTarget } from "@/hooks/useApiQuery"
+import { errorText as errorMessage } from "@/lib/queryClient"
+import { taskKeys, taskQueries, refreshTasks, writeTask } from "./taskQueries"
+import { useTaskQueryEvents } from "./useTaskQueryEvents"
 import { ApiError, isConnectionError, targetReady, type ApiTarget } from "@/lib/api"
 import { buildTaskForest, canDropTaskInside } from "@/lib/taskTree"
 import { resolveDaemon } from "@/lib/daemons"
@@ -12,12 +16,6 @@ import {
   createTask,
   createTaskQueue,
   deleteTaskRelation,
-  getTask,
-  listTaskNotifications,
-  listTaskEvents,
-  listTaskPrincipals,
-  listTaskQueues,
-  type listTasks,
   markTaskNotificationRead,
   moveTask,
   requeueTask,
@@ -28,10 +26,7 @@ import {
   type Task,
   type TaskDetail as Detail,
   type TaskPriority,
-  type TaskEvent,
   type TaskNotification,
-  type TaskPrincipals,
-  type TaskQueue,
   type TaskRelationType,
   type TaskStatus,
   type TaskStatusView,
@@ -42,7 +37,6 @@ import TaskDetail, { TaskDetailLoading } from "./TaskDetail"
 import TaskForm from "./TaskForm"
 import TaskTree from "./TaskTree"
 import TaskPanelResizeHandle from "./TaskPanelResizeHandle"
-import { listAllTasks } from "./useAllServersTasks"
 import { persistTaskQueueFilter, readTaskQueueFilter } from "./taskFilterStorage"
 import { readRememberedQueue, rememberQueue } from "./taskQueueMemory"
 import { MIN_TASK_DETAIL_WIDTH, useTaskPanelWidths } from "./useTaskPanelWidths"
@@ -56,10 +50,6 @@ function idempotencyKey(): string {
   return globalThis.crypto?.randomUUID?.() ?? `task-action-${Date.now()}-${Math.random()}`
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
 type TasksWorkspaceProps = {
   scopeAgent?: string
   target?: ApiTarget
@@ -69,11 +59,13 @@ type TasksWorkspaceProps = {
 
 function TasksWorkspaceContent({
   scopeAgent,
-  target,
+  target: inputTarget,
   initialTaskKey,
   onNotificationsChanged,
   server,
 }: TasksWorkspaceProps & { server: string }) {
+  const target = useApiTarget(inputTarget)
+  const client = useQueryClient()
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const { detailWidth, setDetailWidth } = useTaskPanelWidths()
   const [workspaceWidth, setWorkspaceWidth] = useState(0)
@@ -94,11 +86,6 @@ function TasksWorkspaceContent({
     ? Math.max(MIN_TASK_DETAIL_WIDTH, workspaceWidth - 80)
     : Math.max(MIN_TASK_DETAIL_WIDTH, (globalThis.innerWidth || 820) - 80)
   const effectiveDetailWidth = Math.min(detailWidth, detailMaximum)
-  const [queues, setQueues] = useState<TaskQueue[]>([])
-  const [principals, setPrincipals] = useState<TaskPrincipals | null>(null)
-  const [metadataError, setMetadataError] = useState("")
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [notifications, setNotifications] = useState<TaskNotification[]>([])
   const [view, setView] = useState<TaskPrincipalFilter>("")
   const [queuesOpen, setQueuesOpen] = useState(false)
   const [statusView, setStatusView] = useState<TaskStatusView>("active")
@@ -110,246 +97,89 @@ function TasksWorkspaceContent({
   }, [])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [selectedKey, setSelectedKey] = useState("")
-  const selectedKeyRef = useRef("")
-  const [detail, setDetail] = useState<Detail | null>(null)
-  // The task a click asked for whose detail has not arrived yet; the sheet
-  // opens on it at once instead of waiting for the read.
-  const [loadingKey, setLoadingKey] = useState("")
-  const [events, setEvents] = useState<TaskEvent[]>([])
   const [creatingParent, setCreatingParent] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [sequence, setSequence] = useState(0)
-  const [socketEnabled, setSocketEnabled] = useState(false)
-  const hasLoadedTreeRef = useRef(false)
-  const treeRequestRef = useRef(0)
-  const metadataRequestRef = useRef(0)
-  const detailRequestRef = useRef(0)
-  const mountedRef = useRef(true)
-  const realtimeRefreshRef = useRef({ running: false, pending: false, scheduled: false })
+  const queueQuery = useApiQuery(taskQueries.queues(target), target)
+  const peopleQuery = useApiQuery(taskQueries.principals(target), target)
+  const inboxQuery = useApiQuery(taskQueries.notifications(target), target)
+  const queues = queueQuery.data?.queues ?? []
+  const principals = peopleQuery.data ?? null
+  const notifications = useMemo(() => inboxQuery.data?.notifications ?? [], [inboxQuery.data])
   const principalFilter = !scopeAgent && view !== "" ? principals?.customer : undefined
-  const principalMetadataError = !scopeAgent && view !== "" ? metadataError : ""
-
-  const loadMetadata = useCallback(async () => {
+  const principalMetadataError = !scopeAgent && view !== "" && peopleQuery.error ? errorMessage(peopleQuery.error) : ""
+  const waitingForPrincipal = !scopeAgent && view !== "" && !principalFilter
+  const filters = {
+    text: query, scope_agent: scopeAgent, status_view: statusView,
+    ...(view === "mine" ? { assignee: scopeAgent ? actorAgent(scopeAgent) : principalFilter } : {}),
+    ...(view === "waiting" ? { waiting_for: scopeAgent ? actorAgent(scopeAgent) : principalFilter } : {}),
+  }
+  const treeQuery = useApiQuery({ ...taskQueries.list(target, filters), enabled: !waitingForPrincipal, placeholderData: keepPreviousData }, target)
+  const detailQuery = useApiQuery(taskQueries.detail(target, selectedKey), target)
+  const historyQuery = useApiQuery(taskQueries.history(target, selectedKey, "latest"), target)
+  const tasks = useMemo(() => treeQuery.data?.tasks ?? [], [treeQuery.data])
+  const detail = detailQuery.data ?? null
+  const events = historyQuery.data ?? []
+  const loadingKey = selectedKey && (!detail || !historyQuery.data) ? selectedKey : ""
+  const loading = waitingForPrincipal ? !principalMetadataError : treeQuery.isPending
+  const refreshing = treeQuery.isFetching && !!treeQuery.data
+  const loadTree = async () => {
     if (!targetReady(target)) return
-    const request = ++metadataRequestRef.current
-    try {
-      const [queuePage, people, inbox] = await Promise.all([
-        listTaskQueues(target),
-        listTaskPrincipals(target),
-        listTaskNotifications(false, target),
-      ])
-      if (!mountedRef.current || request !== metadataRequestRef.current) return
-      const nextQueues = queuePage.queues ?? []
-      setQueues(nextQueues)
-      setPrincipals(people)
-      setNotifications(inbox.notifications ?? [])
-      setMetadataError("")
-    } catch (error) {
-      if (!mountedRef.current || request !== metadataRequestRef.current) return
-      if (isConnectionError(error)) return
-      const message = error instanceof Error ? error.message : String(error)
-      setMetadataError(message)
-      toast.error(message)
-    }
-  }, [target])
-
-  const loadTree = useCallback(async () => {
+    await client.cancelQueries({ queryKey: taskKeys.list(target, filters) })
+    await treeQuery.refetch()
+  }
+  const loadMetadata = async () => {
     if (!targetReady(target)) return
-    const request = ++treeRequestRef.current
-    if (!scopeAgent && view !== "" && !principalFilter) {
-      setLoading(!principalMetadataError)
-      setRefreshing(false)
-      return
-    }
-    const initial = !hasLoadedTreeRef.current
-    if (initial) setLoading(true)
-    else setRefreshing(true)
-    try {
-      const filters: Parameters<typeof listTasks>[0] = {
-        text: query,
-        scope_agent: scopeAgent,
-        status_view: statusView,
-      }
-      if (view === "mine") filters.assignee = scopeAgent ? actorAgent(scopeAgent) : principalFilter
-      if (view === "waiting") filters.waiting_for = scopeAgent ? actorAgent(scopeAgent) : principalFilter
-      const { tasks: loaded, sequence: latestSequence } = await listAllTasks(filters, target)
-      if (request !== treeRequestRef.current) return
-      setTasks(loaded)
-      setSequence((current) => Math.max(current, latestSequence))
-      hasLoadedTreeRef.current = true
-      setSocketEnabled(true)
-    } catch (error) {
-      if (mountedRef.current && request === treeRequestRef.current && !isConnectionError(error)) {
-        toast.error(error instanceof Error ? error.message : String(error))
-      }
-    } finally {
-      if (request === treeRequestRef.current) {
-        setLoading(false)
-        if (!initial) setRefreshing(false)
-      }
-    }
-  }, [principalFilter, principalMetadataError, query, scopeAgent, statusView, target, view])
-
-  const loadDetail = useCallback(async (key: string) => {
-    const refreshingSelection = selectedKeyRef.current === key
-    if (refreshingSelection && !targetReady(target)) return
-    selectedKeyRef.current = key
-    const request = ++detailRequestRef.current
-    if (!refreshingSelection) setLoadingKey(key)
-    try {
-      const loadHistory = async (): Promise<TaskEvent[]> => {
-        const history: TaskEvent[] = []
-        let after = 0
-        for (;;) {
-          const page = await listTaskEvents(key, after, 200, target)
-          const batch = page.events ?? []
-          history.push(...batch)
-          if (batch.length < 200) return history.slice(-200)
-          const next = batch[batch.length - 1]?.sequence ?? after
-          if (next <= after) throw new Error("task history cursor did not advance")
-          after = next
-        }
-      }
-      const [next, history] = await Promise.all([
-        getTask(key, target),
-        loadHistory(),
-      ])
-      if (!mountedRef.current || request !== detailRequestRef.current || selectedKeyRef.current !== key) return
-      setLoadingKey("")
-      setDetail(next)
-      setEvents(history)
-      setSelectedKey(key)
-    } catch (error) {
-      if (!mountedRef.current || request !== detailRequestRef.current) return
-      setLoadingKey("")
-      if (refreshingSelection) {
-        if (!isConnectionError(error)) toast.error(errorMessage(error))
-        return
-      }
-      selectedKeyRef.current = ""
-      setSelectedKey("")
-      setDetail(null)
-      setEvents([])
-      toast.error(error instanceof Error ? error.message : String(error))
-    }
-  }, [target])
-
-  // Opening a task is the customer seeing its question. Marking it read here is
-  // what clears the row's indicator, and the only place that does: the workspace
-  // has no notification inbox of its own.
+    await client.cancelQueries({ queryKey: taskKeys.principals(target) })
+    await Promise.all([queueQuery.refetch(), peopleQuery.refetch(), inboxQuery.refetch()])
+  }
+  const loadDetail = useCallback(async (key: string) => { setSelectedKey(key) }, [])
+  const setTasks = (update: Task[] | ((current: Task[]) => Task[])) => client.setQueryData(taskKeys.list(target, filters), (page: { tasks: Task[]; sequence: number } | undefined) =>
+    page ? { ...page, tasks: typeof update === "function" ? update(page.tasks) : update } : page)
+  const setDetail = (update: (current: Detail | null) => Detail | null) => client.setQueryData(taskKeys.detail(target, selectedKey), (current: Detail | undefined) => update(current ?? null) ?? undefined)
+  const write = <T,>(operation: () => Promise<T>) => writeTask(client, target, operation)
+  useTaskQueryEvents(target, treeQuery.data?.sequence)
   useEffect(() => {
-    if (!selectedKey) return
-    const unread = notifications.filter((notification) =>
-      notification.task_key === selectedKey
-      && notification.type === "task.question"
-      && !notification.read_at
-      && !notification.dismissed_at)
-    if (unread.length === 0) return
-    void (async () => {
+    const error = treeQuery.error ?? peopleQuery.error ?? detailQuery.error ?? historyQuery.error
+    if (error && !isConnectionError(error)) toast.error(errorMessage(error))
+  }, [treeQuery.error, peopleQuery.error, detailQuery.error, historyQuery.error])
+  const markRead = useMutation({
+    mutationFn: async (unread: TaskNotification[]) => {
+      await client.cancelQueries({ queryKey: taskKeys.notifications(target) })
       const read = new Set<string>()
       for (const notification of unread) {
-        try {
-          await markTaskNotificationRead(notification.id, target)
-          read.add(notification.id)
-        } catch {
-          // The indicator stays; the next open of the task tries again.
-        }
+        try { await markTaskNotificationRead(notification.id, target); read.add(notification.id) }
+        catch { /* Leave the indicator for the next open. */ }
       }
-      if (!mountedRef.current || read.size === 0) return
-      const readAt = new Date().toISOString()
-      setNotifications((current) => current.map((notification) =>
-        read.has(notification.id) ? { ...notification, read_at: readAt } : notification))
+      if (!read.size) return
+      client.setQueryData(taskKeys.notifications(target), (page: { notifications: TaskNotification[]; count: number } | undefined) => page ? {
+        ...page, notifications: page.notifications.map((item) => read.has(item.id) ? { ...item, read_at: new Date().toISOString() } : item),
+      } : page)
       onNotificationsChanged?.()
-    })()
-  }, [notifications, onNotificationsChanged, selectedKey, target])
-
-  const refreshInbox = useCallback(async () => {
-    try {
-      const page = await listTaskNotifications(false, target)
-      setNotifications(page.notifications)
-    } catch {
-      // HTTP remains primary; an inbox refresh failure must not blank the tree.
-    }
-  }, [target])
-
-  const refreshFromRealtimeHint = useCallback(() => {
-    const refresh = realtimeRefreshRef.current
-    if (refresh.running) {
-      refresh.pending = true
-      return
-    }
-    if (refresh.scheduled) return
-    refresh.scheduled = true
-    void Promise.resolve().then(async () => {
-      refresh.scheduled = false
-      if (!mountedRef.current) return
-      refresh.running = true
-      do {
-        refresh.pending = false
-        await Promise.all([
-          loadTree(),
-          loadMetadata(),
-          refreshInbox(),
-          selectedKeyRef.current ? loadDetail(selectedKeyRef.current) : Promise.resolve(),
-        ])
-      } while (refresh.pending && mountedRef.current)
-      refresh.running = false
-    })
-  }, [loadDetail, loadMetadata, loadTree, refreshInbox])
-
+    },
+  })
+  const markNotifications = markRead.mutate
   useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-  useEffect(() => {
-    void Promise.resolve().then(loadMetadata)
-  }, [loadMetadata])
-  useEffect(() => {
-    void Promise.resolve().then(loadTree)
-  }, [loadTree])
-  // A new endpoint (the host reconnected) re-reads the open task in place.
-  useEffect(() => {
-    const key = selectedKeyRef.current
-    if (key) void Promise.resolve().then(() => loadDetail(key))
-  }, [loadDetail])
-  // Open each deep-link key once: loadDetail changes identity whenever the
-  // host Daemon object is re-created, and the key stays in the URL after close.
+    if (!selectedKey || !detail) return
+    const unread = notifications.filter((item) => item.task_key === selectedKey && item.type === "task.question" && !item.read_at && !item.dismissed_at)
+    if (unread.length) markNotifications(unread)
+  }, [selectedKey, detail, notifications, markNotifications])
   const openedInitialKeyRef = useRef("")
   useEffect(() => {
     if (!initialTaskKey || openedInitialKeyRef.current === initialTaskKey) return
     openedInitialKeyRef.current = initialTaskKey
-    void Promise.resolve().then(() => loadDetail(initialTaskKey))
+    void loadDetail(initialTaskKey)
   }, [initialTaskKey, loadDetail])
-
-  useTasksSocket({
-    target,
-    after: sequence,
-    enabled: socketEnabled,
-    onHint: (hint) => {
-      setSequence(hint.sequence)
-      refreshFromRealtimeHint()
-    },
-    onReset: () => {
-      setSequence(0)
-      refreshFromRealtimeHint()
-    },
-  })
 
   const create = async (input: { queue: string; parent_key: string; title: string }) => {
     try {
-      const created = await createTask(input, target)
+      const created = await write(() => createTask(input, target))
       if (!input.parent_key) rememberQueue(server, input.queue)
       setCreatingParent(null)
       if (input.parent_key) {
         setExpanded((current) => new Set(current).add(input.parent_key))
       }
-      await loadTree()
       await loadDetail(created.key)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      toast.error(errorMessage(error))
     }
   }
 
@@ -365,19 +195,13 @@ function TasksWorkspaceContent({
   }) => {
     if (!detail) throw new Error("Task is no longer selected")
     try {
-      const updated = await updateTask(detail.task.key, {
-        ...input,
-      }, target)
+      const updated = await write(() => updateTask(detail.task.key, { ...input }, target))
       setDetail((current) => current ? { ...current, task: updated } : current)
       setTasks((current) => current.map((task) => task.key === updated.key ? updated : task))
       toast.success("Task updated")
       return updated
     } catch (error) {
-      if (error instanceof ApiError && error.status === 409) {
-        await loadTree()
-        await loadDetail(detail.task.key)
-      }
-      toast.error(error instanceof Error ? error.message : String(error))
+      toast.error(errorMessage(error))
       throw error
     }
   }
@@ -385,10 +209,9 @@ function TasksWorkspaceContent({
   const comment = async (body: string, idempotencyKey: string) => {
     if (!detail) return
     try {
-      await addTaskComment(detail.task.key, body, target, idempotencyKey)
-      await loadDetail(detail.task.key)
+      await write(() => addTaskComment(detail.task.key, body, target, idempotencyKey))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      toast.error(errorMessage(error))
       throw error
     }
   }
@@ -402,6 +225,7 @@ function TasksWorkspaceContent({
       toast.error("Tasks can only move inside their queue and outside their own subtree")
       return
     }
+    await client.cancelQueries({ queryKey: taskKeys.server(target) })
     const previous = tasks
     setTasks((current) => current.map((task) => task.key === key ? { ...task, parent_key: parentKey } : task))
     try {
@@ -412,11 +236,11 @@ function TasksWorkspaceContent({
       }, target)
       setTasks((current) => current.map((task) => task.key === key ? updated : task))
       if (parentKey) setExpanded((current) => new Set(current).add(parentKey))
-      await loadTree()
     } catch (error) {
       setTasks(previous)
-      if (error instanceof ApiError && error.status === 409) await loadTree()
-      toast.error(error instanceof Error ? error.message : String(error))
+      toast.error(errorMessage(error))
+    } finally {
+      await refreshTasks(client, target)
     }
   }
 
@@ -424,12 +248,11 @@ function TasksWorkspaceContent({
     const changing = tasks.find((task) => task.key === key)
     if (!changing) return
     try {
-      const updated = await updateTask(key, { priority, revision: changing.revision }, target)
+      const updated = await write(() => updateTask(key, { priority, revision: changing.revision }, target))
       setTasks((current) => current.map((task) => task.key === key ? updated : task))
       setDetail((current) => current?.task.key === key ? { ...current, task: updated } : current)
     } catch (error) {
-      if (error instanceof ApiError && error.status === 409) await loadTree()
-      toast.error(error instanceof Error ? error.message : String(error))
+      toast.error(errorMessage(error))
     }
   }
 
@@ -439,38 +262,34 @@ function TasksWorkspaceContent({
     const host = await resolveDaemon(hostID)
     if (!host) throw new Error("That server is no longer registered")
     const label = host.label || host.id
-    await transferTask(key, target, host, label, idempotencyKey())
+    await write(() => transferTask(key, target, host, label, idempotencyKey()))
+    await refreshTasks(client, host)
     toast.success(`${key} moved to ${label}`)
-    await loadTree()
-    await loadDetail(key)
   }
 
   const requeueDetail = async (queue: string) => {
     if (!detail) throw new Error("Task is no longer selected")
-    const moved = await requeueTask(detail.task.key, queue, detail.task.revision, target)
+    const moved = await write(() => requeueTask(detail.task.key, queue, detail.task.revision, target))
     toast.success(`${detail.task.key} moved to ${queue} as ${moved.key}`)
-    await loadTree()
     await loadDetail(moved.key)
   }
 
   const createQueue = async (input: CreateQueueInput) => {
     try {
-      const created = await createTaskQueue(input, target)
-      setQueues((current) => [...current, created])
+      const created = await write(() => createTaskQueue(input, target))
       selectQueue(created.prefix)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      toast.error(errorMessage(error))
     }
   }
 
   const updateQueue = async (prefix: string, input: Parameters<typeof updateTaskQueue>[1]) => {
     try {
-      const updated = await updateTaskQueue(prefix, input, target)
-      setQueues((current) => current.map((item) => item.prefix === prefix ? updated : item))
+      await write(() => updateTaskQueue(prefix, input, target))
       toast.success("Queue updated")
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) await loadMetadata()
-      toast.error(error instanceof Error ? error.message : String(error))
+      toast.error(errorMessage(error))
     }
   }
 
@@ -497,7 +316,6 @@ function TasksWorkspaceContent({
   // leaves out closed tasks, so their questions would count in the badge with
   // no row to open. Such tasks are read one by one and kept in the Active list
   // until their question is read.
-  const [questionTasks, setQuestionTasks] = useState<Task[]>([])
   const missingQuestionKeys = useMemo(() => {
     if (statusView !== "active" || query || view !== "") return []
     const listed = new Set(tasks.map((task) => task.key))
@@ -508,44 +326,22 @@ function TasksWorkspaceContent({
       .filter((key) => !listed.has(key))
       .sort()
   }, [notifications, query, scopeAgent, statusView, tasks, view])
-  const missingQuestionKey = missingQuestionKeys.join(" ")
-  useEffect(() => {
-    if (!missingQuestionKey) return
-    let current = true
-    void Promise.all(missingQuestionKey.split(" ").map((key) =>
-      getTask(key, target).then((loaded) => loaded.task, () => null)))
-      .then((loaded) => {
-        if (current && mountedRef.current) setQuestionTasks(loaded.filter((task): task is Task => task !== null))
-      })
-    return () => { current = false }
-  }, [missingQuestionKey, target])
-  const listedTasks = useMemo(() => {
-    const wanted = new Set(missingQuestionKeys)
-    const extra = questionTasks.filter((task) => wanted.has(task.key) || task.key === selectedKey)
-    const listed = new Set(tasks.map((task) => task.key))
-    return [...tasks, ...extra.filter((task) => !listed.has(task.key))]
-  }, [missingQuestionKeys, questionTasks, selectedKey, tasks])
+  const questionQueries = useQueries({ queries: missingQuestionKeys.map((key) => ({ ...taskQueries.detail(target, key), enabled: targetReady(target) })) })
+  const questionTasks = questionQueries.flatMap((result) => result.data ? [result.data.task] : [])
+  const listed = new Set(tasks.map((task) => task.key))
+  const listedTasks = [...tasks, ...questionTasks.filter((task) => !listed.has(task.key))]
+  if (detail && !listedTasks.some((task) => task.key === detail.task.key) && statusView === "active" && !query && !view) listedTasks.push(detail.task)
 
   // The queue filter is applied here rather than in `listTasks`, so the queue
   // menu can count the queues from the same load instead of asking again.
-  const visibleTasks = useMemo(
-    () => queue ? listedTasks.filter((task) => task.queue === queue) : listedTasks,
-    [listedTasks, queue],
-  )
+  const visibleTasks = queue ? listedTasks.filter((task) => task.queue === queue) : listedTasks
   const queueCounts = useMemo(() => {
     const counts = new Map<string, number>()
     for (const task of tasks) counts.set(task.queue, (counts.get(task.queue) ?? 0) + 1)
     return counts
   }, [tasks])
 
-  const closeDetail = () => {
-    detailRequestRef.current += 1
-    selectedKeyRef.current = ""
-    setLoadingKey("")
-    setSelectedKey("")
-    setDetail(null)
-    setEvents([])
-  }
+  const closeDetail = () => setSelectedKey("")
   const detailResizeHandle = <TaskPanelResizeHandle
     width={effectiveDetailWidth}
     maximum={detailMaximum}
@@ -593,6 +389,7 @@ function TasksWorkspaceContent({
         )}
         {principalMetadataError && !principalFilter
           ? <div className="tasks-empty" role="alert">{principalMetadataError}</div>
+          : treeQuery.error && !treeQuery.data ? <div className="tasks-empty" role="alert">{errorMessage(treeQuery.error)}</div>
           : loading ? <div className="tasks-empty">Loading tasks…</div> : (
           <TaskTree
             tasks={visibleTasks}
@@ -624,9 +421,10 @@ function TasksWorkspaceContent({
       </main>
       <QueueSettingsDialog open={queuesOpen} onOpenChange={setQueuesOpen} queues={queues}
         onCreate={createQueue} onUpdate={updateQueue} target={target} />
-      {loadingKey && detail?.task.key !== loadingKey ? (
+      {loadingKey ? (
         <TaskDetailLoading
           taskKey={loadingKey}
+          error={detailQuery.error || historyQuery.error ? errorMessage(detailQuery.error ?? historyQuery.error) : undefined}
           width={effectiveDetailWidth}
           resizeHandle={detailResizeHandle}
           onClose={closeDetail}
@@ -644,21 +442,19 @@ function TasksWorkspaceContent({
           onSave={saveDetail}
           onComment={comment}
           onAddRelation={async (targetKey: string, type: TaskRelationType) => {
-            await addTaskRelation(
+            await write(() => addTaskRelation(
               detail.task.key, targetKey, type, detail.task.revision, target, idempotencyKey(),
-            )
-            await loadDetail(detail.task.key)
+            ))
           }}
           onTransfer={transferDetail}
           onRequeue={requeueDetail}
           // The row shows the status and category too: reload the tree so the
           // list and the drawer agree before the socket reports the change.
-          onTaskChanged={() => { void loadDetail(detail.task.key); void loadTree() }}
+          onTaskChanged={() => { void refreshTasks(client, target) }}
           onDeleteRelation={async (relationID: number) => {
-            await deleteTaskRelation(
+            await write(() => deleteTaskRelation(
               detail.task.key, relationID, detail.task.revision, target, idempotencyKey(),
-            )
-            await loadDetail(detail.task.key)
+            ))
           }}
         />
       )}

@@ -245,8 +245,11 @@ function call<T>(
   method: string,
   path: string,
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
-  return apiOn<T>(resolveTarget(target), method, path, body)
+  return signal
+    ? apiOn<T>(resolveTarget(target), method, path, body, signal)
+    : apiOn<T>(resolveTarget(target), method, path, body)
 }
 
 function queryPath(path: string, values: object): string {
@@ -258,8 +261,8 @@ function queryPath(path: string, values: object): string {
   return encoded ? `${path}?${encoded}` : path
 }
 
-export const listTaskQueues = (target?: ApiTarget) =>
-  call<{ queues: TaskQueue[]; count: number }>(target, "GET", "/api/task-queues")
+export const listTaskQueues = (target?: ApiTarget, signal?: AbortSignal) =>
+  call<{ queues: TaskQueue[]; count: number }>(target, "GET", "/api/task-queues", undefined, signal)
 export const getTaskQueue = (prefix: string, target?: ApiTarget) =>
   call<TaskQueue>(target, "GET", `/api/task-queues/${encodeURIComponent(prefix)}`)
 export const createTaskQueue = (input: CreateQueueInput, target?: ApiTarget) =>
@@ -274,10 +277,10 @@ export const rebindAgentPool = (queue: string, pool: string, agents: string[], r
     agents, revision, idempotency_key: idempotencyKey,
   })
 
-export const listTasks = (filters: TaskFilters = {}, target?: ApiTarget) =>
-  call<TaskPage>(target, "GET", queryPath("/api/tasks", filters))
-export const getTask = (key: string, target?: ApiTarget) =>
-  call<TaskDetail>(target, "GET", `/api/tasks/${encodeURIComponent(key)}`)
+export const listTasks = (filters: TaskFilters = {}, target?: ApiTarget, signal?: AbortSignal) =>
+  call<TaskPage>(target, "GET", queryPath("/api/tasks", filters), undefined, signal)
+export const getTask = (key: string, target?: ApiTarget, signal?: AbortSignal) =>
+  call<TaskDetail>(target, "GET", `/api/tasks/${encodeURIComponent(key)}`, undefined, signal)
 export const createTask = (input: CreateTaskInput, target?: ApiTarget) =>
   call<Task>(target, "POST", "/api/tasks", input)
 export const updateTask = (key: string, input: UpdateTaskInput, target?: ApiTarget) =>
@@ -386,19 +389,22 @@ export const listTaskEvents = (
   after = 0,
   limit = 200,
   target?: ApiTarget,
+  signal?: AbortSignal,
 ) => call<{ events: TaskEvent[]; count: number }>(
   target,
   "GET",
   queryPath(`/api/tasks/${encodeURIComponent(key)}/events`, { after, limit }),
+  undefined, signal,
 )
 
-export const listTaskPrincipals = (target?: ApiTarget) =>
-  call<TaskPrincipals>(target, "GET", "/api/task-principals")
-export const listTaskNotifications = (includeDismissed = false, target?: ApiTarget) =>
+export const listTaskPrincipals = (target?: ApiTarget, signal?: AbortSignal) =>
+  call<TaskPrincipals>(target, "GET", "/api/task-principals", undefined, signal)
+export const listTaskNotifications = (includeDismissed = false, target?: ApiTarget, signal?: AbortSignal) =>
   call<{ notifications: TaskNotification[]; count: number }>(
     target,
     "GET",
     queryPath("/api/task-notifications", { include_dismissed: includeDismissed || undefined }),
+    undefined, signal,
   )
 export const markTaskNotificationRead = (id: string, target?: ApiTarget) =>
   call<TaskNotification>(
@@ -617,8 +623,8 @@ export const isActiveCategory = (category: TaskCategory): boolean =>
 const taskPath = (key: string) => `/api/tasks/${encodeURIComponent(key)}`
 const queuePath = (queue: string) => `/api/task-queues/${encodeURIComponent(queue)}`
 
-export const getTaskWorkflow = (key: string, target?: ApiTarget) =>
-  call<WorkflowView>(target, "GET", `${taskPath(key)}/workflow`)
+export const getTaskWorkflow = (key: string, target?: ApiTarget, signal?: AbortSignal) =>
+  call<WorkflowView>(target, "GET", `${taskPath(key)}/workflow`, undefined, signal)
 export const advanceTask = (
   key: string,
   outcome: string,

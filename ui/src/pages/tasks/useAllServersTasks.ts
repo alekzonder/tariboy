@@ -8,13 +8,17 @@ import { targetFor } from "@/lib/terminalsHost"
 export async function listAllTasks(
   filters: TaskFilters,
   target?: ApiTarget,
+  signal?: AbortSignal,
 ): Promise<{ tasks: Task[]; sequence: number }> {
   const tasks: Task[] = []
   let after = ""
   let sequence = 0
   const seenCursors = new Set<string>()
   do {
-    const page = await listTasks({ ...filters, limit: 500, after }, target)
+    signal?.throwIfAborted()
+    const page = await (signal
+      ? listTasks({ ...filters, limit: 500, after }, target, signal)
+      : listTasks({ ...filters, limit: 500, after }, target))
     tasks.push(...(page.tasks ?? []))
     sequence = Math.max(sequence, page.sequence ?? 0)
     after = page.next_cursor ?? ""
