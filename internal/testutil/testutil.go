@@ -9,11 +9,17 @@ import (
 	"time"
 )
 
+var realHome string
+
+// RealHome returns the HOME captured by IsolateEnv, for nested Go builds only.
+func RealHome() string { return realHome }
+
 // IsolateEnv removes every TARIBOY_ variable and points HOME at a new
 // temporary directory, so no default path of the code under test can reach
 // the live ~/.tariboy, ~/.tariboyd or daemon socket. Call it from TestMain
 // before m.Run; cleanup removes the temporary HOME.
 func IsolateEnv() (cleanup func(), err error) {
+	realHome = os.Getenv("HOME")
 	for _, kv := range os.Environ() {
 		if name, _, _ := strings.Cut(kv, "="); strings.HasPrefix(name, "TARIBOY_") {
 			os.Unsetenv(name)

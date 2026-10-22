@@ -80,7 +80,11 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   Go unit tests, Store skills, and smoke contracts;
   frontend checks cover UI typecheck, lint, unit tests, branding, and the
   documentation `doctor` plus `build`. Before checking, they download Go
-  modules and install locked UI and documentation dependencies with `npm ci`.
+  modules and install locked UI and documentation dependencies with `npm ci`
+  when the saved fingerprint is missing or differs. The fingerprint covers
+  `package.json`, `package-lock.json`, and the Node.js and npm versions.
+  Use `TARIBOY_NPM_CI_FORCE=1 make check` after manual changes to `node_modules`
+  or npm configuration, which the fingerprint does not track.
   They do not rewrite tracked files or dirty `git status`. Successful
   check-step output is suppressed; each step reports its result and duration
   as it finishes, while a failure also prints its command and complete

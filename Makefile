@@ -602,8 +602,8 @@ backend-check:
 	summarize backend-check
 
 frontend-check:
-	cd ui && npm ci
-	cd docs && npm ci
+	./scripts/npm-ci-locked.sh ui
+	./scripts/npm-ci-locked.sh docs
 	@$(STEP_RUNNER); \
 	run_step "ui-typecheck" 'cd ui && npx tsc -b'; \
 	run_step "ui-lint"      'cd ui && npm run lint'; \

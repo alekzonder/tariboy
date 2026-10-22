@@ -25,10 +25,6 @@ import (
 
 const shimTestProxyToken = "sk-tariboy-0123456789abcdef0123456789abcdef0123456789abcdef"
 
-// realHome is HOME before TestMain isolated it; tests that run the go
-// command hand it back so the build and module caches are reused.
-var realHome string
-
 // Tests in this package stay sequential when they swap package hooks
 // (execCommand, the tmux supervisor hooks, serverConnTimeoutNanos), call
 // t.Setenv or change TERM, or send SIGHUP to the test process, which every
@@ -42,7 +38,6 @@ func TestMain(m *testing.M) {
 	}
 	// Harnesses, fake tmux and the supervisor inherit this environment; keep
 	// live TARIBOY_* variables and the user's HOME out of them.
-	realHome = os.Getenv("HOME")
 	cleanup, err := testutil.IsolateEnv()
 	if err != nil {
 		panic(err)

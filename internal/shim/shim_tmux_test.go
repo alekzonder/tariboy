@@ -25,7 +25,7 @@ func buildShimBinary(t *testing.T, dir string) string {
 	shimBin := filepath.Join(dir, "tariboy-shim")
 	build := exec.Command("go", "build", "-o", shimBin, "./cmd/tariboy-shim")
 	build.Dir = filepath.Join("..", "..")
-	build.Env = append(os.Environ(), "HOME="+realHome)
+	build.Env = append(os.Environ(), "HOME="+testutil.RealHome())
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build tariboy-shim: %v\n%s", err, output)
 	}
