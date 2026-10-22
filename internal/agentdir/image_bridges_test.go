@@ -309,3 +309,84 @@ func TestValidateBridgePlanRejectsBareDotDot(t *testing.T) {
 		t.Fatalf("a name starting with two dots must stay valid: %v", err)
 	}
 }
+
+type bridgeRename struct{ from, to string }
+
+// recordBridgeRenames replaces renameBridge for one test. Tests that call it do
+// not run in parallel, because the hook is package-wide.
+func recordBridgeRenames(t *testing.T, before func(from, to string)) *[]bridgeRename {
+	t.Helper()
+	var mu sync.Mutex
+	renames := &[]bridgeRename{}
+	t.Cleanup(func() { renameBridge = os.Rename })
+	renameBridge = func(from, to string) error {
+		if before != nil {
+			before(from, to)
+		}
+		err := os.Rename(from, to)
+		if err == nil {
+			mu.Lock()
+			*renames = append(*renames, bridgeRename{from, to})
+			mu.Unlock()
+		}
+		return err
+	}
+	return renames
+}
+
+func tamperedBridge(t *testing.T) (source, finalDir string, expected []agentskills.Metadata, plan BridgePlan) {
+	t.Helper()
+	source, expected = bridgeFixture(t)
+	finalDir, _ = New(t.TempDir(), "worker").ImageBridgeDir(strings.Repeat("e", 64), "1", "claude")
+	plan = BridgePlan{SkillDestination: "skills"}
+	if err := PrepareImageBridge(source, finalDir, expected, plan); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(finalDir, "skills", "review", "SKILL.md"), []byte("tampered"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return source, finalDir, expected, plan
+}
+
+func TestPrepareImageBridgeReplacesInvalidBridgeWithOneRename(t *testing.T) {
+	source, finalDir, expected, plan := tamperedBridge(t)
+	attempts := 0
+	renames := recordBridgeRenames(t, func(string, string) { attempts++ })
+	if err := PrepareImageBridge(source, finalDir, expected, plan); err != nil {
+		t.Fatal(err)
+	}
+	parent := filepath.Dir(finalDir)
+	backup := filepath.Join(parent, ".claude-invalid-")
+	if attempts != 2 || len(*renames) != 2 || (*renames)[0].from != finalDir || !strings.HasPrefix((*renames)[0].to, backup) || (*renames)[1].to != finalDir {
+		t.Fatalf("attempts=%d renames=%+v, want the invalid bridge moved aside once, then the stage moved in", attempts, *renames)
+	}
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "claude" {
+		t.Fatalf("bridge parent holds %v, want only the published bridge", entries)
+	}
+}
+
+func TestPrepareImageBridgeRetriesTakenBackupName(t *testing.T) {
+	source, finalDir, expected, plan := tamperedBridge(t)
+	taken := ""
+	renames := recordBridgeRenames(t, func(from, to string) {
+		if from == finalDir && taken == "" {
+			taken = to
+			if err := os.MkdirAll(filepath.Join(to, "occupied"), 0o700); err != nil {
+				t.Error(err)
+			}
+		}
+	})
+	if err := PrepareImageBridge(source, finalDir, expected, plan); err != nil {
+		t.Fatal(err)
+	}
+	if taken == "" || len(*renames) != 2 || (*renames)[0].from != finalDir || (*renames)[0].to == taken {
+		t.Fatalf("taken=%q renames=%+v, want a second backup name", taken, *renames)
+	}
+	if _, err := os.Stat(filepath.Join(taken, "occupied")); err != nil {
+		t.Fatalf("the occupied name was disturbed: %v", err)
+	}
+}

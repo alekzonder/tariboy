@@ -2,6 +2,7 @@ package agentdir
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/imagefile"
@@ -398,6 +400,10 @@ func buildBridgeStage(stage, digest, contractVersion, harness string, expected [
 	return syncBridgeTree(stage)
 }
 
+// PrepareImageBridge publishes the skill bridge for one image at finalDir, or
+// keeps the one already published there when it validates. Calls for the same
+// finalDir run one at a time within this process. An invalid published bridge
+// is moved aside with one rename and replaced by a freshly staged one.
 func PrepareImageBridge(imageSkillsDir, finalDir string, expected []agentskills.Metadata, plan BridgePlan) error {
 	digest, contractVersion, harness, err := bridgeIdentity(finalDir)
 	if err != nil {
@@ -406,6 +412,7 @@ func PrepareImageBridge(imageSkillsDir, finalDir string, expected []agentskills.
 	if len(expected) == 0 {
 		return errors.New("cannot prepare an image bridge without skills")
 	}
+	defer lockBridgeDir(filepath.Clean(finalDir))()
 	if err := validatePublishedBridge(finalDir, expected, plan); err == nil {
 		return nil
 	}
@@ -431,29 +438,78 @@ func PrepareImageBridge(imageSkillsDir, finalDir string, expected []agentskills.
 	if err := buildBridgeStage(stage, digest, contractVersion, harness, expected, prepared, plan); err != nil {
 		return err
 	}
-	if err := os.Rename(stage, finalDir); err == nil {
-		return validatePublishedBridge(finalDir, expected, plan)
-	}
-	if err := validatePublishedBridge(finalDir, expected, plan); err == nil {
-		return nil
-	}
-	backup, err := os.MkdirTemp(parent, "."+harness+"-invalid-")
-	if err != nil {
+	backup := ""
+	if _, err := os.Lstat(finalDir); err == nil {
+		if backup, err = moveAsideInvalidBridge(parent, harness, finalDir); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
 		return err
 	}
-	if err := os.Remove(backup); err != nil {
-		return err
-	}
-	if err := os.Rename(finalDir, backup); err != nil {
-		if validateErr := validatePublishedBridge(finalDir, expected, plan); validateErr == nil {
-			return nil
+	if err := renameBridge(stage, finalDir); err != nil {
+		if backup != "" {
+			_ = renameBridge(backup, finalDir)
 		}
 		return err
 	}
-	if err := os.Rename(stage, finalDir); err != nil {
-		_ = os.Rename(backup, finalDir)
-		return err
+	if backup != "" {
+		_ = os.RemoveAll(backup)
 	}
-	_ = os.RemoveAll(backup)
 	return validatePublishedBridge(finalDir, expected, plan)
+}
+
+// moveAsideInvalidBridge renames finalDir to a fresh .<harness>-invalid-<random>
+// name in parent. Rename fails when that name is already taken, and the move is
+// then retried under another name.
+func moveAsideInvalidBridge(parent, harness, finalDir string) (string, error) {
+	const attempts = 10
+	for i := 0; ; i++ {
+		var random [8]byte
+		if _, err := rand.Read(random[:]); err != nil {
+			return "", err
+		}
+		backup := filepath.Join(parent, "."+harness+"-invalid-"+hex.EncodeToString(random[:]))
+		err := renameBridge(finalDir, backup)
+		if err == nil {
+			return backup, nil
+		}
+		if _, statErr := os.Lstat(backup); statErr != nil || i == attempts-1 {
+			return "", err
+		}
+	}
+}
+
+// renameBridge is os.Rename; tests replace it to count renames.
+var renameBridge = os.Rename
+
+// bridgeLocks serializes PrepareImageBridge per final directory. An entry is
+// dropped when its last user releases it.
+var bridgeLocks = struct {
+	mu   sync.Mutex
+	dirs map[string]*bridgeLock
+}{dirs: map[string]*bridgeLock{}}
+
+type bridgeLock struct {
+	mu    sync.Mutex
+	users int
+}
+
+func lockBridgeDir(dir string) (unlock func()) {
+	bridgeLocks.mu.Lock()
+	l := bridgeLocks.dirs[dir]
+	if l == nil {
+		l = &bridgeLock{}
+		bridgeLocks.dirs[dir] = l
+	}
+	l.users++
+	bridgeLocks.mu.Unlock()
+	l.mu.Lock()
+	return func() {
+		l.mu.Unlock()
+		bridgeLocks.mu.Lock()
+		if l.users--; l.users == 0 {
+			delete(bridgeLocks.dirs, dir)
+		}
+		bridgeLocks.mu.Unlock()
+	}
 }
