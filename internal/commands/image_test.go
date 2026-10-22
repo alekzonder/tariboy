@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -65,18 +66,6 @@ func installDisabledPlugin(t *testing.T, c *registry.Ctx, name string) {
 	if err := store.SetActiveVersion(name, version); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func handler(t *testing.T, path string) registry.HandlerFunc {
-	t.Helper()
-	cmd, ok := BuildRegistry().Get(path)
-	if !ok {
-		t.Fatalf("command %s not registered", path)
-	}
-	if cmd.HTTP != nil {
-		t.Fatalf("%s should be CLI-local (HTTP == nil)", path)
-	}
-	return cmd.Handler
 }
 
 // cmdHandler returns any registered command's handler without asserting on its
@@ -637,14 +626,14 @@ func TestImageBuildRejectsDuplicateAndReservedTagsBeforePublishing(t *testing.T)
 	}
 }
 
-func TestImageBuildWaitsForPublicationGate(t *testing.T) {
+func TestImageBuildWaitsForImageStoreLock(t *testing.T) {
 	t.Parallel()
 	c := localCtx(t)
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	locked := make(chan error, 1)
 	go func() {
-		locked <- image.WithPublicationGate(func() error {
+		locked <- image.WithStoreLock(func() error {
 			close(entered)
 			<-release
 			return nil
@@ -658,13 +647,64 @@ func TestImageBuildWaitsForPublicationGate(t *testing.T) {
 	}()
 	select {
 	case err := <-done:
-		t.Fatalf("build ignored publication gate: %v", err)
+		t.Fatalf("build ignored the image store lock: %v", err)
 	case <-time.After(100 * time.Millisecond):
 	}
 	close(release)
 	if err := <-locked; err != nil {
 		t.Fatal(err)
 	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A build locks only its own image name: another name's lock does not delay
+// it, its own name's lock does. The image locks are process-wide, so this test
+// does not run in parallel: a parallel test waiting for the store lock would
+// hold back the build's read of it while this test holds another name.
+func TestImageBuildLocksOnlyItsName(t *testing.T) {
+	c := localCtx(t)
+	src := writeExample(t)
+	build := func() <-chan error {
+		done := make(chan error, 1)
+		go func() {
+			_, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "tag": "latest", "path": src})
+			done <- err
+		}()
+		return done
+	}
+
+	// The first build migrates the store under the store lock.
+	if err := <-build(); err != nil {
+		t.Fatal(err)
+	}
+
+	var once sync.Once
+	unlockOther := image.LockRef("other")
+	release := func() { once.Do(unlockOther) }
+	defer release()
+	select {
+	case err := <-build():
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("build waited for another image name")
+	}
+	release()
+
+	var ownOnce sync.Once
+	unlockOwn := image.LockRef("reviewer")
+	releaseOwn := func() { ownOnce.Do(unlockOwn) }
+	defer releaseOwn()
+	done := build()
+	select {
+	case err := <-done:
+		t.Fatalf("build ignored its own image name lock: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	releaseOwn()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
@@ -694,7 +734,7 @@ func TestAgentImageAssignmentWaitsForPublicationRollback(t *testing.T) {
 	release := make(chan struct{})
 	locked := make(chan error, 1)
 	go func() {
-		locked <- image.WithPublicationGate(func() error {
+		locked <- image.WithRefLock(ref.Name, func() error {
 			_, buildErr := image.BuildV2(parsed, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
 			published <- buildErr
 			if buildErr != nil {
@@ -749,7 +789,7 @@ func TestImageRemoveWaitsForCommittedAssignment(t *testing.T) {
 	commitAssignment := make(chan struct{})
 	locked := make(chan error, 1)
 	go func() {
-		locked <- image.WithPublicationGate(func() error {
+		locked <- image.WithStoreLock(func() error {
 			close(entered)
 			<-commitAssignment
 			return agent.NewStore(c.Store).Create(agent.Agent{Name: "worker", ImageRef: ref.String(), ImageDigest: digest})

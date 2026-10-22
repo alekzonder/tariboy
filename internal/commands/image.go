@@ -172,9 +172,9 @@ func freezeImageSource(c *registry.Ctx, params imageBuildParams, locks imageBuil
 	if err != nil {
 		return imageBuildSource{}, cleanup, err
 	}
-	if err := image.WithPublicationGate(func() error {
-		return imageStore(c).Migrate()
-	}); err != nil {
+	// Migration walks every image name; MigrateOnce takes the store lock for
+	// it once. The publication later takes only the lock of the name it builds.
+	if err := imageStore(c).MigrateOnce(); err != nil {
 		return imageBuildSource{}, cleanup, api.UserError{Code: "build_failed", Msg: err.Error()}
 	}
 	buildDir := sourceCWD
@@ -230,11 +230,10 @@ func publishImage(c *registry.Ctx, params imageBuildParams, source imageBuildSou
 	builtAt := time.Now()
 	clock := func() time.Time { return builtAt }
 	var result any
-	err := image.WithPublicationGate(func() error {
+	// Every ref of one build shares the image name. freezeImageSource has
+	// already migrated the store.
+	err := image.WithRefLock(refs[0].Name, func() error {
 		store := imageStore(c)
-		if err := store.Migrate(); err != nil {
-			return api.UserError{Code: "build_failed", Msg: err.Error()}
-		}
 		publication, err := store.BeginPublication(refs)
 		if err != nil {
 			return api.UserError{Code: "build_failed", Msg: err.Error()}
@@ -696,7 +695,10 @@ func imageRm() registry.Command {
 		HTTP:    &registry.HTTPRoute{Method: "DELETE", Path: "/api/images/{ref}"},
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			var result any
-			err := image.WithPublicationGate(func() error {
+			// The store lock, not the name lock: removal checks that no
+			// agent has the ref active or pending, and assignment changes
+			// those under the store lock.
+			err := image.WithStoreLock(func() error {
 				ref, err := parseImageRef(p.Params)
 				if err != nil {
 					return err
@@ -745,7 +747,13 @@ func imageReadCommand(command registry.Command) registry.Command {
 	handler := command.Handler
 	command.Handler = func(c *registry.Ctx, p registry.Request) (any, error) {
 		var result any
-		err := image.WithPublicationGate(func() error {
+		// A detail read touches one image name. An unparsable ref locks its
+		// raw text and the handler then rejects it.
+		name := p.String("ref")
+		if ref, err := image.ParseRef(name); err == nil {
+			name = ref.Name
+		}
+		err := image.WithRefLock(name, func() error {
 			if expected := p.String("expected_digest"); expected != "" {
 				ref, err := parseImageRef(p.Params)
 				if err != nil {

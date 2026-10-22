@@ -63,14 +63,14 @@ func newRestartLaunchFixture(t *testing.T) restartLaunchFixture {
 	return restartLaunchFixture{m: m, runner: r, proceed: proceed}
 }
 
-// holdPublicationGate holds the image publication gate until the returned
+// holdImageStoreLock holds the image store lock for writing until the returned
 // release function runs. Release is idempotent.
-func holdPublicationGate(t *testing.T) (release func()) {
+func holdImageStoreLock(t *testing.T) (release func()) {
 	t.Helper()
 	held := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
-		_ = image.WithPublicationGate(func() error {
+		_ = image.WithStoreLock(func() error {
 			close(held)
 			<-done
 			return nil
@@ -122,12 +122,12 @@ func exitOnDeadlock(t *testing.T, what string) {
 }
 
 // The post-adoption Restart launch and Reprovision both hold an agent
-// lifecycle lock and the image publication gate at once. They must take them
+// lifecycle lock and the image store lock at once. They must take them
 // in one order: a launch that holds its lock while waiting for the gate must
 // not meet a Reprovision that holds the gate while waiting for that lock.
 func TestRestartAfterAdoptionAndReprovisionDoNotDeadlock(t *testing.T) {
 	f := newRestartLaunchFixture(t)
-	releaseGate := holdPublicationGate(t)
+	releaseGate := holdImageStoreLock(t)
 
 	reprovisioned := make(chan error, 1)
 	go func() { reprovisioned <- f.m.Reprovision("smoke", "") }()
@@ -156,9 +156,9 @@ func TestRestartAfterAdoptionAndReprovisionDoNotDeadlock(t *testing.T) {
 // launch that waits in it must not stall the manager's other APIs.
 func TestManagerAPIsDoNotWaitForRestartImageActivation(t *testing.T) {
 	f := newRestartLaunchFixture(t)
-	releaseGate := holdPublicationGate(t)
+	releaseGate := holdImageStoreLock(t)
 	close(f.proceed)
-	// The launch now waits for the publication gate inside image activation.
+	// The launch now waits for the image store lock inside image activation.
 	waitForBlockedIn(t, "(*Manager).activatePendingImage")
 
 	calls := []struct {

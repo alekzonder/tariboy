@@ -2819,7 +2819,7 @@ func TestAgentAuthoredImageRejectsDisabledExternalPlugin(t *testing.T) {
 	}
 }
 
-func TestBuildImageForAgentWaitsForPublicationGate(t *testing.T) {
+func TestBuildImageForAgentWaitsForItsNameLock(t *testing.T) {
 	workdir := t.TempDir()
 	source := filepath.Join(workdir, "authored")
 	if err := os.MkdirAll(source, 0o700); err != nil {
@@ -2831,7 +2831,7 @@ func TestBuildImageForAgentWaitsForPublicationGate(t *testing.T) {
 	store := &image.Store{Dir: filepath.Join(t.TempDir(), "images")}
 	entered, release, locked := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	go func() {
-		locked <- image.WithPublicationGate(func() error {
+		locked <- image.WithRefLock("authored", func() error {
 			close(entered)
 			<-release
 			return nil
@@ -2847,7 +2847,7 @@ func TestBuildImageForAgentWaitsForPublicationGate(t *testing.T) {
 	case err := <-done:
 		close(release)
 		<-locked
-		t.Fatalf("agent-authored publisher ignored publication gate: %v", err)
+		t.Fatalf("agent-authored publisher ignored its image name lock: %v", err)
 	case <-time.After(100 * time.Millisecond):
 	}
 	close(release)

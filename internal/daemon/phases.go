@@ -278,7 +278,7 @@ func buildTasks(ctx context.Context, proc *process, c *coreParts) (*taskParts, e
 		log.Error("seed default task queue", "err", err)
 	}
 	imgStore := &image.Store{Dir: p.ImagesDir()}
-	if err := image.WithPublicationGate(imgStore.Migrate); err != nil {
+	if err := image.WithStoreLock(imgStore.Migrate); err != nil {
 		return nil, fmt.Errorf("migrate image store: %w", err)
 	}
 	if err := image.EnsureBare(imgStore, time.Now); err != nil {

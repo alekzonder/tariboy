@@ -245,37 +245,40 @@ func imageSourceBuild() registry.Command {
 			var parseErr error
 			store := imageStore(c)
 			var record imagesource.BuildRecord
-			err = image.WithPublicationGate(func() error {
-				if err := store.Migrate(); err != nil {
-					return err
-				}
-				publication, err := store.BeginPublication([]image.Ref{ref})
-				if err != nil {
-					return err
-				}
-				record, err = sources.RecordBuild(name, func(dir string) (imagesource.BuildRecord, error) {
-					parsed, err := imagefile.ParseV2(dir)
+			// Migration walks every image name; MigrateOnce takes the store
+			// lock for it once, before the build takes only the lock of the
+			// name it publishes.
+			err = store.MigrateOnce()
+			if err == nil {
+				err = image.WithRefLock(ref.Name, func() error {
+					publication, err := store.BeginPublication([]image.Ref{ref})
 					if err != nil {
-						parseErr = err
-						return imagesource.BuildRecord{}, err
+						return err
 					}
-					layout := paths.Paths{Base: c.BaseDir}
-					pluginsDir := layout.PluginsDir()
-					manifest, err = image.BuildV2(parsed, imagefile.ResolveRoots{Plugins: pluginsDir}, ref, store, time.Now, imagePluginResolver(c, pluginsDir))
-					if err != nil {
-						return imagesource.BuildRecord{}, err
-					}
-					if _, err := imageSnapshotStore(c).CaptureWithProvenance(
-						context.Background(), ref.String(), manifest.Digest, name, dir, source.Provenance,
-					); err != nil {
-						return imagesource.BuildRecord{}, err
-					}
-					return imagesource.BuildRecord{
-						Ref: ref.String(), Digest: manifest.Digest, BuiltAt: manifest.BuiltAt,
-					}, nil
-				}, publication.Restore)
-				return err
-			})
+					record, err = sources.RecordBuild(name, func(dir string) (imagesource.BuildRecord, error) {
+						parsed, err := imagefile.ParseV2(dir)
+						if err != nil {
+							parseErr = err
+							return imagesource.BuildRecord{}, err
+						}
+						layout := paths.Paths{Base: c.BaseDir}
+						pluginsDir := layout.PluginsDir()
+						manifest, err = image.BuildV2(parsed, imagefile.ResolveRoots{Plugins: pluginsDir}, ref, store, time.Now, imagePluginResolver(c, pluginsDir))
+						if err != nil {
+							return imagesource.BuildRecord{}, err
+						}
+						if _, err := imageSnapshotStore(c).CaptureWithProvenance(
+							context.Background(), ref.String(), manifest.Digest, name, dir, source.Provenance,
+						); err != nil {
+							return imagesource.BuildRecord{}, err
+						}
+						return imagesource.BuildRecord{
+							Ref: ref.String(), Digest: manifest.Digest, BuiltAt: manifest.BuiltAt,
+						}, nil
+					}, publication.Restore)
+					return err
+				})
+			}
 			if err != nil {
 				if parseErr != nil {
 					return nil, api.UserError{

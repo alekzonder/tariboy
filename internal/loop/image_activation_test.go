@@ -188,7 +188,7 @@ func TestMutableRefIterationsSnapshotSourceVersion(t *testing.T) {
 	}
 }
 
-func TestActivationWaitsForPublicationGate(t *testing.T) {
+func TestActivationWaitsForPublication(t *testing.T) {
 	base := t.TempDir()
 	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
@@ -218,7 +218,7 @@ func TestActivationWaitsForPublicationGate(t *testing.T) {
 	release := make(chan struct{})
 	locked := make(chan error, 1)
 	go func() {
-		locked <- image.WithPublicationGate(func() error {
+		locked <- image.WithRefLock(ref.Name, func() error {
 			_, buildErr := image.BuildV2(spec, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
 			published <- buildErr
 			if buildErr != nil {
@@ -258,7 +258,7 @@ func TestActivationWaitsForPublicationGate(t *testing.T) {
 	}
 	stored, err := as.Get(ag.Name)
 	if returnedEarly || err != nil || stored.ImageDigest != first.Digest || ag.ImageDigest != first.Digest {
-		t.Fatalf("activation crossed the publication gate: early=%v stored=%+v in_memory=%+v err=%v", returnedEarly, stored, ag, err)
+		t.Fatalf("activation crossed the publication: early=%v stored=%+v in_memory=%+v err=%v", returnedEarly, stored, ag, err)
 	}
 }
 

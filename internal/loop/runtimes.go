@@ -12,10 +12,10 @@ import (
 // agentRuntimes is the manager's in-memory registry of per-agent runtimes.
 //
 // Locks in this package are taken in one order: an agent's lifecycle gate,
-// then the image publication gate, then mu. An agent's handoff lock is taken
-// with no gate held, and mu may be taken inside it. mu is a leaf: it guards the maps
-// below and the engine's non-blocking field accessors, never a Store call, a
-// socket, or a callback. The type holds no Store, shim, or configuration, so
+// then an image lock (the store lock or a name lock), then mu. An agent's
+// handoff lock is taken with no gate held, and mu may be taken inside it. mu
+// is a leaf: it guards the maps below and the engine's non-blocking field
+// accessors, never a Store call, a socket, or a callback. The type holds no Store, shim, or configuration, so
 // I/O under mu is not possible from here.
 type agentRuntimes struct {
 	mu   sync.Mutex

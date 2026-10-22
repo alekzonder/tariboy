@@ -87,7 +87,8 @@ func (s *Store) ReadTemplate(ref Ref) (PromptTemplate, error) {
 }
 
 // ReadTemplatePinned reads and validates the template belonging to an exact
-// archive digest. Callers hold WithPublicationGate across capture and persistence.
+// archive digest. Callers hold an image lock (LockRef or
+// LockStore) across capture and persistence.
 func (s *Store) ReadTemplatePinned(ref Ref, digest string) (PromptTemplate, error) {
 	manifest, archivePath, err := s.inspectPinnedArchive(ref, digest)
 	if err != nil {

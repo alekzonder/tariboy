@@ -553,7 +553,7 @@ func (m *Manager) startAfter(ctx context.Context, name string, dones []<-chan st
 // Stop through the agent's lifecycle gate. The caller holds the returned
 // release function until the engine has created the iteration and is ready to
 // enter its runner. Image activation runs inside it, so the lifecycle gate is
-// taken before the publication gate, as everywhere else.
+// taken before the image store lock, as everywhere else.
 func (m *Manager) acquireRestartLaunch(name string) (func(), bool) {
 	release, err := m.runtimes.lockAgent(m.runtimes.baseContext(), name)
 	if err != nil {
@@ -740,9 +740,12 @@ func (m *Manager) recordStaleAdoption(l agentdir.Layout, li agentdir.LiveIterati
 	m.cfg.Log.Warn("adopted iteration abandoned: shim not responding", "agent", li.Agent, "id", li.ID)
 }
 
+// Run holds the image store lock for writing, not only the image name lock:
+// it chooses a new agent name and provisions its directory, which must not
+// race another Run or an assignment that reads the same agent.
 func (m *Manager) Run(spec registry.RunSpec) (string, error) {
 	var name string
-	err := image.WithPublicationGate(func() error {
+	err := image.WithStoreLock(func() error {
 		var err error
 		name, err = m.run(spec)
 		return err
@@ -796,8 +799,8 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 			return "", err
 		}
 	}
-	// The agent is created stopped; Start launches it outside the publication
-	// gate, which is never held while an agent lifecycle gate is taken.
+	// The agent is created stopped; Start launches it outside the image store
+	// lock, which is never held while an agent lifecycle gate is taken.
 	return name, nil
 }
 
@@ -1323,7 +1326,10 @@ func (m *Manager) Reprovision(name, imageRef string) error {
 		return err
 	}
 	defer release()
-	return image.WithPublicationGate(func() error { return m.reprovision(name, imageRef) })
+	// The store lock, not a name lock: the swap replaces the agent's image
+	// tree, which pending activation of the same agent also writes, and it
+	// can move the agent between image names.
+	return image.WithStoreLock(func() error { return m.reprovision(name, imageRef) })
 }
 
 func (m *Manager) reprovision(name, imageRef string) error {
@@ -1691,8 +1697,13 @@ func (m *Manager) toolsLoopControl(name, action string) (agent.Agent, error) {
 // one publication mechanism the operator CLI uses, so an existing ref — latest
 // included — is moved onto the new content instead of being refused.
 func buildImageForAgent(imgStore *image.Store, workdir, name, tag, path string, externalPlugins ...plugincaps.ExternalResolver) (map[string]any, error) {
+	// Migration walks every image name; MigrateOnce takes the store lock for
+	// it once, before the build takes only the lock of the name it publishes.
+	if err := imgStore.MigrateOnce(); err != nil {
+		return nil, err
+	}
 	var result map[string]any
-	err := image.WithPublicationGate(func() error {
+	err := image.WithRefLock(name, func() error {
 		var err error
 		result, err = buildImageForAgentLocked(imgStore, workdir, name, tag, path, externalPlugins...)
 		return err
@@ -1739,9 +1750,6 @@ func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path st
 	resolver := plugins.ResolveInstalledMetadata(pluginsDir)
 	if len(externalPlugins) > 0 && externalPlugins[0] != nil {
 		resolver = externalPlugins[0]
-	}
-	if err := imgStore.Migrate(); err != nil {
-		return nil, err
 	}
 	man, err := image.BuildV2(parsed, imagefile.ResolveRoots{Plugins: pluginsDir}, refs[0], imgStore, time.Now, resolver)
 	if err != nil {

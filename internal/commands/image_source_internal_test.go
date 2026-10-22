@@ -58,7 +58,7 @@ func TestImageSourceBuildCopiesGitProvenanceIntoSnapshot(t *testing.T) {
 	}
 }
 
-func TestImageSourceBuildWaitsForPublicationGate(t *testing.T) {
+func TestImageSourceBuildWaitsForItsNameLock(t *testing.T) {
 	t.Parallel()
 	c := localCtx(t)
 	if _, err := imageSourceStore(c).Create(imagesource.CreateRequest{Name: "reviewer", Prompt: "Review the task."}); err != nil {
@@ -66,7 +66,7 @@ func TestImageSourceBuildWaitsForPublicationGate(t *testing.T) {
 	}
 	entered, release, locked := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	go func() {
-		locked <- image.WithPublicationGate(func() error {
+		locked <- image.WithRefLock("reviewer", func() error {
 			close(entered)
 			<-release
 			return nil
@@ -82,7 +82,7 @@ func TestImageSourceBuildWaitsForPublicationGate(t *testing.T) {
 	case err := <-done:
 		close(release)
 		<-locked
-		t.Fatalf("editable-source publisher ignored publication gate: %v", err)
+		t.Fatalf("editable-source publisher ignored its image name lock: %v", err)
 	case <-time.After(100 * time.Millisecond):
 	}
 	close(release)
