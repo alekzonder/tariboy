@@ -2,6 +2,7 @@ package loop
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -55,7 +56,12 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 		return m.activateCurrentImage(ag, l, current, recoveredSwap)
 	}
 	fail := func(cause error) (activatedImage, error) {
-		_ = m.cfg.Store.SetPendingImageErrorIf(ag.Name, pending.Ref, pending.Digest, cause.Error())
+		// ErrNotFound means a newer assignment replaced this one, so the stale
+		// error has nowhere to go; that is expected, not a failure.
+		if err := m.cfg.Store.SetPendingImageErrorIf(ag.Name, pending.Ref, pending.Digest, cause.Error()); err != nil && !errors.Is(err, agent.ErrNotFound) {
+			m.logger().Error("record pending image error", "agent", ag.Name, "ref", pending.Ref, "digest", pending.Digest, "cause", cause, "err", err)
+			cause = errors.Join(cause, fmt.Errorf("record pending image error: %w", err))
+		}
 		return activatedImage{}, cause
 	}
 	// A crash can occur after candidate shims are written but before the
@@ -150,7 +156,10 @@ func (m *Manager) activateCurrentImage(ag *agent.Agent, l agentdir.Layout, curre
 	}
 	if recoveredSwap {
 		if err := agentdir.WriteShims(l, *ag); err != nil {
-			_, _ = m.cfg.Store.SetPendingImageErrorIfEmpty(ag.Name, err.Error())
+			if _, setErr := m.cfg.Store.SetPendingImageErrorIfEmpty(ag.Name, err.Error()); setErr != nil {
+				m.logger().Error("record pending image error", "agent", ag.Name, "cause", err, "err", setErr)
+				err = errors.Join(err, fmt.Errorf("record pending image error: %w", setErr))
+			}
 			return activatedImage{}, err
 		}
 	}
@@ -247,13 +256,11 @@ func (m *Manager) swapPendingImage(ag *agent.Agent, l agentdir.Layout, pending a
 	nextAgent.Plugins = st.plugins
 	if err := agentdir.WriteShims(l, nextAgent); err != nil {
 		rollback()
-		_ = agentdir.WriteShims(l, *ag)
-		return fail(err)
+		return fail(m.restoreShims(l, ag, err))
 	}
 	if err := m.cfg.Store.PromotePendingImageWithPlugins(ag.Name, pending.Ref, pending.Digest, st.plugins); err != nil {
 		rollback()
-		_ = agentdir.WriteShims(l, *ag)
-		return fail(err)
+		return fail(m.restoreShims(l, ag, err))
 	}
 	commit()
 	if m.cfg.AuditFor != nil {
@@ -363,13 +370,27 @@ func (m *Manager) swapReprovisionedTree(ag, candidate agent.Agent, l agentdir.La
 		return err
 	}
 	if err := m.cfg.Store.Update(candidate); err != nil {
-		_ = m.cfg.Store.SetImageIdentity(ag.Name, ag.ImageRef, ag.ImageDigest)
+		if rbErr := m.cfg.Store.SetImageIdentity(ag.Name, ag.ImageRef, ag.ImageDigest); rbErr != nil {
+			m.logger().Error("image identity rollback failed: database and image tree disagree",
+				"agent", ag.Name, "ref", ag.ImageRef, "digest", ag.ImageDigest, "cause", err, "err", rbErr)
+			err = errors.Join(err, fmt.Errorf("roll back image identity: %w", rbErr))
+		}
 		rollback()
 		return err
 	}
 	commitImage()
 	commitBin()
 	return nil
+}
+
+// restoreShims rewrites ag's shims after a failed swap and joins a failure to
+// do so onto cause, so the operator sees both.
+func (m *Manager) restoreShims(l agentdir.Layout, ag *agent.Agent, cause error) error {
+	if err := agentdir.WriteShims(l, *ag); err != nil {
+		m.logger().Error("restore agent shims after failed image swap", "agent", ag.Name, "cause", cause, "err", err)
+		return errors.Join(cause, fmt.Errorf("restore shims: %w", err))
+	}
+	return cause
 }
 
 func (m *Manager) prepareImageSkillBridge(ag agent.Agent, manifest image.Manifest, imageDir string) (harness.SkillLaunchConfig, error) {
@@ -458,7 +479,7 @@ func recoverImageSwap(l agentdir.Layout, activeRef, activeDigest string) (bool, 
 		if json.Unmarshal(data, &manifest) != nil {
 			return "", ""
 		}
-		digest, _ := os.ReadFile(filepath.Join(dir, ".image-digest"))
+		digest, _ := os.ReadFile(filepath.Join(dir, ".image-digest")) // optional: an image unpacked before digests were recorded has none
 		refText, err := os.ReadFile(filepath.Join(dir, ".image-ref"))
 		if err != nil {
 			// An image unpacked before tags became pointers still names its tag.

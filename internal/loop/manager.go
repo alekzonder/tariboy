@@ -219,6 +219,14 @@ func (m *Manager) ExtendIterationTimeout(name, id string) (registry.IterationTim
 	return result, nil
 }
 
+// logger is cfg.Log, or the default logger for a Manager built without one.
+func (m *Manager) logger() *slog.Logger {
+	if m.cfg.Log == nil {
+		return slog.Default()
+	}
+	return m.cfg.Log
+}
+
 func NewManager(cfg ManagerConfig) *Manager {
 	if cfg.Clock == nil {
 		cfg.Clock = time.Now
@@ -663,7 +671,7 @@ func (m *Manager) finalizeIteration(
 		return false, true, nil
 	}
 	apply(&it)
-	_ = os.Remove(l.ShimSock())
+	logCleanup(m.cfg.Log, "remove shim.sock before terminal status", os.Remove(l.ShimSock()), "agent", agentName, "id", id)
 	committed, err = m.iterations().FinalizeRunningIteration(it)
 	if err != nil {
 		// Roll the marker back so adoption can retry this iteration. A plain
@@ -671,7 +679,7 @@ func (m *Manager) finalizeIteration(
 		// non-socket fails exactly like a dead shim, and every shim removes a
 		// leftover before binding (internal/shim/shim.go).
 		if f, cerr := os.OpenFile(l.ShimSock(), os.O_CREATE|os.O_WRONLY, 0o600); cerr == nil {
-			_ = f.Close()
+			logCleanup(m.cfg.Log, "close shim.sock marker", f.Close(), "agent", agentName, "id", id)
 		} else {
 			m.cfg.Log.Error("restore shim.sock marker after failed terminal status",
 				"agent", agentName, "id", id, "err", cerr)
@@ -726,7 +734,7 @@ func (m *Manager) recordStaleAdoption(l agentdir.Layout, li agentdir.LiveIterati
 		// did) or reattach spins on it forever. Safe here specifically because
 		// adoption gates the agent's next iteration: no newer shim can own the
 		// per-agent socket path while we are adopting.
-		_ = os.Remove(l.ShimSock())
+		logCleanup(m.cfg.Log, "remove stale shim.sock", os.Remove(l.ShimSock()), "agent", li.Agent, "id", li.ID)
 	case err != nil && !errors.Is(err, errIterationLookup):
 		m.cfg.Log.Error("record stale adoption: status not committed, shim.sock kept for re-adoption",
 			"agent", li.Agent, "id", li.ID, "err", err)
@@ -818,7 +826,11 @@ func (m *Manager) newAgentName(requested string) (string, error) {
 	if !agent.ValidName(name) {
 		return "", fmt.Errorf("invalid agent name %q: must match ^[a-z0-9][a-z0-9_-]*$", name)
 	}
-	if ok, _ := m.cfg.Store.Exists(name); ok {
+	ok, err := m.cfg.Store.Exists(name)
+	if err != nil {
+		return "", fmt.Errorf("check agent %q exists: %w", name, err)
+	}
+	if ok {
 		return "", fmt.Errorf("agent %q already exists", name)
 	}
 	return name, nil
@@ -1088,7 +1100,10 @@ func (m *Manager) Stop(name string) error {
 	release()
 	m.emitState(name)
 	m.signalGoals()
-	_ = m.Kill(name)
+	// Stop must finish even when the kill fails; an idle agent has nothing to kill.
+	if err := m.Kill(name); err != nil && !errors.Is(err, errNoIteration) {
+		m.logger().Warn("kill iteration while stopping agent", "agent", name, "err", err)
+	}
 	return nil
 }
 
@@ -1175,7 +1190,7 @@ func (m *Manager) recoverStaleKill(name, id string, rt *runtime, l agentdir.Layo
 		return fmt.Errorf("recover stale shim for %q: %w", name, err)
 	case terminalBeforeCleanup:
 		// Already terminal: the socket must not outlive a committed status.
-		_ = os.Remove(l.ShimSock())
+		logCleanup(m.cfg.Log, "remove shim.sock after terminal status", os.Remove(l.ShimSock()), "agent", name, "id", id)
 	}
 	if committed {
 		m.iterationCompleted(name, id)
@@ -1278,13 +1293,13 @@ func (m *Manager) Remove(name string, force, purge bool) error {
 	if err != nil {
 		return err
 	}
-	shutdownAgentAPIs(servers)
+	shutdownAgentAPIs(m.logger(), servers)
 
 	l := agentdir.New(m.cfg.AgentsDir, name)
 	rl := l.WithRuntime(m.cfg.RuntimeDir)
 	// Runtime sockets are pure runtime, never data — drop them in either path.
-	_ = os.Remove(rl.Sock())
-	_ = os.Remove(rl.ShimSock())
+	logCleanup(m.cfg.Log, "remove agent socket", os.Remove(rl.Sock()), "agent", name)
+	logCleanup(m.cfg.Log, "remove shim socket", os.Remove(rl.ShimSock()), "agent", name)
 
 	if !purge {
 		// Preserve: leave the agent stopped and every durable
@@ -1482,7 +1497,7 @@ func (m *Manager) ActiveAgents() int {
 // quiesce (bounded by shutdownWait) so daemon teardown does not race the store
 // Close that follows it.
 func (m *Manager) Shutdown() {
-	shutdownAgentAPIs(m.runtimes.shutdown())
+	shutdownAgentAPIs(m.logger(), m.runtimes.shutdown())
 
 	done := make(chan struct{})
 	go func() { m.wg.Wait(); close(done) }()
@@ -1493,12 +1508,14 @@ func (m *Manager) Shutdown() {
 	}
 }
 
-func shutdownAgentAPIs(servers map[*agentapi.Server]struct{}) {
+func shutdownAgentAPIs(log *slog.Logger, servers map[*agentapi.Server]struct{}) {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownWait)
 	defer cancel()
 	for srv := range servers {
 		if srv != nil {
-			_ = srv.Shutdown(ctx)
+			if err := srv.Shutdown(ctx); err != nil {
+				log.Warn("shutdown agent API server", "err", err)
+			}
 		}
 	}
 }
@@ -1588,7 +1605,10 @@ func (m *Manager) groupToolsStatus(caller, member string) (map[string]any, error
 }
 
 func (m *Manager) groupStatusRow(a agent.Agent, lead string) map[string]any {
-	state, _ := m.LiveState(a.Name)
+	state, err := m.LiveState(a.Name)
+	if err != nil {
+		m.logger().Warn("group status: live state", "agent", a.Name, "err", err)
+	}
 	row := map[string]any{
 		"name": a.Name, "role": roleOf(a.Name, lead), "state": state,
 		"enabled": a.Enabled, "status_message": a.StatusMessage,

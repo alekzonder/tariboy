@@ -2,6 +2,7 @@ package loop
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -189,10 +190,19 @@ func (r *agentRuntimes) currentTarget(name string, engineSock string) (iteration
 		return iterationTarget{id: live.ID, sock: live.ShimSock}, nil
 	}
 	if rt == nil {
-		return iterationTarget{}, fmt.Errorf("agent %q is not running", name)
+		return iterationTarget{}, noIterationError(fmt.Sprintf("agent %q is not running", name))
 	}
-	return iterationTarget{}, fmt.Errorf("agent %q has no running iteration", name)
+	return iterationTarget{}, noIterationError(fmt.Sprintf("agent %q has no running iteration", name))
 }
+
+// errNoIteration matches the errors currentTarget returns when there is no
+// iteration to act on, so best-effort callers can tell it from a real failure.
+var errNoIteration = errors.New("no running iteration")
+
+type noIterationError string
+
+func (e noIterationError) Error() string        { return string(e) }
+func (e noIterationError) Is(target error) bool { return target == errNoIteration }
 
 func (r *agentRuntimes) beginAdoption(li agentdir.LiveIteration) {
 	r.mu.Lock()
