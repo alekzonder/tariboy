@@ -4,7 +4,7 @@ import { useOptionalDaemons } from "@/components/DaemonProvider"
 import { keepPreviousData, useMutation, useQueries, useQueryClient } from "@tanstack/react-query"
 import { useApiQuery, useApiTarget } from "@/hooks/useApiQuery"
 import { errorText as errorMessage } from "@/lib/queryClient"
-import { taskKeys, taskQueries, refreshTasks, writeTask } from "./taskQueries"
+import { taskKeys, taskQueries, refreshTasks, writeTask, retainTaskRevision } from "./taskQueries"
 import { useTaskQueryEvents } from "./useTaskQueryEvents"
 import { ApiError, isConnectionError, targetReady, type ApiTarget } from "@/lib/api"
 import { buildTaskForest, canDropTaskInside } from "@/lib/taskTree"
@@ -24,7 +24,6 @@ import {
   updateTask,
   type CreateQueueInput,
   type Task,
-  type TaskDetail as Detail,
   type TaskPriority,
   type TaskNotification,
   type TaskRelationType,
@@ -134,7 +133,6 @@ function TasksWorkspaceContent({
   const loadDetail = useCallback(async (key: string) => { setSelectedKey(key) }, [])
   const setTasks = (update: Task[] | ((current: Task[]) => Task[])) => client.setQueryData(taskKeys.list(target, filters), (page: { tasks: Task[]; sequence: number } | undefined) =>
     page ? { ...page, tasks: typeof update === "function" ? update(page.tasks) : update } : page)
-  const setDetail = (update: (current: Detail | null) => Detail | null) => client.setQueryData(taskKeys.detail(target, selectedKey), (current: Detail | undefined) => update(current ?? null) ?? undefined)
   const write = <T,>(operation: () => Promise<T>) => writeTask(client, target, operation)
   useTaskQueryEvents(target, treeQuery.data?.sequence)
   useEffect(() => {
@@ -150,9 +148,12 @@ function TasksWorkspaceContent({
         catch { /* Leave the indicator for the next open. */ }
       }
       if (!read.size) return
+      await client.cancelQueries({ queryKey: taskKeys.notifications(target) })
       client.setQueryData(taskKeys.notifications(target), (page: { notifications: TaskNotification[]; count: number } | undefined) => page ? {
         ...page, notifications: page.notifications.map((item) => read.has(item.id) ? { ...item, read_at: new Date().toISOString() } : item),
       } : page)
+      // The next socket/manual read reconciles the inbox; no extra cycle is started here.
+      await client.invalidateQueries({ queryKey: taskKeys.notifications(target), refetchType: "none" })
       onNotificationsChanged?.()
     },
   })
@@ -196,10 +197,8 @@ function TasksWorkspaceContent({
     if (!detail) throw new Error("Task is no longer selected")
     try {
       const updated = await write(() => updateTask(detail.task.key, { ...input }, target))
-      setDetail((current) => current ? { ...current, task: updated } : current)
-      setTasks((current) => current.map((task) => task.key === updated.key ? updated : task))
       toast.success("Task updated")
-      return updated
+      return retainTaskRevision(client, target, updated)
     } catch (error) {
       toast.error(errorMessage(error))
       throw error
@@ -249,8 +248,7 @@ function TasksWorkspaceContent({
     if (!changing) return
     try {
       const updated = await write(() => updateTask(key, { priority, revision: changing.revision }, target))
-      setTasks((current) => current.map((task) => task.key === key ? updated : task))
-      setDetail((current) => current?.task.key === key ? { ...current, task: updated } : current)
+      retainTaskRevision(client, target, updated)
     } catch (error) {
       toast.error(errorMessage(error))
     }
@@ -448,9 +446,6 @@ function TasksWorkspaceContent({
           }}
           onTransfer={transferDetail}
           onRequeue={requeueDetail}
-          // The row shows the status and category too: reload the tree so the
-          // list and the drawer agree before the socket reports the change.
-          onTaskChanged={() => { void refreshTasks(client, target) }}
           onDeleteRelation={async (relationID: number) => {
             await write(() => deleteTaskRelation(
               detail.task.key, relationID, detail.task.revision, target, idempotencyKey(),

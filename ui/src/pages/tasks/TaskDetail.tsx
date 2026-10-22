@@ -85,7 +85,7 @@ export default function TaskDetail({
   /** Moves the task to another queue of this server; the owner opens the new task. */
   onRequeue: (queue: string) => Promise<void>
   /** A workflow action changed the task on the daemon; the owner reloads it. */
-  onTaskChanged: () => void
+  onTaskChanged?: () => void
   /** A closed list of assignees instead of the free-text field; the owner of
    *  `onSave` gives each value its meaning. */
   assigneeOptions?: ReadonlyArray<{ value: string; label: string }>

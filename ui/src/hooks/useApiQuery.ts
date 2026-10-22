@@ -38,7 +38,7 @@ export function useApiQuery<T, K extends QueryKey>(options: UseQueryOptions<T, E
       for (const query of client.getQueryCache().findAll({ queryKey })) query.reset()
     }
     // All observers first receive the new explicit endpoint, then reads resume.
-    if (ready && old.ready) queueMicrotask(() => { void client.invalidateQueries({ queryKey }, { cancelRefetch: false }) })
+    if (ready && (old.ready || old.token !== token)) queueMicrotask(() => { void client.invalidateQueries({ queryKey }, { cancelRefetch: false }) })
   }, [client, endpoint, ready, server, target, token])
 
   return changedAccount ? { ...result, data: undefined } : result

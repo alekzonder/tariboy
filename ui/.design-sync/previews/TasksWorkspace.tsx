@@ -1,12 +1,12 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from "react";
-import { DaemonProvider, TasksWorkspace } from "tariboy-ui";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { DaemonProvider, TasksWorkspace, QueryClientProvider, createQueryClient } from "tariboy-ui";
 
 // TasksWorkspace is the native task tracker: the "Tasks" rail (All / My /
 // Waiting / Notifications / Queues plus the queue picker), a drag handle, and
 // the center column — toolbar with search, status filter, refresh and "New
 // task" over the task tree. Selecting a task docks TaskDetail on the right.
 //
-// It needs no router (nothing in this subtree links) — only DaemonProvider,
+// It needs no router (nothing in this subtree links) — DaemonProvider and an isolated query client,
 // because the workspace remounts itself per active daemon. `target={null}` pins
 // it to the same-origin local daemon instead of the registry.
 //
@@ -20,8 +20,9 @@ import { DaemonProvider, TasksWorkspace } from "tariboy-ui";
 const Shell = ({ children, frameRef }: {
   children: ReactNode;
   frameRef?: RefObject<HTMLDivElement | null>;
-}) => (
-  <div
+}) => {
+  const [client] = useState(createQueryClient);
+  return <QueryClientProvider client={client}><div
     ref={frameRef}
     style={{
       height: 620,
@@ -33,8 +34,8 @@ const Shell = ({ children, frameRef }: {
     }}
   >
     {children}
-  </div>
-);
+  </div></QueryClientProvider>;
+};
 
 // Click real buttons by their visible label, one per frame, so each click sees
 // the DOM the previous one produced.

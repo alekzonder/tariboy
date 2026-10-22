@@ -1,8 +1,9 @@
-import { keepPreviousData } from "@tanstack/react-query"
+import { QueryClientProvider, keepPreviousData } from "@tanstack/react-query"
 import { act, render, screen, waitFor } from "@/test/queryRender"
 import { expect, it, vi } from "vitest"
 import { ApiError, setActiveDaemon, type ApiTarget } from "@/lib/api"
-import { apiServerKey } from "@/lib/queryClient"
+import { addDaemon, resolveDaemon, setDaemonToken } from "@/lib/daemons"
+import { queryClient, apiServerKey } from "@/lib/queryClient"
 import { useApiQuery, useApiTarget } from "./useApiQuery"
 
 const host = { id: "remote", label: "Remote", baseURL: "https://first.test", token: "secret-one" }
@@ -73,4 +74,36 @@ it("does not retry a failed read and keeps prior data only for network failures"
   expect(await screen.findByText("Sign in")).toBeInTheDocument()
   expect(mounted.client.getQueryData(["server", "remote", "example"])).toBeUndefined()
   expect(read).toHaveBeenCalledTimes(3)
+})
+
+it("does not restore an observer snapshot after registry credential replacement", async () => {
+  const meta = await addDaemon({ label: "Account", baseURL: "https://account.test", token: "old" })
+  const original = await resolveDaemon(meta.id)
+  const read = vi.fn().mockResolvedValueOnce("Old account").mockImplementation(() => new Promise(() => {}))
+  const view = (target: ApiTarget) => <QueryClientProvider client={queryClient}><Resource target={target} read={read} /></QueryClientProvider>
+  const mounted = render(view(original))
+  try {
+    await screen.findByText("Old account")
+    await act(async () => { await setDaemonToken(meta.id, "new") })
+    const changed = await resolveDaemon(meta.id)
+    mounted.rerender(view(changed))
+    await waitFor(() => expect(read.mock.calls.length).toBeGreaterThan(1))
+    mounted.rerender(view(changed))
+    expect(screen.queryByText("Old account")).not.toBeInTheDocument()
+    expect(queryClient.getQueryData([...apiServerKey(changed!), "example"])).toBeUndefined()
+  } finally { mounted.unmount(); queryClient.clear() }
+})
+
+it("restarts the new account read after credentials change while unavailable", async () => {
+  const reads: { signal: AbortSignal; resolve: (value: string) => void }[] = []
+  const read = (_target: ApiTarget, signal: AbortSignal) => new Promise<string>((resolve) => reads.push({ signal, resolve }))
+  const mounted = render(<Resource target={host} read={read} />)
+  await act(async () => reads[0].resolve("Old"))
+  await screen.findByText("Old")
+  mounted.rerender(<Resource target={{ ...host, baseURL: "" }} read={read} />)
+  mounted.rerender(<Resource target={{ ...host, token: "new" }} read={read} />)
+  await waitFor(() => expect(reads.length).toBeGreaterThan(1))
+  await waitFor(() => expect(reads.at(-1)!.signal.aborted).toBe(false))
+  await act(async () => reads.at(-1)!.resolve("New"))
+  expect(await screen.findByText("New")).toBeInTheDocument()
 })

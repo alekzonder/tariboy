@@ -2,7 +2,7 @@ import { useEffect } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useApiQuery, useApiTarget } from "@/hooks/useApiQuery"
 import { errorText as errorMessage, isAccessError } from "@/lib/queryClient"
-import { taskKeys, taskQueries, refreshTasks, writeTask } from "./taskQueries"
+import { taskQueries, refreshTasks, writeTask, retainTaskRevision } from "./taskQueries"
 import { useTaskQueryEvents } from "./useTaskQueryEvents"
 import { toast } from "sonner"
 import { isConnectionError, type ApiTarget } from "@/lib/api"
@@ -19,7 +19,6 @@ import {
   transferTask,
   updateTask,
   type Task,
-  type TaskDetail as Detail,
   type TaskPriority,
   type TaskRelationType,
   type TaskStatus,
@@ -90,7 +89,6 @@ function TaskDrawerContent({
   const events = historyQuery.data ?? []
   const principals = peopleQuery.data ?? null
   useTaskQueryEvents(target, sequenceQuery.data?.sequence, taskKey)
-  const load = () => refreshTasks(client, target)
   const write = <T,>(operation: () => Promise<T>) => writeTask(client, target, operation)
   useEffect(() => {
     const error = detailQuery.error ?? historyQuery.error
@@ -148,7 +146,6 @@ function TaskDrawerContent({
       width={detailWidth}
       resizeHandle={resizeHandle}
       onClose={onClose}
-      onTaskChanged={() => { void load() }}
       assigneeOptions={assignees}
       onTransfer={async (hostID: string) => {
         const host = await resolveDaemon(hostID)
@@ -180,9 +177,8 @@ function TaskDrawerContent({
             return await write(() => moveToAgent(task, input, remote))
           }
           const updated = await write(() => updateTask(detail.task.key, input, target))
-          client.setQueryData(taskKeys.detail(target, taskKey), (current: Detail | undefined) => current ? { ...current, task: updated } : current)
           toast.success("Task updated")
-          return updated
+          return retainTaskRevision(client, target, updated)
         } catch (error) {
           toast.error(errorMessage(error))
           throw error

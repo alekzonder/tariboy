@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { TaskDetail } from "tariboy-ui";
+import { useEffect, useState } from "react";
+import { TaskDetail, QueryClientProvider, createQueryClient } from "tariboy-ui";
 
 // TaskDetail is the task panel TasksWorkspace docks on the right when a row is
 // selected: sticky header (Back · key · title · Save task · close), the metadata
@@ -178,8 +178,9 @@ const saveTask = async () => BASE_TASK;
 const Panel = ({ detail, width = 820, ...rest }: Record<string, unknown> & {
   detail: unknown;
   width?: number;
-}) => (
-  <TaskDetail
+}) => {
+  const [client] = useState(createQueryClient);
+  return <QueryClientProvider client={client}><TaskDetail
     detail={detail}
     target={null}
     principals={PRINCIPALS}
@@ -201,8 +202,8 @@ const Panel = ({ detail, width = 820, ...rest }: Record<string, unknown> & {
     onAddRelation={noop}
     onDeleteRelation={noop}
     {...rest}
-  />
-);
+  /></QueryClientProvider>;
+};
 
 export const OpenTask = () => (
   <Panel detail={{ task: BASE_TASK, comments: COMMENTS, waiting_for: [], relations: RELATIONS }} />

@@ -41,7 +41,7 @@ export function WorkflowPanel({ task, eventSequence = 0, target: inputTarget, on
    */
   eventSequence?: number
   target?: ApiTarget
-  onTaskChanged: () => void
+  onTaskChanged?: () => void
 }) {
   const target = useApiTarget(inputTarget)
   const client = useQueryClient()
@@ -56,13 +56,17 @@ export function WorkflowPanel({ task, eventSequence = 0, target: inputTarget, on
     if (lastChange.current[0] === task.revision && lastChange.current[1] === eventSequence) return
     lastChange.current = [task.revision, eventSequence]
     const queryKey = taskKeys.workflow(target, task.key)
+    // A mounted shared detail owns server-wide event/write refreshes, including
+    // workflow. Standalone panels still react to changes in their input props.
+    const sharedDetail = client.getQueryCache().find({ queryKey: taskKeys.detail(target, task.key), exact: true })
+    if (sharedDetail?.isActive()) return
     void client.cancelQueries({ queryKey }).then(() => client.invalidateQueries({ queryKey }))
   }, [client, target, task.key, task.revision, eventSequence])
   const cancellation = useMutation({
     mutationFn: () => writeTask(client, target, () => cancelWorkflowTask(task.key, target)),
-    onSuccess: () => onTaskChanged(),
+    onSuccess: () => onTaskChanged?.(),
   })
-  const changed = () => { cancellation.reset(); void refreshTasks(client, target); onTaskChanged() }
+  const changed = () => { cancellation.reset(); void refreshTasks(client, target); onTaskChanged?.() }
   const refresh = () => { cancellation.reset(); void workflow.refetch() }
 
   const failure = error && <div role="alert" className="flex items-center gap-2 text-[12px] text-status-failed">
@@ -93,7 +97,7 @@ export function WorkflowPanel({ task, eventSequence = 0, target: inputTarget, on
     description: "The move skips outcomes, required artifacts, and checks, stops the current scripts, and cancels a pending request.",
     action: "Move task",
     onCancel: () => resolve(false),
-    run: () => { writeTask(client, target, () => moveTaskWorkflow(task.key, to, reason, target)).then(() => { resolve(true); onTaskChanged() }, reject) },
+    run: () => { writeTask(client, target, () => moveTaskWorkflow(task.key, to, reason, target)).then(() => { resolve(true); onTaskChanged?.() }, reject) },
   }))
   const upgradeTo = `${view.name}@${view.queue_version ?? ""}`
   // Resolves true once upgraded, false when the confirmation is declined.
@@ -102,7 +106,7 @@ export function WorkflowPanel({ task, eventSequence = 0, target: inputTarget, on
     description: `The task starts again at the first status of ${upgradeTo}. The current status ends, its scripts stop, and a pending request is cancelled. Artifacts stay.`,
     action: "Upgrade task",
     onCancel: () => resolve(false),
-    run: () => { writeTask(client, target, () => upgradeTaskWorkflow(task.key, reason, target)).then(() => { resolve(true); onTaskChanged() }, reject) },
+    run: () => { writeTask(client, target, () => upgradeTaskWorkflow(task.key, reason, target)).then(() => { resolve(true); onTaskChanged?.() }, reject) },
   }))
   const open = (next: OpenForm) => { cancellation.reset(); setForm(form === next ? null : next) }
 
