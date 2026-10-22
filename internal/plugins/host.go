@@ -20,6 +20,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // providerKeyEnv lists the real upstream provider API keys the daemon holds in
@@ -51,6 +52,9 @@ func scrubProviderKeys(env []string) []string {
 	return out
 }
 
+// ErrHostStopping is returned by Start once StopAll has begun.
+var ErrHostStopping = errors.New("plugin host is stopping")
+
 // ErrNotFound is returned by Inspect for an unknown plugin.
 var ErrNotFound = errors.New("plugin not found")
 
@@ -80,18 +84,25 @@ type HostConfig struct {
 	Clock        func() time.Time
 	After        func(time.Duration) <-chan time.Time
 	DrainAfter   func(time.Duration) <-chan time.Time
-	Log          *slog.Logger
+	// SinkAfter is the sink drainer's fallback timer (default time.After).
+	SinkAfter func(time.Duration) <-chan time.Time
+	Log       *slog.Logger
 }
 
 // Host is the registry of running plugins: it starts a Supervisor per enabled
 // plugin, tracks them concurrency-safely, and drains them all (cancel + wait)
 // before the daemon closes the store (spec §13, M5 drain-before-close).
 type Host struct {
-	cfg     HostConfig
-	baseCtx context.Context
-	mu      sync.Mutex
-	running map[string]*runningPlugin
-	wg      sync.WaitGroup
+	cfg HostConfig
+	mu  sync.Mutex
+	// rootCtx parents every plugin life and background worker; StopAll cancels
+	// it through rootCancel. stopping refuses Start and new workers once StopAll
+	// has begun, so nothing joins h.wg after its Wait. All three are under mu.
+	rootCtx    context.Context
+	rootCancel context.CancelFunc
+	stopping   bool
+	running    map[string]*runningPlugin
+	wg         sync.WaitGroup
 
 	// pushMu guards pushQueue: the per-(plugin,channel) watch-push serializers
 	// that keep provider reconciles ordered (spec §6.2). See PushWatches.
@@ -147,15 +158,32 @@ func NewHost(cfg HostConfig) *Host {
 	if cfg.DrainAfter == nil {
 		cfg.DrainAfter = time.After
 	}
+	if cfg.SinkAfter == nil {
+		cfg.SinkAfter = time.After
+	}
 	if cfg.Log == nil {
 		cfg.Log = slog.Default()
 	}
+	rootCtx, rootCancel := context.WithCancel(context.Background())
 	return &Host{
-		cfg:       cfg,
-		baseCtx:   context.Background(),
-		running:   map[string]*runningPlugin{},
-		pushQueue: map[string]*watchPush{},
+		cfg:        cfg,
+		rootCtx:    rootCtx,
+		rootCancel: rootCancel,
+		running:    map[string]*runningPlugin{},
+		pushQueue:  map[string]*watchPush{},
 	}
+}
+
+// track registers one background goroutine on h.wg and returns the root
+// context it must exit on, or false once StopAll has begun.
+func (h *Host) track() (context.Context, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.stopping {
+		return nil, false
+	}
+	h.wg.Add(1)
+	return h.rootCtx, true
 }
 
 func (h *Host) SocketPath(name string) string {
@@ -272,7 +300,17 @@ func (h *Host) logPath(name string) string             { return filepath.Join(h.
 
 // StartAll re-launches every enabled plugin (spec §7.2 step 2).
 func (h *Host) StartAll(ctx context.Context) error {
-	h.baseCtx = ctx
+	h.mu.Lock()
+	if h.stopping {
+		h.mu.Unlock()
+		return ErrHostStopping
+	}
+	// Derive a cancellable root from ctx. Keep the previous root's cancel in the
+	// chain: anything started before StartAll still stops with StopAll.
+	rootCtx, cancel := context.WithCancel(ctx)
+	previous := h.rootCancel
+	h.rootCtx, h.rootCancel = rootCtx, func() { cancel(); previous() }
+	h.mu.Unlock()
 	recs, err := h.cfg.Store.List()
 	if err != nil {
 		return err
@@ -339,13 +377,20 @@ func (h *Host) Start(rec Record) error {
 	// ever runs per name. The reservation already carries a usable cancel so
 	// StopAll can always cancel it even before the supervisor goroutine exists.
 	h.mu.Lock()
+	if h.stopping {
+		h.mu.Unlock()
+		return ErrHostStopping
+	}
 	if _, ok := h.running[name]; ok {
 		h.mu.Unlock()
 		return nil // already running or starting
 	}
-	ctx, cancel := context.WithCancel(h.baseCtx)
+	ctx, cancel := context.WithCancel(h.rootCtx)
 	rp := &runningPlugin{rec: rec, cancel: cancel, state: "starting", health: map[string]any{}, done: make(chan struct{})}
 	h.running[name] = rp
+	// The reservation holds h.wg from here, under mu, so StopAll's Wait can
+	// never miss this life; the supervisor goroutine (or fail) releases it.
+	h.wg.Add(1)
 	h.mu.Unlock()
 
 	// fail releases the reservation (and cancels) on any setup-failure path so a
@@ -357,6 +402,7 @@ func (h *Host) Start(rec Record) error {
 		}
 		h.mu.Unlock()
 		cancel()
+		h.wg.Done()
 		return err
 	}
 
@@ -457,14 +503,16 @@ func (h *Host) Start(rec Record) error {
 	// Task 9 hook: subscribe sink channels + start the drainer here.
 	h.startSink(ctx, rec, sock)
 
-	h.wg.Add(1)
 	go func() {
-		defer h.wg.Done()
+		defer h.wg.Done() // the reservation's h.wg.Add above
 		// Signal Restart (and any per-instance waiter) that this instance has
 		// fully drained. Closed last, after the supervisor has graceful-stopped
 		// the process and revoked its token on the way out of sup.Run.
 		defer close(rp.done)
-		defer func() { _ = logtw.Flush(); _ = logf.Close() }()
+		defer func() {
+			tidy.Log(h.cfg.Log, "plugin log flush failed", logtw.Flush(), "plugin", name)
+			tidy.Log(h.cfg.Log, "plugin log close failed", logf.Close(), "plugin", name)
+		}()
 		// Defense-in-depth: a panic in the host-side onState/Bus.Publish path must
 		// not crash the daemon. Plugin process failures are already out-of-process.
 		defer func() {
@@ -505,14 +553,18 @@ func (h *Host) onState(name, state string, health map[string]any) {
 		return
 	}
 	hb, _ := json.Marshal(health)
-	_ = h.cfg.Store.SetState(name, state, string(hb))
+	if err := h.cfg.Store.SetState(name, state, string(hb)); err != nil {
+		h.cfg.Log.Error("plugin state persist failed", "plugin", name, "state", state, "err", err)
+	}
 	detail, _ := health["detail"].(string)
-	_, _ = h.cfg.Bus.Publish(bus.Message{
+	if _, err := h.cfg.Bus.Publish(bus.Message{
 		Channel: "system:plugins", Type: "plugin.state", Source: "daemon",
 		Text:             fmt.Sprintf("plugin %s -> %s", name, state),
 		ProducedByPlugin: name,
 		Data:             map[string]any{"plugin": name, "state": state, "detail": detail},
-	})
+	}); err != nil {
+		h.cfg.Log.Warn("plugin state event publish failed", "plugin", name, "state", state, "err", err)
+	}
 	// A plugin can print its handshake before the host has registered the new
 	// life token, so its one-shot startup pull may race and fail authorization.
 	// Reconcile from the host side whenever this concrete life first becomes
@@ -526,16 +578,20 @@ func (h *Host) onState(name, state string, health map[string]any) {
 // Stop cancels the supervisor and removes it from the registry. The per-life
 // token is revoked by the supervisor's RevokeToken seam on the exit path.
 func (h *Host) Stop(name string) error {
+	h.stop(name)
+	return nil
+}
+
+// stop cancels name's life, if any. The supervisor and sink drainer exit on
+// that context.
+func (h *Host) stop(name string) {
 	h.mu.Lock()
 	rp := h.running[name]
 	delete(h.running, name)
 	h.mu.Unlock()
-	if rp == nil {
-		return nil
+	if rp != nil {
+		rp.cancel()
 	}
-	rp.cancel()
-	h.stopSink(name) // Task 9 hook
-	return nil
 }
 
 // restartDrainGrace bounds how long Restart waits for the previous instance's
@@ -574,7 +630,7 @@ func (h *Host) Restart(name string) error {
 	rp := h.running[name]
 	h.mu.Unlock()
 	if rp != nil {
-		_ = h.Stop(name)
+		h.stop(name)
 		select {
 		case <-rp.done:
 		case <-h.cfg.DrainAfter(restartDrainGrace):
@@ -586,15 +642,21 @@ func (h *Host) Restart(name string) error {
 }
 
 // StopAll gracefully stops every plugin and waits (drain-before-close, spec §13).
+// It first refuses new work and cancels the root, so a pending rollback restart
+// or watch push exits instead of starting anything; Start returns
+// ErrHostStopping from then on.
 func (h *Host) StopAll() {
 	h.mu.Lock()
+	h.stopping = true
+	cancel := h.rootCancel
 	names := make([]string, 0, len(h.running))
 	for n := range h.running {
 		names = append(names, n)
 	}
 	h.mu.Unlock()
+	cancel()
 	for _, n := range names {
-		_ = h.Stop(n)
+		h.stop(n)
 	}
 	h.wg.Wait()
 }
@@ -655,20 +717,24 @@ func (h *Host) Install(sourcePath string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	rollback := func() {
-		if hadPrevious {
-			_ = h.cfg.Store.Upsert(previous)
-			if hadPreviousActive {
-				_ = h.cfg.Store.SetActiveVersion(m.Name, previousActive)
-				_ = writeActiveVersion(h.dir(m.Name), previousActive)
-			} else {
-				_ = h.cfg.Store.ClearActiveVersion(m.Name)
-				_ = os.Remove(filepath.Join(h.dir(m.Name), "active-version"))
+	// rollback restores the previous record and active version and returns
+	// every step that failed, so the caller can report them with the cause.
+	rollback := func() error {
+		removeMarker := func() error {
+			if err := os.Remove(filepath.Join(h.dir(m.Name), "active-version")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
 			}
-		} else {
-			_ = h.cfg.Store.Delete(m.Name)
-			_ = os.Remove(filepath.Join(h.dir(m.Name), "active-version"))
+			return nil
 		}
+		if !hadPrevious {
+			return errors.Join(h.cfg.Store.Delete(m.Name), removeMarker())
+		}
+		if hadPreviousActive {
+			return errors.Join(h.cfg.Store.Upsert(previous),
+				h.cfg.Store.SetActiveVersion(m.Name, previousActive),
+				writeActiveVersion(h.dir(m.Name), previousActive))
+		}
+		return errors.Join(h.cfg.Store.Upsert(previous), h.cfg.Store.ClearActiveVersion(m.Name), removeMarker())
 	}
 	restartPrevious := func(after *runningPlugin) {
 		if !hadPrevious || !hadPreviousActive || !previous.Enabled {
@@ -679,7 +745,7 @@ func (h *Host) Install(sourcePath string) (map[string]any, error) {
 			record, recordOK, recordErr := h.cfg.Store.Get(m.Name)
 			if activeErr == nil && recordErr == nil && ok && recordOK &&
 				active == previousActive && record.Version == previous.Version && record.Enabled {
-				if startErr := h.Start(previous); startErr != nil {
+				if startErr := h.Start(previous); startErr != nil && !errors.Is(startErr, ErrHostStopping) {
 					h.cfg.Log.Error("restart rolled-back plugin", "plugin", m.Name, "err", startErr)
 				}
 			}
@@ -688,15 +754,12 @@ func (h *Host) Install(sourcePath string) (map[string]any, error) {
 			restart()
 			return
 		}
-		go func() {
-			<-after.done
-			restart()
-		}()
+		h.afterDrain(after, restart)
 	}
 	h.mu.Lock()
 	previousRunning := h.running[m.Name]
 	h.mu.Unlock()
-	_ = h.Stop(m.Name)
+	h.stop(m.Name)
 	if previousRunning != nil {
 		select {
 		case <-previousRunning.done:
@@ -713,8 +776,10 @@ func (h *Host) Install(sourcePath string) (map[string]any, error) {
 	newRunning := h.running[m.Name]
 	h.mu.Unlock()
 	persist := func(err error) (map[string]any, error) {
-		_ = h.Stop(m.Name)
-		rollback()
+		h.stop(m.Name)
+		if rollbackErr := rollback(); rollbackErr != nil {
+			err = errors.Join(err, fmt.Errorf("roll back plugin %s: %w", m.Name, rollbackErr))
+		}
 		restartPrevious(newRunning)
 		return nil, err
 	}
@@ -730,12 +795,33 @@ func (h *Host) Install(sourcePath string) (map[string]any, error) {
 	return map[string]any{"name": m.Name, "version": m.Version, "types": m.Types, "installed": true}, nil
 }
 
+// afterDrain runs restart once the previous instance after has fully exited.
+// The wait is tracked on h.wg and gives up when StopAll cancels the root, so a
+// rollback never starts a plugin during shutdown.
+func (h *Host) afterDrain(after *runningPlugin, restart func()) {
+	ctx, ok := h.track()
+	if !ok {
+		return
+	}
+	go func() {
+		defer h.wg.Done()
+		select {
+		case <-after.done:
+		case <-ctx.Done():
+			return
+		}
+		if ctx.Err() == nil {
+			restart()
+		}
+	}()
+}
+
 // Remove stops the plugin, drops its subscriptions, deletes the row and files.
 func (h *Host) Remove(name string) error {
 	if err := checkName(name); err != nil {
 		return err
 	}
-	_ = h.Stop(name)
+	h.stop(name)
 	h.unsubscribeSink(name) // Task 9 hook
 	if err := h.cfg.Store.Delete(name); err != nil {
 		return err
@@ -782,7 +868,10 @@ func (h *Host) Inspect(name string) (map[string]any, error) {
 	if !ok {
 		return nil, ErrNotFound
 	}
-	list, _ := h.List()
+	list, err := h.List()
+	if err != nil {
+		return nil, err
+	}
 	state := rec.State
 	for _, e := range list {
 		if e["name"] == name {
@@ -937,7 +1026,12 @@ func writeActiveVersion(dir, version string) error {
 
 // --- channel-sink hooks (Task 9) ---
 
-const sinkPollInterval = 500 * time.Millisecond
+// sinkFallbackInterval bounds how long a sink drainer sleeps without a bus
+// Wake signal. Wake carries new deliveries; the timer retries failed ones.
+const sinkFallbackInterval = 5 * time.Second
+
+// sinkBatch is how many pending messages one drain pass takes.
+const sinkBatch = 50
 
 // sinkPatterns returns the declared subscribe patterns a channel-sink plugin
 // drains, or nil for any other plugin type. It is the single source that both
@@ -952,6 +1046,8 @@ func sinkPatterns(rec Record) []string {
 // startSink subscribes a channel-sink plugin to its declared channels and runs a
 // per-plugin drainer that delivers matching bus messages to the plugin's
 // /deliver (spec §7.3). The subscriptions are durable; the drainer exits on ctx.
+// It drains at start, then whenever the bus Wake signal reports a new delivery,
+// and at the latest every sinkFallbackInterval to retry failed deliveries.
 //
 // The bus fans out by EXACT channel (store.subscriptionsFor: WHERE channel=?),
 // so a glob subscribe entry like chat:* would match nothing AND is not even a
@@ -978,28 +1074,43 @@ func (h *Host) startSink(ctx context.Context, rec Record, socket string) {
 		}
 	}
 	client := NewClient(socket)
+	// Take the signal before the first drain so a publish in between still
+	// leaves a pending wake.
+	wake := h.cfg.Bus.Wake(subscriber)
 	h.wg.Add(1)
 	go func() {
 		defer h.wg.Done()
 		for {
+			for ctx.Err() == nil && h.drainOnce(ctx, rec.Name, subscriber, client) {
+			}
 			select {
 			case <-ctx.Done():
 				return
-			case <-h.cfg.After(sinkPollInterval):
-				h.drainOnce(ctx, rec.Name, subscriber, client)
+			case <-wake:
+			case <-h.cfg.SinkAfter(sinkFallbackInterval):
 			}
 		}
 	}()
 }
 
-// drainOnce delivers all currently-pending messages for one plugin. A delivery
+// drainOnce delivers one batch of pending messages for one plugin. A delivery
 // failure is left unacked (bus redelivery + DLQ handle it) and surfaced as a
-// system:plugins event. Never panics on plugin I/O (spec §13).
-func (h *Host) drainOnce(ctx context.Context, name, subscriber string, client *Client) {
-	msgs, err := h.cfg.Bus.Pending(subscriber, 50)
+// system:plugins event. Never panics on plugin I/O (spec §13). It reports
+// whether a full batch went through cleanly, so more may be waiting now; after
+// a failure the drainer waits instead of spending retry attempts in a loop.
+func (h *Host) drainOnce(ctx context.Context, name, subscriber string, client *Client) bool {
+	msgs, err := h.cfg.Bus.Pending(subscriber, sinkBatch)
 	if err != nil {
 		h.cfg.Log.Warn("sink pending", "plugin", name, "err", err)
-		return
+		return false
+	}
+	clean := true
+	ack := func(id string) {
+		if err := h.cfg.Bus.Ack(subscriber, []string{id}); err != nil {
+			// The delivery stays pending and is offered again.
+			h.cfg.Log.Warn("sink ack failed", "plugin", name, "msg", id, "err", err)
+			clean = false
+		}
 	}
 	for _, m := range msgs {
 		// ECHO SUPPRESSION: once a sink is subscribed to a concrete chat channel
@@ -1010,7 +1121,7 @@ func (h *Host) drainOnce(ctx context.Context, name, subscriber string, client *C
 		// genuine outbound (agent replies / other sources); ack+skip anything this
 		// same plugin produced so it drops out of Pending instead of retrying.
 		if m.ProducedByPlugin == name || m.Source == subscriber {
-			_ = h.cfg.Bus.Ack(subscriber, []string{m.ID})
+			ack(m.ID)
 			continue
 		}
 		dctx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -1018,19 +1129,21 @@ func (h *Host) drainOnce(ctx context.Context, name, subscriber string, client *C
 		cancel()
 		if err != nil {
 			h.cfg.Log.Warn("sink deliver failed", "plugin", name, "msg", m.ID, "err", err)
-			_, _ = h.cfg.Bus.Publish(bus.Message{
+			clean = false
+			if _, pubErr := h.cfg.Bus.Publish(bus.Message{
 				Channel: "system:plugins", Type: "plugin.deliver_failed", Source: "daemon",
 				Text:             fmt.Sprintf("plugin %s deliver failed for %s", name, m.ID),
 				ProducedByPlugin: name,
 				Data:             map[string]any{"plugin": name, "message": m.ID, "detail": err.Error()},
-			})
+			}); pubErr != nil {
+				h.cfg.Log.Warn("sink deliver_failed event publish failed", "plugin", name, "msg", m.ID, "err", pubErr)
+			}
 			continue // leave unacked for redelivery/DLQ
 		}
-		_ = h.cfg.Bus.Ack(subscriber, []string{m.ID})
+		ack(m.ID)
 	}
+	return clean && len(msgs) == sinkBatch
 }
-
-func (h *Host) stopSink(name string) {} // drainer exits on the plugin ctx cancel
 
 // ApplyActionSubscriptions validates and applies the protocol-level subscription
 // effects returned by a successful plugin action. It accepts effects only from a
@@ -1105,22 +1218,30 @@ func (h *Host) ApplyActionSubscriptions(name string, response map[string]any) er
 	}
 	added := []string{}
 	removed := []string{}
-	rollback := func() {
+	// rollback undoes the applied changes and joins any failure to cause.
+	rollback := func(cause error) error {
+		var errs []error
 		for _, channel := range added {
-			_, _ = h.cfg.Bus.UnsubscribeChannel(subscriber, channel)
+			if _, err := h.cfg.Bus.UnsubscribeChannel(subscriber, channel); err != nil {
+				errs = append(errs, fmt.Errorf("unsubscribe %s: %w", channel, err))
+			}
 		}
 		for _, channel := range removed {
-			_, _ = h.cfg.Bus.Subscribe(subscriber, channel, bus.Matcher{}, nil)
+			if _, err := h.cfg.Bus.Subscribe(subscriber, channel, bus.Matcher{}, nil); err != nil {
+				errs = append(errs, fmt.Errorf("resubscribe %s: %w", channel, err))
+			}
 		}
+		if len(errs) == 0 {
+			return cause
+		}
+		return errors.Join(cause, fmt.Errorf("roll back subscriptions: %w", errors.Join(errs...)))
 	}
 	for _, channel := range add {
 		if err := h.cfg.Bus.EnsureChannel(channel); err != nil {
-			rollback()
-			return err
+			return rollback(err)
 		}
 		if _, err := h.cfg.Bus.Subscribe(subscriber, channel, bus.Matcher{}, nil); err != nil {
-			rollback()
-			return err
+			return rollback(err)
 		}
 		if !existing[channel] {
 			added = append(added, channel)
@@ -1129,8 +1250,7 @@ func (h *Host) ApplyActionSubscriptions(name string, response map[string]any) er
 	for _, channel := range remove {
 		_, err := h.cfg.Bus.UnsubscribeChannel(subscriber, channel)
 		if err != nil && !errors.Is(err, bus.ErrNotFound) {
-			rollback()
-			return err
+			return rollback(err)
 		}
 		if err == nil && existing[channel] {
 			removed = append(removed, channel)
@@ -1288,7 +1408,17 @@ func (h *Host) enqueueWatches(plugin, channel string, dtos []WatchDTO, current b
 	wp.busy = true
 	h.pushMu.Unlock()
 
-	h.wg.Add(1)
+	ctx, ok := h.track()
+	if !ok {
+		// StopAll has begun: drop the queue; the plugin pulls on its next start.
+		h.pushMu.Lock()
+		if h.pushQueue[key] == wp {
+			delete(h.pushQueue, key)
+		}
+		wp.busy = false
+		h.pushMu.Unlock()
+		return
+	}
 	go func() {
 		defer h.wg.Done()
 		for {
@@ -1315,7 +1445,7 @@ func (h *Host) enqueueWatches(plugin, channel string, dtos []WatchDTO, current b
 				dtos = watchDTOs(watches)
 			}
 
-			h.deliverWatches(plugin, channel, dtos)
+			h.deliverWatches(ctx, plugin, channel, dtos)
 		}
 	}()
 }
@@ -1325,13 +1455,13 @@ func (h *Host) enqueueWatches(plugin, channel string, dtos []WatchDTO, current b
 // fails, it gives up — the plugin reconciles via GET /api/plugin/watches on
 // (re)start. Called only from the serialized PushWatches worker, so snapshots
 // never overlap for a given (plugin, channel).
-func (h *Host) deliverWatches(plugin, channel string, dtos []WatchDTO) {
+func (h *Host) deliverWatches(root context.Context, plugin, channel string, dtos []WatchDTO) {
 	for attempt := 0; attempt < pushWatchesMaxAttempts; attempt++ {
 		sock, err := h.socketIfRunning(plugin)
 		if err != nil {
 			return // not running: pull reconciles on (re)start
 		}
-		ctx, cancel := context.WithTimeout(h.baseCtx, 3*time.Second)
+		ctx, cancel := context.WithTimeout(root, 3*time.Second)
 		err = NewClient(sock).PushWatches(ctx, channel, dtos)
 		cancel()
 		if err == nil {
@@ -1340,7 +1470,7 @@ func (h *Host) deliverWatches(plugin, channel string, dtos []WatchDTO) {
 		h.cfg.Log.Warn("push watches failed", "plugin", plugin, "channel", channel,
 			"attempt", attempt+1, "err", err)
 		select {
-		case <-h.baseCtx.Done():
+		case <-root.Done():
 			return
 		case <-h.cfg.After(backoff(attempt)):
 		}
@@ -1353,10 +1483,13 @@ func (h *Host) unsubscribeSink(name string) {
 	subscriber := "plugin:" + name
 	subs, err := h.cfg.Bus.ListSubscriptions(subscriber)
 	if err != nil {
+		h.cfg.Log.Warn("plugin remove: list sink subscriptions", "plugin", name, "err", err)
 		return
 	}
 	for _, s := range subs {
-		_ = h.cfg.Bus.Unsubscribe(subscriber, s.ID)
+		if err := h.cfg.Bus.Unsubscribe(subscriber, s.ID); err != nil && !errors.Is(err, bus.ErrNotFound) {
+			h.cfg.Log.Warn("plugin remove: unsubscribe sink", "plugin", name, "subscription", s.ID, "err", err)
+		}
 	}
 }
 

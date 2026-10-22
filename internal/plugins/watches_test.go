@@ -209,7 +209,6 @@ func TestStartupRefreshReadsCurrentWatchesAtDeliveryBoundary(t *testing.T) {
 func TestHostPushWatchesPluginNotRunning(t *testing.T) {
 	t.Parallel()
 	h, _, _ := newHost(t, nil)
-	h.baseCtx = context.Background()
 	done := make(chan struct{})
 	go func() {
 		h.PushWatches("ghost", "issues:query", nil)

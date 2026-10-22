@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/store"
@@ -85,6 +86,43 @@ type Bus struct {
 	// findings #3/#6). Same seam pattern as publishHook; the bus stays ignorant
 	// of who provides what, gating only on its own watch state.
 	subscriptionHook func(channel string)
+	// wakeMu guards wakes: one coalescing signal channel per subscriber that
+	// asked for one (Wake). Signalled after commit, never inside a transaction.
+	wakeMu sync.Mutex
+	wakes  map[string]chan struct{}
+}
+
+// Wake returns subscriber's coalescing delivery signal: a channel with a
+// one-slot buffer that receives after a committed publish, Requeue, or Announce
+// gives subscriber a new delivery. Many deliveries before the reader runs
+// collapse into one signal, so the reader drains with Pending until empty. The
+// channel is created on first call and is the same for every later call.
+func (b *Bus) Wake(subscriber string) <-chan struct{} {
+	b.wakeMu.Lock()
+	defer b.wakeMu.Unlock()
+	if b.wakes == nil {
+		b.wakes = map[string]chan struct{}{}
+	}
+	ch := b.wakes[subscriber]
+	if ch == nil {
+		ch = make(chan struct{}, 1)
+		b.wakes[subscriber] = ch
+	}
+	return ch
+}
+
+// wake sends a non-blocking signal to each subscriber that holds a Wake channel.
+func (b *Bus) wake(subscribers ...string) {
+	b.wakeMu.Lock()
+	defer b.wakeMu.Unlock()
+	for _, s := range subscribers {
+		if ch := b.wakes[s]; ch != nil {
+			select {
+			case ch <- struct{}{}:
+			default:
+			}
+		}
+	}
 }
 
 func New(s *store.Store, clock func() time.Time) *Bus {
@@ -449,6 +487,7 @@ func pendingCount(x dbtx, agent string) (int, error) {
 }
 
 func (b *Bus) emitPublish(msg Message, delivered []string) {
+	b.wake(delivered...)
 	if b.hook != nil {
 		b.hook(msg, delivered)
 	}
@@ -782,9 +821,12 @@ func (b *Bus) Ack(agent string, messageIDs []string) error {
 const ackBatch = 500
 
 func (b *Bus) Announce(agent, channel string) error {
-	_, err := b.db.Exec(`UPDATE deliveries SET acked_at=NULL, delivered_at=NULL, attempts=0, dlq=0
-		WHERE subscription_id IN (SELECT id FROM subscriptions WHERE agent=? AND channel=?)`, agent, channel)
-	return err
+	if _, err := b.db.Exec(`UPDATE deliveries SET acked_at=NULL, delivered_at=NULL, attempts=0, dlq=0
+		WHERE subscription_id IN (SELECT id FROM subscriptions WHERE agent=? AND channel=?)`, agent, channel); err != nil {
+		return err
+	}
+	b.wake(agent)
+	return nil
 }
 
 // EnsureChannel materializes the channel row for name so it lists in
