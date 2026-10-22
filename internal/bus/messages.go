@@ -265,6 +265,7 @@ func (b *Bus) Requeue(agent, msgID string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	b.wake(agent)
 	b.emitAudit(agent, "message_requeued", auditJSON(map[string]string{"message_id": msgID}))
 	return nil
 }

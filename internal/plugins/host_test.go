@@ -423,7 +423,6 @@ func TestHostRestart(t *testing.T) {
 	h, _, ps := newHost(t, nil)
 	runner := &countingNameRunner{}
 	h.cfg.Runner = runner
-	h.baseCtx = context.Background()
 
 	for _, name := range []string{"a", "b"} {
 		if err := ps.Upsert(sampleRecord(name)); err != nil {
@@ -503,7 +502,6 @@ func TestHostConcurrentStartStop(t *testing.T) {
 		status := 200
 		healthServer(t, sock, &status)
 	}
-	h.baseCtx = context.Background()
 
 	// Hammer Start/Stop/List concurrently: the registry map must be race-free and
 	// a plugin failure must never crash the host.
@@ -798,7 +796,12 @@ func TestHostInstallFailureRestoresPreviousActiveVersion(t *testing.T) {
 	if _, err := h.Install(pluginSource("1.0.0")); err != nil {
 		t.Fatal(err)
 	}
-	h.StopAll()
+	// Stop only this plugin: after StopAll the host refuses every Start.
+	h.mu.Lock()
+	first := h.running["rollback"]
+	h.mu.Unlock()
+	h.stop("rollback")
+	<-first.done
 	logs := filepath.Join(h.cfg.PluginsDir, "rollback", "logs")
 	if err := os.RemoveAll(logs); err != nil {
 		t.Fatal(err)
@@ -832,7 +835,6 @@ func TestStartRefusesSymlinkEscapeExec(t *testing.T) {
 	t.Parallel()
 	h, b, ps := newHost(t, nil)
 	h.cfg.Runner = &nameRunner{}
-	h.baseCtx = context.Background()
 
 	// evil: exec is a symlink pointing outside the plugin dir.
 	evil := sampleRecord("evil")
@@ -1008,7 +1010,6 @@ func TestStartSameNameConcurrentNoLeak(t *testing.T) {
 	t.Parallel()
 	h, _, ps := newHost(t, nil)
 	h.cfg.Runner = &nameRunner{}
-	h.baseCtx = context.Background()
 
 	if err := ps.Upsert(sampleRecord("p")); err != nil {
 		t.Fatal(err)

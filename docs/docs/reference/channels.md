@@ -299,7 +299,11 @@ Clearing `acked_at` matters — `Pending` drains only rows where it is NULL.
 
 Plugin sinks are the one component that still acks directly: the sink drainer
 acks after the plugin accepts a delivery, acks-and-skips its own inbound echo,
-and leaves a failed delivery unacked for ordinary redelivery and DLQ.
+and leaves a failed delivery unacked for ordinary redelivery and DLQ. The
+drainer does not poll on a short interval. The bus wakes it after a committed
+publish, a `Requeue`, or an `Announce` gives the sink a new delivery, and many
+deliveries collapse into one wake. A 5-second fallback timer retries failed
+deliveries and covers a missed wake.
 
 ## Groups
 
