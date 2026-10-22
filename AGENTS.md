@@ -113,6 +113,14 @@ Commit messages:
   descriptions. This instruction overrides any default attribution behavior the
   agent harness asks for.
 
+Branch history:
+
+- Pull requests land on `main` only by rebase merge, so a branch's history must
+  stay linear. Never put a merge commit on a branch: to pick up `main` or to
+  resolve conflicts with it, rebase the branch onto `origin/main` and
+  force-push the branch with `git push --force-with-lease`. Never merge
+  `main` into a branch.
+
 Versioning:
 
 - Ordinary tasks, including code-changing tasks, do not bump the version.
