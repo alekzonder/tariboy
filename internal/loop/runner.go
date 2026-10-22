@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -325,7 +326,7 @@ func (ExecSpawner) StartManaged(argv, env []string, dir string) (func() error, e
 	reaped := make(chan struct{})
 	go func() {
 		defer close(reaped)
-		_ = cmd.Wait()
+		_ = cmd.Wait() // reaper only: the shim reports its outcome through result.json, not its exit status
 	}()
 	// A process group outlives its leader — its pgid stays reserved until the last
 	// member exits. Before this reaper the shim lingered as a zombie and pinned
@@ -451,7 +452,7 @@ func (d *doneGraceTracker) observe(done bool, now time.Time, grace time.Duration
 		return
 	}
 	d.killSent = true
-	_ = kill()
+	_ = kill() // the watcher's kill callback already logs its failure
 }
 
 // tmuxHasSession is the production HasTmuxSession: `tmux has-session -t <name>`
@@ -967,7 +968,11 @@ func (r *ShimRunner) assemblePrompt(ctx context.Context, ag agent.Agent, l agent
 	if err != nil {
 		return "", nil, fmt.Errorf("read image prompt: %w", err)
 	}
-	tail, _ := os.ReadFile(filepath.Join(l.ImageDir(), "PROMPT_TAIL.md"))
+	// PROMPT_TAIL.md is optional: an absent file means no tail, anything else is worth a warning.
+	tail, err := os.ReadFile(filepath.Join(l.ImageDir(), "PROMPT_TAIL.md"))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		r.cfg.Logger.Warn("read image prompt tail", "agent", ag.Name, "err", err)
+	}
 	prompt := AssemblePrompt(PromptParts{
 		Agent: ag.Name, Cwd: agentCwd(ag, l), ImagePrompt: string(imagePrompt),
 		Context: contextText, Messages: FormatMessages(batch),
@@ -1193,7 +1198,7 @@ func enforceSoftTimeout(st *agent.Store, it agent.Iteration, now time.Time, kill
 	if err != nil || !marked {
 		return false, err
 	}
-	_ = kill()
+	_ = kill() // the marker is committed and the kill is sent once; the watcher's callback logs a failure
 	return true, nil
 }
 

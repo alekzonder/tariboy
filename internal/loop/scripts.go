@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -61,14 +62,14 @@ func (s *scriptSupervisor) markScriptCancellation(key string) bool {
 }
 
 func (s *scriptSupervisor) terminateScriptProcess(key string, pid int) {
-	_ = syscall.Kill(-pid, syscall.SIGTERM)
+	logCleanup(s.cfg.Log, "terminate script process group", syscall.Kill(-pid, syscall.SIGTERM), "run", key, "pid", pid)
 	time.AfterFunc(scriptCancelGrace, func() {
 		s.mu.Lock()
 		cancelPending := s.scriptCancels[key]
 		_, stillRunning := s.scriptRuns[key]
 		s.mu.Unlock()
 		if cancelPending && stillRunning {
-			_ = syscall.Kill(-pid, syscall.SIGKILL)
+			logCleanup(s.cfg.Log, "kill script process group", syscall.Kill(-pid, syscall.SIGKILL), "run", key, "pid", pid)
 		}
 	})
 }
@@ -167,7 +168,15 @@ func (s *scriptSupervisor) startScript(ctx context.Context, ag agent.Agent, r sc
 		return
 	}
 
-	secrets, _ := s.cfg.Store.SecretMap(ag.Name)
+	secrets, err := s.cfg.Store.SecretMap(ag.Name)
+	if err != nil {
+		// A script that starts without its secrets runs with the wrong
+		// environment, so it must not start at all.
+		err = fmt.Errorf("load agent secrets: %w", err)
+		writeScriptStartFailure(s.cfg.Log, logPath, err)
+		s.finishScript(key, r, -1, err, logPath)
+		return
+	}
 	env := agentScriptEnv(s.cfg.BaseEnv, ag, l, secrets, l.Sock())
 	// Appended last: os/exec keeps the final value of a duplicated key, so an
 	// agent's own environment cannot redefine the protocol.
@@ -207,22 +216,22 @@ func (s *scriptSupervisor) startScript(ctx context.Context, ag agent.Agent, r sc
 	}
 	if _, err := fmt.Fprintf(logFile, "cwd: %s\n", cmd.Dir); err != nil {
 		cancelRunContext()
-		_ = logFile.Close()
+		logCleanup(s.cfg.Log, "close script log", logFile.Close(), "agent", r.Agent, "run", r.ID)
 		s.finishScript(key, r, -1, err, logPath)
 		return
 	}
 	cmd.Stdout, cmd.Stderr = logFile, logFile
 	if err := cmd.Start(); err != nil {
 		cancelRunContext()
-		_ = logFile.Close()
+		logCleanup(s.cfg.Log, "close script log", logFile.Close(), "agent", r.Agent, "run", r.ID)
 		s.finishScript(key, r, -1, err, logPath)
 		return
 	}
 	pidSet, err := s.cfg.Scripts.SetRunPID(r.Agent, r.ID, cmd.Process.Pid)
 	if err != nil || !pidSet {
 		cancelRunContext()
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
-		_ = logFile.Close()
+		logCleanup(s.cfg.Log, "terminate script process group", syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM), "agent", r.Agent, "run", r.ID, "pid", cmd.Process.Pid)
+		logCleanup(s.cfg.Log, "close script log", logFile.Close(), "agent", r.Agent, "run", r.ID)
 		if err == nil {
 			err = errors.New("script claim was canceled before process startup completed")
 		}
@@ -241,7 +250,7 @@ func (s *scriptSupervisor) startScript(ctx context.Context, ag agent.Agent, r sc
 		defer s.wg.Done()
 		defer cancelRunContext()
 		err := cmd.Wait()
-		_ = logFile.Close()
+		logCleanup(s.cfg.Log, "close script log", logFile.Close(), "agent", r.Agent, "run", r.ID)
 		code := 0
 		if err != nil {
 			if exitErr, ok := err.(*exec.ExitError); ok {
@@ -255,6 +264,23 @@ func (s *scriptSupervisor) startScript(ctx context.Context, ag agent.Agent, r sc
 		}
 		s.finishScript(key, r, code, err, logPath)
 	}()
+}
+
+// writeScriptStartFailure puts a start failure into the run's log file, so the
+// operator who opens the log of a run that never started sees why. The file is
+// created exclusively, like the real log, and a failure to write it is logged.
+func writeScriptStartFailure(log *slog.Logger, logPath string, cause error) {
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err != nil {
+		logCleanup(log, "create script log directory", err, "path", logPath)
+		return
+	}
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		logCleanup(log, "create script log", err, "path", logPath)
+		return
+	}
+	_, werr := fmt.Fprintf(f, "error: %v\n", cause)
+	logCleanup(log, "write script log", errors.Join(werr, f.Close()), "path", logPath)
 }
 
 func (s *scriptSupervisor) finishScript(key string, r script.Run, code int, runErr error, logPath string) {
@@ -338,7 +364,7 @@ func (s *scriptSupervisor) openScriptLog(agentName, runID string) (*os.File, str
 	}
 	file := os.NewFile(uintptr(fd), path)
 	if file == nil {
-		_ = unix.Close(fd)
+		logCleanup(s.cfg.Log, "close script log descriptor", unix.Close(fd), "run", runID)
 		return nil, "", errors.New("open script log")
 	}
 	info, err := file.Stat()
@@ -453,7 +479,7 @@ func (s *scriptSupervisor) CancelScriptTarget(agentName, id string) error {
 				if tracked {
 					s.terminateScriptProcess(key, *run.PID)
 				} else {
-					_ = syscall.Kill(-*run.PID, syscall.SIGTERM)
+					logCleanup(s.cfg.Log, "terminate untracked script process group", syscall.Kill(-*run.PID, syscall.SIGTERM), "agent", agentName, "run", run.ID, "pid", *run.PID)
 				}
 			}
 			return nil
@@ -487,7 +513,7 @@ func (s *scriptSupervisor) CancelScriptTarget(agentName, id string) error {
 			if tracked {
 				s.terminateScriptProcess(key, *running.PID)
 			} else {
-				_ = syscall.Kill(-*running.PID, syscall.SIGTERM)
+				logCleanup(s.cfg.Log, "terminate untracked script process group", syscall.Kill(-*running.PID, syscall.SIGTERM), "agent", agentName, "run", running.ID, "pid", *running.PID)
 			}
 		}
 	}
