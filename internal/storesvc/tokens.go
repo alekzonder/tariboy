@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 )
 
 const (
@@ -30,7 +31,7 @@ func (d *DB) SeedToken(tok, scope string) error {
 func (d *DB) LookupToken(tok string) (string, bool, error) {
 	var scope string
 	err := d.sql.QueryRow(`SELECT scope FROM tokens WHERE token_sha256 = ?`, tokenHash(tok)).Scan(&scope)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
 	if err != nil {

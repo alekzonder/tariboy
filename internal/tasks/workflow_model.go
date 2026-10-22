@@ -269,7 +269,7 @@ func loadManifestTx(ctx context.Context, q queryer, digest string) (workflowimag
 	var raw string
 	err := q.QueryRowContext(ctx, `SELECT manifest FROM task_workflow_images WHERE digest = ?`, digest).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
-		return workflowimage.Manifest{}, domainError(http.StatusConflict, "workflow_not_found", "workflow image "+digest+" is not published")
+		return workflowimage.Manifest{}, newError(http.StatusConflict, "workflow_not_found", "workflow image "+digest+" is not published")
 	}
 	if err != nil {
 		return workflowimage.Manifest{}, err

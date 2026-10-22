@@ -45,9 +45,7 @@ func workflowManagedErrorFor(ctx context.Context, q queryer, task Task) error {
 	if status, ok := currentStatus(manifest, task.WorkflowStatus); ok {
 		outcomes = statusOutcomes(status)
 	}
-	managed := workflowManagedError().(*Error)
-	managed.Data = map[string]any{"status": task.WorkflowStatus, "outcomes": outcomes}
-	return managed
+	return workflowManagedError().WithData(map[string]any{"status": task.WorkflowStatus, "outcomes": outcomes})
 }
 
 // enterStatusTx closes the current visit, opens a visit for statusID, sets

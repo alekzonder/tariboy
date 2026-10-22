@@ -55,7 +55,7 @@ func pickHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool string, busy 
 	if err == nil {
 		return holder, nil
 	}
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return "", err
 	}
 	// The assigned-work test is the one taskgoal's reconcileAgent selects a

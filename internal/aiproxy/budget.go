@@ -2,6 +2,7 @@ package aiproxy
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -112,7 +113,7 @@ func (s *Store) AgentBudgetStatus(agent string, now time.Time) (AgentBudgetStatu
 	status := AgentBudgetStatus{}
 	err := s.db.QueryRow(`SELECT hour_usd,day_usd,week_usd,month_usd FROM agent_budgets WHERE agent_name=?`, agent).
 		Scan(&status.HourUSD, &status.DayUSD, &status.WeekUSD, &status.MonthUSD)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return AgentBudgetStatus{}, err
 	}
 	query, args := agentWindowSpendQuery(agent, now)
@@ -235,7 +236,7 @@ func (s *Store) GetBudget(scope string) (Budget, bool, error) {
 	var b Budget
 	err := s.db.QueryRow(`SELECT scope, limit_usd, period_s, mode, created_at FROM budgets WHERE scope=?`,
 		scope).Scan(&b.Scope, &b.LimitUSD, &b.PeriodS, &b.Mode, &b.CreatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Budget{}, false, nil
 	}
 	return b, err == nil, err

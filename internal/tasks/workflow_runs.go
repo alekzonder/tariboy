@@ -100,7 +100,7 @@ type RunCompletion struct {
 
 // invalidCompletion refuses a run result without a finish time.
 func invalidCompletion(kind string, id int64) error {
-	return domainError(http.StatusBadRequest, "invalid_completion",
+	return newError(http.StatusBadRequest, "invalid_completion",
 		fmt.Sprintf("%s %d: the completion has no finish time", kind, id))
 }
 
@@ -140,7 +140,7 @@ func IsTaskDirKey(key string) bool {
 }
 
 func scriptRunNotFound(id int64) error {
-	return domainError(http.StatusNotFound, "run_not_found", fmt.Sprintf("script run %d not found", id))
+	return notFound("run_not_found", fmt.Sprintf("script run %d not found", id))
 }
 
 // PendingRunJobs returns every pending run, oldest first, with what the worker

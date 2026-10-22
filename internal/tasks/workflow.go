@@ -3,8 +3,11 @@ package tasks
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 func validStatus(status string) bool {
@@ -132,7 +135,7 @@ func updateTaskFieldsTx(ctx context.Context, tx *sql.Tx, task *Task, in UpdateTa
 	if in.Title != nil {
 		task.Title = strings.TrimSpace(*in.Title)
 		if task.Title == "" {
-			return domainError(http.StatusBadRequest, "missing_title", "task title is required")
+			return newError(http.StatusBadRequest, "missing_title", "task title is required")
 		}
 	}
 	if in.Description != nil {
@@ -161,7 +164,7 @@ func updateTaskFieldsTx(ctx context.Context, tx *sql.Tx, task *Task, in UpdateTa
 	if in.Status != nil {
 		task.Status = strings.TrimSpace(*in.Status)
 		if !validStatus(task.Status) {
-			return domainError(http.StatusBadRequest, "invalid_status", "invalid task status")
+			return newError(http.StatusBadRequest, "invalid_status", "invalid task status")
 		}
 		if task.Status == StatusDone {
 			_, count, err := descendantCounts(ctx, tx, task.ID)
@@ -243,7 +246,7 @@ func (s *TaskService) AddRelation(ctx context.Context, actor Actor, key string, 
 	}
 	in.Type = strings.TrimSpace(in.Type)
 	if in.Type != "blocks" && in.Type != "related" {
-		return Relation{}, domainError(http.StatusBadRequest, "invalid_relation", "relation type must be blocks or related")
+		return Relation{}, newError(http.StatusBadRequest, "invalid_relation", "relation type must be blocks or related")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -266,7 +269,7 @@ func (s *TaskService) AddRelation(ctx context.Context, actor Actor, key string, 
 		return Relation{}, err
 	}
 	if source.ID == target.ID {
-		return Relation{}, domainError(http.StatusBadRequest, "self_relation", "a task cannot relate to itself")
+		return Relation{}, newError(http.StatusBadRequest, "self_relation", "a task cannot relate to itself")
 	}
 	if err := requireWrite(ctx, tx, actor, source); err != nil {
 		return Relation{}, err
@@ -295,8 +298,8 @@ func (s *TaskService) AddRelation(ctx context.Context, actor Actor, key string, 
 		INSERT INTO task_relations(source_id, target_id, type, created_by, created_at)
 		VALUES (?, ?, ?, ?, ?)`, source.ID, target.ID, in.Type, actor.Principal, now)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE") {
-			return Relation{}, domainError(http.StatusConflict, "relation_exists", "relation already exists")
+		if store.IsUniqueViolation(err) {
+			return Relation{}, newError(http.StatusConflict, "relation_exists", "relation already exists")
 		}
 		return Relation{}, err
 	}
@@ -351,7 +354,7 @@ func relationCycleTx(ctx context.Context, tx *sql.Tx, source, target Task) error
 		return err
 	}
 	if cycle {
-		return domainError(http.StatusConflict, "blocking_cycle",
+		return newError(http.StatusConflict, "blocking_cycle",
 			"blocking relation would create a cycle")
 	}
 	return nil
@@ -392,8 +395,8 @@ func (s *TaskService) DeleteRelation(ctx context.Context, actor Actor, key strin
 		SELECT source_id, target_id, type FROM task_relations
 		WHERE id = ? AND (source_id = ? OR target_id = ?)`,
 		in.RelationID, task.ID, task.ID).Scan(&sourceID, &targetID, &relationType); err != nil {
-		if err == sql.ErrNoRows {
-			return domainError(http.StatusNotFound, "relation_not_found", "relation not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			return notFound("relation_not_found", "relation not found")
 		}
 		return err
 	}
@@ -448,7 +451,7 @@ func (s *TaskService) DeleteRelation(ctx context.Context, actor Actor, key strin
 
 func (s *TaskService) ClaimTask(ctx context.Context, actor Actor, key string, revision int64) (Task, error) {
 	if actor.IsCustomer || !strings.HasPrefix(actor.Principal, "agent:") {
-		return Task{}, domainError(http.StatusForbidden, "forbidden", "only an agent can claim a task")
+		return Task{}, newError(http.StatusForbidden, "forbidden", "only an agent can claim a task")
 	}
 	detail, err := s.GetTask(ctx, actor, key)
 	if err != nil {
@@ -458,10 +461,10 @@ func (s *TaskService) ClaimTask(ctx context.Context, actor Actor, key string, re
 		return Task{}, workflowManagedErrorFor(ctx, s.db, detail.Task)
 	}
 	if detail.Task.Blocked {
-		return Task{}, domainError(http.StatusConflict, "task_blocked", "blocked task cannot be claimed")
+		return Task{}, newError(http.StatusConflict, "task_blocked", "blocked task cannot be claimed")
 	}
 	if detail.Task.Assignee != "" && detail.Task.Assignee != actor.Principal {
-		return Task{}, domainError(http.StatusConflict, "already_assigned", "task is assigned to another principal")
+		return Task{}, newError(http.StatusConflict, "already_assigned", "task is assigned to another principal")
 	}
 	assignee, status := actor.Principal, StatusInProgress
 	return s.UpdateTask(ctx, actor, key, UpdateTaskInput{
@@ -473,8 +476,8 @@ func (s *TaskService) ClaimTask(ctx context.Context, actor Actor, key string, re
 
 // workflowManagedError refuses a flexible-task command on a task with a
 // workflow, or one that would bring a task into or out of a bound queue.
-func workflowManagedError() error {
-	return domainError(http.StatusConflict, "workflow_managed",
+func workflowManagedError() *Error {
+	return newError(http.StatusConflict, "workflow_managed",
 		"task lifecycle is managed by its workflow")
 }
 

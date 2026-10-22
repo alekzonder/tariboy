@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -178,7 +179,7 @@ func Down(ctx context.Context, cfg Config, out io.Writer) error {
 		return nil
 	}
 	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
-		if err == syscall.ESRCH { // already gone
+		if errors.Is(err, syscall.ESRCH) { // already gone
 			os.Remove(cfg.PidFile)
 			fmt.Fprintln(out, "tariboyd is not running (stale pidfile removed)")
 			return nil
@@ -211,7 +212,7 @@ func waitPidGone(ctx context.Context, pid int, timeout, poll time.Duration) bool
 	}
 	deadline := time.Now().Add(timeout)
 	for {
-		if syscall.Kill(pid, 0) == syscall.ESRCH {
+		if errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) {
 			return true
 		}
 		if time.Now().After(deadline) {

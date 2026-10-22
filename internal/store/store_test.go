@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -777,7 +778,7 @@ func TestTaskPriorityMigrationPreservesLegacyTaskData(t *testing.T) {
 			taskCount, relationCount, commentCount, waitingCount, eventCount)
 	}
 	var fkViolation string
-	if err := s.DB.QueryRow(`SELECT "table" FROM pragma_foreign_key_check LIMIT 1`).Scan(&fkViolation); err != sql.ErrNoRows {
+	if err := s.DB.QueryRow(`SELECT "table" FROM pragma_foreign_key_check LIMIT 1`).Scan(&fkViolation); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("foreign key check returned table %q, err %v", fkViolation, err)
 	}
 	var foreignKeysEnabled int
@@ -1073,7 +1074,7 @@ func TestTaskPriorityConstraint(t *testing.T) {
 		INSERT INTO tasks(task_key, queue_prefix, position, title, author, customer, priority, created_at, updated_at)
 		VALUES ('TEST-X', 'TEST', 10, 'invalid', 'user:test', 'user:test', 'urgent', ?, ?)`, now, now); err == nil {
 		t.Fatal("invalid priority write succeeded")
-	} else if err == sql.ErrNoRows {
+	} else if errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("unexpected invalid priority error: %v", err)
 	}
 }

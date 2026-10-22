@@ -67,7 +67,7 @@ func (s *Store) Upsert(g Group) error {
 func (s *Store) Get(name string) (Group, bool, error) {
 	row := s.db.QueryRow(`SELECT name, lead, created_at, settings FROM groups WHERE name=?`, name)
 	g, err := scanGroup(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Group{}, false, nil
 	}
 	if err != nil {

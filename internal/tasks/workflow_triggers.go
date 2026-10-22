@@ -229,7 +229,7 @@ func (s *WorkflowEngine) applyQueueWorkflowTriggers(ctx context.Context, in Appl
 			continue
 		}
 		if trigger.action != "create_task" {
-			return domainError(http.StatusConflict, "invalid_trigger_action", "persisted workflow trigger action is unsupported")
+			return newError(http.StatusConflict, "invalid_trigger_action", "persisted workflow trigger action is unsupported")
 		}
 		title, _ := in.Payload["text"].(string)
 		title = strings.TrimSpace(title)
@@ -262,17 +262,17 @@ func (s *WorkflowEngine) CreateQueueWorkflowTrigger(ctx context.Context, actor A
 	queue = strings.ToUpper(strings.TrimSpace(queue))
 	in.Pattern, in.CorrelationKey, in.Action = strings.TrimSpace(in.Pattern), strings.TrimSpace(in.CorrelationKey), strings.TrimSpace(in.Action)
 	if !validRuntimeChannelPattern(in.Pattern) {
-		return QueueWorkflowTrigger{}, domainError(http.StatusBadRequest, "invalid_channel_pattern", "trigger channel pattern is invalid")
+		return QueueWorkflowTrigger{}, newError(http.StatusBadRequest, "invalid_channel_pattern", "trigger channel pattern is invalid")
 	}
 	switch strings.SplitN(in.Pattern, ":", 2)[0] {
 	case "agent", "group", "user", "system":
-		return QueueWorkflowTrigger{}, domainError(http.StatusBadRequest, "invalid_channel_pattern", "task-creating triggers require an external channel namespace")
+		return QueueWorkflowTrigger{}, newError(http.StatusBadRequest, "invalid_channel_pattern", "task-creating triggers require an external channel namespace")
 	}
 	if in.Action == "" {
-		return QueueWorkflowTrigger{}, domainError(http.StatusBadRequest, "invalid_trigger_action", "trigger action is required")
+		return QueueWorkflowTrigger{}, newError(http.StatusBadRequest, "invalid_trigger_action", "trigger action is required")
 	}
 	if in.Action != "create_task" {
-		return QueueWorkflowTrigger{}, domainError(http.StatusBadRequest, "invalid_trigger_action", "trigger action must be create_task")
+		return QueueWorkflowTrigger{}, newError(http.StatusBadRequest, "invalid_trigger_action", "trigger action must be create_task")
 	}
 	if _, err := s.admin.GetQueue(ctx, actor, queue); err != nil {
 		return QueueWorkflowTrigger{}, err
@@ -339,7 +339,7 @@ func (s *WorkflowEngine) DeleteQueueWorkflowTrigger(ctx context.Context, actor A
 		return err
 	}
 	if n, _ := res.RowsAffected(); n != 1 {
-		return domainError(http.StatusNotFound, "workflow_trigger_not_found", "workflow trigger not found")
+		return notFound("workflow_trigger_not_found", "workflow trigger not found")
 	}
 	s.refreshWorkflowIngressEnabled(ctx)
 	return nil
@@ -351,14 +351,14 @@ func (s *WorkflowEngine) DeleteQueueWorkflowTrigger(ctx context.Context, actor A
 func (s *WorkflowEngine) ApplyWorkflowObservation(ctx context.Context, in ApplyWorkflowObservationInput) error {
 	in.EventID, in.EventAt, in.Channel, in.Kind, in.CorrelationKey = strings.TrimSpace(in.EventID), strings.TrimSpace(in.EventAt), strings.TrimSpace(in.Channel), strings.TrimSpace(in.Kind), strings.TrimSpace(in.CorrelationKey)
 	if in.EventID == "" || in.Channel == "" {
-		return domainError(http.StatusBadRequest, "invalid_observation", "event id and channel are required")
+		return newError(http.StatusBadRequest, "invalid_observation", "event id and channel are required")
 	}
 	if in.EventAt == "" {
 		in.EventAt = s.now()
 	}
 	eventAt, err := store.ParseInputTime(in.EventAt)
 	if err != nil {
-		return domainError(http.StatusBadRequest, "invalid_observation", "event_at must be an RFC 3339 time")
+		return newError(http.StatusBadRequest, "invalid_observation", "event_at must be an RFC 3339 time")
 	}
 	in.EventAt = store.FormatTime(eventAt)
 	return s.applyQueueWorkflowTriggers(ctx, in)
@@ -404,7 +404,7 @@ func requireOperator(actor Actor) error {
 		return err
 	}
 	if !actor.IsCustomer {
-		return domainError(http.StatusForbidden, "forbidden", "operator access required")
+		return newError(http.StatusForbidden, "forbidden", "operator access required")
 	}
 	return nil
 }

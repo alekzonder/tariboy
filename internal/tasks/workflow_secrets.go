@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"regexp"
 	"slices"
@@ -20,18 +21,18 @@ var queueSecretKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // value.
 func validateQueueSecret(key, value string) error {
 	if !queueSecretKeyPattern.MatchString(key) {
-		return domainError(http.StatusBadRequest, "invalid_secret_key",
+		return newError(http.StatusBadRequest, "invalid_secret_key",
 			"a secret key starts with a letter or underscore and holds letters, digits, and underscores")
 	}
 	if strings.HasPrefix(key, "TARIBOY_") {
-		return domainError(http.StatusBadRequest, "invalid_secret_key",
+		return newError(http.StatusBadRequest, "invalid_secret_key",
 			"a secret key must not start with TARIBOY_: it would shadow a protocol variable")
 	}
 	if value == "" || !utf8.ValidString(value) {
-		return domainError(http.StatusBadRequest, "invalid_secret", "a secret value is non-empty UTF-8 text")
+		return newError(http.StatusBadRequest, "invalid_secret", "a secret value is non-empty UTF-8 text")
 	}
 	if len(value) > MaxQueueSecretBytes {
-		return domainError(http.StatusRequestEntityTooLarge, "secret_too_large", "a secret value is at most 64 KiB")
+		return newError(http.StatusRequestEntityTooLarge, "secret_too_large", "a secret value is at most 64 KiB")
 	}
 	return nil
 }
@@ -83,7 +84,7 @@ func missingQueueSecrets(ctx context.Context, q queryer, queue string, names []s
 		if err == nil {
 			continue
 		}
-		if err != sql.ErrNoRows {
+		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 		missing = append(missing, name)
@@ -335,9 +336,9 @@ func (s *Admin) removeQueueValue(ctx context.Context, actor Actor, queue, key st
 	if affected, err := result.RowsAffected(); err != nil {
 		return err
 	} else if affected != 1 && secret {
-		return domainError(http.StatusNotFound, "not_found", "queue secret not found")
+		return notFound("not_found", "queue secret not found")
 	} else if affected != 1 {
-		return domainError(http.StatusNotFound, "not_found", "queue env var not found")
+		return notFound("not_found", "queue env var not found")
 	}
 	if _, err := appendQueueEventTx(ctx, tx, Queue{Prefix: queue, Revision: revision},
 		queueValueEvent(secret, "removed"), actor, map[string]any{"key": key}, s.now()); err != nil {
@@ -384,8 +385,8 @@ func (s *Admin) queueEnvironment(ctx context.Context, queue string) (env, secret
 func queueSecretRevision(ctx context.Context, q queryer, queue string) (int64, error) {
 	var revision int64
 	err := q.QueryRowContext(ctx, `SELECT revision FROM task_queues WHERE prefix = ?`, queue).Scan(&revision)
-	if err == sql.ErrNoRows {
-		return 0, domainError(http.StatusNotFound, "not_found", "queue not found")
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, notFound("not_found", "queue not found")
 	}
 	return revision, err
 }

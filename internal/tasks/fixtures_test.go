@@ -12,6 +12,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -454,7 +455,7 @@ func holderFor(t *testing.T, svc *Service, task Task, pool string) holderRecord 
 	var h holderRecord
 	err := svc.db.QueryRow(`SELECT agent, released, unavailable_since FROM task_workflow_holders WHERE task_id = ? AND pool = ?`,
 		task.ID, pool).Scan(&h.Agent, &h.Released, &h.UnavailableSince)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return holderRecord{}
 	}
 	if err != nil {

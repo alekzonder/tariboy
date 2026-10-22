@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/workflowfile"
@@ -212,7 +213,7 @@ func (s *WorkflowEngine) GetWorkflow(ctx context.Context, actor Actor, key strin
 	case err == nil:
 		last.TaskKey = task.Key
 		view.LastRequest = &last
-	case err != sql.ErrNoRows:
+	case !errors.Is(err, sql.ErrNoRows):
 		return WorkflowView{}, err
 	}
 	return view, nil

@@ -80,7 +80,7 @@ func (s *Store) Close() error {
 func (s *Store) ConfigGet(key string) (string, bool, error) {
 	var v string
 	err := s.DB.QueryRow(`SELECT value FROM daemon_config WHERE key = ?`, key).Scan(&v)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
 	if err != nil {

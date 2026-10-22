@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -29,7 +30,7 @@ func (s *TaskService) CreateTask(ctx context.Context, actor Actor, in CreateTask
 		return Task{}, err
 	}
 	if strings.TrimSpace(in.Title) == "" {
-		return Task{}, domainError(http.StatusBadRequest, "missing_title", "task title is required")
+		return Task{}, newError(http.StatusBadRequest, "missing_title", "task title is required")
 	}
 	if _, err := NormalizePriority(in.Priority); err != nil {
 		return Task{}, err
@@ -70,7 +71,7 @@ func (s *TaskService) CreateTask(ctx context.Context, actor Actor, in CreateTask
 func (s *TaskService) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor, in CreateTaskInput) (Task, error) {
 	in.Title = strings.TrimSpace(in.Title)
 	if in.Title == "" {
-		return Task{}, domainError(http.StatusBadRequest, "missing_title", "task title is required")
+		return Task{}, newError(http.StatusBadRequest, "missing_title", "task title is required")
 	}
 	priority, err := NormalizePriority(in.Priority)
 	if err != nil {
@@ -184,7 +185,7 @@ func (s *TaskService) createTaskPlacementTx(ctx context.Context, tx *sql.Tx, act
 		place.queue, place.customer, place.group = parent.Queue, parent.Customer, parent.Group
 		place.parentID, place.parentKey = parent.ID, parent.Key
 	} else if place.queue == "" {
-		return createTaskPlacement{}, domainError(http.StatusBadRequest, "missing_queue", "queue is required for a root task")
+		return createTaskPlacement{}, newError(http.StatusBadRequest, "missing_queue", "queue is required for a root task")
 	}
 	return place, nil
 }
@@ -198,7 +199,7 @@ func (s *TaskService) createTaskQueueTx(ctx context.Context, tx *sql.Tx, queue, 
 		return QueueWorkflow{}, false, err
 	}
 	if exists == 0 {
-		return QueueWorkflow{}, false, domainError(http.StatusNotFound, "queue_not_found", "queue not found")
+		return QueueWorkflow{}, false, notFound("queue_not_found", "queue not found")
 	}
 	// A task created in a bound queue pins the queue's workflow and the workflow
 	// assigns it, so an explicit assignee is refused.
@@ -240,7 +241,7 @@ func createTaskReportTx(
 		}
 		if !runsQueue {
 			if group != "" {
-				return false, false, domainError(http.StatusBadRequest, "report_cannot_assign",
+				return false, false, newError(http.StatusBadRequest, "report_cannot_assign",
 					"a root task created in a queue you do not run cannot carry a group")
 			}
 			if strings.TrimSpace(assignee) == "" {
@@ -322,7 +323,7 @@ func readTaskIdempotency[T any](
 		SELECT response FROM task_idempotency
 		WHERE actor = ? AND action = ? AND idempotency_key = ?`,
 		actor, action, key).Scan(&raw)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return zero, false, nil
 	}
 	if err != nil {
@@ -372,7 +373,7 @@ func (s *TaskService) GetTask(ctx context.Context, actor Actor, key string) (Tas
 		return TaskDetail{}, err
 	}
 	if access == "" {
-		return TaskDetail{}, notFound(key)
+		return TaskDetail{}, taskNotFound(key)
 	}
 	task.Access = access
 	comments, err := listComments(ctx, s.db, task)
@@ -481,22 +482,22 @@ func listFilterPlan(actor Actor, filter ListFilter) (listTasksPlan, error) {
 		statusView = "active"
 	}
 	if statusView != "" && statusView != "active" && statusView != "closed" && statusView != "all" {
-		return listTasksPlan{}, domainError(http.StatusBadRequest, "invalid_status_view", "status_view must be active, closed, or all")
+		return listTasksPlan{}, newError(http.StatusBadRequest, "invalid_status_view", "status_view must be active, closed, or all")
 	}
 	for _, category := range filter.Categories {
 		switch category {
 		case StatusOpen, StatusInProgress, StatusWaitCustomer, StatusDone, StatusCancelled:
 		default:
-			return listTasksPlan{}, domainError(http.StatusBadRequest, "invalid_category", "category must be open, in_progress, wait_customer, done, or cancelled")
+			return listTasksPlan{}, newError(http.StatusBadRequest, "invalid_category", "category must be open, in_progress, wait_customer, done, or cancelled")
 		}
 	}
 	for _, priority := range filter.Priorities {
 		if _, err := NormalizePriority(priority); err != nil || priority == "" {
-			return listTasksPlan{}, domainError(http.StatusBadRequest, "invalid_priority", "priority must be P0, P1, P2, or P3")
+			return listTasksPlan{}, newError(http.StatusBadRequest, "invalid_priority", "priority must be P0, P1, P2, or P3")
 		}
 	}
 	if filter.ParentKey != "" && filter.SubtreeKey != "" {
-		return listTasksPlan{}, domainError(http.StatusBadRequest, "invalid_filter", "parent and subtree cannot be combined")
+		return listTasksPlan{}, newError(http.StatusBadRequest, "invalid_filter", "parent and subtree cannot be combined")
 	}
 	sortName := filter.Sort
 	if sortName == "" {
@@ -504,13 +505,13 @@ func listFilterPlan(actor Actor, filter ListFilter) (listTasksPlan, error) {
 	}
 	order, ok := listOrders[sortName]
 	if !ok {
-		return listTasksPlan{}, domainError(http.StatusBadRequest, "invalid_sort", "sort must be tree, updated, created, or priority")
+		return listTasksPlan{}, newError(http.StatusBadRequest, "invalid_sort", "sort must be tree, updated, created, or priority")
 	}
 	visibilityActor := actor
 	if filter.ScopeAgent != "" {
 		if !actor.IsCustomer &&
 			actor.Principal != agentPrincipal(filter.ScopeAgent) {
-			return listTasksPlan{}, domainError(http.StatusForbidden, "forbidden", "agent scope cannot be expanded")
+			return listTasksPlan{}, newError(http.StatusForbidden, "forbidden", "agent scope cannot be expanded")
 		}
 		visibilityActor = AgentActor(filter.ScopeAgent)
 	}

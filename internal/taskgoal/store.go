@@ -194,7 +194,7 @@ func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, 
 
 	if current != "" {
 		task, waitAt, err := readGoalTask(tx, current, agent)
-		if err != nil && err != sql.ErrNoRows {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return Goal{}, tasks.Task{}, err
 		}
 		if err == nil {
@@ -232,7 +232,7 @@ func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, 
 			         CASE t.status WHEN 'in_progress' THEN 0 ELSE 1 END,
 			         t.created_at, t.task_key
 			LIMIT 1`, agent).Scan(&selected, &revision)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return Goal{}, tasks.Task{}, err
 	}
 

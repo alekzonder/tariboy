@@ -2,6 +2,7 @@ package imageprovenance
 
 import (
 	"database/sql"
+	"errors"
 	"os"
 
 	"github.com/alekzonder/tariboy/internal/store"
@@ -40,7 +41,7 @@ func upsert(exec executor, record Record) error {
 func (s Store) Get(ref string) (Record, bool, error) {
 	var record Record
 	err := s.DB.QueryRow(`SELECT ref,digest,source_cwd,built_at FROM image_provenance WHERE ref=?`, ref).Scan(&record.Ref, &record.Digest, &record.SourceCWD, &record.BuiltAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Record{}, false, nil
 	}
 	if err != nil {

@@ -25,11 +25,11 @@ const (
 )
 
 func runLogUnavailable(id int64) error {
-	return domainError(http.StatusNotFound, "not_found", "script run "+strconv.FormatInt(id, 10)+" has no readable log")
+	return notFound("not_found", "script run "+strconv.FormatInt(id, 10)+" has no readable log")
 }
 
 func invalidMaxBytes() error {
-	return domainError(http.StatusBadRequest, "invalid_request", "max_bytes must be a non-negative whole number")
+	return newError(http.StatusBadRequest, "invalid_request", "max_bytes must be a non-negative whole number")
 }
 
 // ParseMaxBytes reads the max_bytes argument of a log request as it arrives
@@ -69,7 +69,7 @@ func ParseMaxBytes(value any) (int, error) {
 }
 
 func runLogInvalid(id int64) error {
-	return domainError(http.StatusConflict, "run_log_invalid",
+	return newError(http.StatusConflict, "run_log_invalid",
 		"the log of script run "+strconv.FormatInt(id, 10)+" is not where the worker writes it")
 }
 
@@ -186,7 +186,7 @@ func (s *RunService) requireRunLogAccess(ctx context.Context, actor Actor, task 
 		}
 	}
 	if !allowed {
-		return domainError(http.StatusForbidden, "forbidden",
+		return newError(http.StatusForbidden, "forbidden",
 			"the log of script run "+strconv.FormatInt(run.ID, 10)+" is available to the task's holder and the customer")
 	}
 	return nil

@@ -17,7 +17,7 @@ func (s *TaskService) AddComment(ctx context.Context, actor Actor, key string, i
 	}
 	body := strings.TrimSpace(in.Body)
 	if body == "" {
-		return CommentResult{}, domainError(http.StatusBadRequest, "missing_comment", "comment body is required")
+		return CommentResult{}, newError(http.StatusBadRequest, "missing_comment", "comment body is required")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

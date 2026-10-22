@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -206,5 +207,5 @@ func warnVersionMismatch(daemonVersion string) {
 func IsDaemonDown(err error) bool {
 	return errors.Is(err, syscall.ECONNREFUSED) ||
 		errors.Is(err, syscall.ENOENT) ||
-		(err != nil && strings.Contains(err.Error(), "no such file"))
+		errors.Is(err, fs.ErrNotExist)
 }
