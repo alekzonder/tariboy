@@ -297,6 +297,10 @@ func teamImportArchiveApply() registry.Command {
 			return nil, err
 		}
 		defer service.RemoveLease(preview.ImportID)
+		heartbeatLog := c.Log
+		if heartbeatLog == nil {
+			heartbeatLog = slog.Default()
+		}
 		heartbeatDone := make(chan struct{})
 		defer close(heartbeatDone)
 		go func() {
@@ -306,7 +310,7 @@ func teamImportArchiveApply() registry.Command {
 				select {
 				case <-ticker.C:
 					if err := service.TouchLease(preview.ImportID); err != nil {
-						slog.Warn("team import: lease heartbeat failed", "import", preview.ImportID, "err", err)
+						heartbeatLog.Warn("team import: lease heartbeat failed", "import", preview.ImportID, "err", err)
 					}
 				case <-heartbeatDone:
 					return

@@ -534,7 +534,7 @@ func imageLs() registry.Command {
 				for rows.Next() {
 					var name, currentRef, pendingRef string
 					if scanErr := rows.Scan(&name, &currentRef, &pendingRef); scanErr != nil {
-						tidy.Close(rows)
+						tidy.Close(nil, rows)
 						return nil, scanErr
 					}
 					currentAgents[currentRef] = append(currentAgents[currentRef], name)
@@ -543,7 +543,7 @@ func imageLs() registry.Command {
 					}
 				}
 				if rowsErr := rows.Err(); rowsErr != nil {
-					tidy.Close(rows)
+					tidy.Close(nil, rows)
 					return nil, rowsErr
 				}
 				if closeErr := rows.Close(); closeErr != nil {

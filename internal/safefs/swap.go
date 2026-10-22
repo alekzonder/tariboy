@@ -1,6 +1,9 @@
 package safefs
 
 import (
+	"errors"
+	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/alekzonder/tariboy/internal/tidy"
@@ -14,28 +17,33 @@ import (
 // stage only moves dir aside so the caller can rebuild it in place. dir, backup
 // and stage must be siblings on one filesystem so every move is one rename.
 func SwapDir(dir, backup, stage string) (commit, rollback func(), err error) {
-	tidy.RemoveAll(backup)
+	tidy.RemoveAll(nil, backup)
 	hadOld := false
 	if err := os.Rename(dir, backup); err == nil {
 		hadOld = true
 	} else if !os.IsNotExist(err) {
 		return nil, nil, err
 	}
-	restore := func() {
+	restore := func() error {
 		if hadOld {
-			tidy.Log("best effort: os.Rename", os.Rename(backup, dir))
+			return os.Rename(backup, dir)
 		}
+		return nil
 	}
 	if stage != "" {
 		if err := os.Rename(stage, dir); err != nil {
-			restore()
+			if restoreErr := restore(); restoreErr != nil {
+				err = errors.Join(err, fmt.Errorf("restore %s from %s: %w", dir, backup, restoreErr))
+			}
 			return nil, nil, err
 		}
 	}
 	commit = func() { _ = os.RemoveAll(backup) }
 	rollback = func() {
-		tidy.RemoveAll(dir)
-		restore()
+		tidy.RemoveAll(nil, dir)
+		if err := restore(); err != nil {
+			slog.Warn("swap rollback: previous directory not restored", "dir", dir, "backup", backup, "err", err)
+		}
 	}
 	return commit, rollback, nil
 }

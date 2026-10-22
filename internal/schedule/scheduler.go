@@ -123,7 +123,7 @@ func renderTemplate(sch Schedule) bus.Message {
 		Text    string         `json:"text"`
 		Data    map[string]any `json:"data"`
 	}
-	tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(sch.MessageTemplate), &tpl))
+	tidy.Log(nil, "schedule message template is not valid JSON; using defaults", json.Unmarshal([]byte(sch.MessageTemplate), &tpl), "schedule", sch.ID)
 	if tpl.Type == "" {
 		tpl.Type = "schedule.fire"
 	}

@@ -102,7 +102,7 @@ func (s *Server) ListenAndServeTLS() error {
 // second db.Close() returns an error that is ignored).
 func (s *Server) Shutdown(ctx context.Context) error {
 	err := s.http.Shutdown(ctx)
-	tidy.Close(s.db)
+	tidy.Close(nil, s.db)
 	return err
 }
 

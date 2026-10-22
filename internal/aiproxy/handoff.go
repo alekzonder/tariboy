@@ -1,13 +1,13 @@
 package aiproxy
 
 import (
-	"github.com/alekzonder/tariboy/internal/tidy"
-
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 type handoffState struct {
@@ -54,8 +54,8 @@ func (t *TokenRegistry) persistLocked() error {
 	}
 	tmpName := tmp.Name()
 	cleanup := func() {
-		tidy.Close(tmp)
-		tidy.Remove(tmpName)
+		tidy.Close(nil, tmp)
+		tidy.Remove(nil, tmpName)
 	}
 	if err := tmp.Chmod(0o600); err != nil {
 		cleanup()
@@ -72,11 +72,11 @@ func (t *TokenRegistry) persistLocked() error {
 		return fmt.Errorf("sync AI proxy handoff temporary file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		tidy.Remove(tmpName)
+		tidy.Remove(nil, tmpName)
 		return fmt.Errorf("close AI proxy handoff temporary file: %w", err)
 	}
 	if err := os.Rename(tmpName, t.persistPath); err != nil {
-		tidy.Remove(tmpName)
+		tidy.Remove(nil, tmpName)
 		return fmt.Errorf("publish AI proxy handoff state: %w", err)
 	}
 	parent, err := os.Open(dir)

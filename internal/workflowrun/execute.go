@@ -1,8 +1,6 @@
 package workflowrun
 
 import (
-	"github.com/alekzonder/tariboy/internal/tidy"
-
 	"context"
 	"errors"
 	"fmt"
@@ -13,6 +11,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // DefaultTimeout bounds a run whose Spec names no timeout.
@@ -63,7 +63,7 @@ func Execute(ctx context.Context, spec Spec) Result {
 		res.Finished = now
 		if logFile != nil {
 			_, _ = fmt.Fprintf(logFile, "error: %s\n", res.Verdict.Message)
-			tidy.Close(logFile)
+			tidy.Close(nil, logFile)
 		}
 		return res
 	}
@@ -155,14 +155,14 @@ func Execute(ctx context.Context, spec Spec) Result {
 		if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 			_, _ = fmt.Fprintf(logFile, "error: cannot kill the process group %d: %v\n", pid, err)
 		}
-		tidy.Log("best effort: cmd.Wait", cmd.Wait())
+		_ = cmd.Wait() // reaper only: a non-zero exit is reported through the run result, not here
 		res.Finished = time.Now()
 	}
 	if !callOnStart(spec.OnStart, pid) {
 		proc.signal(syscall.SIGKILL)
 		reap()
 		_, _ = fmt.Fprintln(logFile, "error: run bookkeeping failed")
-		tidy.Close(logFile)
+		tidy.Close(nil, logFile)
 		res.Verdict = failure("run bookkeeping failed")
 		return res
 	}
@@ -184,7 +184,7 @@ func Execute(ctx context.Context, spec Spec) Result {
 		}
 	}
 	reap()
-	tidy.Close(logFile)
+	tidy.Close(nil, logFile)
 
 	if st := cmd.ProcessState; st != nil && st.Exited() {
 		code := st.ExitCode()
@@ -240,7 +240,7 @@ func (p *process) signal(sig syscall.Signal) bool {
 	if p.done {
 		return false
 	}
-	tidy.Log("best effort: syscall.Kill", syscall.Kill(-p.pid, sig))
+	tidy.Log(nil, "signal script group", syscall.Kill(-p.pid, sig), "pid", p.pid, "signal", sig.String())
 	return true
 }
 
@@ -273,11 +273,11 @@ func writeOwnerFile(path string, data []byte) error {
 		return err
 	}
 	if err := f.Chmod(0o600); err != nil {
-		tidy.Close(f)
+		tidy.Close(nil, f)
 		return err
 	}
 	if _, err := f.Write(data); err != nil {
-		tidy.Close(f)
+		tidy.Close(nil, f)
 		return err
 	}
 	return f.Close()

@@ -1,14 +1,16 @@
 package groups
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/bus"
-	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // ProvisionerConfig wires the provisioner to the group store, the agent store
@@ -192,8 +194,16 @@ func (p *Provisioner) AssignAgent(agentName, group string) error {
 	return nil
 }
 
+// deleteOldChannel drops a channel of the renamed group. The rename is already
+// committed, so a failure is logged with its identity instead of returned.
+func (p *Provisioner) deleteOldChannel(group, channel string) {
+	if err := p.bus.DeleteChannel(channel); err != nil {
+		slog.Warn("group rename: old channel not deleted", "group", group, "channel", channel, "err", err)
+	}
+}
+
 // Rename changes group identity and membership together, preserving agents.
-func (p *Provisioner) Rename(oldName, newName string) error {
+func (p *Provisioner) Rename(oldName, newName string) (retErr error) {
 	if !agent.ValidName(oldName) || !agent.ValidName(newName) || oldName == newName {
 		return fmt.Errorf("invalid group rename")
 	}
@@ -216,7 +226,9 @@ func (p *Provisioner) Rename(oldName, newName string) error {
 	rollbackDir := true
 	defer func() {
 		if rollbackDir {
-			tidy.Log("best effort: os.Rename", os.Rename(newRoot, oldRoot))
+			if err := os.Rename(newRoot, oldRoot); err != nil {
+				retErr = errors.Join(retErr, fmt.Errorf("roll back group directory %s to %s: %w", newRoot, oldRoot, err))
+			}
 		}
 	}()
 	tx, err := p.groups.db.Begin()
@@ -227,7 +239,9 @@ func (p *Provisioner) Rename(oldName, newName string) error {
 		_, err = tx.Exec(`UPDATE agents SET "group"=? WHERE "group"=?`, newName, oldName)
 	}
 	if err != nil {
-		tidy.Log("best effort: tx.Rollback", tx.Rollback())
+		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			err = errors.Join(err, fmt.Errorf("roll back group rename %s to %s: %w", oldName, newName, rbErr))
+		}
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -244,10 +258,10 @@ func (p *Provisioner) Rename(oldName, newName string) error {
 		if err := p.unsubscribeFrom(member.Name, bus.GroupDirect(oldName, member.Name)); err != nil {
 			return err
 		}
-		tidy.Log("best effort: p.bus.DeleteChannel", p.bus.DeleteChannel(bus.GroupDirect(oldName, member.Name)))
+		p.deleteOldChannel(oldName, bus.GroupDirect(oldName, member.Name))
 	}
-	tidy.Log("best effort: p.bus.DeleteChannel", p.bus.DeleteChannel(bus.GroupBroadcast(oldName)))
-	tidy.Log("best effort: p.bus.DeleteChannel", p.bus.DeleteChannel(bus.GroupInbox(oldName)))
+	p.deleteOldChannel(oldName, bus.GroupBroadcast(oldName))
+	p.deleteOldChannel(oldName, bus.GroupInbox(oldName))
 	return p.Reconcile(newName)
 }
 

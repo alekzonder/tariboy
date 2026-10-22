@@ -1,8 +1,6 @@
 package api
 
 import (
-	"github.com/alekzonder/tariboy/internal/tidy"
-
 	"crypto/rand"
 	"io"
 	"net/http"
@@ -10,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode"
+
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 const MaxFileUploadBytes int64 = 1 << 30
@@ -46,8 +46,8 @@ func SaveUploadedFile(baseDir, name string, body io.Reader, maxBytes int64) (res
 	saved := false
 	defer func() {
 		if !saved {
-			tidy.Log("best effort: root.Remove", root.Remove(path))
-			tidy.Log("best effort: root.Remove", root.Remove(dir))
+			tidy.Log(nil, "remove partial upload", root.Remove(path), "path", path)
+			tidy.Log(nil, "remove upload directory", root.Remove(dir), "path", dir)
 		}
 	}()
 	file, err := root.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)

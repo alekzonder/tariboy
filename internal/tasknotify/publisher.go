@@ -72,8 +72,8 @@ func (p *Publisher) Flush(ctx context.Context) error {
 	for _, row := range pending {
 		subject := map[string]any{}
 		data := map[string]any{}
-		tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(row.subject), &subject))
-		tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(row.data), &data))
+		tidy.Log(p.log, "notification subject is not valid JSON", json.Unmarshal([]byte(row.subject), &subject), "row", row.id)
+		tidy.Log(p.log, "notification data is not valid JSON", json.Unmarshal([]byte(row.data), &data), "row", row.id)
 		message, publishErr := p.bus.Publish(bus.Message{
 			IdempotencyKey: row.id,
 			Channel:        row.channel,
@@ -111,7 +111,7 @@ func (p *Publisher) Flush(ctx context.Context) error {
 }
 
 func (p *Publisher) Run(ctx context.Context) {
-	tidy.Log("best effort: p.Flush", p.Flush(ctx))
+	tidy.Log(p.log, "task notification flush failed", p.Flush(ctx))
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {

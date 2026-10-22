@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,7 +21,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/pricingcatalog"
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/store"
-	"github.com/alekzonder/tariboy/internal/tidy"
 	"github.com/alekzonder/tariboy/internal/userpath"
 )
 
@@ -428,8 +428,11 @@ func listenProxyWithHandoff(
 		return "", err
 	}
 	if err := tokens.SetListenAddr(addr); err != nil {
-		tidy.Log("best effort: proxy.CloseListener", proxy.CloseListener())
-		return "", fmt.Errorf("persist AI proxy listen address: %w", err)
+		err = fmt.Errorf("persist AI proxy listen address: %w", err)
+		if closeErr := proxy.CloseListener(); closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
+			err = errors.Join(err, fmt.Errorf("close AI proxy listener: %w", closeErr))
+		}
+		return "", err
 	}
 	return addr, nil
 }

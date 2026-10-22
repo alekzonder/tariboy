@@ -246,11 +246,11 @@ func (s *Service) backup(keep int) (string, error) {
 	// Leftovers of interrupted runs are never valid backups.
 	if stale, _ := filepath.Glob(filepath.Join(s.backupDir, "*.partial")); len(stale) > 0 {
 		for _, f := range stale {
-			tidy.Remove(f)
+			tidy.Remove(nil, f)
 		}
 	}
 	if err := s.st.BackupTo(tmp); err != nil {
-		tidy.Remove(tmp)
+		tidy.Remove(nil, tmp)
 		return "", err
 	}
 	if err := os.Chmod(tmp, 0o600); err != nil {
@@ -296,7 +296,7 @@ func (s *Service) cleanup(cutoffAt, msgCutoffAt time.Time, deleted map[string]in
 		if err == nil {
 			err = tx.Commit()
 		} else {
-			tidy.Log("best effort: tx.Rollback", tx.Rollback())
+			tidy.Log(s.log, "maintenance step rollback failed", tx.Rollback(), "step", name)
 		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))

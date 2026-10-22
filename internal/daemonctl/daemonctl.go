@@ -151,7 +151,7 @@ func GetStatus(cfg Config) StatusInfo {
 		Pid     int    `json:"pid"`
 		Version string `json:"version"`
 	}
-	_ = json.Unmarshal(raw, &body) // best effort: an unparsable error body falls back to the HTTP status
+	_ = json.Unmarshal(raw, &body) // best effort: a malformed success body leaves body zeroed and the caller validates the fields
 	si.Pid, si.Version = body.Pid, body.Version
 	return si
 }
@@ -190,7 +190,7 @@ func Down(ctx context.Context, cfg Config, out io.Writer) error {
 	deadline := time.Now().Add(cfg.ReadyTimeout)
 	for syscall.Kill(pid, 0) == nil {
 		if time.Now().After(deadline) {
-			tidy.Log("best effort: syscall.Kill", syscall.Kill(pid, syscall.SIGKILL))
+			tidy.Log(nil, "kill daemon after stop timeout", syscall.Kill(pid, syscall.SIGKILL), "pid", pid)
 			break
 		}
 		select {

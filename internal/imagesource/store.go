@@ -272,7 +272,7 @@ func (s *Store) ImportTree(name, incoming string) (Source, error) {
 	if err := os.Rename(stage, target); err != nil {
 		return Source{}, err
 	}
-	tidy.Log("best effort: syncDir", syncDir(s.Root))
+	tidy.Log(nil, "sync image source root", syncDir(s.Root), "path", s.Root)
 	return source, nil
 }
 
@@ -457,8 +457,8 @@ func (s *Store) writeAtomic(path string, content []byte, perm fs.FileMode) (err 
 	}
 	tmpName := tmp.Name()
 	defer func() {
-		tidy.Close(tmp)
-		tidy.Remove(tmpName)
+		tidy.Close(nil, tmp)
+		tidy.Remove(nil, tmpName)
 	}()
 	if err := tmp.Chmod(perm); err != nil {
 		return err
@@ -487,7 +487,7 @@ func (s *Store) writeAtomic(path string, content []byte, perm fs.FileMode) (err 
 	if syncDirectory == nil {
 		syncDirectory = syncDir
 	}
-	tidy.Log("best effort: syncDirectory", syncDirectory(dir))
+	tidy.Log(nil, "sync image source directory", syncDirectory(dir), "path", dir)
 	return nil
 }
 

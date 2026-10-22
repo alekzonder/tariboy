@@ -43,7 +43,7 @@ func Stage(r io.Reader, compressedSize int64, destination string, limits Limits)
 	published := false
 	defer func() {
 		if !published {
-			tidy.RemoveAll(stage)
+			tidy.RemoveAll(nil, stage)
 		}
 	}()
 	limited := &io.LimitedReader{R: r, N: limits.MaxCompressedBytes + 1}

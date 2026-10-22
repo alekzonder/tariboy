@@ -114,7 +114,7 @@ func (s Service) PreviewYAML(team string, composeYAML []byte) (Preview, error) {
 	remove := true
 	defer func() {
 		if remove {
-			tidy.RemoveAll(destination)
+			tidy.RemoveAll(nil, destination)
 		}
 	}()
 	stored, err := json.Marshal(metadata{Team: team, Images: []json.RawMessage{}})
@@ -271,7 +271,7 @@ func (s Service) Preview(ctx context.Context, r io.Reader, compressedSize int64)
 	remove := true
 	defer func() {
 		if remove {
-			tidy.RemoveAll(destination)
+			tidy.RemoveAll(nil, destination)
 		}
 	}()
 	if manifest.Kind != "team" {

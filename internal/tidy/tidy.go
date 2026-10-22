@@ -14,21 +14,28 @@ import (
 	"syscall"
 )
 
-// Log warns about err unless it is nil or an expected already-gone error
+// Log warns about err on log (nil means slog.Default) unless it is nil or an expected already-gone error
 // (missing file, no such process, closed file or listener, finished tx).
-func Log(msg string, err error, args ...any) {
+func Log(log *slog.Logger, msg string, err error, args ...any) {
 	if err == nil || errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH) ||
-		errors.Is(err, os.ErrClosed) || errors.Is(err, net.ErrClosed) || errors.Is(err, sql.ErrTxDone) {
+		errors.Is(err, os.ErrClosed) || errors.Is(err, os.ErrProcessDone) || errors.Is(err, net.ErrClosed) || errors.Is(err, sql.ErrTxDone) {
 		return
 	}
-	slog.Warn(msg, append(args, "err", err)...)
+	if log == nil {
+		log = slog.Default()
+	}
+	log.Warn(msg, append(args, "err", err)...)
 }
 
 // Remove deletes path and logs an unexpected failure.
-func Remove(path string) { Log("cleanup: remove", os.Remove(path), "path", path) }
+func Remove(log *slog.Logger, path string) {
+	Log(log, "cleanup: remove", os.Remove(path), "path", path)
+}
 
 // RemoveAll deletes path recursively and logs an unexpected failure.
-func RemoveAll(path string) { Log("cleanup: remove all", os.RemoveAll(path), "path", path) }
+func RemoveAll(log *slog.Logger, path string) {
+	Log(log, "cleanup: remove all", os.RemoveAll(path), "path", path)
+}
 
 // Close closes c and logs an unexpected failure.
-func Close(c io.Closer) { Log("cleanup: close", c.Close()) }
+func Close(log *slog.Logger, c io.Closer) { Log(log, "cleanup: close", c.Close()) }

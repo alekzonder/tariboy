@@ -319,10 +319,10 @@ func readAllowedSourceWithHook(
 		}
 		openedParentInfo, err := child.Stat(".")
 		if err != nil || !os.SameFile(parentInfo, openedParentInfo) {
-			tidy.Close(child)
+			tidy.Close(nil, child)
 			return nil, "not_regular", nil
 		}
-		tidy.Close(root)
+		tidy.Close(nil, root)
 		root = child
 		current = filepath.Join(current, part)
 		if afterParent != nil {
@@ -408,11 +408,11 @@ func (a preparedArchive) WriteZIP(output io.Writer) error {
 		header.Modified = time.Unix(0, 0).UTC()
 		file, err := writer.CreateHeader(header)
 		if err != nil {
-			tidy.Close(writer)
+			tidy.Close(nil, writer)
 			return err
 		}
 		if _, err := file.Write(item.Body); err != nil {
-			tidy.Close(writer)
+			tidy.Close(nil, writer)
 			return err
 		}
 	}

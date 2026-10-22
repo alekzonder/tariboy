@@ -3,11 +3,11 @@
 package logrotate
 
 import (
-	"github.com/alekzonder/tariboy/internal/tidy"
-
 	"fmt"
 	"os"
 	"sync"
+
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // File is an append-only log file that rotates itself when a write would take
@@ -76,9 +76,9 @@ func Rotate(path string, keep int) error {
 	if keep < 1 {
 		return os.Remove(path)
 	}
-	tidy.Remove(fmt.Sprintf("%s.%d", path, keep))
+	tidy.Remove(nil, fmt.Sprintf("%s.%d", path, keep))
 	for i := keep - 1; i >= 1; i-- {
-		tidy.Log("best effort: os.Rename", os.Rename(fmt.Sprintf("%s.%d", path, i), fmt.Sprintf("%s.%d", path, i+1)))
+		tidy.Log(nil, "rotate log", os.Rename(fmt.Sprintf("%s.%d", path, i), fmt.Sprintf("%s.%d", path, i+1)), "path", path, "index", i)
 	}
 	if err := os.Rename(path, path+".1"); err != nil && !os.IsNotExist(err) {
 		return err
