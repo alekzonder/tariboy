@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/image"
@@ -75,16 +76,41 @@ func (l Layout) EnsureIteration(id string) error {
 // Provision creates the tree, unpacks the image, and writes the bin shims
 // (tasks -> tasks.sh; i-am-done -> loop.sh done). Agent config is
 // NOT snapshotted to disk — the DB is the single source of truth.
+//
+// The image is unpacked atomically: a failed unpack leaves no image/, and a
+// repeated Provision replaces image/ whole. Staging and backup directories a
+// crashed unpack left under the agent root are removed first.
 func Provision(l Layout, a agent.Agent, imgStore *image.Store, ref image.Ref) error {
-	for _, d := range []string{l.Root, l.Workdir(), l.ImageDir(), l.BinDir(), l.IterationsDir()} {
+	for _, d := range []string{l.Root, l.Workdir(), l.BinDir(), l.IterationsDir()} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return err
 		}
+	}
+	if err := removeUnpackLeftovers(l.Root); err != nil {
+		return err
 	}
 	if err := imgStore.Unpack(ref, l.ImageDir()); err != nil {
 		return fmt.Errorf("unpack image %s: %w", ref.String(), err)
 	}
 	return WriteShims(l, a)
+}
+
+// removeUnpackLeftovers removes the image.UnpackStagingPrefix directories an
+// interrupted unpack left directly under root.
+func removeUnpackLeftovers(root string) error {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), image.UnpackStagingPrefix) {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(root, e.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func hasCapability(capabilities []string, name string) bool {

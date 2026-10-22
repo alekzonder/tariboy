@@ -3,8 +3,10 @@ package image
 import (
 	"archive/tar"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -190,16 +192,75 @@ func (s *Store) tagReferences(name, id string) (bool, error) {
 	return false, nil
 }
 
+// UnpackStagingPrefix starts the names of the sibling directories Unpack
+// stages into and parks a replaced destination under. A crash can leave them
+// behind next to the destination; owners of the parent remove them.
+const UnpackStagingPrefix = ".unpack-"
+
+// Unpack materializes ref into destDir atomically. The image is written to a
+// staging directory next to destDir, synced, and renamed into place; an
+// existing destDir is moved to a sibling backup first and removed once the new
+// tree is in place. On any error the staging directory is removed and destDir
+// is left as it was, or absent.
 func (s *Store) Unpack(ref Ref, destDir string) error {
 	archivePath, err := s.archiveFor(ref)
 	if err != nil {
 		return err
 	}
-	return unpackArchive(archivePath, ref, destDir)
+	return unpackReplacing(archivePath, ref, destDir)
+}
+
+func unpackReplacing(archivePath string, ref Ref, destDir string) (err error) {
+	parent := filepath.Dir(destDir)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return err
+	}
+	stage, err := os.MkdirTemp(parent, UnpackStagingPrefix)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(stage)
+		}
+	}()
+	if err := unpackArchive(archivePath, ref, stage); err != nil {
+		return err
+	}
+	if err := syncTree(stage); err != nil {
+		return err
+	}
+	backup := filepath.Join(parent, UnpackStagingPrefix+"backup-"+filepath.Base(destDir))
+	commit, _, err := safefs.SwapDir(destDir, backup, stage)
+	if err != nil {
+		return err
+	}
+	commit()
+	return refstore.SyncDir(parent)
+}
+
+// syncTree flushes every file and directory under root to disk.
+func syncTree(root string) error {
+	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		syncErr := f.Sync()
+		closeErr := f.Close()
+		if syncErr != nil {
+			return syncErr
+		}
+		return closeErr
+	})
 }
 
 // UnpackPinned materializes the exact generation assigned to an agent, which
-// may be an earlier ref id than the one the tag points at today.
+// may be an earlier ref id than the one the tag points at today. destDir is
+// the caller's own staging directory and is written in place.
 func (s *Store) UnpackPinned(ref Ref, id, destDir string) error {
 	_, archivePath, err := s.inspectPinnedArchive(ref, id)
 	if err != nil {
@@ -207,6 +268,12 @@ func (s *Store) UnpackPinned(ref Ref, id, destDir string) error {
 	}
 	return unpackArchive(archivePath, ref, destDir)
 }
+
+// unpackFailAfter, when a test in this package sets it above zero, makes an
+// unpack fail with errUnpackInjected once that many members are written.
+var unpackFailAfter int
+
+var errUnpackInjected = errors.New("injected unpack failure")
 
 func unpackArchive(archivePath string, ref Ref, destDir string) error {
 	archive, err := os.ReadFile(archivePath)
@@ -217,7 +284,10 @@ func unpackArchive(archivePath string, ref Ref, destDir string) error {
 	if err != nil {
 		return fmt.Errorf("validate image before unpack: %w", err)
 	}
-	for _, name := range parsed.order {
+	for written, name := range parsed.order {
+		if unpackFailAfter > 0 && written >= unpackFailAfter {
+			return errUnpackInjected
+		}
 		member := parsed.members[name]
 		if member.typ != tar.TypeReg {
 			return fmt.Errorf("invalid image archive member %q: regular files only", name)
