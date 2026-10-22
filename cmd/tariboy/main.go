@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/compose"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/taskcli"
 	"github.com/alekzonder/tariboy/internal/version"
 )
 
@@ -57,6 +59,9 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) int {
 	if sock == "" {
 		sock = p.Socket()
 	}
+	if argv, ok := tasksArgs(rest); ok {
+		return taskcli.RunOperator(ctx, argv, sock, out, errOut)
+	}
 	// compose has always accepted its flags before the verb
 	// (`compose -f FILE up`); the registry resolves the verb first.
 	if len(rest) > 0 && rest[0] == "compose" {
@@ -81,6 +86,21 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) int {
 		_ = cli.LoadPluginCommands(reg, caller, os.Stdin)
 	}
 	return cli.Run(ctx, reg, rest, caller, local, out, errOut)
+}
+
+// tasksArgs reports whether argv's first word is tasks and returns argv
+// without it: tariboy tasks is the ttasks client, always in operator mode.
+func tasksArgs(argv []string) ([]string, bool) {
+	for i, a := range argv {
+		if strings.HasPrefix(a, "-") || a == "help" {
+			continue
+		}
+		if a != "tasks" {
+			return nil, false
+		}
+		return append(slices.Clone(argv[:i]), argv[i+1:]...), true
+	}
+	return nil, false
 }
 
 // isCoreCommand reports whether argv's first word names a core group or

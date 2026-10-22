@@ -27,7 +27,7 @@ when the daemon is down.
 | `plugin` | `install`, `ls`, `inspect`, `logs`, `rm` |
 | `telegram` | contributed by the running bundled plugin: `configure`, `chat setup`, `status` |
 | `schedule` | `ls` |
-| `tasks queue create` | Create a native task queue with owners and an optional responsible agent |
+| `tasks` | the [`ttasks`](/docs/reference/commands#native-tasks-ttasks-) client in operator mode: the same commands, for example `queue create` and `activity` |
 | `secret` | `set`, `ls`, `rm` |
 | `budget` | `set`, `ls`, `status` |
 | `usage` / `logs` / `iteration` | AI usage/cost, event stream, iteration inspect/logs/ls |

@@ -15,6 +15,7 @@ import (
 // task command registry.
 func TaskOperatorCommands() []registry.Command {
 	return []registry.Command{
+		taskActivity(),
 		taskRoute("tasks.queue.list", "GET", "/api/task-queues", "List task queues",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				queues, err := control.ListQueues(ctx, actor)
@@ -388,7 +389,7 @@ func taskRoute(path, method, route, summary string, handler taskHandler) registr
 		}
 	}
 	return registry.Command{
-		Path: path, Summary: summary, CLIHidden: path != "tasks.queue.create",
+		Path: path, Summary: summary, CLIHidden: true,
 		Args: args, ResultSchema: taskHTTPResultSchema(path),
 		Schemas: taskOpenAPISchemas(),
 		HTTP:    &registry.HTTPRoute{Method: method, Path: route},

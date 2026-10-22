@@ -25,9 +25,31 @@ var newCaller = func(socket string) Caller { return client.New(socket) }
 // stdin is where "artifacts set" reads a value that is not given as an argument.
 var stdin io.Reader = os.Stdin
 
+// mode is how an entry point reaches the daemon: prog names the command in
+// help, a non-empty toolsSocket selects agent mode, and socket resolves the
+// operator daemon socket.
+type mode struct {
+	prog        string
+	toolsSocket string
+	socket      func() (string, error)
+}
+
 // Run dispatches task commands to the identity-bound agent socket when one is
 // present, otherwise to the operator daemon socket.
 func Run(ctx context.Context, argv []string, getenv func(string) string, stdout, stderr io.Writer) int {
+	return run(ctx, argv, mode{prog: "ttasks", toolsSocket: getenv("TARIBOY_TOOLS_SOCKET"), socket: func() (string, error) {
+		resolved, err := paths.Resolve(getenv)
+		return resolved.Socket(), err
+	}}, stdout, stderr)
+}
+
+// RunOperator runs the commands of Run in operator mode on socket whatever
+// TARIBOY_TOOLS_SOCKET holds, so tariboy tasks sees every task even for an agent.
+func RunOperator(ctx context.Context, argv []string, socket string, stdout, stderr io.Writer) int {
+	return run(ctx, argv, mode{prog: "tariboy tasks", socket: func() (string, error) { return socket, nil }}, stdout, stderr)
+}
+
+func run(ctx context.Context, argv []string, m mode, stdout, stderr io.Writer) int {
 	jsonOut := false
 	args := make([]string, 0, len(argv))
 	for _, arg := range argv {
@@ -44,12 +66,12 @@ func Run(ctx context.Context, argv []string, getenv func(string) string, stdout,
 	if len(args) == 1 && args[0] == "--help-json" {
 		return runHelpJSON(ctx, stdout, stderr)
 	}
-	if code, handled := runTextHelp(args, stdout, stderr); handled {
+	if code, handled := runTextHelp(args, m.prog, stdout, stderr); handled {
 		return code
 	}
 	parsed, err := parse(args)
 	if err != nil {
-		if isOperatorCommand(args) && getenv("TARIBOY_TOOLS_SOCKET") == "" {
+		if isOperatorCommand(args) && m.toolsSocket == "" {
 			if jsonOut {
 				args = append(args, "--json")
 			}
@@ -58,12 +80,12 @@ func Run(ctx context.Context, argv []string, getenv func(string) string, stdout,
 				return code
 			}
 			args = resolvedArgs
-			return runOperatorCommand(ctx, args, getenv, stdout, stderr)
+			return runOperatorCommand(ctx, args, m, stdout, stderr)
 		}
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	if toolsSocket := getenv("TARIBOY_TOOLS_SOCKET"); toolsSocket != "" {
+	if toolsSocket := m.toolsSocket; toolsSocket != "" {
 		if parsed.spec.OperatorOnly {
 			fmt.Fprintf(stderr, "tasks: unknown command %q\n", strings.ReplaceAll(parsed.action, "_", " "))
 			return 2
@@ -73,7 +95,7 @@ func Run(ctx context.Context, argv []string, getenv func(string) string, stdout,
 		}
 		return runAgent(ctx, parsed, newCaller(toolsSocket), jsonOut, stdout, stderr)
 	}
-	resolved, err := paths.Resolve(getenv)
+	socket, err := m.socket()
 	if err != nil {
 		fmt.Fprintf(stderr, "tariboy-tasks: %v\n", err)
 		return 2
@@ -81,7 +103,7 @@ func Run(ctx context.Context, argv []string, getenv func(string) string, stdout,
 	if code := resolveArtifactValue(&parsed, stderr); code != 0 {
 		return code
 	}
-	return runOperator(ctx, parsed, newCaller(resolved.Socket()), jsonOut, stdout, stderr)
+	return runOperator(ctx, parsed, newCaller(socket), jsonOut, stdout, stderr)
 }
 
 func runAgent(ctx context.Context, parsed request, caller Caller, jsonOut bool, stdout, stderr io.Writer) int {
