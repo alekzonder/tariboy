@@ -205,7 +205,7 @@ func (m *Manager) stagePendingImage(ag agent.Agent, l agentdir.Layout, pending a
 	if err != nil {
 		return st, err
 	}
-	if st.manifest.SchemaVersion == 2 {
+	if !image.IsLegacyV1(st.manifest) {
 		st.plugins = requested
 	} else if st.plugins, err = plugincaps.ResolveWithExternal(requested, resolver); err != nil {
 		return st, err
@@ -227,7 +227,7 @@ func readStagedManifest(stage string, ref image.Ref, digest string) (image.Manif
 		return staged, fmt.Errorf("staged image ref mismatch")
 	}
 	staged.Digest = digest
-	if staged.SchemaVersion == 2 {
+	if !image.IsLegacyV1(staged) {
 		if _, err := os.Stat(filepath.Join(stage, "prompt", "template.json")); err != nil {
 			return staged, fmt.Errorf("staged prompt template: %w", err)
 		}
@@ -294,7 +294,7 @@ func (m *Manager) reprovisionCandidate(ag agent.Agent, imageRef string) (agent.A
 	candidate.Enabled = true
 	candidate.ImageRef = ref.String()
 	candidate.ImageDigest = man.Digest
-	if man.SchemaVersion == 2 {
+	if !image.IsLegacyV1(man) {
 		candidate.Plugins = make([]string, 0, len(man.Plugins))
 		for _, plugin := range man.Plugins {
 			candidate.Plugins = append(candidate.Plugins, plugin.Name)

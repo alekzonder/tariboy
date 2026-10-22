@@ -828,13 +828,13 @@ func (m *Manager) newAgentName(requested string) (string, error) {
 // plugins are image content, never an implicit core union or a runtime
 // override. Schema v1 keeps its historical precedence.
 func (m *Manager) resolveRunPlugins(requested []string, man image.Manifest) ([]string, error) {
-	if man.SchemaVersion == 2 || len(requested) == 0 {
+	if !image.IsLegacyV1(man) || len(requested) == 0 {
 		requested = nil
 		for _, p := range man.Plugins {
 			requested = append(requested, p.Name)
 		}
 	}
-	if man.SchemaVersion == 2 {
+	if !image.IsLegacyV1(man) {
 		return plugincaps.ValidateExplicit(requested, m.imagePluginResolver())
 	}
 	pluginsDir := filepath.Join(filepath.Dir(m.cfg.ImgStore.Dir), "plugins")
