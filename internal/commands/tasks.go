@@ -256,6 +256,12 @@ func TaskOperatorCommands() []registry.Command {
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				return control.CancelWorkflowTask(ctx, actor, p.Trimmed("key"))
 			}),
+		taskRoute("tasks.requeue", "POST", "/api/tasks/{key}/requeue", "Move a task to another queue as a new task",
+			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
+				var in tasks.RequeueRequest
+				tasks.Decode(p, &in)
+				return control.RequeueTask(ctx, actor, in.Key, in.Input())
+			}),
 		taskRoute("tasks.queue.workflow.set", "PUT", "/api/task-queues/{queue}/workflow", "Bind a workflow image to a queue",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				return control.SetQueueWorkflow(ctx, actor, p.Trimmed("queue"), p.Trimmed("ref"), p.Int64("revision"))
@@ -516,7 +522,7 @@ func taskHTTPResultSchema(path string) map[string]any {
 		return objectSchema([]string{"artifact", "history"}, map[string]any{"artifact": schemaRef("Artifact"), "history": arrayOf("Artifact")})
 	case "tasks.workflow.get":
 		return schemaRef("WorkflowView")
-	case "tasks.workflow.move", "tasks.workflow.resume", "tasks.cancel":
+	case "tasks.workflow.move", "tasks.workflow.resume", "tasks.cancel", "tasks.requeue":
 		return schemaRef("Task")
 	case "tasks.queue.workflow.set", "tasks.queue.workflow.get":
 		return schemaRef("QueueWorkflow")

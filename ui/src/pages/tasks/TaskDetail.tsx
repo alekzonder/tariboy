@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import TaskTransferDialog from "./TaskTransferDialog"
+import TaskRequeueDialog from "./TaskRequeueDialog"
 import { WorkflowPanel } from "./WorkflowPanel"
 import { MarkdownEditor, MarkdownContent, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown"
 import { SendFilesButton } from "@/components/SendFilesButton"
@@ -49,6 +50,7 @@ export default function TaskDetail({
   onAddRelation,
   onDeleteRelation,
   onTransfer,
+  onRequeue,
   onTaskChanged,
   assigneeOptions,
 }: {
@@ -78,6 +80,8 @@ export default function TaskDetail({
   onAddRelation: (targetKey: string, type: TaskRelationType) => Promise<void>
   onDeleteRelation: (relationID: number) => Promise<void>
   onTransfer: (hostID: string) => Promise<void>
+  /** Moves the task to another queue of this server; the owner opens the new task. */
+  onRequeue: (queue: string) => Promise<void>
   /** A workflow action changed the task on the daemon; the owner reloads it. */
   onTaskChanged: () => void
   /** A closed list of assignees instead of the free-text field; the owner of
@@ -110,6 +114,7 @@ export default function TaskDetail({
   const [commentOrder, setCommentOrder] = useState<"newest" | "oldest">("newest")
   const [historyOpen, setHistoryOpen] = useState(true)
   const [transferOpen, setTransferOpen] = useState(false)
+  const [requeueOpen, setRequeueOpen] = useState(false)
   const dirty = title !== baseline.title || description !== baseline.description
     || status !== baseline.category || pullRequest !== (baseline.pull_request ?? "")
     || priority !== baseline.priority || assignee !== baseline.assignee
@@ -192,6 +197,7 @@ export default function TaskDetail({
   const commentWaits = detail.waiting_for.filter((wait) => !(workflow && wait.requesting_principal === "system:workflow"))
   const openWaits = commentWaits.filter((wait) => !wait.resolved_at)
   const editable = task.access !== "context" && task.access !== "respond"
+  const closed = task.category === "done" || task.category === "cancelled"
   // The workflow panel refetches when a new event arrives.
   const eventSequence = Math.max(events.reduce((latest, event) => Math.max(latest, event.sequence), 0), liveSequence ?? 0)
 
@@ -210,6 +216,8 @@ export default function TaskDetail({
     {resizeHandle}
     <TaskTransferDialog taskKey={task.key} queue={task.queue} open={transferOpen}
       onOpenChange={setTransferOpen} onTransfer={onTransfer} />
+    <TaskRequeueDialog taskKey={task.key} queue={task.queue} workflow={workflow} target={target} open={requeueOpen}
+      onOpenChange={setRequeueOpen} onRequeue={onRequeue} />
     <div className="task-detail-panel">
       {/* Sticky: whatever the panel is scrolled to, the key, the title and the
           status stay in view. The one shadow here is the same rule the selected
@@ -234,14 +242,15 @@ export default function TaskDetail({
           {/* Everything that is not Save or Close lives behind one menu, so the
               header keeps its two primary controls at any panel width. */}
           {/* A workflow task cannot move to another server: the export is
-              refused with workflow_managed. */}
-          {editable && !workflow && <DropdownMenu>
+              refused with workflow_managed. Only an open task changes queue. */}
+          {editable && (!workflow || !closed) && <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Task actions" disabled={pending}
                 className="size-7 rounded-[8px] text-muted-foreground hover:bg-accent hover:text-foreground"><MoreHorizontal className="size-3.5" /></Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setTransferOpen(true)}>Move to another server…</DropdownMenuItem>
+              {!closed && <DropdownMenuItem onSelect={() => setRequeueOpen(true)}>Move to queue…</DropdownMenuItem>}
+              {!workflow && <DropdownMenuItem onSelect={() => setTransferOpen(true)}>Move to another server…</DropdownMenuItem>}
             </DropdownMenuContent>
           </DropdownMenu>}
           {/* The close button is the panel entry point now that Back is gone,

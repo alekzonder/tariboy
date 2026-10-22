@@ -256,6 +256,7 @@ Nobody sets a category; the daemon derives it from the status owner:
 | Paused (any non-terminal status) | `wait_customer`, with an open customer wait authored by `system:workflow` | unchanged | `pause` |
 | Terminal status | `done`, or `cancelled` when the status declares `cancelled: true` | unchanged | |
 | Cancelled with `ttasks cancel` | `cancelled`; the status stays where the task stopped | unchanged | |
+| Moved with `ttasks requeue` | `cancelled`, as for `ttasks cancel`; the new task in the target queue starts its own life | unchanged | |
 
 One function derives this table, from the owner kind of the status, the
 holder, the pause, and whether the holder's question is open. Entering a
@@ -951,7 +952,7 @@ Sources poll; for events pushed by a plugin, use a
 
 The operator (acting as the customer) can override a workflow. These commands
 are operator-only. An agent that tries `ttasks workflow move`,
-`ttasks workflow retry`, or `ttasks cancel` gets the CLI's "unknown command",
+`ttasks workflow retry`, `ttasks cancel`, or `ttasks requeue` gets the CLI's "unknown command",
 because no agent action exists for them; a caller of the REST route that is not
 the customer receives `forbidden` (403).
 
@@ -959,6 +960,7 @@ the customer receives `forbidden` (403).
 ttasks workflow move DEV-ab12 --to implement --reason 'review found a regression'
 ttasks workflow retry DEV-ab12
 ttasks cancel DEV-ab12
+ttasks requeue DEV-ab12 --queue OPS
 ```
 
 `workflow retry KEY [REQUEST]` runs the checks of a `failed` transition request
@@ -988,6 +990,25 @@ already closed). It stops the scripts of the current status, cancels a pending
 request, and resolves the workflow's own wait and the current assignee's
 questions to the customer. The workflow status stays as the record of where the
 task stopped. It records `workflow.cancelled`.
+
+`requeue KEY --queue QUEUE` moves the task to another queue of the same
+daemon. A key belongs to its queue, so the move does not change the task: in
+one transaction it creates a new task in `QUEUE` and cancels this one exactly
+as `cancel` does, so its scripts stop and its workflow ends where it stood. The
+new task gets a new key, the same title, description, priority, pull request,
+group, and comments (with their original authors and times). If `QUEUE` is
+bound to a workflow, the new task pins that workflow and enters its initial
+status like any new task there; otherwise it is a flexible `open` task.
+Artifacts, visits, and script runs stay with the old task. The two tasks get a
+`related` relation, each gets a comment that names the other ("Moved to queue
+OPS as OPS-cd34." and "Moved from DEV-ab12."), and both record
+`task.requeued` with `from_key`, `to_key`, `from_queue`, and `to_queue`. The
+move works for a flexible task too. It is refused, changing nothing, for a
+closed task (`task_closed`), the task's own queue (`same_queue`), an unknown
+queue (`queue_not_found`), a stale `revision` (`revision_conflict`), and a task
+with open subtasks (`requeue_has_children`, with their keys); move or close the
+subtasks first. A subtask moves on its own and becomes a root task. The branch,
+worktree, and pull request of the old task are not touched.
 
 ## Questions on a workflow task
 
@@ -1335,6 +1356,7 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks workflow resume KEY --decision continue\|release` | operator | Resolve a pause. |
 | `ttasks workflow retry KEY [REQUEST]` | operator | Run a failed request's checks again and wait for them. |
 | `ttasks cancel KEY` | operator | Cancel the task. |
+| `ttasks requeue KEY --queue QUEUE` | operator | Move the task to another queue as a new task. |
 
 "agent" means any agent that can read the task; "holder" means the agent that
 holds it, under the rules above.
@@ -1370,6 +1392,7 @@ generated OpenAPI document is the authority for request and response schemas.
 | `POST` | `/api/tasks/{key}/workflow/move` | move to a status (`to`, `reason`) | operator |
 | `POST` | `/api/tasks/{key}/workflow/resume` | resolve a pause (`decision`: `continue` or `release`); returns the task | operator |
 | `POST` | `/api/tasks/{key}/cancel` | cancel | operator |
+| `POST` | `/api/tasks/{key}/requeue` | move to another queue (`queue`, optional `revision`); returns the new task | operator |
 
 Agents reach the agent operations over their identity-bound socket with the
 actions `advance`, `request_get`, `artifact_set`, `artifact_ls`,
@@ -1613,7 +1636,8 @@ the status select. It reads top down: what is wrong, where the task is, what
 may happen next, what it produced, and what ran. The task's assignee is
 read-only, because the workflow assigns pool work, and the sheet has no
 **Move to another server…**, because the daemon refuses to export a workflow
-task. The panel follows the task's events as well as its revision: a rejected
+task. Its actions menu offers **Move to queue…** instead (see
+[Tasks](/docs/tasks#moving-a-task-to-another-queue)). The panel follows the task's events as well as its revision: a rejected
 request, a script run, or another event refetches the view while the sheet is
 open, and an older response never replaces a newer one. The panel has these
 sections:

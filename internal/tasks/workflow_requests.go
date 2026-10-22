@@ -435,31 +435,7 @@ func (s *WorkflowEngine) CancelWorkflowTask(ctx context.Context, actor Actor, ke
 	if task.Status == StatusDone || task.Status == StatusCancelled {
 		return Task{}, newError(http.StatusConflict, "workflow_closed", "task "+task.Key+" is closed")
 	}
-	now := s.now()
-	if err := guardRevisionTx(ctx, tx, task); err != nil {
-		return Task{}, err
-	}
-	if err := stopVisitScriptsTx(ctx, tx, task, "task cancelled by "+actor.Principal, now); err != nil {
-		return Task{}, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE task_status_visits SET left_at = ?, outcome = '', message = 'cancelled'
-		WHERE task_id = ? AND left_at = ''`, now, task.ID); err != nil {
-		return Task{}, err
-	}
-	// The current assignee is the holder whose questions the cancel makes moot.
-	if err := resolveWorkflowWaitsTx(ctx, tx, task, task.Assignee, now); err != nil {
-		return Task{}, err
-	}
-	// The workflow status stays as the record of where the task stopped.
-	previousCategory := task.Status
-	task.Status, task.CompletedAt, task.WorkflowPausedReason = StatusCancelled, now, ""
-	if _, err := saveTaskStateTx(ctx, tx, &task, previousCategory, now, false); err != nil {
-		return Task{}, err
-	}
-	if _, err := appendEventTx(ctx, tx, task, "workflow.cancelled", actor, map[string]any{
-		"status": task.WorkflowStatus, "actor": actor.Principal,
-	}, now); err != nil {
+	if err := cancelWorkflowTaskTx(ctx, tx, actor, task, s.now()); err != nil {
 		return Task{}, err
 	}
 	cancelled, err := taskByID(ctx, tx, task.ID)
@@ -472,6 +448,36 @@ func (s *WorkflowEngine) CancelWorkflowTask(ctx context.Context, actor Actor, ke
 	s.signal()
 	cancelled.Access = "write"
 	return cancelled, nil
+}
+
+// cancelWorkflowTaskTx closes an open workflow task as cancelled: it stops the
+// scripts of its visit, closes the visit, and resolves its waits.
+func cancelWorkflowTaskTx(ctx context.Context, tx *sql.Tx, actor Actor, task Task, now string) error {
+	if err := guardRevisionTx(ctx, tx, task); err != nil {
+		return err
+	}
+	if err := stopVisitScriptsTx(ctx, tx, task, "task cancelled by "+actor.Principal, now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE task_status_visits SET left_at = ?, outcome = '', message = 'cancelled'
+		WHERE task_id = ? AND left_at = ''`, now, task.ID); err != nil {
+		return err
+	}
+	// The current assignee is the holder whose questions the cancel makes moot.
+	if err := resolveWorkflowWaitsTx(ctx, tx, task, task.Assignee, now); err != nil {
+		return err
+	}
+	// The workflow status stays as the record of where the task stopped.
+	previousCategory := task.Status
+	task.Status, task.CompletedAt, task.WorkflowPausedReason = StatusCancelled, now, ""
+	if _, err := saveTaskStateTx(ctx, tx, &task, previousCategory, now, false); err != nil {
+		return err
+	}
+	_, err := appendEventTx(ctx, tx, task, "workflow.cancelled", actor, map[string]any{
+		"status": task.WorkflowStatus, "actor": actor.Principal,
+	}, now)
+	return err
 }
 
 // requireWorkflowOperator admits the customer and the operator, who act as the

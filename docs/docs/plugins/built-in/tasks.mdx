@@ -74,7 +74,7 @@ declares checks, `advance` waits for the daemon to run them: a rejection prints
 `rejected:` with the check's message, which says what to fix before repeating
 the advance; a failure prints `failed:` with the run to read with
 `workflow log`. A holder of the task may read run logs. `ttasks workflow move`,
-`ttasks cancel`, `ttasks queue workflow`, and `ttasks queue secret` are
+`ttasks cancel`, `ttasks requeue`, `ttasks queue workflow`, and `ttasks queue secret` are
 operator-only and unavailable to an agent.
 
 ## Durable state and notifications

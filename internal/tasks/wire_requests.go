@@ -317,6 +317,17 @@ type RunLogRequest struct {
 	MaxBytes int    `json:"max_bytes" flag:"max-bytes" min:"1" help:"Largest log tail to return in bytes (default 65536, maximum 1048576)"`
 }
 
+// RequeueRequest moves a task to another queue as a new task.
+type RequeueRequest struct {
+	Key      string `json:"key" pos:"0" label:"task key" required:"cli"`
+	Queue    string `json:"queue" flag:"queue" required:"true" help:"Target queue prefix"`
+	Revision int64  `json:"revision" flag:"revision" help:"Expected current revision"`
+}
+
+func (r *RequeueRequest) Input() RequeueInput {
+	return RequeueInput{Queue: r.Queue, Revision: r.Revision}
+}
+
 // RequestRef names one transition request of a task.
 type RequestRef struct {
 	Key string `json:"key"`

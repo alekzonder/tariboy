@@ -74,6 +74,8 @@ var sharedHelp = map[string]commandHelp{
 		"KEY  Task key (required)\nREQUEST  Transition request id, as shown by workflow get (default: the latest)", "ttasks workflow retry DEV-12\nttasks workflow retry DEV-12 41"},
 	"cancel": {"Cancel a workflow task (operator-only)", "cancel KEY",
 		"Cancels a task that follows a workflow. Operator-only: uses the host daemon as the customer actor.", "KEY  Task key (required)", "ttasks cancel DEV-12"},
+	"requeue": {"Move a task to another queue (operator-only)", "requeue KEY --queue QUEUE",
+		"A task key belongs to its queue, so the move creates a new task in QUEUE with the same title, description, priority, pull request, group, and comments, and prints it. The new task enters the workflow of QUEUE, if it has one, like any new task there. The old task is cancelled: its workflow stops, its running scripts are stopped, and its questions are resolved. The two tasks are related and each gets a comment that names the other. A task with open subtasks is refused with requeue_has_children. Operator-only: uses the host daemon as the customer actor.", "KEY  Task key (required)", "ttasks requeue DEV-12 --queue OPS"},
 }
 
 var helpGroups = map[string]string{

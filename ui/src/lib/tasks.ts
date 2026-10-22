@@ -655,6 +655,9 @@ export const moveTaskWorkflow = (key: string, to: string, reason: string, target
   call<Task>(target, "POST", `${taskPath(key)}/workflow/move`, { to, reason })
 export const cancelWorkflowTask = (key: string, target?: ApiTarget) =>
   call<Task>(target, "POST", `${taskPath(key)}/cancel`)
+/** Moves a task to another queue; the daemon returns the new task there. */
+export const requeueTask = (key: string, queue: string, revision: number, target?: ApiTarget) =>
+  call<Task>(target, "POST", `${taskPath(key)}/requeue`, { queue, revision })
 export const resumeTaskWorkflow = (
   key: string,
   decision: "continue" | "release",

@@ -37,7 +37,7 @@ function renderDetail(task: Task, waiting_for: TaskWait[] = [], comments: TaskCo
   const onClose = vi.fn()
   const element = (events: TaskEvent[]) => <TaskDetail detail={detail} events={events} principals={null} width={600} resizeHandle={null}
     onClose={onClose} onSave={onSave} onComment={vi.fn()} onAddRelation={vi.fn()} onDeleteRelation={vi.fn()}
-    onTransfer={vi.fn()} onTaskChanged={onTaskChanged} />
+    onTransfer={vi.fn()} onRequeue={vi.fn()} onTaskChanged={onTaskChanged} />
   const { rerender } = render(element([]))
   return { onSave, onTaskChanged, onClose, rerenderEvents: (events: TaskEvent[]) => rerender(element(events)) }
 }
@@ -55,15 +55,26 @@ it("refetches the workflow view when a workflow event arrives without a new revi
   await waitFor(() => expect(api.getTaskWorkflow).toHaveBeenCalledTimes(2))
 })
 
-it("offers Move to another server for a flexible task only", async () => {
+it("offers Move to another server and Move to queue for an open flexible task", async () => {
   renderDetail(flexible)
   await userEvent.click(screen.getByRole("button", { name: "Task actions" }))
   expect(await screen.findByRole("menuitem", { name: "Move to another server…" })).toBeInTheDocument()
-  cleanup()
+  expect(screen.getByRole("menuitem", { name: "Move to queue…" })).toBeInTheDocument()
+})
+
+it("offers only Move to queue for a workflow task", async () => {
   renderDetail(workflowTask)
   await screen.findByText("release@1.2.0")
-  expect(screen.queryByRole("button", { name: "Task actions" })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole("button", { name: "Task actions" }))
+  expect(await screen.findByRole("menuitem", { name: "Move to queue…" })).toBeInTheDocument()
   expect(screen.queryByText("Move to another server…")).not.toBeInTheDocument()
+})
+
+it("offers no Move to queue for a closed task", async () => {
+  renderDetail({ ...flexible, status: "done", category: "done" })
+  await userEvent.click(screen.getByRole("button", { name: "Task actions" }))
+  expect(await screen.findByRole("menuitem", { name: "Move to another server…" })).toBeInTheDocument()
+  expect(screen.queryByRole("menuitem", { name: "Move to queue…" })).not.toBeInTheDocument()
 })
 
 it("puts no waiting chip on the workflow's own question, but keeps it on an agent's", async () => {

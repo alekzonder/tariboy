@@ -20,6 +20,7 @@ import {
   type listTasks,
   markTaskNotificationRead,
   moveTask,
+  requeueTask,
   transferTask,
   updateTaskQueue,
   updateTask,
@@ -444,6 +445,14 @@ function TasksWorkspaceContent({
     await loadDetail(key)
   }
 
+  const requeueDetail = async (queue: string) => {
+    if (!detail) throw new Error("Task is no longer selected")
+    const moved = await requeueTask(detail.task.key, queue, detail.task.revision, target)
+    toast.success(`${detail.task.key} moved to ${queue} as ${moved.key}`)
+    await loadTree()
+    await loadDetail(moved.key)
+  }
+
   const createQueue = async (input: CreateQueueInput) => {
     try {
       const created = await createTaskQueue(input, target)
@@ -641,6 +650,7 @@ function TasksWorkspaceContent({
             await loadDetail(detail.task.key)
           }}
           onTransfer={transferDetail}
+          onRequeue={requeueDetail}
           // The row shows the status and category too: reload the tree so the
           // list and the drawer agree before the socket reports the change.
           onTaskChanged={() => { void loadDetail(detail.task.key); void loadTree() }}
