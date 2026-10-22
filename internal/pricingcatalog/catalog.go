@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"math"
 	"net/http"
 	"os"
@@ -64,7 +63,6 @@ type Config struct {
 	Store      *store.Store
 	Pricing    *aiproxy.Pricing
 	Diagnostic func(Diagnostic)
-	Log        *slog.Logger // nil means slog.Default
 }
 
 // Catalog validates and publishes complete LiteLLM pricing generations.
@@ -77,7 +75,6 @@ type Catalog struct {
 	store      *store.Store
 	pricing    *aiproxy.Pricing
 	diagnostic func(Diagnostic)
-	log        *slog.Logger
 }
 
 // New constructs a catalog. Production callers leave the network seams unset
@@ -104,12 +101,7 @@ func New(cfg Config) *Catalog {
 	if sourceURL == "" {
 		sourceURL = SourceURL
 	}
-	log := cfg.Log
-	if log == nil {
-		log = slog.Default()
-	}
 	return &Catalog{
-		log:        log,
 		httpClient: client,
 		clock:      clock,
 		after:      after,
@@ -176,26 +168,18 @@ func (c *Catalog) Refresh(ctx context.Context) error {
 	return nil
 }
 
-// refreshLogged runs Refresh in the background loop, where nobody can act on the
-// error. Refresh already emits the diagnostic event; this adds the log line.
-func (c *Catalog) refreshLogged(ctx context.Context) {
-	if err := c.Refresh(ctx); err != nil {
-		c.log.Warn("pricing catalog refresh failed", "err", err)
-	}
-}
-
 // Run refreshes once when the cache is absent or stale, then checks every day
 // until daemon cancellation.
 func (c *Catalog) Run(ctx context.Context) {
 	if c.cacheStale() {
-		c.refreshLogged(ctx)
+		_ = c.Refresh(ctx) // Refresh reports its own bounded diagnostic
 	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-c.after(RefreshInterval):
-			c.refreshLogged(ctx)
+			_ = c.Refresh(ctx) // Refresh reports its own bounded diagnostic
 		}
 	}
 }

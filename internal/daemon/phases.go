@@ -79,7 +79,8 @@ func setupProcess(ctx context.Context, o Options, stack *shutdownStack) (*proces
 		lvl = slog.LevelError
 	}
 	log := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))
-	slog.SetDefault(log) // packages without their own logger (tidy, safefs, groups) log to the daemon sink
+	slog.SetDefault(log)                    // packages without their own logger (tidy, safefs, groups) log to the daemon sink
+	slog.SetLogLoggerLevel(slog.LevelError) // stdlib log lines (net/http ErrorLog) stay visible at warn and error levels
 	resolveUserPath := o.UserPathResolver
 	if resolveUserPath == nil {
 		resolveUserPath = userpath.Resolve
@@ -345,7 +346,6 @@ func buildProxy(ctx context.Context, o Options, proc *process, c *coreParts) (*p
 		CachePath:  p.PricingCatalogFile(),
 		Store:      st,
 		Pricing:    pricing,
-		Log:        log,
 		Diagnostic: func(d pricingcatalog.Diagnostic) {
 			fields := safePricingFields(d)
 			log.LogAttrs(ctx, levelForPricing(d.Kind), d.Kind, safePricingAttrs(fields)...)
@@ -355,7 +355,7 @@ func buildProxy(ctx context.Context, o Options, proc *process, c *coreParts) (*p
 	})
 	// Cache reads are local and strictly size-bounded. A rejected cache is
 	// diagnostic-only: fallback/manual pricing and proxy startup remain live.
-	tidy.Log(log, "pricing catalog cache not loaded", pricingCatalog.LoadCache(ctx))
+	_ = pricingCatalog.LoadCache(ctx) // LoadCache reports its own bounded diagnostic
 	router, err := aiproxy.LoadRouter(st, os.Getenv)
 	if err != nil {
 		return nil, fmt.Errorf("load router: %w", err)

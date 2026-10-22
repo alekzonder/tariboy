@@ -1101,11 +1101,30 @@ func (m *Manager) Stop(name string) error {
 	m.emitState(name)
 	m.signalGoals()
 	// Stop must finish even when the kill fails; an idle agent has nothing to kill.
-	if err := m.Kill(name); err != nil && !errors.Is(err, errNoIteration) {
+	if err := m.killRetryingNotStarted(name); err != nil && !errors.Is(err, errNoIteration) {
 		m.logger().Warn("kill iteration while stopping agent", "agent", name, "err", err)
 	}
 	return nil
 }
+
+// killRetryingNotStarted retries Kill for a bounded interval while the shim
+// answers that its harness does not exist yet (nothing was stopped). Stop
+// runs it so a stop that races the launch still ends the iteration.
+func (m *Manager) killRetryingNotStarted(name string) error {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		err := m.Kill(name)
+		var rpcErr *shim.RPCError
+		if err == nil || !errors.As(err, &rpcErr) || rpcErr.Message != shimHarnessNotStarted ||
+			!time.Now().Before(deadline) {
+			return err
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// shimHarnessNotStarted is the shim's Kill refusal before the harness exists.
+const shimHarnessNotStarted = "harness not started yet"
 
 // RefreshLoopConfig asks a live engine to discard its timer and reload the
 // persisted settings. A stopped or not-yet-started agent has nothing to wake.
