@@ -3,6 +3,7 @@ package script
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -145,14 +146,14 @@ func scanRun(row interface{ Scan(...any) error }) (Run, error) {
 
 func (s *Store) GetDefinition(agent, id string) (Definition, error) {
 	definition, err := scanDefinition(s.db.QueryRow(selectDefinition+` WHERE agent=? AND id=?`, agent, id))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Definition{}, ErrNotFound
 	}
 	if err != nil {
 		return Definition{}, err
 	}
 	latest, err := scanRun(s.db.QueryRow(selectRun+` WHERE agent=? AND script_id=? ORDER BY created_at DESC,id DESC LIMIT 1`, agent, id))
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return Definition{}, err
 	}
 	if err == nil {
@@ -163,7 +164,7 @@ func (s *Store) GetDefinition(agent, id string) (Definition, error) {
 
 func (s *Store) GetRun(agent, id string) (Run, error) {
 	run, err := scanRun(s.db.QueryRow(selectRun+` WHERE agent=? AND id=?`, agent, id))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Run{}, ErrNotFound
 	}
 	return run, err
@@ -188,7 +189,7 @@ func (s *Store) ListDefinitions(agent string) ([]Definition, error) {
 	}
 	for i := range definitions {
 		latest, err := scanRun(s.db.QueryRow(selectRun+` WHERE agent=? AND script_id=? ORDER BY created_at DESC,id DESC LIMIT 1`, agent, definitions[i].ID))
-		if err != nil && err != sql.ErrNoRows {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 		if err == nil {
@@ -251,7 +252,7 @@ func (s *Store) RequestRunCancellation(agent, runID string) (Run, error) {
 	}
 	defer tx.Rollback()
 	run, err := scanRun(tx.QueryRow(selectRun+` WHERE agent=? AND id=?`, agent, runID))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Run{}, ErrNotFound
 	}
 	if err != nil {
@@ -287,7 +288,7 @@ func (s *Store) CompleteRun(agent, runID string, completion Completion) (Run, er
 	}
 	defer tx.Rollback()
 	run, err := scanRun(tx.QueryRow(selectRun+` WHERE agent=? AND id=?`, agent, runID))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Run{}, ErrNotFound
 	}
 	if err != nil {
@@ -369,7 +370,7 @@ func (s *Store) Rerun(agent, scriptID string) (Run, error) {
 	}
 	defer tx.Rollback()
 	definition, err := scanDefinition(tx.QueryRow(selectDefinition+` WHERE agent=? AND id=?`, agent, scriptID))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Run{}, ErrNotFound
 	}
 	if err != nil {
@@ -386,7 +387,7 @@ func (s *Store) Rerun(agent, scriptID string) (Run, error) {
 	}
 	run, err := s.newPendingRun(tx, definition)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		if basestore.IsUniqueViolation(err) {
 			return Run{}, ErrConflict
 		}
 		return Run{}, err
@@ -407,7 +408,7 @@ func (s *Store) ScheduleNext(agent, scriptID string) (Run, error) {
 	}
 	defer tx.Rollback()
 	definition, err := scanDefinition(tx.QueryRow(selectDefinition+` WHERE agent=? AND id=?`, agent, scriptID))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Run{}, ErrNotFound
 	}
 	if err != nil {
@@ -421,7 +422,7 @@ func (s *Store) ScheduleNext(agent, scriptID string) (Run, error) {
 	}
 	run, err := s.newPendingRun(tx, definition)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		if basestore.IsUniqueViolation(err) {
 			return Run{}, ErrConflict
 		}
 		return Run{}, err
@@ -490,7 +491,7 @@ func (s *Store) CancelDefinition(agent, scriptID, at string) error {
 	}
 	defer tx.Rollback()
 	definition, err := scanDefinition(tx.QueryRow(selectDefinition+` WHERE agent=? AND id=?`, agent, scriptID))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
@@ -548,7 +549,7 @@ func (s *Store) CancelRun(agent, runID, at string) error {
 	}
 	defer tx.Rollback()
 	run, err := scanRun(tx.QueryRow(selectRun+` WHERE agent=? AND id=?`, agent, runID))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
@@ -606,7 +607,7 @@ func (s *Store) RemoveDefinition(agent, scriptID string) error {
 	}
 	defer tx.Rollback()
 	definition, err := scanDefinition(tx.QueryRow(selectDefinition+` WHERE agent=? AND id=?`, agent, scriptID))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {

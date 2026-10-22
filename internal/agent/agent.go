@@ -258,7 +258,7 @@ func (s *Store) ClearPendingImage(name string) error {
 func (s *Store) PendingImage(name string) (ImageAssignment, error) {
 	var out ImageAssignment
 	err := s.db.QueryRow(`SELECT pending_image_ref,pending_image_digest,pending_image_error FROM agents WHERE name=?`, name).Scan(&out.Ref, &out.Digest, &out.Error)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return ImageAssignment{}, ErrNotFound
 	}
 	return out, err
@@ -958,7 +958,7 @@ func scanAgent(row scanner) (Agent, error) {
 		&a.MessagesBatch, &a.MessagesMaxQueue, &a.Group, &a.StatusMessage, &a.StatusUpdated, &a.Alias, &a.Notes, &a.Color,
 		&a.MaxIdleIterations, &goalEnabled, &a.GoalWaitCustomerTimeoutS, &a.GoalDeliveryCooldownS, &a.AIStallTimeoutS, &a.LastGoalDeliveryAt, &a.CurrentGoalTaskKey,
 		&a.ScheduleRRule)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Agent{}, ErrNotFound
 	}
 	if err != nil {
@@ -983,7 +983,7 @@ func scanIteration(row scanner) (Iteration, error) {
 		&it.ExitCode, &done, &productive, &it.PromptPath, &it.CPUMs, &it.MemPeakKB,
 		&it.TimeoutPeriodS, &it.TimeoutDeadline, &it.HardTimeoutDeadline,
 		&it.TimeoutExtensions, &it.TimeoutTriggeredAt, &it.ImageRef, &it.ImageVersion, &it.ImageDigest, &it.PromptTemplateSHA256, &it.LastAIRequestAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Iteration{}, ErrNotFound
 	}
 	if err != nil {

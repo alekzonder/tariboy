@@ -426,7 +426,7 @@ func (b *Bus) publishTx(tx *sql.Tx, msg Message, now time.Time, guard func(*sql.
 func queueLimitReached(tx *sql.Tx, agent string) (bool, error) {
 	var limit int
 	if err := tx.QueryRow(`SELECT messages_max_queue FROM agents WHERE name=?`, agent).Scan(&limit); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
 		return false, err
@@ -458,7 +458,7 @@ func messageByIdempotency(x dbtx, key string) (Message, bool, error) {
 	var idempotency sql.NullString
 	m, err := scanMessage(x.QueryRow(`SELECT `+messageColumns+`, idempotency_key
 		FROM messages WHERE idempotency_key = ?`, key), &idempotency)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Message{}, false, nil
 	}
 	if err != nil {
@@ -507,7 +507,7 @@ func (b *Bus) Subscribe(agent, channel string, m Matcher, typeFilter []string) (
 		}
 		return b.getSubscription(existing)
 	}
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return Subscription{}, err
 	}
 	id, err := nextSubscriptionID(b.db, agent, now)
@@ -538,7 +538,7 @@ func (b *Bus) Unsubscribe(agent, id string) error {
 	var channel string
 	var watch sql.NullString
 	err := b.db.QueryRow(`SELECT channel, watch FROM subscriptions WHERE id=? AND agent=?`, id, agent).Scan(&channel, &watch)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
@@ -854,7 +854,7 @@ func (b *Bus) MessagesSince(channel, afterID string, limit int) ([]Message, erro
 func (b *Bus) InspectChannel(name string) (Channel, int, error) {
 	var c Channel
 	err := b.db.QueryRow(`SELECT name, kind, created_at FROM channels WHERE name=?`, name).Scan(&c.Name, &c.Kind, &c.CreatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Channel{}, 0, ErrNotFound
 	}
 	if err != nil {
@@ -923,7 +923,7 @@ func scanSubscription(row scanner) (Subscription, error) {
 	var tf, params, watch sql.NullString
 	var locked int
 	if err := row.Scan(&s.ID, &s.Agent, &s.Channel, &matcher, &tf, &s.CreatedAt, &params, &watch, &locked); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return Subscription{}, ErrNotFound
 		}
 		return Subscription{}, err

@@ -9,6 +9,7 @@ package plugins
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -73,7 +74,7 @@ func (s *Store) Get(name string) (Record, bool, error) {
 	row := s.db.QueryRow(`SELECT name, version, types, protocol_version, exec, source_path,
 		channels, enabled, installed_at, state, health FROM plugins WHERE name=?`, name)
 	r, err := scanRecord(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Record{}, false, nil
 	}
 	if err != nil {
@@ -117,7 +118,7 @@ func (s *Store) SetActiveVersion(name, version string) error {
 func (s *Store) ActiveVersion(name string) (string, bool, error) {
 	var version string
 	err := s.db.QueryRow(`SELECT version FROM plugin_active_versions WHERE name=?`, name).Scan(&version)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
 	if err != nil {

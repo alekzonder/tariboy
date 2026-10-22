@@ -85,7 +85,7 @@ func requireRespond(ctx context.Context, q queryer, actor Actor, task Task) erro
 		return err
 	}
 	if access != "write" && access != "respond" {
-		return notFound(task.Key)
+		return taskNotFound(task.Key)
 	}
 	return nil
 }
@@ -96,7 +96,7 @@ func requireWrite(ctx context.Context, q queryer, actor Actor, task Task) error 
 		return err
 	}
 	if access != "write" {
-		return notFound(task.Key)
+		return taskNotFound(task.Key)
 	}
 	return nil
 }

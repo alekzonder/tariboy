@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"strings"
@@ -106,14 +107,14 @@ func moveTaskTargetTx(ctx context.Context, tx *sql.Tx, actor Actor, task Task, i
 			return moveTaskTarget{}, err
 		}
 		if before.ID == task.ID {
-			return moveTaskTarget{}, domainError(http.StatusConflict, "invalid_before",
+			return moveTaskTarget{}, newError(http.StatusConflict, "invalid_before",
 				"a task cannot be ordered before itself")
 		}
 		if before.Queue != task.Queue {
-			return moveTaskTarget{}, domainError(http.StatusConflict, "cross_queue_move", "tasks cannot move across queues")
+			return moveTaskTarget{}, newError(http.StatusConflict, "cross_queue_move", "tasks cannot move across queues")
 		}
 		if before.Priority != task.Priority {
-			return moveTaskTarget{}, domainError(http.StatusConflict, "priority_bucket_mismatch",
+			return moveTaskTarget{}, newError(http.StatusConflict, "priority_bucket_mismatch",
 				"before task must have the same priority")
 		}
 		if in.ParentKey == "" {
@@ -127,7 +128,7 @@ func moveTaskTargetTx(ctx context.Context, tx *sql.Tx, actor Actor, task Task, i
 				}
 			}
 		} else if before.ParentKey != target.parentKey {
-			return moveTaskTarget{}, domainError(http.StatusConflict, "invalid_before",
+			return moveTaskTarget{}, newError(http.StatusConflict, "invalid_before",
 				"before task must be a child of the target parent")
 		}
 		target.beforeID = before.ID
@@ -141,13 +142,13 @@ func moveTaskCheckParentTx(ctx context.Context, tx *sql.Tx, actor Actor, task, p
 		return err
 	}
 	if parent.ID == task.ID {
-		return domainError(http.StatusConflict, "hierarchy_cycle", "a task cannot parent itself")
+		return newError(http.StatusConflict, "hierarchy_cycle", "a task cannot parent itself")
 	}
 	if parent.Queue != task.Queue {
-		return domainError(http.StatusConflict, "cross_queue_move", "tasks cannot move across queues")
+		return newError(http.StatusConflict, "cross_queue_move", "tasks cannot move across queues")
 	}
 	if parent.Customer != task.Customer || parent.Group != task.Group {
-		return domainError(http.StatusConflict, "scope_change", "move would change inherited task scope")
+		return newError(http.StatusConflict, "scope_change", "move would change inherited task scope")
 	}
 	var descendant bool
 	if err := tx.QueryRowContext(ctx, `
@@ -161,7 +162,7 @@ func moveTaskCheckParentTx(ctx context.Context, tx *sql.Tx, actor Actor, task, p
 		return err
 	}
 	if descendant {
-		return domainError(http.StatusConflict, "hierarchy_cycle",
+		return newError(http.StatusConflict, "hierarchy_cycle",
 			"a task cannot move beneath its own descendant")
 	}
 	return nil
@@ -303,7 +304,7 @@ func (s *TaskService) ClaimReady(ctx context.Context, actor Actor, filter ReadyF
 		return Task{}, err
 	}
 	if actor.IsCustomer || !strings.HasPrefix(actor.Principal, "agent:") {
-		return Task{}, domainError(http.StatusForbidden, "forbidden", "only an agent can claim ready work")
+		return Task{}, newError(http.StatusForbidden, "forbidden", "only an agent can claim ready work")
 	}
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -320,11 +321,11 @@ func (s *TaskService) ClaimReady(ctx context.Context, actor Actor, filter ReadyF
 		if err == nil {
 			var replay Task
 			if json.Unmarshal([]byte(raw), &replay) != nil {
-				return Task{}, domainError(http.StatusInternalServerError, "invalid_replay", "stored claim result is invalid")
+				return Task{}, newError(http.StatusInternalServerError, "invalid_replay", "stored claim result is invalid")
 			}
 			return replay, nil
 		}
-		if err != sql.ErrNoRows {
+		if !errors.Is(err, sql.ErrNoRows) {
 			return Task{}, err
 		}
 	}
@@ -333,7 +334,7 @@ func (s *TaskService) ClaimReady(ctx context.Context, actor Actor, filter ReadyF
 		return Task{}, err
 	}
 	if len(ready) == 0 {
-		return Task{}, domainError(http.StatusNotFound, "no_ready_task", "no ready task is available")
+		return Task{}, notFound("no_ready_task", "no ready task is available")
 	}
 	task := ready[0]
 	now := s.now()
@@ -346,7 +347,7 @@ func (s *TaskService) ClaimReady(ctx context.Context, actor Actor, filter ReadyF
 		return Task{}, err
 	}
 	if n, _ := result.RowsAffected(); n != 1 {
-		return Task{}, domainError(http.StatusConflict, "claim_conflict", "task was claimed by another actor")
+		return Task{}, newError(http.StatusConflict, "claim_conflict", "task was claimed by another actor")
 	}
 	task.Assignee = actor.Principal
 	task.Status = StatusInProgress

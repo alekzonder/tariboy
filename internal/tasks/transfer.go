@@ -203,11 +203,11 @@ func (s *TaskService) ImportTask(ctx context.Context, actor Actor, bundle Transf
 		return Task{}, err
 	}
 	if !actor.IsCustomer || actor.Principal != userPrincipal(s.customer) {
-		return Task{}, domainError(http.StatusForbidden, "forbidden",
+		return Task{}, newError(http.StatusForbidden, "forbidden",
 			"only the daemon customer can import a transferred task")
 	}
 	if len(bundle.Tasks) == 0 {
-		return Task{}, domainError(http.StatusBadRequest, "transfer_empty", "the bundle carries no task")
+		return Task{}, newError(http.StatusBadRequest, "transfer_empty", "the bundle carries no task")
 	}
 	queue := strings.ToUpper(strings.TrimSpace(bundle.Queue))
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -249,7 +249,7 @@ func importTaskQueueTx(ctx context.Context, tx *sql.Tx, queue string) error {
 		return err
 	}
 	if exists == 0 {
-		return domainError(http.StatusNotFound, "queue_not_found",
+		return newError(http.StatusNotFound, "queue_not_found",
 			"this daemon has no queue "+queue)
 	}
 	// A task enters a bound queue only by being created there.
@@ -282,14 +282,14 @@ func importTaskItemTx(
 		return Task{}, err
 	}
 	if taken > 0 {
-		return Task{}, domainError(http.StatusConflict, "task_key_taken",
+		return Task{}, newError(http.StatusConflict, "task_key_taken",
 			"key "+key+" already exists on this daemon")
 	}
 	var parentID any
 	if parent := NormalizeKey(item.ParentKey); parent != "" {
 		id, ok := ids[parent]
 		if !ok {
-			return Task{}, domainError(http.StatusBadRequest, "transfer_orphan",
+			return Task{}, newError(http.StatusBadRequest, "transfer_orphan",
 				"task "+key+" names a parent that is not in the bundle")
 		}
 		parentID = id

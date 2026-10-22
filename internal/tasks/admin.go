@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 func (s *Admin) requireCustomer(actor Actor) error {
@@ -14,7 +17,7 @@ func (s *Admin) requireCustomer(actor Actor) error {
 		return err
 	}
 	if !actor.IsCustomer || actor.Principal != userPrincipal(s.customer) {
-		return domainError(http.StatusForbidden, "forbidden", "customer access required")
+		return newError(http.StatusForbidden, "forbidden", "customer access required")
 	}
 	return nil
 }
@@ -76,8 +79,8 @@ func (s *Admin) GetQueue(ctx context.Context, actor Actor, prefix string) (Queue
 		FROM task_queues WHERE prefix = ?`, prefix).Scan(
 		&queue.Prefix, &queue.Name, &queue.Description, &queue.ResponsibleAgent,
 		&queue.Revision, &queue.CreatedAt, &queue.UpdatedAt)
-	if err == sql.ErrNoRows {
-		return Queue{}, domainError(http.StatusNotFound, "queue_not_found", "queue not found")
+	if errors.Is(err, sql.ErrNoRows) {
+		return Queue{}, notFound("queue_not_found", "queue not found")
 	}
 	if err != nil {
 		return Queue{}, err
@@ -95,7 +98,7 @@ func (s *Admin) GetQueue(ctx context.Context, actor Actor, prefix string) (Queue
 			allowed = count > 0
 		}
 		if !allowed {
-			return Queue{}, domainError(http.StatusNotFound, "queue_not_found", "queue not found")
+			return Queue{}, notFound("queue_not_found", "queue not found")
 		}
 	}
 	queue.Owners, err = queueOwners(ctx, s.db, prefix)
@@ -138,7 +141,7 @@ func (s *Admin) UpdateQueue(ctx context.Context, actor Actor, prefix string, in 
 	if in.Name != nil {
 		current.Name = strings.TrimSpace(*in.Name)
 		if current.Name == "" {
-			return Queue{}, domainError(http.StatusBadRequest, "missing_name", "queue name is required")
+			return Queue{}, newError(http.StatusBadRequest, "missing_name", "queue name is required")
 		}
 	}
 	if in.Description != nil {
@@ -392,7 +395,7 @@ func (s *Admin) MarkNotification(ctx context.Context, actor Actor, id, action st
 	case "dismiss":
 		column = "dismissed_at"
 	default:
-		return Notification{}, domainError(http.StatusBadRequest, "invalid_action", "notification action is invalid")
+		return Notification{}, newError(http.StatusBadRequest, "invalid_action", "notification action is invalid")
 	}
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE task_notification_state SET `+column+` = ?
@@ -402,7 +405,7 @@ func (s *Admin) MarkNotification(ctx context.Context, actor Actor, id, action st
 		return Notification{}, err
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
-		return Notification{}, domainError(http.StatusNotFound, "notification_not_found", "notification not found")
+		return Notification{}, notFound("notification_not_found", "notification not found")
 	}
 	list, err := s.ListNotifications(ctx, actor, true)
 	if err != nil {
@@ -413,7 +416,7 @@ func (s *Admin) MarkNotification(ctx context.Context, actor Actor, id, action st
 			return notification, nil
 		}
 	}
-	return Notification{}, domainError(http.StatusNotFound, "notification_not_found", "notification not found")
+	return Notification{}, notFound("notification_not_found", "notification not found")
 }
 
 func (s *Admin) CreateQueue(ctx context.Context, actor Actor, in CreateQueueInput) (Queue, error) {
@@ -421,16 +424,16 @@ func (s *Admin) CreateQueue(ctx context.Context, actor Actor, in CreateQueueInpu
 		return Queue{}, err
 	}
 	if !actor.IsCustomer || actor.Principal != userPrincipal(s.customer) {
-		return Queue{}, domainError(http.StatusForbidden, "forbidden", "only the daemon customer can administer queues")
+		return Queue{}, newError(http.StatusForbidden, "forbidden", "only the daemon customer can administer queues")
 	}
 	in.Prefix = strings.ToUpper(strings.TrimSpace(in.Prefix))
 	in.Name = strings.TrimSpace(in.Name)
 	if !queuePrefixRE.MatchString(in.Prefix) {
-		return Queue{}, domainError(http.StatusBadRequest, "invalid_queue_prefix",
+		return Queue{}, newError(http.StatusBadRequest, "invalid_queue_prefix",
 			"queue prefix must match ^[A-Z][A-Z0-9]{1,9}$")
 	}
 	if in.Name == "" {
-		return Queue{}, domainError(http.StatusBadRequest, "missing_name", "queue name is required")
+		return Queue{}, newError(http.StatusBadRequest, "missing_name", "queue name is required")
 	}
 	now := s.now()
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -443,8 +446,8 @@ func (s *Admin) CreateQueue(ctx context.Context, actor Actor, in CreateQueueInpu
 		VALUES (?, ?, ?, ?, ?, ?)`,
 		in.Prefix, in.Name, strings.TrimSpace(in.Description),
 		strings.TrimPrefix(normalizeAssignee(in.ResponsibleAgent), "agent:"), now, now); err != nil {
-		if strings.Contains(err.Error(), "UNIQUE") {
-			return Queue{}, domainError(http.StatusConflict, "queue_exists", "queue prefix already exists")
+		if store.IsUniqueViolation(err) {
+			return Queue{}, newError(http.StatusConflict, "queue_exists", "queue prefix already exists")
 		}
 		return Queue{}, err
 	}

@@ -17,6 +17,7 @@ package migrate
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path"
@@ -163,7 +164,7 @@ func apply(db *sql.DB, name, body string, h header) (resultErr error) {
 	if h.foreignKeysOff {
 		var table string
 		err := tx.QueryRow(`SELECT "table" FROM pragma_foreign_key_check LIMIT 1`).Scan(&table)
-		if err != nil && err != sql.ErrNoRows {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			tx.Rollback()
 			return fmt.Errorf("migration %s foreign key check: %w", name, err)
 		}

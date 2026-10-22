@@ -28,7 +28,7 @@ func (s *WorkflowEngine) requireWorkflowAdmin(actor Actor) error {
 		return err
 	}
 	if !actor.IsCustomer || actor.Principal != userPrincipal(s.customer) {
-		return domainError(http.StatusForbidden, "forbidden", "only the daemon customer can administer workflows")
+		return newError(http.StatusForbidden, "forbidden", "only the daemon customer can administer workflows")
 	}
 	return nil
 }
@@ -48,7 +48,7 @@ func (s *WorkflowEngine) RebindAgentPool(
 	queue = strings.ToUpper(strings.TrimSpace(queue))
 	poolName = strings.TrimSpace(poolName)
 	if poolName == "" {
-		return AgentPool{}, domainError(http.StatusBadRequest, "missing_pool", "agent pool name is required")
+		return AgentPool{}, newError(http.StatusBadRequest, "missing_pool", "agent pool name is required")
 	}
 	agents = normalizePoolAgents(agents)
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -168,7 +168,7 @@ func (s *WorkflowEngine) GetAgentPool(ctx context.Context, actor Actor, queue, p
 		return AgentPool{}, err
 	}
 	if !found {
-		return AgentPool{}, domainError(http.StatusNotFound, "workflow_pool_not_found", "workflow agent pool not found")
+		return AgentPool{}, notFound("workflow_pool_not_found", "workflow agent pool not found")
 	}
 	return item, nil
 }
@@ -223,7 +223,7 @@ func queueWorkflowRevisionConflict(current int64) error {
 }
 
 func errQueueWorkflowNotFound() error {
-	return domainError(http.StatusNotFound, "queue_workflow_not_found", "queue has no workflow binding")
+	return notFound("queue_workflow_not_found", "queue has no workflow binding")
 }
 
 // queueWorkflowTx reads the binding of a queue; found is false when unbound.
@@ -234,7 +234,7 @@ func queueWorkflowTx(ctx context.Context, q queryer, queue string) (QueueWorkflo
 		FROM task_queue_workflows qw
 		JOIN task_workflow_images wi ON wi.digest = qw.workflow_digest
 		WHERE qw.queue_prefix = ?`, queue).Scan(&b.Queue, &b.Digest, &b.Tag, &b.Revision, &b.UpdatedAt, &b.Name, &b.Version)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return QueueWorkflow{}, false, nil
 	}
 	if err != nil {
@@ -254,7 +254,7 @@ func emptyPools(ctx context.Context, q queryer, queue string, pools []string) ([
 			LEFT JOIN task_agent_pool_members m ON m.pool_id = p.id
 			WHERE p.queue_prefix = ? AND p.name = ?
 			GROUP BY p.id`, queue, name).Scan(&members)
-		if err != nil && err != sql.ErrNoRows {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 		if members == 0 {
@@ -321,19 +321,19 @@ func poolsEmptyError(pools []string) error {
 func (s *WorkflowEngine) resolveWorkflowRef(ref string) (string, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
-		return "", domainError(http.StatusBadRequest, "missing_workflow", "workflow reference is required")
+		return "", newError(http.StatusBadRequest, "missing_workflow", "workflow reference is required")
 	}
 	if s.workflowResolver == nil {
-		return "", domainError(http.StatusServiceUnavailable, "workflow_unavailable", "workflow images are unavailable")
+		return "", newError(http.StatusServiceUnavailable, "workflow_unavailable", "workflow images are unavailable")
 	}
 	digest, err := s.workflowResolver(ref)
 	switch {
 	case err == nil:
 		return digest, nil
 	case errors.Is(err, workflowimage.ErrNotFound):
-		return "", domainError(http.StatusNotFound, "not_found", err.Error())
+		return "", notFound("not_found", err.Error())
 	case errors.Is(err, workflowimage.ErrInvalid):
-		return "", domainError(http.StatusBadRequest, "invalid_workflow_ref", err.Error())
+		return "", newError(http.StatusBadRequest, "invalid_workflow_ref", err.Error())
 	default:
 		return "", err
 	}
@@ -393,7 +393,7 @@ func (s *WorkflowEngine) SetQueueWorkflow(ctx context.Context, actor Actor, queu
 	manifest, err := loadManifestTx(ctx, tx, digest)
 	if err != nil {
 		if ErrorCode(err) == "workflow_not_found" {
-			return QueueWorkflow{}, domainError(http.StatusNotFound, "not_found", "workflow image "+digest+" is not published")
+			return QueueWorkflow{}, notFound("not_found", "workflow image "+digest+" is not published")
 		}
 		return QueueWorkflow{}, err
 	}
@@ -627,8 +627,8 @@ func (s *WorkflowEngine) GetQueueWorkflow(ctx context.Context, actor Actor, queu
 func requireQueueExists(ctx context.Context, q queryer, queue string) error {
 	var exists int
 	if err := q.QueryRowContext(ctx, `SELECT 1 FROM task_queues WHERE prefix = ?`, queue).Scan(&exists); err != nil {
-		if err == sql.ErrNoRows {
-			return domainError(http.StatusNotFound, "queue_not_found", "queue not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			return notFound("queue_not_found", "queue not found")
 		}
 		return err
 	}
@@ -639,7 +639,7 @@ func requireAgentsExist(ctx context.Context, q queryer, agents []string) error {
 	for _, agent := range agents {
 		var exists int
 		if err := q.QueryRowContext(ctx, `SELECT 1 FROM agents WHERE name = ?`, agent).Scan(&exists); err != nil {
-			if err == sql.ErrNoRows {
+			if errors.Is(err, sql.ErrNoRows) {
 				return &Error{
 					Status: http.StatusBadRequest, Code: "agent_not_found",
 					Msg: "agent pool member does not exist", Data: map[string]any{"agent": agent},
@@ -658,7 +658,7 @@ func agentPoolByName(ctx context.Context, q queryer, queue string, name string) 
 		FROM task_agent_pools WHERE queue_prefix = ? AND name = ?`, queue, name).Scan(
 		&pool.ID, &pool.Queue, &pool.Name, &pool.Revision, &pool.CreatedAt, &pool.UpdatedAt,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return AgentPool{}, false, nil
 	}
 	if err != nil {

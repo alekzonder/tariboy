@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"sort"
@@ -39,7 +40,7 @@ type ClearPendingResult struct {
 func (b *Bus) PendingCount(agent string) (int, error) {
 	var exists int
 	if err := b.db.QueryRow(`SELECT 1 FROM agents WHERE name=?`, agent).Scan(&exists); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return 0, ErrNotFound
 		}
 		return 0, err
@@ -57,7 +58,7 @@ func (b *Bus) ClearPending(agent string) (ClearPendingResult, error) {
 	defer tx.Rollback()
 	var exists int
 	if err := tx.QueryRow(`SELECT 1 FROM agents WHERE name=?`, agent).Scan(&exists); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return ClearPendingResult{}, ErrNotFound
 		}
 		return ClearPendingResult{}, err
@@ -187,7 +188,7 @@ func scanInboxItem(row scanner) (InboxItem, error) {
 	var da, at, res sql.NullString
 	var attempts, dlq int
 	m, err := scanMessage(row, &attempts, &da, &at, &res, &dlq)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return InboxItem{}, ErrNotFound
 	}
 	if err != nil {
@@ -574,7 +575,7 @@ func (b *Bus) SubscribeParams(agent, channel string, m Matcher, typeFilter []str
 	if err == nil {
 		return b.getSubscription(existing)
 	}
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return Subscription{}, err
 	}
 	id := "sub-" + agent + "-" + now.Format("20060102150405.000000000")

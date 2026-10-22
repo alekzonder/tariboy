@@ -7,6 +7,7 @@ package retention
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 
 	"github.com/alekzonder/tariboy/internal/store"
 )
@@ -64,7 +65,7 @@ func (s *Store) Get(agent string) (Policy, bool, error) {
 	err := s.db.QueryRow(`SELECT keep_iterations, keep_days, max_bytes
 		FROM retention_policies WHERE agent=?`, agent).
 		Scan(&p.KeepIterations, &p.KeepDays, &p.MaxBytes)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Policy{}, false, nil
 	}
 	if err != nil {

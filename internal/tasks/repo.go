@@ -68,16 +68,16 @@ func taskByKey(ctx context.Context, q queryer, key string) (Task, error) {
 		WHERE t.task_key = ?
 		   OR t.id = (SELECT task_id FROM task_key_aliases WHERE old_key = ?)`,
 		normalized, normalized))
-	if err == sql.ErrNoRows {
-		return Task{}, notFound(key)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Task{}, taskNotFound(key)
 	}
 	return t, err
 }
 
 func taskByID(ctx context.Context, q queryer, id int64) (Task, error) {
 	t, err := scanTask(q.QueryRowContext(ctx, taskSelect+` WHERE t.id = ?`, id))
-	if err == sql.ErrNoRows {
-		return Task{}, notFound("")
+	if errors.Is(err, sql.ErrNoRows) {
+		return Task{}, taskNotFound("")
 	}
 	return t, err
 }

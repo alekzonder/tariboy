@@ -12,11 +12,11 @@ import (
 // action is refused.
 func (s *TaskService) AgentAction(ctx context.Context, actor Actor, action string, body map[string]any) (any, error) {
 	if actor.IsCustomer || !strings.HasPrefix(actor.Principal, "agent:") {
-		return nil, domainError(http.StatusForbidden, "forbidden", "agent identity required")
+		return nil, newError(http.StatusForbidden, "forbidden", "agent identity required")
 	}
 	spec, ok := SpecFor(action)
 	if !ok || spec.agent == nil {
-		return nil, domainError(http.StatusBadRequest, "invalid_action",
+		return nil, newError(http.StatusBadRequest, "invalid_action",
 			fmt.Sprintf("unknown task action %q", action))
 	}
 	// Decode reads a malformed max_bytes as absent; the socket refuses it, as
@@ -87,7 +87,7 @@ func (s *TaskService) agentAsk(ctx context.Context, actor Actor, in *AskRequest)
 		principal = agentPrincipal(principal)
 	}
 	if principal == "" {
-		return nil, domainError(http.StatusBadRequest, "missing_principal", "question principal is required")
+		return nil, newError(http.StatusBadRequest, "missing_principal", "question principal is required")
 	}
 	return s.AddComment(ctx, actor, in.Key, AddCommentInput{
 		Body: "@" + principal + "\n\n" + in.Body, IdempotencyKey: in.IdempotencyKey,
@@ -183,7 +183,7 @@ func (s *TaskService) agentRunLog(ctx context.Context, actor Actor, in *RunLogRe
 // positiveID refuses a request or run id that is not a positive number.
 func positiveID(id int64) error {
 	if id <= 0 {
-		return domainError(http.StatusBadRequest, "invalid_id", "a positive numeric id is required")
+		return newError(http.StatusBadRequest, "invalid_id", "a positive numeric id is required")
 	}
 	return nil
 }

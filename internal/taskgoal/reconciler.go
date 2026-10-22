@@ -137,7 +137,7 @@ func (r *Reconciler) latestTerminalIteration(agentName string) (string, error) {
 	var id string
 	err := r.store.db.QueryRow(`SELECT id FROM iterations
 		WHERE agent=? AND ended_at<>'' ORDER BY ended_at DESC, id DESC LIMIT 1`, agentName).Scan(&id)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	return id, err

@@ -4,6 +4,7 @@ package tasks
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -35,7 +36,7 @@ func NormalizePriority(priority Priority) (Priority, error) {
 	case PriorityP0, PriorityP1, PriorityP2, PriorityP3:
 		return priority, nil
 	default:
-		return "", domainError(http.StatusBadRequest, "invalid_priority", "priority must be P0, P1, P2, or P3")
+		return "", newError(http.StatusBadRequest, "invalid_priority", "priority must be P0, P1, P2, or P3")
 	}
 }
 
@@ -46,7 +47,7 @@ func NormalizePullRequest(raw string) (string, error) {
 	}
 	u, err := url.Parse(raw)
 	if err != nil || !u.IsAbs() || (!strings.EqualFold(u.Scheme, "http") && !strings.EqualFold(u.Scheme, "https")) || u.Host == "" || u.User != nil {
-		return "", domainError(http.StatusBadRequest, "invalid_pull_request", "pull request must be an absolute http or https URL without credentials")
+		return "", newError(http.StatusBadRequest, "invalid_pull_request", "pull request must be an absolute http or https URL without credentials")
 	}
 	u.Scheme, u.Host = strings.ToLower(u.Scheme), strings.ToLower(u.Host)
 	return u.String(), nil
@@ -101,19 +102,33 @@ func (e *Error) Error() string {
 	return e.Code
 }
 
-func domainError(status int, code, msg string) error {
+func newError(status int, code, msg string) *Error {
 	return &Error{Status: status, Code: code, Msg: msg}
 }
 
+// notFound is the 404 for a resource the request addresses. A resource the
+// request only references (an unpublished image) is a 409 via newError.
+func notFound(code, msg string) *Error {
+	return newError(http.StatusNotFound, code, msg)
+}
+
+// WithData sets the structured details the HTTP layer returns with the error.
+func (e *Error) WithData(data map[string]any) *Error {
+	e.Data = data
+	return e
+}
+
 func ErrorCode(err error) string {
-	if e, ok := err.(*Error); ok {
+	var e *Error
+	if errors.As(err, &e) {
 		return e.Code
 	}
 	return ""
 }
 
 func ErrorStatus(err error) int {
-	if e, ok := err.(*Error); ok && e.Status != 0 {
+	var e *Error
+	if errors.As(err, &e) && e.Status != 0 {
 		return e.Status
 	}
 	return http.StatusInternalServerError
@@ -447,11 +462,11 @@ func normalizeAssignee(value string) string {
 
 func validateActor(actor Actor) error {
 	if strings.TrimSpace(actor.Principal) == "" {
-		return domainError(http.StatusForbidden, "forbidden", "actor identity is required")
+		return newError(http.StatusForbidden, "forbidden", "actor identity is required")
 	}
 	return nil
 }
 
-func notFound(key string) error {
-	return domainError(http.StatusNotFound, "not_found", fmt.Sprintf("task %q not found", key))
+func taskNotFound(key string) *Error {
+	return notFound("not_found", fmt.Sprintf("task %q not found", key))
 }

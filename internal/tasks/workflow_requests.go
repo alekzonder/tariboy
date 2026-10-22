@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -55,7 +56,7 @@ func (s *WorkflowEngine) RetryTransitionRequest(ctx context.Context, actor Actor
 func (s *WorkflowEngine) advance(ctx context.Context, actor Actor, key string, in AdvanceInput, retryOf int64) (TransitionRequest, error) {
 	in.Outcome = strings.TrimSpace(in.Outcome)
 	if len(in.Message) > maxTransitionMessageBytes {
-		return TransitionRequest{}, domainError(http.StatusBadRequest, "invalid_message",
+		return TransitionRequest{}, newError(http.StatusBadRequest, "invalid_message",
 			"a transition message is limited to 4 KiB")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -77,14 +78,13 @@ func (s *WorkflowEngine) advance(ctx context.Context, actor Actor, key string, i
 		}
 	}
 	if in.From = strings.TrimSpace(in.From); in.From != "" && in.From != task.WorkflowStatus {
-		changed := domainError(http.StatusConflict, "status_changed",
-			"task "+task.Key+" is in status "+task.WorkflowStatus+", not "+in.From).(*Error)
-		changed.Data = map[string]any{"status": task.WorkflowStatus}
-		return TransitionRequest{}, changed
+		return TransitionRequest{}, newError(http.StatusConflict, "status_changed",
+			"task "+task.Key+" is in status "+task.WorkflowStatus+", not "+in.From).
+			WithData(map[string]any{"status": task.WorkflowStatus})
 	}
 	status, ok := currentStatus(manifest, task.WorkflowStatus)
 	if !ok {
-		return TransitionRequest{}, domainError(http.StatusConflict, "status_unknown",
+		return TransitionRequest{}, newError(http.StatusConflict, "status_unknown",
 			"task "+task.Key+" is in status "+task.WorkflowStatus+", which its workflow does not declare")
 	}
 	if err := advanceRequireOwnerTx(ctx, tx, task, manifest, status, actor, retryOf); err != nil {
@@ -92,10 +92,9 @@ func (s *WorkflowEngine) advance(ctx context.Context, actor Actor, key string, i
 	}
 	transition, ok := statusTransition(status, in.Outcome)
 	if !ok {
-		unknown := domainError(http.StatusBadRequest, "outcome_unknown",
-			"status "+status.ID+" does not declare outcome "+in.Outcome).(*Error)
-		unknown.Data = map[string]any{"outcomes": statusOutcomes(status)}
-		return TransitionRequest{}, unknown
+		return TransitionRequest{}, newError(http.StatusBadRequest, "outcome_unknown",
+			"status "+status.ID+" does not declare outcome "+in.Outcome).
+			WithData(map[string]any{"outcomes": statusOutcomes(status)})
 	}
 	if err := advanceArtifactsTx(ctx, tx, task, transition, in.Outcome); err != nil {
 		return TransitionRequest{}, err
@@ -166,7 +165,7 @@ func advanceRequireOwnerTx(ctx context.Context, tx *sql.Tx, task Task, manifest 
 		}
 	}
 	if !owns {
-		return domainError(http.StatusForbidden, "not_holder",
+		return newError(http.StatusForbidden, "not_holder",
 			actor.Principal+" does not own status "+status.ID+" of "+task.Key)
 	}
 	return nil
@@ -180,10 +179,9 @@ func advanceArtifactsTx(ctx context.Context, tx *sql.Tx, task Task, transition w
 		return err
 	}
 	if missing := missingArtifacts(transition, artifactNames(artifacts)); len(missing) > 0 {
-		refused := domainError(http.StatusConflict, "artifact_missing",
-			"outcome "+outcome+" requires artifacts with no value: "+strings.Join(missing, ", ")).(*Error)
-		refused.Data = map[string]any{"missing": missing}
-		return refused
+		return newError(http.StatusConflict, "artifact_missing",
+			"outcome "+outcome+" requires artifacts with no value: "+strings.Join(missing, ", ")).
+			WithData(map[string]any{"missing": missing})
 	}
 	return nil
 }
@@ -198,7 +196,7 @@ func advanceChecksTx(ctx context.Context, tx *sql.Tx, task Task, transition work
 		return err
 	}
 	if pending {
-		return domainError(http.StatusConflict, "transition_pending",
+		return newError(http.StatusConflict, "transition_pending",
 			"another transition request of "+task.Key+" is still running")
 	}
 	// Runs of one task never overlap: a run cancelled when the task left its
@@ -211,7 +209,7 @@ func advanceChecksTx(ctx context.Context, tx *sql.Tx, task Task, transition work
 			return err
 		}
 		if active {
-			return domainError(http.StatusConflict, "script_running",
+			return newError(http.StatusConflict, "script_running",
 				"a script run of "+task.Key+" is still stopping; retry the request shortly")
 		}
 	}
@@ -258,19 +256,19 @@ func retriedRequestTx(ctx context.Context, tx *sql.Tx, task Task, id int64) (Adv
 		FROM task_transition_requests r JOIN task_status_visits v ON v.id = r.visit_id
 		WHERE r.task_id = ? AND r.id = ?`, task.ID, id).
 		Scan(&in.Outcome, &in.Message, &requester, &state, &latest, &current)
-	if err == sql.ErrNoRows {
-		return in, "", domainError(http.StatusNotFound, "not_found",
+	if errors.Is(err, sql.ErrNoRows) {
+		return in, "", newError(http.StatusNotFound, "not_found",
 			fmt.Sprintf("transition request %d of %s not found", id, task.Key))
 	}
 	if err != nil {
 		return in, "", err
 	}
 	if state != "failed" {
-		return in, "", domainError(http.StatusConflict, "request_not_failed",
+		return in, "", newError(http.StatusConflict, "request_not_failed",
 			fmt.Sprintf("transition request %d of %s is %s; only a failed request can be retried", id, task.Key, state))
 	}
 	if !latest || !current {
-		return in, "", domainError(http.StatusConflict, "request_superseded",
+		return in, "", newError(http.StatusConflict, "request_superseded",
 			fmt.Sprintf("transition request %d of %s is no longer the task's latest request in its current status", id, task.Key))
 	}
 	return in, requester, nil
@@ -321,8 +319,8 @@ func (s *WorkflowEngine) GetTransitionRequest(ctx context.Context, actor Actor, 
 		FROM task_transition_requests WHERE task_id = ? AND id = ?`, task.ID, id).Scan(
 		&request.ID, &request.Outcome, &request.Message, &request.Actor, &request.State,
 		&request.ResultMessage, &request.CreatedAt, &request.FinishedAt, &visitID)
-	if err == sql.ErrNoRows {
-		return TransitionRequest{}, domainError(http.StatusNotFound, "not_found",
+	if errors.Is(err, sql.ErrNoRows) {
+		return TransitionRequest{}, newError(http.StatusNotFound, "not_found",
 			fmt.Sprintf("transition request %d of %s not found", id, task.Key))
 	}
 	if err != nil {
@@ -350,7 +348,7 @@ func (s *WorkflowEngine) MoveWorkflow(ctx context.Context, actor Actor, key, to,
 	}
 	to, reason = strings.TrimSpace(to), strings.TrimSpace(reason)
 	if reason == "" {
-		return Task{}, domainError(http.StatusBadRequest, "reason_required", "a workflow move needs a reason")
+		return Task{}, newError(http.StatusBadRequest, "reason_required", "a workflow move needs a reason")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -366,10 +364,9 @@ func (s *WorkflowEngine) MoveWorkflow(ctx context.Context, actor Actor, key, to,
 		for _, status := range manifest.Definition.Statuses {
 			ids = append(ids, status.ID)
 		}
-		unknown := domainError(http.StatusBadRequest, "status_unknown",
-			"workflow "+manifest.Name+" does not declare status "+to).(*Error)
-		unknown.Data = map[string]any{"statuses": ids}
-		return Task{}, unknown
+		return Task{}, newError(http.StatusBadRequest, "status_unknown",
+			"workflow "+manifest.Name+" does not declare status "+to).
+			WithData(map[string]any{"statuses": ids})
 	}
 	now := s.now()
 	if err := guardRevisionTx(ctx, tx, task); err != nil {
@@ -435,7 +432,7 @@ func (s *WorkflowEngine) CancelWorkflowTask(ctx context.Context, actor Actor, ke
 		return Task{}, err
 	}
 	if task.Status == StatusDone || task.Status == StatusCancelled {
-		return Task{}, domainError(http.StatusConflict, "workflow_closed", "task "+task.Key+" is closed")
+		return Task{}, newError(http.StatusConflict, "workflow_closed", "task "+task.Key+" is closed")
 	}
 	now := s.now()
 	if err := guardRevisionTx(ctx, tx, task); err != nil {
@@ -483,7 +480,7 @@ func requireWorkflowOperator(actor Actor) error {
 		return err
 	}
 	if !actor.IsCustomer {
-		return domainError(http.StatusForbidden, "forbidden", "only the customer can override a workflow")
+		return newError(http.StatusForbidden, "forbidden", "only the customer can override a workflow")
 	}
 	return nil
 }
@@ -491,10 +488,10 @@ func requireWorkflowOperator(actor Actor) error {
 // requireOpenWorkflow refuses a closed or paused workflow task.
 func requireOpenWorkflow(task Task) error {
 	if task.Status == StatusDone || task.Status == StatusCancelled {
-		return domainError(http.StatusConflict, "workflow_closed", "task "+task.Key+" is closed")
+		return newError(http.StatusConflict, "workflow_closed", "task "+task.Key+" is closed")
 	}
 	if task.WorkflowPausedReason != "" {
-		return domainError(http.StatusConflict, "workflow_paused",
+		return newError(http.StatusConflict, "workflow_paused",
 			"task "+task.Key+" is paused and waits for the customer: "+task.WorkflowPausedReason)
 	}
 	return nil
@@ -562,7 +559,7 @@ func guardRevisionTx(ctx context.Context, tx *sql.Tx, task Task) error {
 		return err
 	}
 	if n != 1 {
-		return domainError(http.StatusConflict, "revision_conflict", "task was changed by another actor")
+		return newError(http.StatusConflict, "revision_conflict", "task was changed by another actor")
 	}
 	return nil
 }

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -156,7 +155,7 @@ func querySourceRuns(ctx context.Context, q queryer, where string, args ...any) 
 }
 
 func sourceRunNotFound(id int64) error {
-	return domainError(http.StatusNotFound, "run_not_found", fmt.Sprintf("source run %d not found", id))
+	return notFound("run_not_found", fmt.Sprintf("source run %d not found", id))
 }
 
 // boundSource is one source of a queue's bound workflow.

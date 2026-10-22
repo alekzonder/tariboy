@@ -1427,6 +1427,7 @@ the key, and the run id. A failed source run records the queue event
 | `workflow_pool_empty` | 409 | A pool the image names is missing or has no agents. |
 | `workflow_secret_missing` | 409 | A secret the image requires has no value in the queue or the global env, or `secret rm` would remove a secret the bound image requires and the global env does not hold. |
 | `workflow_unavailable` | 503 | The workflow image store is not available. |
+| `workflow_not_found` | 409 | The image a task or binding pins is not published. |
 | `queue_workflow_not_found` | 404 | The queue has no binding. |
 | `not_holder` | 403 | The caller does not own the current status. |
 | `forbidden` | 403 | A caller that is not the customer used an operator-only route (move, cancel, resume), or a caller that may not read a run log asked for it. |
@@ -1450,6 +1451,14 @@ the key, and the run id. A failed source run records the queue event
 | `reason_required` | 400 | A move needs a reason. |
 | `invalid_message` | 400 | The transition message exceeds 4 KiB. |
 | `revision_conflict` | 409 | The binding, pool, or task revision is not the current one. |
+
+A missing resource has one of two statuses. If the request addresses the
+resource (the task, queue, run, artifact, or secret in the path or body), the
+code is `<resource>_not_found` (or plain `not_found` for a task, request,
+image, or queue secret) and the status is 404. If the request only refers to
+the resource, the status is 409. For example, `workflow_not_found` is 409: the
+bound image is not published, and the request itself is well formed. The codes
+are part of the public contract and do not change.
 
 `rejected` and `failed` are not error codes: they are states of a transition
 request, and `workflow.transition_rejected` and `workflow.transition_failed` are

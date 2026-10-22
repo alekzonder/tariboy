@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"strings"
 	"unicode/utf8"
@@ -31,11 +32,11 @@ func (s *WorkflowEngine) SetArtifact(ctx context.Context, actor Actor, key, name
 		return Artifact{}, err
 	}
 	if task.Status == StatusDone || task.Status == StatusCancelled {
-		return Artifact{}, domainError(http.StatusConflict, "workflow_closed", "task "+task.Key+" is closed")
+		return Artifact{}, newError(http.StatusConflict, "workflow_closed", "task "+task.Key+" is closed")
 	}
 	if !actor.IsCustomer {
 		if task.WorkflowPausedReason != "" {
-			return Artifact{}, domainError(http.StatusConflict, "workflow_paused",
+			return Artifact{}, newError(http.StatusConflict, "workflow_paused",
 				"task "+task.Key+" is paused and waits for the customer: "+task.WorkflowPausedReason)
 		}
 		holds, err := holdsPoolStatusTx(ctx, tx, task, manifest, actor)
@@ -43,7 +44,7 @@ func (s *WorkflowEngine) SetArtifact(ctx context.Context, actor Actor, key, name
 			return Artifact{}, err
 		}
 		if !holds {
-			return Artifact{}, domainError(http.StatusForbidden, "not_holder",
+			return Artifact{}, newError(http.StatusForbidden, "not_holder",
 				"only the holder of a pool status or the customer may set artifacts on "+task.Key)
 		}
 	}
@@ -127,7 +128,7 @@ func (s *WorkflowEngine) GetArtifact(ctx context.Context, actor Actor, key, name
 		return Artifact{}, nil, err
 	}
 	if len(history) == 0 {
-		return Artifact{}, nil, domainError(http.StatusNotFound, "artifact_not_found",
+		return Artifact{}, nil, newError(http.StatusNotFound, "artifact_not_found",
 			"artifact "+name+" has no value on "+task.Key)
 	}
 	return history[0], history, nil
@@ -164,10 +165,10 @@ func workflowTaskTx(ctx context.Context, q taskQueryer, actor Actor, key string,
 		return Task{}, workflowimage.Manifest{}, err
 	}
 	if access == "" {
-		return Task{}, workflowimage.Manifest{}, notFound(key)
+		return Task{}, workflowimage.Manifest{}, taskNotFound(key)
 	}
 	if task.WorkflowDigest == "" {
-		return Task{}, workflowimage.Manifest{}, domainError(http.StatusConflict, "workflow_not_bound",
+		return Task{}, workflowimage.Manifest{}, newError(http.StatusConflict, "workflow_not_bound",
 			"task "+task.Key+" has no workflow")
 	}
 	manifest, err := loadManifestTx(ctx, q, task.WorkflowDigest)
@@ -187,7 +188,7 @@ func holdsPoolStatusTx(ctx context.Context, q queryer, task Task, manifest workf
 	var recorded string
 	err := q.QueryRowContext(ctx, `SELECT agent FROM task_workflow_holders WHERE task_id = ? AND pool = ? AND released = 0`,
 		task.ID, status.Owner.Pool).Scan(&recorded)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
@@ -210,10 +211,9 @@ func unknownArtifactError(manifest workflowimage.Manifest, name string) error {
 	for _, declared := range manifest.Definition.Artifacts {
 		names = append(names, declared.Name)
 	}
-	err := domainError(http.StatusBadRequest, "artifact_unknown",
-		"workflow "+manifest.Name+" does not declare artifact "+name).(*Error)
-	err.Data = map[string]any{"artifacts": names}
-	return err
+	return newError(http.StatusBadRequest, "artifact_unknown",
+		"workflow "+manifest.Name+" does not declare artifact "+name).
+		WithData(map[string]any{"artifacts": names})
 }
 
 // setArtifactTx validates and stores a new current value of a declared
@@ -225,11 +225,11 @@ func setArtifactTx(ctx context.Context, tx *sql.Tx, task Task, manifest workflow
 		return Artifact{}, unknownArtifactError(manifest, name)
 	}
 	if value == "" || !utf8.ValidString(value) {
-		return Artifact{}, domainError(http.StatusBadRequest, "invalid_artifact",
+		return Artifact{}, newError(http.StatusBadRequest, "invalid_artifact",
 			"an artifact value must be non-empty UTF-8 text")
 	}
 	if len(value) > maxArtifactBytes {
-		return Artifact{}, domainError(http.StatusRequestEntityTooLarge, "artifact_too_large",
+		return Artifact{}, newError(http.StatusRequestEntityTooLarge, "artifact_too_large",
 			"an artifact value is limited to 64 KiB")
 	}
 	result, err := tx.ExecContext(ctx, `

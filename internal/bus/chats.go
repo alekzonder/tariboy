@@ -3,6 +3,7 @@ package bus
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -142,7 +143,7 @@ func (b *Bus) CreateChat(c Chat) (Chat, error) {
 
 func (b *Bus) GetChat(id string) (Chat, error) {
 	c, err := scanChat(b.db.QueryRow(`SELECT `+chatColumns+` FROM chats WHERE id = ?`, id))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Chat{}, ErrNotFound
 	}
 	return c, err
@@ -159,7 +160,7 @@ func (b *Bus) ChatByChannel(channel string) (Chat, bool, error) {
 // owning chat inside the transaction that publishes it.
 func chatByChannel(x dbtx, channel string) (Chat, bool, error) {
 	c, err := scanChat(x.QueryRow(`SELECT `+chatColumns+` FROM chats WHERE channel = ?`, channel))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Chat{}, false, nil
 	}
 	if err != nil {
@@ -257,7 +258,7 @@ const defaultCustomerLogin = "customer"
 func (b *Bus) CustomerPrincipal() (string, error) {
 	var login string
 	err := b.db.QueryRow(`SELECT value FROM daemon_config WHERE key = ?`, customerLoginKey).Scan(&login)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", err
 	}
 	if login = strings.TrimSpace(login); login == "" {
@@ -328,7 +329,7 @@ func legacyFor(kind, agent string) string {
 func (b *Bus) legacyReadMarks() (map[string]string, error) {
 	var value string
 	err := b.db.QueryRow(`SELECT value FROM daemon_config WHERE key = ?`, legacyReadKey).Scan(&value)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return map[string]string{}, nil
 	}
 	if err != nil {

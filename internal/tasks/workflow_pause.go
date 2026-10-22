@@ -164,7 +164,7 @@ func (s *WorkflowEngine) ResumeWorkflow(ctx context.Context, actor Actor, key, d
 	}
 	decision = strings.TrimSpace(decision)
 	if decision != ResumeContinue && decision != ResumeRelease {
-		return Task{}, domainError(http.StatusBadRequest, "invalid_decision",
+		return Task{}, newError(http.StatusBadRequest, "invalid_decision",
 			"a pause is resolved with --decision continue or --decision release")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -253,16 +253,16 @@ func (s *WorkflowEngine) ResumeWorkflow(ctx context.Context, actor Actor, key, d
 // does not declare, and a release outside a pool status.
 func resumeDecisionStatus(task Task, manifest workflowimage.Manifest, decision string) (workflowfile.Status, bool, error) {
 	if task.WorkflowPausedReason == "" {
-		return workflowfile.Status{}, false, domainError(http.StatusConflict, "workflow_not_paused", "task "+task.Key+" is not paused")
+		return workflowfile.Status{}, false, newError(http.StatusConflict, "workflow_not_paused", "task "+task.Key+" is not paused")
 	}
 	status, ok := currentStatus(manifest, task.WorkflowStatus)
 	if !ok || status.Terminal {
-		return workflowfile.Status{}, false, domainError(http.StatusConflict, "status_unknown",
+		return workflowfile.Status{}, false, newError(http.StatusConflict, "status_unknown",
 			"task "+task.Key+" is in status "+task.WorkflowStatus+", which its workflow does not declare")
 	}
 	pool := status.Owner.Kind == workflowfile.OwnerPool
 	if decision == ResumeRelease && !pool {
-		return workflowfile.Status{}, false, domainError(http.StatusBadRequest, "invalid_decision",
+		return workflowfile.Status{}, false, newError(http.StatusBadRequest, "invalid_decision",
 			"release applies only to a status owned by an agent pool; status "+status.ID+" is not")
 	}
 	return status, pool, nil
