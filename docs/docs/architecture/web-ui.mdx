@@ -1048,14 +1048,18 @@ for the traffic lights exists only in the Desktop app.
 
 ### Compact screens
 
-Below 1024 CSS pixels (Tailwind's `lg`, the `COMPACT_QUERY` of
-`useMediaQuery`) the window is compact: phones and most tablets. The agent list
-then takes no room beside the island. The titlebar's sidebar toggle becomes a
-**Open menu** button that opens the same list as a drawer from the left, at
-most 85% of the width. Picking an agent, a server or a team, **New agent**,
+Below 1024 CSS pixels (Tailwind's `lg`) the window is compact: phones and
+most tablets. Below 768 CSS pixels (Tailwind's `md`, the `DRAWER_QUERY` of
+`useMediaQuery`) the agent list takes no room beside the island. The
+titlebar's sidebar toggle becomes a **Open menu** button that opens the same
+list as a drawer from the left, at most 85% of the width. The drawer opens
+without focus in **Search agents**, so a phone does not raise its keyboard;
+the first Tab moves focus into it. From 768 to 1023 CSS pixels the agent list
+stays a column, and the titlebar's **Hide agents** / **Show agents** toggle
+collapses it as on a wide window, saved in `terminals:sidebar:v1`. Picking an agent, a server or a team, **New agent**,
 **Add server**, editing a server or cloning an agent closes it, and so do a tap
 outside, Escape, and any route change, Back included: the drawer belongs to the
-history entry it opened on. A window that grows past the threshold drops it, so
+history entry it opened on. A window that grows past 768 CSS pixels drops it, so
 it does not come back when the tablet turns again. It has no resize handle and
 is never stored:
 the wide layout's width and hidden state in `terminals:sidebar:v1` stay as

@@ -247,18 +247,22 @@ describe("product routing", () => {
   });
 });
 
+function stubMatchingQueries(...matching: string[]) {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: matching.includes(query),
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  }));
+}
+
 describe("compact screens", () => {
   beforeEach(() => {
-    vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: query === "(max-width: 1023.98px)",
-      media: query,
-      onchange: null,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      addListener: () => {},
-      removeListener: () => {},
-      dispatchEvent: () => false,
-    }));
+    stubMatchingQueries("(max-width: 767.98px)", "(max-width: 1023.98px)");
     vi.mocked(fetchAllAgents).mockResolvedValue([{
       host: { id: "", label: "This daemon (local)" },
       agents: [
@@ -278,6 +282,8 @@ describe("compact screens", () => {
 
     const drawer = await screen.findByRole("dialog", { name: "Agents" });
     expect(within(drawer).getByTestId("agents-sidebar")).toBeInTheDocument();
+    // Focus in the search field would raise the on-screen keyboard on a phone.
+    expect(document.activeElement).not.toBe(within(drawer).getByRole("searchbox", { name: "Search agents" }));
     expect(within(drawer).queryByRole("separator", { name: "resize sidebar" })).toBeNull();
     fireEvent.click(await within(drawer).findByRole("button", { name: "Open bob" }));
 
@@ -312,5 +318,31 @@ describe("compact screens", () => {
   it("drops the macOS traffic-light gap outside the Desktop app", () => {
     renderAt("/");
     expect(screen.queryByTestId("titlebar-window-controls-gap")).toBeNull();
+  });
+});
+
+describe("medium screens", () => {
+  beforeEach(() => {
+    stubMatchingQueries("(max-width: 1023.98px)");
+    vi.mocked(fetchAllAgents).mockResolvedValue([{
+      host: { id: "", label: "This daemon (local)" },
+      agents: [
+        { name: "alice", image: "bare:latest", state: "idle", harness: "claude", group: null, interactive: true },
+      ],
+    }] as never);
+  });
+
+  it("shows the agent column with a toggle that collapses it", async () => {
+    renderAt("/agents/local/alice/chat");
+
+    expect(await screen.findByTestId("agents-sidebar")).toBeInTheDocument();
+    const titlebar = screen.getByTestId("app-titlebar");
+    expect(within(titlebar).queryByRole("button", { name: "Open menu" })).toBeNull();
+
+    fireEvent.click(within(titlebar).getByRole("button", { name: "Hide agents" }));
+    await waitFor(() => expect(screen.queryByTestId("agents-sidebar")).toBeNull());
+
+    fireEvent.click(within(titlebar).getByRole("button", { name: "Show agents" }));
+    expect(await screen.findByTestId("agents-sidebar")).toBeInTheDocument();
   });
 });
