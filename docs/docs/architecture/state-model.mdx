@@ -504,7 +504,12 @@ The agent row remains authoritative during crash recovery. An incomplete local
 image swap is either rolled back to the DB-active backup or completed when the
 already-promoted image digest matches the row. Each unpacked image records the
 ref it was materialized for and a daemon-owned id marker, so two generations of
-one ref cannot be confused. Generations are kept by id under
+one ref cannot be confused. Provisioning unpacks an image atomically: it writes
+a staging directory next to the agent's `image/`, syncs it, and renames it into
+place, so a failed unpack leaves no partial `image/` and a repeated provision
+keeps no stale files. A crash between the two renames can leave `.unpack-*`
+staging or backup directories under the agent root; the next provisioning of
+that agent removes them. Generations are kept by id under
 `images/<name>/refs/`, so active and pending assignments survive a moved tag.
 Harness, model, effort, environment, CWD, context, workdir, messages, history,
 group, and subscriptions are not image assignment fields.
