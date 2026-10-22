@@ -40,6 +40,11 @@ const (
 	tmuxExitNotifyTimeout = time.Second
 )
 
+// errHarnessNotStarted answers a Kill that arrives after the RPC socket is
+// bound but before the harness exists. Nothing was stopped, so the caller
+// should retry.
+var errHarnessNotStarted = errors.New("harness not started yet")
+
 var (
 	errTmuxExitStatusMissing    = errors.New("missing")
 	errTmuxExitStatusUnreadable = errors.New("unreadable")
@@ -59,6 +64,11 @@ var (
 	// for the harness after SIGTERM and after SIGKILL; tests shorten them.
 	tmuxTermWait = 2 * time.Second
 	tmuxKillWait = 2 * time.Second
+	// tmuxPaneCloseWait bounds how long the shim lets a reported pane close on
+	// its own, checking every tmuxPaneClosePoll, before it kills the session.
+	// Letting tmux close the pane keeps the tail of the pane log.
+	tmuxPaneCloseWait = time.Second
+	tmuxPaneClosePoll = 50 * time.Millisecond
 )
 
 // activePTYs maps a tmux session to the SET of live ptmx of its in-progress
@@ -162,7 +172,7 @@ func (s *procShim) Kill() error {
 	pid := s.pid
 	s.mu.Unlock()
 	if pid <= 0 {
-		return nil
+		return errHarnessNotStarted
 	}
 	return syscall.Kill(-pid, syscall.SIGTERM)
 }
@@ -368,6 +378,9 @@ func runTmux(ctx context.Context, o Options, fallback time.Duration) error {
 		logShim(o.IterationDir, "ERROR tmux new-window session=%s: %v", o.TmuxSession, err)
 		return fmt.Errorf("tmux new-window: %w", err)
 	}
+	s.mu.Lock()
+	s.harnessWindow = true
+	s.mu.Unlock()
 	if err := execCommand("tmux", "kill-window", "-t", bootstrapWindow).Run(); err != nil {
 		logShim(o.IterationDir, "ERROR tmux kill-window session=%s: %v", o.TmuxSession, err)
 		return fmt.Errorf("tmux kill-window: %w", err)
@@ -393,14 +406,7 @@ func runTmux(ctx context.Context, o Options, fallback time.Duration) error {
 
 	tk := time.NewTicker(fallback)
 	defer tk.Stop()
-	if end := waitTmuxEnd(ctx, o.TmuxSession, s.harnessExited, tk.C); end != tmuxEndSessionGone {
-		// The supervisor has recorded the status, or the shim is being
-		// stopped. Remove the session either way so it never outlives
-		// result.json; an absent session is already stopped.
-		if err := KillTmuxSession(o.TmuxSession); err != nil {
-			logShim(o.IterationDir, "kill tmux session %s after %s: %v", o.TmuxSession, end, err)
-		}
-	}
+	endTmuxSession(o.IterationDir, o.TmuxSession, waitTmuxEnd(ctx, o.TmuxSession, s.harnessExited, tk.C))
 	exitCode, statusErr := readTmuxExitStatus(statusPath)
 	if statusErr != nil {
 		exitCode = -1
@@ -416,6 +422,33 @@ func runTmux(ctx context.Context, o Options, fallback time.Duration) error {
 	s.result = res
 	s.mu.Unlock()
 	return writeResult(o.IterationDir, res)
+}
+
+// endTmuxSession makes sure the session is gone before result.json is
+// written. After a supervisor report it lets the pane close on its own for up
+// to tmuxPaneCloseWait; after a cancellation it kills at once. An absent
+// session is already stopped.
+func endTmuxSession(iterDir, session string, end tmuxWaitEnd) {
+	if end == tmuxEndSessionGone {
+		return
+	}
+	if end == tmuxEndHarnessExited {
+		// The supervisor is exiting; give tmux a moment to drain the pane and
+		// close the session itself.
+		deadline := time.Now().Add(tmuxPaneCloseWait)
+		for {
+			if execCommand("tmux", "has-session", "-t", session).Run() != nil {
+				return
+			}
+			if !time.Now().Before(deadline) {
+				break
+			}
+			time.Sleep(tmuxPaneClosePoll)
+		}
+	}
+	if err := KillTmuxSession(session); err != nil {
+		logShim(iterDir, "kill tmux session %s after %s: %v", session, end, err)
+	}
 }
 
 // tmuxWaitEnd names why waitTmuxEnd returned.
@@ -677,6 +710,9 @@ type tmuxShim struct {
 	// the harness exit status.
 	harnessExited   chan struct{}
 	harnessExitOnce sync.Once
+	// harnessWindow is set once the harness window exists; Kill before that
+	// returns errHarnessNotStarted.
+	harnessWindow bool
 }
 
 // HarnessExited records the pane supervisor's exit report. Repeated reports
@@ -702,6 +738,12 @@ func (s *tmuxShim) Status() StatusResult {
 }
 
 func (s *tmuxShim) Kill() error {
+	s.mu.Lock()
+	started := s.harnessWindow
+	s.mu.Unlock()
+	if !started {
+		return errHarnessNotStarted
+	}
 	return KillTmuxSession(s.session)
 }
 

@@ -276,13 +276,28 @@ type Spawner interface {
 	Start(argv, env []string, dir string) error
 }
 
-// ManagedSpawner additionally returns a process-level termination function.
-// ShimRunner uses it when Stop cancels an iteration while detached shim launch
-// is in progress. The production function first asks the shim process to run
-// its signal cleanup, then escalates against the shim process group.
+// ManagedSpawner additionally returns a handle on the started shim process.
 type ManagedSpawner interface {
-	StartManaged(argv, env []string, dir string) (terminate func() error, err error)
+	StartManaged(argv, env []string, dir string) (ManagedShim, error)
 }
+
+// ManagedShim is the daemon's handle on one detached shim process.
+type ManagedShim struct {
+	// Terminate is used when Stop cancels an iteration while detached shim
+	// launch is in progress. The production function first asks the shim
+	// process to run its signal cleanup, then escalates against the shim
+	// process group.
+	Terminate func() error
+	// Exited closes once the shim process has exited and been reaped. A shim
+	// writes result.json before it exits, so an exit without a result means
+	// the shim failed (for example, it could not bind its RPC socket). Nil
+	// when the spawner cannot observe the process.
+	Exited <-chan struct{}
+}
+
+// shimExitedReason is the harness_error reason for a shim process that
+// exited without writing result.json.
+const shimExitedReason = "shim exited before writing result (see shim.log)"
 
 // ProxyBinder is the slice of the AI proxy the runner needs. Defined here (plain
 // strings, no aiproxy import) so loop stays free of an import cycle; satisfied by
@@ -306,7 +321,7 @@ func (ExecSpawner) Start(argv, env []string, dir string) error {
 	return err
 }
 
-func (ExecSpawner) StartManaged(argv, env []string, dir string) (func() error, error) {
+func (ExecSpawner) StartManaged(argv, env []string, dir string) (ManagedShim, error) {
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Env = env
 	cmd.Dir = dir
@@ -314,7 +329,7 @@ func (ExecSpawner) StartManaged(argv, env []string, dir string) (func() error, e
 	cmd.Stderr = nil
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
-		return nil, err
+		return ManagedShim{}, err
 	}
 	// The shim is launched detached: the runner observes the iteration through
 	// result.json and the shim RPC, never through this process handle. Nothing
@@ -348,7 +363,7 @@ func (ExecSpawner) StartManaged(argv, env []string, dir string) (func() error, e
 		}
 		return syscall.Kill(-pgid, sig)
 	}
-	return func() error {
+	terminate := func() error {
 		err := kill(syscall.SIGTERM)
 		if errors.Is(err, syscall.ESRCH) || errors.Is(err, os.ErrProcessDone) {
 			return os.ErrProcessDone
@@ -361,7 +376,8 @@ func (ExecSpawner) StartManaged(argv, env []string, dir string) (func() error, e
 			return nil
 		}
 		return killErr
-	}, nil
+	}
+	return ManagedShim{Terminate: terminate, Exited: reaped}, nil
 }
 
 // ErrSessionAlive is returned by Run when an interactive agent already has a live
@@ -564,13 +580,13 @@ func (r *ShimRunner) Run(ctx context.Context, ag agent.Agent, trigger, iteration
 		rec = r.cfg.AuditFor(ag.Name)
 	}
 	r.recordLaunch(ag, iterationID, prep, rec)
-	terminate, err := r.spawnShim(ctx, tr, ag, iterationID, &prep, rec)
+	managedShim, err := r.spawnShim(ctx, tr, ag, iterationID, &prep, rec)
 	if err != nil {
 		return Outcome{}, err
 	}
 	if ctx.Err() != nil {
 		if it, loadErr := r.cfg.Store.GetIteration(ag.Name, iterationID); loadErr == nil && it.Status != agent.IterationRunning {
-			r.terminateCanceledLaunch(ag, l, iterationID, terminate)
+			r.terminateCanceledLaunch(ag, l, iterationID, managedShim.Terminate)
 			return Outcome{}, ctx.Err()
 		}
 	}
@@ -580,12 +596,12 @@ func (r *ShimRunner) Run(ctx context.Context, ag agent.Agent, trigger, iteration
 	}
 
 	hctx, harnessSpan := tr.Start(ctx, "harness")
-	outcome, err := r.await(hctx, ag, l, iterationID)
+	outcome, err := r.await(hctx, ag, l, iterationID, managedShim.Exited)
 	harnessSpan.End()
 	if errors.Is(err, ErrIterationDetached) {
 		detached = true
 	}
-	if err == nil && outcome.Status == agent.IterationHarnessError {
+	if err == nil && outcome.Status == agent.IterationHarnessError && outcome.Error == "" {
 		outcome.Error = harnessExitReason(outcome.ExitCode, l.HarnessStderr(iterationID), ag.Interactive)
 	}
 	// No auto-ack of the message batch here (spec §3.2). Deliveries are drained
@@ -612,26 +628,26 @@ func (r *ShimRunner) recordLaunch(ag agent.Agent, iterationID string, prep prepa
 }
 
 // spawnShim runs the shim.spawn phase: it snapshots the iteration deadlines,
-// starts the shim, and returns the managed termination function when the
-// spawner provides one.
-func (r *ShimRunner) spawnShim(ctx context.Context, tr oteltrace.Tracer, ag agent.Agent, iterationID string, prep *preparedRun, rec Recorder) (func() error, error) {
+// starts the shim, and returns the managed shim handle when the spawner
+// provides one (a zero handle otherwise).
+func (r *ShimRunner) spawnShim(ctx context.Context, tr oteltrace.Tracer, ag agent.Agent, iterationID string, prep *preparedRun, rec Recorder) (ManagedShim, error) {
 	_, spawn := tr.Start(ctx, "shim.spawn")
 	if err := ctx.Err(); err != nil {
 		spawn.End()
-		return nil, err
+		return ManagedShim{}, err
 	}
 	if err := r.snapshotDeadlines(ag, iterationID, prep); err != nil {
 		spawn.End()
-		return nil, err
+		return ManagedShim{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		spawn.End()
-		return nil, err
+		return ManagedShim{}, err
 	}
-	var terminate func() error
+	var handle ManagedShim
 	var err error
 	if managed, ok := r.cfg.Spawner.(ManagedSpawner); ok {
-		terminate, err = managed.StartManaged(prep.shimArgv, prep.env, prep.cwd)
+		handle, err = managed.StartManaged(prep.shimArgv, prep.env, prep.cwd)
 	} else {
 		err = r.cfg.Spawner.Start(prep.shimArgv, prep.env, prep.cwd)
 	}
@@ -641,9 +657,9 @@ func (r *ShimRunner) spawnShim(ctx context.Context, tr oteltrace.Tracer, ag agen
 		if rec != nil {
 			rec.Record("shim_error", "system", iterationID, map[string]any{"error": err.Error()})
 		}
-		return nil, fmt.Errorf("spawn shim: %w", err)
+		return ManagedShim{}, fmt.Errorf("spawn shim: %w", err)
 	}
-	return terminate, nil
+	return handle, nil
 }
 
 // snapshotDeadlines persists both deadlines from one clock sample directly
@@ -1157,14 +1173,20 @@ func preflightExecutables(adapter harness.Adapter, env []string, cwd string, bar
 }
 
 // await polls result.json (and the shim RPC) until the iteration finishes,
-// enforcing the soft timeout via the shim kill RPC.
-func (r *ShimRunner) await(ctx context.Context, ag agent.Agent, l agentdir.Layout, iterationID string) (Outcome, error) {
+// enforcing the soft timeout via the shim kill RPC. shimExited, when not nil,
+// closes once the shim process is reaped; a shim gone without result.json ends
+// the iteration as harness_error.
+func (r *ShimRunner) await(ctx context.Context, ag agent.Agent, l agentdir.Layout, iterationID string, shimExited <-chan struct{}) (Outcome, error) {
 	w := iterationWatcher{
 		store: r.cfg.Store, clock: r.cfg.Clock, log: r.cfg.Logger, agent: ag.Name, id: iterationID,
 		resultPath: l.ResultPath(iterationID), shimSock: l.ShimSock(), poll: r.cfg.PollInterval,
-		doneGrace: r.cfg.DoneGrace,
+		doneGrace: r.cfg.DoneGrace, shimExited: shimExited,
 	}
 	res, err := w.watch(ctx)
+	if err == nil && res.shimGone {
+		r.cfg.Logger.Warn("shim exited without result", "agent", ag.Name, "iteration", iterationID)
+		return Outcome{Status: agent.IterationHarnessError, ExitCode: -1, Error: shimExitedReason}, nil
+	}
 	if err != nil {
 		var ok bool
 		if res.result, ok = readResult(l.ResultPath(iterationID)); !ok {

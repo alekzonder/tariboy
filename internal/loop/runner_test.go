@@ -398,7 +398,7 @@ func TestAwaitKillsAfterDoneGraceForAllModes(t *testing.T) {
 			})
 
 			start := time.Now()
-			out, err := r.await(context.Background(), ag, l, iterID)
+			out, err := r.await(context.Background(), ag, l, iterID, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -731,6 +731,8 @@ func TestShimRunnerCancellationDetachesLiveIteration(t *testing.T) {
 	}
 }
 
+var _ ManagedSpawner = (*managedCancelSpawner)(nil)
+
 type managedCancelSpawner struct {
 	entered         chan struct{}
 	proceed         chan struct{}
@@ -745,7 +747,7 @@ func (s *managedCancelSpawner) Start(_, _ []string, _ string) error {
 	return nil
 }
 
-func (s *managedCancelSpawner) StartManaged(argv, _ []string, _ string) (func() error, error) {
+func (s *managedCancelSpawner) StartManaged(argv, _ []string, _ string) (ManagedShim, error) {
 	close(s.entered)
 	<-s.proceed
 	sock := ""
@@ -756,11 +758,11 @@ func (s *managedCancelSpawner) StartManaged(argv, _ []string, _ string) (func() 
 		}
 	}
 	if sock == "" {
-		return nil, errors.New("missing --shim-sock")
+		return ManagedShim{}, errors.New("missing --shim-sock")
 	}
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
-		return nil, err
+		return ManagedShim{}, err
 	}
 	s.listener = ln
 	go func() {
@@ -768,10 +770,10 @@ func (s *managedCancelSpawner) StartManaged(argv, _ []string, _ string) (func() 
 			childKilled: s.childKilled,
 		})
 	}()
-	return func() error {
+	return ManagedShim{Terminate: func() error {
 		close(s.outerTerminated)
 		return nil
-	}, nil
+	}}, nil
 }
 
 type managedChildShim struct {

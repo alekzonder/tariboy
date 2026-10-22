@@ -157,6 +157,7 @@ func TestRunTmuxSupervisorIgnoresUnreachableExitSocket(t *testing.T) {
 }
 
 func TestRunTmuxEndsOnSupervisorReportWithoutFallbackTick(t *testing.T) {
+	shortenPaneCloseWait(t, 20*time.Millisecond)
 	old := execCommand
 	t.Cleanup(func() { execCommand = old })
 	var mu sync.Mutex
@@ -181,8 +182,9 @@ func TestRunTmuxEndsOnSupervisorReportWithoutFallbackTick(t *testing.T) {
 			}
 			return exec.Command("true")
 		case "has-session":
-			t.Errorf("fallback has-session ran; the supervisor report must end the wait")
-			return exec.Command("/bin/false")
+			// Only the post-report pane-close check runs: the fallback tick is
+			// an hour away. This pane never closes on its own.
+			return exec.Command("true")
 		case "list-sessions":
 			if alive {
 				return exec.Command("/bin/sh", "-c", "printf managed")
@@ -234,5 +236,72 @@ func TestRunTmuxEndsOnSupervisorReportWithoutFallbackTick(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(dir, "result.json"))
 	if err != nil || !strings.Contains(string(data), `"exit_code": 7`) {
 		t.Fatalf("result.json = %s, %v; want exit_code 7", data, err)
+	}
+}
+
+// tmuxSessionRecorder fakes tmux for endTmuxSession: has-session reports the
+// session alive for aliveChecks calls, then gone; kill-session is recorded.
+func tmuxSessionRecorder(t *testing.T, aliveChecks int) *[]string {
+	t.Helper()
+	old := execCommand
+	t.Cleanup(func() { execCommand = old })
+	var mu sync.Mutex
+	var calls []string
+	checks := 0
+	execCommand = func(_ string, args ...string) *exec.Cmd {
+		mu.Lock()
+		defer mu.Unlock()
+		calls = append(calls, args[0])
+		switch args[0] {
+		case "has-session":
+			checks++
+			if checks <= aliveChecks {
+				return exec.Command("true")
+			}
+			return exec.Command("/bin/false")
+		case "list-sessions":
+			return exec.Command("/bin/sh", "-c", "printf managed")
+		default:
+			return exec.Command("true")
+		}
+	}
+	return &calls
+}
+
+func shortenPaneCloseWait(t *testing.T, wait time.Duration) {
+	t.Helper()
+	oldWait, oldPoll := tmuxPaneCloseWait, tmuxPaneClosePoll
+	tmuxPaneCloseWait, tmuxPaneClosePoll = wait, time.Millisecond
+	t.Cleanup(func() { tmuxPaneCloseWait, tmuxPaneClosePoll = oldWait, oldPoll })
+}
+
+func TestEndTmuxSessionLetsReportedPaneCloseOnItsOwn(t *testing.T) {
+	shortenPaneCloseWait(t, 5*time.Second)
+	calls := tmuxSessionRecorder(t, 2)
+	endTmuxSession(t.TempDir(), "managed", tmuxEndHarnessExited)
+	for _, call := range *calls {
+		if call == "kill-session" {
+			t.Fatalf("session killed although it closed on its own: %v", *calls)
+		}
+	}
+}
+
+func TestEndTmuxSessionKillsReportedPaneThatStaysOpen(t *testing.T) {
+	shortenPaneCloseWait(t, 20*time.Millisecond)
+	calls := tmuxSessionRecorder(t, 1<<30)
+	endTmuxSession(t.TempDir(), "managed", tmuxEndHarnessExited)
+	if (*calls)[len(*calls)-1] != "kill-session" {
+		t.Fatalf("calls = %v, want kill-session after the bounded wait", *calls)
+	}
+}
+
+func TestEndTmuxSessionKillsAtOnceOnCancel(t *testing.T) {
+	shortenPaneCloseWait(t, 5*time.Second)
+	calls := tmuxSessionRecorder(t, 1<<30)
+	endTmuxSession(t.TempDir(), "managed", tmuxEndCanceled)
+	for _, call := range *calls {
+		if call == "has-session" {
+			t.Fatalf("cancellation waited for the pane: %v", *calls)
+		}
 	}
 }

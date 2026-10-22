@@ -332,7 +332,7 @@ facade over these parts:
 | Script supervisor (`scripts.go`) | Durable script runs: claim, start as the agent, cancel, and record the result. |
 | Tools facade (`tools_facade.go`) | The per-agent tools socket API. It reaches the manager only through narrow interfaces, so the API does not depend on a loop engine. |
 | Image activation (`image_activation.go`) | Pending image activation, the Reprovision swap, the skill bridge, and crash recovery of an interrupted swap. |
-| Iteration watcher (`iteration_watcher.go`) | The one polling loop that waits for `result.json`. It resyncs the hard deadline, enforces the soft deadline and the done grace with at most one Kill, and, for adoption, probes the shim. The runner and adoption both use it. |
+| Iteration watcher (`iteration_watcher.go`) | The one polling loop that waits for `result.json`. It resyncs the hard deadline, enforces the soft deadline and the done grace with at most one Kill, and, for adoption, probes the shim. For a shim the runner launched, it also ends the wait when the reaped shim process left no `result.json`, which the runner records as `harness_error`. The runner and adoption both use it. |
 
 The manager takes its locks in one order:
 
