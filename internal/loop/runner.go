@@ -673,6 +673,17 @@ func (r *ShimRunner) snapshotDeadlines(ag agent.Agent, iterationID string, prep 
 	return nil
 }
 
+// recordsProxyUsage reports whether the harness adapter asks the runner to
+// record its usage from the stdout stream (harness.ProxyUsageRecorder).
+func recordsProxyUsage(harnessType string) bool {
+	a, err := harness.Get(harnessType)
+	if err != nil {
+		return false
+	}
+	_, ok := a.(harness.ProxyUsageRecorder)
+	return ok
+}
+
 // startHarnessTailer records harness_spawned and tees logs into the audit log
 // for the lifetime of the harness; the final drain on Stop captures trailing
 // output. Interactive agents tee only shim.log (their harness output is a tmux
@@ -680,7 +691,7 @@ func (r *ShimRunner) snapshotDeadlines(ag agent.Agent, iterationID string, prep 
 // nil when nothing is tailed.
 func (r *ShimRunner) startHarnessTailer(ag agent.Agent, l agentdir.Layout, iterationID string, rec Recorder) func() {
 	var onStdout func(string)
-	if ag.HarnessType == "cursor" && !ag.Interactive && r.cfg.RecordCursorUsage != nil {
+	if recordsProxyUsage(ag.HarnessType) && !ag.Interactive && r.cfg.RecordCursorUsage != nil {
 		onStdout = cursorUsageObserver(ag.Model, func(usage CursorResultUsage) {
 			imageName, imageTag := imageNameTag(ag.ImageRef)
 			r.cfg.RecordCursorUsage(ag.Name, iterationID, imageName, imageTag, ag.ImageDigest, usage)

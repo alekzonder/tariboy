@@ -102,3 +102,16 @@ func TestLoadRouterChatGPTEnvOverrideCannotInheritWildcardRuleCredential(t *test
 		t.Fatalf("openai generic rule changed: %+v", u)
 	}
 }
+
+func TestProviderSpecsMatchRouterDefaults(t *testing.T) {
+	r := NewRouter()
+	for p, s := range providerSpecs {
+		got := r.ResolveDefault(string(p))
+		if got.BaseURL != s.baseURL || got.KeyEnv != s.keyEnv {
+			t.Errorf("%s router default = %+v, spec = %q/%q", p, got, s.baseURL, s.keyEnv)
+		}
+	}
+	if !ProviderCursor.spec().passthrough || ProviderOpenAI.spec().passthrough || ProviderAnthropic.spec().passthrough {
+		t.Error("only cursor is passthrough")
+	}
+}

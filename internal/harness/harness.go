@@ -101,6 +101,13 @@ type Adapter interface {
 	SkillBridge(SkillBridgeRequest) (SkillBridge, error)
 }
 
+// ProxyUsageRecorder is an optional Adapter interface for harnesses whose
+// traffic bypasses the AI proxy body parser: the runner records their usage
+// from the harness stdout stream instead. Only the cursor adapter implements it.
+type ProxyUsageRecorder interface {
+	RecordsUsageFromStdout()
+}
+
 func Get(typ string) (Adapter, error) {
 	switch typ {
 	case "claude":
@@ -316,6 +323,9 @@ type cursor struct{}
 
 func (cursor) Type() string       { return "cursor" }
 func (cursor) Executable() string { return "agent" }
+
+// RecordsUsageFromStdout implements ProxyUsageRecorder.
+func (cursor) RecordsUsageFromStdout() {}
 
 func (cursor) Command(cwd, promptPath string, cfg Config) ([]string, []string, error) {
 	shellCommand := `cmd=$1; shift; exec "$cmd" "$@"`

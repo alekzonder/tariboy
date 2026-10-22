@@ -125,3 +125,12 @@ func TestCursorUsageObserverPrefersConfiguredModelID(t *testing.T) {
 		}
 	}
 }
+
+func TestRecordsProxyUsageFollowsHarnessInterface(t *testing.T) {
+	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	for typ, want := range map[string]bool{"cursor": true, "claude": false, "codex": false, "opencode": false, "stub": false, "unknown": false} {
+		if got := recordsProxyUsage(typ); got != want {
+			t.Errorf("recordsProxyUsage(%q) = %v, want %v", typ, got, want)
+		}
+	}
+}

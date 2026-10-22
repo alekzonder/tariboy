@@ -569,3 +569,17 @@ func TestClaudeBareCommand(t *testing.T) {
 		t.Fatalf("bare argv does not preserve the effective environment: %v", argv)
 	}
 }
+
+func TestOnlyCursorAdapterRecordsProxyUsage(t *testing.T) {
+	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	for _, typ := range []string{"claude", "codex", "opencode", "cursor", "stub"} {
+		a, err := Get(typ)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, ok := a.(ProxyUsageRecorder)
+		if want := typ == "cursor"; ok != want {
+			t.Errorf("%s implements ProxyUsageRecorder = %v, want %v", typ, ok, want)
+		}
+	}
+}

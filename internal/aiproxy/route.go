@@ -25,12 +25,13 @@ type Router struct {
 }
 
 func NewRouter() *Router {
-	return &Router{defaults: map[string]Upstream{
-		"anthropic": {BaseURL: "https://api.anthropic.com", KeyEnv: "ANTHROPIC_API_KEY"},
-		"chatgpt":   {BaseURL: "https://chatgpt.com/backend-api/codex"},
-		"openai":    {BaseURL: "https://api.openai.com", KeyEnv: "OPENAI_API_KEY"},
-		"cursor":    {BaseURL: "https://api2.cursor.sh"},
-	}}
+	defaults := map[string]Upstream{
+		providerChatGPT: {BaseURL: "https://chatgpt.com/backend-api/codex"},
+	}
+	for p, s := range providerSpecs {
+		defaults[string(p)] = Upstream{BaseURL: s.baseURL, KeyEnv: s.keyEnv}
+	}
+	return &Router{defaults: defaults}
 }
 
 func (r *Router) SetDefault(provider string, u Upstream) {
@@ -123,24 +124,24 @@ func LoadRouter(s *store.Store, getenv func(string) string) (*Router, error) {
 	}
 	if getenv != nil {
 		if v := getenv("TARIBOY_UPSTREAM_ANTHROPIC_BASE_URL"); v != "" {
-			d := r.ResolveDefault("anthropic")
+			d := r.ResolveDefault(string(ProviderAnthropic))
 			d.BaseURL = v
-			r.SetDefault("anthropic", d)
+			r.SetDefault(string(ProviderAnthropic), d)
 		}
 		if v := getenv("TARIBOY_UPSTREAM_CHATGPT_BASE_URL"); v != "" {
-			d := r.ResolveDefault("chatgpt")
+			d := r.ResolveDefault(providerChatGPT)
 			d.BaseURL = v
-			r.SetDefault("chatgpt", d)
+			r.SetDefault(providerChatGPT, d)
 		}
 		if v := getenv("TARIBOY_UPSTREAM_OPENAI_BASE_URL"); v != "" {
-			d := r.ResolveDefault("openai")
+			d := r.ResolveDefault(string(ProviderOpenAI))
 			d.BaseURL = v
-			r.SetDefault("openai", d)
+			r.SetDefault(string(ProviderOpenAI), d)
 		}
 		if v := getenv("TARIBOY_UPSTREAM_CURSOR_BASE_URL"); v != "" {
-			d := r.ResolveDefault("cursor")
+			d := r.ResolveDefault(string(ProviderCursor))
 			d.BaseURL = v
-			r.SetDefault("cursor", d)
+			r.SetDefault(string(ProviderCursor), d)
 		}
 	}
 	return r, nil
