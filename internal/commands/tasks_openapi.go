@@ -54,6 +54,7 @@ func taskOpenAPISchemas() map[string]map[string]any {
 			"run_as":  map[string]any{"type": "string", "enum": []string{"queue", "agent"}},
 			"timeout": map[string]any{"type": "string", "description": "The effective timeout as a duration, for example 1m0s"}}),
 		"StatusVisit": objectSchema([]string{"id", "sequence", "status", "entered_at", "entered_by"}, map[string]any{"id": integer, "sequence": integer, "status": str, "entered_at": str, "entered_by": str, "left_at": str, "outcome": str, "message": str,
+			"workflow_digest": str, "workflow_version": str,
 			"idle_iterations": integer, "rejected_requests": integer, "script_failures": integer}),
 		"TransitionRequest": objectSchema([]string{"id", "task_key", "outcome", "actor", "state", "created_at"}, map[string]any{"id": integer, "task_key": str, "outcome": str, "message": str, "actor": str,
 			"state": map[string]any{"type": "string", "enum": []string{"pending", "applied", "rejected", "failed", "cancelled"}, "description": "One of pending, applied, rejected, failed, cancelled"}, "result_message": str, "created_at": str, "finished_at": str,
@@ -64,6 +65,7 @@ func taskOpenAPISchemas() map[string]map[string]any {
 		"QueueEnvVar":   objectSchema([]string{"key", "value", "updated_at"}, map[string]any{"key": str, "value": str, "updated_at": str}),
 		"WorkflowView": objectSchema([]string{"name", "version", "digest", "status", "category", "owner", "outcomes", "artifacts", "visits", "declared_artifacts", "statuses"}, map[string]any{
 			"name": str, "version": str, "digest": str, "status": str, "category": status,
+			"queue_version": str, "queue_digest": map[string]any{"type": "string", "description": "The digest the task's queue is bound to now; another digest than digest means the task can be upgraded"},
 			"waiting_on": str, "paused_reason": str, "owner": str, "holder": str, "instructions_path": str,
 			"outcomes": arrayOf("OutcomeView"), "artifacts": arrayOf("Artifact"), "visits": arrayOf("StatusVisit"),
 			"last_request": schemaRef("TransitionRequest"), "runs": arrayOf("ScriptRun"),

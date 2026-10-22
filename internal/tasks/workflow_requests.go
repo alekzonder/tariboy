@@ -370,36 +370,16 @@ func (s *WorkflowEngine) MoveWorkflow(ctx context.Context, actor Actor, key, to,
 			WithData(map[string]any{"statuses": ids})
 	}
 	now := s.now()
-	if err := guardRevisionTx(ctx, tx, task); err != nil {
-		return Task{}, err
-	}
-	if err := cancelPendingRequestTx(ctx, tx, task, "moved by "+actor.Principal, now); err != nil {
-		return Task{}, err
-	}
-	// The move is the customer's decision on a paused task; enterStatusTx
-	// dispatches only an unpaused one, and answers the pause wait when it
-	// leaves the visit.
-	pausedReason := task.WorkflowPausedReason
-	if pausedReason != "" {
-		task.WorkflowPausedReason = ""
-		if _, err := tx.ExecContext(ctx, `UPDATE tasks SET workflow_paused_reason = '' WHERE id = ?`, task.ID); err != nil {
-			return Task{}, err
-		}
-	}
-	// A move hands the task back to holders the customer released.
-	if _, err := tx.ExecContext(ctx, `DELETE FROM task_workflow_holders WHERE task_id = ? AND released = 1`, task.ID); err != nil {
+	pausedReason, err := overrideWorkflowTx(ctx, tx, &task, "moved by "+actor.Principal, now)
+	if err != nil {
 		return Task{}, err
 	}
 	from := task.WorkflowStatus
 	if err := s.enterStatusTx(ctx, tx, &task, manifest, to, actor.Principal, "", reason); err != nil {
 		return Task{}, err
 	}
-	if pausedReason != "" {
-		if _, err := appendEventTx(ctx, tx, task, "workflow.resumed", actor, map[string]any{
-			"status": from, "decision": "move", "actor": actor.Principal, "reason": pausedReason,
-		}, now); err != nil {
-			return Task{}, err
-		}
+	if err := recordOverrideResumeTx(ctx, tx, task, actor, from, "move", pausedReason, now); err != nil {
+		return Task{}, err
 	}
 	if _, err := appendEventTx(ctx, tx, task, "workflow.moved", actor, map[string]any{
 		"from": from, "to": to, "actor": actor.Principal, "reason": reason,
@@ -416,6 +396,45 @@ func (s *WorkflowEngine) MoveWorkflow(ctx context.Context, actor Actor, key, to,
 	s.signal()
 	moved.Access = "write"
 	return moved, nil
+}
+
+// overrideWorkflowTx prepares a task for the customer's override of its
+// workflow, a move or an upgrade: it confirms the revision, cancels a pending
+// request, clears a pause, and hands the task back to holders the customer
+// released. It returns the pause reason it cleared.
+func overrideWorkflowTx(ctx context.Context, tx *sql.Tx, task *Task, why, now string) (string, error) {
+	if err := guardRevisionTx(ctx, tx, *task); err != nil {
+		return "", err
+	}
+	if err := cancelPendingRequestTx(ctx, tx, *task, why, now); err != nil {
+		return "", err
+	}
+	// The override is the customer's decision on a paused task; enterStatusTx
+	// dispatches only an unpaused one, and answers the pause wait when it
+	// leaves the visit.
+	pausedReason := task.WorkflowPausedReason
+	if pausedReason != "" {
+		task.WorkflowPausedReason = ""
+		if _, err := tx.ExecContext(ctx, `UPDATE tasks SET workflow_paused_reason = '' WHERE id = ?`, task.ID); err != nil {
+			return "", err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM task_workflow_holders WHERE task_id = ? AND released = 1`, task.ID); err != nil {
+		return "", err
+	}
+	return pausedReason, nil
+}
+
+// recordOverrideResumeTx records the workflow.resumed event of an override
+// that cleared pausedReason; it does nothing for an unpaused task.
+func recordOverrideResumeTx(ctx context.Context, tx *sql.Tx, task Task, actor Actor, from, decision, pausedReason, now string) error {
+	if pausedReason == "" {
+		return nil
+	}
+	_, err := appendEventTx(ctx, tx, task, "workflow.resumed", actor, map[string]any{
+		"status": from, "decision": decision, "actor": actor.Principal, "reason": pausedReason,
+	}, now)
+	return err
 }
 
 // CancelWorkflowTask closes a workflow task as cancelled. Customer only.

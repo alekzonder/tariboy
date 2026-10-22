@@ -32,6 +32,20 @@ export function inCurrentVisit(view: WorkflowView, at: string): boolean {
   return !!open && Date.parse(at) >= Date.parse(open.entered_at)
 }
 
+/**
+ * The visits of the task's current workflow version. An upgrade restarts the
+ * task under a new digest; the visits before it stay as history only. A visit
+ * without a digest predates the record and counts as current.
+ */
+export function runVisits(view: WorkflowView): WorkflowVisit[] {
+  return view.visits.filter((visit) => !visit.workflow_digest || visit.workflow_digest === view.digest)
+}
+
+/** Whether the task's queue is bound to another workflow version than the task's. */
+export function canUpgrade(view: WorkflowView): boolean {
+  return !isClosed(view) && !!view.queue_digest && view.queue_digest !== view.digest
+}
+
 /** The position of the current status in manifest order, from 1. */
 export function stepOf(view: WorkflowView): { index: number; total: number } | null {
   const index = view.statuses.findIndex((status) => status.id === view.status)
@@ -55,7 +69,7 @@ export function stepMarks(view: WorkflowView): StepMark[] {
   const order = new Map(view.statuses.map((status, index) => [status.id, index]))
   const visited = new Set<string>()
   const returns = new Map<string, number>()
-  const visits = [...view.visits].sort((a, b) => a.sequence - b.sequence)
+  const visits = runVisits(view).sort((a, b) => a.sequence - b.sequence)
   visits.forEach((visit, i) => {
     visited.add(visit.status)
     const before = visits[i - 1]
@@ -176,7 +190,7 @@ export function returnTargets(view: WorkflowView): ReturnTarget[] {
     const declared = view.owner === "customer" && !paused
     out.push({ status: outcome.to, via: declared ? "advance" : "move", outcome: declared ? outcome.on : undefined, reason: "outcome" })
   }
-  const visits = [...view.visits].sort((a, b) => b.sequence - a.sequence)
+  const visits = runVisits(view).sort((a, b) => b.sequence - a.sequence)
   for (const visit of visits) {
     if (visit.status === view.status || !pools.has(visit.status) || seen.has(visit.status)) continue
     seen.add(visit.status)
@@ -193,7 +207,7 @@ export function returnTargets(view: WorkflowView): ReturnTarget[] {
  * which is where the work was done; otherwise the first declared one.
  */
 export function defaultReturnTarget(view: WorkflowView, targets: ReturnTarget[]): ReturnTarget | undefined {
-  const visits = [...view.visits].sort((a, b) => b.sequence - a.sequence)
+  const visits = runVisits(view).sort((a, b) => b.sequence - a.sequence)
   for (const visit of visits) {
     const target = targets.find((candidate) => candidate.status === visit.status && visit.status !== view.status)
     if (target) return target

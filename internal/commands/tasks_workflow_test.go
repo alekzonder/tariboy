@@ -73,6 +73,10 @@ func (s *workflowStub) MoveWorkflow(_ context.Context, a tasks.Actor, key, to, r
 	s.record(a, "workflow_move %s %s %q", key, to, reason)
 	return tasks.Task{Key: key, Status: tasks.StatusInProgress, WorkflowDigest: "d", WorkflowStatus: to}, s.err
 }
+func (s *workflowStub) UpgradeWorkflow(_ context.Context, a tasks.Actor, key, reason string) (tasks.Task, error) {
+	s.record(a, "workflow_upgrade %s %q", key, reason)
+	return tasks.Task{Key: key, Status: tasks.StatusInProgress, WorkflowDigest: "d2", WorkflowStatus: "develop"}, s.err
+}
 func (s *workflowStub) ResumeWorkflow(_ context.Context, a tasks.Actor, key, decision string) (tasks.Task, error) {
 	s.record(a, "workflow_resume %s %s", key, decision)
 	return tasks.Task{Key: key, Status: tasks.StatusInProgress, WorkflowDigest: "d", WorkflowStatus: "develop"}, s.err
@@ -178,6 +182,10 @@ func TestWorkflowRoutesCallTheServiceAsTheCustomer(t *testing.T) {
 		{"run log max_bytes", "GET", "/api/tasks/DEV-1/workflow/runs/4/log?max_bytes=100", nil, `run_log DEV-1 4 max=100`, `"truncated":true`},
 		{"workflow move", "POST", "/api/tasks/DEV-1/workflow/move", map[string]any{"to": "review", "reason": "unstick"},
 			`workflow_move DEV-1 review "unstick"`, `"key":"DEV-1"`},
+		{"workflow upgrade", "POST", "/api/tasks/DEV-1/workflow/upgrade", map[string]any{"reason": "new rules"},
+			`workflow_upgrade DEV-1 "new rules"`, `"workflow_digest":"d2"`},
+		{"workflow upgrade without reason", "POST", "/api/tasks/DEV-1/workflow/upgrade", nil,
+			`workflow_upgrade DEV-1 ""`, `"key":"DEV-1"`},
 		{"workflow resume", "POST", "/api/tasks/DEV-1/workflow/resume", map[string]any{"decision": "release"},
 			`workflow_resume DEV-1 release`, `"category":"in_progress"`},
 		{"cancel", "POST", "/api/tasks/DEV-1/cancel", nil, `cancel DEV-1`, `"category":"cancelled"`},
@@ -284,6 +292,7 @@ func TestWorkflowOpenAPIDescribesRoutesAndSchemas(t *testing.T) {
 		"/api/tasks/{key}/workflow":         "get",
 		"/api/tasks/{key}/workflow/move":    "post",
 		"/api/tasks/{key}/workflow/resume":  "post",
+		"/api/tasks/{key}/workflow/upgrade": "post",
 		"/api/tasks/{key}/workflow/runs":    "get",
 
 		"/api/tasks/{key}/workflow/runs/{id}":     "get",

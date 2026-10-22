@@ -501,11 +501,14 @@ second click on the step, clears the selection and lists every entry of the
 view's `declared_artifacts` in one list, those `requiredBy` names for the
 current status first), `WorkflowRuns`
 (`getTaskScriptRunLog`; `runTone` gives each row its tone), the visit list,
-and the header's labeled **Return to agent…**, **Move to status…**, and
-**Cancel task** buttons: `ReturnToAgent` picks its targets with
-`returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the move form
-uses `moveTaskWorkflow` (targets from the view's `statuses`), and cancel uses
-`cancelWorkflowTask`. Outcomes, the problem block, and the return form follow
+and the header's labeled **Return to agent…**, **Upgrade to NAME@VERSION…**,
+**Move to status…**, and **Cancel task** buttons: `ReturnToAgent` picks its
+targets with `returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the
+upgrade form appears when `canUpgrade` finds the view's `queue_digest` differs
+from its `digest` and sends `upgradeTaskWorkflow`, the move form uses
+`moveTaskWorkflow` (targets from the view's `statuses`), and cancel uses
+`cancelWorkflowTask`. `stepMarks`, `returnTargets`, and `defaultReturnTarget`
+read `runVisits`, the visits of the task's current workflow digest. Outcomes, the problem block, and the return form follow
 a transition request through `useFollowRequest` in `workflowShared.ts`
 (`getTransitionRequest` once a second until the request settles or
 `wait_seconds` passes). Destructive actions confirm through

@@ -145,6 +145,7 @@ type TaskControl interface {
 	GetScriptRun(context.Context, tasks.Actor, string, int64) (tasks.ScriptRun, error)
 	ScriptRunLog(context.Context, tasks.Actor, string, int64, int) (string, bool, error)
 	MoveWorkflow(context.Context, tasks.Actor, string, string, string) (tasks.Task, error)
+	UpgradeWorkflow(context.Context, tasks.Actor, string, string) (tasks.Task, error)
 	CancelWorkflowTask(context.Context, tasks.Actor, string) (tasks.Task, error)
 	RequeueTask(context.Context, tasks.Actor, string, tasks.RequeueInput) (tasks.Task, error)
 	ResumeWorkflow(context.Context, tasks.Actor, string, string) (tasks.Task, error)

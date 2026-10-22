@@ -341,6 +341,13 @@ type WorkflowMoveRequest struct {
 	Reason string `json:"reason" flag:"reason" required:"true" help:"Why the task is moved"`
 }
 
+// WorkflowUpgradeRequest restarts a workflow task at the version its queue is
+// bound to.
+type WorkflowUpgradeRequest struct {
+	Key    string `json:"key" pos:"0" label:"task key" required:"cli"`
+	Reason string `json:"reason" flag:"reason" help:"Why the task is upgraded"`
+}
+
 // ResumeRequest resolves the pause of a workflow task.
 type ResumeRequest struct {
 	Key      string `json:"key" pos:"0" label:"task key" required:"cli"`

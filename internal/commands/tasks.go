@@ -246,6 +246,12 @@ func TaskOperatorCommands() []registry.Command {
 				tasks.Decode(p, &in)
 				return control.MoveWorkflow(ctx, actor, in.Key, in.To, in.Reason)
 			}),
+		taskRoute("tasks.workflow.upgrade", "POST", "/api/tasks/{key}/workflow/upgrade", "Restart a workflow task at the version its queue is bound to",
+			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
+				var in tasks.WorkflowUpgradeRequest
+				tasks.Decode(p, &in)
+				return control.UpgradeWorkflow(ctx, actor, in.Key, in.Reason)
+			}),
 		taskRoute("tasks.workflow.resume", "POST", "/api/tasks/{key}/workflow/resume", "Resolve the pause of a workflow task",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				var in tasks.ResumeRequest

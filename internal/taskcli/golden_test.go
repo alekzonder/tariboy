@@ -51,6 +51,7 @@ func TestParseGoldenPayloads(t *testing.T) {
 		{[]string{"workflow", "runs", "DEV-1"}, "workflow_runs", `{"key":"DEV-1"}`, false},
 		{[]string{"workflow", "log", "DEV-1", "4", "--max-bytes", "100"}, "workflow_run_log", `{"id":4,"key":"DEV-1","max_bytes":100}`, false},
 		{[]string{"workflow", "move", "DEV-1", "--to", "develop", "--reason", "regression"}, "workflow_move", `{"key":"DEV-1","reason":"regression","to":"develop"}`, false},
+		{[]string{"workflow", "upgrade", "DEV-1", "--reason", "new rules"}, "workflow_upgrade", `{"key":"DEV-1","reason":"new rules"}`, false},
 		{[]string{"workflow", "resume", "DEV-1", "--decision", "release"}, "workflow_resume", `{"decision":"release","key":"DEV-1"}`, false},
 		{[]string{"workflow", "retry", "DEV-1"}, "workflow_retry", `{"key":"DEV-1"}`, false},
 		{[]string{"workflow", "retry", "DEV-1", "41"}, "workflow_retry", `{"id":41,"key":"DEV-1"}`, false},

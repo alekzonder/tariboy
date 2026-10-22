@@ -115,9 +115,14 @@ func statusView(manifest workflowimage.Manifest, status workflowfile.Status) Sta
 // WorkflowView is the read model of one workflow task: where it is, who owns
 // it, what it may do next, and its history.
 type WorkflowView struct {
-	Name             string             `json:"name"`
-	Version          string             `json:"version"`
-	Digest           string             `json:"digest"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Digest  string `json:"digest"`
+	// QueueVersion and QueueDigest name the workflow the task's queue is bound
+	// to now; empty for an unbound queue. A digest other than Digest means the
+	// task can be upgraded.
+	QueueVersion     string             `json:"queue_version,omitempty"`
+	QueueDigest      string             `json:"queue_digest,omitempty"`
 	Status           string             `json:"status"`
 	Category         string             `json:"category"`
 	WaitingOn        string             `json:"waiting_on,omitempty"`
@@ -198,6 +203,11 @@ func (s *WorkflowEngine) GetWorkflow(ctx context.Context, actor Actor, key strin
 			view.Outcomes = append(view.Outcomes, outcome)
 		}
 	}
+	if binding, bound, err := queueWorkflowTx(ctx, tx, task.Queue); err != nil {
+		return WorkflowView{}, err
+	} else if bound {
+		view.QueueVersion, view.QueueDigest = binding.Version, binding.Digest
+	}
 	if view.Visits, err = statusVisitsTx(ctx, tx, task.ID); err != nil {
 		return WorkflowView{}, err
 	}
@@ -222,9 +232,11 @@ func (s *WorkflowEngine) GetWorkflow(ctx context.Context, actor Actor, key strin
 // statusVisitsTx returns every visit of a task, oldest first.
 func statusVisitsTx(ctx context.Context, q queryer, taskID int64) ([]StatusVisit, error) {
 	rows, err := q.QueryContext(ctx, `
-		SELECT id, sequence, status_id, entered_at, entered_by, left_at, outcome, message,
-		       idle_iterations, rejected_requests, script_failures
-		FROM task_status_visits WHERE task_id = ? ORDER BY sequence`, taskID)
+		SELECT v.id, v.sequence, v.status_id, v.entered_at, v.entered_by, v.left_at, v.outcome, v.message,
+		       v.workflow_digest, COALESCE(wi.version, ''),
+		       v.idle_iterations, v.rejected_requests, v.script_failures
+		FROM task_status_visits v LEFT JOIN task_workflow_images wi ON wi.digest = v.workflow_digest
+		WHERE v.task_id = ? ORDER BY v.sequence`, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +245,7 @@ func statusVisitsTx(ctx context.Context, q queryer, taskID int64) ([]StatusVisit
 	for rows.Next() {
 		var v StatusVisit
 		if err := rows.Scan(&v.ID, &v.Sequence, &v.Status, &v.EnteredAt, &v.EnteredBy, &v.LeftAt, &v.Outcome, &v.Message,
-			&v.IdleIterations, &v.RejectedRequests, &v.ScriptFailures); err != nil {
+			&v.WorkflowDigest, &v.WorkflowVersion, &v.IdleIterations, &v.RejectedRequests, &v.ScriptFailures); err != nil {
 			return nil, err
 		}
 		visits = append(visits, v)
