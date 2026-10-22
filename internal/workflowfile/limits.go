@@ -9,6 +9,9 @@ const (
 	MaxWatchTimeout     = 30 * time.Minute
 	MinWatchEvery       = time.Second
 	MinSourceEvery      = 10 * time.Second
+	DefaultWatchSpacing = 5 * time.Second
+	MinWatchSpacing     = time.Second
+	MaxWatchSpacing     = 10 * time.Minute
 )
 
 const (
@@ -66,4 +69,14 @@ func (e *EffectiveLimits) apply(l *Limits) {
 			e.UnavailableGrace = d
 		}
 	}
+}
+
+// EffectiveWatchSpacing is the least time between the starts of two watch
+// runs of this workflow: watch_spacing, or DefaultWatchSpacing when it is
+// absent or does not parse. Validate reports a value that does not parse.
+func (f *File) EffectiveWatchSpacing() time.Duration {
+	if d, err := time.ParseDuration(f.WatchSpacing); err == nil && d > 0 {
+		return d
+	}
+	return DefaultWatchSpacing
 }

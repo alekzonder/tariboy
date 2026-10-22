@@ -27,3 +27,21 @@ func TestStatusLimits(t *testing.T) {
 		t.Fatalf("unknown status = %+v", got)
 	}
 }
+
+func TestWatchSpacing(t *testing.T) {
+	f := validFixture(t)
+	if got := f.EffectiveWatchSpacing(); got != 5*time.Second {
+		t.Fatalf("default = %s, want %s", got, DefaultWatchSpacing)
+	}
+	f.WatchSpacing = "10s"
+	if got := f.EffectiveWatchSpacing(); got != 10*time.Second {
+		t.Fatalf("override = %s, want 10s", got)
+	}
+	if errs := Validate(f); len(errs) != 0 {
+		t.Fatalf("errors = %+v", errs)
+	}
+	f.WatchSpacing = "abc"
+	if got := f.EffectiveWatchSpacing(); got != DefaultWatchSpacing {
+		t.Fatalf("unparsable = %s, want the default", got)
+	}
+}

@@ -127,6 +127,7 @@ type fakeJobs struct {
 	claimedEarly     bool                    // a run was claimed before recovery succeeded
 	activeWatches    int
 	maxWatches       int
+	claimedAt        map[int64]time.Time // when ClaimScriptRun accepted the run
 }
 
 func newFakeJobs(jobs ...tasks.RunJob) *fakeJobs {
@@ -135,7 +136,7 @@ func newFakeJobs(jobs ...tasks.RunJob) *fakeJobs {
 		completions: map[int64]tasks.RunCompletion{}, cancel: map[int64]bool{}, active: map[string]int{},
 		completed: make(chan int64, 64), started: make(chan int64, 64),
 		completeFail: map[int64]int{}, completeNotFound: map[int64]bool{}, completeBlock: map[int64]chan struct{}{},
-		attempts: map[int64]int{},
+		attempts: map[int64]int{}, claimedAt: map[int64]time.Time{},
 	}
 }
 
@@ -203,6 +204,7 @@ func (f *fakeJobs) ClaimScriptRun(_ context.Context, id int64, startedAt time.Ti
 		f.claimedEarly = true
 	}
 	f.claimed[id] = logPath
+	f.claimedAt[id] = time.Now()
 	return true, nil
 }
 
@@ -1047,6 +1049,71 @@ func TestSupervisorAsksForJobsOnlyWithAFreeSlot(t *testing.T) {
 	h.jobs.mu.Unlock()
 	if after != before {
 		t.Fatalf("PendingRunJobs called %d times while every slot was taken", after-before)
+	}
+}
+
+// spacedWatch is a watch job of the test workflow with a watch spacing.
+func spacedWatch(id int64, key, script string, spacing time.Duration) tasks.RunJob {
+	job := watchJob(id, key, script)
+	job.WatchSpacing = spacing
+	return job
+}
+
+func (f *fakeJobs) claimTime(id int64) (time.Time, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	at, ok := f.claimedAt[id]
+	return at, ok
+}
+
+func TestSupervisorSpacesTheWatchesOfOneWorkflow(t *testing.T) {
+	t.Parallel()
+	const spacing = 300 * time.Millisecond
+	h := newHarness(t, spacedWatch(1, "DEV-1", "scripts/quiet.sh", spacing),
+		spacedWatch(2, "DEV-2", "scripts/quiet.sh", spacing), spacedWatch(3, "DEV-3", "scripts/quiet.sh", spacing))
+	h.start()
+	for id := int64(1); id <= 3; id++ {
+		h.awaitCompletion(id, 10*time.Second)
+	}
+	var starts []time.Time
+	for id := int64(1); id <= 3; id++ {
+		at, _ := h.jobs.claimTime(id)
+		starts = append(starts, at)
+	}
+	slices.SortFunc(starts, func(a, b time.Time) int { return a.Compare(b) })
+	for i := 1; i < len(starts); i++ {
+		if gap := starts[i].Sub(starts[i-1]); gap < spacing {
+			t.Fatalf("watch %d started %s after the one before it, want at least %s", i+1, gap, spacing)
+		}
+	}
+}
+
+func TestSupervisorNeverOverlapsWatchesOfOneWorkflow(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, spacedWatch(1, "DEV-1", "scripts/sleep.sh", time.Millisecond),
+		spacedWatch(2, "DEV-2", "scripts/sleep.sh", time.Millisecond))
+	h.start()
+	h.awaitCompletion(1, 10*time.Second)
+	h.awaitCompletion(2, 10*time.Second)
+	h.jobs.mu.Lock()
+	defer h.jobs.mu.Unlock()
+	if h.jobs.maxWatches != 1 {
+		t.Fatalf("%d watch runs of one workflow at once, want 1", h.jobs.maxWatches)
+	}
+}
+
+func TestSupervisorWatchSpacingHoldsBackNoCheckAndNoOtherWorkflow(t *testing.T) {
+	t.Parallel()
+	other := spacedWatch(3, "DEV-3", "scripts/quiet.sh", time.Hour)
+	other.WorkflowName, other.WorkflowVersion, other.WorkflowDigest = "other", "1.0.0", "sha256:other"
+	h := newHarness(t, spacedWatch(1, "DEV-1", "scripts/quiet.sh", time.Hour),
+		spacedWatch(2, "DEV-2", "scripts/quiet.sh", time.Hour), other, checkJob(4, "DEV-4", "scripts/pass.sh"))
+	h.start()
+	h.awaitCompletion(1, 10*time.Second)
+	h.awaitCompletion(3, 10*time.Second)
+	h.awaitCompletion(4, 10*time.Second)
+	if _, ok := h.jobs.claimTime(2); ok {
+		t.Fatal("a second watch of the workflow started before its spacing passed")
 	}
 }
 

@@ -58,6 +58,7 @@ func Validate(f *File) []ValidationError {
 	v.header(f)
 	v.secretsAndEnv(f)
 	v.limits("limits", f.Limits)
+	v.watchSpacing(f)
 	artifacts := v.artifacts(f)
 	v.sources(f)
 	v.statuses(f, artifacts)
@@ -130,6 +131,16 @@ func (v *validator) limits(prefix string, l *Limits) {
 		if d, err := time.ParseDuration(l.UnavailableGrace); err != nil || d < 0 {
 			v.add("duration_invalid", prefix+".unavailable_grace", "unavailable_grace %q must be a non-negative duration", l.UnavailableGrace)
 		}
+	}
+}
+
+func (v *validator) watchSpacing(f *File) {
+	if f.WatchSpacing == "" {
+		return
+	}
+	if d, err := time.ParseDuration(f.WatchSpacing); err != nil || d < MinWatchSpacing || d > MaxWatchSpacing {
+		v.add("duration_invalid", "watch_spacing", "watch_spacing %q must be a duration from %s to %s",
+			f.WatchSpacing, MinWatchSpacing, MaxWatchSpacing)
 	}
 }
 

@@ -61,6 +61,9 @@ type RunJob struct {
 	Outcome         string // requested outcome; checks only
 	Timeout         time.Duration
 	Holder          string // agent name for run_as agent, else ""
+	// WatchSpacing is the least time between the starts of two watch runs of
+	// the workflow; watches only.
+	WatchSpacing time.Duration
 	// WorkflowEnv, QueueEnv, and QueueSecrets reach the process environment
 	// only; they are never marshalled. Only QueueSecrets is redacted.
 	WorkflowEnv  map[string]string `json:"-"`
@@ -203,6 +206,7 @@ func (s *RunService) runJob(ctx context.Context, run scriptRunRecord) (RunJob, e
 		if status.Watch != nil {
 			job.Timeout = scriptTimeout(status.Watch.Timeout, workflowfile.DefaultWatchTimeout)
 		}
+		job.WatchSpacing = manifest.Definition.EffectiveWatchSpacing()
 	}
 	if job.Snapshot, err = taskSnapshotJSON(ctx, s.db, task, manifest, run.visitID, job.Outcome, message); err != nil {
 		return RunJob{}, err
