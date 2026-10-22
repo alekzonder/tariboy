@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
@@ -37,7 +37,7 @@ function renderPanel(task = workflowTask) {
 it("renders the header, outcomes, artifacts, runs and visits of the view", async () => {
   renderPanel()
   expect(await screen.findByText("release@1.2.0")).toBeInTheDocument()
-  expect(api.getTaskWorkflow).toHaveBeenCalledWith("REL-1", target)
+  expect(api.getTaskWorkflow).toHaveBeenCalledWith("REL-1", target, expect.any(AbortSignal))
   const header = screen.getByText("release@1.2.0").parentElement!
   expect(header).toHaveTextContent("review")
   expect(header).toHaveTextContent("customer")

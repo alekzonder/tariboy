@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent, within } from "@/test/queryRender";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import TerminalsPage from "./TerminalsPage";
@@ -352,7 +352,7 @@ describe("TerminalsPage", () => {
     renderAt("/agents/local/a1/tasks?task=DEV-1");
     await waitFor(() => expect(screen.getByText("a2")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: "Open a2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open a2", hidden: true }));
 
     await waitFor(() =>
       expect(screen.getByTestId("location").textContent).toBe("/agents/local/a2/tasks"),

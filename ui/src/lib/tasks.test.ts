@@ -16,6 +16,7 @@ import {
   getTaskArtifactHistory,
   getTaskScriptRunLog,
   getTaskWorkflow,
+  getTask,
   getTransitionRequest,
   isActiveCategory,
   isWorkflowTask,
@@ -47,6 +48,12 @@ import {
 
 describe("task client", () => {
   beforeEach(() => apiOn.mockReset().mockResolvedValue({}))
+
+  it("forwards the query cancellation signal to the HTTP transport", async () => {
+    const signal = new AbortController().signal
+    await getTask("DEV-1", null, signal)
+    expect(apiOn).toHaveBeenCalledWith(null, "GET", "/api/tasks/DEV-1", undefined, signal)
+  })
 
   it("uses revisioned explicit pool mutations", async () => {
     await rebindAgentPool("DEV", "developers", ["dev-a", "dev-b"], 4, "pool-4")

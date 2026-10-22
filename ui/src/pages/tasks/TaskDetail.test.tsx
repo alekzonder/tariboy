@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react"
+import { cleanup, render, screen, waitFor, within } from "@/test/queryRender"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
 import type { Task, TaskComment, TaskDetail as Detail, TaskEvent, TaskWait } from "@/lib/tasks"
@@ -142,7 +142,7 @@ it("confirms a pause decision inside the open sheet without closing it", async (
   const { onTaskChanged, onClose } = renderDetail({ ...workflowTask, waiting_on: "pause" })
   await userEvent.click(await screen.findByRole("button", { name: "Continue" }))
   await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Continue" }))
-  await waitFor(() => expect(api.resumeTaskWorkflow).toHaveBeenCalledWith("REL-1", "continue", undefined))
+  await waitFor(() => expect(api.resumeTaskWorkflow).toHaveBeenCalledWith("REL-1", "continue", null))
   await waitFor(() => expect(onTaskChanged).toHaveBeenCalled())
   expect(onClose).not.toHaveBeenCalled()
   expect(screen.getByText("Release notes")).toBeInTheDocument()

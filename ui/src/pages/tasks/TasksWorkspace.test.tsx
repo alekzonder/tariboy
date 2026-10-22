@@ -1,7 +1,7 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { ApiError } from "@/lib/api"
+import { ApiError, setActiveDaemon } from "@/lib/api"
 import type { Task, TaskDetail, TaskNotification, TaskQueue } from "@/lib/tasks"
 import TasksWorkspace from "./TasksWorkspace"
 import { customerView } from "./workflowFixtures"
@@ -144,6 +144,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
   sessionStorage.clear()
+  setActiveDaemon(null)
   daemonContext.activeId = ""
   taskSocket.options = undefined
   api.listTaskQueues.mockResolvedValue({ queues: [queue], count: 1 })
@@ -350,7 +351,7 @@ describe("TasksWorkspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save task" }))
     expect(api.updateTask).toHaveBeenLastCalledWith(root.key, expect.objectContaining({
       title: "My title", priority: "P1", revision: 3,
-    }), undefined)
+    }), null)
   })
 
   it("opens the detail sheet at half width and restores its persisted resize", async () => {
@@ -366,7 +367,7 @@ describe("TasksWorkspace", () => {
     expect(workspace.style.getPropertyValue("--tasks-detail-width")).toBe("")
     expect(screen.queryByRole("separator", { name: "Resize task details" })).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole("button", { name: /Ship native tasks/ }))
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
 
     expect(screen.getByRole("separator", { name: "Resize task details" })).toHaveAttribute("aria-valuenow", "520")
     expect(screen.getByRole("dialog").style.getPropertyValue("--tasks-detail-width")).toBe("520px")
@@ -415,7 +416,7 @@ describe("TasksWorkspace", () => {
       toJSON: () => ({}),
     })
     fireEvent(window, new Event("resize"))
-    await userEvent.click(screen.getByRole("button", { name: /Ship native tasks/ }))
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     const handle = screen.getByRole("separator", { name: "Resize task details" })
 
     fireEvent.pointerDown(handle, { pointerId: 1, button: 0, isPrimary: true })
@@ -438,7 +439,7 @@ describe("TasksWorkspace", () => {
       toJSON: () => ({}),
     })
     fireEvent(window, new Event("resize"))
-    await userEvent.click(screen.getByRole("button", { name: /Ship native tasks/ }))
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     const handle = screen.getByRole("separator", { name: "Resize task details" })
 
     fireEvent.pointerDown(handle, { pointerId: 7, button: 0, isPrimary: true })
@@ -467,7 +468,7 @@ describe("TasksWorkspace", () => {
       toJSON: () => ({}),
     })
     fireEvent(window, new Event("resize"))
-    await userEvent.click(screen.getByRole("button", { name: /Ship native tasks/ }))
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     const handle = screen.getByRole("separator", { name: "Resize task details" })
     expect(handle).toHaveAttribute("aria-valuemax", "1020")
 
@@ -526,7 +527,7 @@ describe("TasksWorkspace", () => {
     expect(api.listTasks.mock.calls.filter(([, target]) => target === offline)).toHaveLength(0)
     const back = remote("http://127.0.0.1:41002")
     view.rerender(<TasksWorkspace target={back} />)
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(expect.anything(), back))
+    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(expect.anything(), back, expect.any(AbortSignal)))
 
     expect(api.listTasks.mock.calls.length).toBe(loads + 1)
     expect(screen.getByTestId(`task-row-${root.key}`)).toBeInTheDocument()
@@ -622,7 +623,7 @@ describe("TasksWorkspace", () => {
     fireEvent.change(within(developers).getByLabelText("Add agent to developers"), { target: { value: "dev-b" } })
     await userEvent.click(within(developers).getByRole("button", { name: "Add" }))
     await userEvent.click(within(developers).getByRole("button", { name: "Save pool developers" }))
-    expect(api.rebindAgentPool).toHaveBeenCalledWith("TEST", "developers", ["dev-a", "dev-b"], 2, expect.any(String), undefined)
+    expect(api.rebindAgentPool).toHaveBeenCalledWith("TEST", "developers", ["dev-a", "dev-b"], 2, expect.any(String), null)
   })
 
   it("retries a queue whose pools failed to load and refreshes revisions after a conflict", async () => {
@@ -651,7 +652,7 @@ describe("TasksWorkspace", () => {
     fireEvent.change(within(developers).getByLabelText("Add agent to developers"), { target: { value: "dev-b" } })
     await userEvent.click(within(developers).getByRole("button", { name: "Add" }))
     await userEvent.click(within(developers).getByRole("button", { name: "Save pool developers" }))
-    expect(api.rebindAgentPool).toHaveBeenLastCalledWith("TEST", "developers", ["dev-a", "dev-b"], 7, expect.any(String), undefined)
+    expect(api.rebindAgentPool).toHaveBeenLastCalledWith("TEST", "developers", ["dev-a", "dev-b"], 7, expect.any(String), null)
   })
 
   it("names a dependency by its title and status, and the parent only once", async () => {
@@ -689,7 +690,7 @@ describe("TasksWorkspace", () => {
     expect(await within(rootRow).findByRole("img", { name: "Unread question notification for TEST-1" })).toBeVisible()
     await userEvent.click(within(rootRow).getByRole("button", { name: /Ship native tasks/ }))
 
-    await waitFor(() => expect(api.markTaskNotificationRead).toHaveBeenCalledWith("notification-1", undefined))
+    await waitFor(() => expect(api.markTaskNotificationRead).toHaveBeenCalledWith("notification-1", null))
     expect(within(await screen.findByTestId("task-row-TEST-1")).queryByRole("img", { name: "Unread question notification for TEST-1" })).toBeNull()
   })
 
@@ -705,10 +706,10 @@ describe("TasksWorkspace", () => {
 
     const closedRow = await screen.findByTestId("task-row-TEST-9")
     expect(await within(closedRow).findByRole("img", { name: "Unread question notification for TEST-9" })).toBeVisible()
-    expect(api.getTask).toHaveBeenCalledWith("TEST-9", undefined)
-    expect(api.getTask).not.toHaveBeenCalledWith("TEST-1", undefined)
+    expect(api.getTask).toHaveBeenCalledWith("TEST-9", null, expect.any(AbortSignal))
+    expect(api.getTask).not.toHaveBeenCalledWith("TEST-1", null)
     await userEvent.click(within(closedRow).getByRole("button", { name: /Closed with a question/ }))
-    await waitFor(() => expect(api.markTaskNotificationRead).toHaveBeenCalledWith("closed-question", undefined))
+    await waitFor(() => expect(api.markTaskNotificationRead).toHaveBeenCalledWith("closed-question", null))
   })
 
   it("pulls in only the scoped agent's closed questions", async () => {
@@ -782,19 +783,16 @@ describe("TasksWorkspace", () => {
     await screen.findByText("Ship native tasks")
     expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ status_view: "active" }),
-      undefined,
-    )
+      null, expect.any(AbortSignal))
 
     await userEvent.click(within(screen.getByRole("radiogroup", { name: "Task status" })).getByRole("radio", { name: "Closed" }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ status_view: "closed" }),
-      undefined,
-    ))
+      null, expect.any(AbortSignal)))
     await userEvent.click(within(screen.getByRole("radiogroup", { name: "Task status" })).getByRole("radio", { name: "All" }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ status_view: "all" }),
-      undefined,
-    ))
+      null, expect.any(AbortSignal)))
 
     await act(async () => closedPage.resolve({ tasks: [], sequence: 11 }))
     expect(screen.getByText("Ship native tasks")).toBeInTheDocument()
@@ -807,8 +805,7 @@ describe("TasksWorkspace", () => {
     act(() => onHint({ sequence: 13, kind: "task.updated", task_key: root.key }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ status_view: "all" }),
-      undefined,
-    ))
+      null, expect.any(AbortSignal)))
   })
 
   it("waits for the accepted initial sequence and coalesces a replay burst into one refresh", async () => {
@@ -845,8 +842,7 @@ describe("TasksWorkspace", () => {
     expect(api.listTasks).toHaveBeenCalledTimes(2)
     expect(api.listTaskQueues).toHaveBeenCalledTimes(metadataCalls + 1)
     expect(api.listTaskPrincipals).toHaveBeenCalledTimes(principalCalls + 1)
-    // Metadata refreshes notifications once and the realtime cycle refreshes the inbox once.
-    expect(api.listTaskNotifications).toHaveBeenCalledTimes(notificationCalls + 2)
+    expect(api.listTaskNotifications).toHaveBeenCalledTimes(notificationCalls + 1)
   })
 
   it("runs one trailing refresh when a hint arrives during an active refresh", async () => {
@@ -869,7 +865,7 @@ describe("TasksWorkspace", () => {
     render(<TasksWorkspace />)
 
     expect(await screen.findByLabelText("P0 Critical")).toHaveTextContent("P0")
-    await userEvent.click(screen.getByRole("button", { name: /Ship native tasks/ }))
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     const priority = await screen.findByLabelText("Priority")
     expect(priority).toHaveValue("P0")
 
@@ -879,7 +875,7 @@ describe("TasksWorkspace", () => {
     expect(api.updateTask).toHaveBeenCalledWith(
       "TEST-1",
       expect.objectContaining({ priority: "P1", revision: 2 }),
-      undefined,
+      null,
     )
   })
 
@@ -999,8 +995,7 @@ describe("TasksWorkspace", () => {
 
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ assignee: "user:owner" }),
-      undefined,
-    ))
+      null, expect.any(AbortSignal)))
   })
 
   it("does not accept an in-flight unfiltered result while waiting for principals", async () => {
@@ -1019,8 +1014,7 @@ describe("TasksWorkspace", () => {
     await act(async () => people.resolve({ customer: "user:owner", agents: [], groups: [] }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ assignee: "user:owner" }),
-      undefined,
-    ))
+      null, expect.any(AbortSignal)))
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
   })
 
@@ -1039,8 +1033,7 @@ describe("TasksWorkspace", () => {
 
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ assignee: "user:owner" }),
-      undefined,
-    ))
+      null, expect.any(AbortSignal)))
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
   })
 
@@ -1058,8 +1051,7 @@ describe("TasksWorkspace", () => {
     await act(async () => newerPeople.resolve({ customer: "user:new", agents: [], groups: [] }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ assignee: "user:new" }),
-      undefined,
-    ))
+      null, expect.any(AbortSignal)))
 
     await act(async () => olderPeople.reject(new Error("obsolete metadata failure")))
 
@@ -1081,8 +1073,7 @@ describe("TasksWorkspace", () => {
     await act(async () => newerPeople.resolve({ customer: "user:new", agents: [], groups: [] }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ waiting_for: "user:new" }),
-      undefined,
-    ))
+      null, expect.any(AbortSignal)))
     const callsAfterLatest = api.listTasks.mock.calls.length
 
     await act(async () => olderPeople.resolve({ customer: "user:old", agents: [], groups: [] }))
@@ -1109,6 +1100,7 @@ describe("TasksWorkspace", () => {
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
     api.listTasks.mockReturnValueOnce(nextTree.promise)
 
+    setActiveDaemon({ id: "second-host", label: "Second", baseURL: "https://second.test", token: "" })
     daemonContext.activeId = "second-host"
     rerender(<TasksWorkspace />)
 
@@ -1131,8 +1123,7 @@ describe("TasksWorkspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ waiting_for: "user:first" }),
-      firstTarget,
-    ))
+      firstTarget, expect.any(AbortSignal)))
 
     rerender(<TasksWorkspace target={secondTarget} />)
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
@@ -1143,8 +1134,7 @@ describe("TasksWorkspace", () => {
 
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ waiting_for: "user:second" }),
-      secondTarget,
-    ))
+      secondTarget, expect.any(AbortSignal)))
   })
 
   it("ignores principal metadata that resolves after switching targets", async () => {
@@ -1162,8 +1152,7 @@ describe("TasksWorkspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "My tasks" }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ assignee: "user:second" }),
-      secondTarget,
-    ))
+      secondTarget, expect.any(AbortSignal)))
     const callsAfterSecondCustomer = api.listTasks.mock.calls.length
 
     await act(async () => firstPeople.resolve({ customer: "user:first", agents: [], groups: [] }))
@@ -1198,7 +1187,7 @@ describe("TasksWorkspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Expand TEST-1" }))
     expect(screen.getByText("Desktop tree")).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole("button", { name: /Ship native tasks/ }))
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     expect(await screen.findByRole("heading", { name: "TEST-1" })).toBeInTheDocument()
     expect(screen.getByRole("textbox", { name: "Description" })).toHaveTextContent("Central work system")
     expect(screen.getByText("Starting now")).toBeInTheDocument()
@@ -1213,7 +1202,7 @@ describe("TasksWorkspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Create task" }))
     expect(api.createTask).toHaveBeenCalledWith(
       expect.objectContaining({ queue: "TEST", title: "New root", parent_key: "" }),
-      undefined,
+      null,
     )
 
     await userEvent.click(await screen.findByRole("button", { name: "Close task detail" }))
@@ -1222,7 +1211,7 @@ describe("TasksWorkspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Create task" }))
     expect(api.createTask).toHaveBeenLastCalledWith(
       expect.objectContaining({ parent_key: "TEST-1", title: "Child work" }),
-      undefined,
+      null,
     )
   })
 
@@ -1237,7 +1226,7 @@ describe("TasksWorkspace", () => {
     fireEvent.change(screen.getByLabelText("Task queue"), { target: { value: "TEST" } })
     fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "New root" } })
     await userEvent.click(screen.getByRole("button", { name: "Create task" }))
-    expect(api.createTask).toHaveBeenCalledWith(expect.objectContaining({ queue: "TEST" }), undefined)
+    expect(api.createTask).toHaveBeenCalledWith(expect.objectContaining({ queue: "TEST" }), null)
     await waitFor(() => expect(JSON.parse(localStorage.getItem("tasks:new-task-queue:v1") ?? "{}"))
       .toEqual({ local: "TEST", remote: "GONE" }))
     first.unmount()
@@ -1297,7 +1286,7 @@ describe("TasksWorkspace", () => {
     expect(api.updateTask).toHaveBeenCalledWith(
       "TEST-1",
       expect.objectContaining({ assignee: "freelance-reviewer", revision: 2 }),
-      undefined,
+      null,
     )
 
     await userEvent.selectOptions(screen.getByLabelText("Ask"), "user:owner")
@@ -1307,7 +1296,7 @@ describe("TasksWorkspace", () => {
     expect(api.addTaskComment).toHaveBeenCalledWith(
       "TEST-1",
       "@user:owner\n\nWhich release?",
-      undefined,
+      null,
       expect.any(String),
     )
   })
@@ -1324,7 +1313,7 @@ describe("TasksWorkspace", () => {
     expect(api.addTaskComment).toHaveBeenCalledWith(
       "TEST-1",
       "@agent:worker\n\nCan you verify?",
-      undefined,
+      null,
       expect.any(String),
     )
   })
@@ -1346,7 +1335,7 @@ describe("TasksWorkspace", () => {
     await waitFor(() => expect(api.addTaskComment).toHaveBeenCalledWith(
       "TEST-1",
       "@user:owner\n\nOk",
-      undefined,
+      null,
       expect.any(String),
     ))
     expect(screen.getByLabelText("Ask")).toHaveValue("user:owner")
@@ -1388,7 +1377,7 @@ describe("TasksWorkspace", () => {
     await waitFor(() => expect(api.addTaskComment).toHaveBeenCalledWith(
       "TEST-1",
       "@user:owner\n\nCan you verify?",
-      undefined,
+      null,
       expect.any(String),
     ))
     expect(ask).toHaveValue("freelance-reviewer")
@@ -1411,12 +1400,12 @@ describe("TasksWorkspace", () => {
     expect(screen.getByRole("button", { name: "Add relation" })).toBeEnabled()
     await userEvent.click(screen.getByRole("button", { name: "Add relation" }))
     await waitFor(() => expect(api.addTaskRelation).toHaveBeenCalledWith(
-      "TEST-1", "TEST-2", "related", 2, undefined, expect.any(String),
+      "TEST-1", "TEST-2", "related", 2, null, expect.any(String),
     ))
 
     await userEvent.click(screen.getByRole("button", { name: "Remove relation to TEST-2" }))
     expect(api.deleteTaskRelation).toHaveBeenCalledWith(
-      "TEST-1", 9, 2, undefined, expect.any(String),
+      "TEST-1", 9, 2, null, expect.any(String),
     )
   })
 
@@ -1427,8 +1416,7 @@ describe("TasksWorkspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ waiting_for: "user:owner" }),
-      undefined,
-    ))
+      null, expect.any(AbortSignal)))
   })
 
   it("creates and updates queues", async () => {
@@ -1443,7 +1431,7 @@ describe("TasksWorkspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Add queue" }))
     expect(api.createTaskQueue).toHaveBeenCalledWith(
       expect.objectContaining({ prefix: "OPS", name: "Operations" }),
-      undefined,
+      null,
     )
 
     await userEvent.click(screen.getByRole("button", { name: /^Queue TEST/ }))
@@ -1452,7 +1440,7 @@ describe("TasksWorkspace", () => {
     expect(api.updateTaskQueue).toHaveBeenCalledWith(
       "TEST",
       expect.objectContaining({ name: "Tests updated", revision: 1 }),
-      undefined,
+      null,
     )
 
   })
@@ -1467,15 +1455,13 @@ describe("TasksWorkspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "My tasks" }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ assignee: "user:owner" }),
-      undefined,
-    ))
+      null, expect.any(AbortSignal)))
     expect(screen.getByRole("button", { name: "My tasks" })).toHaveAttribute("aria-pressed", "true")
 
     await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ waiting_for: "user:owner" }),
-      undefined,
-    ))
+      null, expect.any(AbortSignal)))
     expect(api.listTasks.mock.calls.at(-1)?.[0].assignee).toBeUndefined()
 
     await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))

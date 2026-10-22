@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
@@ -61,6 +61,70 @@ const task: Task = {
 }
 const detail: Detail = { task, comments: [], waiting_for: [], relations: [] }
 
+it("does not show one server's detail while the same key loads on another", async () => {
+  const first = { id: "first", label: "First", baseURL: "https://first.test", token: "" }
+  const second = { ...first, id: "second", baseURL: "https://second.test" }
+  const mounted = render(<TaskDrawer target={first} taskKey="TEST-1" onClose={vi.fn()} />)
+  await screen.findByText("Ship the drawer")
+  api.getTask.mockReturnValue(new Promise(() => {}))
+  mounted.rerender(<TaskDrawer target={second} taskKey="TEST-1" onClose={vi.fn()} />)
+  expect(screen.queryByText("Ship the drawer")).not.toBeInTheDocument()
+  expect(screen.getByText("Loading task…")).toBeInTheDocument()
+})
+
+it("shares an in-flight detail read between two consumers on the same server", async () => {
+  let finish!: (value: Detail) => void
+  api.getTask.mockReturnValue(new Promise<Detail>((resolve) => { finish = resolve }))
+  render(<><TaskDrawer taskKey="TEST-1" onClose={vi.fn()} /><TaskDrawer taskKey="TEST-1" onClose={vi.fn()} /></>)
+  await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(1))
+  await act(async () => finish(detail))
+  expect(await screen.findAllByText("Ship the drawer")).toHaveLength(2)
+})
+
+it("shows an initial network failure in a closable detail panel", async () => {
+  api.getTask.mockRejectedValue(new ApiError(0, "network_error", "Server unavailable"))
+  const onClose = vi.fn()
+  render(<TaskDrawer taskKey="TEST-1" onClose={onClose} />)
+  expect(await screen.findByRole("alert")).toHaveTextContent("Server unavailable")
+  fireEvent.click(screen.getByRole("button", { name: "Close task detail" }))
+  expect(onClose).toHaveBeenCalledOnce()
+})
+
+it("aborts a detail read when its last consumer closes", async () => {
+  api.getTask.mockReturnValue(new Promise(() => {}))
+  const mounted = render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />)
+  await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(1))
+  const signal = api.getTask.mock.calls[0][2] as AbortSignal | undefined
+  mounted.unmount()
+  expect(signal?.aborted).toBe(true)
+})
+
+it("does not read an unresolved host or fall back to the local server", async () => {
+  render(<TaskDrawer target={{ id: "offline", label: "Offline", baseURL: "", token: "" }} taskKey="TEST-1" onClose={vi.fn()} />)
+  await act(async () => {})
+  expect(api.getTask).not.toHaveBeenCalled()
+  expect(api.listTasks).not.toHaveBeenCalled()
+  expect(screen.getByText("Loading task…")).toBeInTheDocument()
+})
+
+it("clears the old account's detail before reading with changed credentials", async () => {
+  const host = { id: "remote", label: "Remote", baseURL: "https://remote.test", token: "old" }
+  const mounted = render(<TaskDrawer target={host} taskKey="TEST-1" onClose={vi.fn()} />)
+  await screen.findByText("Ship the drawer")
+  api.getTask.mockReturnValue(new Promise(() => {}))
+  mounted.rerender(<TaskDrawer target={{ ...host, token: "new" }} taskKey="TEST-1" onClose={vi.fn()} />)
+  expect(screen.queryByText("Ship the drawer")).not.toBeInTheDocument()
+})
+
+it("removes a loaded detail when access is denied during refresh", async () => {
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />)
+  await screen.findByText("Ship the drawer")
+  api.getTask.mockRejectedValue(new ApiError(403, "forbidden", "Access denied"))
+  await act(async () => { taskSocket.options?.onHint?.({ sequence: 420 }) })
+  await waitFor(() => expect(screen.queryByText("Ship the drawer")).not.toBeInTheDocument())
+  expect(await screen.findByText("Access denied")).toBeInTheDocument()
+})
+
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
@@ -77,7 +141,7 @@ it("loads the task it was given and closes without touching the tasks list", asy
   const onClose = vi.fn()
   render(<TaskDrawer taskKey="TEST-1" onClose={onClose} />)
   expect(await screen.findByText("Ship the drawer")).toBeInTheDocument()
-  expect(api.getTask).toHaveBeenCalledWith("TEST-1", undefined)
+  expect(api.getTask).toHaveBeenCalledWith("TEST-1", null, expect.any(AbortSignal))
   await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
   expect(onClose).toHaveBeenCalled()
 })
@@ -90,7 +154,7 @@ it("saves task edits from the drawer itself", async () => {
   await waitFor(() => expect(api.updateTask).toHaveBeenCalledWith(
     "TEST-1",
     expect.objectContaining({ revision: 2, status: "in_progress" }),
-    undefined,
+    null,
   ))
 })
 
@@ -102,7 +166,7 @@ it("posts a comment and reloads the task", async () => {
   await userEvent.type(screen.getByLabelText("Comment"), "on it")
   await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
   await waitFor(() => expect(api.addTaskComment).toHaveBeenCalledWith(
-    "TEST-1", expect.stringContaining("on it"), undefined, expect.any(String),
+    "TEST-1", expect.stringContaining("on it"), null, expect.any(String),
   ))
   await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(2))
 })

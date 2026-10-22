@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react"
+import { act, render, screen, waitFor, within } from "@/test/queryRender"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
 import type { HostAgents } from "@/lib/aggregate"
@@ -139,7 +139,7 @@ it("shows an empty state that clears the filters", async () => {
 it("opens a task on its own server", async () => {
   render(<AllTasksWorkspace hosts={hosts} />)
   await userEvent.click(await screen.findByText("Title IMPROVE-c3"))
-  await waitFor(() => expect(api.getTask).toHaveBeenCalledWith("IMPROVE-c3", expect.objectContaining({ id: "h2" })))
+  await waitFor(() => expect(api.getTask).toHaveBeenCalledWith("IMPROVE-c3", expect.objectContaining({ id: "h2" }), expect.any(AbortSignal)))
   expect(await screen.findByRole("button", { name: "Save task" })).toBeInTheDocument()
 })
 
@@ -178,7 +178,7 @@ it("moves a task to the server of an agent picked from another server and assign
   // Nothing else was edited, so the source is not written before the move.
   expect(api.updateTask).toHaveBeenCalledTimes(2)
   // The sheet follows the task.
-  await waitFor(() => expect(api.getTask).toHaveBeenLastCalledWith("TASK-b2", expect.objectContaining({ id: "h2" })))
+  await waitFor(() => expect(api.getTask).toHaveBeenLastCalledWith("TASK-b2", expect.objectContaining({ id: "h2" }), expect.any(AbortSignal)))
 })
 
 it("follows the task to its new server even when a step after the import fails", async () => {
@@ -193,7 +193,7 @@ it("follows the task to its new server even when a step after the import fails",
   await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
     "TASK-b2 moved to hetzner-02, but the move did not finish: tunnel dropped",
   ))
-  await waitFor(() => expect(api.getTask).toHaveBeenLastCalledWith("TASK-b2", expect.objectContaining({ id: "h2" })))
+  await waitFor(() => expect(api.getTask).toHaveBeenLastCalledWith("TASK-b2", expect.objectContaining({ id: "h2" }), expect.any(AbortSignal)))
 })
 
 it("refuses an assignee whose server dropped out of the list before Save", async () => {

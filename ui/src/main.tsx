@@ -1,3 +1,5 @@
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, HashRouter } from "react-router-dom";
@@ -54,11 +56,13 @@ async function boot() {
   configureDesktopInputAssistance(root);
   createRoot(root).render(
     <StrictMode>
+      <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="system">
         <Router>
           <App />
         </Router>
       </ThemeProvider>
+      </QueryClientProvider>
     </StrictMode>,
   );
 }
