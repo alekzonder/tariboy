@@ -29,6 +29,8 @@ type iterationWatcher struct {
 	// probe, when set, also checks shim liveness: a shim that misses
 	// probe.maxMisses consecutive probes without a result is stale.
 	probe *livenessProbe
+	// shimExited, when set, closes once the launched shim process is reaped.
+	shimExited <-chan struct{}
 }
 
 type livenessProbe struct {
@@ -42,9 +44,12 @@ type watchResult struct {
 	softHit bool
 	// stale reports that the shim stopped answering without a result.
 	stale bool
+	// shimGone reports that the shim process exited without a result.
+	shimGone bool
 }
 
-// watch returns when the result appears or the probe declares the shim stale.
+// watch returns when the result appears, the probe declares the shim stale,
+// or the shim process exits without a result.
 // When ctx ends first it returns ctx.Err(); the iteration may still run.
 func (w *iterationWatcher) watch(ctx context.Context) (watchResult, error) {
 	tk := time.NewTicker(w.poll)
@@ -65,6 +70,15 @@ func (w *iterationWatcher) watch(ctx context.Context) (watchResult, error) {
 		select {
 		case <-ctx.Done():
 			return out, ctx.Err()
+		case <-w.shimExited:
+			// The shim writes result.json before it exits, so a result that is
+			// still missing after the reap will never appear.
+			if res, ok := readResult(w.resultPath); ok {
+				out.result = res
+				return out, nil
+			}
+			out.shimGone = true
+			return out, nil
 		case <-tk.C:
 		}
 		if res, ok := readResult(w.resultPath); ok {

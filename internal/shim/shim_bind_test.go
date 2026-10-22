@@ -2,6 +2,7 @@ package shim
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -85,5 +86,20 @@ func TestRunProcessBusySocketFailsBeforeHarnessStart(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, "result.json")); !os.IsNotExist(statErr) {
 		t.Fatalf("result.json written after bind failure: %v", statErr)
+	}
+}
+
+// The socket answers before the harness exists. A Kill then must report that
+// nothing was stopped, so callers retry instead of trusting a no-op success.
+func TestProcShimKillBeforeHarnessStartReportsNotStarted(t *testing.T) {
+	if err := (&procShim{}).Kill(); !errors.Is(err, errHarnessNotStarted) {
+		t.Fatalf("Kill() = %v, want errHarnessNotStarted", err)
+	}
+}
+
+func TestTmuxShimKillBeforeHarnessWindowReportsNotStarted(t *testing.T) {
+	failOnTmux(t)
+	if err := (&tmuxShim{session: "managed"}).Kill(); !errors.Is(err, errHarnessNotStarted) {
+		t.Fatalf("Kill() = %v, want errHarnessNotStarted", err)
 	}
 }

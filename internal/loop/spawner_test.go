@@ -131,7 +131,7 @@ func TestExecSpawnerTerminateAfterReapReportsDone(t *testing.T) {
 		return zombieChildren(t) <= baseline
 	})
 
-	if err := terminate(); err != os.ErrProcessDone {
+	if err := terminate.Terminate(); err != os.ErrProcessDone {
 		t.Fatalf("terminate after reap = %v, want %v", err, os.ErrProcessDone)
 	}
 }
