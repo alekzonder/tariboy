@@ -184,11 +184,11 @@ func (f *fakeCaller) Call(method, route string, body any) (json.RawMessage, erro
 		row := subRow{channel: channel, key: key}
 		for _, existing := range f.subs[name] {
 			if existing == row {
-				return mustJSON(map[string]any{"channel": channel, "id": "sub-existing"}), nil
+				return mustJSON(map[string]any{"channel": channel, "id": "sub-existing", "changed": false}), nil
 			}
 		}
 		f.subs[name] = append(f.subs[name], row)
-		return mustJSON(map[string]any{"channel": channel, "id": fmt.Sprintf("sub-%d", len(f.subs[name]))}), nil
+		return mustJSON(map[string]any{"channel": channel, "id": fmt.Sprintf("sub-%d", len(f.subs[name])), "changed": true}), nil
 	case method == "POST" && len(route) > 5 && route[len(route)-4:] == "/cwd":
 		name := route[len("/api/agents/") : len(route)-len("/cwd")]
 		m := body.(map[string]any)

@@ -28,7 +28,7 @@ func TestUpCreateFailureDoesNotBlockOtherAgents(t *testing.T) {
 	r := NewRunner(caller, "", &out)
 	r.skipBuild = true
 	err := r.Up(f)
-	if err == nil || !strings.Contains(err.Error(), "create agent a") {
+	if err == nil || !strings.Contains(actionErrs(err), "create agent a") {
 		t.Fatalf("Up = %v; want the create failure of a", err)
 	}
 	if fc.agents["b"] == nil || countCalls(fc, "POST /api/agents/b/start") != 1 {
@@ -46,6 +46,14 @@ func TestUpCreateFailureDoesNotBlockOtherAgents(t *testing.T) {
 			t.Errorf("report lacks %q:\n%s", want, got)
 		}
 	}
+}
+
+// actionErrs is the text of the action errors an Up summary error wraps.
+func actionErrs(err error) string {
+	if u := errors.Unwrap(err); u != nil {
+		return u.Error()
+	}
+	return err.Error()
 }
 
 // failCreateCaller fails POST /api/agents for one agent name.
@@ -75,7 +83,7 @@ func TestUpIndependentAgentActionsContinueAfterFailure(t *testing.T) {
 	r := NewRunner(fc, dir, io.Discard)
 	r.skipBuild = true
 	err := r.Up(File{Version: 1, Agents: map[string]AgentSpec{"a": {Image: "img:latest", Timeout: "1m"}}})
-	if err == nil || !strings.Contains(err.Error(), "set cwd a") {
+	if err == nil || !strings.Contains(actionErrs(err), "set cwd a") {
 		t.Fatalf("Up = %v", err)
 	}
 	if countCalls(fc, "POST /api/agents/a/loop/timeout") != 1 {
@@ -203,8 +211,8 @@ func TestComposeUpExitsNonZeroAndPrintsReportOnFailure(t *testing.T) {
 	if !strings.Contains(out.String(), "failed   agent:a") || !strings.Contains(out.String(), "changed  agent:b") {
 		t.Fatalf("report:\n%s", out.String())
 	}
-	if !strings.Contains(errOut.String(), "create agent a") {
-		t.Fatalf("stderr = %s", errOut.String())
+	if !strings.Contains(out.String(), "create agent a") {
+		t.Fatalf("report:\n%s", out.String())
 	}
 }
 
@@ -225,5 +233,47 @@ func TestComposeImportWithoutYesReadsAnswerFromStdin(t *testing.T) {
 		if got := countCalls(caller.fakeCaller, "POST /api/team-imports/import-1/apply"); got != tc.applied {
 			t.Fatalf("answer %q: apply calls = %d, want %d", tc.answer, got, tc.applied)
 		}
+	}
+}
+
+// A running agent with a harness change and other drift is restarted once,
+// after every other change, so the restarted iteration uses all of them.
+func TestUpHarnessRestartRunsAfterOtherAgentChanges(t *testing.T) {
+	fc := newFake()
+	fc.agents["a"] = map[string]any{"name": "a", "state": "running", "enabled": true, "image": "img:old", "harness": "codex", "cwd": "/old", "timeout_s": 1}
+	dir := t.TempDir()
+	r := NewRunner(fc, dir, io.Discard)
+	upNoBuild(t, r, File{Version: 1, Agents: map[string]AgentSpec{"a": {Image: "img:new", Harness: &HarnessSpec{Type: "claude"}, Timeout: "1m"}}})
+	stop, start := callIndex(fc.calls, "POST /api/agents/a/stop"), callIndex(fc.calls, "POST /api/agents/a/start")
+	if stop < 0 || start < stop || countCalls(fc, "POST /api/agents/a/stop") != 1 || countCalls(fc, "POST /api/agents/a/start") != 1 {
+		t.Fatalf("want one stop then one start: %v", fc.calls)
+	}
+	for _, c := range []string{"POST /api/agents/a/harness", "POST /api/agents/a/image", "POST /api/agents/a/cwd", "POST /api/agents/a/loop/timeout"} {
+		if i := callIndex(fc.calls, c); i < 0 || i > stop {
+			t.Fatalf("%s not applied before the restart: %v", c, fc.calls)
+		}
+	}
+}
+
+// A failed up prints the report with each failure and returns a short summary,
+// so the CLI does not print the failures a second time.
+func TestComposeUpPrintsEachFailureOnce(t *testing.T) {
+	t.Setenv("TARIBOY_NO_AUTOSTART", "1")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tariboy-compose.yaml")
+	if err := os.WriteFile(path, []byte("version: 1\nagents:\n  a: {image: img:latest}\n  b: {image: img:latest}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	caller := &failCreateCaller{fakeCaller: newFake(), failName: "a"}
+	var out, errOut strings.Builder
+	if code := Run(context.Background(), caller, Options{Verb: "up", File: path}, &out, &errOut); code != 1 {
+		t.Fatalf("code = %d; want 1 (stderr %s)", code, errOut.String())
+	}
+	all := out.String() + errOut.String()
+	if n := strings.Count(all, "create agent a: boom"); n != 1 {
+		t.Fatalf("failure printed %d times:\nstdout:\n%s\nstderr:\n%s", n, out.String(), errOut.String())
+	}
+	if got := strings.TrimSpace(errOut.String()); got != "compose up: 1 resource failed" {
+		t.Fatalf("stderr = %q", got)
 	}
 }

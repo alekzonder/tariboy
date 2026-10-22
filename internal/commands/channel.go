@@ -118,11 +118,26 @@ func agentSubscribe() registry.Command {
 				return nil, api.UserError{Code: "bad_params", Msg: err.Error()}
 			}
 			typeFilter := splitCommaList(p.String("type"))
+			// The bus is idempotent and returns the existing row for a repeated
+			// subscribe. Read the active rows first so the response can say
+			// whether this call added or resumed one; compose reports an
+			// unchanged subscription as converged.
+			before, err := b.ListSubscriptions(name)
+			if err != nil {
+				return nil, err
+			}
 			sub, err := b.SubscribeParams(name, channel, matcher, typeFilter, params)
 			if err != nil {
 				return nil, err
 			}
-			res := map[string]any{"name": name, "channel": channel, "kind": bus.ChannelKind(channel), "id": sub.ID}
+			changed := true
+			for _, s := range before {
+				if s.ID == sub.ID {
+					changed = false
+					break
+				}
+			}
+			res := map[string]any{"name": name, "channel": channel, "kind": bus.ChannelKind(channel), "id": sub.ID, "changed": changed}
 			if sub.Watch != "" {
 				res["watch"] = sub.Watch
 			}

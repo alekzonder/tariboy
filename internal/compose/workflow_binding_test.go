@@ -220,7 +220,7 @@ func TestUpStoreWorkflowTagMissingAfterBuildIsAnError(t *testing.T) {
 	r := NewRunner(fc, "", io.Discard)
 	r.skipBuild = true
 	err := r.Up(workflowComposeFile("official/development:9.9.9"))
-	if err == nil || !strings.Contains(err.Error(), "development:9.9.9") {
+	if err == nil || !strings.Contains(actionErrs(err), "development:9.9.9") {
 		t.Fatalf("Up = %v; want an error naming the ref", err)
 	}
 	if callIndex(fc.calls, "PUT /api/task-queues/DEV/workflow") >= 0 {
@@ -268,7 +268,7 @@ func TestUpMissingPublishedRefNamesTheRefAndTheFix(t *testing.T) {
 	r := NewRunner(fc, "", io.Discard)
 	r.skipBuild = true
 	err := r.Up(workflowComposeFile("development:0.1.0"))
-	if err == nil || !strings.Contains(err.Error(), "development:0.1.0") || !strings.Contains(err.Error(), "Store prefix") {
+	if err == nil || !strings.Contains(actionErrs(err), "development:0.1.0") || !strings.Contains(actionErrs(err), "Store prefix") {
 		t.Fatalf("Up = %v", err)
 	}
 }
@@ -342,8 +342,8 @@ func TestUpSecretMissingNamesSecretsAndTheCommandWithoutAValue(t *testing.T) {
 		t.Fatalf("Up = %v; want the daemon error intact", err)
 	}
 	for _, want := range []string{"GH_TOKEN", "NPM_TOKEN", "ttasks queue secret set DEV GH_TOKEN", "standard input"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q lacks %q", err.Error(), want)
+		if !strings.Contains(actionErrs(err), want) {
+			t.Errorf("error %q lacks %q", actionErrs(err), want)
 		}
 	}
 }

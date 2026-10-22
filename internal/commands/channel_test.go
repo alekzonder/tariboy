@@ -206,6 +206,40 @@ func TestAgentSubscribeParams(t *testing.T) {
 	}
 }
 
+// TestAgentSubscribeReportsChanged proves the operator subscribe response says
+// whether the call added (or resumed) a subscription, so compose can report an
+// already-converged subscription as unchanged.
+func TestAgentSubscribeReportsChanged(t *testing.T) {
+	t.Parallel()
+	c, b := ctxWithBus(t)
+	agent.NewStore(c.Store).Create(agent.Agent{Name: "worker", ImageRef: "i:latest"})
+	for _, params := range []registry.Params{
+		{"name": "worker", "channel": "chat:messenger:x"},
+		{"name": "worker", "channel": "plugin:issue-provider", "params": map[string]any{"query": "Q1"}},
+	} {
+		for i, want := range []bool{true, false} {
+			res, err := h(t, "agent.subscribe")(c, params)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := res.(map[string]any)["changed"]; got != want {
+				t.Fatalf("%v call %d: changed = %v, want %v", params["channel"], i, got, want)
+			}
+		}
+	}
+	// A revoked subscription that a subscribe resumes is a change.
+	if n, err := b.RevokeChannel("worker", "chat:messenger:x"); err != nil || n != 1 {
+		t.Fatalf("revoke = %d, %v", n, err)
+	}
+	res, err := h(t, "agent.subscribe")(c, registry.Params{"name": "worker", "channel": "chat:messenger:x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.(map[string]any)["changed"]; got != true {
+		t.Fatalf("resumed subscription: changed = %v, want true", got)
+	}
+}
+
 // isCode reports whether err is an api.UserError carrying the given code.
 // isCode reports whether err is a UserError or a registry.ParamError with code.
 func isCode(err error, code string) bool {
