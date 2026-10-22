@@ -21,7 +21,8 @@ tariboy has three command surfaces:
    `scripts/*.sh` launcher, run *inside* an agent over `$TARIBOY_TOOLS_SOCKET`.
 3. **Native Tasks** — `tariboy-tasks`, installed as `ttasks`, runs shared task
    verbs for an operator or an identity-bound agent. `ttasks --version` reports
-   its build and `ttasks --json …` requests JSON output.
+   its build and `ttasks --json …` requests JSON output. `tariboy tasks …` runs
+   the same client, always in operator mode; the table below does not list it.
 
 ## Operator commands
 
@@ -212,8 +213,6 @@ tariboy has three command surfaces:
 | `tariboy store refresh NAME` | Refresh a Store |
 | `tariboy store remove NAME` | Remove a Store registration |
 | `tariboy store show NAME` | Show a Store and its images |
-| `tariboy tasks activity` | Summarize work on tasks in a time window |
-| `tariboy tasks queue create` | Create a task queue |
 | `tariboy team compose NAME` | Render a group as tariboy-compose.yaml |
 | `tariboy team import archive apply ID` | Build images and create a staged portable team |
 | `tariboy team import archive plan ID` | Validate and plan a staged portable team import |
@@ -331,6 +330,12 @@ and fails closed if it cannot connect. Without the variable, the client uses
 the host Unix daemon socket as the customer actor. The bare `tasks` command is
 only the optional capability-controlled legacy agent shim.
 
+`tariboy tasks …` is the same client with the same commands, flags, output,
+and exit codes. It always runs in operator mode on the daemon socket
+(`--socket` or the default path) and ignores `TARIBOY_TOOLS_SOCKET`, so an
+agent that runs it sees every task and acts as the customer. Its help names
+`tariboy tasks`; `tariboy tasks --help-json` prints the `ttasks` tree.
+
 These shared verbs are available in both modes; in agent mode every mutation
 derives identity from the socket.
 
@@ -392,8 +397,10 @@ checks and watch statuses.
 
 The following administration roots are operator-only and are documented by
 `ttasks --help-json`: `queue` (including pools and triggers; see
-[Task workflows](/docs/task-workflows)), `events`, `principals`, and
-`notifications`. They are unavailable to agent mode.
+[Task workflows](/docs/task-workflows)), `events`, `principals`,
+`notifications`, and `activity` (`GET /api/task-activity`: the work on tasks in
+a `--since`/`--until` window, optionally for one `--agent`). They are
+unavailable to agent mode.
 
 Resource identifiers are positional (or named flags), for example:
 

@@ -180,7 +180,7 @@ history entry.
 Under the period bar, cards total the work on tasks in the period: tasks,
 completed tasks, status changes, comments, iterations, and cost. They come from
 one `GET /api/task-activity?since=&until=[&agent=]` response
-(`tariboy tasks activity`), polled every 10 seconds; a response for an older
+(`ttasks activity`), polled every 10 seconds; a response for an older
 period or host never replaces the current one. The daemon builds it from AI
 requests tagged with a task and from task events in the window: per task the
 iterations, requests, tokens, and cost, the comments, the outcomes an agent

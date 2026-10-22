@@ -137,7 +137,7 @@ const globalHelp = `Global flags:
   --version    Print the client build version (root only)`
 
 // Help is resolved before parsing or socket selection in both modes.
-func runTextHelp(args []string, stdout, stderr io.Writer) (int, bool) {
+func runTextHelp(args []string, prog string, stdout, stderr io.Writer) (int, bool) {
 	explicit := len(args) == 0 || slices.Contains(args, "--help") || slices.Contains(args, "-h")
 	if len(args) > 0 && args[0] == "help" {
 		explicit, args = true, args[1:]
@@ -157,12 +157,12 @@ func runTextHelp(args []string, stdout, stderr io.Writer) (int, bool) {
 	for n := 0; n <= len(args); n++ {
 		path = strings.Join(args[:n], ".")
 		if entry, ok := entries[path]; ok {
-			printTaskCommandHelp(entry, stdout)
+			printTaskCommandHelp(entry, prog, stdout)
 			return 0, true
 		}
 		if n == len(args) || args[n] == "--help" || args[n] == "-h" || args[n] == "help" {
 			if path == "" || helpGroups[path] != "" {
-				printTaskGroupHelp(path, entries, stdout)
+				printTaskGroupHelp(path, prog, entries, stdout)
 				return 0, true
 			}
 			break
@@ -216,20 +216,25 @@ func taskHelpEntries(reg *registry.Registry) map[string]commandHelp {
 	return entries
 }
 
-func printTaskCommandHelp(entry commandHelp, out io.Writer) {
-	fmt.Fprintf(out, "Usage: ttasks %s\n\n%s\n\n%s\n", entry.usage, entry.summary, strings.TrimSpace(entry.help))
+func printTaskCommandHelp(entry commandHelp, prog string, out io.Writer) {
+	var text strings.Builder
+	fmt.Fprintf(&text, "Usage: ttasks %s\n\n%s\n\n%s\n", entry.usage, entry.summary, strings.TrimSpace(entry.help))
 	if strings.TrimSpace(entry.arguments) != "" {
-		fmt.Fprintf(out, "\nArguments and flags:\n%s\n", strings.TrimSpace(entry.arguments))
+		fmt.Fprintf(&text, "\nArguments and flags:\n%s\n", strings.TrimSpace(entry.arguments))
 	}
-	fmt.Fprintf(out, "\nExamples:\n%s\n\n%s\n", entry.examples, globalHelp)
+	fmt.Fprintf(&text, "\nExamples:\n%s\n\n%s\n", entry.examples, globalHelp)
+	// The help texts name ttasks in usage lines, examples, and cross-references.
+	fmt.Fprint(out, strings.ReplaceAll(text.String(), "ttasks ", prog+" "))
 }
 
-func printTaskGroupHelp(path string, entries map[string]commandHelp, out io.Writer) {
+func printTaskGroupHelp(path, prog string, entries map[string]commandHelp, out io.Writer) {
 	display := strings.ReplaceAll(path, ".", " ")
-	if path == "" {
+	if path == "" && prog != "ttasks" {
+		fmt.Fprintf(out, "Usage: %s <command> [args] [flags]\n\nNative Tasks client: the commands, flags, and output of ttasks.\nAlways operator mode on the host Unix daemon socket, also for an agent:\nthe host daemon acts as the customer and every task is visible.\n", prog)
+	} else if path == "" {
 		fmt.Fprintln(out, "Usage: ttasks <command> [args] [flags]\n\nNative Tasks client (tariboy-tasks; ttasks is its alias).\nWith non-empty TARIBOY_TOOLS_SOCKET: identity-bound agent mode, no operator fallback.\nOtherwise: operator mode on the host Unix daemon socket.\nHelp is local and lists both modes; execution still enforces their permissions.")
 	} else {
-		fmt.Fprintf(out, "Usage: ttasks %s <command> [args] [flags]\n\n%s\n", display, helpGroups[path])
+		fmt.Fprintf(out, "Usage: %s %s <command> [args] [flags]\n\n%s\n", prog, display, helpGroups[path])
 	}
 	children := map[string]string{}
 	prefix := path
@@ -260,7 +265,7 @@ func printTaskGroupHelp(path string, entries map[string]commandHelp, out io.Writ
 	for _, name := range names {
 		fmt.Fprintf(out, "  %-18s %s\n", name, children[name])
 	}
-	fmt.Fprintf(out, "\nExamples:\n  ttasks %s --help\n\n%s\n", strings.TrimSpace(display+" "+names[0]), globalHelp)
+	fmt.Fprintf(out, "\nExamples:\n  %s %s --help\n\n%s\n", prog, strings.TrimSpace(display+" "+names[0]), globalHelp)
 }
 
 var operatorExamples = map[string]string{
@@ -287,6 +292,7 @@ var operatorExamples = map[string]string{
 	"queue.source.log":      "queue source log DEV 12\nqueue source log DEV 12 --max-bytes 4096",
 	"events":                "events DEV-12 --after 42 --limit 20",
 	"principals":            "principals",
+	"activity":              "activity --since 2026-10-01T00:00:00Z --agent worker",
 	"notifications.list":    "notifications list --include-dismissed",
 	"notifications.read":    "notifications read 1",
 	"notifications.dismiss": "notifications dismiss 1",
@@ -315,6 +321,7 @@ var operatorHelp = map[string]string{
 	"queue.source.ls":       "Lists the sources of the workflow bound to the queue: script, every, when each runs next, how many runs failed in a row, the last run with its verdict, message, and the number of tasks it created, and the ids of its 20 newest runs, newest first, for queue source log.",
 	"queue.source.log":      "Prints the last bytes of a source run's log, 64 KiB by default and at most 1 MiB. Queue secret values are replaced with [redacted]. Run ids come from queue source ls or the queue.source_failed event. A running run's log can be read before it finishes.",
 	"events":                "Reads durable task events after the supplied sequence, bounded by --limit. Use the last sequence to resume.",
+	"activity":              "Summarizes the work on tasks in a time window: AI requests tagged with a task and the task events, per task and, server-wide, per agent. --since and --until take RFC 3339 times; --agent keeps one agent's work.",
 	"principals":            "Lists principals available for task assignment and typed user:login or agent:name mentions.",
 	"notifications.list":    "Lists customer task notifications. Dismissed entries are excluded unless --include-dismissed is supplied.",
 	"notifications.read":    "Marks one customer notification read without changing the task or answering its question.",

@@ -197,30 +197,6 @@ func TestRunJSONFlag(t *testing.T) {
 	}
 }
 
-func TestRunCreatesTaskQueue(t *testing.T) {
-	t.Parallel()
-	caller := &fakeCaller{result: json.RawMessage(`{"prefix":"TEST"}`)}
-	var out, errOut bytes.Buffer
-	code := Run(context.Background(), commands.BuildRegistry(), []string{
-		"tasks", "queue", "create", "--prefix", "TEST", "--name", "Test queue",
-		"--description", "CLI-created", "--owners", "alice,bob", "--responsible-agent", "worker",
-	}, caller, nil, &out, &errOut)
-	if code != 0 {
-		t.Fatalf("exit=%d err=%s", code, errOut.String())
-	}
-	if caller.method != "POST" || caller.route != "/api/task-queues" {
-		t.Fatalf("called %s %s", caller.method, caller.route)
-	}
-	body := caller.body.(registry.Params)
-	if body["prefix"] != "TEST" || body["name"] != "Test queue" || body["description"] != "CLI-created" || body["owners"] != "alice,bob" || body["responsible_agent"] != "worker" {
-		t.Fatalf("body=%#v", body)
-	}
-	help, _, helpCode := runHelp(t, commands.BuildRegistry(), "tasks", "queue", "create", "--help")
-	if helpCode != 0 || !strings.Contains(help, "--responsible-agent") {
-		t.Fatalf("help exit=%d out=%s", helpCode, help)
-	}
-}
-
 // TestRunValidateExitsNonZeroWhenInvalid pins that a validate command exits 1
 // on a `valid: false` result, after printing the whole result, so a script
 // can gate on it; the HTTP result itself is not an error.

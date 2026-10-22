@@ -15,7 +15,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/cli"
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/commands"
-	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
@@ -242,10 +241,10 @@ func isOperatorCommand(args []string) bool {
 	return len(args) > 0 && operatorRoots[args[0]]
 }
 
-var operatorRoots = map[string]bool{"queue": true, "events": true, "principals": true, "notifications": true}
+var operatorRoots = map[string]bool{"queue": true, "events": true, "principals": true, "notifications": true, "activity": true}
 
-func runOperatorCommand(ctx context.Context, args []string, getenv func(string) string, stdout, stderr io.Writer) int {
-	resolved, err := paths.Resolve(getenv)
+func runOperatorCommand(ctx context.Context, args []string, m mode, stdout, stderr io.Writer) int {
+	socket, err := m.socket()
 	if err != nil {
 		fmt.Fprintf(stderr, "tariboy-tasks: %v\n", err)
 		return 2
@@ -255,7 +254,7 @@ func runOperatorCommand(ctx context.Context, args []string, getenv func(string) 
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	return cli.Run(ctx, reg, args, newCaller(resolved.Socket()), nil, stdout, stderr)
+	return cli.Run(ctx, reg, args, newCaller(socket), nil, stdout, stderr)
 }
 
 func runHelpJSON(_ context.Context, stdout, stderr io.Writer) int {

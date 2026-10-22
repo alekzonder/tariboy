@@ -181,8 +181,9 @@ The daemon runs the check, watch, and source scripts of a queue's
 the same OS user as the agents. A workflow gate protects against a skipped
 step, not against an agent that deliberately works around the process: an
 agent can read the task directory, the unpacked image, and the run files, and
-can reach the daemon socket at its default path. Run workflows only with agents
-you trust that far.
+can reach the daemon socket at its default path; `tariboy tasks` uses that
+socket in operator mode, so an agent that runs it sees and changes every task
+as the customer. Run workflows only with agents you trust that far.
 
 - A script receives no agent tools socket and no daemon API variables:
   `TARIBOY_TOOLS_SOCKET`, `TARIBOY_DAEMON_SOCKET`, `TARIBOY_PLUGIN_SOCKET`, and

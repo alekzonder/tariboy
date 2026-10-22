@@ -72,8 +72,10 @@ func roundUSD(v float64) float64 { return math.Round(v*1e6) / 1e6 }
 // tagged with a task plus the task events, per task and, server-wide, per agent.
 func taskActivity() registry.Command {
 	return registry.Command{
-		Path:    "tasks.activity",
-		Summary: "Summarize work on tasks in a time window",
+		Path: "tasks.activity",
+		// tariboy tasks runs taskcli; this registry entry is only its HTTP route.
+		CLIHidden: true,
+		Summary:   "Summarize work on tasks in a time window",
 		Args: []registry.Arg{
 			{Name: "since", Flag: "since", Short: "s", Type: registry.String, Help: "RFC 3339 time (inclusive lower bound)"},
 			{Name: "until", Flag: "until", Short: "u", Type: registry.String, Help: "RFC 3339 time (exclusive upper bound)"},
