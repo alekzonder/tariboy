@@ -688,7 +688,7 @@ it("keeps prune and preview as confirmed, immediate actions outside Save", async
   await within(retention).findByLabelText("Keep days");
   fireEvent.click(within(retention).getByRole("button", { name: "Preview cleanup" }));
   await waitFor(() => expect(server.writes()).toEqual(["POST prune"]));
-  expect(server.calls.at(-1)?.body).toEqual({ "dry-run": true });
+  expect(server.calls.filter((c) => c.method === "POST").at(-1)?.body).toEqual({ "dry-run": true });
   fireEvent.click(within(retention).getByRole("button", { name: "Prune now" }));
   expect(server.writes()).toHaveLength(1);
   fireEvent.click(await screen.findByRole("button", { name: "Prune retained data" }));

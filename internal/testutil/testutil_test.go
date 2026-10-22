@@ -16,6 +16,10 @@ func TestIsolateEnvDropsTariboyVariablesAndMovesHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer cleanup()
+	if got := RealHome(); got != "/live/home" {
+		t.Fatalf("RealHome = %q, want original HOME /live/home", got)
+	}
 	home := os.Getenv("HOME")
 	for _, kv := range os.Environ() {
 		if strings.HasPrefix(kv, "TARIBOY_") {

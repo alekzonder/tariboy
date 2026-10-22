@@ -150,7 +150,7 @@ describe("Stores workspace", () => {
     expect(await screen.findByRole("heading", { name: "design" })).toBeInTheDocument();
     expect(await screen.findByRole("columnheader", { name: "Source image_version" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Latest image_version" })).toBeInTheDocument();
-    const reviewerRow = screen.getByText("reviewer").closest("tr");
+    const reviewerRow = screen.getByText("reviewer").closest("tr")!;
     expect(reviewerRow).toHaveTextContent("1.0.0");
     expect(reviewerRow).toHaveTextContent("Update needed");
     expect(reviewerRow).toHaveClass("bg-amber-50");
@@ -182,7 +182,9 @@ describe("Stores workspace", () => {
     });
 
     setActiveDaemon({ id: "other", label: "Other", baseURL: "https://other.example", token: "other-token" });
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    const refresh = screen.getByRole("button", { name: "Refresh" });
+    const removeStore = screen.getByRole("button", { name: "Remove store" });
+    fireEvent.click(refresh);
     expect(await screen.findByRole("alert")).toHaveTextContent("refresh failed");
     expect(screen.getByRole("heading", { name: "design" })).toBeInTheDocument();
     expect(calls).toContainEqual(expect.objectContaining({
@@ -191,16 +193,16 @@ describe("Stores workspace", () => {
       authorization: "Bearer store-token",
     }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Build reviewer" }));
+    fireEvent.click(within(reviewerRow).getByRole("button", { name: "Build reviewer" }));
     await waitFor(() => expect(calls).toContainEqual({
       url: "https://store.example/api/images/build",
       method: "POST",
       body: JSON.stringify({ source: "design/reviewer" }),
       authorization: "Bearer store-token",
     }));
-    expect(screen.getByRole("button", { name: "Building reviewer…" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Refresh" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Remove store" })).toBeDisabled();
+    expect(within(reviewerRow).getByRole("button", { name: "Building reviewer…" })).toBeDisabled();
+    expect(refresh).toBeDisabled();
+    expect(removeStore).toBeDisabled();
 
     finishBuild(envelope({ name: "reviewer", tag: "1.2.3", digest: "sha256:new", layers: 2 }));
     expect(await screen.findByText("Built reviewer:1.2.3 and reviewer:latest.")).toBeInTheDocument();
@@ -211,12 +213,12 @@ describe("Stores workspace", () => {
     expect(imageBuilt).toHaveBeenCalledOnce();
 
     detailReloadFails = true;
-    fireEvent.click(screen.getByRole("button", { name: "Build reviewer" }));
+    fireEvent.click(within(screen.getByText("reviewer").closest("tr")!).getByRole("button", { name: "Build reviewer" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("reload failed");
     expect(screen.getByText("Built reviewer:1.2.3 and reviewer:latest.")).toBeInTheDocument();
     expect(imageBuilt).toHaveBeenCalledTimes(2);
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove store" }));
+    fireEvent.click(removeStore);
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText(/preserves local sources and built images/i)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Remove store" }));

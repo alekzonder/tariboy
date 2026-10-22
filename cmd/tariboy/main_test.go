@@ -6,12 +6,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alekzonder/tariboy/internal/testutil"
 	"github.com/alekzonder/tariboy/internal/version"
 )
 
 func TestBinaryVersionCommandMatchesFlagWithoutHome(t *testing.T) {
 	bin := t.TempDir() + "/tariboy"
-	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+	build := exec.Command("go", "build", "-o", bin, ".")
+	build.Env = append(os.Environ(), "HOME="+testutil.RealHome())
+	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
 
