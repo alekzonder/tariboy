@@ -17,6 +17,7 @@ import (
 	"sort"
 
 	"github.com/alekzonder/tariboy/internal/portablearchive"
+	"github.com/alekzonder/tariboy/internal/safefs"
 	"gopkg.in/yaml.v3"
 )
 
@@ -166,29 +167,22 @@ func validateStagedTeamMembers(root string) error {
 		".operation.json":      true,
 		".operation.lease":     true,
 	}
-	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if path == root {
-			return nil
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() || !allowed[filepath.ToSlash(rel)] {
-			return fmt.Errorf("team portable: unsupported staged member %q", filepath.ToSlash(rel))
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if !info.Mode().IsRegular() {
-			return fmt.Errorf("team portable: unsafe staged member %q", filepath.ToSlash(rel))
+	err := safefs.WalkRegular(root, safefs.WalkOptions{Dirs: true}, func(rel string, _ fs.DirEntry, info fs.FileInfo) error {
+		if info.IsDir() || !allowed[rel] {
+			return fmt.Errorf("team portable: unsupported staged member %q", rel)
 		}
 		return nil
 	})
+	// A symbolic link or other non-regular entry: a name outside the allowed
+	// set is unsupported, an allowed name that is not a regular file unsafe.
+	var pathErr *safefs.PathError
+	if errors.As(err, &pathErr) && errors.Is(err, safefs.ErrUnsafeFile) {
+		if !allowed[pathErr.Rel] {
+			return fmt.Errorf("team portable: unsupported staged member %q", pathErr.Rel)
+		}
+		return fmt.Errorf("team portable: unsafe staged member %q", pathErr.Rel)
+	}
+	return err
 }
 
 func addFile(root, archivePath string, data []byte, files *[]portablearchive.File, paths *[]string) error {
