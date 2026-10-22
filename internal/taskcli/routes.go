@@ -258,13 +258,12 @@ func runOperatorCommand(ctx context.Context, args []string, getenv func(string) 
 	return cli.Run(ctx, reg, args, newCaller(resolved.Socket()), nil, stdout, stderr)
 }
 
-func runHelpJSON(ctx context.Context, stdout, stderr io.Writer) int {
+func runHelpJSON(_ context.Context, stdout, stderr io.Writer) int {
 	reg, err := taskOperatorRegistry()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	_ = ctx // ctx is accepted for the command signature; this command needs none
 	tree := reg.Tree()
 	entries := taskHelpEntries(reg)
 	for _, command := range reg.Commands() {
