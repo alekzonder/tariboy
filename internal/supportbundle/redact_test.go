@@ -71,3 +71,37 @@ func TestSafeDaemonLogRejectsMalformedTimestampToken(t *testing.T) {
 		t.Fatalf("malformed timestamp entered lifecycle log: %q", output)
 	}
 }
+
+func TestRedactTextClassifiesEnvironmentByKey(t *testing.T) {
+	environ := []string{
+		"SHELL=/bin/bash", "TERM=xterm-256color", "LANG=en_US.UTF-8",
+		"LC_ALL=en_US.UTF-8", "GOPATH=/opt/gopath-dir",
+		"GITHUB_TOKEN=g5t9x", "USER=bob", "CUSTOM_VALUE=longvalue123",
+		"SHORT_VALUE=abc",
+	}
+	cases := []struct {
+		name, text string
+		redacted   bool
+	}{
+		{"shell kept", "using /bin/bash now", false},
+		{"term kept", "term xterm-256color ok", false},
+		{"lang kept", "locale en_US.UTF-8 set", false},
+		{"gopath kept", "build in /opt/gopath-dir ok", false},
+		{"short aws secret assignment", "AWS_SECRET_ACCESS_KEY=abc", true},
+		{"short token outside assignment", "value g5t9x leaked", true},
+		{"user redacted", "owner is bob here", true},
+		{"unknown long redacted", "got longvalue123 here", true},
+		{"unknown short kept", "got abc here", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			output := string(redactText([]byte(tc.text), nil, environ))
+			if got := strings.Contains(output, "<redacted>"); got != tc.redacted {
+				t.Fatalf("redacted=%v, want %v: %q", got, tc.redacted, output)
+			}
+			if tc.name == "short aws secret assignment" && strings.Contains(output, "=abc") {
+				t.Fatalf("leaked: %q", output)
+			}
+		})
+	}
+}

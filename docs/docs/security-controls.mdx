@@ -319,6 +319,15 @@ files for the newest 10 iterations of each agent on that host. It reads only
 `result.json`, `logs/shim.log`, `logs/harness.stdout.log`, and
 `logs/harness.stderr.log`; it never recursively walks an agent directory.
 
+Redaction of agent files classifies each daemon environment variable by its
+name. Values of secret-looking names (`*_TOKEN`, `*_SECRET*`, `*_API_KEY`,
+`*PASSWORD*`) are removed from 4 characters, `USER`, `LOGNAME`, and `HOSTNAME`
+from 3 characters, and any unknown name from 8 characters. A short allowlist of
+harmless names (`SHELL`, `TERM`, `LANG`, `LC_*`, `PATH`, `GOPATH`, `PWD`,
+`TMPDIR`, `EDITOR`, `COLORTERM`, `TERM_PROGRAM`, `SHLVL`) keeps its values. A
+secret-looking name is never allowlisted, and the unknown-name rule is
+unchanged from policy version 1. `diagnostics.json` reports policy version 2.
+
 The collector never includes credentials or environment values (including
 `PATH`), SSH aliases/configuration, `PROMPT.md`, context, transcripts, audit,
 workdirs, configured cwd contents, global or agent shell scripts, image/plugin
