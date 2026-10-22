@@ -105,3 +105,20 @@ func TestRedactTextClassifiesEnvironmentByKey(t *testing.T) {
 		})
 	}
 }
+
+func TestRedactTextSensitiveKeyBeatsAllowlist(t *testing.T) {
+	environ := []string{"LC_TOKEN=abcd", "PATH_SECRET=wxyz"}
+	output := string(redactText([]byte("a abcd b wxyz c"), nil, environ))
+	if strings.Contains(output, "abcd") || strings.Contains(output, "wxyz") {
+		t.Fatalf("sensitive value kept: %q", output)
+	}
+}
+
+func TestRedactTextDoesNotReplaceInsideMarkers(t *testing.T) {
+	output := string(redactText(
+		[]byte("token=secretvalue by act"), nil, []string{"USER=act"},
+	))
+	if output != "token=<redacted> by <redacted>" {
+		t.Fatalf("output = %q", output)
+	}
+}

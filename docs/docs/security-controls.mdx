@@ -323,13 +323,15 @@ Redaction of agent files classifies each daemon environment variable by its
 name. Values of secret-looking names (`*_TOKEN`, `*_SECRET*`, `*_API_KEY`,
 `*PASSWORD*`) are removed from 4 characters, `USER`, `LOGNAME`, and `HOSTNAME`
 from 3 characters, and any unknown name from 8 characters. A short allowlist of
-harmless names (`SHELL`, `TERM`, `LANG`, `LC_*`, `PATH`, `GOPATH`, `PWD`,
-`TMPDIR`, `EDITOR`, `COLORTERM`, `TERM_PROGRAM`, `SHLVL`) keeps its values. A
+harmless names (`SHELL`, `TERM`, `LANG`, `LANGUAGE`, `LC_*`, `PATH`, `GOPATH`,
+`GOROOT`, `PWD`, `TMPDIR`, `EDITOR`, `VISUAL`, `COLORTERM`, `TERM_PROGRAM`,
+`SHLVL`) keeps its values. The collector does not export the environment; an
+allowlisted value that already appears in collected text is kept on purpose,
+and home directory prefixes are still rewritten. A
 secret-looking name is never allowlisted, and the unknown-name rule is
 unchanged from policy version 1. `diagnostics.json` reports policy version 2.
 
-The collector never includes credentials or environment values (including
-`PATH`), SSH aliases/configuration, `PROMPT.md`, context, transcripts, audit,
+The collector never includes credentials or environment values, SSH aliases/configuration, `PROMPT.md`, context, transcripts, audit,
 workdirs, configured cwd contents, global or agent shell scripts, image/plugin
 state, provisioning replies, or user files. It does not open agent environment
 configuration. Harness output can

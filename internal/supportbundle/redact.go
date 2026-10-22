@@ -63,8 +63,19 @@ func redactText(body []byte, roots, environ []string) []byte {
 	sort.Slice(replacements, func(i, j int) bool {
 		return len(replacements[i]) > len(replacements[j])
 	})
+	// Replace in a single pass and only between existing markers, so a short
+	// value cannot match inside a "<redacted>" marker.
+	pairs := make([]string, 0, len(replacements)*2)
 	for _, value := range replacements {
-		output = strings.ReplaceAll(output, value, "<redacted>")
+		pairs = append(pairs, value, "<redacted>")
+	}
+	if len(pairs) > 0 {
+		replacer := strings.NewReplacer(pairs...)
+		parts := strings.Split(output, "<redacted>")
+		for i, part := range parts {
+			parts[i] = replacer.Replace(part)
+		}
+		output = strings.Join(parts, "<redacted>")
 	}
 	output = redactHomePath(output, "/Users/")
 	output = redactHomePath(output, "/home/")
