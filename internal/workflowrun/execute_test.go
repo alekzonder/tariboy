@@ -277,8 +277,9 @@ func TestExecuteKillsOrphanedChild(t *testing.T) {
 	requireGone(t, readPID(t, filepath.Join(f.dir, "child.pid")))
 }
 
+// Not parallel: TotalAlloc counts every goroutine, so parallel tests would
+// add their allocations to the measured window.
 func TestExecuteLargeOutputGoesToDisk(t *testing.T) {
-	t.Parallel()
 	const size = 8 << 20
 	f := newFixture(t, "head -c "+strconv.Itoa(size)+" /dev/zero; exit 0\n")
 	var before, after runtime.MemStats
