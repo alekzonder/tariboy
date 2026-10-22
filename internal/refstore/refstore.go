@@ -10,8 +10,6 @@
 package refstore
 
 import (
-	"github.com/alekzonder/tariboy/internal/tidy"
-
 	"errors"
 	"fmt"
 	"io/fs"
@@ -20,6 +18,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 var (
@@ -206,9 +206,9 @@ func (s Store) PruneEmpty(name string) {
 	if CheckName(name) != nil {
 		return
 	}
-	tidy.Remove(s.TagsDir(name))
-	tidy.Remove(s.RefsDir(name))
-	tidy.Remove(s.NameDir(name))
+	tidy.Remove(nil, s.TagsDir(name))
+	tidy.Remove(nil, s.RefsDir(name))
+	tidy.Remove(nil, s.NameDir(name))
 }
 
 // SyncDir fsyncs a directory so a rename or removal inside it is durable.

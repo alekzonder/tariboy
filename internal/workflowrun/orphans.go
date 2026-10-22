@@ -113,7 +113,7 @@ func isRunScript(pid int, resultFile string) bool {
 // environment, or the leader is gone while the group lives on, which keeps its
 // id from being reused.
 func terminateOrphan(pid int, resultFile string) {
-	tidy.Log("best effort: syscall.Kill", syscall.Kill(-pid, syscall.SIGTERM))
+	tidy.Log(nil, "terminate orphaned script group", syscall.Kill(-pid, syscall.SIGTERM), "pid", pid)
 	deadline := time.Now().Add(killGrace)
 	for time.Now().Before(deadline) {
 		if errors.Is(syscall.Kill(-pid, 0), syscall.ESRCH) {
@@ -126,6 +126,6 @@ func terminateOrphan(pid int, resultFile string) {
 	}
 	leaderGone := errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
 	if leaderGone || isRunScript(pid, resultFile) {
-		tidy.Log("best effort: syscall.Kill", syscall.Kill(-pid, syscall.SIGKILL))
+		tidy.Log(nil, "kill orphaned script group", syscall.Kill(-pid, syscall.SIGKILL), "pid", pid)
 	}
 }

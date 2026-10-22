@@ -68,7 +68,7 @@ func readRegular(path string, before os.FileInfo) ([]byte, os.FileInfo, error) {
 	}
 	f := os.NewFile(uintptr(fd), path)
 	if f == nil {
-		tidy.Log("best effort: syscall.Close", syscall.Close(fd))
+		tidy.Log(nil, "best effort: syscall.Close", syscall.Close(fd), "fd", fd)
 		return nil, nil, errors.New("open regular skill file")
 	}
 	defer f.Close()
@@ -100,7 +100,7 @@ func openSkillMember(parent *os.File, name, displayPath string) (*os.File, error
 	}
 	f := os.NewFile(uintptr(fd), displayPath)
 	if f == nil {
-		tidy.Log("best effort: syscall.Close", syscall.Close(fd))
+		tidy.Log(nil, "best effort: syscall.Close", syscall.Close(fd), "fd", fd)
 		return nil, errors.New("open skill member")
 	}
 	return f, nil
@@ -132,7 +132,7 @@ func openPinnedSkillRoot(root string) (*os.File, error) {
 		}
 		next := os.NewFile(uintptr(fd), walked)
 		if next == nil {
-			tidy.Log("best effort: unix.Close", unix.Close(fd))
+			tidy.Log(nil, "best effort: unix.Close", unix.Close(fd), "fd", fd)
 			current.Close()
 			return nil, errors.New("open skill source component")
 		}

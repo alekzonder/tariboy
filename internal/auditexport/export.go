@@ -29,20 +29,20 @@ func WriteZIP(ctx context.Context, dst io.Writer, agentsDir, agent, iteration st
 	zw := zip.NewWriter(dst)
 	markdown, err := createZipFile(zw, "audit.md")
 	if err != nil {
-		tidy.Close(zw)
+		tidy.Close(nil, zw)
 		return err
 	}
 	if err := writeMarkdown(ctx, markdown, agentsDir, agent, events, iterations); err != nil {
-		tidy.Close(zw)
+		tidy.Close(nil, zw)
 		return err
 	}
 	jsonl, err := createZipFile(zw, "audit.jsonl")
 	if err != nil {
-		tidy.Close(zw)
+		tidy.Close(nil, zw)
 		return err
 	}
 	if err := writeJSONL(ctx, jsonl, agentsDir, agent, events, iterations); err != nil {
-		tidy.Close(zw)
+		tidy.Close(nil, zw)
 		return err
 	}
 	return zw.Close()

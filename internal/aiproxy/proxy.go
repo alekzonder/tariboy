@@ -279,7 +279,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ex.Provider = providerFor(r.URL.Path)
 	if ex.Provider != "cursor" {
 		body, err := io.ReadAll(io.LimitReader(r.Body, 32<<20))
-		tidy.Close(r.Body)
+		tidy.Close(nil, r.Body)
 		if err != nil {
 			ex.Status = "upstream_error"
 			w.Header().Set("Content-Type", "application/json")
@@ -891,7 +891,7 @@ func modelFromBody(body []byte) string {
 	var r struct {
 		Model string `json:"model"`
 	}
-	tidy.Log("best effort: ignored malformed JSON", json.Unmarshal(body, &r))
+	_ = json.Unmarshal(body, &r) // the model is advisory; empty (GET /v1/models) and non-JSON bodies are normal
 	return r.Model
 }
 

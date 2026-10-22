@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"os/exec"
@@ -20,7 +21,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	storedb "github.com/alekzonder/tariboy/internal/store"
-	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 var (
@@ -118,7 +118,9 @@ func (c *Catalog) Add(ctx context.Context, name, source string) (Store, error) {
 	}
 	if _, err := c.DB.ExecContext(ctx, `INSERT INTO image_stores(name,source) VALUES(?,?)`, name, normalized); err != nil {
 		if kind == sourceGit {
-			tidy.Log("best effort: c.removeManaged", c.removeManaged(name))
+			if rmErr := c.removeManaged(name); rmErr != nil && !errors.Is(rmErr, fs.ErrNotExist) {
+				err = errors.Join(err, fmt.Errorf("remove managed clone of store %s: %w", name, rmErr))
+			}
 		}
 		return Store{}, err
 	}

@@ -310,13 +310,13 @@ func (s *Server) serveTeamImportPreview(w http.ResponseWriter, r *http.Request) 
 	}
 	planner, ok := s.reg.Get("team.import.archive.plan")
 	if !ok {
-		tidy.RemoveAll(preview.StagedDir)
+		tidy.RemoveAll(nil, preview.StagedDir)
 		WriteErr(w, http.StatusInternalServerError, "internal", "team import planner unavailable")
 		return
 	}
 	plan, err := registry.Call(s.cctx, r.Context(), planner, map[string]any{"id": preview.ImportID})
 	if err != nil {
-		tidy.RemoveAll(preview.StagedDir)
+		tidy.RemoveAll(nil, preview.StagedDir)
 		WriteErr(w, http.StatusBadRequest, "bad_compose", err.Error())
 		return
 	}
@@ -655,7 +655,7 @@ func (s *Server) serveTerminal(w http.ResponseWriter, r *http.Request) {
 		if typ == websocket.MessageText {
 			var m struct{ Cols, Rows int }
 			if json.Unmarshal(data, &m) == nil && m.Cols > 0 && m.Rows > 0 {
-				tidy.Log("best effort: s.cctx.Control.Resize", s.cctx.Control.Resize(name, m.Cols, m.Rows))
+				tidy.Log(s.cctx.Log, "terminal resize failed", s.cctx.Control.Resize(name, m.Cols, m.Rows), "agent", name)
 			}
 			continue
 		}
@@ -858,7 +858,7 @@ func (s *Server) bound(hs *http.Server, handler http.Handler, ln net.Listener) f
 		s.serveMu.Lock()
 		if s.stopping {
 			s.serveMu.Unlock()
-			tidy.Close(ln)
+			tidy.Close(nil, ln)
 			return nil
 		}
 		hs.Handler = handler
@@ -1052,14 +1052,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	listeners := s.listeners
 	s.serveMu.Unlock()
 	if webSrv != nil {
-		tidy.Log("best effort: webSrv.Shutdown", webSrv.Shutdown(ctx))
+		tidy.Log(s.cctx.Log, "web server shutdown failed", webSrv.Shutdown(ctx))
 	}
 	err := s.http.Shutdown(ctx)
 	// http.Server.Shutdown closes only the listeners it serves; also release
 	// the ones bound but never served. Closing after Shutdown makes a Serve
 	// that is still starting see ErrServerClosed, not a closed listener.
 	for _, ln := range listeners {
-		tidy.Close(ln)
+		tidy.Close(nil, ln)
 	}
 	return err
 }

@@ -96,7 +96,7 @@ func (execRunner) Start(spec SpawnSpec, logw io.Writer) (ProcHandle, error) {
 	}
 	go h.readHandshake(stdout, safe)
 	go func() {
-		tidy.Log("best effort: cmd.Wait", cmd.Wait())
+		_ = cmd.Wait() // reaper only: an ExitError is the normal outcome of a stop; the handshake and done channel report state
 		close(h.done)
 	}()
 	return h, nil
@@ -143,7 +143,7 @@ func (h *execHandle) Stop(grace time.Duration) error {
 	if h.pid <= 0 {
 		return nil
 	}
-	tidy.Log("best effort: syscall.Kill", syscall.Kill(-h.pid, syscall.SIGTERM))
+	tidy.Log(nil, "terminate plugin process group", syscall.Kill(-h.pid, syscall.SIGTERM), "pid", h.pid)
 	select {
 	case <-h.done:
 		return nil

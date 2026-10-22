@@ -14,9 +14,9 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/safefs"
-	"github.com/alekzonder/tariboy/internal/tidy"
 
 	"github.com/alekzonder/tariboy/internal/refstore"
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 // FileEntry describes one member of an image's tar.gz, enough to render a tree.
@@ -222,7 +222,7 @@ func unpackReplacing(archivePath string, ref Ref, destDir string) (err error) {
 	}
 	defer func() {
 		if err != nil {
-			tidy.RemoveAll(stage)
+			tidy.RemoveAll(nil, stage)
 		}
 	}()
 	if err := unpackArchive(archivePath, ref, stage); err != nil {

@@ -116,7 +116,7 @@ func (s Service) Preview(ctx context.Context, r io.Reader, compressedSize int64)
 	remove := true
 	defer func() {
 		if remove {
-			tidy.RemoveAll(dest)
+			tidy.RemoveAll(nil, dest)
 		}
 	}()
 	if manifest.Kind != "image-artifact" || len(manifest.Files) != 1 || manifest.Files[0].Path != "image.tar.gz" {
@@ -257,7 +257,7 @@ func (s Service) apply(ctx context.Context, importID, refOverride string) (Resul
 		}
 		previousDigest = manifest.Digest
 		if target.String() == preview.Ref && manifest.Digest == preview.Digest {
-			tidy.RemoveAll(stage)
+			tidy.RemoveAll(nil, stage)
 			return Result{Ref: target.String(), Digest: manifest.Digest, Reused: true}, nil
 		}
 	}
@@ -273,6 +273,6 @@ func (s Service) apply(ctx context.Context, importID, refOverride string) (Resul
 	if published.Digest != candidate.Digest {
 		return Result{}, errors.New("image portable: installed digest mismatch")
 	}
-	tidy.RemoveAll(stage)
+	tidy.RemoveAll(nil, stage)
 	return Result{Ref: target.String(), Digest: published.Digest, Reused: targetExists && previousDigest == published.Digest}, nil
 }

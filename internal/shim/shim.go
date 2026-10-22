@@ -1,8 +1,6 @@
 package shim
 
 import (
-	"github.com/alekzonder/tariboy/internal/tidy"
-
 	"bufio"
 	"encoding/json"
 	"errors"
@@ -19,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/tidy"
 	"github.com/creack/pty"
 	"golang.org/x/sys/unix"
 )
@@ -244,7 +243,7 @@ func runProcessWithStop(
 			defer close(forceStopDone)
 			select {
 			case <-forceStop:
-				tidy.Log("best effort: syscall.Kill", syscall.Kill(-pid, syscall.SIGKILL))
+				killGroup(o.IterationDir, pid, syscall.SIGKILL)
 			case <-processDone:
 			}
 		}()
@@ -253,11 +252,11 @@ func runProcessWithStop(
 		s.mu.Lock()
 		s.terminationReason = "hard_timeout"
 		s.mu.Unlock()
-		tidy.Log("best effort: syscall.Kill", syscall.Kill(-pid, syscall.SIGTERM))
+		killGroup(o.IterationDir, pid, syscall.SIGTERM)
 		select {
 		case <-processDone:
 		case <-time.After(grace):
-			tidy.Log("best effort: syscall.Kill", syscall.Kill(-pid, syscall.SIGKILL))
+			killGroup(o.IterationDir, pid, syscall.SIGKILL)
 		}
 	})
 
@@ -344,7 +343,9 @@ func runTmux(o Options, sample time.Duration) error {
 		s.mu.Lock()
 		s.terminationReason = "hard_timeout"
 		s.mu.Unlock()
-		tidy.Log("best effort: KillTmuxSession", KillTmuxSession(o.TmuxSession))
+		if err := KillTmuxSession(o.TmuxSession); err != nil {
+			logShim(o.IterationDir, "kill tmux session %s: %v", o.TmuxSession, err)
+		}
 	})
 	defer s.watchdog.Stop()
 
@@ -884,9 +885,11 @@ func (s *tmuxShim) Attach(conn net.Conn, p AttachParams) error {
 		// Closing the ptmx unblocks whichever io.Copy is still running so
 		// neither goroutine leaks. Kill the attach client (detach); never
 		// kill-session.
-		tidy.Close(ptmx)
+		tidy.Close(nil, ptmx)
 		if cmd.Process != nil {
-			tidy.Log("best effort: cmd.Process.Kill", cmd.Process.Kill())
+			if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+				logShim(s.iterationDir, "kill tmux attach client: %v", err)
+			}
 			_, _ = cmd.Process.Wait()
 		}
 	}()
@@ -966,7 +969,7 @@ func (s *tmuxShim) Report() ReportResult {
 // result.json for completion) but it costs live control (kill/screen/reattach),
 // so it is logged loudly to logs/shim.log rather than silently swallowed.
 func serveRPC(iterDir, sockPath string, h Handler) func() {
-	tidy.Remove(sockPath)
+	tidy.Remove(nil, sockPath)
 	l, err := netListenUnix(sockPath)
 	if err != nil {
 		logShim(iterDir, "ERROR bind shim rpc socket %q: %v (continuing without live control; completion via result.json)", sockPath, err)
@@ -975,7 +978,15 @@ func serveRPC(iterDir, sockPath string, h Handler) func() {
 	go Serve(l, h)
 	return func() {
 		l.Close()
-		tidy.Remove(sockPath)
+		tidy.Remove(nil, sockPath)
+	}
+}
+
+// killGroup signals the process group led by pid. The group may already have
+// exited (ESRCH), which is not worth a line.
+func killGroup(iterDir string, pid int, sig syscall.Signal) {
+	if err := syscall.Kill(-pid, sig); err != nil && !errors.Is(err, syscall.ESRCH) {
+		logShim(iterDir, "signal process group %d with %v: %v", pid, sig, err)
 	}
 }
 

@@ -1,8 +1,6 @@
 package telegramplugin
 
 import (
-	"github.com/alekzonder/tariboy/internal/tidy"
-
 	"context"
 	"errors"
 	"net/http"
@@ -10,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 func (s *Server) Run(ctx context.Context) {
@@ -50,7 +50,7 @@ func (s *Server) Run(ctx context.Context) {
 }
 
 func (s *Server) reconcileLoop(ctx context.Context) {
-	tidy.Log("best effort: s.ReconcileTopics", s.ReconcileTopics(ctx))
+	tidy.Log(nil, "telegram topic reconcile failed", s.ReconcileTopics(ctx))
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -58,7 +58,7 @@ func (s *Server) reconcileLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			tidy.Log("best effort: s.ReconcileTopics", s.ReconcileTopics(ctx))
+			tidy.Log(nil, "telegram topic reconcile failed", s.ReconcileTopics(ctx))
 		}
 	}
 }

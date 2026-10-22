@@ -8,8 +8,6 @@
 package audit
 
 import (
-	"github.com/alekzonder/tariboy/internal/tidy"
-
 	"bufio"
 	"context"
 	"encoding/json"
@@ -20,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 const tsFormat = "2006-01-02T15:04:05.000Z07:00"
@@ -71,7 +71,7 @@ func (l *Log) Record(typ, source, iterationID string, data map[string]any) int64
 		return l.seq
 	}
 	if dir := filepath.Dir(l.path); dir != "" && dir != "." {
-		tidy.Log("best effort: os.MkdirAll", os.MkdirAll(dir, 0o700))
+		tidy.Log(nil, "create audit directory", os.MkdirAll(dir, 0o700), "path", dir)
 	}
 	f, err := os.OpenFile(l.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {

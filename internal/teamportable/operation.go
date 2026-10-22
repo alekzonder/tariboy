@@ -53,7 +53,7 @@ func (s Service) TouchLease(importID string) error {
 
 func (s Service) RemoveLease(importID string) {
 	if path, err := s.leasePath(importID); err == nil {
-		tidy.Remove(path)
+		tidy.Remove(nil, path)
 	}
 }
 

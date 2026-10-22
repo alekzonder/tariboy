@@ -79,6 +79,7 @@ func setupProcess(ctx context.Context, o Options, stack *shutdownStack) (*proces
 		lvl = slog.LevelError
 	}
 	log := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))
+	slog.SetDefault(log) // packages without their own logger (tidy, safefs, groups) log to the daemon sink
 	resolveUserPath := o.UserPathResolver
 	if resolveUserPath == nil {
 		resolveUserPath = userpath.Resolve
@@ -198,7 +199,7 @@ func openStore(ctx context.Context, proc *process, stack *shutdownStack) (*coreP
 		// ctx is already canceled when the stack runs.
 		fctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		tidy.Log("best effort: tel.Shutdown", tel.Shutdown(fctx))
+		tidy.Log(log, "telemetry shutdown failed", tel.Shutdown(fctx))
 	})
 	metrics, err := telemetry.NewMetrics(otel.Meter("tariboy"))
 	if err != nil {
@@ -344,6 +345,7 @@ func buildProxy(ctx context.Context, o Options, proc *process, c *coreParts) (*p
 		CachePath:  p.PricingCatalogFile(),
 		Store:      st,
 		Pricing:    pricing,
+		Log:        log,
 		Diagnostic: func(d pricingcatalog.Diagnostic) {
 			fields := safePricingFields(d)
 			log.LogAttrs(ctx, levelForPricing(d.Kind), d.Kind, safePricingAttrs(fields)...)
@@ -353,7 +355,7 @@ func buildProxy(ctx context.Context, o Options, proc *process, c *coreParts) (*p
 	})
 	// Cache reads are local and strictly size-bounded. A rejected cache is
 	// diagnostic-only: fallback/manual pricing and proxy startup remain live.
-	tidy.Log("best effort: pricingCatalog.LoadCache", pricingCatalog.LoadCache(ctx))
+	tidy.Log(log, "pricing catalog cache not loaded", pricingCatalog.LoadCache(ctx))
 	router, err := aiproxy.LoadRouter(st, os.Getenv)
 	if err != nil {
 		return nil, fmt.Errorf("load router: %w", err)
@@ -361,7 +363,7 @@ func buildProxy(ctx context.Context, o Options, proc *process, c *coreParts) (*p
 	aiStore := aiproxy.NewStore(st, time.Now)
 	ingester := aiproxy.NewIngester(aiStore, log)
 	budgetCache := aiproxy.NewBudgetCache(aiStore, time.Now)
-	tidy.Log("best effort: budgetCache.Refresh", budgetCache.Refresh())
+	tidy.Log(log, "budget cache initial refresh failed", budgetCache.Refresh())
 	if o.wireHook != nil {
 		o.wireHook(ingester, aiStore)
 	}
@@ -834,7 +836,7 @@ func serve(ctx context.Context, o Options, proc *process, c *coreParts, tk *task
 		// ctx is already canceled when the stack runs.
 		shctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		tidy.Log("best effort: px.proxy.Shutdown", px.proxy.Shutdown(shctx))
+		tidy.Log(log, "ai proxy shutdown failed", px.proxy.Shutdown(shctx))
 		proxyServe.Wait()
 	})
 

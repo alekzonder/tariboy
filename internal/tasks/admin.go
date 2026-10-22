@@ -340,7 +340,7 @@ func (s *Admin) ListEvents(ctx context.Context, actor Actor, key string, after i
 			return nil, err
 		}
 		event.Payload = map[string]any{}
-		tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(payload), &event.Payload))
+		tidy.Log(nil, "task event payload is not valid JSON", json.Unmarshal([]byte(payload), &event.Payload), "task", event.TaskKey, "sequence", event.Sequence)
 		out = append(out, event)
 	}
 	return out, rows.Err()

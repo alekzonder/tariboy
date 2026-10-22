@@ -23,13 +23,13 @@ func composeArchive(file, output string, out, errOut io.Writer) int {
 		return 1
 	}
 	if err := teamportable.CreateFromCompose(file, archiveOut); err != nil {
-		tidy.Close(archiveOut)
-		tidy.Remove(output)
+		tidy.Close(nil, archiveOut)
+		tidy.Remove(nil, output)
 		fmt.Fprintf(errOut, "compose archive: %v\n", err)
 		return 1
 	}
 	if err := archiveOut.Close(); err != nil {
-		tidy.Remove(output)
+		tidy.Remove(nil, output)
 		fmt.Fprintf(errOut, "compose archive: %v\n", err)
 		return 1
 	}

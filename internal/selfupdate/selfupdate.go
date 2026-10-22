@@ -362,11 +362,11 @@ func download(ctx context.Context, opts Options, target string) (string, error) 
 	_, copyErr := io.Copy(io.MultiWriter(file, hash), io.LimitReader(body, maxArchiveBytes))
 	closeErr := file.Close()
 	if copyErr != nil || closeErr != nil {
-		tidy.Remove(file.Name())
+		tidy.Remove(nil, file.Name())
 		return "", errors.Join(copyErr, closeErr)
 	}
 	if got := hex.EncodeToString(hash.Sum(nil)); got != expected {
-		tidy.Remove(file.Name())
+		tidy.Remove(nil, file.Name())
 		return "", fmt.Errorf("checksum mismatch for %s: got %s, expected %s", name, got, expected)
 	}
 	return file.Name(), nil
@@ -383,7 +383,7 @@ func fetch(ctx context.Context, opts Options, url string) (io.ReadCloser, error)
 		return nil, fmt.Errorf("download %s: %w", url, err)
 	}
 	if response.StatusCode != http.StatusOK {
-		tidy.Close(response.Body)
+		tidy.Close(nil, response.Body)
 		return nil, fmt.Errorf("download %s: unexpected status %d", url, response.StatusCode)
 	}
 	return response.Body, nil
@@ -473,7 +473,7 @@ func install(ctx context.Context, opts Options, stage, staging, target string) e
 		return err
 	}
 	if _, err := script.Write(body); err != nil {
-		tidy.Close(script)
+		tidy.Close(nil, script)
 		return err
 	}
 	if err := script.Close(); err != nil {

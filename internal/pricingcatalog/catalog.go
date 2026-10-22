@@ -64,6 +64,7 @@ type Config struct {
 	Store      *store.Store
 	Pricing    *aiproxy.Pricing
 	Diagnostic func(Diagnostic)
+	Log        *slog.Logger // nil means slog.Default
 }
 
 // Catalog validates and publishes complete LiteLLM pricing generations.
@@ -76,6 +77,7 @@ type Catalog struct {
 	store      *store.Store
 	pricing    *aiproxy.Pricing
 	diagnostic func(Diagnostic)
+	log        *slog.Logger
 }
 
 // New constructs a catalog. Production callers leave the network seams unset
@@ -102,7 +104,12 @@ func New(cfg Config) *Catalog {
 	if sourceURL == "" {
 		sourceURL = SourceURL
 	}
+	log := cfg.Log
+	if log == nil {
+		log = slog.Default()
+	}
 	return &Catalog{
+		log:        log,
 		httpClient: client,
 		clock:      clock,
 		after:      after,
@@ -173,7 +180,7 @@ func (c *Catalog) Refresh(ctx context.Context) error {
 // error. Refresh already emits the diagnostic event; this adds the log line.
 func (c *Catalog) refreshLogged(ctx context.Context) {
 	if err := c.Refresh(ctx); err != nil {
-		slog.Warn("pricing catalog refresh failed", "err", err)
+		c.log.Warn("pricing catalog refresh failed", "err", err)
 	}
 }
 
@@ -266,8 +273,8 @@ func writeAtomicCache(path string, data []byte) error {
 	}
 	tmpName := tmp.Name()
 	cleanup := func() {
-		tidy.Close(tmp)
-		tidy.Remove(tmpName)
+		tidy.Close(nil, tmp)
+		tidy.Remove(nil, tmpName)
 	}
 	if err := tmp.Chmod(0o600); err != nil {
 		cleanup()
@@ -282,11 +289,11 @@ func writeAtomicCache(path string, data []byte) error {
 		return fmt.Errorf("sync LiteLLM pricing cache temporary file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		tidy.Remove(tmpName)
+		tidy.Remove(nil, tmpName)
 		return fmt.Errorf("close LiteLLM pricing cache temporary file: %w", err)
 	}
 	if err := os.Rename(tmpName, path); err != nil {
-		tidy.Remove(tmpName)
+		tidy.Remove(nil, tmpName)
 		return fmt.Errorf("publish LiteLLM pricing cache: %w", err)
 	}
 	return nil

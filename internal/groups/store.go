@@ -113,7 +113,7 @@ func scanGroup(row rowScanner) (Group, error) {
 		return Group{}, err
 	}
 	if settings != "" && settings != "{}" {
-		tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(settings), &g.Settings))
+		tidy.Log(nil, "group settings are not valid JSON; using defaults", json.Unmarshal([]byte(settings), &g.Settings), "group", g.Name)
 	}
 	return g, nil
 }

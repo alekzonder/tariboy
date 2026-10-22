@@ -5,13 +5,13 @@
 package storeui
 
 import (
-	"github.com/alekzonder/tariboy/internal/tidy"
-
 	"embed"
 	"io/fs"
 	"net/http"
 	"path"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
 //go:embed all:dist
@@ -46,7 +46,7 @@ func Handler() (http.Handler, error) {
 		}
 		if f, err := sub.Open(clean); err == nil {
 			st, serr := f.Stat()
-			tidy.Close(f)
+			tidy.Close(nil, f)
 			if serr == nil && !st.IsDir() {
 				r2 := r.Clone(r.Context())
 				r2.URL.Path = "/" + clean

@@ -122,14 +122,14 @@ func WorkflowScanTargets(t *Task) ([]any, func()) {
 		finishWorkflowFields(t, owner)
 		var step scannedStep
 		if position.Valid {
-			tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(position.String), &step))
+			tidy.Log(nil, "workflow position is not valid JSON", json.Unmarshal([]byte(position.String), &step), "workflow", t.WorkflowName)
 		}
 		if position.Valid && step.Total > 0 {
 			t.WorkflowStep = &WorkflowStep{Index: step.Index + 1, Total: step.Total}
 		}
 		var open scannedVisit
 		if visit.Valid {
-			tidy.Log("best effort: ignored malformed JSON", json.Unmarshal([]byte(visit.String), &open))
+			tidy.Log(nil, "workflow visit is not valid JSON", json.Unmarshal([]byte(visit.String), &open), "workflow", t.WorkflowName)
 		}
 		t.WorkflowAttention = workflowAttention(t, open)
 	}

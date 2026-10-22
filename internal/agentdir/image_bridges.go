@@ -449,12 +449,14 @@ func PrepareImageBridge(imageSkillsDir, finalDir string, expected []agentskills.
 	}
 	if err := renameBridge(stage, finalDir); err != nil {
 		if backup != "" {
-			tidy.Log("best effort: renameBridge", renameBridge(backup, finalDir))
+			if restoreErr := renameBridge(backup, finalDir); restoreErr != nil {
+				err = errors.Join(err, fmt.Errorf("restore previous bridge %s to %s: %w", backup, finalDir, restoreErr))
+			}
 		}
 		return err
 	}
 	if backup != "" {
-		tidy.RemoveAll(backup)
+		tidy.RemoveAll(nil, backup)
 	}
 	return validatePublishedBridge(finalDir, expected, plan)
 }

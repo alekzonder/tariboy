@@ -5,13 +5,12 @@
 package telemetry
 
 import (
-	"github.com/alekzonder/tariboy/internal/tidy"
-
 	"context"
 	"log/slog"
 	"os"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/tidy"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -118,7 +117,7 @@ func Setup(ctx context.Context, cfg Config, log *slog.Logger) (*Providers, error
 		otlpmetrichttp.WithEndpoint(cfg.Endpoint), otlpmetrichttp.WithInsecure())
 	restoreEnv()
 	if err != nil {
-		tidy.Log("best effort: tp.Shutdown", tp.Shutdown(ctx))
+		tidy.Log(nil, "trace provider shutdown failed", tp.Shutdown(ctx))
 		return nil, err
 	}
 	mp := sdkmetric.NewMeterProvider(
