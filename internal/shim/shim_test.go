@@ -1,6 +1,7 @@
 package shim
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -1310,7 +1311,7 @@ func TestRunTmuxLogsNewSessionError(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	err := runTmux(Options{
+	err := runTmux(context.Background(), Options{
 		IterationDir: dir, Agent: "manager", IterationID: "manager-x-1",
 		TmuxSession: "manager", HarnessArgv: []string{"claude"},
 	}, 10*time.Millisecond)
@@ -1351,7 +1352,7 @@ func TestRunTmuxCreatesHarnessWindowAfterSettingSessionHistoryLimit(t *testing.T
 		IterationDir: dir, Agent: "manager", IterationID: "manager-history-1",
 		TmuxSession: "managed-history", HarnessArgv: []string{"claude", "prompt with spaces"},
 	}
-	if err := runTmux(opts, time.Millisecond); err != nil {
+	if err := runTmux(context.Background(), opts, time.Millisecond); err != nil {
 		t.Fatalf("runTmux() error = %v", err)
 	}
 
@@ -1374,7 +1375,7 @@ func TestRunTmuxCreatesHarnessWindowAfterSettingSessionHistoryLimit(t *testing.T
 				t.Fatal(err)
 			}
 			wantCommand := shellJoin(tmuxSupervisorCommand(executable, opts.TmuxSession, filepath.Join(dir, "logs", tmuxExitStatusFilename), opts.HarnessArgv))
-			if !reflect.DeepEqual(call, []string{"new-window", "-t", opts.TmuxSession, wantCommand}) {
+			if !reflect.DeepEqual(call, []string{"new-window", "-e", tmuxSupervisorSockEnv + "=" + filepath.Join(dir, "shim.sock"), "-t", opts.TmuxSession, wantCommand}) {
 				t.Fatalf("new-window args = %#v, want harness command byte-identical to prior new-session command", call)
 			}
 		case "kill-window":
@@ -1416,7 +1417,7 @@ func TestRunTmuxKeepsBootstrapWindowWhenHarnessWindowCreationFails(t *testing.T)
 	if err := os.MkdirAll(filepath.Join(dir, "logs"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	err := runTmux(Options{
+	err := runTmux(context.Background(), Options{
 		IterationDir: dir, Agent: "manager", IterationID: "manager-history-failure-1",
 		TmuxSession: "managed-history-failure", HarnessArgv: []string{"claude"},
 	}, time.Millisecond)
@@ -1460,7 +1461,7 @@ func TestRunTmuxDisablesMouseForEachManagedSession(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(dir, "logs"), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		err := runTmux(Options{
+		err := runTmux(context.Background(), Options{
 			IterationDir: dir, Agent: session, IterationID: session + "-1",
 			TmuxSession: session, HarnessArgv: []string{"claude"},
 		}, time.Millisecond)
@@ -1523,7 +1524,7 @@ esac
 
 	argv := codexHarnessArgv(t, binDir)
 	original := append([]string(nil), argv...)
-	err := runTmux(Options{
+	err := runTmux(context.Background(), Options{
 		IterationDir: dir, Agent: "codex-agent", IterationID: "codex-tmux-1",
 		TmuxSession: "codex-agent", HarnessArgv: argv,
 	}, 10*time.Millisecond)
@@ -1738,7 +1739,7 @@ esac
 				harnessArgv = []string{"/bin/sh", "-c", "exit 127"}
 			}
 
-			err := runTmux(Options{
+			err := runTmux(context.Background(), Options{
 				IterationDir: dir, Agent: "manager", IterationID: "manager-exit-1",
 				TmuxSession: "manager", HardTimeoutS: tc.hardTimeout,
 				HarnessArgv: harnessArgv,

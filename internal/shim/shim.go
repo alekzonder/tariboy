@@ -2,6 +2,7 @@ package shim
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +29,15 @@ const (
 	tmuxExitStatusFilename  = "harness.exit-status"
 	defaultTmuxHistoryLimit = 10000
 	TmuxSupervisorMode      = "__tmux-supervisor"
+	// tmuxSupervisorSockEnv carries the shim RPC socket to the pane
+	// supervisor, which reports harness exit there. It is set only on the
+	// harness window and removed from the harness environment.
+	tmuxSupervisorSockEnv = "TARIBOY_SHIM_SUPERVISOR_SOCK"
+	// tmuxSessionPollInterval is the fallback has-session check for a session
+	// that ends without a supervisor exit report.
+	tmuxSessionPollInterval = 10 * time.Second
+	// tmuxExitNotifyTimeout bounds the supervisor's best-effort exit report.
+	tmuxExitNotifyTimeout = time.Second
 )
 
 var (
@@ -91,7 +101,9 @@ func (o Options) sockPath() string {
 // use production defaults.
 func Run(o Options) error {
 	if o.TmuxSession != "" {
-		return runTmux(o, 2*time.Second)
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+		defer stop()
+		return runTmux(ctx, o, tmuxSessionPollInterval)
 	}
 	forceStop := make(chan struct{})
 	signals := make(chan os.Signal, 1)
@@ -113,7 +125,7 @@ func Run(o Options) error {
 // runWith exposes the SIGTERM grace and sampling periods for tests.
 func runWith(o Options, grace, sample time.Duration) error {
 	if o.TmuxSession != "" {
-		return runTmux(o, sample)
+		return runTmux(context.Background(), o, sample)
 	}
 	return runProcessWithStop(o, grace, sample, nil)
 }
@@ -130,10 +142,13 @@ type procShim struct {
 }
 
 func (s *procShim) SetHardDeadline(deadline string) error {
-	if s.watchdog == nil {
+	s.mu.Lock()
+	w := s.watchdog
+	s.mu.Unlock()
+	if w == nil {
 		return fmt.Errorf("watchdog is not running")
 	}
-	return s.watchdog.Set(deadline)
+	return w.Set(deadline)
 }
 
 func (s *procShim) Status() StatusResult {
@@ -192,6 +207,16 @@ func runProcessWithStop(
 	}
 	defer stderr.Close()
 
+	// Bind the control socket before the harness exists: a shim without live
+	// control must fail its launch rather than run a harness nobody can kill.
+	s := &procShim{}
+	stopRPC, err := serveRPC(o.sockPath(), s)
+	if err != nil {
+		logShim(o.IterationDir, "ERROR %v", err)
+		return err
+	}
+	defer stopRPC()
+
 	logShim(o.IterationDir, "launch agent=%s iteration=%s argv=%q", o.Agent, o.IterationID, redactHarnessArgv(o.HarnessArgv))
 	cmd := exec.Command(o.HarnessArgv[0], o.HarnessArgv[1:]...)
 	cmd.Stdout = stdout
@@ -204,10 +229,9 @@ func runProcessWithStop(
 	pid := cmd.Process.Pid
 	logShim(o.IterationDir, "started pid=%d", pid)
 
-	s := &procShim{pid: pid, startedAt: formatTime(time.Now()), cmd: cmd}
-	sockPath := o.sockPath()
-	stopRPC := serveRPC(o.IterationDir, sockPath, s)
-	defer stopRPC()
+	s.mu.Lock()
+	s.pid, s.startedAt, s.cmd = pid, formatTime(time.Now()), cmd
+	s.mu.Unlock()
 
 	// Resource sampler.
 	var peakRSS int
@@ -248,7 +272,7 @@ func runProcessWithStop(
 			}
 		}()
 	}
-	s.watchdog = newDeadlineWatchdog(deadline, func() {
+	watchdog := newDeadlineWatchdog(deadline, func() {
 		s.mu.Lock()
 		s.terminationReason = "hard_timeout"
 		s.mu.Unlock()
@@ -259,13 +283,16 @@ func runProcessWithStop(
 			killGroup(o.IterationDir, pid, syscall.SIGKILL)
 		}
 	})
+	s.mu.Lock()
+	s.watchdog = watchdog
+	s.mu.Unlock()
 
 	waitErr := cmd.Wait()
 	close(processDone)
 	if forceStopDone != nil {
 		<-forceStopDone
 	}
-	s.watchdog.Stop()
+	watchdog.Stop()
 	close(sampleStop)
 	sampleWG.Wait()
 	// Final sample (best-effort; the process may already be reaped).
@@ -289,7 +316,7 @@ func runProcessWithStop(
 	return writeResult(o.IterationDir, res)
 }
 
-func runTmux(o Options, sample time.Duration) error {
+func runTmux(ctx context.Context, o Options, fallback time.Duration) error {
 	statusPath := filepath.Join(o.IterationDir, "logs", tmuxExitStatusFilename)
 	if err := os.Remove(statusPath); err != nil && !os.IsNotExist(err) {
 		return errors.New("prepare tmux exit status")
@@ -298,6 +325,23 @@ func runTmux(o Options, sample time.Duration) error {
 	if err != nil {
 		return fmt.Errorf("resolve shim executable: %w", err)
 	}
+	// Bind the control socket before the tmux session exists: a session
+	// without live control must fail its launch rather than run a harness the
+	// daemon can neither kill nor reattach.
+	s := &tmuxShim{
+		session:       o.TmuxSession,
+		iterationDir:  o.IterationDir,
+		startedAt:     formatTime(time.Now()),
+		harnessExited: make(chan struct{}),
+	}
+	sockPath := o.sockPath()
+	stopRPC, err := serveRPC(sockPath, s)
+	if err != nil {
+		logShim(o.IterationDir, "ERROR %v", err)
+		return err
+	}
+	defer stopRPC()
+
 	cmdStr := shellJoin(tmuxSupervisorCommand(executable, o.TmuxSession, statusPath, o.HarnessArgv))
 	logShim(o.IterationDir, "launch tmux agent=%s iteration=%s session=%s argv=%q", o.Agent, o.IterationID, o.TmuxSession, redactHarnessArgv(o.HarnessArgv))
 	bootstrapWindowID, err := execCommand("tmux", tmuxBootstrapSessionArgs(o.TmuxSession, os.Environ())...).Output()
@@ -320,7 +364,7 @@ func runTmux(o Options, sample time.Duration) error {
 		logShim(o.IterationDir, "ERROR tmux set-option session=%s: %v", o.TmuxSession, err)
 		return fmt.Errorf("tmux set-option: %w", err)
 	}
-	if err := execCommand("tmux", "new-window", "-t", o.TmuxSession, cmdStr).Run(); err != nil {
+	if err := execCommand("tmux", "new-window", "-e", tmuxSupervisorSockEnv+"="+sockPath, "-t", o.TmuxSession, cmdStr).Run(); err != nil {
 		logShim(o.IterationDir, "ERROR tmux new-window session=%s: %v", o.TmuxSession, err)
 		return fmt.Errorf("tmux new-window: %w", err)
 	}
@@ -331,29 +375,30 @@ func runTmux(o Options, sample time.Duration) error {
 	if err := pipeTmuxLogs(o.TmuxSession, filepath.Join(o.IterationDir, "logs", "harness.stdout.log")); err != nil {
 		logShim(o.IterationDir, "WARN tmux pipe logs unavailable")
 	}
-	s := &tmuxShim{
-		session:      o.TmuxSession,
-		iterationDir: o.IterationDir,
-		startedAt:    formatTime(time.Now()),
-	}
-	sockPath := o.sockPath()
-	stopRPC := serveRPC(o.IterationDir, sockPath, s)
-	defer stopRPC()
-	s.watchdog = newDeadlineWatchdog(tmuxDeadline(o), func() {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	watchdog := newDeadlineWatchdog(tmuxDeadline(o), func() {
 		s.mu.Lock()
 		s.terminationReason = "hard_timeout"
 		s.mu.Unlock()
 		if err := KillTmuxSession(o.TmuxSession); err != nil {
 			logShim(o.IterationDir, "kill tmux session %s: %v", o.TmuxSession, err)
 		}
+		cancel()
 	})
-	defer s.watchdog.Stop()
+	s.mu.Lock()
+	s.watchdog = watchdog
+	s.mu.Unlock()
+	defer watchdog.Stop()
 
-	tk := time.NewTicker(sample)
+	tk := time.NewTicker(fallback)
 	defer tk.Stop()
-	for range tk.C {
-		if execCommand("tmux", "has-session", "-t", o.TmuxSession).Run() != nil {
-			break // session gone
+	if end := waitTmuxEnd(ctx, o.TmuxSession, s.harnessExited, tk.C); end != tmuxEndSessionGone {
+		// The supervisor has recorded the status, or the shim is being
+		// stopped. Remove the session either way so it never outlives
+		// result.json; an absent session is already stopped.
+		if err := KillTmuxSession(o.TmuxSession); err != nil {
+			logShim(o.IterationDir, "kill tmux session %s after %s: %v", o.TmuxSession, end, err)
 		}
 	}
 	exitCode, statusErr := readTmuxExitStatus(statusPath)
@@ -371,6 +416,34 @@ func runTmux(o Options, sample time.Duration) error {
 	s.result = res
 	s.mu.Unlock()
 	return writeResult(o.IterationDir, res)
+}
+
+// tmuxWaitEnd names why waitTmuxEnd returned.
+type tmuxWaitEnd string
+
+const (
+	tmuxEndHarnessExited tmuxWaitEnd = "harness_exited"
+	tmuxEndCanceled      tmuxWaitEnd = "canceled"
+	tmuxEndSessionGone   tmuxWaitEnd = "session_gone"
+)
+
+// waitTmuxEnd blocks until the pane supervisor reports harness exit, ctx is
+// canceled (SIGTERM or the hard-deadline watchdog), or a fallback tick finds
+// the session gone. The tick covers a session killed from outside before the
+// supervisor could report, and a supervisor that does not send the report.
+func waitTmuxEnd(ctx context.Context, session string, harnessExited <-chan struct{}, fallback <-chan time.Time) tmuxWaitEnd {
+	for {
+		select {
+		case <-harnessExited:
+			return tmuxEndHarnessExited
+		case <-ctx.Done():
+			return tmuxEndCanceled
+		case <-fallback:
+			if execCommand("tmux", "has-session", "-t", session).Run() != nil {
+				return tmuxEndSessionGone
+			}
+		}
+	}
 }
 
 // redactHarnessArgv returns a log-only copy with tokenized local proxy URL path
@@ -600,13 +673,26 @@ type tmuxShim struct {
 	result            *IterationResult
 	watchdog          *deadlineWatchdog
 	terminationReason string
+	// harnessExited closes when the pane supervisor reports that it recorded
+	// the harness exit status.
+	harnessExited   chan struct{}
+	harnessExitOnce sync.Once
+}
+
+// HarnessExited records the pane supervisor's exit report. Repeated reports
+// are harmless.
+func (s *tmuxShim) HarnessExited() {
+	s.harnessExitOnce.Do(func() { close(s.harnessExited) })
 }
 
 func (s *tmuxShim) SetHardDeadline(deadline string) error {
-	if s.watchdog == nil {
+	s.mu.Lock()
+	w := s.watchdog
+	s.mu.Unlock()
+	if w == nil {
 		return fmt.Errorf("watchdog is not running")
 	}
-	return s.watchdog.Set(deadline)
+	return w.Set(deadline)
 }
 
 func (s *tmuxShim) Status() StatusResult {
@@ -682,7 +768,9 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 	signal.Notify(events, syscall.SIGHUP)
 	defer signal.Stop(events)
 
+	exitSock := os.Getenv(tmuxSupervisorSockEnv)
 	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Env = envWithout(os.Environ(), tmuxSupervisorSockEnv)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdinFD := int(os.Stdin.Fd())
@@ -763,7 +851,39 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 		return err
 	}
 	reaped = true
-	return writeTmuxExitStatus(statusPath, waitStatusExitCode(status))
+	if err := writeTmuxExitStatus(statusPath, waitStatusExitCode(status)); err != nil {
+		return err
+	}
+	notifyHarnessExited(exitSock)
+	return nil
+}
+
+// notifyHarnessExited tells the outer shim that the exit status is recorded,
+// so it stops waiting for the session to end. The report is best-effort: an
+// unreachable socket or an older shim without the method leaves the shim on
+// its has-session fallback, which still ends the wait.
+func notifyHarnessExited(sock string) {
+	if sock == "" {
+		return
+	}
+	client, err := ConnectTimeout(sock, tmuxExitNotifyTimeout)
+	if err != nil {
+		return
+	}
+	client.Timeout = tmuxExitNotifyTimeout
+	_ = client.NotifyHarnessExited() // best-effort; the shim's has-session fallback ends its wait
+}
+
+// envWithout returns base without any key= entry.
+func envWithout(base []string, key string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(base))
+	for _, item := range base {
+		if !strings.HasPrefix(item, prefix) {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func signalTmuxGroup(pid int, signal syscall.Signal) error {
@@ -965,21 +1085,20 @@ func (s *tmuxShim) Report() ReportResult {
 }
 
 // serveRPC listens on sockPath and returns a stop func that closes the listener
-// and removes the socket. A bind failure is not fatal (the daemon falls back to
-// result.json for completion) but it costs live control (kill/screen/reattach),
-// so it is logged loudly to logs/shim.log rather than silently swallowed.
-func serveRPC(iterDir, sockPath string, h Handler) func() {
+// and removes the socket. Callers bind before they start the harness or create
+// the tmux session: a bind failure is fatal, because a harness without its
+// control socket could not be killed, inspected, or reattached.
+func serveRPC(sockPath string, h Handler) (func(), error) {
 	tidy.Remove(nil, sockPath)
 	l, err := netListenUnix(sockPath)
 	if err != nil {
-		logShim(iterDir, "ERROR bind shim rpc socket %q: %v (continuing without live control; completion via result.json)", sockPath, err)
-		return func() {}
+		return nil, fmt.Errorf("bind shim rpc socket: %w", err)
 	}
 	go Serve(l, h)
 	return func() {
 		l.Close()
 		tidy.Remove(nil, sockPath)
-	}
+	}, nil
 }
 
 // killGroup signals the process group led by pid. The group may already have
