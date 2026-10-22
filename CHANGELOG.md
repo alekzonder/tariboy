@@ -1,3 +1,41 @@
+## [0.91.0] - 2026-10-22
+
+### Changed
+
+- Every operator command binds its arguments once, before its handler runs,
+  on HTTP, the CLI, plugin commands and internal calls alike. A missing
+  required argument is `400 missing_param`, and a value of the wrong type
+  (`"abc"` for a number) is `400 invalid_param`. An empty query value such as
+  `?limit=` counts as omitted.
+- The operator API and the agent tools API map errors in one place and give
+  the same answer: an unknown script is 404 `not_found` and an active script
+  is 409 `script_active` on both. Any other error is 500 `internal` with the
+  fixed text "internal error, see daemon log"; its detail goes only to the
+  daemon log. A body that is not valid JSON gets 400 `bad_json` with a fixed
+  text.
+- `ttasks`, the operator task routes and the agent socket are built from one
+  table of task commands. Numbers and booleans travel as JSON numbers and
+  booleans, and a malformed one is refused with `invalid_param`; the list,
+  move, complete, comment and relation routes are now documented in OpenAPI.
+- `daemon start|stop|restart|status|logs`, `update` and the `compose` verbs
+  are ordinary commands, so their help comes from `--help-json`, and
+  `daemon help` lists `agent-shell-script`. `--json` is the global flag only
+  in flag position.
+- On compact windows the agents drawer is for phone widths only (below
+  768 CSS pixels). From 768 to 1023 pixels the agent list stays a column
+  with the titlebar toggle that collapses it.
+
+### Fixed
+
+- The queue dialogs can save owners again: task routes accept owners and
+  other list fields as a string or an array.
+- `ttasks` keeps words such as `-42` or `-v` as text; only a word with two
+  dashes is a flag.
+- The agents drawer no longer focuses **Search agents** as it opens, so a
+  phone does not raise its keyboard.
+
+[0.91.0]: https://github.com/alekzonder/tariboy/compare/v0.90.0...v0.91.0
+
 ## [0.90.0] - 2026-10-21
 
 ### Added
