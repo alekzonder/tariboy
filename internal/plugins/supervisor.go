@@ -46,8 +46,8 @@ type Runner interface {
 	Start(spec SpawnSpec, logw io.Writer) (ProcHandle, error)
 }
 
-// ResolveExec is the symlink-safe gate for what the daemon will exec (carry-forward
-// from the manifest task). Manifest.Validate is a string-only check; it cannot see
+// ResolveExec is the symlink-safe gate for what the daemon will exec.
+// Manifest.Validate is a string-only check; it cannot see
 // through symlinks. ResolveExec resolves both the plugin dir and the exec to their
 // real paths and refuses any exec whose real path escapes the real plugin dir (e.g.
 // a symlink to /bin/sh). The caller (host) passes the returned absolute path as
@@ -75,12 +75,12 @@ func NewExecRunner() Runner { return execRunner{} }
 
 func (execRunner) Start(spec SpawnSpec, logw io.Writer) (ProcHandle, error) {
 	// Serialise all writes to the plugin log so the stderr copier and the
-	// stdout tee cannot race (carry-forward 6: a plugin never trips -race).
+	// stdout tee cannot race.
 	safe := &syncWriter{w: logw}
 	cmd := exec.Command(spec.Exec)
 	cmd.Dir = spec.Dir
 	cmd.Env = spec.Env
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // own process group (spec §13)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // own process group
 	cmd.Stderr = safe
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -199,7 +199,7 @@ type SupervisorConfig struct {
 	// LogWriter captures the plugin's stdout tail + stderr (default io.Discard).
 	LogWriter io.Writer
 
-	// MintToken/RevokeToken manage the per-life plugin token (carry-forward 5).
+	// MintToken/RevokeToken manage the per-life plugin token.
 	// When MintToken is set, the supervisor mints a fresh token at the start of
 	// every life, injects it as TARIBOY_PLUGIN_TOKEN, and revokes it on EVERY
 	// exit path (spawn fail, handshake reject/timeout, exit, unhealthy, cancel).

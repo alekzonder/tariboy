@@ -62,9 +62,11 @@ Types are defined in `internal/plugins`:
 - **`channel-source`** publishes inbound events through
   `POST /api/plugin/publish`.
 - **`channel-sink`** receives subscribed bus messages at `POST /deliver`, with
-  durable redelivery and a dead-letter queue.
-- **`tool`** advertises an agent-facing capability out of band.
-- **`harness`** is recognized, but its runtime wiring is deferred.
+  durable redelivery and a dead-letter queue. The bus wakes the sink's drainer
+  when a new delivery is committed; a 5-second fallback timer retries failed
+  deliveries.
+- **`tool`** and **`harness`** are accepted in a manifest, but the daemon
+  connects nothing to them yet.
 
 ### Providers and parameterized channels
 

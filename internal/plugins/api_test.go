@@ -152,7 +152,7 @@ func TestSubscriptions(t *testing.T) {
 	}
 }
 
-// TestPluginWatchesPull covers GET /api/plugin/watches (spec §6.2 pull path):
+// TestPluginWatchesPull covers GET /api/plugin/watches (the pull path):
 // it returns the full current watch list for exactly the plugin's provided
 // channels, scoped by the plugin token.
 func TestPluginWatchesPull(t *testing.T) {

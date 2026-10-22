@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-// provider.go implements the plugin provider contract's subscribe-time gate
-// (spec §6.1): a plugin declares the channels it fulfils for parameterized
+// provider.go implements the plugin provider contract's subscribe-time gate:
+// a plugin declares the channels it fulfils for parameterized
 // subscriptions (Channels.Provide), each with an optional JSON Schema for the
 // params a subscriber must supply. When an agent subscribes with params to a
 // provided channel, the daemon validates those params here and fails the
@@ -74,8 +74,7 @@ type RecordLister interface {
 // ParamsValidatorFor builds the bus params validator (bus.SetParamsValidator)
 // over a record lister. The params gate exists only for provider channels; a
 // core channel that no plugin provides never needed the plugin store at all. So
-// a transient List() failure must NOT fail every subscribe (spec §6.1, review
-// finding #2): on a list error the validator treats the target channel as
+// a transient List() failure must NOT fail every subscribe: on a list error the validator treats the target channel as
 // non-provider and accepts the subscribe, reporting the read failure via
 // onListErr. When the store IS readable, a provided channel's params_schema gate
 // applies exactly as before, failing loudly on bad params.
@@ -93,7 +92,7 @@ func ParamsValidatorFor(lister RecordLister, onListErr func(channel string, err 
 }
 
 // ProvidedChannelInfo is a flattened, presentation-ready view of one plugin
-// provided-channel declaration, used by the Messages skill (spec §6.1) to list and
+// provided-channel declaration, used by the Messages skill to list and
 // annotate provider channels — even before the channel row exists in the bus.
 type ProvidedChannelInfo struct {
 	Channel  string   // the provided channel name

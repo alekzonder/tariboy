@@ -360,3 +360,20 @@ func TestResolveInstalledDistinguishesPromptlessPluginFromMissing(t *testing.T) 
 		t.Fatalf("missing plugin = %+v", missing)
 	}
 }
+
+func TestReservedDirNamesCoverHostPaths(t *testing.T) {
+	t.Parallel()
+	h := &Host{cfg: HostConfig{PluginsDir: t.TempDir()}}
+	for _, path := range []string{h.SocketPath("echo"), h.workdir("echo"), filepath.Dir(h.logPath("echo"))} {
+		if filepath.Dir(path) != h.dir("echo") || !reservedDirName(filepath.Base(path)) {
+			t.Errorf("host path %q is not a reserved entry of the plugin directory", path)
+		}
+	}
+	for _, name := range reservedDirNames {
+		m, _ := ParseManifest([]byte(goodManifest))
+		m.Version = name
+		if err := m.Validate(); err == nil {
+			t.Errorf("version %q accepted, want reserved-name rejection", name)
+		}
+	}
+}

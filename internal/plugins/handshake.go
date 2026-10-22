@@ -8,7 +8,7 @@ import (
 	"io"
 )
 
-// Handshake is the one JSON line a plugin prints to stdout on startup (spec §7.2).
+// Handshake is the one JSON line a plugin prints to stdout on startup.
 type Handshake struct {
 	Name            string   `json:"name"`
 	Version         string   `json:"version"`
@@ -36,7 +36,7 @@ func ReadHandshake(r io.Reader) (Handshake, error) {
 	return h, nil
 }
 
-// Validate checks the handshake against the installed manifest (spec §7.2).
+// Validate checks the handshake against the installed manifest.
 func (h Handshake) Validate(m Manifest) error {
 	if h.ProtocolVersion != ProtocolVersion {
 		return fmt.Errorf("plugin %s announced protocol_version %d (daemon speaks %d)",

@@ -215,7 +215,9 @@ maps forum updates, then publishes ordinary text through the authenticated
 plugin API onto `chat:telegram:<agent>`. Agent replies return through the
 existing channel-sink outbox, so bus persistence, wake coalescing,
 acknowledgement, redelivery, and DLQ behavior remain authoritative; Telegram
-does not introduce a second agent-delivery path.
+does not introduce a second agent-delivery path. The sink drainer does not poll
+on a short interval: the bus wakes it after a committed delivery, and a
+5-second fallback timer retries failed deliveries.
 
 ## Agent goal delivery
 

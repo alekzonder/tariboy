@@ -91,7 +91,7 @@ type HostConfig struct {
 
 // Host is the registry of running plugins: it starts a Supervisor per enabled
 // plugin, tracks them concurrency-safely, and drains them all (cancel + wait)
-// before the daemon closes the store (spec §13, M5 drain-before-close).
+// before the daemon closes the store.
 type Host struct {
 	cfg HostConfig
 	mu  sync.Mutex
@@ -105,7 +105,7 @@ type Host struct {
 	wg         sync.WaitGroup
 
 	// pushMu guards pushQueue: the per-(plugin,channel) watch-push serializers
-	// that keep provider reconciles ordered (spec §6.2). See PushWatches.
+	// that keep provider reconciles ordered. See PushWatches.
 	pushMu    sync.Mutex
 	pushQueue map[string]*watchPush
 }
@@ -187,7 +187,7 @@ func (h *Host) track() (context.Context, bool) {
 }
 
 func (h *Host) SocketPath(name string) string {
-	return filepath.Join(h.cfg.PluginsDir, name, "plugin.sock")
+	return filepath.Join(h.cfg.PluginsDir, name, socketFileName)
 }
 
 // ErrNotRunning is returned by PluginRoutes/PluginAction when the target plugin
@@ -295,10 +295,12 @@ func (h *Host) ValidateOperatorAction(name, action string, data map[string]any) 
 }
 func (h *Host) dir(name string) string                 { return filepath.Join(h.cfg.PluginsDir, name) }
 func (h *Host) versionDir(name, version string) string { return filepath.Join(h.dir(name), version) }
-func (h *Host) workdir(name string) string             { return filepath.Join(h.dir(name), "workdir") }
-func (h *Host) logPath(name string) string             { return filepath.Join(h.dir(name), "logs", "plugin.log") }
+func (h *Host) workdir(name string) string             { return filepath.Join(h.dir(name), workdirName) }
+func (h *Host) logPath(name string) string {
+	return filepath.Join(h.dir(name), logsDirName, "plugin.log")
+}
 
-// StartAll re-launches every enabled plugin (spec §7.2 step 2).
+// StartAll re-launches every enabled plugin after a daemon restart.
 func (h *Host) StartAll(ctx context.Context) error {
 	h.mu.Lock()
 	if h.stopping {
@@ -352,9 +354,8 @@ func (h *Host) migrateLegacyPackage(rec Record) error {
 	if err != nil {
 		return err
 	}
-	reserved := map[string]bool{"active-version": true, "logs": true, "workdir": true, "plugin.sock": true, filepath.Base(tmp): true}
 	for _, entry := range entries {
-		if reserved[entry.Name()] {
+		if reservedDirName(entry.Name()) || entry.Name() == filepath.Base(tmp) {
 			continue
 		}
 		if err := copyTree(filepath.Join(root, entry.Name()), filepath.Join(tmp, entry.Name())); err != nil {
@@ -500,7 +501,7 @@ func (h *Host) Start(rec Record) error {
 		},
 	})
 
-	// Task 9 hook: subscribe sink channels + start the drainer here.
+	// A channel-sink plugin gets its subscriptions and delivery drainer.
 	h.startSink(ctx, rec, sock)
 
 	go func() {
@@ -530,7 +531,7 @@ func (h *Host) Start(rec Record) error {
 }
 
 // onState fans a supervisor state change to the live snapshot, the durable
-// store, and a system:plugins bus event (carry-forward (c)). Repeated idempotent
+// store, and a system:plugins bus event. Repeated idempotent
 // "running" emissions are deduped so a healthy plugin does not spam the bus.
 func (h *Host) onState(name, state string, health map[string]any) {
 	h.mu.Lock()
@@ -641,7 +642,8 @@ func (h *Host) Restart(name string) error {
 	return h.Start(rec)
 }
 
-// StopAll gracefully stops every plugin and waits (drain-before-close, spec §13).
+// StopAll gracefully stops every plugin and waits, so nothing touches the
+// store after the daemon closes it.
 // It first refuses new work and cancels the root, so a pending rollback restart
 // or watch push exits instead of starting anything; Start returns
 // ErrHostStopping from then on.
@@ -663,7 +665,7 @@ func (h *Host) StopAll() {
 
 // Install validates+copies a plugin dir into PluginsDir, records it, and starts it.
 func (h *Host) Install(sourcePath string) (map[string]any, error) {
-	// SECURITY (Task 2/7 carry-forward): reject the whole source tree if it
+	// SECURITY: reject the whole source tree if it
 	// contains ANY symlink, anywhere (not just the top level). A plugin package
 	// shipping a symlink whose target lies outside the plugin dir would let a
 	// later exec or read escape containment once copied into PluginsDir — this
@@ -721,7 +723,7 @@ func (h *Host) Install(sourcePath string) (map[string]any, error) {
 	// every step that failed, so the caller can report them with the cause.
 	rollback := func() error {
 		removeMarker := func() error {
-			if err := os.Remove(filepath.Join(h.dir(m.Name), "active-version")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			if err := os.Remove(filepath.Join(h.dir(m.Name), activeVersionFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}
 			return nil
@@ -822,7 +824,7 @@ func (h *Host) Remove(name string) error {
 		return err
 	}
 	h.stop(name)
-	h.unsubscribeSink(name) // Task 9 hook
+	h.unsubscribeSink(name)
 	if err := h.cfg.Store.Delete(name); err != nil {
 		return err
 	}
@@ -1004,7 +1006,7 @@ func writeActiveVersion(dir, version string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".active-version-")
+	tmp, err := os.CreateTemp(dir, "."+activeVersionFile+"-")
 	if err != nil {
 		return err
 	}
@@ -1021,10 +1023,10 @@ func writeActiveVersion(dir, version string) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(name, filepath.Join(dir, "active-version"))
+	return os.Rename(name, filepath.Join(dir, activeVersionFile))
 }
 
-// --- channel-sink hooks (Task 9) ---
+// --- channel-sink delivery ---
 
 // sinkFallbackInterval bounds how long a sink drainer sleeps without a bus
 // Wake signal. Wake carries new deliveries; the timer retries failed ones.
@@ -1045,7 +1047,7 @@ func sinkPatterns(rec Record) []string {
 
 // startSink subscribes a channel-sink plugin to its declared channels and runs a
 // per-plugin drainer that delivers matching bus messages to the plugin's
-// /deliver (spec §7.3). The subscriptions are durable; the drainer exits on ctx.
+// /deliver. The subscriptions are durable; the drainer exits on ctx.
 // It drains at start, then whenever the bus Wake signal reports a new delivery,
 // and at the latest every sinkFallbackInterval to retry failed deliveries.
 //
@@ -1095,7 +1097,7 @@ func (h *Host) startSink(ctx context.Context, rec Record, socket string) {
 
 // drainOnce delivers one batch of pending messages for one plugin. A delivery
 // failure is left unacked (bus redelivery + DLQ handle it) and surfaced as a
-// system:plugins event. Never panics on plugin I/O (spec §13). It reports
+// system:plugins event. Never panics on plugin I/O. It reports
 // whether a full batch went through cleanly, so more may be waiting now; after
 // a failure the drainer waits instead of spending retry attempts in a loop.
 func (h *Host) drainOnce(ctx context.Context, name, subscriber string, client *Client) bool {
@@ -1364,7 +1366,7 @@ func watchDTOs(ws []bus.WatchInfo) []WatchDTO {
 }
 
 // PushWatches asynchronously delivers the full current watch list for a provided
-// channel to its provider plugin's socket (spec §6.2). Delivery is serialized
+// channel to its provider plugin's socket. Delivery is serialized
 // per (plugin, channel): concurrent subscribe/unsubscribe events would otherwise
 // each spawn an independent goroutine, and a stale full-list snapshot could
 // overtake a newer one — leaving the provider reconciled to a watch that is gone
