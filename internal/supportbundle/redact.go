@@ -63,17 +63,13 @@ func redactText(body []byte, roots, environ []string) []byte {
 	sort.Slice(replacements, func(i, j int) bool {
 		return len(replacements[i]) > len(replacements[j])
 	})
-	// Replace in a single pass and only between existing markers, so a short
-	// value cannot match inside a "<redacted>" marker.
-	pairs := make([]string, 0, len(replacements)*2)
+	// Replace longest first, so a short value cannot split a longer secret that
+	// starts with it. Only text between existing markers is searched, so a
+	// short value cannot match inside a "<redacted>" marker either.
 	for _, value := range replacements {
-		pairs = append(pairs, value, "<redacted>")
-	}
-	if len(pairs) > 0 {
-		replacer := strings.NewReplacer(pairs...)
 		parts := strings.Split(output, "<redacted>")
 		for i, part := range parts {
-			parts[i] = replacer.Replace(part)
+			parts[i] = strings.ReplaceAll(part, value, "<redacted>")
 		}
 		output = strings.Join(parts, "<redacted>")
 	}

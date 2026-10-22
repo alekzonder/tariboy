@@ -1001,6 +1001,9 @@ type attachRecordingShim struct {
 	resized chan shim.ResizeParams
 	killed  chan struct{}
 	sent    chan string
+	// killRefusals makes the first Kill calls fail like a shim whose harness
+	// has not started yet.
+	killRefusals *atomic.Int32
 }
 
 func (s attachRecordingShim) Status() shim.StatusResult { return shim.StatusResult{Running: true} }
@@ -1017,6 +1020,9 @@ func (s attachRecordingShim) SendKeys(p shim.SendKeysParams) error {
 func (s attachRecordingShim) Report() shim.ReportResult { return shim.ReportResult{} }
 
 func (s attachRecordingShim) Kill() error {
+	if s.killRefusals != nil && s.killRefusals.Add(-1) >= 0 {
+		return errors.New("harness not started yet")
+	}
 	if s.killed != nil {
 		select {
 		case s.killed <- struct{}{}:
@@ -1117,6 +1123,24 @@ func TestManagerKillForwardsToAdoptedShim(t *testing.T) {
 	case <-killed:
 	case <-time.After(time.Second):
 		t.Fatal("adopted shim did not receive Kill")
+	}
+}
+
+func TestManagerStopRetriesKillRefusedBeforeHarnessStarts(t *testing.T) {
+	t.Parallel()
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done"}}})
+	killed := make(chan struct{}, 1)
+	refusals := &atomic.Int32{}
+	refusals.Store(2)
+	startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{killed: killed, killRefusals: refusals})
+
+	if err := m.Stop("smoke"); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	select {
+	case <-killed:
+	default:
+		t.Fatal("Stop gave up after the shim refused Kill with harness not started yet")
 	}
 }
 

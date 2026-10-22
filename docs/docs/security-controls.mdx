@@ -331,13 +331,13 @@ and home directory prefixes are still rewritten. A
 secret-looking name is never allowlisted, and the unknown-name rule is
 unchanged from policy version 1. `diagnostics.json` reports policy version 2.
 
-The collector never includes credentials or environment values, SSH aliases/configuration, `PROMPT.md`, context, transcripts, audit,
-workdirs, configured cwd contents, global or agent shell scripts, image/plugin
-state, provisioning replies, or user files. It does not open agent environment
-configuration. Harness output can
-nevertheless contain arbitrary private natural language, so inspect the ZIP
-before sending it under your organization's support data policy. Export does
-not upload anything automatically.
+The collector never includes credentials or environment values, SSH
+aliases/configuration, `PROMPT.md`, context, transcripts, audit, workdirs,
+configured cwd contents, global or agent shell scripts, image/plugin state,
+provisioning replies, or user files. It does not open agent environment
+configuration. Harness output can nevertheless contain arbitrary private natural
+language, so inspect the ZIP before sending it under your organization's support
+data policy. Export does not upload anything automatically.
 
 Activity audit export is a separate, explicit operator action and is not a
 support bundle. It can export one iteration or all retained iterations and may

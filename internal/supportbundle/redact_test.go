@@ -122,3 +122,12 @@ func TestRedactTextDoesNotReplaceInsideMarkers(t *testing.T) {
 		t.Fatalf("output = %q", output)
 	}
 }
+
+func TestRedactTextShortValueOverlappingLongSecretDoesNotLeak(t *testing.T) {
+	// The USER value ends inside the secret that follows it in the text.
+	environ := []string{"USER=xab", "API_TOKEN=abcdefghijklmnop"}
+	output := string(redactText([]byte("v xabcdefghijklmnop u"), nil, environ))
+	if strings.Contains(output, "defghijkl") {
+		t.Fatalf("secret tail leaked: %q", output)
+	}
+}

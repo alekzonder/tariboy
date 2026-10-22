@@ -81,14 +81,15 @@ truncates one of those selected files: agent data above 128 MiB is rejected,
 and Desktop bounds a daemon response at 160 MiB.
 
 The collector never includes `PROMPT.md`, model/proxy transcripts,
-`audit.jsonl`, secrets, environment configuration or values, `CONTEXT.md`, workdirs, configured cwd contents, image/plugin state,
-SSH aliases/configuration, provisioning replies, or user files, and it does
-not open agent environment configuration. It does not export the process
-environment. A value of an allowlisted variable (see below) that already
-appears in collected text is kept on purpose. The transient tmux exit-status file
-is also outside the allowlist. Harness output is still arbitrary,
-sensitive text; automatic redaction cannot prove it contains no private
-business data. Inspect the ZIP before sending it.
+`audit.jsonl`, secrets, environment configuration or values, `CONTEXT.md`,
+workdirs, configured cwd contents, image/plugin state, SSH
+aliases/configuration, provisioning replies, or user files, and it does not open
+agent environment configuration. It does not export the process environment. A
+value of an allowlisted variable (see below) that already appears in collected
+text is kept on purpose. The transient tmux exit-status file is also outside the
+allowlist. Harness output is still arbitrary, sensitive text; automatic
+redaction cannot prove it contains no private business data. Inspect the ZIP
+before sending it.
 
 Redaction decides by the name of each environment variable of the daemon
 process (policy version 2, shown as `redaction_policy_version` in
