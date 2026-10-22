@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
-/** Below Tailwind's `lg` the agent list is a drawer, not a column. */
-export const COMPACT_QUERY = "(max-width: 1023.98px)";
+/** Below Tailwind's `md` the agent list is a drawer, not a column. */
+export const DRAWER_QUERY = "(max-width: 767.98px)";
 
 /** Whether a CSS media query matches now, following later changes. */
 export function useMediaQuery(query: string): boolean {

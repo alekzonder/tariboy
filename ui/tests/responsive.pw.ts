@@ -4,7 +4,7 @@ const daemonURL = "http://127.0.0.1:4176";
 const fixture = "/tests/tasks-fixture.html#";
 const AGENT = "responsive-agent-with-a-long-name";
 // The width below which the agent list is a drawer behind the menu button.
-const COMPACT = 1024;
+const COMPACT = 768;
 
 async function ensureAgent(request: APIRequestContext) {
   const existing = await request.get(`${daemonURL}/api/agents/${AGENT}`);
@@ -141,6 +141,8 @@ test("the agent list is a drawer on compact screens and a column on wide ones", 
   await page.getByRole("button", { name: "Open menu" }).click();
   const drawer = page.getByRole("dialog", { name: "Agents" });
   await expect(drawer).toBeVisible();
+  // No focus in the search field, so a phone keeps its keyboard down.
+  await expect(drawer.getByRole("searchbox", { name: "Search agents" })).not.toBeFocused();
   // It slides in; measure where it settles.
   await expect.poll(async () => (await drawer.boundingBox())?.x).toBe(0);
   const box = await drawer.boundingBox();
