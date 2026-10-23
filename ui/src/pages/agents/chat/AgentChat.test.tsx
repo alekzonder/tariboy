@@ -277,3 +277,24 @@ it("re-reads the conversation from the new endpoint after the host reconnects", 
     String(path).startsWith(`http://127.0.0.1:41002${DM}`))).toBe(true));
   expect(screen.getByText("please look at this")).toBeInTheDocument();
 });
+
+
+it("keeps the composer draft after sending fails", async () => {
+  stubChat();
+  const fetchChat = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation((...args) => {
+    if (String(args[0]).endsWith("/api/messages")) {
+      return Promise.resolve({
+        ok: false, status: 500,
+        text: async () => JSON.stringify({ ok: false, error: { code: "failed", message: "offline" } }),
+      } as Response);
+    }
+    return fetchChat(...args);
+  });
+  renderChat();
+  await screen.findByText("please look at this");
+  await userEvent.type(screen.getByLabelText("Message worker"), "keep this reply");
+  await userEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
+  expect(screen.getByLabelText("Message worker")).toHaveValue("keep this reply");
+});
