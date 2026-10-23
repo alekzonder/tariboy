@@ -24,8 +24,12 @@ no native command is called. The implicit same-origin "This daemon (local)"
 host is absent, the router is `HashRouter`, the daemon banner is hidden, an
 empty start screen offers **Add server**, and the server dialog accepts
 `https://` or plain `http://` to a loopback port only. A web link navigates the
-WebView, and the Android host's navigation guard cancels that and opens the
-system browser (see [Security and controls](/docs/security-controls)). See
+WebView, and the Android host's navigation guard cancels that without waiting
+for the system browser. A background task opens the browser, so the navigation
+callback does not block the Android UI thread. If the browser cannot open the
+link, the current screen stays in place and the host logs a fixed message
+without the URL or error details. The app shows no failure message for this
+native attempt (see [Security and controls](/docs/security-controls)). See
 [Remote hosts](/docs/remote-hosts#android-app).
 
 Linux native UI verification uses `make desktop-e2e`: Playwright specs speak a
