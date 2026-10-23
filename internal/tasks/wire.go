@@ -73,6 +73,7 @@ var specs = []Spec{
 	{Action: "workflow_move", Words: []string{"workflow", "move"}, Request: &WorkflowMoveRequest{}, Method: "POST", Path: "/api/tasks/{key}/workflow/move", OperatorOnly: true},
 	{Action: "workflow_upgrade", Words: []string{"workflow", "upgrade"}, Request: &WorkflowUpgradeRequest{}, Method: "POST", Path: "/api/tasks/{key}/workflow/upgrade", OperatorOnly: true},
 	{Action: "workflow_resume", Words: []string{"workflow", "resume"}, Request: &ResumeRequest{}, Method: "POST", Path: "/api/tasks/{key}/workflow/resume", OperatorOnly: true},
+	{Action: "workflow_reassign", Words: []string{"workflow", "reassign"}, Request: &ReassignRequest{}, Method: "POST", Path: "/api/tasks/{key}/workflow/reassign", OperatorOnly: true},
 	{Action: "workflow_retry", Words: []string{"workflow", "retry"}, Request: &RetryRequest{}, Method: "POST", Path: "/api/tasks/{key}/workflow/requests/{id}/retry", OperatorOnly: true},
 	{Action: "cancel", Words: []string{"cancel"}, Request: &KeyRequest{}, Method: "POST", Path: "/api/tasks/{key}/cancel", OperatorOnly: true},
 	{Action: "requeue", Words: []string{"requeue"}, Request: &RequeueRequest{}, Method: "POST", Path: "/api/tasks/{key}/requeue", OperatorOnly: true},

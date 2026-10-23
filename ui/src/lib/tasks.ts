@@ -679,6 +679,10 @@ export const resumeTaskWorkflow = (
   target?: ApiTarget,
 ) => call<Task>(target, "POST", `${taskPath(key)}/workflow/resume`, { decision })
 
+/** Hands the pool status of a workflow task to another member of that pool. */
+export const reassignTaskWorkflow = (key: string, agent: string, target?: ApiTarget) =>
+  call<Task>(target, "POST", `${taskPath(key)}/workflow/reassign`, { agent })
+
 /** The workflow image a queue is bound to, or null when it is unbound. */
 export async function getQueueWorkflow(queue: string, target?: ApiTarget): Promise<QueueWorkflow | null> {
   try {

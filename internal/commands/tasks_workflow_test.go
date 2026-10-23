@@ -81,6 +81,10 @@ func (s *workflowStub) ResumeWorkflow(_ context.Context, a tasks.Actor, key, dec
 	s.record(a, "workflow_resume %s %s", key, decision)
 	return tasks.Task{Key: key, Status: tasks.StatusInProgress, WorkflowDigest: "d", WorkflowStatus: "develop"}, s.err
 }
+func (s *workflowStub) ReassignWorkflow(_ context.Context, a tasks.Actor, key, agent string) (tasks.Task, error) {
+	s.record(a, "workflow_reassign %s %s", key, agent)
+	return tasks.Task{Key: key, Status: tasks.StatusInProgress, Assignee: "agent:" + agent, WorkflowDigest: "d", WorkflowStatus: "develop"}, s.err
+}
 func (s *workflowStub) CancelWorkflowTask(_ context.Context, a tasks.Actor, key string) (tasks.Task, error) {
 	s.record(a, "cancel %s", key)
 	return tasks.Task{Key: key, Status: tasks.StatusCancelled}, s.err
@@ -188,6 +192,8 @@ func TestWorkflowRoutesCallTheServiceAsTheCustomer(t *testing.T) {
 			`workflow_upgrade DEV-1 ""`, `"key":"DEV-1"`},
 		{"workflow resume", "POST", "/api/tasks/DEV-1/workflow/resume", map[string]any{"decision": "release"},
 			`workflow_resume DEV-1 release`, `"category":"in_progress"`},
+		{"workflow reassign", "POST", "/api/tasks/DEV-1/workflow/reassign", map[string]any{"agent": "dev-2"},
+			`workflow_reassign DEV-1 dev-2`, `"assignee":"agent:dev-2"`},
 		{"cancel", "POST", "/api/tasks/DEV-1/cancel", nil, `cancel DEV-1`, `"category":"cancelled"`},
 		{"requeue", "POST", "/api/tasks/DEV-1/requeue", map[string]any{"queue": "OPS", "revision": 3},
 			`requeue DEV-1 OPS 3`, `"key":"OPS-2"`},
@@ -286,14 +292,15 @@ func TestWorkflowOpenAPIDescribesRoutesAndSchemas(t *testing.T) {
 		t.Fatal(err)
 	}
 	for path, method := range map[string]string{
-		"/api/tasks/{key}/advance":          "post",
-		"/api/tasks/{key}/artifacts/{name}": "put",
-		"/api/tasks/{key}/artifacts":        "get",
-		"/api/tasks/{key}/workflow":         "get",
-		"/api/tasks/{key}/workflow/move":    "post",
-		"/api/tasks/{key}/workflow/resume":  "post",
-		"/api/tasks/{key}/workflow/upgrade": "post",
-		"/api/tasks/{key}/workflow/runs":    "get",
+		"/api/tasks/{key}/advance":           "post",
+		"/api/tasks/{key}/artifacts/{name}":  "put",
+		"/api/tasks/{key}/artifacts":         "get",
+		"/api/tasks/{key}/workflow":          "get",
+		"/api/tasks/{key}/workflow/move":     "post",
+		"/api/tasks/{key}/workflow/resume":   "post",
+		"/api/tasks/{key}/workflow/reassign": "post",
+		"/api/tasks/{key}/workflow/upgrade":  "post",
+		"/api/tasks/{key}/workflow/runs":     "get",
 
 		"/api/tasks/{key}/workflow/runs/{id}":     "get",
 		"/api/tasks/{key}/workflow/runs/{id}/log": "get",

@@ -258,6 +258,12 @@ func TaskOperatorCommands() []registry.Command {
 				tasks.Decode(p, &in)
 				return control.ResumeWorkflow(ctx, actor, in.Key, in.Decision)
 			}),
+		taskRoute("tasks.workflow.reassign", "POST", "/api/tasks/{key}/workflow/reassign", "Hand the pool status of a workflow task to another member",
+			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
+				var in tasks.ReassignRequest
+				tasks.Decode(p, &in)
+				return control.ReassignWorkflow(ctx, actor, in.Key, in.Agent)
+			}),
 		taskRoute("tasks.cancel", "POST", "/api/tasks/{key}/cancel", "Cancel a workflow task",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				return control.CancelWorkflowTask(ctx, actor, p.Trimmed("key"))

@@ -543,7 +543,11 @@ marker with a problem mark whose title is the message; the pause pill
 outranks it, and `idle` earns no mark. The row needs no request of its own:
 both objects come with the task JSON. `TaskDetail`
 compares `status` only with `category` for its dirty check and tone, and sends
-no `status` or `assignee` on Save for a workflow task; it hides **Move to
+no `status` or `assignee` on Save for a workflow task. Its assignee is
+`WorkflowAssignee`: in an open, unpaused pool status of the shared workflow
+query it is a select of that pool's members (`listAgentPools` through
+`taskQueries.pools`) that calls `reassignTaskWorkflow` on change and then
+`onTaskChanged`; otherwise it is text. `TaskDetail` hides **Move to
 another server…** for one, and neither its banner nor a comment chip asks for
 a comment on the workflow's own (`system:workflow`) wait. In place of the status
 select it renders `WorkflowPanel`, which reads the shared workflow query. A task revision, an event sequence, or
