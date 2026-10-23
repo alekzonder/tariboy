@@ -578,6 +578,60 @@ func TestRunLoopManualTrigger(t *testing.T) {
 	}
 }
 
+// promptRunner records the standing user prompt each iteration was built from.
+type promptRunner struct {
+	mu      sync.Mutex
+	prompts []string
+}
+
+func (p *promptRunner) Run(_ context.Context, ag agent.Agent, _, _, _ string) (Outcome, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.prompts = append(p.prompts, ag.UserPrompt)
+	return Outcome{Status: "done", DoneFlag: true}, nil
+}
+
+func (p *promptRunner) seen() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]string(nil), p.prompts...)
+}
+
+// TestRunManualTriggerUsesSavedUserPrompt verifies that a manual run started
+// after the user prompt was saved uses the new prompt on that first run, not
+// only from the next iteration on.
+func TestRunManualTriggerUsesSavedUserPrompt(t *testing.T) {
+	t.Parallel()
+	ag := baseAgent()
+	ag.IntervalS = 0
+	ag.UserPrompt = "old prompt"
+	r := &promptRunner{}
+	e, as := newEngine(t, ag, r)
+	idle := trackIdle(e)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { e.Run(ctx); close(done) }()
+	idle.wait(t, 1)
+
+	saved, err := as.Get("smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved.UserPrompt = "new prompt"
+	if err := as.Update(saved); err != nil {
+		t.Fatal(err)
+	}
+	e.Trigger("")
+	idle.wait(t, 1)
+	cancel()
+	<-done
+
+	if got := r.seen(); len(got) != 1 || got[0] != "new prompt" {
+		t.Fatalf("manual iteration user prompts = %q, want [\"new prompt\"]", got)
+	}
+}
+
 // TestRunEventOnlyCreatesNoTimers verifies that an event-only agent
 // (IntervalS <= 0) processes manual triggers without ever allocating a timer,
 // which is what used to leak on every manual wakeup.

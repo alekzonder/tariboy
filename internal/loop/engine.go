@@ -307,6 +307,9 @@ func (e *Engine) Run(ctx context.Context) {
 			// (stop); WakeMessage additionally runs a message iteration above.
 		case m := <-e.manualCh:
 			stopTimer()
+			// Settings saved while parked in select (user prompt, model, env)
+			// must reach this run, not only the next loop pass.
+			e.reload()
 			e.runOnceGuarded(ctx, TriggerManual, m.oneShot, m.launchGate)
 		case <-timerC:
 			// The timer fired and drained its channel; no Stop needed.
