@@ -422,6 +422,26 @@ daemon. The client therefore still needs memory proportional to the archive;
 streaming directly to a file requires a separate authenticated Desktop/Rust
 download API.
 
+## Component boundaries
+
+The public screen components keep their existing imports and properties.
+Their internal modules separate form state, requests, and presentation:
+
+- `terminals/create-agent` owns the single creation draft, source and image
+  loading, request validation, and the Target, Identity, Runtime, Loop, and
+  Lifecycle sections. Submission keeps creation separate from a retry of Start.
+- `terminals/server-dialog` separates HTTPS and SSH forms from host-operation
+  events and progress. The operation result remains separate from connectivity.
+- `components/file-browser` separates the tree, toolbar, viewer, dialogs, and
+  file actions. `FileBrowser` keeps the public API and source reset boundary.
+- `agents/configuration` owns the configuration blocks. The existing draft and
+  commit modules still own the single Save operation for the page.
+- `agents/chat` separates the toolbar and feed from loading, read markers, and
+  scroll position. It keeps its existing loader.
+- Tasks separates local view state, panel sizing, query composition, and write
+  actions. `TaskDetail` keeps one draft with its original revision. Its fields,
+  relations, history, and dialogs render that state without another server cache.
+
 ## Server data in Tasks
 
 TanStack Query v5 owns the server data for Tasks. One QueryClient serves the

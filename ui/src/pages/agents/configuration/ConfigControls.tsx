@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EditablePresetCombobox } from "@/components/EditablePresetCombobox";
 import { cn } from "@/lib/utils";
 import type { PresetGroup } from "@/lib/runtimePresets";
-import type { ConfigBlock, ConfigField } from "./registry";
+import { fieldOfKey, type ConfigBlock, type ConfigField } from "./registry";
 import type { ConfigDraft } from "./useConfigDraft";
 
 // Mirror the shadcn Input look (rounded-lg, same border + focus ring) so
@@ -246,6 +246,20 @@ export function ConfigSaveBar({ draft, blockTitles }: { draft: ConfigDraft; bloc
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+export function ReadOnly({ draft, matched, fieldKey, children }: { draft: ConfigDraft; matched: Set<string>; fieldKey: string; children: React.ReactNode }) {
+  return <FieldFrame field={fieldOfKey(fieldKey) as ConfigField} draft={draft} matched={matched.has(fieldKey)}>{children}</FieldFrame>;
+}
+
+// Actions run at once and are never part of Save; the row says so.
+export function ActionRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+      <span className="text-xs text-muted-foreground">Actions apply immediately, not part of Save:</span>
+      {children}
     </div>
   );
 }
