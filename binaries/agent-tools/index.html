@@ -86,7 +86,7 @@ makes a retried advance fail with <code>status_changed</code> instead of applyin
 <code>advance</code> waits for the transition’s check scripts and exits non-zero on a
 rejection or failure, naming the next command; <code>--no-wait</code> returns the pending
 request at once. <code>ttasks workflow runs KEY</code> and <code>ttasks workflow log KEY RUN</code>
-show what the scripts did. <code>ttasks workflow move</code>, <code>ttasks cancel</code>, and the
+show what the scripts did. <code>ttasks workflow move</code>, <code>ttasks cancel</code>, <code>ttasks requeue</code>, and the
 <code>ttasks queue</code> commands are operator-only. Workflow scripts themselves never
 receive the tools socket.</p>
 <p><code>tariboyd</code> normally selects and persists one sticky assigned task per enabled

@@ -85,6 +85,12 @@ with stdin attached, while non-interactive Codex iterations continue to use
 `codex exec --json` outside tmux. The Desktop only attaches another tmux client;
 disconnecting it does not replace or terminate the harness TUI.
 
+All agent tmux targets match the full session name exactly: session commands
+use `=name`, and window or pane commands use `=name:`. tmux otherwise accepts
+prefix and pattern matches, so a missing `image-creator` could resolve to
+`image-creator-sam`. Existence checks, terminal attach, screen capture, input,
+exit waiting, and cleanup therefore cannot select another agent by prefix.
+
 When Tariboy creates an interactive tmux session, it disables tmux mouse
 capture for that exact managed session. This leaves browser and OS text
 selection available in the agent Terminal tab without changing global tmux

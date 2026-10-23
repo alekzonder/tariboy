@@ -1685,6 +1685,12 @@ with stdin attached, while non-interactive Codex iterations continue to use
 `codex exec --json` outside tmux. The Desktop only attaches another tmux client;
 disconnecting it does not replace or terminate the harness TUI.
 
+All agent tmux targets match the full session name exactly: session commands
+use `=name`, and window or pane commands use `=name:`. tmux otherwise accepts
+prefix and pattern matches, so a missing `image-creator` could resolve to
+`image-creator-sam`. Existence checks, terminal attach, screen capture, input,
+exit waiting, and cleanup therefore cannot select another agent by prefix.
+
 When Tariboy creates an interactive tmux session, it disables tmux mouse
 capture for that exact managed session. This leaves browser and OS text
 selection available in the agent Terminal tab without changing global tmux
@@ -2210,6 +2216,14 @@ created_at)`, which the idle-iteration count reads, and
 time on the open visit, and an iteration that started before it does not count
 as idle. See [Task workflows](/docs/task-workflows#pauses).
 
+Migration `0071` adds `task_status_visits.workflow_digest` (default empty),
+the digest the task was pinned to when it entered the status, filled for
+existing visits from `tasks.workflow_digest`. An operator upgrade changes
+`tasks.workflow_digest` to the queue's current binding and enters the new
+version's initial status in one transaction, with a `workflow.upgraded` event;
+the visits of the earlier version stay as history. See
+[Task workflows](/docs/task-workflows#upgrading-a-task-to-the-queue-version).
+
 Migration `0063` adds `task_queue_source_runs`, the durable record of every run
 of a workflow source (queue, source, script, image digest, state, verdict, exit
 code, message, number of tasks created, process id, times, and log path), with a
@@ -2369,8 +2383,12 @@ no native command is called. The implicit same-origin "This daemon (local)"
 host is absent, the router is `HashRouter`, the daemon banner is hidden, an
 empty start screen offers **Add server**, and the server dialog accepts
 `https://` or plain `http://` to a loopback port only. A web link navigates the
-WebView, and the Android host's navigation guard cancels that and opens the
-system browser (see [Security and controls](/docs/security-controls)). See
+WebView, and the Android host's navigation guard cancels that without waiting
+for the system browser. A background task opens the browser, so the navigation
+callback does not block the Android UI thread. If the browser cannot open the
+link, the current screen stays in place and the host logs a fixed message
+without the URL or error details. The app shows no failure message for this
+native attempt (see [Security and controls](/docs/security-controls)). See
 [Remote hosts](/docs/remote-hosts#android-app).
 
 Linux native UI verification uses `make desktop-e2e`: Playwright specs speak a
@@ -2763,6 +2781,67 @@ daemon. The client therefore still needs memory proportional to the archive;
 streaming directly to a file requires a separate authenticated Desktop/Rust
 download API.
 
+## Server data in Tasks
+
+TanStack Query v5 owns the server data for Tasks. One QueryClient serves the
+application, and each component test uses an isolated client. The migrated
+read owners are TasksWorkspace, TaskDrawer, and WorkflowPanel. TaskDetail
+keeps form drafts and uses a mutation for relation writes.
+
+A query key identifies one response. Its prefix is
+the server identity, followed by the Tasks resource and its parameters.
+List keys include the agent scope, text, status view, assignee, and waiting
+principal. Queue filtering remains local. History keys distinguish the
+workspace's latest 200 events from the drawer's first 200 events.
+
+The connection adapter resolves an omitted ApiTarget to an explicit target
+before a request starts. A null target always selects the local server.
+Server identity is independent of its endpoint. A new SSH port cancels old
+reads and refreshes active queries without changing their keys or form state.
+An unavailable endpoint disables background reads. Credentials never appear
+in query keys, logs, or persistent storage. Credential changes clear that
+server's old data, and removing a host removes its cached queries.
+
+The cache holds data only in memory. Inactive queries expire after five
+minutes. Data is stale immediately, so reopening a view refreshes it in the
+background. Automatic retries, window-focus refresh, and browser reconnect
+refresh are disabled. The host connection adapter controls reconnect reads.
+Network failures retain a loaded snapshot. A 401 or 403 response clears the
+server's cached data and shows the access error.
+
+HTTP responses remain authoritative. The task socket opens after HTTP supplies
+its starting sequence. The event adapter combines a burst into one refresh
+cycle per server and query client, including one notification read. Multiple
+subscribers deduplicate the same event sequence. An event during a cycle requests a
+trailing cycle. Socket frames never replace task records.
+
+Writes cancel competing reads before and after the operation. They then
+invalidate the same server's task queries, so lists, details, history,
+notifications, and workflows refresh together. An optimistic tree move restores
+the previous rows on failure and reads the server again. A rejected save keeps
+its draft, including after a revision conflict. Writes do not retry or queue
+for an offline host. WorkflowPanel owns workflow-action refreshes; its parent
+does not start a second cycle. A successful notification-read write cancels
+intervening inbox reads before updating the read marker. It marks the inbox
+stale for the next socket, manual, or mount refresh.
+
+For another Tasks reader, reuse its typed query options:
+
+~~~tsx
+const target = useApiTarget(inputTarget)
+const detail = useApiQuery(taskQueries.detail(target, taskKey), target)
+~~~
+
+Keep selection, drafts, expansion, sizing, and focus in the component.
+Pass the query's AbortSignal through every paginated read. The shared layer
+discards cancelled results. New resources need keys for every response parameter.
+
+Terminals, AgentChat, the aggregate task list, the attention coordinator, and
+standalone queue forms retain their existing loaders. Their migration belongs
+to separate work. The drawer opened from those screens already shares the
+Tasks queries. Specialized workflow actions and log readers retain their own
+state.
+
 Tasks uses one reusable workspace at `/servers/:hostId/tasks` and inside each
 Agent tab. The server route shows every task visible on that host;
 an Agent tab sends
@@ -2826,11 +2905,9 @@ compares `status` only with `category` for its dirty check and tone, and sends
 no `status` or `assignee` on Save for a workflow task; it hides **Move to
 another server…** for one, and neither its banner nor a comment chip asks for
 a comment on the workflow's own (`system:workflow`) wait. In place of the status
-select it renders `WorkflowPanel`, which loads the view with `getTaskWorkflow`
-(on mount, on a new task revision, on a new event sequence passed down by
-`TaskDetail` as `eventSequence`, which in the chat `TaskDrawer` also follows
-the last socket hint about the task through `liveSequence`, and after each change; a request counter drops
-a response older than the newest) and composes, top down,
+select it renders `WorkflowPanel`, which reads the shared workflow query. A task revision, an event sequence, or
+a completed write marks that query stale, so a workflow event refreshes the
+panel even when the task revision stays the same. It composes, top down,
 `WorkflowPauseBanner` (`resumeTaskWorkflow`, `cancelWorkflowTask`),
 `WorkflowProblem` (the one problem `explainProblem` in `explainWorkflowProblem.ts`
 picks from the view, with `retryTransitionRequest` behind **Retry** and the
@@ -2846,11 +2923,14 @@ second click on the step, clears the selection and lists every entry of the
 view's `declared_artifacts` in one list, those `requiredBy` names for the
 current status first), `WorkflowRuns`
 (`getTaskScriptRunLog`; `runTone` gives each row its tone), the visit list,
-and the header's labeled **Return to agent…**, **Move to status…**, and
-**Cancel task** buttons: `ReturnToAgent` picks its targets with
-`returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the move form
-uses `moveTaskWorkflow` (targets from the view's `statuses`), and cancel uses
-`cancelWorkflowTask`. Outcomes, the problem block, and the return form follow
+and the header's labeled **Return to agent…**, **Upgrade to NAME@VERSION…**,
+**Move to status…**, and **Cancel task** buttons: `ReturnToAgent` picks its
+targets with `returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the
+upgrade form appears when `canUpgrade` finds the view's `queue_digest` differs
+from its `digest` and sends `upgradeTaskWorkflow`, the move form uses
+`moveTaskWorkflow` (targets from the view's `statuses`), and cancel uses
+`cancelWorkflowTask`. `stepMarks`, `returnTargets`, and `defaultReturnTarget`
+read `runVisits`, the visits of the task's current workflow digest. Outcomes, the problem block, and the return form follow
 a transition request through `useFollowRequest` in `workflowShared.ts`
 (`getTransitionRequest` once a second until the request settles or
 `wait_seconds` passes). Destructive actions confirm through
@@ -3764,7 +3844,7 @@ makes a retried advance fail with `status_changed` instead of applying twice.
 `advance` waits for the transition's check scripts and exits non-zero on a
 rejection or failure, naming the next command; `--no-wait` returns the pending
 request at once. `ttasks workflow runs KEY` and `ttasks workflow log KEY RUN`
-show what the scripts did. `ttasks workflow move`, `ttasks cancel`, and the
+show what the scripts did. `ttasks workflow move`, `ttasks cancel`, `ttasks requeue`, and the
 `ttasks queue` commands are operator-only. Workflow scripts themselves never
 receive the tools socket.
 
@@ -4302,8 +4382,9 @@ when ownership is unclear. The backend target runs `fmt-check`, `vet`,
 `staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. The
 frontend target runs UI typecheck, lint, unit tests, branding, and the
 documentation checks. Before checking, `backend-check` runs `go mod download`
-for the module and for `tools.mod`, and `frontend-check` runs
-locked `npm ci` installs under both `ui/` and `docs/`. They do not write into
+for the module and for `tools.mod`. `frontend-check` uses
+`scripts/npm-ci-locked.sh` for locked installs under both `ui/` and `docs/`.
+They do not write into
 `bin/` or dirty `git status`. Each step reports its result and duration as it
 finishes.
 Successful check-step output is suppressed; failed steps print their command
@@ -4320,8 +4401,17 @@ first failure. Each step is timed and recorded, and the run ends with a summary
 table naming every step that failed, so one aggregate pass surfaces gofmt drift
 and a UI type error together.
 
-`frontend-check`, `check`, and `full-check` refresh `ui/node_modules` and
-`docs/node_modules` from the committed lockfiles before running checks.
+`frontend-check`, `check`, and `full-check` reuse dependencies when a saved
+SHA-256 fingerprint matches `package.json`, `package-lock.json`, and the Node.js
+and npm versions. A fingerprint identifies those inputs by their contents.
+Missing or changed fingerprints trigger `npm ci --no-audit --no-fund`.
+The script saves the fingerprint inside `node_modules` only after installation
+succeeds. Checks still run on every invocation.
+
+Use `TARIBOY_NPM_CI_FORCE=1 make check` to force both installs. Use this after
+manual changes inside `node_modules` or changes to npm configuration, such as
+`.npmrc` or install flags. Those changes are outside the fingerprint.
+Deleting `node_modules` also forces installation on the next run.
 
 Three scripts stay outside `full-check` deliberately and are run by hand:
 `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` require a
@@ -4711,10 +4801,20 @@ The Android app is the same SPA in a Tauri WebView, built in Android mode
 mobile entry point in `desktop/src-tauri/src/lib.rs`: no commands, daemon, SSH,
 tunnels, or bundled Go binaries. Its only plugins are a navigation guard and
 `tauri-plugin-opener` (a mobile-only dependency, pinned to the release line
-that matches the locked `tauri`), which keep web links out of the WebView. The
-guard's decision, `navigation_for`, is a plain function with unit tests that
+that matches the locked `tauri`), which keep web links out of the WebView.
+The navigation callback cancels an external web link without waiting for the
+browser. It copies the URL and app handle into a `spawn_blocking` task that
+calls the opener. The Android opener waits for a response from the UI thread,
+so calling it inside the navigation callback can deadlock that thread.
+If opening fails, the current page stays in place. The host logs a fixed
+message without the URL or error details and shows no message in the UI.
+The guard's decision, `navigation_for`, is a plain function with unit tests that
 `cargo test` runs on the host; `cargo check --lib --target aarch64-linux-android`
-compiles the entry point without the Android SDK. `tauri.android.conf.json` swaps
+compiles the entry point without the Android SDK. Host Rust tests also cover
+the callback returning while an opener waits, unchanged URL delivery, blocked
+and internal navigation, and failed browser attempts. `make check` does not
+run these Rust tests or test browser opening on an Android device.
+`tauri.android.conf.json` swaps
 in that SPA build and drops the bundled resources. The Gradle project under
 `desktop/src-tauri/gen/android` is generated by `cargo tauri android init` and
 committed; it adds `res/xml/network_security_config.xml` (plain http only to
@@ -4868,6 +4968,9 @@ live state:
   exist. `loop.NewManager` never reads the environment: tests pass
   `RuntimeDir` (use `testutil.ShortDir(t)` for socket paths) and may pass
   `BaseEnv`.
+  For nested `go build` commands only, pass `testutil.RealHome()` as the child
+  process's `HOME` to reuse Go caches. Keep the test process and built binaries
+  on their isolated `HOME`.
 - **Wait for state, not for time.** Use `testutil.WaitFor` instead of a
   `time.Sleep` loop, and prove that something did not happen with a hook, a
   fake timer, or `testing/synctest`. A `time.Sleep` that must stay in a test
@@ -4887,7 +4990,11 @@ The two UI targets have different Git contracts:
 - `desktop/branding/tariboy-logo-source.svg` is the repository-owned logo
   source: a white dancer mark on a dark rounded tile.
   `ui/scripts/generate-desktop-branding.mjs` validates its native
-  transparency and generates the Tauri PNG icons and `icon.icns`. Run
+  transparency and generates the Tauri PNG icons, `icon.icns`, and Android
+  launcher PNGs under `desktop/src-tauri/gen/android/app/src/main/res/mipmap-*`.
+  Android adaptive icons use transparent padding around the logo and a
+  matching `#111214` background in `res/values/ic_launcher_background.xml`.
+  Regenerate the PNGs after changing the source or regenerating the Android project. Run
   `npm run branding:check` from `ui/`; do not hand-edit generated branding.
   `ui/public/favicon.svg` and `docs/public/favicon.svg` are copies of the same
   source; the documentation site uses its copy as the favicon and header logo.
@@ -7094,7 +7201,7 @@ declares checks, `advance` waits for the daemon to run them: a rejection prints
 `rejected:` with the check's message, which says what to fix before repeating
 the advance; a failure prints `failed:` with the run to read with
 `workflow log`. A holder of the task may read run logs. `ttasks workflow move`,
-`ttasks cancel`, `ttasks queue workflow`, and `ttasks queue secret` are
+`ttasks cancel`, `ttasks requeue`, `ttasks queue workflow`, and `ttasks queue secret` are
 operator-only and unavailable to an agent.
 
 ## Durable state and notifications
@@ -7272,13 +7379,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.92.0` alpha on an Apple Silicon Mac.
+This path is for the `0.93.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.92.0_aarch64.dmg`;
+- a verified `Tariboy_0.93.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -8377,8 +8484,10 @@ socket; operator mode calls the REST routes as the customer.
 | `ttasks workflow runs KEY` (newest first) | agent, operator | `GET /api/tasks/{key}/workflow/runs` |
 | `ttasks workflow log KEY RUN [--max-bytes N]` (last 64 KiB by default, at most 1 MiB; queue secrets redacted; customer and the task's holders only) | agent, operator | `GET /api/tasks/{key}/workflow/runs/{id}/log` |
 | `ttasks workflow move KEY --to STATUS --reason TEXT` | operator only | `POST /api/tasks/{key}/workflow/move` |
+| `ttasks workflow upgrade KEY [--reason TEXT]` (pins the task to the queue's current workflow version and restarts it at that version's initial status; artifacts and holders stay; errors `workflow_current`, `workflow_unbound`, `workflow_closed`, `workflow_pool_empty`, `workflow_secret_missing`, `forbidden`) | operator only | `POST /api/tasks/{key}/workflow/upgrade` |
 | `ttasks workflow resume KEY --decision continue\|release` (resolves the pause of a task the daemon paused: `continue` keeps the holder and zeroes the counters; `release` takes a pool task from its holder and dispatches it to another member, or leaves it `open` and unassigned; errors `invalid_decision`, `workflow_not_paused`, `forbidden`) | operator only | `POST /api/tasks/{key}/workflow/resume` |
 | `ttasks cancel KEY` | operator only | `POST /api/tasks/{key}/cancel` |
+| `ttasks requeue KEY --queue QUEUE [--revision N]` (creates a new task in `QUEUE` and cancels this one; errors `task_closed`, `same_queue`, `queue_not_found`, `requeue_has_children`) | operator only | `POST /api/tasks/{key}/requeue` |
 | `ttasks queue workflow set QUEUE REF [--revision N]` | operator only | `PUT /api/task-queues/{queue}/workflow` |
 | `ttasks queue workflow get QUEUE` | operator only | `GET /api/task-queues/{queue}/workflow` |
 | `ttasks queue workflow clear QUEUE --revision N` | operator only | `DELETE /api/task-queues/{queue}/workflow` |
@@ -8827,9 +8936,12 @@ persisted `otlp_endpoint` daemon setting.
   build, its configured dev server) loads inside the WebView. The page that is
   shown now never widens that. Any other
   `http` or `https` address is cancelled and given to the system browser
-  through the opener plugin; every other scheme (`javascript:`, `file:`,
+  through the opener plugin in a background task. The navigation callback
+  returns without waiting for the browser. If opening fails, navigation stays
+  cancelled and the current page stays in place. Every other scheme (`javascript:`, `file:`,
   `intent:`, and the rest) is cancelled and opens nothing. The guard never logs
-  the address, because its query can carry a token.
+  the address or raw opener error, because either can carry a token. An opener
+  failure logs only the fixed message `could not open a web link in the browser`.
 
 ## Credentials
 
@@ -9027,7 +9139,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.92.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.93.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -9141,7 +9253,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.92.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.93.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -9345,8 +9457,10 @@ operations.
 3. A task created in the bound queue **pins** the image version (its digest)
    and enters the image's `initial_status`. A binding made by a tag, such as
    `latest`, follows that tag: when a new build moves the tag, tasks created
-   after it pin the new version. Existing tasks keep their version, and a task
-   is never migrated to another version.
+   after it pin the new version. Existing tasks keep their version. Only an
+   explicit [upgrade](#upgrading-a-task-to-the-queue-version) by the operator
+   moves a task to the queue's current version, and it starts the task again
+   at that version's `initial_status`.
 4. Every non-terminal **status** has one owner, who leaves it by naming an
    **outcome**; the status declares a **transition** per outcome.
    - A **pool** status is worked by one agent, the **holder**, which the daemon
@@ -9567,6 +9681,7 @@ Nobody sets a category; the daemon derives it from the status owner:
 | Paused (any non-terminal status) | `wait_customer`, with an open customer wait authored by `system:workflow` | unchanged | `pause` |
 | Terminal status | `done`, or `cancelled` when the status declares `cancelled: true` | unchanged | |
 | Cancelled with `ttasks cancel` | `cancelled`; the status stays where the task stopped | unchanged | |
+| Moved with `ttasks requeue` | `cancelled`, as for `ttasks cancel`; the new task in the target queue starts its own life | unchanged | |
 
 One function derives this table, from the owner kind of the status, the
 holder, the pause, and whether the holder's question is open. Entering a
@@ -10262,7 +10377,8 @@ Sources poll; for events pushed by a plugin, use a
 
 The operator (acting as the customer) can override a workflow. These commands
 are operator-only. An agent that tries `ttasks workflow move`,
-`ttasks workflow retry`, or `ttasks cancel` gets the CLI's "unknown command",
+`ttasks workflow upgrade`, `ttasks workflow retry`, `ttasks cancel`, or
+`ttasks requeue` gets the CLI's "unknown command",
 because no agent action exists for them; a caller of the REST route that is not
 the customer receives `forbidden` (403).
 
@@ -10270,6 +10386,7 @@ the customer receives `forbidden` (403).
 ttasks workflow move DEV-ab12 --to implement --reason 'review found a regression'
 ttasks workflow retry DEV-ab12
 ttasks cancel DEV-ab12
+ttasks requeue DEV-ab12 --queue OPS
 ```
 
 `workflow retry KEY [REQUEST]` runs the checks of a `failed` transition request
@@ -10294,11 +10411,78 @@ status entry (so it dispatches, opens a customer wait, or starts a watch just as
 an advance would), and records `workflow.moved` with the reason. A move out of a
 terminal status reopens the task.
 
+### Upgrading a task to the queue version
+
+A task stays on the workflow version it was created with, even after its queue
+is bound to a newer one. `workflow upgrade` moves one task to the version its
+queue is bound to now and starts the workflow again from the beginning:
+
+```bash
+ttasks workflow upgrade DEV-ab12 --reason 'adopt the new review step'
+```
+
+The `--reason` is optional. The daemon, in one transaction:
+
+1. Reads the queue binding and, for a binding made by a tag, follows the tag to
+   the version it names now, as a new task does.
+2. Refuses the upgrade when the task is closed (`workflow_closed`), the queue has
+   no binding (`workflow_unbound`), the task already pins the queue's digest
+   (`workflow_current`), or the new version needs a pool or secret the queue
+   lacks (`workflow_pool_empty`, `workflow_secret_missing`). A refusal changes
+   nothing.
+3. Cancels a pending request, clears a pause (recording `workflow.resumed` with
+   the decision `upgrade`), deletes released holder rows, and resolves the
+   workflow's own wait and the current holder's questions to the customer.
+4. Pins the task to the new digest and enters the new version's
+   `initial_status` as an ordinary status entry: the current visit closes with
+   the message `workflow upgraded from OLD to NEW: REASON`, the old status's
+   scripts stop, and the new status dispatches, opens a customer wait, or starts
+   a watch.
+5. Records `workflow.upgraded` with `from_version`, `to_version`,
+   `from_digest`, `to_digest`, the `status` the task left, `actor`, and
+   `reason`.
+
+Artifacts and pool holders stay. A holder of a pool the new version also uses
+gets the task back (the sticky rule), so an agent finds its `branch` and
+`pull_request` artifacts and does not open a second branch or pull request. The
+statuses of the new version set their own artifacts again; until then an old
+value stays visible. Work outside the daemon, such as a branch or an open pull
+request, is not undone.
+
+Each visit records the digest the task was pinned to when it entered the status
+(`workflow_digest` and `workflow_version` in the task view). The visits before an
+upgrade stay as history; the Desktop counts steps, returns, and return targets
+only from the visits of the current version. An upgrade always targets the
+queue's current binding: to reach another version, bind the queue to it first.
+The Desktop shows **Upgrade to NAME@VERSION…** in the workflow panel of an open
+task whose queue is bound to another version, and asks for confirmation.
+
+### Cancel
+
 `cancel` closes any unfinished task as `cancelled` (`workflow_closed` when it is
 already closed). It stops the scripts of the current status, cancels a pending
 request, and resolves the workflow's own wait and the current assignee's
 questions to the customer. The workflow status stays as the record of where the
 task stopped. It records `workflow.cancelled`.
+
+`requeue KEY --queue QUEUE` moves the task to another queue of the same
+daemon. A key belongs to its queue, so the move does not change the task: in
+one transaction it creates a new task in `QUEUE` and cancels this one exactly
+as `cancel` does, so its scripts stop and its workflow ends where it stood. The
+new task gets a new key, the same title, description, priority, pull request,
+group, and comments (with their original authors and times). If `QUEUE` is
+bound to a workflow, the new task pins that workflow and enters its initial
+status like any new task there; otherwise it is a flexible `open` task.
+Artifacts, visits, and script runs stay with the old task. The two tasks get a
+`related` relation, each gets a comment that names the other ("Moved to queue
+OPS as OPS-cd34." and "Moved from DEV-ab12."), and both record
+`task.requeued` with `from_key`, `to_key`, `from_queue`, and `to_queue`. The
+move works for a flexible task too. It is refused, changing nothing, for a
+closed task (`task_closed`), the task's own queue (`same_queue`), an unknown
+queue (`queue_not_found`), a stale `revision` (`revision_conflict`), and a task
+with open subtasks (`requeue_has_children`, with their keys); move or close the
+subtasks first. A subtask moves on its own and becomes a root task. The branch,
+worktree, and pull request of the old task are not touched.
 
 ## Questions on a workflow task
 
@@ -10605,6 +10789,7 @@ and what it may do next. Agents and the operator can read it.
 | Field | Meaning |
 | --- | --- |
 | `name`, `version`, `digest` | The pinned image. |
+| `queue_version`, `queue_digest` | The image the task's queue is bound to now; absent for an unbound queue. Another digest than `digest` means the task can be [upgraded](#upgrading-a-task-to-the-queue-version). |
 | `status`, `category`, `waiting_on` | As described in [Status and category](#status-and-category). |
 | `paused_reason` | The reason the task is paused; absent otherwise. |
 | `owner` | `pool:<name>`, `customer`, `script`, or empty for a finished task. |
@@ -10612,7 +10797,7 @@ and what it may do next. Agents and the operator can read it.
 | `instructions_path` | The status instruction file inside the image. |
 | `outcomes` | Each outcome with `to`, `requires`, `missing` (required artifacts with no value), `checks` (script paths), and `check_details`: the same checks, in order, each with `script`, `description` (when the image gives one), and the resolved `run_as` and `timeout`. A finished task has none. |
 | `artifacts` | The current value of each artifact. |
-| `visits` | Every stay in a status with who entered it, when it was left, and by which outcome and message, plus the visit's counters `idle_iterations`, `rejected_requests`, and `script_failures` (absent when zero); compare them with the `limits` of the status to see how close the task is to a pause. |
+| `visits` | Every stay in a status with who entered it, when it was left, and by which outcome and message, the `workflow_digest` and `workflow_version` the task was pinned to on entry, plus the visit's counters `idle_iterations`, `rejected_requests`, and `script_failures` (absent when zero); compare them with the `limits` of the status to see how close the task is to a pause. |
 | `last_request` | The latest transition request: `id`, `outcome`, `message`, `actor`, `state`, `result_message`, times, and `wait_seconds` while pending. |
 | `runs` | The 20 most recent script runs, newest first. A check run carries the `request_id` of the transition request it belongs to. |
 | `declared_artifacts` | Every artifact the manifest declares, in manifest order, as `name` and `description`, whether or not it has a value. |
@@ -10643,9 +10828,11 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks workflow runs KEY` | agent, operator | List script runs. |
 | `ttasks workflow log KEY RUN [--max-bytes N]` | holder, operator | Read a run log. |
 | `ttasks workflow move KEY --to STATUS --reason TEXT` | operator | Move without checks. |
+| `ttasks workflow upgrade KEY [--reason TEXT]` | operator | Restart the task at the queue's current workflow version. |
 | `ttasks workflow resume KEY --decision continue\|release` | operator | Resolve a pause. |
 | `ttasks workflow retry KEY [REQUEST]` | operator | Run a failed request's checks again and wait for them. |
 | `ttasks cancel KEY` | operator | Cancel the task. |
+| `ttasks requeue KEY --queue QUEUE` | operator | Move the task to another queue as a new task. |
 
 "agent" means any agent that can read the task; "holder" means the agent that
 holds it, under the rules above.
@@ -10679,8 +10866,10 @@ generated OpenAPI document is the authority for request and response schemas.
 | `GET` | `/api/tasks/{key}/workflow/runs/{id}` | one run | agent, operator |
 | `GET` | `/api/tasks/{key}/workflow/runs/{id}/log` | the redacted log tail (`max_bytes`); returns `run_id`, `text`, `truncated` | holder, operator |
 | `POST` | `/api/tasks/{key}/workflow/move` | move to a status (`to`, `reason`) | operator |
+| `POST` | `/api/tasks/{key}/workflow/upgrade` | restart at the queue's current version (`reason`, optional); returns the task | operator |
 | `POST` | `/api/tasks/{key}/workflow/resume` | resolve a pause (`decision`: `continue` or `release`); returns the task | operator |
 | `POST` | `/api/tasks/{key}/cancel` | cancel | operator |
+| `POST` | `/api/tasks/{key}/requeue` | move to another queue (`queue`, optional `revision`); returns the new task | operator |
 
 Agents reach the agent operations over their identity-bound socket with the
 actions `advance`, `request_get`, `artifact_set`, `artifact_ls`,
@@ -10700,7 +10889,7 @@ See [State model](/docs/architecture/state-model) for the tables.
 | `task_queue_workflows` | One binding per queue: digest, the tag it follows (`workflow_tag`, empty when pinned), revision, update time. |
 | `task_queue_secrets` | Queue secret values in plaintext, per queue and key (migration `0056`). |
 | `task_workflow_holders` | The last holder of each task and pool, with the dispatch time, `released` (set by a `release` decision; migration `0060`), and `unavailable_since`, when the holder was first seen unable to work (migration `0061`). |
-| `task_status_visits` | One row per stay in a status, with its outcome and message, the `rejected_requests`, `script_failures`, and `idle_iterations` counters, `next_watch_at`, when a script status's watch runs next (migration `0057`), and `resumed_at`, when a pause of the visit was last resumed (migration `0062`). |
+| `task_status_visits` | One row per stay in a status, with its outcome and message, the `rejected_requests`, `script_failures`, and `idle_iterations` counters, `next_watch_at`, when a script status's watch runs next (migration `0057`), `resumed_at`, when a pause of the visit was last resumed (migration `0062`), and `workflow_digest`, the digest the task was pinned to on entry (migration `0071`). |
 | `task_transition_requests` | Each request, with its state and `result_message`; at most one is `pending` per task. |
 | `task_artifacts` | Every artifact value with its author and time. |
 | `task_queue_source_runs` | Every source run: queue, source, script, image digest, state, verdict, exit code, message, number of tasks created, process id, times, and log path (migration `0063`). At most one run of a source of a queue is `running`. |
@@ -10732,6 +10921,7 @@ Events recorded on a workflow task: `workflow.transition_requested`,
 message), `workflow.transition_failed` (with the reason and log path),
 `workflow.script_run` (every run that ended, with its state, verdict, and exit
 code), `workflow.script_failed` (a failed watch run), `workflow.moved`,
+`workflow.upgraded`,
 `workflow.cancelled`, `workflow.paused`, `workflow.resumed`, and `artifact.set`.
 A task created by a source also records `workflow.source_item` with the source,
 the key, and the run id. A failed source run records the queue event
@@ -10745,6 +10935,8 @@ the key, and the run id. A failed source run records the queue event
 | `workflow_not_bound` | 409 | The task has no workflow. |
 | `workflow_closed` | 409 | The task is `done` or `cancelled`. |
 | `workflow_paused` | 409 | The task is paused: `advance` and `artifacts set` are refused until the customer decides. |
+| `workflow_unbound` | 409 | `workflow upgrade` of a task whose queue has no binding. |
+| `workflow_current` | 409 | `workflow upgrade` of a task that already pins the queue's version. |
 | `workflow_not_paused` | 409 | `workflow resume` on a task that is not paused. |
 | `request_not_failed` | 409 | `workflow retry` of a request that did not fail. |
 | `request_superseded` | 409 | `workflow retry` of a request that is not the task's latest one in its current status. |
@@ -10756,7 +10948,7 @@ the key, and the run id. A failed source run records the queue event
 | `workflow_not_found` | 409 | The image a task or binding pins is not published. |
 | `queue_workflow_not_found` | 404 | The queue has no binding. |
 | `not_holder` | 403 | The caller does not own the current status. |
-| `forbidden` | 403 | A caller that is not the customer used an operator-only route (move, cancel, resume), or a caller that may not read a run log asked for it. |
+| `forbidden` | 403 | A caller that is not the customer used an operator-only route (move, upgrade, cancel, resume), or a caller that may not read a run log asked for it. |
 | `status_changed` | 409 | An advance named `from`, and the task is in another status. |
 | `outcome_unknown` | 400 | The status does not declare that outcome. |
 | `status_unknown` | 400, 409 | The image does not declare that status (400 for a move, 409 for a task in an undeclared status). |
@@ -10924,7 +11116,8 @@ the status select. It reads top down: what is wrong, where the task is, what
 may happen next, what it produced, and what ran. The task's assignee is
 read-only, because the workflow assigns pool work, and the sheet has no
 **Move to another server…**, because the daemon refuses to export a workflow
-task. The panel follows the task's events as well as its revision: a rejected
+task. Its actions menu offers **Move to queue…** instead (see
+[Tasks](/docs/tasks#moving-a-task-to-another-queue)). The panel follows the task's events as well as its revision: a rejected
 request, a script run, or another event refetches the view while the sheet is
 open, and an older response never replaces a newer one. The panel has these
 sections:
@@ -10957,8 +11150,8 @@ sections:
   checks (script, `description`, `run_as`, and timeout), and the effective
   limits. The row wraps on a narrow screen.
 - **Header.** `name@version`, `step k of n`, the status, the owner, and the
-  holder, with the labeled actions **Return to agent…**, **Move to status…**,
-  and **Cancel task**; see below.
+  holder, with the labeled actions **Return to agent…**, **Upgrade to
+  NAME@VERSION…**, **Move to status…**, and **Cancel task**; see below.
 - **Outcomes.** Each outcome shows its target status, the artifacts it
   requires (a set one ticked, a missing one highlighted), and its checks with
   what each verifies, when the image describes it, and the resolved `run_as`
@@ -10989,7 +11182,8 @@ sections:
   running, an open log has **Refresh**. Who may read a log is described in
   [Runs and logs](#runs-and-logs); a refusal is shown in place of the log.
 - **Visits.** Every stay in a status, with who entered it, when it was left and
-  by which outcome, and the message.
+  by which outcome, and the message. A visit made under an earlier workflow
+  version carries that version, as `@VERSION`.
 - **Return to agent.** Sends the task back to a pool status with a message
   the agent reads in its Goal as the transition message. The targets are the
   pool statuses a declared outcome of the current status leads to, the pool
@@ -11004,8 +11198,16 @@ sections:
   the current one, terminal statuses grouped last, and needs a reason; a move
   to a terminal status closes the task. **Cancel task** is hidden once the
   task is closed. Both ask for confirmation, because they skip outcomes,
-  checks, and required artifacts and stop the current scripts. The three
+  checks, and required artifacts and stop the current scripts. The header
   actions are shown only to a principal that may edit the task.
+- **Upgrade.** **Upgrade to NAME@VERSION…** is shown on an open task whose
+  queue is bound to another version than the task's. It takes an optional
+  reason and asks for confirmation, then restarts the task at the first status
+  of that version; see
+  [Upgrading a task to the queue version](#upgrading-a-task-to-the-queue-version).
+  A refusal shows the daemon's message in the form. The step marks, the return
+  counts, and the targets of **Return to agent…** read only the visits of the
+  task's current version.
 
 Messages and logs are text; Desktop never interprets them as Markdown or HTML.
 Artifact values render as Markdown without raw HTML, or as text when switched. After an action in the sheet the task list reloads as well,
@@ -11343,6 +11545,27 @@ client renders it as a root-level filtered orphan; the excluded parent is never
 included merely to reconstruct the tree. Switching views always refetches the
 authoritative selected view, and realtime refreshes retain that selection.
 
+## Moving a task to another queue
+
+A task key names its queue, so a task that belongs in another queue of the same
+host is moved as a new task. In the task panel, the actions menu beside **Save
+task** opens **Move to queue…** for any open task, workflow or not. The dialog
+lists the other queues of this host and says what happens; for a workflow task
+it says that the current workflow stops. After the move the Tasks workspace
+opens the new task. The same move is `ttasks requeue KEY --queue QUEUE` for the
+operator; agents cannot move tasks between queues.
+
+The daemon does the whole move in one transaction: it creates the new task in
+the target queue with the same title, description, priority, pull request,
+group, and comments, and cancels the old task. If the old task followed a
+workflow, its scripts stop and its questions close, as with `ttasks cancel`. If
+the target queue has a workflow, the new task enters it like any new task
+there; if not, the new task is a flexible `open` task. The two tasks are
+related and each has a comment that names the other. A task with open subtasks
+is refused (`requeue_has_children`); move or close the subtasks first. See
+[Operator move, retry, and cancel](/docs/task-workflows#operator-move-retry-and-cancel)
+for the details.
+
 ## Moving a task to another server
 
 Each host keeps its own tasks, so work that belongs with another host is moved
@@ -11506,7 +11729,7 @@ ttasks workflow log TEST-fkt3 4
 
 `advance` waits for the transition's checks and prints `rejected:` with the
 script's message or `failed:` with the run log to read. `workflow move`,
-`cancel`, `queue workflow`, and `queue secret` are operator-only. See
+`workflow upgrade`, `cancel`, `queue workflow`, and `queue secret` are operator-only. See
 [Task workflows](/docs/task-workflows) for the full flow.
 
 Create, comment, and relation actions accept stable idempotency keys internally

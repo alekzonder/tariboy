@@ -397,6 +397,13 @@ task. Migration <code>0062</code> adds an index on <code>task_transition_request
 <code>task_status_visits.resumed_at</code> (default empty): a resume decision writes the
 time on the open visit, and an iteration that started before it does not count
 as idle. See <a href="/tariboy/docs/task-workflows#pauses">Task workflows</a>.</p>
+<p>Migration <code>0071</code> adds <code>task_status_visits.workflow_digest</code> (default empty),
+the digest the task was pinned to when it entered the status, filled for
+existing visits from <code>tasks.workflow_digest</code>. An operator upgrade changes
+<code>tasks.workflow_digest</code> to the queue’s current binding and enters the new
+version’s initial status in one transaction, with a <code>workflow.upgraded</code> event;
+the visits of the earlier version stay as history. See
+<a href="/tariboy/docs/task-workflows#upgrading-a-task-to-the-queue-version">Task workflows</a>.</p>
 <p>Migration <code>0063</code> adds <code>task_queue_source_runs</code>, the durable record of every run
 of a workflow source (queue, source, script, image digest, state, verdict, exit
 code, message, number of tasks created, process id, times, and log path), with a

@@ -49,7 +49,7 @@ makes a retried advance fail with `status_changed` instead of applying twice.
 `advance` waits for the transition's check scripts and exits non-zero on a
 rejection or failure, naming the next command; `--no-wait` returns the pending
 request at once. `ttasks workflow runs KEY` and `ttasks workflow log KEY RUN`
-show what the scripts did. `ttasks workflow move`, `ttasks cancel`, and the
+show what the scripts did. `ttasks workflow move`, `ttasks cancel`, `ttasks requeue`, and the
 `ttasks queue` commands are operator-only. Workflow scripts themselves never
 receive the tools socket.
 

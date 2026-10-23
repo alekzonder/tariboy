@@ -455,6 +455,14 @@ created_at)`, which the idle-iteration count reads, and
 time on the open visit, and an iteration that started before it does not count
 as idle. See [Task workflows](/docs/task-workflows#pauses).
 
+Migration `0071` adds `task_status_visits.workflow_digest` (default empty),
+the digest the task was pinned to when it entered the status, filled for
+existing visits from `tasks.workflow_digest`. An operator upgrade changes
+`tasks.workflow_digest` to the queue's current binding and enters the new
+version's initial status in one transaction, with a `workflow.upgraded` event;
+the visits of the earlier version stay as history. See
+[Task workflows](/docs/task-workflows#upgrading-a-task-to-the-queue-version).
+
 Migration `0063` adds `task_queue_source_runs`, the durable record of every run
 of a workflow source (queue, source, script, image digest, state, verdict, exit
 code, message, number of tasks created, process id, times, and log path), with a

@@ -274,6 +274,27 @@ client renders it as a root-level filtered orphan; the excluded parent is never
 included merely to reconstruct the tree. Switching views always refetches the
 authoritative selected view, and realtime refreshes retain that selection.
 
+## Moving a task to another queue
+
+A task key names its queue, so a task that belongs in another queue of the same
+host is moved as a new task. In the task panel, the actions menu beside **Save
+task** opens **Move to queue…** for any open task, workflow or not. The dialog
+lists the other queues of this host and says what happens; for a workflow task
+it says that the current workflow stops. After the move the Tasks workspace
+opens the new task. The same move is `ttasks requeue KEY --queue QUEUE` for the
+operator; agents cannot move tasks between queues.
+
+The daemon does the whole move in one transaction: it creates the new task in
+the target queue with the same title, description, priority, pull request,
+group, and comments, and cancels the old task. If the old task followed a
+workflow, its scripts stop and its questions close, as with `ttasks cancel`. If
+the target queue has a workflow, the new task enters it like any new task
+there; if not, the new task is a flexible `open` task. The two tasks are
+related and each has a comment that names the other. A task with open subtasks
+is refused (`requeue_has_children`); move or close the subtasks first. See
+[Operator move, retry, and cancel](/docs/task-workflows#operator-move-retry-and-cancel)
+for the details.
+
 ## Moving a task to another server
 
 Each host keeps its own tasks, so work that belongs with another host is moved
@@ -437,7 +458,7 @@ ttasks workflow log TEST-fkt3 4
 
 `advance` waits for the transition's checks and prints `rejected:` with the
 script's message or `failed:` with the run log to read. `workflow move`,
-`cancel`, `queue workflow`, and `queue secret` are operator-only. See
+`workflow upgrade`, `cancel`, `queue workflow`, and `queue secret` are operator-only. See
 [Task workflows](/docs/task-workflows) for the full flow.
 
 Create, comment, and relation actions accept stable idempotency keys internally

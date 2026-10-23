@@ -24,8 +24,12 @@ no native command is called. The implicit same-origin "This daemon (local)"
 host is absent, the router is `HashRouter`, the daemon banner is hidden, an
 empty start screen offers **Add server**, and the server dialog accepts
 `https://` or plain `http://` to a loopback port only. A web link navigates the
-WebView, and the Android host's navigation guard cancels that and opens the
-system browser (see [Security and controls](/docs/security-controls)). See
+WebView, and the Android host's navigation guard cancels that without waiting
+for the system browser. A background task opens the browser, so the navigation
+callback does not block the Android UI thread. If the browser cannot open the
+link, the current screen stays in place and the host logs a fixed message
+without the URL or error details. The app shows no failure message for this
+native attempt (see [Security and controls](/docs/security-controls)). See
 [Remote hosts](/docs/remote-hosts#android-app).
 
 Linux native UI verification uses `make desktop-e2e`: Playwright specs speak a
@@ -418,6 +422,67 @@ daemon. The client therefore still needs memory proportional to the archive;
 streaming directly to a file requires a separate authenticated Desktop/Rust
 download API.
 
+## Server data in Tasks
+
+TanStack Query v5 owns the server data for Tasks. One QueryClient serves the
+application, and each component test uses an isolated client. The migrated
+read owners are TasksWorkspace, TaskDrawer, and WorkflowPanel. TaskDetail
+keeps form drafts and uses a mutation for relation writes.
+
+A query key identifies one response. Its prefix is
+the server identity, followed by the Tasks resource and its parameters.
+List keys include the agent scope, text, status view, assignee, and waiting
+principal. Queue filtering remains local. History keys distinguish the
+workspace's latest 200 events from the drawer's first 200 events.
+
+The connection adapter resolves an omitted ApiTarget to an explicit target
+before a request starts. A null target always selects the local server.
+Server identity is independent of its endpoint. A new SSH port cancels old
+reads and refreshes active queries without changing their keys or form state.
+An unavailable endpoint disables background reads. Credentials never appear
+in query keys, logs, or persistent storage. Credential changes clear that
+server's old data, and removing a host removes its cached queries.
+
+The cache holds data only in memory. Inactive queries expire after five
+minutes. Data is stale immediately, so reopening a view refreshes it in the
+background. Automatic retries, window-focus refresh, and browser reconnect
+refresh are disabled. The host connection adapter controls reconnect reads.
+Network failures retain a loaded snapshot. A 401 or 403 response clears the
+server's cached data and shows the access error.
+
+HTTP responses remain authoritative. The task socket opens after HTTP supplies
+its starting sequence. The event adapter combines a burst into one refresh
+cycle per server and query client, including one notification read. Multiple
+subscribers deduplicate the same event sequence. An event during a cycle requests a
+trailing cycle. Socket frames never replace task records.
+
+Writes cancel competing reads before and after the operation. They then
+invalidate the same server's task queries, so lists, details, history,
+notifications, and workflows refresh together. An optimistic tree move restores
+the previous rows on failure and reads the server again. A rejected save keeps
+its draft, including after a revision conflict. Writes do not retry or queue
+for an offline host. WorkflowPanel owns workflow-action refreshes; its parent
+does not start a second cycle. A successful notification-read write cancels
+intervening inbox reads before updating the read marker. It marks the inbox
+stale for the next socket, manual, or mount refresh.
+
+For another Tasks reader, reuse its typed query options:
+
+~~~tsx
+const target = useApiTarget(inputTarget)
+const detail = useApiQuery(taskQueries.detail(target, taskKey), target)
+~~~
+
+Keep selection, drafts, expansion, sizing, and focus in the component.
+Pass the query's AbortSignal through every paginated read. The shared layer
+discards cancelled results. New resources need keys for every response parameter.
+
+Terminals, AgentChat, the aggregate task list, the attention coordinator, and
+standalone queue forms retain their existing loaders. Their migration belongs
+to separate work. The drawer opened from those screens already shares the
+Tasks queries. Specialized workflow actions and log readers retain their own
+state.
+
 Tasks uses one reusable workspace at `/servers/:hostId/tasks` and inside each
 Agent tab. The server route shows every task visible on that host;
 an Agent tab sends
@@ -481,11 +546,9 @@ compares `status` only with `category` for its dirty check and tone, and sends
 no `status` or `assignee` on Save for a workflow task; it hides **Move to
 another server…** for one, and neither its banner nor a comment chip asks for
 a comment on the workflow's own (`system:workflow`) wait. In place of the status
-select it renders `WorkflowPanel`, which loads the view with `getTaskWorkflow`
-(on mount, on a new task revision, on a new event sequence passed down by
-`TaskDetail` as `eventSequence`, which in the chat `TaskDrawer` also follows
-the last socket hint about the task through `liveSequence`, and after each change; a request counter drops
-a response older than the newest) and composes, top down,
+select it renders `WorkflowPanel`, which reads the shared workflow query. A task revision, an event sequence, or
+a completed write marks that query stale, so a workflow event refreshes the
+panel even when the task revision stays the same. It composes, top down,
 `WorkflowPauseBanner` (`resumeTaskWorkflow`, `cancelWorkflowTask`),
 `WorkflowProblem` (the one problem `explainProblem` in `explainWorkflowProblem.ts`
 picks from the view, with `retryTransitionRequest` behind **Retry** and the
@@ -501,11 +564,14 @@ second click on the step, clears the selection and lists every entry of the
 view's `declared_artifacts` in one list, those `requiredBy` names for the
 current status first), `WorkflowRuns`
 (`getTaskScriptRunLog`; `runTone` gives each row its tone), the visit list,
-and the header's labeled **Return to agent…**, **Move to status…**, and
-**Cancel task** buttons: `ReturnToAgent` picks its targets with
-`returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the move form
-uses `moveTaskWorkflow` (targets from the view's `statuses`), and cancel uses
-`cancelWorkflowTask`. Outcomes, the problem block, and the return form follow
+and the header's labeled **Return to agent…**, **Upgrade to NAME@VERSION…**,
+**Move to status…**, and **Cancel task** buttons: `ReturnToAgent` picks its
+targets with `returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the
+upgrade form appears when `canUpgrade` finds the view's `queue_digest` differs
+from its `digest` and sends `upgradeTaskWorkflow`, the move form uses
+`moveTaskWorkflow` (targets from the view's `statuses`), and cancel uses
+`cancelWorkflowTask`. `stepMarks`, `returnTargets`, and `defaultReturnTarget`
+read `runVisits`, the visits of the task's current workflow digest. Outcomes, the problem block, and the return form follow
 a transition request through `useFollowRequest` in `workflowShared.ts`
 (`getTransitionRequest` once a second until the request settles or
 `wait_seconds` passes). Destructive actions confirm through

@@ -59,9 +59,12 @@ persisted `otlp_endpoint` daemon setting.
   build, its configured dev server) loads inside the WebView. The page that is
   shown now never widens that. Any other
   `http` or `https` address is cancelled and given to the system browser
-  through the opener plugin; every other scheme (`javascript:`, `file:`,
+  through the opener plugin in a background task. The navigation callback
+  returns without waiting for the browser. If opening fails, navigation stays
+  cancelled and the current page stays in place. Every other scheme (`javascript:`, `file:`,
   `intent:`, and the rest) is cancelled and opens nothing. The guard never logs
-  the address, because its query can carry a token.
+  the address or raw opener error, because either can carry a token. An opener
+  failure logs only the fixed message `could not open a web link in the browser`.
 
 ## Credentials
 
@@ -259,7 +262,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.92.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.93.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
