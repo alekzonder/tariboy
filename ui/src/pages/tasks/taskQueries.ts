@@ -1,7 +1,7 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query"
 import type { ApiTarget } from "@/lib/api"
 import { apiServerKey } from "@/lib/queryClient"
-import { getTask, getTaskWorkflow, listTaskEvents, listTaskNotifications, listTaskPrincipals, listTaskQueues, listTasks, type Task, type TaskDetail, type TaskEvent, type TaskFilters } from "@/lib/tasks"
+import { getTask, getTaskWorkflow, listAgentPools, listTaskEvents, listTaskNotifications, listTaskPrincipals, listTaskQueues, listTasks, type Task, type TaskDetail, type TaskEvent, type TaskFilters } from "@/lib/tasks"
 import { listAllTasks } from "./useAllServersTasks"
 
 type Target = Exclude<ApiTarget, undefined>
@@ -12,6 +12,7 @@ export const taskKeys = {
   history: (target: Target, key: string, policy: "first" | "latest") => [...taskKeys.server(target), "history", key, policy] as const,
   workflow: (target: Target, key: string) => [...taskKeys.server(target), "workflow", key] as const,
   queues: (target: Target) => [...taskKeys.server(target), "queues"] as const,
+  pools: (target: Target, queue: string) => [...taskKeys.server(target), "pools", queue] as const,
   principals: (target: Target) => [...taskKeys.server(target), "principals"] as const,
   notifications: (target: Target) => [...taskKeys.server(target), "notifications"] as const,
 }
@@ -45,6 +46,9 @@ export const taskQueries = {
   }),
   queues: (target: Target) => queryOptions({
     queryKey: taskKeys.queues(target), queryFn: ({ signal }) => listTaskQueues(target, signal),
+  }),
+  pools: (target: Target, queue: string) => queryOptions({
+    queryKey: taskKeys.pools(target, queue), queryFn: () => listAgentPools(queue, target), enabled: !!queue,
   }),
   principals: (target: Target) => queryOptions({
     queryKey: taskKeys.principals(target), queryFn: ({ signal }) => listTaskPrincipals(target, signal),

@@ -484,6 +484,41 @@ any assigned task.
 One pass assigns at most one task to each agent, in priority and creation order,
 so a single free agent does not collect every waiting task.
 
+### Changing the holder
+
+The customer can give a task in a pool status to another member of that pool:
+
+```bash
+ttasks workflow reassign DEV-ab12 --agent dev-2
+```
+
+The command is operator-only, like `workflow move`. It applies only to an open
+task in a status owned by an agent pool. It is refused with
+`invalid_status_owner` in a customer, script, or terminal status, with
+`workflow_paused` on a paused task (there, `workflow resume --decision release`
+gives the task to another member), and with `transition_pending` while a
+transition request runs. The agent must be a member of the status's pool and
+able to work: it exists, is enabled, is not halted, and does not run the bare
+image. Otherwise the command fails with `agent_unavailable`, and the error data
+names the cause (`deleted`, `disabled`, `halted`, `bare`, or `left_pool`). Other
+work of the agent is not checked: the customer chose it. Reassigning a task to
+its current holder changes nothing.
+
+In one transaction the command:
+
+- resolves the open questions the previous holder asked the customer;
+- resets the idle iterations and rejected requests of the current visit, so
+  the previous holder's stall counters cannot pause the task under the new one;
+- records the new agent as the task's holder for the pool, so the sticky rule
+  gives the task back to it when the task returns to a status of that pool;
+- sets `assignee` to `agent:<name>`, records `workflow.reassigned` (`status`,
+  `pool`, `from`, `to`, `actor`), and sends the usual assignment notification.
+
+Goal then wakes the new agent. The previous agent is no longer the holder, so
+it loses the task's Goal and its access to the task. Artifacts such as `branch`
+and `pull_request` stay, and the new agent continues from them. Uncommitted
+work in the previous agent's worktree does not move.
+
 Entering a customer status keeps the assignee, sets the category to
 `wait_customer`, and opens a wait for the customer through a comment by
 `system:workflow` that mentions the customer, lists the outcomes, and includes
@@ -1407,6 +1442,7 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks workflow move KEY --to STATUS --reason TEXT` | operator | Move without checks. |
 | `ttasks workflow upgrade KEY [--reason TEXT]` | operator | Restart the task at the queue's current workflow version. |
 | `ttasks workflow resume KEY --decision continue\|release` | operator | Resolve a pause. |
+| `ttasks workflow reassign KEY --agent NAME` | operator | Give the pool status to another member of its pool. |
 | `ttasks workflow retry KEY [REQUEST]` | operator | Run a failed request's checks again and wait for them. |
 | `ttasks cancel KEY` | operator | Cancel the task. |
 | `ttasks requeue KEY --queue QUEUE` | operator | Move the task to another queue as a new task. |
@@ -1445,6 +1481,7 @@ generated OpenAPI document is the authority for request and response schemas.
 | `POST` | `/api/tasks/{key}/workflow/move` | move to a status (`to`, `reason`) | operator |
 | `POST` | `/api/tasks/{key}/workflow/upgrade` | restart at the queue's current version (`reason`, optional); returns the task | operator |
 | `POST` | `/api/tasks/{key}/workflow/resume` | resolve a pause (`decision`: `continue` or `release`); returns the task | operator |
+| `POST` | `/api/tasks/{key}/workflow/reassign` | give the pool status to another member (`agent`); returns the task | operator |
 | `POST` | `/api/tasks/{key}/cancel` | cancel | operator |
 | `POST` | `/api/tasks/{key}/requeue` | move to another queue (`queue`, optional `revision`); returns the new task | operator |
 
@@ -1517,6 +1554,9 @@ the key, and the run id. A failed source run records the queue event
 | `workflow_not_paused` | 409 | `workflow resume` on a task that is not paused. |
 | `request_not_failed` | 409 | `workflow retry` of a request that did not fail. |
 | `request_superseded` | 409 | `workflow retry` of a request that is not the task's latest one in its current status. |
+| `invalid_status_owner` | 409 | `workflow reassign` of a task whose current status is not owned by an agent pool. |
+| `agent_unavailable` | 409 | `workflow reassign` to an agent that is not a member of the status's pool or cannot work; `data.cause` says why. |
+| `invalid_agent` | 400 | `workflow reassign` without an agent name. |
 | `invalid_decision` | 400 | A resume decision that is not `continue` or `release`, or `release` outside a pool status. |
 | `workflow_in_use` | 409 | A queue binds the image or a task, open or closed, pins it. |
 | `workflow_pool_empty` | 409 | A pool the image names is missing or has no agents. |
@@ -1525,7 +1565,7 @@ the key, and the run id. A failed source run records the queue event
 | `workflow_not_found` | 409 | The image a task or binding pins is not published. |
 | `queue_workflow_not_found` | 404 | The queue has no binding. |
 | `not_holder` | 403 | The caller does not own the current status. |
-| `forbidden` | 403 | A caller that is not the customer used an operator-only route (move, upgrade, cancel, resume), or a caller that may not read a run log asked for it. |
+| `forbidden` | 403 | A caller that is not the customer used an operator-only route (move, upgrade, cancel, resume, reassign), or a caller that may not read a run log asked for it. |
 | `status_changed` | 409 | An advance named `from`, and the task is in another status. |
 | `outcome_unknown` | 400 | The status does not declare that outcome. |
 | `status_unknown` | 400, 409 | The image does not declare that status (400 for a move, 409 for a task in an undeclared status). |
@@ -1690,8 +1730,12 @@ How the list shows these tasks is in [Tasks](/docs/tasks#desktop).
 
 Opening a workflow task shows a **Workflow** panel in the task sheet in place of
 the status select. It reads top down: what is wrong, where the task is, what
-may happen next, what it produced, and what ran. The task's assignee is
-read-only, because the workflow assigns pool work, and the sheet has no
+may happen next, what it produced, and what ran. The workflow assigns pool
+work, so Save never changes the assignee. In an open, unpaused pool status the
+**Assignee** field is a list of the members of that status's pool: choosing one
+runs `workflow reassign` at once (see [Changing the holder](#changing-the-holder)),
+and a refusal shows its message under the field. In any other status the
+assignee is read-only text. The sheet has no
 **Move to another server…**, because the daemon refuses to export a workflow
 task. Its actions menu offers **Move to queue…** instead (see
 [Tasks](/docs/tasks#moving-a-task-to-another-queue)). The panel follows the task's events as well as its revision: a rejected

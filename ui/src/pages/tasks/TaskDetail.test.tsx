@@ -3,9 +3,12 @@ import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
 import type { Task, TaskComment, TaskDetail as Detail, TaskEvent, TaskWait } from "@/lib/tasks"
 import TaskDetail from "./TaskDetail"
-import { customerView, poolView, workflowTask } from "./workflowFixtures"
+import { ApiError } from "@/lib/api"
+import { agentPool, customerView, poolView, workflowTask } from "./workflowFixtures"
 
-const api = vi.hoisted(() => ({ getTaskWorkflow: vi.fn(), resumeTaskWorkflow: vi.fn() }))
+const api = vi.hoisted(() => ({
+  getTaskWorkflow: vi.fn(), resumeTaskWorkflow: vi.fn(), listAgentPools: vi.fn(), reassignTaskWorkflow: vi.fn(),
+}))
 vi.mock("@/lib/tasks", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/tasks")>(),
   ...api,
@@ -175,4 +178,41 @@ it("shows a workflow task's assignee as text, with no control to change it", asy
   expect(field).toHaveTextContent("agent:writer")
   expect(within(field).queryByRole("textbox")).not.toBeInTheDocument()
   expect(within(field).queryByRole("combobox")).not.toBeInTheDocument()
+})
+
+const heldTask: Task = { ...workflowTask, status: "draft", category: "in_progress", waiting_on: undefined }
+
+it("changes the agent of a workflow task in a pool status to another member of that pool", async () => {
+  api.getTaskWorkflow.mockResolvedValue(poolView)
+  api.listAgentPools.mockResolvedValue({ items: [agentPool("writers", ["writer", "editor"], 1, "REL"), agentPool("other", ["x"], 2, "REL")], count: 2 })
+  api.reassignTaskWorkflow.mockResolvedValue({ ...heldTask, assignee: "agent:editor", revision: 5 })
+  const { onSave, onTaskChanged } = renderDetail(heldTask)
+  const select = await screen.findByRole("combobox", { name: "Assignee" })
+  await waitFor(() => expect(within(select).getAllByRole("option").map((option) => option.textContent))
+    .toEqual(["agent:writer", "agent:editor"]))
+  expect(select).toHaveValue("agent:writer")
+  await userEvent.selectOptions(select, "agent:editor")
+  await waitFor(() => expect(api.reassignTaskWorkflow).toHaveBeenCalledWith("REL-1", "editor", null))
+  await waitFor(() => expect(onTaskChanged).toHaveBeenCalled())
+  expect(onSave).not.toHaveBeenCalled()
+})
+
+it("shows why the daemon refused to change the agent", async () => {
+  api.getTaskWorkflow.mockResolvedValue(poolView)
+  api.listAgentPools.mockResolvedValue({ items: [agentPool("writers", ["writer", "editor"], 1, "REL")], count: 1 })
+  api.reassignTaskWorkflow.mockRejectedValue(new ApiError(409, "agent_unavailable", "agent editor cannot take status draft of pool writers: halted"))
+  renderDetail(heldTask)
+  const select = await screen.findByRole("combobox", { name: "Assignee" })
+  await waitFor(() => expect(within(select).getAllByRole("option")).toHaveLength(2))
+  await userEvent.selectOptions(select, "agent:editor")
+  expect(await screen.findByRole("alert")).toHaveTextContent("halted")
+  expect(select).toHaveValue("agent:writer")
+})
+
+it("keeps the assignee as text on a paused task in a pool status", async () => {
+  api.getTaskWorkflow.mockResolvedValue({ ...poolView, waiting_on: "pause", paused_reason: "idle_iterations" })
+  api.listAgentPools.mockResolvedValue({ items: [agentPool("writers", ["writer", "editor"], 1, "REL")], count: 1 })
+  renderDetail({ ...heldTask, waiting_on: "pause" })
+  await screen.findByRole("button", { name: "Continue" })
+  expect(screen.queryByRole("combobox", { name: "Assignee" })).not.toBeInTheDocument()
 })

@@ -20,6 +20,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import TaskTransferDialog from "./TaskTransferDialog"
 import TaskRequeueDialog from "./TaskRequeueDialog"
 import { WorkflowPanel } from "./WorkflowPanel"
+import WorkflowAssignee from "./WorkflowAssignee"
 import { MarkdownEditor, MarkdownContent, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown"
 import { SendFilesButton } from "@/components/SendFilesButton"
 import { StatusPill } from "@/components/ui/status"
@@ -336,10 +337,7 @@ export default function TaskDetail({
                 <option value="P2">P2 Normal</option>
                 <option value="P3">P3 Low</option>
               </SelectField>
-              {workflow && <dl className="flex min-w-0 flex-col gap-[5px]">
-                <dt className={LABEL}>Assignee</dt>
-                <dd className={cn(MONO, "flex h-[30px] min-w-0 items-center truncate")}>{task.assignee || "Unassigned"}</dd>
-              </dl>}
+              {workflow && <WorkflowAssignee task={task} target={target} onTaskChanged={onTaskChanged} />}
               {!workflow && assigneeOptions && <SelectField label="Assignee" value={assignee} onChange={setAssignee} mono>
                 <option value="">Unassigned</option>
                 {[task.assignee, principals?.customer ?? ""]

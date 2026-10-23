@@ -72,6 +72,9 @@ var sharedHelp = map[string]commandHelp{
 	"workflow_resume": {"Resolve the pause of a workflow task (operator-only)", "workflow resume KEY --decision continue|release",
 		"A paused task waits for the customer's decision; a plain comment does not resume it. --decision continue resumes the task in its current status with the status counters reset; in a status owned by an agent pool the holder stays. --decision release, only in a status owned by an agent pool, takes the task from its holder and dispatches it to another member; with no other eligible member the task waits unassigned. To stop the task instead, run ttasks cancel KEY. Operator-only: uses the host daemon as the customer actor.",
 		"KEY  Task key (required)", "ttasks workflow resume DEV-12 --decision continue\nttasks workflow resume DEV-12 --decision release"},
+	"workflow_reassign": {"Hand the pool status of a workflow task to another member (operator-only)", "workflow reassign KEY --agent NAME",
+		"Changes the agent of a task in a status owned by an agent pool. NAME must be a member of that pool that can work: enabled, not halted, and not on the bare image. The task goes to NAME at once and NAME becomes the sticky holder of the pool: when the task comes back to a status of that pool, NAME gets it again. The previous holder loses the task, and its open questions to the customer are resolved. The idle and rejected counters of the status are reset. Artifacts stay. Refused in a customer, script, or terminal status, on a paused task (use workflow resume), and while a transition request runs. Operator-only: uses the host daemon as the customer actor.",
+		"KEY  Task key (required)", "ttasks workflow reassign DEV-12 --agent dev-2"},
 	"workflow_retry": {"Run the checks of a failed transition request again (operator-only)", "workflow retry KEY [REQUEST]",
 		"Repeats a transition request whose check could not run (a script error or an expired token, for example) as a new request with the same outcome, message and requester, and waits for its checks like advance. Without REQUEST it retries the task's latest request. Only the latest request of the current status can be retried, and only when it failed: a rejection is the holder's to fix, and a paused task must be resumed first. Operator-only: uses the host daemon as the customer actor.",
 		"KEY  Task key (required)\nREQUEST  Transition request id, as shown by workflow get (default: the latest)", "ttasks workflow retry DEV-12\nttasks workflow retry DEV-12 41"},
@@ -133,6 +136,7 @@ var helpFlags = map[string]string{
 	"to":                  "Target workflow status id (required)",
 	"reason":              "Why the task is moved (required)",
 	"decision":            "How to resolve the pause: continue or release (required)",
+	"agent":               "Pool member that takes over the current status (required)",
 }
 
 const globalHelp = `Global flags:

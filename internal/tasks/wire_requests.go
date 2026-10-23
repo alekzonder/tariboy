@@ -361,6 +361,12 @@ func (r *ResumeRequest) Validate() error {
 	return nil
 }
 
+// ReassignRequest hands the pool status of a workflow task to another member.
+type ReassignRequest struct {
+	Key   string `json:"key" pos:"0" label:"task key" required:"cli"`
+	Agent string `json:"agent" flag:"agent" required:"true" help:"Pool member that takes over the current status"`
+}
+
 // RetryRequest retries a failed transition request; without ID the client
 // names the task's latest one.
 type RetryRequest struct {

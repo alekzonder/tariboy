@@ -74,6 +74,7 @@ func TestOperatorWorkflowCommandsUseRestRoutes(t *testing.T) {
 		{[]string{"workflow", "upgrade", "DEV-1", "--reason", "new rules"}, "POST", "/api/tasks/DEV-1/workflow/upgrade", map[string]any{"reason": "new rules"}},
 		{[]string{"workflow", "resume", "DEV-1", "--decision", "continue"}, "POST", "/api/tasks/DEV-1/workflow/resume", map[string]any{"decision": "continue"}},
 		{[]string{"workflow", "resume", "DEV-1", "--decision", " release "}, "POST", "/api/tasks/DEV-1/workflow/resume", map[string]any{"decision": "release"}},
+		{[]string{"workflow", "reassign", "DEV-1", "--agent", "dev-2"}, "POST", "/api/tasks/DEV-1/workflow/reassign", map[string]any{"agent": "dev-2"}},
 		{[]string{"workflow", "retry", "DEV-1", "7"}, "POST", "/api/tasks/DEV-1/workflow/requests/7/retry", map[string]any{}},
 		{[]string{"cancel", "DEV-1"}, "POST", "/api/tasks/DEV-1/cancel", map[string]any{}},
 		{[]string{"requeue", "DEV-1", "--queue", "OPS", "--revision", "3"}, "POST", "/api/tasks/DEV-1/requeue", map[string]any{"queue": "OPS", "revision": float64(3)}},
@@ -112,6 +113,7 @@ func TestAgentModeRefusesOperatorOnlyWorkflowCommandsLocally(t *testing.T) {
 	for _, argv := range [][]string{
 		{"workflow", "move", "DEV-1", "--to", "develop", "--reason", "x"},
 		{"workflow", "resume", "DEV-1", "--decision", "continue"},
+		{"workflow", "reassign", "DEV-1", "--agent", "dev-2"},
 		{"workflow", "retry", "DEV-1", "7"},
 		{"cancel", "DEV-1"},
 		{"requeue", "DEV-1", "--queue", "OPS"},
@@ -439,6 +441,7 @@ func TestWorkflowCommandsAreDocumentedInHelp(t *testing.T) {
 		{[]string{"workflow", "log"}, []string{"KEY", "RUN", "--max-bytes", "[redacted]"}},
 		{[]string{"workflow", "move"}, []string{"--to", "--reason", "operator-only"}},
 		{[]string{"workflow", "resume"}, []string{"--decision", "continue", "resumes the task in its current status with the status counters reset", "release", "ttasks cancel", "operator-only"}},
+		{[]string{"workflow", "reassign"}, []string{"--agent", "pool", "sticky", "operator-only"}},
 		{[]string{"cancel"}, []string{"operator-only"}},
 		{[]string{"requeue"}, []string{"--queue", "new task", "cancelled", "requeue_has_children", "operator-only"}},
 		{[]string{"queue", "workflow", "set"}, []string{"operator-only", "--ref", "--revision"}},
@@ -465,7 +468,7 @@ func TestWorkflowCommandsAreDocumentedInHelp(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range [][]string{
-		{"advance"}, {"artifacts", "set"}, {"artifacts", "ls"}, {"artifacts", "show"}, {"workflow", "get"}, {"workflow", "runs"}, {"workflow", "log"}, {"workflow", "move"}, {"workflow", "resume"}, {"cancel"}, {"requeue"},
+		{"advance"}, {"artifacts", "set"}, {"artifacts", "ls"}, {"artifacts", "show"}, {"workflow", "get"}, {"workflow", "runs"}, {"workflow", "log"}, {"workflow", "move"}, {"workflow", "resume"}, {"workflow", "reassign"}, {"cancel"}, {"requeue"},
 		{"queue", "workflow", "set"}, {"queue", "workflow", "get"}, {"queue", "workflow", "clear"},
 	} {
 		node := tree

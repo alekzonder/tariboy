@@ -33,6 +33,7 @@ import {
   moveTaskWorkflow,
   removeQueueEnv,
   removeQueueSecret,
+  reassignTaskWorkflow,
   resumeTaskWorkflow,
   setQueueEnv,
   setQueueSecret,
@@ -141,6 +142,8 @@ describe("workflow task client", () => {
     expect(lastCall()).toEqual([remote, "POST", "/api/tasks/TARI-1/cancel", undefined])
     await resumeTaskWorkflow("TARI-1", "release", remote)
     expect(lastCall()).toEqual([remote, "POST", "/api/tasks/TARI-1/workflow/resume", { decision: "release" }])
+    await reassignTaskWorkflow("TARI-1", "dev-2", remote)
+    expect(lastCall()).toEqual([remote, "POST", "/api/tasks/TARI-1/workflow/reassign", { agent: "dev-2" }])
   })
 
   it("maps only an unbound queue to null", async () => {

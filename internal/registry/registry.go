@@ -149,6 +149,7 @@ type TaskControl interface {
 	CancelWorkflowTask(context.Context, tasks.Actor, string) (tasks.Task, error)
 	RequeueTask(context.Context, tasks.Actor, string, tasks.RequeueInput) (tasks.Task, error)
 	ResumeWorkflow(context.Context, tasks.Actor, string, string) (tasks.Task, error)
+	ReassignWorkflow(context.Context, tasks.Actor, string, string) (tasks.Task, error)
 	SetQueueWorkflow(context.Context, tasks.Actor, string, string, int64) (tasks.QueueWorkflow, error)
 	FollowQueueWorkflows(context.Context, string) error
 	GetQueueWorkflow(context.Context, tasks.Actor, string) (tasks.QueueWorkflow, error)
