@@ -1,3 +1,55 @@
+## [0.93.0] - 2026-10-23
+
+### Added
+
+- `ttasks requeue KEY --queue QUEUE` (operator only, `POST /api/tasks/{key}/requeue`)
+  moves a task to another queue of the same host as a new task. The new task
+  keeps the title, description, priority, pull request, group and comments, and
+  enters the target queue's workflow if it has one. The old task is cancelled;
+  if it followed a workflow, that workflow stops as with `ttasks cancel`. The two
+  tasks are related and each gets a comment naming the other. A task with open
+  subtasks is refused (`requeue_has_children`). The Desktop task panel offers
+  **Move to queue…** for any open task.
+- `ttasks workflow upgrade KEY [--reason TEXT]` (operator only,
+  `POST /api/tasks/{key}/workflow/upgrade`) pins a workflow task to the version
+  its queue is bound to now and starts it again at that version's initial
+  status. Artifacts and pool holders stay, so the agent keeps its branch and
+  pull request. It is refused with `workflow_closed`, `workflow_unbound`,
+  `workflow_current`, `workflow_pool_empty` or `workflow_secret_missing`, and it
+  records `workflow.upgraded`. The task view reports `queue_version` and
+  `queue_digest`, and each visit reports `workflow_digest` and `workflow_version`.
+  The Desktop workflow panel shows **Upgrade to NAME@VERSION…** on an open task
+  whose queue is bound to another version, labels visits of earlier versions,
+  and counts steps and returns only for the current version.
+
+### Changed
+
+- The Android launcher icons are generated from the Tariboy logo by the
+  desktop branding generator. The adaptive icon uses a `#111214` background.
+- Migration `0071` records on each workflow status visit the workflow digest
+  the task was pinned to. The daemon applies it automatically on start.
+- The Desktop Tasks workspace, task drawer and workflow panel read server data
+  from one shared in-memory cache. Reopening a view refreshes it in the
+  background, a burst of task events triggers one refresh per server, a write
+  refreshes lists, details, history, notifications and workflows together, a
+  network failure keeps the loaded data, and a 401/403 response or a
+  credential change clears that server's cached data. Nothing is stored on
+  disk and credentials never appear in cache keys.
+
+### Fixed
+
+- Agent tmux commands match the full session name exactly. A missing agent
+  session can no longer resolve by prefix to another agent's session (for
+  example `image-creator` to `image-creator-sam`) during existence checks,
+  terminal attach, screen capture, input, exit waiting or cleanup.
+- The Android app no longer blocks its UI thread when a web link is opened:
+  the navigation guard cancels the link at once and hands it to the system
+  browser in the background. If the browser cannot open it, the current
+  screen stays in place and only a fixed message is logged, never the URL or
+  error details.
+
+[0.93.0]: https://github.com/alekzonder/tariboy/compare/v0.92.0...v0.93.0
+
 ## [0.92.0] - 2026-10-22
 
 ### Added
