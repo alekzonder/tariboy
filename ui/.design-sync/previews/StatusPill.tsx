@@ -80,10 +80,30 @@ export const InTaskRow = () => (
     }}
   >
     {[
-      { key: "TB-142", title: "Ship the metal theme", tone: "live" as const, status: "In progress" },
-      { key: "TB-147", title: "Answer the packaging question", tone: "attention" as const, status: "Wait customer" },
-      { key: "TB-151", title: "Remote provision smoke fails", tone: "danger" as const, status: "Failed" },
-      { key: "TB-153", title: "Audit export column widths", tone: "quiet" as const, status: "Open" },
+      {
+        key: "TB-142",
+        title: "Ship the metal theme",
+        tone: "live" as const,
+        status: "In progress",
+      },
+      {
+        key: "TB-147",
+        title: "Answer the packaging question",
+        tone: "attention" as const,
+        status: "Wait customer",
+      },
+      {
+        key: "TB-151",
+        title: "Remote provision smoke fails",
+        tone: "danger" as const,
+        status: "Failed",
+      },
+      {
+        key: "TB-153",
+        title: "Audit export column widths",
+        tone: "quiet" as const,
+        status: "Open",
+      },
     ].map((row, i) => (
       <div
         key={row.key}
@@ -106,7 +126,15 @@ export const InTaskRow = () => (
         >
           {row.key}
         </span>
-        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
           {row.title}
         </span>
         <span style={{ width: 110, flexShrink: 0 }}>

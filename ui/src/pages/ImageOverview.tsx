@@ -29,7 +29,9 @@ function Chips({ items }: { items: string[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {items.map((s) => (
-        <span key={s} className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{s}</span>
+        <span key={s} className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+          {s}
+        </span>
       ))}
     </div>
   );
@@ -47,19 +49,21 @@ export default function ImageOverview() {
       {manifest.bare && (
         <Section title="Terminal-only">
           <p className="text-muted-foreground">
-            This built-in image has no prompt or capabilities. It starts a normal
-            interactive harness session and cannot be rebuilt or automated.
+            This built-in image has no prompt or capabilities. It starts a normal interactive
+            harness session and cannot be rebuilt or automated.
           </p>
         </Section>
       )}
-      {manifest.schema_version===1&&harness&&<Section title="Harness">
-        <Row label="type" value={harness.type} />
-        {harness.model && <Row label="model" value={harness.model} />}
-        {harness.effort && <Row label="effort" value={harness.effort} />}
-        <Row label="interactive" value={String(harness.interactive)} />
-      </Section>}
+      {manifest.schema_version === 1 && harness && (
+        <Section title="Harness">
+          <Row label="type" value={harness.type} />
+          {harness.model && <Row label="model" value={harness.model} />}
+          {harness.effort && <Row label="effort" value={harness.effort} />}
+          <Row label="interactive" value={String(harness.interactive)} />
+        </Section>
+      )}
 
-      {(policy?.tools_allow?.length || policy?.tools_deny?.length) ? (
+      {policy?.tools_allow?.length || policy?.tools_deny?.length ? (
         <Section title="Policy">
           {policy?.tools_allow?.length ? (
             <div className="space-y-1">
@@ -91,7 +95,6 @@ export default function ImageOverview() {
           ))}
         </Section>
       ) : null}
-
 
       {parents?.length ? (
         <Section title="Parents">

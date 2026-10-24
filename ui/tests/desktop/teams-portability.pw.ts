@@ -9,7 +9,10 @@ async function bodyText(desktop: W3CClient): Promise<string> {
   return desktop.execute<string>("return document.body ? document.body.innerText : '';");
 }
 
-test("real Desktop creates, separates, copies, exports, previews, and imports a team", async ({ desktop, desktopWorker }) => {
+test("real Desktop creates, separates, copies, exports, previews, and imports a team", async ({
+  desktop,
+  desktopWorker,
+}) => {
   const sourceDir = await createTestImageSource(desktopWorker.baseDir);
   await desktop.execute(`window.__desktopApiBase = "";
     const originalFetch = window.fetch.bind(window);
@@ -22,7 +25,8 @@ test("real Desktop creates, separates, copies, exports, previews, and imports a 
   await openPath(desktop, "/servers/local/settings/advanced/groups");
   await expect.poll(() => bodyText(desktop)).toContain("New group (wizard)");
 
-  const created = await desktop.execute<boolean>(`const input = document.querySelector('input[placeholder="group name"]');
+  const created =
+    await desktop.execute<boolean>(`const input = document.querySelector('input[placeholder="group name"]');
     const button = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === "Create");
     if (!(input instanceof HTMLInputElement) || !(button instanceof HTMLButtonElement)) return false;
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "desktop-team");
@@ -44,7 +48,8 @@ test("real Desktop creates, separates, copies, exports, previews, and imports a 
       await call("POST", "/api/agents", { image: "portable-image:v1", name: "desktop-worker", group: "desktop-team", harness: "codex" });
       window.__desktopSetup = "complete";
     })().catch((error) => { window.__desktopSetup = "failed: " + String(error); });`);
-  await expect.poll(() => desktop.execute<string>("return window.__desktopSetup || '';"), { timeout: 60_000 })
+  await expect
+    .poll(() => desktop.execute<string>("return window.__desktopSetup || '';"), { timeout: 60_000 })
     .toBe("complete");
 
   await openPath(desktop, "/");
@@ -61,7 +66,8 @@ test("real Desktop creates, separates, copies, exports, previews, and imports a 
     button.click();
     return true;`);
   expect(copyStarted).toBe(true);
-  await expect.poll(() => desktop.execute<string>("return window.__desktopCopiedYAML || '';"))
+  await expect
+    .poll(() => desktop.execute<string>("return window.__desktopCopiedYAML || '';"))
     .toContain("desktop-team");
 
   const exportStarted = await desktop.execute<boolean>(`window.__desktopTeamArchive = null;
@@ -74,9 +80,15 @@ test("real Desktop creates, separates, copies, exports, previews, and imports a 
     button.click();
     return true;`);
   expect(exportStarted).toBe(true);
-  await expect.poll(() => desktop.execute<number>("return window.__desktopTeamArchive ? window.__desktopTeamArchive.size : 0;"))
+  await expect
+    .poll(() =>
+      desktop.execute<number>(
+        "return window.__desktopTeamArchive ? window.__desktopTeamArchive.size : 0;",
+      ),
+    )
     .toBeGreaterThan(0);
-  await expect.poll(() => desktop.execute<string>("return window.__desktopTeamDownloadName || '';"))
+  await expect
+    .poll(() => desktop.execute<string>("return window.__desktopTeamDownloadName || '';"))
     .toBe("desktop-team.tar.gz");
 
   await desktop.execute(`window.__desktopCleanup = "running";
@@ -90,10 +102,14 @@ test("real Desktop creates, separates, copies, exports, previews, and imports a 
       await call("DELETE", "/api/groups/desktop-team");
       window.__desktopCleanup = "complete";
     })().catch((error) => { window.__desktopCleanup = "failed: " + String(error); });`);
-  await expect.poll(() => desktop.execute<string>("return window.__desktopCleanup || '';"), { timeout: 60_000 })
+  await expect
+    .poll(() => desktop.execute<string>("return window.__desktopCleanup || '';"), {
+      timeout: 60_000,
+    })
     .toBe("complete");
 
-  const uploadStarted = await desktop.execute<boolean>(`const input = document.querySelector('input[aria-label="Import team archive"]');
+  const uploadStarted =
+    await desktop.execute<boolean>(`const input = document.querySelector('input[aria-label="Import team archive"]');
     if (!(input instanceof HTMLInputElement) || !window.__desktopTeamArchive) return false;
     const transfer = new DataTransfer();
     transfer.items.add(new File([window.__desktopTeamArchive], "desktop-team.tar.gz", { type: "application/gzip" }));
@@ -104,13 +120,16 @@ test("real Desktop creates, separates, copies, exports, previews, and imports a 
   await expect.poll(() => bodyText(desktop)).toContain("Images: none");
   expect(await bodyText(desktop)).not.toContain("Portable Desktop source");
 
-  const applyStarted = await desktop.execute<boolean>(`const yaml = document.querySelector('textarea[aria-label="Imported team compose YAML"]');
+  const applyStarted =
+    await desktop.execute<boolean>(`const yaml = document.querySelector('textarea[aria-label="Imported team compose YAML"]');
     const button = document.querySelector('button[aria-label="Confirm and import team"]');
     if (!(yaml instanceof HTMLTextAreaElement) || !(button instanceof HTMLButtonElement)) return false;
     button.click();
     return true;`);
   expect(applyStarted).toBe(true);
-  await expect.poll(() => bodyText(desktop), { timeout: 60_000 }).toContain("Import status: complete");
+  await expect
+    .poll(() => bodyText(desktop), { timeout: 60_000 })
+    .toContain("Import status: complete");
 
   await openPath(desktop, "/servers/local/settings/advanced/groups?team=desktop-team");
   await expect.poll(() => bodyText(desktop)).toContain("desktop-worker");

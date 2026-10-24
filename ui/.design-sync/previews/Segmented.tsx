@@ -19,12 +19,7 @@ export const TaskStatus = () => {
   const [view, setView] = useState<StatusView>("active");
   return (
     <div style={{ display: "flex" }}>
-      <Segmented
-        label="Task status"
-        options={STATUS_OPTIONS}
-        value={view}
-        onChange={setView}
-      />
+      <Segmented label="Task status" options={STATUS_OPTIONS} value={view} onChange={setView} />
     </div>
   );
 };
@@ -92,12 +87,7 @@ export const InFilterBar = () => {
           <Search aria-hidden="true" className="size-3 shrink-0" />
           <span className="min-w-0 flex-1 text-[12px]">Search tasks</span>
         </label>
-        <Segmented
-          label="Task status"
-          options={STATUS_OPTIONS}
-          value={view}
-          onChange={setView}
-        />
+        <Segmented label="Task status" options={STATUS_OPTIONS} value={view} onChange={setView} />
       </div>
       <div
         style={{

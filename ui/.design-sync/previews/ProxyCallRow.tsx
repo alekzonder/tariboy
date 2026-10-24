@@ -22,7 +22,10 @@ const call = {
   ],
   response: {
     blocks: [
-      { type: "thinking" as const, text: "The shim expects every updater command to resolve after acknowledgement." },
+      {
+        type: "thinking" as const,
+        text: "The shim expects every updater command to resolve after acknowledgement.",
+      },
       { type: "text" as const, text: "Running the desktop updater contract tests before editing." },
       {
         type: "tool_use" as const,
@@ -30,7 +33,11 @@ const call = {
         tool_use_id: "call_1",
         input: { command: "cargo test -p tariboy-desktop updater" },
       },
-      { type: "tool_result" as const, tool_use_id: "call_1", text: "running 9 tests … ok. 9 passed; 0 failed" },
+      {
+        type: "tool_result" as const,
+        tool_use_id: "call_1",
+        text: "running 9 tests … ok. 9 passed; 0 failed",
+      },
     ],
     stop_reason: "end_turn",
   },

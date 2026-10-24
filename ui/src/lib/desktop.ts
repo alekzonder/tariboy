@@ -42,7 +42,15 @@ export interface DesktopHostView {
   remote_port: number;
   https_base_url: string;
   last_daemon_version: string;
-  state: "disconnected" | "connecting" | "provisioning" | "ready" | "error" | "degraded" | "needs_auth" | "failed";
+  state:
+    | "disconnected"
+    | "connecting"
+    | "provisioning"
+    | "ready"
+    | "error"
+    | "degraded"
+    | "needs_auth"
+    | "failed";
   base_url: string;
   local_port: number;
   phase: string;
@@ -213,14 +221,12 @@ export const hostSaveHttps = (input: SaveHttpsHostInput, token?: string) =>
   invokeDesktop<DesktopHostView>("host_save_https", { input, token });
 export const hostSessionCredentials = (id: string) =>
   invokeDesktop<HostSessionCredentials>("host_session_credentials", { id });
-export const hostHasToken = (id: string) =>
-  invokeDesktop<boolean>("host_has_token", { id });
+export const hostHasToken = (id: string) => invokeDesktop<boolean>("host_has_token", { id });
 export const hostRemove = (id: string) => invokeDesktop<null>("host_remove", { id });
 export const hostProvision = (id: string) =>
   invokeDesktop<HostOperationResult>("host_provision", { id });
 export const hostConnect = (id: string) => invokeDesktop<null>("host_connect", { id });
-export const hostUpdate = (id: string) =>
-  invokeDesktop<HostOperationResult>("host_update", { id });
+export const hostUpdate = (id: string) => invokeDesktop<HostOperationResult>("host_update", { id });
 export const hostPromptReply = (operationId: string, text: string) =>
   invokeDesktop<null>("host_prompt_reply", { operationId, text });
 export const desktopUpdateState = () =>
@@ -233,9 +239,11 @@ export const desktopUpdateInstall = () =>
 export async function showTaskNotification(
   input: TaskNotificationInput,
 ): Promise<TaskNotificationResult> {
-  return (await invokeDesktop<TaskNotificationResult>("task_notification_show", { input })) ?? {
-    outcome: "unavailable",
-  };
+  return (
+    (await invokeDesktop<TaskNotificationResult>("task_notification_show", { input })) ?? {
+      outcome: "unavailable",
+    }
+  );
 }
 
 /**

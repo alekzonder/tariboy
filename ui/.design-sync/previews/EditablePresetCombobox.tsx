@@ -4,12 +4,7 @@ import { EditablePresetCombobox, Label } from "tariboy-ui";
 // Options are exactly what src/lib/runtimePresets.ts hands the create-agent
 // form: runtimePresetOptions(harness, "models" | "efforts").
 const EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultracode"];
-const CLAUDE_MODELS = [
-  "claude-opus-4-8",
-  "claude-sonnet-5",
-  "claude-haiku-4-5",
-  "claude-fable-5",
-];
+const CLAUDE_MODELS = ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5", "claude-fable-5"];
 
 // The create-agent form wraps every combobox in a labelled field; on its own the
 // h-8 input captures as a sliver.
@@ -130,7 +125,11 @@ export const CustomValue = () => {
 };
 
 export const Disabled = () => (
-  <Field id="model-locked" label="model" hint="worker:v1 pins the model — inherited from the image.">
+  <Field
+    id="model-locked"
+    label="model"
+    hint="worker:v1 pins the model — inherited from the image."
+  >
     <EditablePresetCombobox
       id="model-locked"
       ariaLabel="model"

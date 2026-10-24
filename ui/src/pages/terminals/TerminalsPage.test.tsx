@@ -24,8 +24,12 @@ vi.mock("@/lib/aggregate", () => ({
 // client that sent it. apiOn records the daemon config writes (sidebar order).
 const calls = vi.hoisted(() => ({
   agentGetOn: vi.fn<(target: Daemon | null, name: string, action: string) => Promise<unknown>>(),
-  apiOn: vi.fn<(target: Daemon | null, method: string, path: string, body?: unknown) => Promise<unknown>>(),
-  createAgent: vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<CreateAgentResult>>(),
+  apiOn:
+    vi.fn<
+      (target: Daemon | null, method: string, path: string, body?: unknown) => Promise<unknown>
+    >(),
+  createAgent:
+    vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<CreateAgentResult>>(),
   imageManifestGet: vi.fn<(ref: string, target: Daemon | null) => Promise<ImageManifest>>(),
   listImages: vi.fn<(target: Daemon | null) => Promise<{ images: ImageRow[]; count: number }>>(),
   startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentLifecycleResult>>(),
@@ -39,9 +43,10 @@ vi.mock("@/lib/api", async (importOriginal) => {
     const host = client.target;
     return {
       ...client,
-      post: <T,>(path: string, body?: unknown) => path === "/api/daemon/config"
-        ? calls.apiOn(host, "POST", path, body) as Promise<T>
-        : client.post<T>(path, body),
+      post: <T,>(path: string, body?: unknown) =>
+        path === "/api/daemon/config"
+          ? (calls.apiOn(host, "POST", path, body) as Promise<T>)
+          : client.post<T>(path, body),
       agents: {
         ...client.agents,
         getAgent: (name: string) => calls.agentGetOn(host, name, "") as Promise<AgentView>,
@@ -115,8 +120,22 @@ beforeEach(() => {
     {
       host: { id: "", label: "This daemon (local)" },
       agents: [
-        { name: "a1", image: "bare:latest", state: "running", harness: "claude", group: null, interactive: true },
-        { name: "a2", image: "img", state: "running", harness: "claude", group: null, interactive: false },
+        {
+          name: "a1",
+          image: "bare:latest",
+          state: "running",
+          harness: "claude",
+          group: null,
+          interactive: true,
+        },
+        {
+          name: "a2",
+          image: "img",
+          state: "running",
+          harness: "claude",
+          group: null,
+          interactive: false,
+        },
       ],
     },
     { host: { id: "d1", label: "prod" }, agents: [], error: "unauthorized: nope" },
@@ -132,7 +151,7 @@ beforeEach(() => {
     built_at: "2026-07-29T00:00:00Z",
     parents: null,
     plugins: null,
-	 skills: null,
+    skills: null,
     requires_secrets: null,
     harness: { type: "codex", interactive: false },
     env: null,
@@ -153,23 +172,25 @@ function renderAt(path: string, attention: ReadonlyMap<string, number> = new Map
   const slot = document.body.appendChild(document.createElement("div"));
   return render(
     <TitlebarSlotContext.Provider value={slot}>
-    <DaemonProvider>
-      <CustomerQuestionNotificationsContext.Provider value={{ attention, refreshHost: async () => {} }}>
-        <MemoryRouter initialEntries={[path]}>
-          <SidebarStateProvider>
-            <RoutedLocation />
-            <Routes>
-              <Route path="/" element={<TerminalsPage />} />
-              <Route path="/terminals" element={<TerminalsPage />} />
-              <Route path="/terminals/:hostId/:agent" element={<TerminalsPage />} />
-              <Route path="/agents/:hostId/:agent/:tab" element={<TerminalsPage />} />
-              <Route path="/agents/:hostId/teams/:team" element={<TerminalsPage />} />
-              <Route path="/servers/:hostId/tasks" element={<TerminalsPage />} />
-            </Routes>
-          </SidebarStateProvider>
-        </MemoryRouter>
-      </CustomerQuestionNotificationsContext.Provider>
-    </DaemonProvider>
+      <DaemonProvider>
+        <CustomerQuestionNotificationsContext.Provider
+          value={{ attention, refreshHost: async () => {} }}
+        >
+          <MemoryRouter initialEntries={[path]}>
+            <SidebarStateProvider>
+              <RoutedLocation />
+              <Routes>
+                <Route path="/" element={<TerminalsPage />} />
+                <Route path="/terminals" element={<TerminalsPage />} />
+                <Route path="/terminals/:hostId/:agent" element={<TerminalsPage />} />
+                <Route path="/agents/:hostId/:agent/:tab" element={<TerminalsPage />} />
+                <Route path="/agents/:hostId/teams/:team" element={<TerminalsPage />} />
+                <Route path="/servers/:hostId/tasks" element={<TerminalsPage />} />
+              </Routes>
+            </SidebarStateProvider>
+          </MemoryRouter>
+        </CustomerQuestionNotificationsContext.Provider>
+      </DaemonProvider>
     </TitlebarSlotContext.Provider>,
   );
 }
@@ -180,10 +201,19 @@ function RoutedLocation() {
 }
 
 function mockRowRects(tops: Record<string, number>) {
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
     const top = tops[this.getAttribute("aria-label") ?? ""] ?? 0;
     return {
-      left: 0, top, width: 100, height: 20, right: 100, bottom: top + 20, x: 0, y: top,
+      left: 0,
+      top,
+      width: 100,
+      height: 20,
+      right: 100,
+      bottom: top + 20,
+      x: 0,
+      y: top,
       toJSON: () => ({}),
     };
   });
@@ -215,7 +245,6 @@ async function openManageMenu(): Promise<void> {
   fireEvent.keyDown(await screen.findByRole("button", { name: "manage prod" }), { key: "Enter" });
 }
 
-
 /** Open the Servers tab before mounting — the tab the sidebar remembers is the
  *  one the server sections, host status and drag-and-drop live in. */
 function serversTab() {
@@ -235,23 +264,42 @@ function pickSidebarTab(name: string) {
 describe("TerminalsPage", () => {
   it("retains the selected agent shell when its next aggregate refresh is unavailable", async () => {
     vi.useFakeTimers();
-    const remote = await addDaemon({ label: "prod", baseURL: "http://127.0.0.1:19992", token: "tok" });
+    const remote = await addDaemon({
+      label: "prod",
+      baseURL: "http://127.0.0.1:19992",
+      token: "tok",
+    });
     let state: "ready" | "unavailable" | "recovered" = "ready";
-    vi.mocked(fetchAllAgents).mockImplementation(async () => [{
-      host: { id: remote.id, label: "prod" },
-      agents: state === "unavailable" ? [] : [{
-        name: "worker", image: state === "recovered" ? "worker:v2" : "worker:v1", state: "running", harness: "codex",
-        group: null, interactive: false,
-      }],
-      error: state === "unavailable" ? "unreachable" : undefined,
-    }]);
+    vi.mocked(fetchAllAgents).mockImplementation(async () => [
+      {
+        host: { id: remote.id, label: "prod" },
+        agents:
+          state === "unavailable"
+            ? []
+            : [
+                {
+                  name: "worker",
+                  image: state === "recovered" ? "worker:v2" : "worker:v1",
+                  state: "running",
+                  harness: "codex",
+                  group: null,
+                  interactive: false,
+                },
+              ],
+        error: state === "unavailable" ? "unreachable" : undefined,
+      },
+    ]);
 
     renderAt(`/agents/${remote.id}/worker/console`);
-    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
     expect(screen.getByRole("heading", { name: "worker" })).toBeInTheDocument();
 
     state = "unavailable";
-    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
     expect(vi.mocked(fetchAllAgents).mock.calls.length).toBeGreaterThan(1);
 
     expect(screen.getByRole("heading", { name: "worker" })).toBeInTheDocument();
@@ -260,7 +308,9 @@ describe("TerminalsPage", () => {
     expect(screen.getByRole("button", { name: "Open worker" })).toBeDisabled();
 
     state = "recovered";
-    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
     expect(vi.mocked(fetchAllAgents).mock.calls.length).toBeGreaterThan(2);
     expect(screen.getByRole("heading", { name: "worker" })).toBeInTheDocument();
     expect(screen.getByText("worker:v2")).toBeInTheDocument();
@@ -272,31 +322,33 @@ describe("TerminalsPage", () => {
     serversTab();
     renderAt("/");
 
-    fireEvent.click(await screen.findByRole("button", {
-      name: "Open server This daemon (local)",
-    }));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Open server This daemon (local)",
+      }),
+    );
 
     await waitFor(() =>
       expect(screen.getByTestId("location")).toHaveTextContent("/servers/local/tasks"),
     );
-    expect(screen.getByRole("navigation", { name: "Server workspace" }))
-      .toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open server This daemon (local)" }))
-      .toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("navigation", { name: "Server workspace" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open server This daemon (local)" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   it("shows server context above agent context with distinct selected states", async () => {
     serversTab();
     renderAt("/agents/local/a1/console");
 
-    expect(await screen.findByRole("navigation", { name: "Server workspace" }))
-      .toBeInTheDocument();
-    expect(await screen.findByRole("navigation", { name: "Agent workspace" }))
-      .toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open server This daemon (local)" }))
-      .toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "Open a1" }))
-      .toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("navigation", { name: "Server workspace" })).toBeInTheDocument();
+    expect(await screen.findByRole("navigation", { name: "Agent workspace" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open server This daemon (local)" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("button", { name: "Open a1" })).toHaveAttribute("aria-current", "page");
   });
 
   it("counts the agent's tasks with unread questions on the Tasks tab", async () => {
@@ -333,11 +385,9 @@ describe("TerminalsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open a2" }));
 
     await waitFor(() =>
-      expect(screen.getByTestId("location"))
-        .toHaveTextContent("/agents/local/a2/console"),
+      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/a2/console"),
     );
-    expect(await screen.findByRole("navigation", { name: "Agent workspace" }))
-      .toBeInTheDocument();
+    expect(await screen.findByRole("navigation", { name: "Agent workspace" })).toBeInTheDocument();
   });
 
   it("keeps the current agent tab when switching to another agent", async () => {
@@ -347,8 +397,7 @@ describe("TerminalsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open a2" }));
 
     await waitFor(() =>
-      expect(screen.getByTestId("location"))
-        .toHaveTextContent("/agents/local/a2/activity"),
+      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/a2/activity"),
     );
   });
 
@@ -379,19 +428,53 @@ describe("TerminalsPage", () => {
 
   it("restores server, team, and agent order", async () => {
     serversTab();
-    localStorage.setItem("terminals:server-order:v1", JSON.stringify({
-      version: 1,
-      ids: ["d1", ""],
-    }));
+    localStorage.setItem(
+      "terminals:server-order:v1",
+      JSON.stringify({
+        version: 1,
+        ids: ["d1", ""],
+      }),
+    );
     vi.mocked(fetchAllAgents).mockResolvedValue([
       {
         host: { id: "", label: "local" },
-        groups: [{ name: "alpha", lead: "", members: 1 }, { name: "beta", lead: "", members: 1 }],
+        groups: [
+          { name: "alpha", lead: "", members: 1 },
+          { name: "beta", lead: "", members: 1 },
+        ],
         agents: [
-          { name: "a1", image: "img", state: "running", harness: "codex", group: "alpha", interactive: true },
-          { name: "b1", image: "img", state: "running", harness: "codex", group: "beta", interactive: true },
-          { name: "solo1", image: "img", state: "running", harness: "codex", group: null, interactive: true },
-          { name: "solo2", image: "img", state: "running", harness: "codex", group: null, interactive: true },
+          {
+            name: "a1",
+            image: "img",
+            state: "running",
+            harness: "codex",
+            group: "alpha",
+            interactive: true,
+          },
+          {
+            name: "b1",
+            image: "img",
+            state: "running",
+            harness: "codex",
+            group: "beta",
+            interactive: true,
+          },
+          {
+            name: "solo1",
+            image: "img",
+            state: "running",
+            harness: "codex",
+            group: null,
+            interactive: true,
+          },
+          {
+            name: "solo2",
+            image: "img",
+            state: "running",
+            harness: "codex",
+            group: null,
+            interactive: true,
+          },
         ],
         sidebarOrder: { version: 1, groups: ["beta", "alpha"], agents: ["solo2", "solo1"] },
       },
@@ -436,8 +519,10 @@ describe("TerminalsPage", () => {
 
     await keyboardMove("Open server local", "ArrowDown");
 
-    expect(JSON.parse(localStorage.getItem("terminals:server-order:v1")!))
-      .toEqual({ version: 1, ids: ["d1", ""] });
+    expect(JSON.parse(localStorage.getItem("terminals:server-order:v1")!)).toEqual({
+      version: 1,
+      ids: ["d1", ""],
+    });
   });
 
   it("keeps the saved position of hosts in other workspaces when reordering servers", async () => {
@@ -447,7 +532,10 @@ describe("TerminalsPage", () => {
       { host: { id: "d1", label: "prod" }, agents: [], groups: [] },
       { host: { id: "d2", label: "lab" }, agents: [], groups: [] },
     ]);
-    localStorage.setItem("terminals:server-order:v1", JSON.stringify({ version: 1, ids: ["", "d2", "d1"] }));
+    localStorage.setItem(
+      "terminals:server-order:v1",
+      JSON.stringify({ version: 1, ids: ["", "d2", "d1"] }),
+    );
     moveHost("d2", createWorkspace("Lab")!);
     mockRowRects({ "Open server local": 0, "Open server prod": 30 });
     renderAt("/");
@@ -455,17 +543,24 @@ describe("TerminalsPage", () => {
 
     await keyboardMove("Open server local", "ArrowDown");
 
-    expect(JSON.parse(localStorage.getItem("terminals:server-order:v1")!))
-      .toEqual({ version: 1, ids: ["d1", "d2", ""] });
+    expect(JSON.parse(localStorage.getItem("terminals:server-order:v1")!)).toEqual({
+      version: 1,
+      ids: ["d1", "d2", ""],
+    });
   });
 
   it("persists team order after a keyboard drag", async () => {
     serversTab();
-    vi.mocked(fetchAllAgents).mockResolvedValue([{
-      host: { id: "", label: "local" },
-      agents: [],
-      groups: [{ name: "a", lead: "", members: 0 }, { name: "b", lead: "", members: 0 }],
-    }]);
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      {
+        host: { id: "", label: "local" },
+        agents: [],
+        groups: [
+          { name: "a", lead: "", members: 0 },
+          { name: "b", lead: "", members: 0 },
+        ],
+      },
+    ]);
     mockRowRects({ "Open team a": 0, "Open team b": 30 });
     apiOn.mockResolvedValueOnce(undefined);
     renderAt("/");
@@ -473,29 +568,48 @@ describe("TerminalsPage", () => {
 
     await keyboardMove("Open team a", "ArrowDown");
 
-    await waitFor(() => expect(apiOn).toHaveBeenCalledWith(
-      null,
-      "POST",
-      "/api/daemon/config",
-      { key: "sidebar_order_v1", value: JSON.stringify({ version: 1, groups: ["b", "a"], agents: [] }) },
-    ));
+    await waitFor(() =>
+      expect(apiOn).toHaveBeenCalledWith(null, "POST", "/api/daemon/config", {
+        key: "sidebar_order_v1",
+        value: JSON.stringify({ version: 1, groups: ["b", "a"], agents: [] }),
+      }),
+    );
   });
 
   it("rolls back agent order when daemon persistence fails", async () => {
     serversTab();
-    vi.mocked(fetchAllAgents).mockResolvedValue([{
-      host: { id: "", label: "local" },
-      agents: [
-        { name: "a1", image: "img", state: "running", harness: "codex", group: null, interactive: true },
-        { name: "a2", image: "img", state: "running", harness: "codex", group: null, interactive: true },
-      ],
-      groups: [],
-    }]);
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      {
+        host: { id: "", label: "local" },
+        agents: [
+          {
+            name: "a1",
+            image: "img",
+            state: "running",
+            harness: "codex",
+            group: null,
+            interactive: true,
+          },
+          {
+            name: "a2",
+            image: "img",
+            state: "running",
+            harness: "codex",
+            group: null,
+            interactive: true,
+          },
+        ],
+        groups: [],
+      },
+    ]);
     mockRowRects({ "Open a1": 0, "Open a2": 30 });
     let rejectSave!: (cause: Error) => void;
-    apiOn.mockImplementationOnce(() => new Promise<void>((_, reject) => {
-      rejectSave = reject;
-    }));
+    apiOn.mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectSave = reject;
+        }),
+    );
     renderAt("/");
     const a1 = await screen.findByRole("button", { name: "Open a1" });
     const a2 = screen.getByRole("button", { name: "Open a2" });
@@ -510,21 +624,64 @@ describe("TerminalsPage", () => {
 
   it("serializes daemon order writes so an older request cannot finish last", async () => {
     serversTab();
-    vi.mocked(fetchAllAgents).mockResolvedValue([{
-      host: { id: "", label: "local" },
-      agents: [
-        { name: "a1", image: "img", state: "running", harness: "codex", group: "a", interactive: true },
-        { name: "a2", image: "img", state: "running", harness: "codex", group: "a", interactive: true },
-        { name: "b1", image: "img", state: "running", harness: "codex", group: "b", interactive: true },
-        { name: "b2", image: "img", state: "running", harness: "codex", group: "b", interactive: true },
-      ],
-      groups: [{ name: "a", lead: "", members: 2 }, { name: "b", lead: "", members: 2 }],
-    }]);
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      {
+        host: { id: "", label: "local" },
+        agents: [
+          {
+            name: "a1",
+            image: "img",
+            state: "running",
+            harness: "codex",
+            group: "a",
+            interactive: true,
+          },
+          {
+            name: "a2",
+            image: "img",
+            state: "running",
+            harness: "codex",
+            group: "a",
+            interactive: true,
+          },
+          {
+            name: "b1",
+            image: "img",
+            state: "running",
+            harness: "codex",
+            group: "b",
+            interactive: true,
+          },
+          {
+            name: "b2",
+            image: "img",
+            state: "running",
+            harness: "codex",
+            group: "b",
+            interactive: true,
+          },
+        ],
+        groups: [
+          { name: "a", lead: "", members: 2 },
+          { name: "b", lead: "", members: 2 },
+        ],
+      },
+    ]);
     let finishFirst!: () => void;
     let failSecond!: (cause: Error) => void;
     apiOn
-      .mockImplementationOnce(() => new Promise<void>((resolve) => { finishFirst = resolve; }))
-      .mockImplementationOnce(() => new Promise<void>((_, reject) => { failSecond = reject; }));
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            failSecond = reject;
+          }),
+      );
     mockRowRects({
       "Open a1": 0,
       "Open a2": 30,
@@ -553,26 +710,48 @@ describe("TerminalsPage", () => {
     expect(apiOn).toHaveBeenCalledTimes(1);
     finishFirst();
     await waitFor(() => expect(apiOn).toHaveBeenCalledTimes(2));
-    expect(screen.getByRole("button", { name: "Open a2" })
-      .compareDocumentPosition(screen.getByRole("button", { name: "Open a1" }))
-      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Open b2" })
-      .compareDocumentPosition(screen.getByRole("button", { name: "Open b1" }))
-      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Open a2" })
+        .compareDocumentPosition(screen.getByRole("button", { name: "Open a1" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Open b2" })
+        .compareDocumentPosition(screen.getByRole("button", { name: "Open b1" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     failSecond(new Error("offline"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not save agents order");
-    expect(screen.getByRole("button", { name: "Open a2" })
-      .compareDocumentPosition(screen.getByRole("button", { name: "Open a1" }))
-      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Open b1" })
-      .compareDocumentPosition(screen.getByRole("button", { name: "Open b2" }))
-      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Open a2" })
+        .compareDocumentPosition(screen.getByRole("button", { name: "Open a1" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Open b1" })
+        .compareDocumentPosition(screen.getByRole("button", { name: "Open b2" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     let failThird!: (cause: Error) => void;
     let failFourth!: (cause: Error) => void;
     apiOn
-      .mockImplementationOnce(() => new Promise<void>((_, reject) => { failThird = reject; }))
-      .mockImplementationOnce(() => new Promise<void>((_, reject) => { failFourth = reject; }));
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            failThird = reject;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            failFourth = reject;
+          }),
+      );
     await keyboardMove("Open b1", "ArrowDown");
     await waitFor(() => expect(apiOn).toHaveBeenCalledTimes(3));
     await keyboardMove("Open team a", "ArrowDown");
@@ -580,20 +759,30 @@ describe("TerminalsPage", () => {
     failThird(new Error("offline"));
     await waitFor(() => expect(apiOn).toHaveBeenCalledTimes(4));
     failFourth(new Error("offline"));
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not save groups order"));
-    expect(screen.getByRole("button", { name: "Open a2" })
-      .compareDocumentPosition(screen.getByRole("button", { name: "Open a1" }))
-      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Open b1" })
-      .compareDocumentPosition(screen.getByRole("button", { name: "Open b2" }))
-      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("Could not save groups order"),
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Open a2" })
+        .compareDocumentPosition(screen.getByRole("button", { name: "Open a1" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Open b1" })
+        .compareDocumentPosition(screen.getByRole("button", { name: "Open b2" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("honors a hidden sidebar from the shared persisted state", async () => {
     localStorage.setItem("terminals:sidebar:v1", JSON.stringify({ width: 268, hidden: true }));
     renderAt("/");
 
-    expect(await screen.findByText("Pick an agent on the left, or create one.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Pick an agent on the left, or create one."),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Agents")).toBeNull();
     expect(screen.queryByRole("separator", { name: "resize sidebar" })).toBeNull();
   });
@@ -640,14 +829,30 @@ describe("TerminalsPage", () => {
 
   it("separates team members from individual agents", async () => {
     serversTab();
-    vi.mocked(fetchAllAgents).mockResolvedValue([{
-      host: { id: "", label: "This daemon (local)" },
-      groups: [{ name: "empty-team", lead: "", members: 0 }],
-      agents: [
-        { name: "lead", image: "img", state: "running", harness: "claude", group: "dev-team", interactive: true },
-        { name: "solo", image: "img", state: "stopped", harness: "codex", group: null, interactive: true },
-      ],
-    }]);
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      {
+        host: { id: "", label: "This daemon (local)" },
+        groups: [{ name: "empty-team", lead: "", members: 0 }],
+        agents: [
+          {
+            name: "lead",
+            image: "img",
+            state: "running",
+            harness: "claude",
+            group: "dev-team",
+            interactive: true,
+          },
+          {
+            name: "solo",
+            image: "img",
+            state: "stopped",
+            harness: "codex",
+            group: null,
+            interactive: true,
+          },
+        ],
+      },
+    ]);
     renderAt("/");
     expect(await screen.findByText("Teams")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open team empty-team" })).toBeInTheDocument();
@@ -663,25 +868,44 @@ describe("TerminalsPage", () => {
   it.each([
     { agentName: "lead", group: "dev-team" },
     { agentName: "solo", group: null },
-  ])("opens Clone for the $agentName sidebar row without navigating", async ({ agentName, group }) => {
-    vi.mocked(fetchAllAgents).mockResolvedValue([{
-      host: { id: "", label: "This daemon (local)" },
-      agents: [
-        { name: "lead", image: "worker:v1", state: "running", harness: "codex", group: "dev-team", interactive: true },
-        { name: "solo", image: "worker:v1", state: "stopped", harness: "codex", group: null, interactive: true },
-      ],
-    }]);
-    agentGetOn.mockResolvedValueOnce({ ...cloneProjection, name: agentName, group });
-    renderAt("/");
+  ])(
+    "opens Clone for the $agentName sidebar row without navigating",
+    async ({ agentName, group }) => {
+      vi.mocked(fetchAllAgents).mockResolvedValue([
+        {
+          host: { id: "", label: "This daemon (local)" },
+          agents: [
+            {
+              name: "lead",
+              image: "worker:v1",
+              state: "running",
+              harness: "codex",
+              group: "dev-team",
+              interactive: true,
+            },
+            {
+              name: "solo",
+              image: "worker:v1",
+              state: "stopped",
+              harness: "codex",
+              group: null,
+              interactive: true,
+            },
+          ],
+        },
+      ]);
+      agentGetOn.mockResolvedValueOnce({ ...cloneProjection, name: agentName, group });
+      renderAt("/");
 
-    const row = await screen.findByRole("button", { name: `Open ${agentName}` });
-    fireEvent.contextMenu(row);
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Clone" }));
+      const row = await screen.findByRole("button", { name: `Open ${agentName}` });
+      fireEvent.contextMenu(row);
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Clone" }));
 
-    expect(await screen.findByRole("heading", { name: "Clone agent" })).toBeInTheDocument();
-    expect(agentGetOn).toHaveBeenCalledWith(targetFor(""), agentName, "");
-    expect(screen.getByTestId("location")).toHaveTextContent("/");
-  });
+      expect(await screen.findByRole("heading", { name: "Clone agent" })).toBeInTheDocument();
+      expect(agentGetOn).toHaveBeenCalledWith(targetFor(""), agentName, "");
+      expect(screen.getByTestId("location")).toHaveTextContent("/");
+    },
+  );
 
   it("does not navigate for a context-menu gesture", async () => {
     renderAt("/");
@@ -697,11 +921,13 @@ describe("TerminalsPage", () => {
 
   it("keeps the individual agents subsection visible when a host only has an empty team", async () => {
     serversTab();
-    vi.mocked(fetchAllAgents).mockResolvedValue([{
-      host: { id: "", label: "This daemon (local)" },
-      groups: [{ name: "empty-team", lead: "", members: 0 }],
-      agents: [],
-    }]);
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      {
+        host: { id: "", label: "This daemon (local)" },
+        groups: [{ name: "empty-team", lead: "", members: 0 }],
+        agents: [],
+      },
+    ]);
     renderAt("/");
     expect(await screen.findByRole("button", { name: "Open team empty-team" })).toBeInTheDocument();
     expect(screen.getByText("Individual agents")).toBeInTheDocument();
@@ -710,24 +936,26 @@ describe("TerminalsPage", () => {
   it("shows native SSH connection failures in the terminal workspace", async () => {
     serversTab();
     vi.stubGlobal("__TAURI_INTERNALS__", {});
-    vi.spyOn(desktop, "hostsList").mockResolvedValue([{
-      id: "d1",
-      label: "prod",
-      kind: "ssh",
-      ssh_alias: "prod-box",
-      remote_install_dir: "~/.local/lib/tariboy",
-      remote_port: 9990,
-      https_base_url: "",
-      last_daemon_version: "",
-      state: "disconnected",
-      base_url: "",
-      local_port: 0,
-      phase: "",
-      platform: "",
-      arch: "",
-      prerequisites: [],
-      message: "",
-    }]);
+    vi.spyOn(desktop, "hostsList").mockResolvedValue([
+      {
+        id: "d1",
+        label: "prod",
+        kind: "ssh",
+        ssh_alias: "prod-box",
+        remote_install_dir: "~/.local/lib/tariboy",
+        remote_port: 9990,
+        https_base_url: "",
+        last_daemon_version: "",
+        state: "disconnected",
+        base_url: "",
+        local_port: 0,
+        phase: "",
+        platform: "",
+        arch: "",
+        prerequisites: [],
+        message: "",
+      },
+    ]);
     vi.spyOn(desktop, "hostConnect").mockRejectedValue(new Error("SSH timed out"));
 
     renderAt("/terminals");
@@ -751,24 +979,26 @@ describe("TerminalsPage", () => {
       adopted: false,
       message: "",
     });
-    vi.spyOn(desktop, "hostsList").mockResolvedValue([{
-      id: "d1",
-      label: "prod",
-      kind: "ssh",
-      ssh_alias: "prod-box",
-      remote_install_dir: "~/.local/lib/tariboy",
-      remote_port: 9990,
-      https_base_url: "",
-      last_daemon_version: "0.11.5",
-      state: "ready",
-      base_url: "http://127.0.0.1:18444",
-      local_port: 18444,
-      phase: "connect",
-      platform: "Linux",
-      arch: "x86_64",
-      prerequisites: [],
-      message: "",
-    }]);
+    vi.spyOn(desktop, "hostsList").mockResolvedValue([
+      {
+        id: "d1",
+        label: "prod",
+        kind: "ssh",
+        ssh_alias: "prod-box",
+        remote_install_dir: "~/.local/lib/tariboy",
+        remote_port: 9990,
+        https_base_url: "",
+        last_daemon_version: "0.11.5",
+        state: "ready",
+        base_url: "http://127.0.0.1:18444",
+        local_port: 18444,
+        phase: "connect",
+        platform: "Linux",
+        arch: "x86_64",
+        prerequisites: [],
+        message: "",
+      },
+    ]);
 
     renderAt("/terminals");
 
@@ -819,7 +1049,10 @@ describe("TerminalsPage", () => {
 
   it("updates every outdated server once Update all is confirmed", async () => {
     const update = vi.spyOn(desktop, "hostUpdate").mockResolvedValue({ operation_id: "op" });
-    vi.stubGlobal("confirm", vi.fn(() => true));
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
+    );
 
     fireEvent.click(await staleHosts());
 
@@ -829,7 +1062,10 @@ describe("TerminalsPage", () => {
 
   it("updates nothing when Update all is cancelled", async () => {
     const update = vi.spyOn(desktop, "hostUpdate").mockResolvedValue({ operation_id: "op" });
-    vi.stubGlobal("confirm", vi.fn(() => false));
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => false),
+    );
 
     fireEvent.click(await staleHosts());
 
@@ -838,10 +1074,14 @@ describe("TerminalsPage", () => {
   });
 
   it("reports a failed server and still updates the rest", async () => {
-    const update = vi.spyOn(desktop, "hostUpdate")
+    const update = vi
+      .spyOn(desktop, "hostUpdate")
       .mockRejectedValueOnce(new Error("ssh closed"))
       .mockResolvedValue({ operation_id: "op" });
-    vi.stubGlobal("confirm", vi.fn(() => true));
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
+    );
 
     fireEvent.click(await staleHosts());
 
@@ -869,15 +1109,36 @@ describe("TerminalsPage", () => {
     vi.mocked(fetchAllAgents).mockResolvedValue([
       {
         host: { id: "remote-1", label: "prod" },
-        agents: [{ name: "alice", image: "bare:latest", state: "running", harness: "claude", group: null, interactive: true }],
-        chats: [{ id: "dm:alice", kind: "direct", title: "alice", agent: "alice", last_ts: "2026-09-15T10:00:00Z", last_from: "agent:alice", last_type: "message", last_text: "hi", unread: 3 }],
+        agents: [
+          {
+            name: "alice",
+            image: "bare:latest",
+            state: "running",
+            harness: "claude",
+            group: null,
+            interactive: true,
+          },
+        ],
+        chats: [
+          {
+            id: "dm:alice",
+            kind: "direct",
+            title: "alice",
+            agent: "alice",
+            last_ts: "2026-09-15T10:00:00Z",
+            last_from: "agent:alice",
+            last_type: "message",
+            last_text: "hi",
+            unread: 3,
+          },
+        ],
       },
-    ])
+    ]);
 
-    renderAt("/", new Map([[JSON.stringify(["remote-1", "alice"]), 1]]))
+    renderAt("/", new Map([[JSON.stringify(["remote-1", "alice"]), 1]]));
 
-    expect(await screen.findByLabelText("3 unread messages from alice")).toBeInTheDocument()
-    expect(screen.queryByRole("img", { name: /customer question/ })).toBeNull()
+    expect(await screen.findByLabelText("3 unread messages from alice")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /customer question/ })).toBeNull();
   });
 
   it("re-polls immediately after creating an agent instead of waiting for the next tick", async () => {
@@ -907,13 +1168,8 @@ describe("TerminalsPage", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Host" })).toHaveTextContent("prod");
     expect(screen.getByLabelText("image")).toHaveValue("worker:v1");
-    await waitFor(() =>
-      expect(listImages).toHaveBeenCalledWith(expect.objectContaining({ id })),
-    );
-    expect(imageManifestGet).toHaveBeenCalledWith(
-      "worker:v1",
-      expect.objectContaining({ id }),
-    );
+    await waitFor(() => expect(listImages).toHaveBeenCalledWith(expect.objectContaining({ id })));
+    expect(imageManifestGet).toHaveBeenCalledWith("worker:v1", expect.objectContaining({ id }));
   });
 
   it("offers a manage menu for remote servers but not for the local daemon", async () => {
@@ -997,15 +1253,26 @@ describe("TerminalsPage", () => {
 
   it("navigates away when the server open in the route is removed", async () => {
     serversTab();
-    const id = (await addDaemon({
-      label: "prod", baseURL: "http://127.0.0.1:9992", token: "tok",
-    })).id;
+    const id = (
+      await addDaemon({
+        label: "prod",
+        baseURL: "http://127.0.0.1:9992",
+        token: "tok",
+      })
+    ).id;
     vi.mocked(fetchAllAgents).mockResolvedValue([
       { host: { id: "", label: "This daemon (local)" }, agents: [] },
       {
         host: { id, label: "prod" },
         agents: [
-          { name: "a1", image: "bare:latest", state: "running", harness: "claude", group: null, interactive: true },
+          {
+            name: "a1",
+            image: "bare:latest",
+            state: "running",
+            harness: "claude",
+            group: null,
+            interactive: true,
+          },
         ],
       },
     ]);
@@ -1032,13 +1299,27 @@ describe("host workspaces", () => {
       {
         host: { id: "", label: "This daemon (local)" },
         agents: [
-          { name: "a1", image: "img", state: "running", harness: "claude", group: null, interactive: true },
+          {
+            name: "a1",
+            image: "img",
+            state: "running",
+            harness: "claude",
+            group: null,
+            interactive: true,
+          },
         ],
       },
       {
         host: { id: "d1", label: "prod" },
         agents: [
-          { name: "b1", image: "img", state: "running", harness: "claude", group: null, interactive: true },
+          {
+            name: "b1",
+            image: "img",
+            state: "running",
+            harness: "claude",
+            group: null,
+            interactive: true,
+          },
         ],
       },
     ]);
@@ -1080,7 +1361,9 @@ describe("host workspaces", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: /^Default/ }));
     await userEvent.click(within(dialog).getByRole("button", { name: "Move prod to…" }));
     await userEvent.click(within(dialog).getByRole("button", { name: "Lab" }));
-    expect(await screen.findByRole("button", { name: "Open b1", hidden: true })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Open b1", hidden: true }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -1103,13 +1386,17 @@ describe("sidebar width", () => {
     fireEvent.pointerUp(window);
 
     expect(screen.getByTestId("agents-sidebar")).toHaveStyle({ width: "400px" });
-    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
-      .toMatchObject({ width: 400, hidden: false });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!)).toMatchObject({
+      width: 400,
+      hidden: false,
+    });
 
     // Drag ended: further pointer moves must not keep resizing.
     fireEvent.pointerMove(window, { clientX: 200 });
-    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
-      .toMatchObject({ width: 400, hidden: false });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!)).toMatchObject({
+      width: 400,
+      hidden: false,
+    });
   });
 
   it("clamps a drag past the maximum", async () => {
@@ -1118,8 +1405,10 @@ describe("sidebar width", () => {
     fireEvent.pointerDown(screen.getByRole("separator", { name: "resize sidebar" }));
     fireEvent.pointerMove(window, { clientX: 5000 });
     fireEvent.pointerUp(window);
-    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
-      .toMatchObject({ width: 640, hidden: false });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!)).toMatchObject({
+      width: 640,
+      hidden: false,
+    });
   });
 
   it("resets to the default on double-click", async () => {
@@ -1127,8 +1416,10 @@ describe("sidebar width", () => {
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
     fireEvent.doubleClick(screen.getByRole("separator", { name: "resize sidebar" }));
-    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
-      .toMatchObject({ width: 268, hidden: false });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!)).toMatchObject({
+      width: 268,
+      hidden: false,
+    });
   });
 
   it("resizes with arrow keys", async () => {
@@ -1137,11 +1428,15 @@ describe("sidebar width", () => {
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
     const handle = screen.getByRole("separator", { name: "resize sidebar" });
     fireEvent.keyDown(handle, { key: "ArrowRight" });
-    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
-      .toMatchObject({ width: 308, hidden: false });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!)).toMatchObject({
+      width: 308,
+      hidden: false,
+    });
     fireEvent.keyDown(handle, { key: "ArrowLeft", shiftKey: true });
-    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
-      .toMatchObject({ width: 276, hidden: false });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!)).toMatchObject({
+      width: 276,
+      hidden: false,
+    });
   });
 });
 
@@ -1151,14 +1446,35 @@ describe("sidebar tabs", () => {
       host: { id: "", label: "This daemon (local)" },
       groups: [{ name: "release", lead: "alpha", members: 1 }],
       agents: [
-        { name: "alpha", image: "img", state: "running", harness: "claude", group: "release", interactive: true },
-        { name: "beta", image: "img", state: "stopped", harness: "claude", group: null, interactive: true },
+        {
+          name: "alpha",
+          image: "img",
+          state: "running",
+          harness: "claude",
+          group: "release",
+          interactive: true,
+        },
+        {
+          name: "beta",
+          image: "img",
+          state: "stopped",
+          harness: "claude",
+          group: null,
+          interactive: true,
+        },
       ],
     },
     {
       host: { id: "prod", label: "prod" },
       agents: [
-        { name: "gamma", image: "img", state: "running", harness: "claude", group: "release", interactive: true },
+        {
+          name: "gamma",
+          image: "img",
+          state: "running",
+          harness: "claude",
+          group: "release",
+          interactive: true,
+        },
       ],
     },
   ];
@@ -1188,7 +1504,9 @@ describe("sidebar tabs", () => {
     const first = renderAt("/");
     expect(await screen.findByRole("button", { name: "Open server prod" })).toBeInTheDocument();
     pickSidebarTab("Agents");
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Open server prod" })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Open server prod" })).toBeNull(),
+    );
     first.unmount();
 
     renderAt("/");
@@ -1209,7 +1527,9 @@ describe("sidebar tabs", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: "Pin" }));
     await waitFor(() => expect(names()[0]).toMatch(/beta/));
     expect(names()[1]).toMatch(/gamma/);
-    expect(JSON.parse(localStorage.getItem("terminals:sidebar-pinned:v1")!))
-      .toEqual({ version: 1, keys: [JSON.stringify(["", "beta"])] });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar-pinned:v1")!)).toEqual({
+      version: 1,
+      keys: [JSON.stringify(["", "beta"])],
+    });
   });
 });

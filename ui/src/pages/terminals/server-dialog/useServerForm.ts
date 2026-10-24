@@ -77,10 +77,9 @@ export function useServerForm({ open, server, onOpenChange, onSaved }: ServerDia
     };
   }, [open, server, resetOperation]);
 
-  const dirtySsh = editing && (
-    label.trim() !== (server?.label ?? "")
-    || sshAlias.trim() !== (server?.sshAlias ?? "")
-  );
+  const dirtySsh =
+    editing &&
+    (label.trim() !== (server?.label ?? "") || sshAlias.trim() !== (server?.sshAlias ?? ""));
   const submitHttps = async () => {
     const cleanLabel = label.trim();
     const cleanURL = baseURL.trim();

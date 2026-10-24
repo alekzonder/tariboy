@@ -23,17 +23,21 @@ beforeEach(() => localStorage.clear());
 describe("SidebarStateProvider", () => {
   it("shares one persisted sidebar state between independent consumers", () => {
     render(
-      <MemoryRouter><SidebarStateProvider>
-        <Toggle />
-        <Observer />
-      </SidebarStateProvider></MemoryRouter>,
+      <MemoryRouter>
+        <SidebarStateProvider>
+          <Toggle />
+          <Observer />
+        </SidebarStateProvider>
+      </MemoryRouter>,
     );
 
     expect(screen.getByText("268:false")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "hide" }));
 
     expect(screen.getByText("268:true")).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
-      .toMatchObject({ width: 268, hidden: true });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!)).toMatchObject({
+      width: 268,
+      hidden: true,
+    });
   });
 });

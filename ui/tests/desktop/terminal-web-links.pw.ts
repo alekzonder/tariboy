@@ -64,7 +64,8 @@ async function terminalText(desktop: W3CClient): Promise<string> {
  * DOM range over the row that carries it. Returns null while the text is not
  * rendered, or when it straddles two rows. */
 async function locate(desktop: W3CClient, needle: string): Promise<Point | null> {
-  return desktop.execute<Point | null>(`
+  return desktop.execute<Point | null>(
+    `
     const needle = arguments[0];
     const rows = document.querySelector('${SURFACE} .xterm-rows');
     if (!rows) return null;
@@ -93,13 +94,18 @@ async function locate(desktop: W3CClient, needle: string): Promise<Point | null>
       return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
     }
     return null;
-  `, [needle]);
+  `,
+    [needle],
+  );
 }
 
 async function pointOf(desktop: W3CClient, needle: string): Promise<Point> {
-  const point = await expect.poll(async () => locate(desktop, needle), {
-    timeout: 30_000,
-  }).not.toBeNull().then(async () => locate(desktop, needle));
+  const point = await expect
+    .poll(async () => locate(desktop, needle), {
+      timeout: 30_000,
+    })
+    .not.toBeNull()
+    .then(async () => locate(desktop, needle));
   if (!point) throw new Error(`terminal text is not rendered on a single row: ${needle}`);
   return point;
 }
@@ -124,7 +130,9 @@ async function pointOf(desktop: W3CClient, needle: string): Promise<Point> {
  * the hop; reading the rectangle from the screen element rather than the row
  * container is not, on its own, a behavioural change. */
 async function parkPoint(desktop: W3CClient, target: Point): Promise<Point> {
-  const find = async (): Promise<Point | null> => desktop.execute<Point | null>(`
+  const find = async (): Promise<Point | null> =>
+    desktop.execute<Point | null>(
+      `
     const target = arguments[0];
     const screen = document.querySelector('${SURFACE} .xterm-screen');
     if (!screen) return null;
@@ -148,7 +156,9 @@ async function parkPoint(desktop: W3CClient, target: Point): Promise<Point> {
       if (hit && (hit === screen || screen.contains(hit))) return point;
     }
     return null;
-  `, [target]);
+  `,
+      [target],
+    );
   // Polled, not paused: right after the route switch the hit test can land on
   // the surrounding container for every candidate while the pane is still being
   // laid out, and that was measured failing the whole spec on the first look.
@@ -311,7 +321,10 @@ async function settle(): Promise<void> {
   await new Promise((resolveWait) => setTimeout(resolveWait, 2_000));
 }
 
-test("Command-click opens only explicit web links from the real terminal", async ({ desktop, desktopWorker }) => {
+test("Command-click opens only explicit web links from the real terminal", async ({
+  desktop,
+  desktopWorker,
+}) => {
   test.setTimeout(240_000);
   const observationPath = desktopWorker.externalOpenLog;
   await waitForMainWindow(desktop);
@@ -342,9 +355,11 @@ test("Command-click opens only explicit web links from the real terminal", async
       .catch((error) => { window.__webLinksSetup = "error: " + String(error); });
     return true;
   `);
-  await expect.poll(() => desktop.execute<string>("return window.__webLinksSetup || '';"), {
-    timeout: 60_000,
-  }).toBe("ready");
+  await expect
+    .poll(() => desktop.execute<string>("return window.__webLinksSetup || '';"), {
+      timeout: 60_000,
+    })
+    .toBe("ready");
 
   // CLAUDE.md isolation: this run must drive the fixture's throwaway daemon and
   // write its observations below the fixture's own temp root — never the
@@ -359,9 +374,15 @@ test("Command-click opens only explicit web links from the real terminal", async
   await desktop.execute(
     `window.location.hash = ${JSON.stringify(`#/agents/local/${AGENT}/console`)}; return true;`,
   );
-  await expect.poll(async () => desktop.execute<boolean>(
-    `return document.querySelector('${SURFACE} .xterm-rows') !== null;`,
-  ), { timeout: 60_000 }).toBe(true);
+  await expect
+    .poll(
+      async () =>
+        desktop.execute<boolean>(
+          `return document.querySelector('${SURFACE} .xterm-rows') !== null;`,
+        ),
+      { timeout: 60_000 },
+    )
+    .toBe(true);
 
   await injectTerminalText(desktop, TERMINAL_LINE);
   await expect.poll(async () => terminalText(desktop), { timeout: 30_000 }).toContain(WEB_LINK);
@@ -373,7 +394,8 @@ test("Command-click opens only explicit web links from the real terminal", async
     // pointer when the press landed; without this a hover that never arrived
     // would be indistinguishable from one that did.
     expect(resolved, "xterm resolved the link under the pointer for case 1").toBe(true);
-    await expect.poll(async () => recordedOpens(observationPath), { timeout: 20_000 })
+    await expect
+      .poll(async () => recordedOpens(observationPath), { timeout: 20_000 })
       .toEqual([WEB_LINK]);
   });
 
@@ -389,7 +411,9 @@ test("Command-click opens only explicit web links from the real terminal", async
     // The click must have landed on a working terminal, otherwise "nothing was
     // recorded" would hold for the wrong reason.
     await typeMarker(desktop, INPUT_MARKER);
-    await expect.poll(async () => terminalText(desktop), { timeout: 30_000 }).toContain(INPUT_MARKER);
+    await expect
+      .poll(async () => terminalText(desktop), { timeout: 30_000 })
+      .toContain(INPUT_MARKER);
   });
 
   await test.step("case 3 - Command-clicking a file URL or a bare path records nothing", async () => {

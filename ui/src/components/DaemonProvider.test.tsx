@@ -18,7 +18,9 @@ const model = vi.hoisted(() => ({
   listeners: [] as Array<(host: unknown) => void>,
   unsubscribe: vi.fn(),
   setActiveDaemon: vi.fn(),
-  setActiveId: vi.fn(async (id: string) => { void id; }),
+  setActiveId: vi.fn(async (id: string) => {
+    void id;
+  }),
   resolveDaemon: vi.fn(),
   daemonState: vi.fn(),
 }));
@@ -34,7 +36,7 @@ vi.mock("@/lib/daemons", () => ({
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/api")>(),
+  ...(await importOriginal<typeof import("@/lib/api")>()),
   setActiveDaemon: (daemon: unknown) => model.setActiveDaemon(daemon),
 }));
 
@@ -152,12 +154,19 @@ function SelectionProbe() {
 it("does not let a slow older selection overwrite a newer host", async () => {
   let resolveA!: (value: typeof model.daemon) => void;
   let resolveB!: (value: typeof model.daemon) => void;
-  model.resolveDaemon.mockImplementation((id: string) => new Promise((resolve) => {
-    if (id === "host-a") resolveA = resolve;
-    else if (id === "host-b") resolveB = resolve;
-    else resolve(model.daemon);
-  }));
-  render(<DaemonProvider><SelectionProbe /></DaemonProvider>);
+  model.resolveDaemon.mockImplementation(
+    (id: string) =>
+      new Promise((resolve) => {
+        if (id === "host-a") resolveA = resolve;
+        else if (id === "host-b") resolveB = resolve;
+        else resolve(model.daemon);
+      }),
+  );
+  render(
+    <DaemonProvider>
+      <SelectionProbe />
+    </DaemonProvider>,
+  );
   await waitFor(() => expect(screen.getByText("ssh-1")).toBeInTheDocument());
 
   fireEvent.click(screen.getByRole("button", { name: "A" }));

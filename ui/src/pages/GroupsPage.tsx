@@ -11,12 +11,30 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-interface GroupRow { name: string; lead: string; members: number }
-interface GroupView { name: string; lead: string; members: string[]; broadcast: string; inbox: string; shared_dir: string }
+interface GroupRow {
+  name: string;
+  lead: string;
+  members: number;
+}
+interface GroupView {
+  name: string;
+  lead: string;
+  members: string[];
+  broadcast: string;
+  inbox: string;
+  shared_dir: string;
+}
 
 export default function GroupsPage() {
   const [searchParams] = useSearchParams();
@@ -29,7 +47,22 @@ export default function GroupsPage() {
   const [wizard, setWizard] = useState(false);
   const [rename, setRename] = useState("");
   const [yaml, setYaml] = useState("");
-  const [archivePreview, setArchivePreview] = useState<null | { import_id: string; team: string; yaml: string; images: Array<{original: string; resolved: string; action: string; conflict: boolean; message?: string}>; agents: Array<{name: string; action: string; conflict: boolean; message?: string}>; groups: Array<{name: string; action: string; conflict: boolean; message?: string}>; updateExisting: boolean; api: ApiClient }>(null);
+  const [archivePreview, setArchivePreview] = useState<null | {
+    import_id: string;
+    team: string;
+    yaml: string;
+    images: Array<{
+      original: string;
+      resolved: string;
+      action: string;
+      conflict: boolean;
+      message?: string;
+    }>;
+    agents: Array<{ name: string; action: string; conflict: boolean; message?: string }>;
+    groups: Array<{ name: string; action: string; conflict: boolean; message?: string }>;
+    updateExisting: boolean;
+    api: ApiClient;
+  }>(null);
   const [importOperation, setImportOperation] = useState<TeamImportOperation | null>(null);
   const [operationRef, setOperationRef] = useState<{ id: string; api: ApiClient } | null>(() => {
     const saved = localStorage.getItem("tariboy:team-import");
@@ -51,26 +84,62 @@ export default function GroupsPage() {
   const saveBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.href = url; link.download = filename; link.click();
+    link.href = url;
+    link.download = filename;
+    link.click();
     URL.revokeObjectURL(url);
   };
 
-  const load = useCallback(() => api.request<{ groups: GroupRow[] }>("GET", "/api/groups").then((r) => setGroups(r.groups)).catch(() => setGroups([])), [api]);
-  const inspect = useCallback((name: string) => api.request<GroupView>("GET", `/api/groups/${encodeURIComponent(name)}`).then((group) => { setSel(group); setRename(group.name); }).catch(() => setSel(null)), [api]);
+  const load = useCallback(
+    () =>
+      api
+        .request<{ groups: GroupRow[] }>("GET", "/api/groups")
+        .then((r) => setGroups(r.groups))
+        .catch(() => setGroups([])),
+    [api],
+  );
+  const inspect = useCallback(
+    (name: string) =>
+      api
+        .request<GroupView>("GET", `/api/groups/${encodeURIComponent(name)}`)
+        .then((group) => {
+          setSel(group);
+          setRename(group.name);
+        })
+        .catch(() => setSel(null)),
+    [api],
+  );
   // The team named in the URL opens on arrival and whenever the link names another one.
   const requestedTeam = searchParams.get("team");
-  useEffect(() => { void load(); }, [load]);
-  useEffect(() => { if (requestedTeam) void inspect(requestedTeam); }, [inspect, requestedTeam]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  useEffect(() => {
+    if (requestedTeam) void inspect(requestedTeam);
+  }, [inspect, requestedTeam]);
   useEffect(() => {
     if (!operationRef) return;
-    void operationRef.api.groups.getTeamImportOperation(operationRef.id).then(setImportOperation).catch(() => localStorage.removeItem("tariboy:team-import"));
+    void operationRef.api.groups
+      .getTeamImportOperation(operationRef.id)
+      .then(setImportOperation)
+      .catch(() => localStorage.removeItem("tariboy:team-import"));
   }, [operationRef]);
   useEffect(() => {
     if (!operationRef || importOperation?.status !== "running") return;
-    const timer = window.setInterval(() => void operationRef.api.groups.getTeamImportOperation(operationRef.id).then((operation) => {
-      setImportOperation(operation);
-      if (operation.status === "complete") { localStorage.removeItem("tariboy:team-import"); void load(); }
-    }).catch(() => {}), 500);
+    const timer = window.setInterval(
+      () =>
+        void operationRef.api.groups
+          .getTeamImportOperation(operationRef.id)
+          .then((operation) => {
+            setImportOperation(operation);
+            if (operation.status === "complete") {
+              localStorage.removeItem("tariboy:team-import");
+              void load();
+            }
+          })
+          .catch(() => {}),
+      500,
+    );
     return () => window.clearInterval(timer);
   }, [operationRef, importOperation?.status, load]);
 
@@ -78,7 +147,11 @@ export default function GroupsPage() {
     <div className="space-y-4 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Groups</h1>
-        <Button size="sm" variant={wizard ? "secondary" : "default"} onClick={() => setWizard((w) => !w)}>
+        <Button
+          size="sm"
+          variant={wizard ? "secondary" : "default"}
+          onClick={() => setWizard((w) => !w)}
+        >
           {wizard ? "Close wizard" : "New group (wizard)"}
         </Button>
       </div>
@@ -87,21 +160,61 @@ export default function GroupsPage() {
         <GroupWizard onCreated={() => void load()} />
       ) : (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Create group</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Create group</CardTitle>
+          </CardHeader>
           <CardContent className="flex flex-wrap items-end gap-2">
-            <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="group name" className="h-8 w-48" />
-            <Input value={newLead} onChange={(e) => setNewLead(e.target.value)} placeholder="lead (optional)" className="h-8 w-48" />
-            <Button size="sm" onClick={() => guard("create", () => api.request("POST", "/api/groups", { name: newName, lead: newLead || undefined }), { verb: "ok", after: () => { setNewName(""); setNewLead(""); void load(); } })}>Create</Button>
+            <Input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="group name"
+              className="h-8 w-48"
+            />
+            <Input
+              value={newLead}
+              onChange={(e) => setNewLead(e.target.value)}
+              placeholder="lead (optional)"
+              className="h-8 w-48"
+            />
+            <Button
+              size="sm"
+              onClick={() =>
+                guard(
+                  "create",
+                  () =>
+                    api.request("POST", "/api/groups", {
+                      name: newName,
+                      lead: newLead || undefined,
+                    }),
+                  {
+                    verb: "ok",
+                    after: () => {
+                      setNewName("");
+                      setNewLead("");
+                      void load();
+                    },
+                  },
+                )
+              }
+            >
+              Create
+            </Button>
           </CardContent>
         </Card>
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Groups</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Groups</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-1">
             {groups.map((g) => (
-              <button key={g.name} onClick={() => void inspect(g.name)} className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-accent">
+              <button
+                key={g.name}
+                onClick={() => void inspect(g.name)}
+                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
+              >
                 <span className="font-mono">{g.name}</span>
                 <span className="flex items-center gap-2 text-xs text-muted-foreground">
                   {g.lead && <Badge variant="secondary">lead {g.lead}</Badge>}
@@ -118,95 +231,418 @@ export default function GroupsPage() {
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-base font-mono">{sel.name}</CardTitle>
               <AlertDialog>
-                <AlertDialogTrigger asChild><Button size="sm" variant="destructive">Remove</Button></AlertDialogTrigger>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="destructive">
+                    Remove
+                  </Button>
+                </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Remove group {sel.name}?</AlertDialogTitle>
-                    <AlertDialogDescription>Detaches members and deletes the group's channels.</AlertDialogDescription>
+                    <AlertDialogDescription>
+                      Detaches members and deletes the group's channels.
+                    </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => guard("remove", () => api.request("DELETE", `/api/groups/${encodeURIComponent(sel.name)}`), { verb: "ok", after: () => { setSel(null); void load(); } })}>Remove</AlertDialogAction>
+                    <AlertDialogAction
+                      onClick={() =>
+                        guard(
+                          "remove",
+                          () =>
+                            api.request("DELETE", `/api/groups/${encodeURIComponent(sel.name)}`),
+                          {
+                            verb: "ok",
+                            after: () => {
+                              setSel(null);
+                              void load();
+                            },
+                          },
+                        )
+                      }
+                    >
+                      Remove
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex gap-2">
-                <Input aria-label="team name" value={rename} onChange={(event) => setRename(event.target.value)} className="h-8" />
-                <Button size="sm" variant="outline" onClick={() => guard("rename", () => api.groups.renameTeam(sel.name, rename), { verb: "ok", after: () => { setSel(null); void inspect(rename); void load(); } })}>Rename</Button>
+                <Input
+                  aria-label="team name"
+                  value={rename}
+                  onChange={(event) => setRename(event.target.value)}
+                  className="h-8"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    guard("rename", () => api.groups.renameTeam(sel.name, rename), {
+                      verb: "ok",
+                      after: () => {
+                        setSel(null);
+                        void inspect(rename);
+                        void load();
+                      },
+                    })
+                  }
+                >
+                  Rename
+                </Button>
               </div>
-              <div className="flex items-center gap-2">lead:
-                <select aria-label="team lead" value={sel.lead} className="h-8 rounded border bg-background px-2"
-                  onChange={(event) => guard("lead", () => api.groups.setTeamLead(sel.name, event.target.value), { verb: "ok", after: () => refreshSelected() })}>
+              <div className="flex items-center gap-2">
+                lead:
+                <select
+                  aria-label="team lead"
+                  value={sel.lead}
+                  className="h-8 rounded border bg-background px-2"
+                  onChange={(event) =>
+                    guard("lead", () => api.groups.setTeamLead(sel.name, event.target.value), {
+                      verb: "ok",
+                      after: () => refreshSelected(),
+                    })
+                  }
+                >
                   <option value="">No lead</option>
-                  {sel.members.map((member) => <option key={member} value={member}>{member}</option>)}
+                  {sel.members.map((member) => (
+                    <option key={member} value={member}>
+                      {member}
+                    </option>
+                  ))}
                 </select>
               </div>
-              <div className="space-y-1">members:
+              <div className="space-y-1">
+                members:
                 {sel.members.map((member) => (
-                  <div key={member} className="flex items-center justify-between rounded border px-2 py-1">
+                  <div
+                    key={member}
+                    className="flex items-center justify-between rounded border px-2 py-1"
+                  >
                     <span className="font-mono">{member}</span>
-                    <Button size="sm" variant="ghost" aria-label={`Remove ${member}`}
-                      onClick={() => guard("remove member", () => api.groups.removeTeamMember(sel.name, member), { verb: "ok", after: () => refreshSelected() })}>Remove</Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Remove ${member}`}
+                      onClick={() =>
+                        guard(
+                          "remove member",
+                          () => api.groups.removeTeamMember(sel.name, member),
+                          { verb: "ok", after: () => refreshSelected() },
+                        )
+                      }
+                    >
+                      Remove
+                    </Button>
                   </div>
                 ))}
               </div>
               <div className="text-xs text-muted-foreground">shared: {sel.shared_dir}</div>
               <div className="flex items-end gap-2 pt-2">
-                <Input value={assignAgent} onChange={(e) => setAssignAgent(e.target.value)} placeholder="agent to assign" className="h-8 w-48" />
-                <Button size="sm" onClick={() => guard("assign", () => api.request("POST", `/api/groups/${encodeURIComponent(sel.name)}/assign`, { agent: assignAgent }), { verb: "ok", after: () => { setAssignAgent(""); void inspect(sel.name); void load(); } })}>Assign</Button>
+                <Input
+                  value={assignAgent}
+                  onChange={(e) => setAssignAgent(e.target.value)}
+                  placeholder="agent to assign"
+                  className="h-8 w-48"
+                />
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    guard(
+                      "assign",
+                      () =>
+                        api.request("POST", `/api/groups/${encodeURIComponent(sel.name)}/assign`, {
+                          agent: assignAgent,
+                        }),
+                      {
+                        verb: "ok",
+                        after: () => {
+                          setAssignAgent("");
+                          void inspect(sel.name);
+                          void load();
+                        },
+                      },
+                    )
+                  }
+                >
+                  Assign
+                </Button>
               </div>
               <div className="flex flex-wrap gap-2 border-t pt-3">
-                <Button size="sm" variant="outline" aria-label="Copy compose YAML" onClick={() => void api.groups.getTeamCompose(sel.name).then((result) => navigator.clipboard.writeText(result.yaml)).then(() => toast.success("compose YAML copied")).catch((error) => toast.error(String(error)))}>Copy YAML</Button>
-                <Button size="sm" variant="outline" aria-label="Export team archive" onClick={() => void api.groups.downloadTeamArchive(sel.name).then((blob) => saveBlob(blob, `${sel.name}.tar.gz`)).catch((error) => toast.error(String(error)))}>Export archive</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  aria-label="Copy compose YAML"
+                  onClick={() =>
+                    void api.groups
+                      .getTeamCompose(sel.name)
+                      .then((result) => navigator.clipboard.writeText(result.yaml))
+                      .then(() => toast.success("compose YAML copied"))
+                      .catch((error) => toast.error(String(error)))
+                  }
+                >
+                  Copy YAML
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  aria-label="Export team archive"
+                  onClick={() =>
+                    void api.groups
+                      .downloadTeamArchive(sel.name)
+                      .then((blob) => saveBlob(blob, `${sel.name}.tar.gz`))
+                      .catch((error) => toast.error(String(error)))
+                  }
+                >
+                  Export archive
+                </Button>
               </div>
             </CardContent>
           </Card>
         )}
       </div>
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Import team</CardTitle></CardHeader>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Import team</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-2">
-          <Textarea aria-label="Import compose YAML" value={yaml} onChange={(event) => setYaml(event.target.value)} placeholder="Paste tariboy-compose.yaml" className="min-h-32 w-full rounded border bg-background p-2 font-mono text-xs" />
-          <Button size="sm" disabled={!yaml.trim()} onClick={() => void api.groups.importTeamYAML(yaml).then((preview) => {
-            setArchivePreview({ ...preview, images: preview.images.map((image) => ({ ...image, original: image.ref, resolved: image.ref })), groups: preview.groups ?? [], updateExisting: false, api });
-            setOperationRef({ id: preview.import_id, api });
-            setImportOperation({ import_id: preview.import_id, team: preview.team, status: "pending", steps: [], updated_at: "" });
-            setYaml("");
-          }).catch((error) => toast.error(String(error)))}>Preview YAML</Button>
+          <Textarea
+            aria-label="Import compose YAML"
+            value={yaml}
+            onChange={(event) => setYaml(event.target.value)}
+            placeholder="Paste tariboy-compose.yaml"
+            className="min-h-32 w-full rounded border bg-background p-2 font-mono text-xs"
+          />
+          <Button
+            size="sm"
+            disabled={!yaml.trim()}
+            onClick={() =>
+              void api.groups
+                .importTeamYAML(yaml)
+                .then((preview) => {
+                  setArchivePreview({
+                    ...preview,
+                    images: preview.images.map((image) => ({
+                      ...image,
+                      original: image.ref,
+                      resolved: image.ref,
+                    })),
+                    groups: preview.groups ?? [],
+                    updateExisting: false,
+                    api,
+                  });
+                  setOperationRef({ id: preview.import_id, api });
+                  setImportOperation({
+                    import_id: preview.import_id,
+                    team: preview.team,
+                    status: "pending",
+                    steps: [],
+                    updated_at: "",
+                  });
+                  setYaml("");
+                })
+                .catch((error) => toast.error(String(error)))
+            }
+          >
+            Preview YAML
+          </Button>
           <div>
-            <label className="text-sm font-medium" htmlFor="team-archive">Portable team archive (compose only; transfer images separately)</label>
-            <Input id="team-archive" aria-label="Import team archive" type="file" accept=".gz,.tgz,application/gzip" className="mt-1"
-              onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; void api.groups.uploadTeamArchive(file).then((preview) => { setArchivePreview({ ...preview, agents: preview.agents ?? [], groups: preview.groups ?? [], images: preview.images.map((image) => ({ ...image, original: image.ref, resolved: image.ref })), updateExisting: false, api }); setOperationRef({ id: preview.import_id, api }); setImportOperation({ import_id: preview.import_id, team: preview.team, status: "pending", steps: preview.images.map((image) => ({ kind: "image", name: image.ref, status: "pending" })), updated_at: "" }); }).catch((error) => toast.error(String(error))); }} />
+            <label className="text-sm font-medium" htmlFor="team-archive">
+              Portable team archive (compose only; transfer images separately)
+            </label>
+            <Input
+              id="team-archive"
+              aria-label="Import team archive"
+              type="file"
+              accept=".gz,.tgz,application/gzip"
+              className="mt-1"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                void api.groups
+                  .uploadTeamArchive(file)
+                  .then((preview) => {
+                    setArchivePreview({
+                      ...preview,
+                      agents: preview.agents ?? [],
+                      groups: preview.groups ?? [],
+                      images: preview.images.map((image) => ({
+                        ...image,
+                        original: image.ref,
+                        resolved: image.ref,
+                      })),
+                      updateExisting: false,
+                      api,
+                    });
+                    setOperationRef({ id: preview.import_id, api });
+                    setImportOperation({
+                      import_id: preview.import_id,
+                      team: preview.team,
+                      status: "pending",
+                      steps: preview.images.map((image) => ({
+                        kind: "image",
+                        name: image.ref,
+                        status: "pending",
+                      })),
+                      updated_at: "",
+                    });
+                  })
+                  .catch((error) => toast.error(String(error)));
+              }}
+            />
           </div>
-          {archivePreview && <div className="space-y-2 rounded border p-3 text-sm">
-            <div>Team: <strong>{archivePreview.team}</strong></div>
-            <div className="space-y-1">Images: {archivePreview.images.length === 0 && "none"}
-              {archivePreview.images.map((image, index) => <div key={image.original}><Input aria-label={`Imported team image ref ${index}`} value={image.resolved} className="h-8 font-mono"
-                onChange={(event) => setArchivePreview({ ...archivePreview, images: archivePreview.images.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, resolved: event.target.value } : candidate) })} />
-                <span className={image.conflict ? "text-destructive" : "text-muted-foreground"}>{image.action}{image.message ? ` — ${image.message}` : ""}</span></div>)}
+          {archivePreview && (
+            <div className="space-y-2 rounded border p-3 text-sm">
+              <div>
+                Team: <strong>{archivePreview.team}</strong>
+              </div>
+              <div className="space-y-1">
+                Images: {archivePreview.images.length === 0 && "none"}
+                {archivePreview.images.map((image, index) => (
+                  <div key={image.original}>
+                    <Input
+                      aria-label={`Imported team image ref ${index}`}
+                      value={image.resolved}
+                      className="h-8 font-mono"
+                      onChange={(event) =>
+                        setArchivePreview({
+                          ...archivePreview,
+                          images: archivePreview.images.map((candidate, candidateIndex) =>
+                            candidateIndex === index
+                              ? { ...candidate, resolved: event.target.value }
+                              : candidate,
+                          ),
+                        })
+                      }
+                    />
+                    <span className={image.conflict ? "text-destructive" : "text-muted-foreground"}>
+                      {image.action}
+                      {image.message ? ` — ${image.message}` : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {archivePreview.agents.map((agent) => (
+                <div
+                  key={agent.name}
+                  className={agent.conflict ? "text-destructive" : "text-muted-foreground"}
+                >
+                  agent {agent.name}: {agent.action}
+                  {agent.message ? ` — ${agent.message}; edit YAML to rename it` : ""}
+                </div>
+              ))}
+              {archivePreview.groups.map((group) => (
+                <div
+                  key={group.name}
+                  className={group.conflict ? "text-destructive" : "text-muted-foreground"}
+                >
+                  team {group.name}: {group.action}
+                  {group.message ? ` — ${group.message}` : ""}
+                </div>
+              ))}
+              {archivePreview.groups.some((group) => group.conflict) && (
+                <label className="flex items-center gap-2">
+                  <input
+                    aria-label="Update existing team"
+                    type="checkbox"
+                    checked={archivePreview.updateExisting}
+                    onChange={(event) =>
+                      setArchivePreview({ ...archivePreview, updateExisting: event.target.checked })
+                    }
+                  />
+                  Update the existing team additively (members not present in YAML are preserved)
+                </label>
+              )}
+              <Textarea
+                aria-label="Imported team compose YAML"
+                value={archivePreview.yaml}
+                onChange={(event) =>
+                  setArchivePreview({ ...archivePreview, yaml: event.target.value })
+                }
+                className="max-h-48 min-h-32 w-full overflow-auto rounded bg-muted p-2 font-mono text-xs"
+              />
+              <Button
+                size="sm"
+                aria-label="Confirm and import team"
+                onClick={() => {
+                  const preview = archivePreview;
+                  const refs = Object.fromEntries(
+                    preview.images
+                      .filter((image) => image.original !== image.resolved)
+                      .map((image) => [image.original, image.resolved]),
+                  );
+                  localStorage.setItem(
+                    "tariboy:team-import",
+                    JSON.stringify({ id: preview.import_id, hostId: preview.api.target?.id ?? "" }),
+                  );
+                  setImportOperation((operation) =>
+                    operation ? { ...operation, status: "running" } : operation,
+                  );
+                  void preview.api.groups
+                    .applyTeamArchive(preview.import_id, {
+                      refs: Object.keys(refs).length ? refs : undefined,
+                      yaml: preview.yaml,
+                      update_existing: preview.updateExisting,
+                    })
+                    .then(() => preview.api.groups.getTeamImportOperation(preview.import_id))
+                    .then((operation) => {
+                      setImportOperation(operation);
+                      if (operation.status === "complete") {
+                        localStorage.removeItem("tariboy:team-import");
+                        toast.success("team archive imported");
+                        setArchivePreview(null);
+                        void load();
+                      }
+                    })
+                    .catch(async (error) => {
+                      try {
+                        setImportOperation(
+                          await preview.api.groups.getTeamImportOperation(preview.import_id),
+                        );
+                      } catch {
+                        /* preserve apply error */
+                      }
+                      toast.error(String(error));
+                    });
+                }}
+              >
+                Confirm and import team
+              </Button>
             </div>
-            {archivePreview.agents.map((agent) => <div key={agent.name} className={agent.conflict ? "text-destructive" : "text-muted-foreground"}>agent {agent.name}: {agent.action}{agent.message ? ` — ${agent.message}; edit YAML to rename it` : ""}</div>)}
-            {archivePreview.groups.map((group) => <div key={group.name} className={group.conflict ? "text-destructive" : "text-muted-foreground"}>team {group.name}: {group.action}{group.message ? ` — ${group.message}` : ""}</div>)}
-            {archivePreview.groups.some((group) => group.conflict) && <label className="flex items-center gap-2"><input aria-label="Update existing team" type="checkbox" checked={archivePreview.updateExisting} onChange={(event) => setArchivePreview({ ...archivePreview, updateExisting: event.target.checked })} />Update the existing team additively (members not present in YAML are preserved)</label>}
-            <Textarea aria-label="Imported team compose YAML" value={archivePreview.yaml} onChange={(event) => setArchivePreview({ ...archivePreview, yaml: event.target.value })} className="max-h-48 min-h-32 w-full overflow-auto rounded bg-muted p-2 font-mono text-xs" />
-            <Button size="sm" aria-label="Confirm and import team" onClick={() => {
-              const preview = archivePreview;
-              const refs = Object.fromEntries(preview.images.filter((image) => image.original !== image.resolved).map((image) => [image.original, image.resolved]));
-              localStorage.setItem("tariboy:team-import", JSON.stringify({ id: preview.import_id, hostId: preview.api.target?.id ?? "" }));
-              setImportOperation((operation) => operation ? { ...operation, status: "running" } : operation);
-              void preview.api.groups.applyTeamArchive(preview.import_id, { refs: Object.keys(refs).length ? refs : undefined, yaml: preview.yaml, update_existing: preview.updateExisting })
-                .then(() => preview.api.groups.getTeamImportOperation(preview.import_id))
-                .then((operation) => { setImportOperation(operation); if (operation.status === "complete") { localStorage.removeItem("tariboy:team-import"); toast.success("team archive imported"); setArchivePreview(null); void load(); } })
-                .catch(async (error) => { try { setImportOperation(await preview.api.groups.getTeamImportOperation(preview.import_id)); } catch { /* preserve apply error */ } toast.error(String(error)); });
-            }}>Confirm and import team</Button>
-          </div>}
-          {importOperation && <div className="space-y-1 text-xs" aria-label="Team import progress">
-            <div>Import status: {importOperation.status}</div>
-            {importOperation.steps.map((step, index) => <div key={`${step.kind}-${step.name}-${index}`}>{step.kind} {step.name}: {step.status}{step.error ? ` — ${step.error}` : ""}</div>)}
-            {importOperation.status === "failed" && operationRef && <Button size="sm" variant="outline" onClick={() => { setImportOperation({ ...importOperation, status: "running" }); void operationRef.api.groups.applyTeamArchive(operationRef.id).then(() => operationRef.api.groups.getTeamImportOperation(operationRef.id)).then(setImportOperation).catch(() => void operationRef.api.groups.getTeamImportOperation(operationRef.id).then(setImportOperation)); }}>Retry unfinished work</Button>}
-          </div>}
+          )}
+          {importOperation && (
+            <div className="space-y-1 text-xs" aria-label="Team import progress">
+              <div>Import status: {importOperation.status}</div>
+              {importOperation.steps.map((step, index) => (
+                <div key={`${step.kind}-${step.name}-${index}`}>
+                  {step.kind} {step.name}: {step.status}
+                  {step.error ? ` — ${step.error}` : ""}
+                </div>
+              ))}
+              {importOperation.status === "failed" && operationRef && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setImportOperation({ ...importOperation, status: "running" });
+                    void operationRef.api.groups
+                      .applyTeamArchive(operationRef.id)
+                      .then(() => operationRef.api.groups.getTeamImportOperation(operationRef.id))
+                      .then(setImportOperation)
+                      .catch(
+                        () =>
+                          void operationRef.api.groups
+                            .getTeamImportOperation(operationRef.id)
+                            .then(setImportOperation),
+                      );
+                  }}
+                >
+                  Retry unfinished work
+                </Button>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

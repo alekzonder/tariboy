@@ -12,9 +12,7 @@ vi.mock("./desktop", () => ({
   hostsList: async () => native.hosts,
   hostSaveHttps: async (input: Record<string, unknown>, token?: string) => {
     if (!String(input.https_base_url).startsWith("https://")) {
-      throw new Error(
-        "https_base_url must be a non-empty HTTPS URL beginning with https://",
-      );
+      throw new Error("https_base_url must be a non-empty HTTPS URL beginning with https://");
     }
     const id = (input.id as string | undefined) ?? `native-${native.hosts.length + 1}`;
     const view = {
@@ -59,7 +57,11 @@ vi.mock("./desktop", () => ({
 }));
 
 import {
-  clearDaemonToken, getActiveId, hasDaemonToken, listDaemons, resolveDaemon,
+  clearDaemonToken,
+  getActiveId,
+  hasDaemonToken,
+  listDaemons,
+  resolveDaemon,
 } from "./daemons";
 
 beforeEach(() => {
@@ -110,9 +112,7 @@ describe("desktop daemon registry migration", () => {
     expect(localStorage.getItem("tariboy_active_daemon")).toBe("native-1");
     expect(sessionStorage.getItem("tariboy_daemon_token_legacy-1")).toBeNull();
     expect(sessionStorage.getItem("tariboy_daemon_token_legacy-http")).toBeNull();
-    expect(
-      JSON.parse(localStorage.getItem("tariboy_daemons_rejected_cleartext") ?? "[]"),
-    ).toEqual([
+    expect(JSON.parse(localStorage.getItem("tariboy_daemons_rejected_cleartext") ?? "[]")).toEqual([
       {
         id: "legacy-http",
         label: "old local",

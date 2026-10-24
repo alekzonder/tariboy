@@ -5,16 +5,16 @@ import { isAndroidShell } from "@/lib/desktop";
 import type { ServerForm } from "./useServerForm";
 
 export function HttpsServerForm({
-  baseURL, setBaseURL, token, setToken, editing, tokenStored, clearToken,
+  baseURL,
+  setBaseURL,
+  token,
+  setToken,
+  editing,
+  tokenStored,
+  clearToken,
 }: Pick<
   ServerForm,
-  | "baseURL"
-  | "setBaseURL"
-  | "token"
-  | "setToken"
-  | "editing"
-  | "tokenStored"
-  | "clearToken"
+  "baseURL" | "setBaseURL" | "token" | "setToken" | "editing" | "tokenStored" | "clearToken"
 >) {
   return (
     <>
@@ -24,7 +24,9 @@ export function HttpsServerForm({
           id="add-host-url"
           value={baseURL}
           onChange={(event) => setBaseURL(event.target.value)}
-          placeholder={isAndroidShell() ? "http://127.0.0.1:9990 or https://host:port" : "https://host:port"}
+          placeholder={
+            isAndroidShell() ? "http://127.0.0.1:9990 or https://host:port" : "https://host:port"
+          }
           className="h-8"
         />
       </div>

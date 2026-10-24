@@ -5,17 +5,9 @@ export function LifecycleSection({
   draft,
   updateDraft,
   formDisabled,
-}: Pick<
-  CreateAgentForm,
-  | "draft"
-  | "updateDraft"
-  | "formDisabled"
->) {
+}: Pick<CreateAgentForm, "draft" | "updateDraft" | "formDisabled">) {
   return (
-    <section
-      aria-labelledby="create-agent-lifecycle"
-      className="space-y-3 rounded border p-3"
-    >
+    <section aria-labelledby="create-agent-lifecycle" className="space-y-3 rounded border p-3">
       <h3 id="create-agent-lifecycle" className="font-medium">
         Lifecycle
       </h3>

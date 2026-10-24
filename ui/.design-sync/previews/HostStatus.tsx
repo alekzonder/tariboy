@@ -3,18 +3,35 @@ import { HostStatus } from "tariboy-ui";
 // HostStatus renders only for kind: "ssh" hosts (it returns null otherwise),
 // so every fixture below is an ssh host. Shapes follow DaemonMeta in
 // src/lib/daemons.ts.
-const base = { id: "build-01", label: "build-01", baseURL: "https://10.0.4.11:7777", kind: "ssh" as const };
+const base = {
+  id: "build-01",
+  label: "build-01",
+  baseURL: "https://10.0.4.11:7777",
+  kind: "ssh" as const,
+};
 
 export const Ready = () => (
   <HostStatus
-    host={{ ...base, state: "ready", platform: "Linux", arch: "x86_64", lastDaemonVersion: "0.58.1" }}
+    host={{
+      ...base,
+      state: "ready",
+      platform: "Linux",
+      arch: "x86_64",
+      lastDaemonVersion: "0.58.1",
+    }}
     appVersion="0.58.1"
   />
 );
 
 export const UpdateAvailable = () => (
   <HostStatus
-    host={{ ...base, state: "ready", platform: "Linux", arch: "x86_64", lastDaemonVersion: "0.57.4" }}
+    host={{
+      ...base,
+      state: "ready",
+      platform: "Linux",
+      arch: "x86_64",
+      lastDaemonVersion: "0.57.4",
+    }}
     appVersion="0.58.1"
     onUpdate={() => {}}
   />

@@ -150,12 +150,8 @@ const WORKFLOW = {
     { id: 12, agent: "", state: "queued", attempt: 0, outcome: "" },
     { id: 13, agent: "reviewer", state: "done", attempt: 1, outcome: "approved" },
   ],
-  holds: [
-    { id: 3, reason: "Waiting on release freeze", scope: "queue:TB", released_at: null },
-  ],
-  observations: [
-    { id: 5, kind: "build.failed", payload: { image: "worker:v2", code: 2 } },
-  ],
+  holds: [{ id: 3, reason: "Waiting on release freeze", scope: "queue:TB", released_at: null }],
+  observations: [{ id: 5, kind: "build.failed", payload: { image: "worker:v2", code: 2 } }],
 };
 
 const ARTIFACTS = [
@@ -175,34 +171,42 @@ const QUESTIONS = [
 const noop = async () => {};
 const saveTask = async () => BASE_TASK;
 
-const Panel = ({ detail, width = 820, ...rest }: Record<string, unknown> & {
+const Panel = ({
+  detail,
+  width = 820,
+  ...rest
+}: Record<string, unknown> & {
   detail: unknown;
   width?: number;
 }) => {
   const [client] = useState(createQueryClient);
-  return <QueryClientProvider client={client}><TaskDetail
-    detail={detail}
-    target={null}
-    principals={PRINCIPALS}
-    events={EVENTS}
-    workflow={null}
-    workflowArtifacts={[]}
-    workflowQuestions={[]}
-    executionLoading={false}
-    executionError=""
-    artifactsLoading={false}
-    artifactsError=""
-    questionsLoading={false}
-    questionsError=""
-    width={width}
-    resizeHandle={ResizeHandle}
-    onClose={() => {}}
-    onSave={saveTask}
-    onComment={noop}
-    onAddRelation={noop}
-    onDeleteRelation={noop}
-    {...rest}
-  /></QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <TaskDetail
+        detail={detail}
+        target={null}
+        principals={PRINCIPALS}
+        events={EVENTS}
+        workflow={null}
+        workflowArtifacts={[]}
+        workflowQuestions={[]}
+        executionLoading={false}
+        executionError=""
+        artifactsLoading={false}
+        artifactsError=""
+        questionsLoading={false}
+        questionsError=""
+        width={width}
+        resizeHandle={ResizeHandle}
+        onClose={() => {}}
+        onSave={saveTask}
+        onComment={noop}
+        onAddRelation={noop}
+        onDeleteRelation={noop}
+        {...rest}
+      />
+    </QueryClientProvider>
+  );
 };
 
 export const OpenTask = () => (
@@ -239,7 +243,8 @@ export const ManagedWorkflow = () => {
           ...BASE_TASK,
           key: "TB-151",
           title: "Ship the skills-tree validator with worker:v2",
-          description: "Blocked on TB-142. Ship the validator case with the next `worker:v2` build.",
+          description:
+            "Blocked on TB-142. Ship the validator case with the next `worker:v2` build.",
           parent_key: "",
           workflow_version_id: 3,
           workflow_version: "bugfix@3",

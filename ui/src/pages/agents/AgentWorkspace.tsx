@@ -67,7 +67,13 @@ export default function AgentWorkspace(props: AgentWorkspaceProps) {
   );
 }
 
-function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable = false }: AgentWorkspaceProps) {
+function AgentWorkspaceContent({
+  hostId,
+  hostLabel,
+  agent,
+  refresh,
+  unavailable = false,
+}: AgentWorkspaceProps) {
   const simple = useUiMode() === "simple";
   const tabs = simple ? TABS.filter(([key]) => SIMPLE_TABS.has(key)) : TABS;
   const { tab = "console" } = useParams();
@@ -76,14 +82,18 @@ function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable 
   const { activeId, daemons, select } = useDaemons();
   const [connection, setConnection] = useState<"selecting" | "ready" | "unavailable">("selecting");
   const [status, setStatus] = useState<AgentStatus | null>(null);
-  const [view, setView] = useState<{ key: string; view: AgentView | null }>({ key: "", view: null });
+  const [view, setView] = useState<{ key: string; view: AgentView | null }>({
+    key: "",
+    view: null,
+  });
   const agentKey = `${hostId}\0${agent.name}`;
   const currentView = view.key === agentKey ? view.view : null;
   const effectiveCwd = agent.cwd || currentView?.cwd || "";
   // Configured runtime, compactly: whatever the harness actually reports.
   // Codex has no model until one is chosen; only Codex reports an effort.
   const runtime = [currentView?.harness || agent.harness, currentView?.model, currentView?.effort]
-    .filter(Boolean).join(" · ");
+    .filter(Boolean)
+    .join(" · ");
   const api = useApi();
   const [execCount, setExecCount] = useState(0);
   // The Goal task opens over whichever tab is showing, not in Tasks.
@@ -99,7 +109,9 @@ function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable 
     void select(hostId).then((ok) => {
       if (!cancelled) setConnection(ok ? "ready" : "unavailable");
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [hostId, select]);
 
   // The URL is authoritative inside an agent workspace. A global host change
@@ -111,7 +123,9 @@ function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable 
     void select(hostId).then((ok) => {
       if (!cancelled && !ok) setConnection("unavailable");
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [activeId, connection, hostId, select]);
 
   const refreshStatus = useCallback(async () => {
@@ -134,7 +148,9 @@ function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable 
   const refreshOnHint = useCoalesced(() => void refreshStatus(), 500);
   const statesSocket = useAgentStatesSocket({
     enabled: connection === "ready" && !unavailable,
-    onHint: (hint) => { if (hint.agent === agent.name) refreshOnHint(); },
+    onHint: (hint) => {
+      if (hint.agent === agent.name) refreshOnHint();
+    },
   });
   const statusPollMs = statesSocket === "open" ? 15000 : 3000;
   useEffect(() => {
@@ -146,7 +162,12 @@ function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable 
 
   // An unknown or hidden tab opens the default one: Terminal, or Chat in Simple.
   if (!tabs.some(([key]) => key === tab)) {
-    return <Navigate to={`/agents/${hostToParam(hostId)}/${encodeURIComponent(agent.name)}/${simple ? "chat" : "console"}`} replace />;
+    return (
+      <Navigate
+        to={`/agents/${hostToParam(hostId)}/${encodeURIComponent(agent.name)}/${simple ? "chat" : "console"}`}
+        replace
+      />
+    );
   }
   if (connection === "unavailable") {
     return (
@@ -157,10 +178,18 @@ function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable 
     );
   }
   if (connection === "selecting") {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Connecting to host…</div>;
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Connecting to host…
+      </div>
+    );
   }
   if (activeId !== hostId) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Restoring route host…</div>;
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Restoring route host…
+      </div>
+    );
   }
 
   const base = `/agents/${hostToParam(hostId)}/${encodeURIComponent(agent.name)}`;
@@ -170,16 +199,23 @@ function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable 
   const alive = agent.enabled ?? agent.state !== "stopped";
   const questionTasks = attention.get(customerQuestionAttentionKey(hostId, agent.name)) ?? 0;
   const content =
-    tab === "console" ? <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} execCount={execCount} />
-    : tab === "activity" ? <AgentActivityTab />
-    : tab === "tasks" ? <TasksWorkspace
-      scopeAgent={agent.name}
-      initialTaskKey={searchParams.get("task") ?? undefined}
-      onNotificationsChanged={() => void refreshHost(hostId)}
-    />
-    : tab === "chat" ? <AgentChatTab hostId={hostId} />
-    : tab === "configuration" ? <AgentConfigurationTab refresh={refresh} />
-    : <AgentAdvancedTab />;
+    tab === "console" ? (
+      <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} execCount={execCount} />
+    ) : tab === "activity" ? (
+      <AgentActivityTab />
+    ) : tab === "tasks" ? (
+      <TasksWorkspace
+        scopeAgent={agent.name}
+        initialTaskKey={searchParams.get("task") ?? undefined}
+        onNotificationsChanged={() => void refreshHost(hostId)}
+      />
+    ) : tab === "chat" ? (
+      <AgentChatTab hostId={hostId} />
+    ) : tab === "configuration" ? (
+      <AgentConfigurationTab refresh={refresh} />
+    ) : (
+      <AgentAdvancedTab />
+    );
 
   return (
     <AgentNameContext.Provider value={agent.name}>
@@ -229,7 +265,9 @@ function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable 
                       >
                         {agent.current_goal_task_key}
                       </button>
-                    ) : <span className="shrink-0">No current goal</span>}
+                    ) : (
+                      <span className="shrink-0">No current goal</span>
+                    )}
                     <GoalHelp />
                   </span>
                 </div>
@@ -239,7 +277,10 @@ function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable 
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1 text-[12px]">
                   <span className="flex min-w-0 items-baseline gap-1.5">
                     <span className="shrink-0 text-muted-foreground">cwd:</span>
-                    <span data-testid="agent-cwd" className="min-w-0 break-all font-mono text-[11.5px]">
+                    <span
+                      data-testid="agent-cwd"
+                      className="min-w-0 break-all font-mono text-[11.5px]"
+                    >
                       {effectiveCwd || "…"}
                     </span>
                   </span>
@@ -251,8 +292,11 @@ function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable 
                       size="xs"
                       className="h-auto shrink-0 px-0 py-0 text-[12px] font-medium text-foreground"
                       disabled={unavailable}
-                      onClick={() => void openHostPathInVSCode(hostId, effectiveCwd)
-                        .catch((error) => toast.error(String(error)))}
+                      onClick={() =>
+                        void openHostPathInVSCode(hostId, effectiveCwd).catch((error) =>
+                          toast.error(String(error)),
+                        )
+                      }
                     >
                       Open in VS Code
                     </Button>
@@ -275,8 +319,10 @@ function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable 
             {(status?.halt_reason || status?.error_reason) && (
               <p
                 data-testid="agent-halt-reason"
-                className={cn("px-4 pb-2 text-[11px] font-medium",
-                  status.halt_kind === "idle_limit" ? "text-muted-foreground" : "text-destructive")}
+                className={cn(
+                  "px-4 pb-2 text-[11px] font-medium",
+                  status.halt_kind === "idle_limit" ? "text-muted-foreground" : "text-destructive",
+                )}
               >
                 {status.halt_reason || status.error_reason}
               </p>
@@ -286,18 +332,43 @@ function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable 
                 Message queue full: {status.messages_pending} / {status.messages_max_queue}
               </p>
             )}
-            {status?.budget && (status.budget.hour_usd > 0 || status.budget.day_usd > 0 || status.budget.week_usd > 0 || status.budget.month_usd > 0) && <div className="px-4 pb-2 text-[11px]" data-testid="agent-budget-header">
-              {exhaustedPeriods.length > 0 && <p className="font-medium text-destructive">Out of budget: {exhaustedPeriods.join(", ")}</p>}
-              <p className="text-muted-foreground tabular-nums">Hour {status.budget.hour_spent_usd.toFixed(2)} / {status.budget.hour_usd || "Unlimited"} · Day {status.budget.day_spent_usd.toFixed(2)} / {status.budget.day_usd || "Unlimited"} · Week {status.budget.week_spent_usd.toFixed(2)} / {status.budget.week_usd || "Unlimited"} · Month {status.budget.month_spent_usd.toFixed(2)} / {status.budget.month_usd || "Unlimited"}</p>
-            </div>}
-            <nav ref={tabStrip} aria-label="Agent workspace" className="scrollbar-none flex items-center gap-0.5 overflow-x-auto border-b px-3">
+            {status?.budget &&
+              (status.budget.hour_usd > 0 ||
+                status.budget.day_usd > 0 ||
+                status.budget.week_usd > 0 ||
+                status.budget.month_usd > 0) && (
+                <div className="px-4 pb-2 text-[11px]" data-testid="agent-budget-header">
+                  {exhaustedPeriods.length > 0 && (
+                    <p className="font-medium text-destructive">
+                      Out of budget: {exhaustedPeriods.join(", ")}
+                    </p>
+                  )}
+                  <p className="text-muted-foreground tabular-nums">
+                    Hour {status.budget.hour_spent_usd.toFixed(2)} /{" "}
+                    {status.budget.hour_usd || "Unlimited"} · Day{" "}
+                    {status.budget.day_spent_usd.toFixed(2)} /{" "}
+                    {status.budget.day_usd || "Unlimited"} · Week{" "}
+                    {status.budget.week_spent_usd.toFixed(2)} /{" "}
+                    {status.budget.week_usd || "Unlimited"} · Month{" "}
+                    {status.budget.month_spent_usd.toFixed(2)} /{" "}
+                    {status.budget.month_usd || "Unlimited"}
+                  </p>
+                </div>
+              )}
+            <nav
+              ref={tabStrip}
+              aria-label="Agent workspace"
+              className="scrollbar-none flex items-center gap-0.5 overflow-x-auto border-b px-3"
+            >
               {tabs.map(([key, label]) => (
                 <NavLink
                   key={key}
                   to={`${base}/${key}`}
                   className={({ isActive }) =>
-                    cn("flex h-[34px] shrink-0 items-center border-b-2 border-transparent px-2.5 text-[13px] whitespace-nowrap text-muted-foreground hover:text-foreground",
-                      isActive && "border-primary font-medium text-foreground")
+                    cn(
+                      "flex h-[34px] shrink-0 items-center border-b-2 border-transparent px-2.5 text-[13px] whitespace-nowrap text-muted-foreground hover:text-foreground",
+                      isActive && "border-primary font-medium text-foreground",
+                    )
                   }
                 >
                   {label}

@@ -4,69 +4,93 @@ import { createApi, setActiveDaemon } from "@/lib/api";
 import { apiWrapper } from "@/test/api";
 import ImageBuildFromDirectory from "./ImageBuildFromDirectory";
 
-afterEach(() => { vi.restoreAllMocks(); setActiveDaemon(null); });
+afterEach(() => {
+  vi.restoreAllMocks();
+  setActiveDaemon(null);
+});
 
 it("sends an explicit name and non-default tag while leaving sources in place", async () => {
   const fetchMock = vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
-    text: async () => JSON.stringify({
-      ok: true,
-      result: { name: "reviewer", tag: "v3", digest: "sha256:new", layers: 2 },
-    }),
+    text: async () =>
+      JSON.stringify({
+        ok: true,
+        result: { name: "reviewer", tag: "v3", digest: "sha256:new", layers: 2 },
+      }),
   } as Response);
   vi.stubGlobal("fetch", fetchMock);
   render(<ImageBuildFromDirectory />, { wrapper: apiWrapper() });
 
-  fireEvent.change(screen.getByLabelText("Image source directory"), { target: { value: "/srv/images/reviewer" } });
+  fireEvent.change(screen.getByLabelText("Image source directory"), {
+    target: { value: "/srv/images/reviewer" },
+  });
   fireEvent.change(screen.getByLabelText("Image name"), { target: { value: "reviewer" } });
   fireEvent.change(screen.getByLabelText("Image tag"), { target: { value: "v3" } });
   fireEvent.click(screen.getByRole("button", { name: "Build" }));
 
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-    "/api/images/build",
-    expect.objectContaining({
-      method: "POST",
-      body: JSON.stringify({ path: "/srv/images/reviewer", name: "reviewer", tag: "v3" }),
-    }),
-  ));
+  await waitFor(() =>
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/images/build",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ path: "/srv/images/reviewer", name: "reviewer", tag: "v3" }),
+      }),
+    ),
+  );
 });
 
 it("shows the exact resolved template and warnings before build", async () => {
-	const fetchMock = vi.fn().mockResolvedValue({
+  const fetchMock = vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
-    text: async () => JSON.stringify({
-      ok: true,
-      result: {
-        valid: true,
-        schema_version: 2,
-        plugins: ["context"],
-		skills: [{
-			name: "code-review", description: "Review changes safely.",
-			source: "./skills/code-review", category: "source",
-			archive_root: "skills/code-review", file_count: 3, size: 2048,
-			tree_sha256: "skill-tree-sha",
-		}],
-        diagnostics: [],
-        warnings: [{ path: "prompts", message: "identity placeholder is omitted" }],
-        template: {
+    text: async () =>
+      JSON.stringify({
+        ok: true,
+        result: {
+          valid: true,
           schema_version: 2,
-          sha256: "template-sha",
-          entries: [
-            { kind: "runtime", runtime: "context" },
-            { kind: "file", source: "./role.md", category: "source", archive_path: "prompt/layers/001-role.md", size: 42, sha256: "abcdef0123456789" },
+          plugins: ["context"],
+          skills: [
+            {
+              name: "code-review",
+              description: "Review changes safely.",
+              source: "./skills/code-review",
+              category: "source",
+              archive_root: "skills/code-review",
+              file_count: 3,
+              size: 2048,
+              tree_sha256: "skill-tree-sha",
+            },
           ],
+          diagnostics: [],
+          warnings: [{ path: "prompts", message: "identity placeholder is omitted" }],
+          template: {
+            schema_version: 2,
+            sha256: "template-sha",
+            entries: [
+              { kind: "runtime", runtime: "context" },
+              {
+                kind: "file",
+                source: "./role.md",
+                category: "source",
+                archive_path: "prompt/layers/001-role.md",
+                size: 42,
+                sha256: "abcdef0123456789",
+              },
+            ],
+          },
         },
-      },
-    }),
-	} as Response);
-	vi.stubGlobal("fetch", fetchMock);
-	render(<ImageBuildFromDirectory />, { wrapper: apiWrapper() });
-	fireEvent.change(screen.getByLabelText("Image source directory"), { target: { value: "/srv/images/reviewer" } });
-	fireEvent.change(screen.getByLabelText("Image name"), { target: { value: "reviewer" } });
-	fireEvent.change(screen.getByLabelText("Image tag"), { target: { value: "v3" } });
-	fireEvent.click(screen.getByRole("button", { name: "Validate" }));
+      }),
+  } as Response);
+  vi.stubGlobal("fetch", fetchMock);
+  render(<ImageBuildFromDirectory />, { wrapper: apiWrapper() });
+  fireEvent.change(screen.getByLabelText("Image source directory"), {
+    target: { value: "/srv/images/reviewer" },
+  });
+  fireEvent.change(screen.getByLabelText("Image name"), { target: { value: "reviewer" } });
+  fireEvent.change(screen.getByLabelText("Image tag"), { target: { value: "v3" } });
+  fireEvent.click(screen.getByRole("button", { name: "Validate" }));
 
   const preview = await screen.findByLabelText("Validated image template");
   const rows = within(preview).getAllByRole("listitem");
@@ -74,36 +98,42 @@ it("shows the exact resolved template and warnings before build", async () => {
   expect(screen.getByText("./role.md")).toBeInTheDocument();
   expect(screen.getByText(/source · 42 bytes · abcdef0123456789/)).toBeInTheDocument();
   expect(screen.getByText(/identity placeholder is omitted/)).toBeInTheDocument();
-	expect(screen.getByText("code-review")).toBeInTheDocument();
-	expect(screen.getByText("Review changes safely.")).toBeInTheDocument();
-	expect(screen.getByText(/source · \.\/skills\/code-review/)).toBeInTheDocument();
-	expect(screen.getByText(/3 files · 2048 bytes · skill-tree-sha/)).toBeInTheDocument();
-	expect(rows).toHaveLength(2);
-	expect(fetchMock).toHaveBeenCalledWith("/api/images/validate", expect.objectContaining({
-		method: "POST",
-		body: JSON.stringify({ path: "/srv/images/reviewer", name: "reviewer", tag: "v3" }),
-	}));
+  expect(screen.getByText("code-review")).toBeInTheDocument();
+  expect(screen.getByText("Review changes safely.")).toBeInTheDocument();
+  expect(screen.getByText(/source · \.\/skills\/code-review/)).toBeInTheDocument();
+  expect(screen.getByText(/3 files · 2048 bytes · skill-tree-sha/)).toBeInTheDocument();
+  expect(rows).toHaveLength(2);
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/images/validate",
+    expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ path: "/srv/images/reviewer", name: "reviewer", tag: "v3" }),
+    }),
+  );
 });
 
 it("dismisses validation diagnostics and the resolved template", async () => {
   const fetchMock = vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
-    text: async () => JSON.stringify({
-      ok: true,
-      result: {
-        valid: true,
-        schema_version: 2,
-        diagnostics: [{ path: "skills", message: "duplicate skill name" }],
-        warnings: [{ path: "prompts", message: "identity placeholder is omitted" }],
-        template: { schema_version: 2, sha256: "template-sha", entries: [] },
-      },
-    }),
+    text: async () =>
+      JSON.stringify({
+        ok: true,
+        result: {
+          valid: true,
+          schema_version: 2,
+          diagnostics: [{ path: "skills", message: "duplicate skill name" }],
+          warnings: [{ path: "prompts", message: "identity placeholder is omitted" }],
+          template: { schema_version: 2, sha256: "template-sha", entries: [] },
+        },
+      }),
   } as Response);
   vi.stubGlobal("fetch", fetchMock);
   render(<ImageBuildFromDirectory />, { wrapper: apiWrapper() });
 
-  fireEvent.change(screen.getByLabelText("Image source directory"), { target: { value: "/srv/images/reviewer" } });
+  fireEvent.change(screen.getByLabelText("Image source directory"), {
+    target: { value: "/srv/images/reviewer" },
+  });
   fireEvent.change(screen.getByLabelText("Image name"), { target: { value: "reviewer" } });
   fireEvent.click(screen.getByRole("button", { name: "Validate" }));
 
@@ -120,16 +150,28 @@ it("keeps validation and build on the explicit target when the active host diffe
   const target = { id: "route", label: "Route", baseURL: "https://route", token: "" };
   setActiveDaemon({ id: "other", label: "Other", baseURL: "https://other", token: "" });
   const calls: string[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
-    calls.push(String(input));
-    return new Response(JSON.stringify({ ok: true, result: { valid: true, schema_version: 2, name: "reviewer", tag: "latest" } }));
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          result: { valid: true, schema_version: 2, name: "reviewer", tag: "latest" },
+        }),
+      );
+    }),
+  );
   render(<ImageBuildFromDirectory />, { wrapper: apiWrapper(createApi(target)) });
-  fireEvent.change(screen.getByLabelText("Image source directory"), { target: { value: "/srv/image" } });
+  fireEvent.change(screen.getByLabelText("Image source directory"), {
+    target: { value: "/srv/image" },
+  });
   fireEvent.change(screen.getByLabelText("Image name"), { target: { value: "reviewer" } });
   fireEvent.click(screen.getByRole("button", { name: "Validate" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "Build" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "Build" }));
-  await waitFor(() => expect(calls).toEqual(["https://route/api/images/validate", "https://route/api/images/build"]));
+  await waitFor(() =>
+    expect(calls).toEqual(["https://route/api/images/validate", "https://route/api/images/build"]),
+  );
   setActiveDaemon(null);
 });

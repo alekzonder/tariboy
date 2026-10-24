@@ -56,7 +56,13 @@ export interface AgentImageStatus {
   name: string;
   current: { ref: string; digest: string; image_version?: string; error?: string };
   pending: { ref: string; digest: string; error: string };
-  next?: { ref: string; digest: string; image_version?: string; reason: "pending" | "ref_moved" | "current"; error?: string };
+  next?: {
+    ref: string;
+    digest: string;
+    image_version?: string;
+    reason: "pending" | "ref_moved" | "current";
+    error?: string;
+  };
 }
 
 // ---- Prompt layers (user-prompt / context / assembled preview) ----
@@ -87,13 +93,9 @@ export function subscribeAgentEventsOn(
   if (daemon && !daemon.baseURL) return () => {};
   const params = new URLSearchParams();
   if (types.length) params.set("types", types.join(","));
-  if (daemon && daemon.baseURL && daemon.token)
-    params.set("token", daemon.token);
+  if (daemon && daemon.baseURL && daemon.token) params.set("token", daemon.token);
   const path = agentApiPath(name, "events");
-  const base =
-    daemon && daemon.baseURL
-      ? daemon.baseURL.replace(/\/+$/, "")
-      : getLocalBaseURL();
+  const base = daemon && daemon.baseURL ? daemon.baseURL.replace(/\/+$/, "") : getLocalBaseURL();
   const qs = params.toString();
   const url = `${base}${path}${qs ? `?${qs}` : ""}`;
   const es = new EventSource(url);
@@ -130,11 +132,16 @@ export function agentsApi(t: Transport) {
       return t.request<T>("DELETE", agentApiPath(name, "") + (qs ? `?${qs}` : ""));
     },
     setAgentCwd: (name: string, value: string, create = false) =>
-      t.agentPost<{ name: string; cwd: string }>(name, "cwd", create ? { value, create: true } : { value }),
+      t.agentPost<{ name: string; cwd: string }>(
+        name,
+        "cwd",
+        create ? { value, create: true } : { value },
+      ),
     // ---- Live config setters (persist now; launch-mode changes apply next start) ----
     setAgentModel: (name: string, value: string) => t.agentPost(name, "model", { value }),
     setAgentEffort: (name: string, value: string) => t.agentPost(name, "effort", { value }),
-    setAgentInteractive: (name: string, value: boolean) => t.agentPost(name, "interactive", { value }),
+    setAgentInteractive: (name: string, value: boolean) =>
+      t.agentPost(name, "interactive", { value }),
     setAgentHarness: (name: string, value: string) => t.agentPost(name, "harness", { value }),
     // ---- Alias / notes / color / status-history ----
     getAlias: (name: string) => t.agentGet<{ name: string; alias: string }>(name, "alias"),
@@ -148,15 +155,18 @@ export function agentsApi(t: Transport) {
     getStatusHistory: (name: string) =>
       t.agentGet<{ events: StatusHistoryEvent[]; count: number }>(name, "status/history"),
     agentPromptGet: (name: string) => t.agentGet<AgentPrompt>(name, "prompt"),
-    agentUserPromptGet: (name: string) => t.agentGet<{ name: string; user_prompt: string }>(name, "user-prompt"),
+    agentUserPromptGet: (name: string) =>
+      t.agentGet<{ name: string; user_prompt: string }>(name, "user-prompt"),
     agentUserPromptSet: (name: string, text: string) => t.agentPost(name, "user-prompt", { text }),
-    agentContextGet: (name: string) => t.agentGet<{ name: string; context: string }>(name, "context"),
+    agentContextGet: (name: string) =>
+      t.agentGet<{ name: string; context: string }>(name, "context"),
     agentContextSet: (name: string, text: string) => t.agentPost(name, "context", { text }),
     getAgentShellScript: (name: string) => t.agentGet<AgentShellScript>(name, "shell-script"),
     setAgentShellScript: (name: string, script: string) =>
       t.agentPost<{ saved: true }>(name, "shell-script", { script }),
     agentImageStatusGet: (name: string) => t.agentGet<AgentImageStatus>(name, "image"),
-    agentImageSet: (name: string, image: string) => t.agentPost<AgentImageStatus>(name, "image", { image }),
+    agentImageSet: (name: string, image: string) =>
+      t.agentPost<AgentImageStatus>(name, "image", { image }),
     agentImageCancel: (name: string) => t.agentDelete<AgentImageStatus>(name, "image"),
     subscribeAgentEvents: (name: string, types: string[], onEvent: (ev: AgentEvent) => void) =>
       subscribeAgentEventsOn(t.target, name, types, onEvent),

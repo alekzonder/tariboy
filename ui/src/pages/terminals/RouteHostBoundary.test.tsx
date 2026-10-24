@@ -64,7 +64,9 @@ describe("RouteHostBoundary", () => {
       </DaemonProvider>,
     );
 
-    expect(await screen.findByRole("status")).toHaveTextContent(/actions are temporarily unavailable/i);
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /actions are temporarily unavailable/i,
+    );
     expect(screen.queryByText(/Host registry:/)).toBeNull();
     expect(screen.getByTestId("host-content").parentElement).toHaveAttribute("inert", "");
   });
@@ -78,12 +80,16 @@ describe("RouteHostBoundary", () => {
     let mounts = 0;
     const probe = { refresh: async () => {} };
     function Draft() {
-      useEffect(() => { mounts++; }, []);
+      useEffect(() => {
+        mounts++;
+      }, []);
       return <input aria-label="draft" />;
     }
     function RefreshProbe() {
       const { refresh } = useDaemons();
-      useEffect(() => { probe.refresh = refresh; }, [refresh]);
+      useEffect(() => {
+        probe.refresh = refresh;
+      }, [refresh]);
       return null;
     }
 

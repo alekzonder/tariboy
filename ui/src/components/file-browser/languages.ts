@@ -13,7 +13,10 @@ import { fileExt } from "./paths";
 // editor.
 export function langFor(path: string): Extension[] {
   switch (fileExt(path)) {
-    case "js": case "jsx": case "mjs": case "cjs":
+    case "js":
+    case "jsx":
+    case "mjs":
+    case "cjs":
       return [javascript({ jsx: true })];
     case "ts":
       return [javascript({ typescript: true })];
@@ -23,11 +26,13 @@ export function langFor(path: string): Extension[] {
       return [python()];
     case "json":
       return [json()];
-    case "html": case "htm":
+    case "html":
+    case "htm":
       return [html()];
     case "css":
       return [css()];
-    case "md": case "markdown":
+    case "md":
+    case "markdown":
       return [markdown()];
     case "go":
       return [go()];

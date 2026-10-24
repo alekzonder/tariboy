@@ -18,7 +18,9 @@ export function clampSidebarWidth(px: number): number {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, Math.round(px)));
 }
 
-function sanitize(value: { width?: unknown; hidden?: unknown } | null | undefined): SidebarState | null {
+function sanitize(
+  value: { width?: unknown; hidden?: unknown } | null | undefined,
+): SidebarState | null {
   if (typeof value?.width !== "number" || !Number.isFinite(value.width)) return null;
   return { width: clampSidebarWidth(value.width), hidden: value.hidden === true };
 }
@@ -33,9 +35,12 @@ function readJSON(key: string): unknown {
 }
 
 function readSidebarState(): SidebarState {
-  return sanitize(readJSON(SIDEBAR_STATE_KEY) as SidebarState | null)
-    ?? sanitize((readJSON(LEGACY_WORKSPACE_STATE_KEY) as { sidebar?: SidebarState } | null)?.sidebar)
-    ?? { width: DEFAULT_SIDEBAR_WIDTH, hidden: false };
+  return (
+    sanitize(readJSON(SIDEBAR_STATE_KEY) as SidebarState | null) ??
+    sanitize(
+      (readJSON(LEGACY_WORKSPACE_STATE_KEY) as { sidebar?: SidebarState } | null)?.sidebar,
+    ) ?? { width: DEFAULT_SIDEBAR_WIDTH, hidden: false }
+  );
 }
 
 function writeSidebarState(state: SidebarState) {

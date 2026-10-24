@@ -29,34 +29,79 @@ afterEach(() => {
 });
 
 it("starts transfer from the route source instead of the active daemon", async () => {
-  const source = await addDaemon({ label: "Source", baseURL: "https://source", token: "source-token" });
-  const target = await addDaemon({ label: "Target", baseURL: "https://target", token: "target-token" });
-  daemonContext.daemons = [{ ...source, state: "ready" }, { ...target, state: "ready" }];
+  const source = await addDaemon({
+    label: "Source",
+    baseURL: "https://source",
+    token: "source-token",
+  });
+  const target = await addDaemon({
+    label: "Target",
+    baseURL: "https://target",
+    token: "target-token",
+  });
+  daemonContext.daemons = [
+    { ...source, state: "ready" },
+    { ...target, state: "ready" },
+  ];
   await updateDaemon(target.id, { label: "Target", baseURL: "https://target-reconnected" });
-  const activeTarget = { id: "active", label: "Active", baseURL: "https://active", token: "active-token" };
+  const activeTarget = {
+    id: "active",
+    label: "Active",
+    baseURL: "https://active",
+    token: "active-token",
+  };
   setActiveDaemon(activeTarget);
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
     const path = String(input);
     if (path === "https://source/api/images") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { images: [
-        { name: "built", tag: "v1", bare: false, exportable: true },
-        { name: "basic", tag: "latest", bare: false, exportable: false },
-      ] } }), { status: 200 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            result: {
+              images: [
+                { name: "built", tag: "v1", bare: false, exportable: true },
+                { name: "basic", tag: "latest", bare: false, exportable: false },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      );
     }
     if (path === "https://source/api/images/built%3Av1/export") {
-      return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(new Blob(["archive"])) } as Response);
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        blob: () => Promise.resolve(new Blob(["archive"])),
+      } as Response);
     }
     if (path === "https://target-reconnected/api/image-imports") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { import_id: "import-1", ref: "built:v1", digest: "digest" } }), { status: 200 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            result: { import_id: "import-1", ref: "built:v1", digest: "digest" },
+          }),
+          { status: 200 },
+        ),
+      );
     }
     if (path === "https://target-reconnected/api/image-imports/import-1/apply") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 }));
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 }),
+      );
     }
     return Promise.reject(new Error(`unexpected request ${path}`));
   });
   vi.stubGlobal("fetch", fetchMock);
 
-  render(<MemoryRouter><BuiltImages imageName="built" hostId={source.id} /></MemoryRouter>, await routeHost(source.id));
+  render(
+    <MemoryRouter>
+      <BuiltImages imageName="built" hostId={source.id} />
+    </MemoryRouter>,
+    await routeHost(source.id),
+  );
 
   await screen.findByRole("button", { name: "Upload to servers built:v1" });
   expect(screen.queryByRole("button", { name: /Upload to servers basic:latest/ })).toBeNull();
@@ -64,32 +109,55 @@ it("starts transfer from the route source instead of the active daemon", async (
   fireEvent.click(await screen.findByRole("button", { name: "All servers" }));
   fireEvent.click(screen.getByRole("button", { name: "Start transfer" }));
 
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-    "https://source/api/images/built%3Av1/export",
-    expect.objectContaining({ method: "GET" }),
-  ));
+  await waitFor(() =>
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://source/api/images/built%3Av1/export",
+      expect.objectContaining({ method: "GET" }),
+    ),
+  );
   expect(fetchMock).not.toHaveBeenCalledWith(
     expect.stringContaining(activeTarget.baseURL),
     expect.anything(),
   );
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-    "https://target-reconnected/api/image-imports",
-    expect.objectContaining({ method: "POST", body: expect.any(Blob) }),
-  ));
+  await waitFor(() =>
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://target-reconnected/api/image-imports",
+      expect.objectContaining({ method: "POST", body: expect.any(Blob) }),
+    ),
+  );
 });
 
 it("exports from the route host instead of the active daemon", async () => {
-  const source = await addDaemon({ label: "Source", baseURL: "https://source", token: "source-token" });
-  setActiveDaemon({ id: "active", label: "Active", baseURL: "https://active", token: "active-token" });
+  const source = await addDaemon({
+    label: "Source",
+    baseURL: "https://source",
+    token: "source-token",
+  });
+  setActiveDaemon({
+    id: "active",
+    label: "Active",
+    baseURL: "https://active",
+    token: "active-token",
+  });
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
     const path = String(input);
     if (path === "https://source/api/images") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { images: [
-        { name: "reviewer", tag: "v3", bare: false, exportable: true },
-      ] } }), { status: 200 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            result: { images: [{ name: "reviewer", tag: "v3", bare: false, exportable: true }] },
+          }),
+          { status: 200 },
+        ),
+      );
     }
     if (path === "https://source/api/images/reviewer%3Av3/export") {
-      return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(new Blob(["archive"])) } as Response);
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        blob: () => Promise.resolve(new Blob(["archive"])),
+      } as Response);
     }
     return Promise.reject(new Error(`unexpected request ${path}`));
   });
@@ -97,9 +165,18 @@ it("exports from the route host instead of the active daemon", async () => {
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:archive");
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
   let downloaded = "";
-  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) { downloaded = this.download; });
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    downloaded = this.download;
+  });
 
-  render(<MemoryRouter><BuiltImages imageName="reviewer" hostId={source.id} /></MemoryRouter>, await routeHost(source.id));
+  render(
+    <MemoryRouter>
+      <BuiltImages imageName="reviewer" hostId={source.id} />
+    </MemoryRouter>,
+    await routeHost(source.id),
+  );
 
   fireEvent.click(await screen.findByRole("button", { name: "Export reviewer:v3" }));
   await waitFor(() => expect(downloaded).toBe("reviewer-v3.tariboy-image.tar.gz"));
@@ -110,24 +187,50 @@ it("exports from the route host instead of the active daemon", async () => {
 });
 
 it("imports into the route host instead of the active daemon", async () => {
-  const source = await addDaemon({ label: "Source", baseURL: "https://source", token: "source-token" });
-  setActiveDaemon({ id: "active", label: "Active", baseURL: "https://active", token: "active-token" });
+  const source = await addDaemon({
+    label: "Source",
+    baseURL: "https://source",
+    token: "source-token",
+  });
+  setActiveDaemon({
+    id: "active",
+    label: "Active",
+    baseURL: "https://active",
+    token: "active-token",
+  });
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
     if (path === "https://source/api/images") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { images: [] } }), { status: 200 }));
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true, result: { images: [] } }), { status: 200 }),
+      );
     }
     if (path === "https://source/api/image-imports" && init?.method === "POST") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { import_id: "import-1", ref: "reviewer:v1", digest: "abc" } }), { status: 200 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            result: { import_id: "import-1", ref: "reviewer:v1", digest: "abc" },
+          }),
+          { status: 200 },
+        ),
+      );
     }
     if (path === "https://source/api/image-imports/import-1/apply" && init?.method === "POST") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 }));
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 }),
+      );
     }
     return Promise.reject(new Error(`unexpected request ${init?.method} ${path}`));
   });
   vi.stubGlobal("fetch", fetchMock);
 
-  render(<MemoryRouter><BuiltImages hostId={source.id} /></MemoryRouter>, await routeHost(source.id));
+  render(
+    <MemoryRouter>
+      <BuiltImages hostId={source.id} />
+    </MemoryRouter>,
+    await routeHost(source.id),
+  );
 
   const archiveInput = await screen.findByLabelText("Import image archive");
   await waitFor(() => expect(archiveInput).toBeEnabled());
@@ -136,55 +239,112 @@ it("imports into the route host instead of the active daemon", async () => {
   });
   fireEvent.click(await screen.findByRole("button", { name: "Import image" }));
 
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-    "https://source/api/image-imports/import-1/apply",
-    expect.objectContaining({ method: "POST" }),
-  ));
+  await waitFor(() =>
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://source/api/image-imports/import-1/apply",
+      expect.objectContaining({ method: "POST" }),
+    ),
+  );
 });
 
 it("removes from the route host instead of the active daemon", async () => {
-  const source = await addDaemon({ label: "Source", baseURL: "https://source", token: "source-token" });
-  setActiveDaemon({ id: "active", label: "Active", baseURL: "https://active", token: "active-token" });
+  const source = await addDaemon({
+    label: "Source",
+    baseURL: "https://source",
+    token: "source-token",
+  });
+  setActiveDaemon({
+    id: "active",
+    label: "Active",
+    baseURL: "https://active",
+    token: "active-token",
+  });
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
     if (path === "https://source/api/images" && init?.method === "GET") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { images: [
-        { name: "reviewer", tag: "v3", bare: false, exportable: true },
-      ] } }), { status: 200 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            result: { images: [{ name: "reviewer", tag: "v3", bare: false, exportable: true }] },
+          }),
+          { status: 200 },
+        ),
+      );
     }
     if (path === "https://source/api/images/reviewer%3Av3" && init?.method === "DELETE") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { removed: "reviewer:v3" } }), { status: 200 }));
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true, result: { removed: "reviewer:v3" } }), {
+          status: 200,
+        }),
+      );
     }
     return Promise.reject(new Error(`unexpected request ${init?.method} ${path}`));
   });
   vi.stubGlobal("fetch", fetchMock);
 
-  render(<MemoryRouter><BuiltImages imageName="reviewer" hostId={source.id} /></MemoryRouter>, await routeHost(source.id));
+  render(
+    <MemoryRouter>
+      <BuiltImages imageName="reviewer" hostId={source.id} />
+    </MemoryRouter>,
+    await routeHost(source.id),
+  );
 
   fireEvent.click(await screen.findByRole("button", { name: "Remove reviewer:v3" }));
   fireEvent.click(screen.getByRole("button", { name: "Remove image" }));
 
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-    "https://source/api/images/reviewer%3Av3",
-    expect.objectContaining({ method: "DELETE" }),
-  ));
+  await waitFor(() =>
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://source/api/images/reviewer%3Av3",
+      expect.objectContaining({ method: "DELETE" }),
+    ),
+  );
 });
 
 it("waits for the current destination generation before opening a transfer", async () => {
-  const source = await addDaemon({ label: "Source", baseURL: "https://source", token: "source-token" });
-  const target = await addDaemon({ label: "Target", baseURL: "https://target", token: "target-token" });
-  daemonContext.daemons = [{ ...source, state: "ready" }, { ...target, state: "ready" }];
+  const source = await addDaemon({
+    label: "Source",
+    baseURL: "https://source",
+    token: "source-token",
+  });
+  const target = await addDaemon({
+    label: "Target",
+    baseURL: "https://target",
+    token: "target-token",
+  });
+  daemonContext.daemons = [
+    { ...source, state: "ready" },
+    { ...target, state: "ready" },
+  ];
   const resolvedSource = await daemonsApi.resolveDaemon(source.id);
   const resolvedTarget = await daemonsApi.resolveDaemon(target.id);
   let finishTarget: (target: Daemon | null) => void = () => undefined;
-  const pendingTarget = new Promise<Daemon | null>((resolve) => { finishTarget = resolve; });
+  const pendingTarget = new Promise<Daemon | null>((resolve) => {
+    finishTarget = resolve;
+  });
   const resolveDaemon = vi.spyOn(daemonsApi, "resolveDaemon");
-  resolveDaemon.mockImplementation((id) => id === target.id ? pendingTarget : Promise.resolve(id === source.id ? resolvedSource : null));
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, result: { images: [
-    { name: "built", tag: "v1", bare: false, exportable: true },
-  ] } }), { status: 200 })));
+  resolveDaemon.mockImplementation((id) =>
+    id === target.id ? pendingTarget : Promise.resolve(id === source.id ? resolvedSource : null),
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          result: { images: [{ name: "built", tag: "v1", bare: false, exportable: true }] },
+        }),
+        { status: 200 },
+      ),
+    ),
+  );
 
-  render(<MemoryRouter><BuiltImages imageName="built" hostId={source.id} /></MemoryRouter>, on(resolvedSource));
+  render(
+    <MemoryRouter>
+      <BuiltImages imageName="built" hostId={source.id} />
+    </MemoryRouter>,
+    on(resolvedSource),
+  );
 
   const action = await screen.findByRole("button", { name: "Upload to servers built:v1" });
   expect(action).toBeDisabled();
@@ -193,24 +353,43 @@ it("waits for the current destination generation before opening a transfer", asy
 });
 
 it("does not invoke an upload action bound to the previous route host", async () => {
-  const sourceA = await addDaemon({ label: "Source A", baseURL: "https://source-a", token: "source-a-token" });
-  const sourceB = await addDaemon({ label: "Source B", baseURL: "https://source-b", token: "source-b-token" });
+  const sourceA = await addDaemon({
+    label: "Source A",
+    baseURL: "https://source-a",
+    token: "source-a-token",
+  });
+  const sourceB = await addDaemon({
+    label: "Source B",
+    baseURL: "https://source-b",
+    token: "source-b-token",
+  });
   daemonContext.daemons = [
     { ...sourceA, state: "ready" },
     { ...sourceB, state: "ready" },
     { id: "target", label: "Target", baseURL: "https://target", state: "ready" },
   ];
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
-    if (String(input) === "https://source-a/api/images") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { images: [
-        { name: "built", tag: "v1", bare: false, exportable: true },
-      ] } }), { status: 200 }));
-    }
-    if (String(input) === "https://source-b/api/images") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { images: [] } }), { status: 200 }));
-    }
-    return Promise.reject(new Error(`unexpected request ${String(input)}`));
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      if (String(input) === "https://source-a/api/images") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              ok: true,
+              result: { images: [{ name: "built", tag: "v1", bare: false, exportable: true }] },
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      if (String(input) === "https://source-b/api/images") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true, result: { images: [] } }), { status: 200 }),
+        );
+      }
+      return Promise.reject(new Error(`unexpected request ${String(input)}`));
+    }),
+  );
 
   const hosts = {
     [sourceA.id]: await daemonsApi.resolveDaemon(sourceA.id),
@@ -224,13 +403,21 @@ it("does not invoke an upload action bound to the previous route host", async ()
         if (staleAction) fireEvent.click(staleAction);
       }
     }, [hostId]);
-    return <>
-      <button onClick={() => setHostId(sourceB.id)}>Switch route</button>
-      <ApiProvider target={hosts[hostId]}><BuiltImages imageName="built" hostId={hostId} /></ApiProvider>
-    </>;
+    return (
+      <>
+        <button onClick={() => setHostId(sourceB.id)}>Switch route</button>
+        <ApiProvider target={hosts[hostId]}>
+          <BuiltImages imageName="built" hostId={hostId} />
+        </ApiProvider>
+      </>
+    );
   };
 
-  render(<MemoryRouter><RouteTransition /></MemoryRouter>);
+  render(
+    <MemoryRouter>
+      <RouteTransition />
+    </MemoryRouter>,
+  );
   await screen.findByRole("button", { name: "Upload to servers built:v1" });
 
   fireEvent.click(screen.getByRole("button", { name: "Switch route" }));
@@ -239,19 +426,57 @@ it("does not invoke an upload action bound to the previous route host", async ()
 });
 
 it("exports runnable images and distinguishes original builds from imports", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok: true, status: 200,
-    text: async () => JSON.stringify({ ok: true, result: { images: [
-      { name: "built", tag: "v1", bare: false, exportable: true, source_cwd: "/srv/images/built" },
-      { name: "imported", tag: "v1", bare: false, exportable: true, current_agents: ["reviewer"], pending_agents: ["worker"] },
-      { name: "missing", tag: "v1", bare: false, exportable: true, source_cwd: "/srv/images/missing", source_available: false },
-      { name: "bare", tag: "latest", bare: true, exportable: true, source_cwd: "/srv/images/bare" },
-    ] } }),
-  } as Response));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          ok: true,
+          result: {
+            images: [
+              {
+                name: "built",
+                tag: "v1",
+                bare: false,
+                exportable: true,
+                source_cwd: "/srv/images/built",
+              },
+              {
+                name: "imported",
+                tag: "v1",
+                bare: false,
+                exportable: true,
+                current_agents: ["reviewer"],
+                pending_agents: ["worker"],
+              },
+              {
+                name: "missing",
+                tag: "v1",
+                bare: false,
+                exportable: true,
+                source_cwd: "/srv/images/missing",
+                source_available: false,
+              },
+              {
+                name: "bare",
+                tag: "latest",
+                bare: true,
+                exportable: true,
+                source_cwd: "/srv/images/bare",
+              },
+            ],
+          },
+        }),
+    } as Response),
+  );
   render(
     <MemoryRouter>
       <BuiltImages hostId="" basePath="/servers/local/images" />
-      {["built", "imported", "missing", "bare"].map((name) => <BuiltImages key={name} imageName={name} hostId="" basePath="/servers/local/images" />)}
+      {["built", "imported", "missing", "bare"].map((name) => (
+        <BuiltImages key={name} imageName={name} hostId="" basePath="/servers/local/images" />
+      ))}
     </MemoryRouter>,
     on(null),
   );
@@ -265,8 +490,10 @@ it("exports runnable images and distinguishes original builds from imports", asy
   expect(screen.getByText("Pending: worker")).toBeInTheDocument();
   expect(screen.getAllByTitle(/original sources are not included/i)).toHaveLength(3);
   expect(screen.getByLabelText("Import image archive")).toBeInTheDocument();
-  expect(screen.getByTestId("built-image-built:v1").querySelector("a"))
-    .toHaveAttribute("href", "/servers/local/images/built/v1");
+  expect(screen.getByTestId("built-image-built:v1").querySelector("a")).toHaveAttribute(
+    "href",
+    "/servers/local/images/built/v1",
+  );
   expect(screen.queryByRole("button", { name: "Upload to servers bare:latest" })).toBeNull();
 });
 
@@ -274,12 +501,22 @@ it("downloads the runnable bundle and confirms the saved portable filename", asy
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
     const path = String(input);
     if (path === "/api/images") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { images: [
-        { name: "reviewer", tag: "v3", bare: false, exportable: true },
-      ] } }), { status: 200 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            result: { images: [{ name: "reviewer", tag: "v3", bare: false, exportable: true }] },
+          }),
+          { status: 200 },
+        ),
+      );
     }
     if (path === "/api/images/reviewer%3Av3/export") {
-      return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(new Blob(["archive"])) } as Response);
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        blob: () => Promise.resolve(new Blob(["archive"])),
+      } as Response);
     }
     return Promise.reject(new Error(`unexpected request ${path}`));
   });
@@ -288,8 +525,17 @@ it("downloads the runnable bundle and confirms the saved portable filename", asy
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
   const success = vi.spyOn(toast, "success");
   let downloaded = "";
-  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) { downloaded = this.download; });
-  render(<MemoryRouter><BuiltImages imageName="reviewer" hostId="" /></MemoryRouter>, on(null));
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    downloaded = this.download;
+  });
+  render(
+    <MemoryRouter>
+      <BuiltImages imageName="reviewer" hostId="" />
+    </MemoryRouter>,
+    on(null),
+  );
 
   fireEvent.click(await screen.findByRole("button", { name: "Export reviewer:v3" }));
   await waitFor(() => expect(downloaded).toBe("reviewer-v3.tariboy-image.tar.gz"));
@@ -302,30 +548,51 @@ it("lets the operator retag a conflicting image import", async () => {
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
     if (path === "/api/images") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { images: [] } }), { status: 200 }));
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true, result: { images: [] } }), { status: 200 }),
+      );
     }
     if (path === "/api/image-imports" && init?.method === "POST") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { import_id: "import-1", ref: "reviewer:v1", digest: "abc" } }), { status: 200 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            result: { import_id: "import-1", ref: "reviewer:v1", digest: "abc" },
+          }),
+          { status: 200 },
+        ),
+      );
     }
     if (path === "/api/image-imports/import-1/apply" && init?.method === "POST") {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 }));
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 }),
+      );
     }
     return Promise.reject(new Error(`unexpected request ${init?.method} ${path}`));
   });
   vi.stubGlobal("fetch", fetchMock);
-  render(<MemoryRouter><BuiltImages hostId="" /></MemoryRouter>, on(null));
+  render(
+    <MemoryRouter>
+      <BuiltImages hostId="" />
+    </MemoryRouter>,
+    on(null),
+  );
 
   const archiveInput = screen.getByLabelText("Import image archive");
   await waitFor(() => expect(archiveInput).toBeEnabled());
   fireEvent.change(archiveInput, {
     target: { files: [new File(["archive"], "reviewer.tar.gz", { type: "application/gzip" })] },
   });
-  fireEvent.change(await screen.findByLabelText("Import name"), { target: { value: "reviewer-copy" } });
+  fireEvent.change(await screen.findByLabelText("Import name"), {
+    target: { value: "reviewer-copy" },
+  });
   fireEvent.change(screen.getByLabelText("Import tag"), { target: { value: "v2" } });
   fireEvent.click(screen.getByRole("button", { name: "Import image" }));
 
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-    "/api/image-imports/import-1/apply",
-    expect.objectContaining({ body: JSON.stringify({ ref: "reviewer-copy:v2" }) }),
-  ));
+  await waitFor(() =>
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/image-imports/import-1/apply",
+      expect.objectContaining({ body: JSON.stringify({ ref: "reviewer-copy:v2" }) }),
+    ),
+  );
 });

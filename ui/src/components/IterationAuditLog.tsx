@@ -44,9 +44,11 @@ export function IterationAuditLog({
   // Loaded data carries the iteration it belongs to, so a switch shows nothing
   // from the previous iteration while the next one loads.
   const key = name && iterationId ? `${name}/${iterationId}` : "";
-  const [loaded, setLoaded] = useState<{ key: string; events: AuditEvent[]; calls: Call[] }>(
-    { key: "", events: [], calls: [] },
-  );
+  const [loaded, setLoaded] = useState<{ key: string; events: AuditEvent[]; calls: Call[] }>({
+    key: "",
+    events: [],
+    calls: [],
+  });
   const events = loaded.key === key ? loaded.events : NONE;
   const calls = loaded.key === key ? loaded.calls : NO_CALLS;
   const [open, setOpen] = useState<Set<number>>(new Set());
@@ -61,22 +63,38 @@ export function IterationAuditLog({
     let transcriptInFlight = false;
     const controller = new AbortController();
     const running = iterationStatus === "running";
-    const current = (prev: typeof loaded) => (prev.key === key ? prev : { key, events: [], calls: [] });
+    const current = (prev: typeof loaded) =>
+      prev.key === key ? prev : { key, events: [], calls: [] };
     const load = () =>
-      void api.audit.listAuditEvents(name, `iteration=${encodeURIComponent(iterationId)}`)
-        .then((r) => { if (active) setLoaded((prev) => ({ ...current(prev), events: r.events ?? [] })); })
-        .catch(() => { /* keep last events on a transient failure */ });
+      void api.audit
+        .listAuditEvents(name, `iteration=${encodeURIComponent(iterationId)}`)
+        .then((r) => {
+          if (active) setLoaded((prev) => ({ ...current(prev), events: r.events ?? [] }));
+        })
+        .catch(() => {
+          /* keep last events on a transient failure */
+        });
     const loadTranscript = () => {
       if (transcriptInFlight) return;
       transcriptInFlight = true;
-      void api.audit.fetchTranscript(name, iterationId, controller.signal)
-        .then((next) => { if (active) setLoaded((prev) => ({ ...current(prev), calls: next })); })
-        .catch(() => { /* keep last transcript on a transient failure */ })
-        .finally(() => { transcriptInFlight = false; });
+      void api.audit
+        .fetchTranscript(name, iterationId, controller.signal)
+        .then((next) => {
+          if (active) setLoaded((prev) => ({ ...current(prev), calls: next }));
+        })
+        .catch(() => {
+          /* keep last transcript on a transient failure */
+        })
+        .finally(() => {
+          transcriptInFlight = false;
+        });
     };
     load();
     loadTranscript();
-    const refresh = () => { load(); if (running) loadTranscript(); };
+    const refresh = () => {
+      load();
+      if (running) loadTranscript();
+    };
     const t = window.setInterval(refresh, 3000);
     const off = api.agents.subscribeAgentEvents(name, ["audit", "iteration", "proxy"], refresh);
     return () => {
@@ -90,7 +108,9 @@ export function IterationAuditLog({
   useEffect(() => {
     const v = viewport();
     if (!v) return;
-    const onScroll = () => { stick.current = v.scrollHeight - v.scrollTop - v.clientHeight < 40; };
+    const onScroll = () => {
+      stick.current = v.scrollHeight - v.scrollTop - v.clientHeight < 40;
+    };
     v.addEventListener("scroll", onScroll);
     return () => v.removeEventListener("scroll", onScroll);
   }, []);
@@ -123,7 +143,14 @@ export function IterationAuditLog({
           const mode = hasHarnessOutput(events) ? "enrich" : "full";
           const rows = mergeProxyCalls(collapseThinking(events), calls, mode);
           return rows.map((r) => (
-            <AuditRow key={r.key} row={r} open={open.has(r.key)} onToggle={toggle} name={name} iteration={iterationId} />
+            <AuditRow
+              key={r.key}
+              row={r}
+              open={open.has(r.key)}
+              onToggle={toggle}
+              name={name}
+              iteration={iterationId}
+            />
           ));
         })()}
         {events.length === 0 && <p className="text-sm text-muted-foreground">No events.</p>}

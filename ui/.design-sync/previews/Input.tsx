@@ -47,18 +47,11 @@ export const States = () => (
     </div>
     <div style={field}>
       <Label htmlFor="preview-state-placeholder">cwd</Label>
-      <Input
-        id="preview-state-placeholder"
-        placeholder="empty = managed workdir"
-      />
+      <Input id="preview-state-placeholder" placeholder="empty = managed workdir" />
     </div>
     <div style={field}>
       <Label htmlFor="preview-state-disabled">host</Label>
-      <Input
-        id="preview-state-disabled"
-        defaultValue="This daemon (local)"
-        disabled
-      />
+      <Input id="preview-state-disabled" defaultValue="This daemon (local)" disabled />
     </div>
     <div style={field}>
       <Label htmlFor="preview-state-invalid">limit USD</Label>

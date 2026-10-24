@@ -41,17 +41,20 @@ export function pluginsApi(t: Transport) {
     getPluginContributions: () =>
       t.get<{ plugins: PluginContribution[]; count: number }>("/api/plugin-contributions"),
     getPluginStatus: async (name: string): Promise<Record<string, unknown>> => {
-      const result = await t.get<Record<string, unknown>>(`/api/plugins/${encodeURIComponent(name)}/routes`);
+      const result = await t.get<Record<string, unknown>>(
+        `/api/plugins/${encodeURIComponent(name)}/routes`,
+      );
       const status = result.status;
       return status && typeof status === "object" && !Array.isArray(status)
         ? (status as Record<string, unknown>)
         : result;
     },
     runPluginAction: (name: string, action: string, data: Record<string, unknown>) =>
-      t.post<Record<string, unknown>>(
-        `/api/plugins/${encodeURIComponent(name)}/action`,
-        { name, action, data: JSON.stringify(data) },
-      ),
+      t.post<Record<string, unknown>>(`/api/plugins/${encodeURIComponent(name)}/action`, {
+        name,
+        action,
+        data: JSON.stringify(data),
+      }),
   };
 }
 export type PluginsApi = ReturnType<typeof pluginsApi>;

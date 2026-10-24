@@ -48,7 +48,12 @@ export const FullAuditToolbar = () => (
     >
       all types
     </div>
-    <Input aria-label="Search text" placeholder="search all fields…" defaultValue="updater" className="h-8" />
+    <Input
+      aria-label="Search text"
+      placeholder="search all fields…"
+      defaultValue="updater"
+      className="h-8"
+    />
     <AuditExportActions name="builder" />
   </div>
 );
@@ -56,7 +61,8 @@ export const FullAuditToolbar = () => (
 export const AgentScoped = () => (
   <div style={{ width: 340, display: "flex", alignItems: "center", gap: 10 }}>
     <span style={{ fontSize: 13 }}>
-      Full audit for <span style={{ font: "12px ui-monospace, SFMono-Regular, Menlo, monospace" }}>docs-bot</span>
+      Full audit for{" "}
+      <span style={{ font: "12px ui-monospace, SFMono-Regular, Menlo, monospace" }}>docs-bot</span>
     </span>
     <span style={{ marginLeft: "auto" }}>
       <AuditExportActions name="docs-bot" />

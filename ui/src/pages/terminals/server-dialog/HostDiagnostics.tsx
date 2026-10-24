@@ -1,23 +1,14 @@
 import { hostInstallBlocked, INSTALL_REQUIREMENTS } from "@/lib/daemons";
 import type { ServerForm } from "./useServerForm";
 
-export function HostDiagnostics({ displayHost, output }: Pick<
-  ServerForm,
-  | "displayHost"
-  | "output"
->) {
+export function HostDiagnostics({
+  displayHost,
+  output,
+}: Pick<ServerForm, "displayHost" | "output">) {
   const prerequisites = displayHost?.prerequisites ?? [];
-  const installRequirements = prerequisites.filter((item) =>
-    INSTALL_REQUIREMENTS.has(item)
-  );
-  const optionalTools = prerequisites.filter((item) =>
-    !INSTALL_REQUIREMENTS.has(item)
-  );
-  const unsupported = hostInstallBlocked(
-    displayHost?.platform,
-    displayHost?.arch,
-    prerequisites,
-  );
+  const installRequirements = prerequisites.filter((item) => INSTALL_REQUIREMENTS.has(item));
+  const optionalTools = prerequisites.filter((item) => !INSTALL_REQUIREMENTS.has(item));
+  const unsupported = hostInstallBlocked(displayHost?.platform, displayHost?.arch, prerequisites);
 
   return (
     <>

@@ -1,11 +1,26 @@
-import { codexHarnessPresentation, descriptor, hhmmss, fmtTokens, tone, pretty, isBoundary, TONE_BAR, type AuditEvent, type DisplayRow } from "@/lib/audit";
+import {
+  codexHarnessPresentation,
+  descriptor,
+  hhmmss,
+  fmtTokens,
+  tone,
+  pretty,
+  isBoundary,
+  TONE_BAR,
+  type AuditEvent,
+  type DisplayRow,
+} from "@/lib/audit";
 import { cn } from "@/lib/utils";
 import { ProxyCallRow } from "@/components/ProxyCallRow";
 
 // prettyEvents renders the collapsed thinking run as a JSON array so the marker
 // still expands to the raw events behind it.
 function prettyEvents(events: AuditEvent[]): string {
-  return JSON.stringify(events.map((e) => ({ seq: e.seq, at: e.at, kind: e.kind, source: e.source })), null, 2);
+  return JSON.stringify(
+    events.map((e) => ({ seq: e.seq, at: e.at, kind: e.kind, source: e.source })),
+    null,
+    2,
+  );
 }
 
 // AuditRow renders one chat-style transcript line — time · icon · label ·
@@ -25,7 +40,9 @@ export function AuditRow({
   iteration?: string;
 }) {
   if (row.kind === "proxycall") {
-    return <ProxyCallRow call={row.call} mode={row.mode} name={name ?? ""} iteration={iteration ?? ""} />;
+    return (
+      <ProxyCallRow call={row.call} mode={row.mode} name={name ?? ""} iteration={iteration ?? ""} />
+    );
   }
 
   if (row.kind === "thinking") {
@@ -67,23 +84,44 @@ export function AuditRow({
         <span className="shrink-0 font-semibold">{codex?.label ?? d.label}</span>
         {codex?.type === "command" ? (
           <>
-            <code className="min-w-0 flex-1 truncate text-muted-foreground" title={codex.text}>{codex.text}</code>
+            <code className="min-w-0 flex-1 truncate text-muted-foreground" title={codex.text}>
+              {codex.text}
+            </code>
             <span className="shrink-0 text-muted-foreground">{codex.status}</span>
           </>
         ) : (
           <>
-            <span className="min-w-0 flex-1 truncate text-muted-foreground">{codex?.text ?? d.preview}</span>
-            {codex?.status && <span className="shrink-0 text-muted-foreground">{codex.status}</span>}
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              {codex?.text ?? d.preview}
+            </span>
+            {codex?.status && (
+              <span className="shrink-0 text-muted-foreground">{codex.status}</span>
+            )}
           </>
         )}
       </button>
       {open && (
         <div className="bg-background/60 p-2 text-xs">
           {codex && (
-            <div className="mb-2 space-y-1" aria-label={codex.type === "command" ? "Command details" : "Activity details"}>
-              <p><span className="font-semibold">{codex.label}:</span> {codex.text}</p>
-              {codex.status && <p><span className="font-semibold">Status:</span> {codex.status}</p>}
-              {codex.output !== undefined && <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded border p-2"><span className="font-semibold">Output:</span>{"\n"}{codex.output}</pre>}
+            <div
+              className="mb-2 space-y-1"
+              aria-label={codex.type === "command" ? "Command details" : "Activity details"}
+            >
+              <p>
+                <span className="font-semibold">{codex.label}:</span> {codex.text}
+              </p>
+              {codex.status && (
+                <p>
+                  <span className="font-semibold">Status:</span> {codex.status}
+                </p>
+              )}
+              {codex.output !== undefined && (
+                <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded border p-2">
+                  <span className="font-semibold">Output:</span>
+                  {"\n"}
+                  {codex.output}
+                </pre>
+              )}
             </div>
           )}
           <details>

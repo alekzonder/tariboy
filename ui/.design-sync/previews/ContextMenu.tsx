@@ -1,10 +1,5 @@
 import { useEffect, useRef } from "react";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "tariboy-ui";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "tariboy-ui";
 
 // ContextMenu.Root is uncontrolled by design (Radix exposes no open/defaultOpen
 // for it — the point is the pointer position). To render the open state
@@ -41,9 +36,7 @@ const rowStyle: React.CSSProperties = {
 
 const Sidebar = ({ children }: { children?: React.ReactNode }) => (
   <div style={{ display: "grid", gap: 6, width: 260 }}>
-    <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
-      This daemon (local)
-    </div>
+    <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>This daemon (local)</div>
     {children}
   </div>
 );
@@ -107,9 +100,7 @@ export const DisabledItems = () => {
   const ref = useRightClick();
   return (
     <Sidebar>
-      <div style={{ fontSize: 12, color: "var(--destructive)" }}>
-        build-02 is unreachable
-      </div>
+      <div style={{ fontSize: 12, color: "var(--destructive)" }}>build-02 is unreachable</div>
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div ref={ref} style={rowStyle}>

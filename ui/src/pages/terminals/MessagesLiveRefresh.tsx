@@ -7,7 +7,12 @@ import { targetFor } from "@/lib/terminalsHost";
  *  publication or agent state change into an immediate refresh of the
  *  authoritative HTTP snapshot, so the sidebar updates as it happens instead of
  *  on the next poll. */
-function HostMessagesWatch({ hostId, onMessage, onState, onAgentStates }: {
+function HostMessagesWatch({
+  hostId,
+  onMessage,
+  onState,
+  onAgentStates,
+}: {
   hostId: string;
   onMessage: () => void;
   onState: () => void;
@@ -17,7 +22,9 @@ function HostMessagesWatch({ hostId, onMessage, onState, onAgentStates }: {
   const enabled = !target || Boolean(target.baseURL);
   useMessagesSocket({ target, enabled, onHint: onMessage });
   const states = useAgentStatesSocket({ target, enabled, onHint: onState });
-  useEffect(() => { onAgentStates(hostId, states === "open"); }, [hostId, states, onAgentStates]);
+  useEffect(() => {
+    onAgentStates(hostId, states === "open");
+  }, [hostId, states, onAgentStates]);
   return null;
 }
 
@@ -25,7 +32,11 @@ function HostMessagesWatch({ hostId, onMessage, onState, onAgentStates }: {
  *  of hints is one refresh, not one per hint: the snapshot is the same either
  *  way. onLive reports whether every server's agent states socket is open, so
  *  the caller can poll slowly while hints keep the sidebar current. */
-export function MessagesLiveRefresh({ hostIds, onChange, onLive }: {
+export function MessagesLiveRefresh({
+  hostIds,
+  onChange,
+  onLive,
+}: {
   hostIds: string[];
   onChange: () => void;
   onLive?: (live: boolean) => void;
@@ -36,14 +47,24 @@ export function MessagesLiveRefresh({ hostIds, onChange, onLive }: {
   const onState = useCoalesced(onChange, 1000);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const onAgentStates = useCallback((hostId: string, isOpen: boolean) => {
-    setOpen((previous) => (previous[hostId] === isOpen ? previous : { ...previous, [hostId]: isOpen }));
+    setOpen((previous) =>
+      previous[hostId] === isOpen ? previous : { ...previous, [hostId]: isOpen },
+    );
   }, []);
   const live = hostIds.length > 0 && hostIds.every((id) => open[id]);
-  useEffect(() => { onLive?.(live); }, [live, onLive]);
+  useEffect(() => {
+    onLive?.(live);
+  }, [live, onLive]);
   return (
     <>
       {hostIds.map((hostId) => (
-        <HostMessagesWatch key={hostId} hostId={hostId} onMessage={onMessage} onState={onState} onAgentStates={onAgentStates} />
+        <HostMessagesWatch
+          key={hostId}
+          hostId={hostId}
+          onMessage={onMessage}
+          onState={onState}
+          onAgentStates={onAgentStates}
+        />
       ))}
     </>
   );

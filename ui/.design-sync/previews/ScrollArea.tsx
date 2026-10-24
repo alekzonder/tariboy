@@ -23,10 +23,7 @@ const IMAGES = [
 ];
 
 export const PluginLogs = () => (
-  <ScrollArea
-    className="rounded border bg-muted/30 p-2"
-    style={{ height: 180, width: 440 }}
-  >
+  <ScrollArea className="rounded border bg-muted/30 p-2" style={{ height: 180, width: 440 }}>
     <pre
       style={{
         margin: 0,
@@ -40,10 +37,7 @@ export const PluginLogs = () => (
 );
 
 export const BuiltImageList = () => (
-  <ScrollArea
-    className="rounded border"
-    style={{ height: 180, width: 380 }}
-  >
+  <ScrollArea className="rounded border" style={{ height: 180, width: 380 }}>
     <div style={{ display: "grid" }}>
       {IMAGES.map((image) => (
         <div
@@ -58,16 +52,12 @@ export const BuiltImageList = () => (
           }}
         >
           <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
-            <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 13 }}>
-              {image.ref}
-            </span>
+            <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 13 }}>{image.ref}</span>
             <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
               Built {image.built}
             </span>
           </div>
-          <Badge variant={image.state === "Active" ? "default" : "secondary"}>
-            {image.state}
-          </Badge>
+          <Badge variant={image.state === "Active" ? "default" : "secondary"}>{image.state}</Badge>
         </div>
       ))}
     </div>
@@ -75,10 +65,7 @@ export const BuiltImageList = () => (
 );
 
 export const ChannelTranscript = () => (
-  <ScrollArea
-    className="rounded border bg-muted/30 p-2"
-    style={{ height: 180, width: 400 }}
-  >
+  <ScrollArea className="rounded border bg-muted/30 p-2" style={{ height: 180, width: 400 }}>
     <div style={{ display: "grid", gap: 10, fontSize: 13 }}>
       {[
         ["builder", "TB-142 is claimed; starting on the retry backoff."],

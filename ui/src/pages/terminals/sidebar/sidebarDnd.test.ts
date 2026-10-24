@@ -28,8 +28,7 @@ function collisionArgs(pointerCoordinates: { x: number; y: number } | null) {
 
 describe("sidebar row collision", () => {
   it("ignores rows outside the active agent scope for keyboard movement", () => {
-    expect(rowCollision(collisionArgs(null))[0]?.id)
-      .toBe('["agents","host","agent-a2","team-a"]');
+    expect(rowCollision(collisionArgs(null))[0]?.id).toBe('["agents","host","agent-a2","team-a"]');
   });
 
   it("does not snap a pointer outside compatible rows", () => {
@@ -45,9 +44,11 @@ describe("sidebar row collision", () => {
 
   it("announces the server label and does not claim a no-op moved", () => {
     const id = '["servers","","",null,"This daemon (local)"]';
-    expect(sidebarAnnouncements.onDragStart({ active: { id } } as never))
-      .toBe("Picked up server This daemon (local).");
-    expect(sidebarAnnouncements.onDragEnd({ active: { id }, over: { id } } as never))
-      .toBe("Did not move server This daemon (local).");
+    expect(sidebarAnnouncements.onDragStart({ active: { id } } as never)).toBe(
+      "Picked up server This daemon (local).",
+    );
+    expect(sidebarAnnouncements.onDragEnd({ active: { id }, over: { id } } as never)).toBe(
+      "Did not move server This daemon (local).",
+    );
   });
 });

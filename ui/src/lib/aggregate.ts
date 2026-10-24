@@ -29,29 +29,44 @@ export async function fetchAllAgents(): Promise<HostAgents[]> {
         const api = createApi(await resolveDaemon(t.id));
         const [res, groupResult, config, chats] = await Promise.all([
           api.request<{ agents: AgentSummary[]; count: number }>("GET", "/api/agents"),
-          api.request<{ groups: Array<{ name: string; lead: string; members: number }>; count: number }>("GET", "/api/groups"),
-          api.request<Record<string, string>>("GET", "/api/daemon/config?key=sidebar_order_v1")
+          api.request<{
+            groups: Array<{ name: string; lead: string; members: number }>;
+            count: number;
+          }>("GET", "/api/groups"),
+          api
+            .request<Record<string, string>>("GET", "/api/daemon/config?key=sidebar_order_v1")
             .catch((): Record<string, string> => ({})),
           // Chats are additive: a host whose daemon does not project them yet
           // degrades to no chat order rather than to an unreachable host.
-          api.messages.chatList().then((r) => r.chats ?? []).catch((): ChatSummary[] => []),
+          api.messages
+            .chatList()
+            .then((r) => r.chats ?? [])
+            .catch((): ChatSummary[] => []),
         ]);
         let sidebarOrder: HostAgents["sidebarOrder"];
         try {
-          const parsed = JSON.parse(config.sidebar_order_v1 ?? "null") as HostAgents["sidebarOrder"];
+          const parsed = JSON.parse(
+            config.sidebar_order_v1 ?? "null",
+          ) as HostAgents["sidebarOrder"];
           if (
-            parsed?.version === 1
-            && Array.isArray(parsed.groups)
-            && parsed.groups.every((name) => typeof name === "string")
-            && Array.isArray(parsed.agents)
-            && parsed.agents.every((name) => typeof name === "string")
+            parsed?.version === 1 &&
+            Array.isArray(parsed.groups) &&
+            parsed.groups.every((name) => typeof name === "string") &&
+            Array.isArray(parsed.agents) &&
+            parsed.agents.every((name) => typeof name === "string")
           ) {
             sidebarOrder = parsed;
           }
         } catch {
           // Invalid optional UI state must not hide an otherwise healthy host.
         }
-        return { host: t, agents: res.agents ?? [], groups: groupResult.groups ?? [], sidebarOrder, chats };
+        return {
+          host: t,
+          agents: res.agents ?? [],
+          groups: groupResult.groups ?? [],
+          sidebarOrder,
+          chats,
+        };
       } catch (e) {
         // Surface the error code alongside the message (e.g. "unauthorized:
         // nope") so a degraded host is diagnosable without leaking the token.

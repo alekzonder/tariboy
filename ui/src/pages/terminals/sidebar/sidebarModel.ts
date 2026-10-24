@@ -50,15 +50,18 @@ export function ordered<T>(items: T[], ids: string[], id: (item: T) => string): 
   const rank = new Map(ids.map((value, index) => [value, index]));
   return items
     .map((item, index) => ({ item, index, rank: rank.get(id(item)) }))
-    .sort((left, right) => (left.rank ?? ids.length + left.index) - (right.rank ?? ids.length + right.index))
+    .sort(
+      (left, right) =>
+        (left.rank ?? ids.length + left.index) - (right.rank ?? ids.length + right.index),
+    )
     .map(({ item }) => item);
 }
 
 /** Agents of one host in the operator's saved order. */
 export function hostAgents(host: HostAgents): SidebarAgent[] {
   const chats = foldAgentChats(host.chats ?? []);
-  return ordered(host.agents, host.sidebarOrder?.agents ?? [], (agent) => agent.name)
-    .map((agent) => ({
+  return ordered(host.agents, host.sidebarOrder?.agents ?? [], (agent) => agent.name).map(
+    (agent) => ({
       key: agentKey(host.host.id, agent.name),
       hostId: host.host.id,
       hostLabel: host.host.label,
@@ -66,7 +69,8 @@ export function hostAgents(host: HostAgents): SidebarAgent[] {
       group: agent.group?.trim() ?? "",
       agent,
       chat: chats.get(agent.name),
-    }));
+    }),
+  );
 }
 
 /** Every agent of every server, servers in sidebar order. */
@@ -93,10 +97,12 @@ export function rankAgents(
     rest: agents
       .filter((row) => !pinned.has(row.key))
       .map((row, index) => ({ row, index }))
-      .sort((left, right) =>
-        band(left.row) - band(right.row)
-        || spokeAt(right.row).localeCompare(spokeAt(left.row))
-        || left.index - right.index)
+      .sort(
+        (left, right) =>
+          band(left.row) - band(right.row) ||
+          spokeAt(right.row).localeCompare(spokeAt(left.row)) ||
+          left.index - right.index,
+      )
       .map(({ row }) => row),
   };
 }
@@ -106,7 +112,10 @@ export function rankAgents(
  * a server but holding no agents still gets a section, so "No agents." says the
  * group exists rather than leaving the operator to wonder where it went.
  */
-export function groupSections(hosts: HostAgents[], agents: SidebarAgent[]): Array<{
+export function groupSections(
+  hosts: HostAgents[],
+  agents: SidebarAgent[],
+): Array<{
   name: string;
   agents: SidebarAgent[];
 }> {

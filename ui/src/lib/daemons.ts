@@ -4,7 +4,12 @@ import { clearServerQueries, queryClient } from "./queryClient";
 // historical localStorage/sessionStorage implementation as a fallback.
 
 import {
-  hostHasToken, hostRemove, hostSaveHttps, hostSessionCredentials, hostsList, isDesktop,
+  hostHasToken,
+  hostRemove,
+  hostSaveHttps,
+  hostSessionCredentials,
+  hostsList,
+  isDesktop,
   hostConnected,
   type DesktopHostView,
 } from "./desktop";
@@ -238,10 +243,7 @@ export async function setDaemonToken(id: string, token: string): Promise<void> {
   const meta = (await listDaemons()).find((item) => item.id === id);
   if (!meta) return;
   requireNative(
-    await hostSaveHttps(
-      { id, label: meta.label, https_base_url: meta.baseURL },
-      token,
-    ),
+    await hostSaveHttps({ id, label: meta.label, https_base_url: meta.baseURL }, token),
     "host_save_https",
   );
   sessionCache.set(id, { ...meta, token });
@@ -250,10 +252,7 @@ export async function setDaemonToken(id: string, token: string): Promise<void> {
 export async function getDaemonToken(id: string): Promise<string> {
   if (!isDesktop()) return sessionStorage.getItem(TOKEN_PREFIX + id) ?? "";
   await ensureDesktopMigration();
-  const credentials = requireNative(
-    await hostSessionCredentials(id),
-    "host_session_credentials",
-  );
+  const credentials = requireNative(await hostSessionCredentials(id), "host_session_credentials");
   return credentials.token;
 }
 
@@ -275,7 +274,7 @@ export async function hasDaemonToken(id: string): Promise<boolean> {
 }
 
 export function peekActiveId(): string {
-  return typeof localStorage === "undefined" ? "" : localStorage.getItem(ACTIVE_KEY) ?? "";
+  return typeof localStorage === "undefined" ? "" : (localStorage.getItem(ACTIVE_KEY) ?? "");
 }
 
 export async function getActiveId(): Promise<string> {
@@ -300,7 +299,8 @@ export async function setActiveId(id: string): Promise<void> {
 // does not restart every load on the page.
 function remember(daemon: Daemon): Daemon {
   const cached = sessionCache.get(daemon.id);
-  if (cached && daemon.baseURL && cached.token !== daemon.token) clearServerQueries(queryClient, daemon.id);
+  if (cached && daemon.baseURL && cached.token !== daemon.token)
+    clearServerQueries(queryClient, daemon.id);
   if (cached && JSON.stringify(cached) === JSON.stringify(daemon)) return cached;
   sessionCache.set(daemon.id, daemon);
   return daemon;
@@ -324,10 +324,7 @@ export async function resolveDaemon(id: string): Promise<Daemon | null> {
     const daemon = { ...meta, token: "" };
     return remember(daemon);
   }
-  const credentials = requireNative(
-    await hostSessionCredentials(id),
-    "host_session_credentials",
-  );
+  const credentials = requireNative(await hostSessionCredentials(id), "host_session_credentials");
   const daemon = {
     ...meta,
     baseURL: normBaseURL(credentials.base_url),
@@ -344,7 +341,7 @@ export async function resolveActive(): Promise<Daemon | null> {
 
 /** Runtime-only lookup for render paths whose surrounding async fetch filled the cache. */
 export function cachedDaemon(id: string): Daemon | null {
-  return id ? sessionCache.get(id) ?? null : null;
+  return id ? (sessionCache.get(id) ?? null) : null;
 }
 
 /** Server prerequisites that block installation, as named by the Desktop
@@ -370,18 +367,22 @@ export function hostInstallBlocked(
 ): boolean {
   const arches = platform ? SERVER_ARCHES.get(platform) : undefined;
   const known = arches ?? new Set([...SERVER_ARCHES.values()].flatMap((set) => [...set]));
-  return (!!platform && !arches)
-    || (!!arch && !known.has(arch))
-    || (prerequisites ?? []).some((item) => INSTALL_REQUIREMENTS.has(item));
+  return (
+    (!!platform && !arches) ||
+    (!!arch && !known.has(arch)) ||
+    (prerequisites ?? []).some((item) => INSTALL_REQUIREMENTS.has(item))
+  );
 }
 
 /** A connected SSH host running a daemon older than this app. Both the host
  *  status block and the sidebar's server header ask this question. */
 export function hostUpdateAvailable(host: DaemonMeta, appVersion: string): boolean {
   const remoteVersion = host.lastDaemonVersion ?? "";
-  return host.kind === "ssh"
-    && hostConnected(host.state)
-    && appVersion !== ""
-    && remoteVersion !== ""
-    && remoteVersion !== appVersion;
+  return (
+    host.kind === "ssh" &&
+    hostConnected(host.state) &&
+    appVersion !== "" &&
+    remoteVersion !== "" &&
+    remoteVersion !== appVersion
+  );
 }

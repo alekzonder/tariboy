@@ -1,7 +1,14 @@
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -35,9 +42,16 @@ export function ConfigBlockCard({
   // overflow-visible: Card clips by default, which hid the in-place pop-up lists
   // (preset combobox, path suggestions) behind the card's bottom edge.
   return (
-    <Card id={`config-block-${block.id}`} role="region" aria-labelledby={`config-block-${block.id}-title`} className="scroll-mt-32 overflow-visible">
+    <Card
+      id={`config-block-${block.id}`}
+      role="region"
+      aria-labelledby={`config-block-${block.id}-title`}
+      className="scroll-mt-32 overflow-visible"
+    >
       <CardHeader>
-        <CardTitle id={`config-block-${block.id}-title`} className="text-base">{block.title}</CardTitle>
+        <CardTitle id={`config-block-${block.id}-title`} className="text-base">
+          {block.title}
+        </CardTitle>
         <CardDescription>{block.description}</CardDescription>
         {(dirtyCount > 0 || action) && (
           <CardAction className="flex items-center gap-2">
@@ -71,7 +85,9 @@ export function FieldFrame({
   const changed = draft.dirtyKeys.includes(field.key);
   const label = (
     <div className="flex items-center gap-2">
-      <Label htmlFor={field.key} className={inline ? "cursor-pointer" : undefined}>{field.label}</Label>
+      <Label htmlFor={field.key} className={inline ? "cursor-pointer" : undefined}>
+        {field.label}
+      </Label>
       {changed && <span className="text-xs font-medium text-primary">Changed</span>}
     </div>
   );
@@ -79,17 +95,40 @@ export function FieldFrame({
     <div
       data-field={field.key}
       data-matched={matched || undefined}
-      className={cn("space-y-1.5 rounded-lg", matched && "-m-2 bg-primary/5 p-2 ring-1 ring-primary/30")}
+      className={cn(
+        "space-y-1.5 rounded-lg",
+        matched && "-m-2 bg-primary/5 p-2 ring-1 ring-primary/30",
+      )}
     >
-      {inline ? <div className="flex items-center gap-3">{children}{label}</div> : <>{label}{children}</>}
-      {error && <p id={`${field.key}-error`} role="alert" className="text-xs text-destructive">{error}</p>}
-      {field.helper && <p id={`${field.key}-help`} className="text-xs text-muted-foreground">{field.helper}</p>}
+      {inline ? (
+        <div className="flex items-center gap-3">
+          {children}
+          {label}
+        </div>
+      ) : (
+        <>
+          {label}
+          {children}
+        </>
+      )}
+      {error && (
+        <p id={`${field.key}-error`} role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+      {field.helper && (
+        <p id={`${field.key}-help`} className="text-xs text-muted-foreground">
+          {field.helper}
+        </p>
+      )}
     </div>
   );
 }
 
 const describedBy = (field: ConfigField, draft: ConfigDraft) =>
-  [field.helper && `${field.key}-help`, draft.fieldErrors[field.key] && `${field.key}-error`].filter(Boolean).join(" ") || undefined;
+  [field.helper && `${field.key}-help`, draft.fieldErrors[field.key] && `${field.key}-error`]
+    .filter(Boolean)
+    .join(" ") || undefined;
 
 // DraftField renders one plain setting bound to the page draft.
 export function DraftField({
@@ -109,13 +148,22 @@ export function DraftField({
 }) {
   const value = draft.values[field.key] ?? "";
   const invalid = draft.fieldErrors[field.key] ? true : undefined;
-  const common = { id: field.key, "aria-describedby": describedBy(field, draft), "aria-invalid": invalid };
+  const common = {
+    id: field.key,
+    "aria-describedby": describedBy(field, draft),
+    "aria-invalid": invalid,
+  };
   const set = (next: string) => draft.setField(field.key, next);
   const unloaded = disabled || !(field.key in draft.values);
   if (field.kind === "switch") {
     return (
       <FieldFrame field={field} draft={draft} matched={matched} inline>
-        <Switch {...common} checked={value === "true"} disabled={unloaded} onCheckedChange={(checked) => set(String(checked))} />
+        <Switch
+          {...common}
+          checked={value === "true"}
+          disabled={unloaded}
+          onCheckedChange={(checked) => set(String(checked))}
+        />
       </FieldFrame>
     );
   }
@@ -136,13 +184,29 @@ export function DraftField({
   } else if (field.kind === "select") {
     const choices = options ?? field.options ?? [];
     control = (
-      <select {...common} value={value} disabled={unloaded} className={selectClass} onChange={(e) => set(e.target.value)}>
-        {choices.map((o) => <option key={o} value={o}>{o}</option>)}
+      <select
+        {...common}
+        value={value}
+        disabled={unloaded}
+        className={selectClass}
+        onChange={(e) => set(e.target.value)}
+      >
+        {choices.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
       </select>
     );
   } else if (field.kind === "textarea") {
     control = (
-      <Textarea {...common} value={value} disabled={unloaded} className="min-h-40 font-mono" onChange={(e) => set(e.target.value)} />
+      <Textarea
+        {...common}
+        value={value}
+        disabled={unloaded}
+        className="min-h-40 font-mono"
+        onChange={(e) => set(e.target.value)}
+      />
     );
   } else {
     control = (
@@ -151,7 +215,13 @@ export function DraftField({
         value={value}
         disabled={unloaded}
         className="h-9"
-        type={field.kind === "number" ? "number" : field.kind === "secret-value" ? "password" : undefined}
+        type={
+          field.kind === "number"
+            ? "number"
+            : field.kind === "secret-value"
+              ? "password"
+              : undefined
+        }
         autoComplete={field.kind === "secret-value" ? "new-password" : undefined}
         min={field.kind === "number" ? (field.minimum ?? 0) : undefined}
         step={field.key.startsWith("budget-") ? "0.01" : undefined}
@@ -159,7 +229,11 @@ export function DraftField({
       />
     );
   }
-  return <FieldFrame field={field} draft={draft} matched={matched}>{control}</FieldFrame>;
+  return (
+    <FieldFrame field={field} draft={draft} matched={matched}>
+      {control}
+    </FieldFrame>
+  );
 }
 
 export function ConfigSearch({
@@ -190,7 +264,11 @@ export function ConfigSearch({
           onChange={(e) => onQuery(e.target.value)}
           className="h-9 min-w-0 flex-1 basis-60"
         />
-        {query && <Button variant="ghost" className="h-9" onClick={() => onQuery("")}>Clear</Button>}
+        {query && (
+          <Button variant="ghost" className="h-9" onClick={() => onQuery("")}>
+            Clear
+          </Button>
+        )}
         <Button
           variant={changedOnly ? "secondary" : "outline"}
           className="h-9"
@@ -207,21 +285,37 @@ export function ConfigSearch({
             size="sm"
             variant="outline"
             className="h-7 rounded-full"
-            onClick={() => document.getElementById(`config-block-${chip.id}`)?.scrollIntoView?.({ block: "start", behavior: "smooth" })}
+            onClick={() =>
+              document
+                .getElementById(`config-block-${chip.id}`)
+                ?.scrollIntoView?.({ block: "start", behavior: "smooth" })
+            }
           >
             {chip.title}
             {chip.dirty > 0 && <Badge className="ml-1">{chip.dirty}</Badge>}
           </Button>
         ))}
       </nav>
-      <p role="status" aria-live="polite" className={resultText ? "text-xs text-muted-foreground" : "sr-only"}>{resultText}</p>
+      <p
+        role="status"
+        aria-live="polite"
+        className={resultText ? "text-xs text-muted-foreground" : "sr-only"}
+      >
+        {resultText}
+      </p>
     </div>
   );
 }
 
 // ConfigSaveBar is the page's only commit point. It appears once there is
 // something to commit, a reason the last save stopped, or a result to report.
-export function ConfigSaveBar({ draft, blockTitles }: { draft: ConfigDraft; blockTitles: string[] }) {
+export function ConfigSaveBar({
+  draft,
+  blockTitles,
+}: {
+  draft: ConfigDraft;
+  blockTitles: string[];
+}) {
   const count = draft.dirtyKeys.length;
   if (count === 0 && !draft.error && !draft.notice) return null;
   return (
@@ -235,11 +329,17 @@ export function ConfigSaveBar({ draft, blockTitles }: { draft: ConfigDraft; bloc
           <p role="status" aria-live="polite" className="text-sm font-medium">
             {count > 0 ? `${unsaved(count)} in ${blockTitles.join(", ")}` : draft.notice}
           </p>
-          {draft.error && <p role="alert" className="text-xs text-destructive">{draft.error}</p>}
+          {draft.error && (
+            <p role="alert" className="text-xs text-destructive">
+              {draft.error}
+            </p>
+          )}
         </div>
         {count > 0 && (
           <>
-            <Button variant="outline" className="h-9" disabled={draft.saving} onClick={draft.reset}>Reset</Button>
+            <Button variant="outline" className="h-9" disabled={draft.saving} onClick={draft.reset}>
+              Reset
+            </Button>
             <Button className="h-9" disabled={draft.saving} onClick={() => void draft.save()}>
               {draft.saving ? "Saving…" : "Save"}
             </Button>
@@ -250,15 +350,35 @@ export function ConfigSaveBar({ draft, blockTitles }: { draft: ConfigDraft; bloc
   );
 }
 
-export function ReadOnly({ draft, matched, fieldKey, children }: { draft: ConfigDraft; matched: Set<string>; fieldKey: string; children: React.ReactNode }) {
-  return <FieldFrame field={fieldOfKey(fieldKey) as ConfigField} draft={draft} matched={matched.has(fieldKey)}>{children}</FieldFrame>;
+export function ReadOnly({
+  draft,
+  matched,
+  fieldKey,
+  children,
+}: {
+  draft: ConfigDraft;
+  matched: Set<string>;
+  fieldKey: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <FieldFrame
+      field={fieldOfKey(fieldKey) as ConfigField}
+      draft={draft}
+      matched={matched.has(fieldKey)}
+    >
+      {children}
+    </FieldFrame>
+  );
 }
 
 // Actions run at once and are never part of Save; the row says so.
 export function ActionRow({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-      <span className="text-xs text-muted-foreground">Actions apply immediately, not part of Save:</span>
+      <span className="text-xs text-muted-foreground">
+        Actions apply immediately, not part of Save:
+      </span>
       {children}
     </div>
   );

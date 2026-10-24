@@ -6,7 +6,10 @@ import { Search } from "lucide-react";
  * is worse than a live one, so it stays a real input that filters the list.
  * The ⌘K hint is the affordance the palette will inherit.
  */
-export function SidebarSearch({ query, onQuery }: {
+export function SidebarSearch({
+  query,
+  onQuery,
+}: {
   query: string;
   onQuery: (value: string) => void;
 }) {
@@ -21,7 +24,9 @@ export function SidebarSearch({ query, onQuery }: {
         placeholder="Search agents"
         className="min-w-0 flex-1 bg-transparent text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground"
       />
-      <span aria-hidden="true" className="shrink-0 text-[11px] opacity-60">⌘K</span>
+      <span aria-hidden="true" className="shrink-0 text-[11px] opacity-60">
+        ⌘K
+      </span>
     </label>
   );
 }

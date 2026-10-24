@@ -9,10 +9,15 @@ const getPluginContributions = vi.fn();
 const getPluginStatus = vi.fn();
 const runPluginAction = vi.fn();
 const pluginsFor = (target: Daemon | null) =>
-  apiWrapper(fakeApi({ plugins: { getPluginContributions, getPluginStatus, runPluginAction } }, target));
+  apiWrapper(
+    fakeApi({ plugins: { getPluginContributions, getPluginStatus, runPluginAction } }, target),
+  );
 
 const remote: Daemon = {
-  id: "remote-1", label: "Production", baseURL: "https://production.example", token: "daemon-token",
+  id: "remote-1",
+  label: "Production",
+  baseURL: "https://production.example",
+  token: "daemon-token",
 };
 
 const telegram: PluginContribution = {
@@ -23,14 +28,16 @@ const telegram: PluginContribution = {
       { name: "token_configured", label: "Token configured" },
       { name: "allowlist_count", label: "Allowed users" },
     ],
-    sections: [{
-      title: "Bot",
-      fields: [
-        { name: "token", label: "Bot token", type: "password" },
-        { name: "allowed_uids", label: "Allowed UIDs", type: "integer-list", required: true },
-      ],
-      actions: [{ label: "Save", action: "configure", fields: ["token", "allowed_uids"] }],
-    }],
+    sections: [
+      {
+        title: "Bot",
+        fields: [
+          { name: "token", label: "Bot token", type: "password" },
+          { name: "allowed_uids", label: "Allowed UIDs", type: "integer-list", required: true },
+        ],
+        actions: [{ label: "Save", action: "configure", fields: ["token", "allowed_uids"] }],
+      },
+    ],
   },
 };
 
@@ -54,10 +61,12 @@ it("renders write-only fields and sends normalized action data to the selected s
   fireEvent.change(screen.getByLabelText("Allowed UIDs"), { target: { value: "22, 11" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-  await waitFor(() => expect(runPluginAction).toHaveBeenCalledWith("telegram", "configure", {
-    token: "123:secret",
-    allowed_uids: [22, 11],
-  }));
+  await waitFor(() =>
+    expect(runPluginAction).toHaveBeenCalledWith("telegram", "configure", {
+      token: "123:secret",
+      allowed_uids: [22, 11],
+    }),
+  );
   expect(screen.getByLabelText("Bot token")).toHaveValue("");
 });
 
@@ -66,6 +75,8 @@ it("rejects a malformed integer list before sending", async () => {
   await screen.findByRole("heading", { name: "Telegram" });
   fireEvent.change(screen.getByLabelText("Allowed UIDs"), { target: { value: "11,nope" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Allowed UIDs must be a comma-separated integer list");
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Allowed UIDs must be a comma-separated integer list",
+  );
   expect(runPluginAction).not.toHaveBeenCalled();
 });

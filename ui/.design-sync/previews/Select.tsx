@@ -1,11 +1,4 @@
-import {
-  Label,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "tariboy-ui";
+import { Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "tariboy-ui";
 
 const IMAGES = ["worker:v1", "worker:v2", "reviewer:v3", "bare:latest"];
 

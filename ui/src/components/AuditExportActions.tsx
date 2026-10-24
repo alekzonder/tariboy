@@ -4,8 +4,14 @@ import { toast } from "sonner";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
@@ -50,24 +56,36 @@ export function AuditExportActions({ name, iteration }: { name: string; iteratio
 
   return (
     <div className="flex items-center gap-1">
-      <Button type="button" variant="outline" size="xs" aria-label="Copy audit log" disabled={copying} onClick={() => void copy()}>
+      <Button
+        type="button"
+        variant="outline"
+        size="xs"
+        aria-label="Copy audit log"
+        disabled={copying}
+        onClick={() => void copy()}
+      >
         <Copy /> {copying ? "Copying…" : "Copy"}
       </Button>
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <Button type="button" variant="outline" size="xs" aria-label="Export audit log"><Download /> Export</Button>
+          <Button type="button" variant="outline" size="xs" aria-label="Export audit log">
+            <Download /> Export
+          </Button>
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Export sensitive audit data?</AlertDialogTitle>
             <AlertDialogDescription>
-              The ZIP contains readable Markdown and lossless JSONL. It may include prompts, reasoning, commands,
-              tool arguments/results, model responses, and user data. Inspect it before sharing.
+              The ZIP contains readable Markdown and lossless JSONL. It may include prompts,
+              reasoning, commands, tool arguments/results, model responses, and user data. Inspect
+              it before sharing.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={exporting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction disabled={exporting} onClick={() => void download()}>{exporting ? "Preparing…" : "Download ZIP"}</AlertDialogAction>
+            <AlertDialogAction disabled={exporting} onClick={() => void download()}>
+              {exporting ? "Preparing…" : "Download ZIP"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

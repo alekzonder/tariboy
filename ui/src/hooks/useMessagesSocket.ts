@@ -1,68 +1,71 @@
-import { useContext, useEffect, useRef, useState } from "react"
-import { ApiContext } from "@/components/apiContext"
-import { getLocalBaseURL } from "@/lib/api"
-import type { Daemon } from "@/lib/daemons"
+import { useContext, useEffect, useRef, useState } from "react";
+import { ApiContext } from "@/components/apiContext";
+import { getLocalBaseURL } from "@/lib/api";
+import type { Daemon } from "@/lib/daemons";
 
-const RECONNECT_MIN_MS = 250
-const RECONNECT_MAX_MS = 5000
+const RECONNECT_MIN_MS = 250;
+const RECONNECT_MAX_MS = 5000;
 
 /** One live publication on this host. It is a hint, not the message: the client
  *  refetches over HTTP, which stays authoritative. */
 export interface MessageHint {
-  agent: string
+  agent: string;
   /** The chat the publication landed in, absent for a message on a channel no
    *  chat owns. A client that knows it refetches only that conversation. */
-  chat?: string
-  id: string
-  channel: string
-  type: string
-  from: string
-  ts: string
+  chat?: string;
+  id: string;
+  channel: string;
+  type: string;
+  from: string;
+  ts: string;
 }
 
 /** Something that can change an agent's state happened: an iteration started
  *  or ended, or a lifecycle event was recorded. The client refetches. */
 export interface AgentStateHint {
-  agent: string
-  type: string
-  ts: string
+  agent: string;
+  type: string;
+  ts: string;
 }
 
-export type MessagesSocketStatus = "connecting" | "open" | "closed"
+export type MessagesSocketStatus = "connecting" | "open" | "closed";
 
 function hintWsUrl(target: Daemon | null, path: string): string {
   if (target && !target.baseURL) {
-    throw new Error(`host ${target.label || target.id} is not ready`)
+    throw new Error(`host ${target.label || target.id} is not ready`);
   }
   const toWs = (url: string) =>
-    url.replace(/\/+$/, "").replace(/^http:/, "ws:").replace(/^https:/, "wss:")
-  let base: string
+    url
+      .replace(/\/+$/, "")
+      .replace(/^http:/, "ws:")
+      .replace(/^https:/, "wss:");
+  let base: string;
   if (target) {
-    base = toWs(target.baseURL)
+    base = toWs(target.baseURL);
   } else {
-    const local = getLocalBaseURL()
+    const local = getLocalBaseURL();
     base = local
       ? toWs(local)
-      : `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`
+      : `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`;
   }
-  const query = new URLSearchParams()
-  if (target?.token) query.set("token", target.token)
-  const qs = query.toString()
-  return `${base}${path}${qs ? `?${qs}` : ""}`
+  const query = new URLSearchParams();
+  if (target?.token) query.set("token", target.token);
+  const qs = query.toString();
+  return `${base}${path}${qs ? `?${qs}` : ""}`;
 }
 
 export function messagesWsUrl(target: Daemon | null): string {
-  return hintWsUrl(target, "/api/messages/ws")
+  return hintWsUrl(target, "/api/messages/ws");
 }
 
 type HintSocketOptions<T> = {
   /** An explicit host (null = same-origin local). Omitted, the socket watches
    *  the server of the surrounding ApiProvider. */
-  target?: Daemon | null
-  enabled?: boolean
-  onHint: (hint: T) => void
-  onOpen?: () => void
-}
+  target?: Daemon | null;
+  enabled?: boolean;
+  onHint: (hint: T) => void;
+  onOpen?: () => void;
+};
 
 /**
  * Watch every chat on one host over a single socket. The socket replays
@@ -70,14 +73,18 @@ type HintSocketOptions<T> = {
  * cursor, is what makes a missed frame harmless.
  */
 export function useMessagesSocket(options: HintSocketOptions<MessageHint>): MessagesSocketStatus {
-  return useHintSocket("/api/messages/ws", (parsed) => {
-    const hint = parsed as Partial<MessageHint>
-    // A shared chat belongs to no single agent, so a frame that names its
-    // chat is addressed even without one.
-    if (!hint || typeof hint.id !== "string") return null
-    if (typeof hint.agent !== "string" && typeof hint.chat !== "string") return null
-    return hint as MessageHint
-  }, options)
+  return useHintSocket(
+    "/api/messages/ws",
+    (parsed) => {
+      const hint = parsed as Partial<MessageHint>;
+      // A shared chat belongs to no single agent, so a frame that names its
+      // chat is addressed even without one.
+      if (!hint || typeof hint.id !== "string") return null;
+      if (typeof hint.agent !== "string" && typeof hint.chat !== "string") return null;
+      return hint as MessageHint;
+    },
+    options,
+  );
 }
 
 /**
@@ -85,11 +92,17 @@ export function useMessagesSocket(options: HintSocketOptions<MessageHint>): Mess
  * and the agent status can poll slowly and refetch on a hint instead. A host
  * without this socket keeps it closed, and the caller keeps its short poll.
  */
-export function useAgentStatesSocket(options: HintSocketOptions<AgentStateHint>): MessagesSocketStatus {
-  return useHintSocket("/api/agent-states/ws", (parsed) => {
-    const hint = parsed as Partial<AgentStateHint>
-    return hint && typeof hint.agent === "string" ? (hint as AgentStateHint) : null
-  }, options)
+export function useAgentStatesSocket(
+  options: HintSocketOptions<AgentStateHint>,
+): MessagesSocketStatus {
+  return useHintSocket(
+    "/api/agent-states/ws",
+    (parsed) => {
+      const hint = parsed as Partial<AgentStateHint>;
+      return hint && typeof hint.agent === "string" ? (hint as AgentStateHint) : null;
+    },
+    options,
+  );
 }
 
 function useHintSocket<T>(
@@ -97,80 +110,81 @@ function useHintSocket<T>(
   accept: (parsed: unknown) => T | null,
   { target, enabled = true, onHint, onOpen }: HintSocketOptions<T>,
 ): MessagesSocketStatus {
-  const [status, setStatus] = useState<MessagesSocketStatus>(enabled ? "connecting" : "closed")
-  const onHintRef = useRef(onHint)
-  const onOpenRef = useRef(onOpen)
-  const acceptRef = useRef(accept)
+  const [status, setStatus] = useState<MessagesSocketStatus>(enabled ? "connecting" : "closed");
+  const onHintRef = useRef(onHint);
+  const onOpenRef = useRef(onOpen);
+  const acceptRef = useRef(accept);
   useEffect(() => {
-    onHintRef.current = onHint
-    onOpenRef.current = onOpen
-    acceptRef.current = accept
-  }, [onHint, onOpen, accept])
+    onHintRef.current = onHint;
+    onOpenRef.current = onOpen;
+    acceptRef.current = accept;
+  }, [onHint, onOpen, accept]);
 
-  const provided = useContext(ApiContext)
-  if (target === undefined && !provided) throw new Error("useApi must be used within an ApiProvider")
+  const provided = useContext(ApiContext);
+  if (target === undefined && !provided)
+    throw new Error("useApi must be used within an ApiProvider");
   // Keyed by the host's value: an equal descriptor (or an ordinary re-render)
   // keeps the socket, a new host, endpoint or token re-dials.
-  const targetKey = JSON.stringify(target === undefined ? provided!.target : target)
+  const targetKey = JSON.stringify(target === undefined ? provided!.target : target);
 
   useEffect(() => {
     if (!enabled) {
-      queueMicrotask(() => setStatus("closed"))
-      return
+      queueMicrotask(() => setStatus("closed"));
+      return;
     }
-    let alive = true
-    let socket: WebSocket | null = null
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let reconnectDelay = RECONNECT_MIN_MS
-    const socketTarget = JSON.parse(targetKey) as Daemon | null
+    let alive = true;
+    let socket: WebSocket | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let reconnectDelay = RECONNECT_MIN_MS;
+    const socketTarget = JSON.parse(targetKey) as Daemon | null;
 
     const connect = () => {
-      if (!alive) return
-      let url: string
+      if (!alive) return;
+      let url: string;
       try {
-        url = hintWsUrl(socketTarget, path)
+        url = hintWsUrl(socketTarget, path);
       } catch {
-        setStatus("closed")
-        return
+        setStatus("closed");
+        return;
       }
-      setStatus("connecting")
-      const current = new WebSocket(url)
-      socket = current
+      setStatus("connecting");
+      const current = new WebSocket(url);
+      socket = current;
       current.onopen = () => {
-        if (!alive || socket !== current) return
-        reconnectDelay = RECONNECT_MIN_MS
-        setStatus("open")
-        onOpenRef.current?.()
-      }
+        if (!alive || socket !== current) return;
+        reconnectDelay = RECONNECT_MIN_MS;
+        setStatus("open");
+        onOpenRef.current?.();
+      };
       current.onmessage = (event) => {
-        if (!alive || typeof event.data !== "string") return
-        let parsed: unknown
+        if (!alive || typeof event.data !== "string") return;
+        let parsed: unknown;
         try {
-          parsed = JSON.parse(event.data)
+          parsed = JSON.parse(event.data);
         } catch {
-          return
+          return;
         }
-        const hint = acceptRef.current(parsed)
-        if (hint !== null) onHintRef.current(hint)
-      }
+        const hint = acceptRef.current(parsed);
+        if (hint !== null) onHintRef.current(hint);
+      };
       current.onclose = () => {
-        if (socket === current) socket = null
-        if (!alive) return
-        setStatus("closed")
-        const wait = reconnectDelay
-        reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS)
-        timer = setTimeout(connect, wait)
-      }
-    }
+        if (socket === current) socket = null;
+        if (!alive) return;
+        setStatus("closed");
+        const wait = reconnectDelay;
+        reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
+        timer = setTimeout(connect, wait);
+      };
+    };
 
-    connect()
+    connect();
     return () => {
-      alive = false
-      if (timer !== undefined) clearTimeout(timer)
-      socket?.close()
-      socket = null
-    }
-  }, [enabled, targetKey, path])
+      alive = false;
+      if (timer !== undefined) clearTimeout(timer);
+      socket?.close();
+      socket = null;
+    };
+  }, [enabled, targetKey, path]);
 
-  return status
+  return status;
 }

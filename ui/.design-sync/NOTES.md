@@ -229,7 +229,6 @@ shape of that divergence is worth knowing because it can recur.
 - Radix scrollbars are hover-type, so `ScrollArea` captures show no thumb;
   overflow reads from the clipped last row.
 
-
 - **This build box has no emoji font**, so emoji written into component source
   (`ProxyCallRow`'s scroll/thinking markers, audit descriptors) capture as empty
   tofu boxes. Capture artifact only; they render normally on a real machine.
@@ -245,7 +244,7 @@ Tailwind engine defaults below were demoted by name):
 - **73 `--tw-*`** Tailwind v4 internals - on `*,:before,:after,::backdrop`, on
   utility classes, and as 73 `@property` rules.
 - **57 flexlayout-react vars** from its `light.css`, declared on
-  `.flexlayout__layout` under *generic* names that collide with real token
+  `.flexlayout__layout` under _generic_ names that collide with real token
   names: `--color-text`, `--color-background`, `--font-family`, `--size-*`.
   Note there is no `--flexlayout*` prefix - filtering by name would have
   missed all of them, which is why the rule is structural.
@@ -264,7 +263,7 @@ utilities. The pass is metadata only, and is verified so: the annotated CSS is
 byte-identical to the original once comments are stripped. It is also
 idempotent (it strips every marker it has written, then re-derives them).
 
-**Why it is a fork and not a `buildCmd` step.** `cfg.buildCmd` runs *before*
+**Why it is a fork and not a `buildCmd` step.** `cfg.buildCmd` runs _before_
 the converter, and annotating `cfg.cssEntry` alone covers only 248 of the 325
 declarations: the converter appends ~48KB of CSS that esbuild pulls out of the
 JS bundle (flexlayout, xterm), which never passes through `cssEntry`. So the
@@ -281,7 +280,7 @@ Two things to know about the fork:
   (`../../.ds-sync/lib/common.mjs`, `../annotate-tokens.mjs`), all of which
   resolve on their own. Verified by importing the fork with the symlink removed.
 - **Introducing or editing it re-opens verification for every component.**
-  `configSlicesFor` in `lib/sync-hashes.mjs` hashes the *bytes* of every
+  `configSlicesFor` in `lib/sync-hashes.mjs` hashes the _bytes_ of every
   `.design-sync/overrides/*.mjs` into the global slice of each component's
   `sourceKey` (`cfg.libOverrides` prose is deliberately NOT keyed - the file
   bytes are). So the sync that added this fork saw all 67 components flip from
@@ -291,7 +290,7 @@ Two things to know about the fork:
   fork has NOT changed, that IS a real finding, chase it.
 
 If the check still reports unclassified tokens after this, the remaining names
-will be real `:root`/`.dark` tokens whose *values* it cannot bucket (easings,
+will be real `:root`/`.dark` tokens whose _values_ it cannot bucket (easings,
 durations, font weights, `calc()` line-heights) - a different problem from the
 scope pollution this pass fixes, and one to solve by value, not by scope.
 
@@ -306,7 +305,7 @@ name in `annotate-tokens.mjs`:
 Tailwind v4 writes its own engine defaults into the very same `:root,:host`
 block as the app's tokens, so no scope rule can separate them - only the name
 can. They back the `transition-*` and `animate-spin` utilities and carry no
-design decision. The marker lands *inside* the declaration, right after its
+design decision. The marker lands _inside_ the declaration, right after its
 `;`, exactly like every scope-demoted one:
 
     --ease-in-out:cubic-bezier(.4, 0, .2, 1);/* @kind other */
@@ -329,7 +328,7 @@ sits in one of exactly two places:
 It also fails if a non-token declaration was left unmarked. Two things worth
 knowing before chasing a report of loose markers in `_ds_bundle.css`:
 
-- A stray marker in the *input* cannot survive. The pass opens by stripping
+- A stray marker in the _input_ cannot survive. The pass opens by stripping
   every marker it has ever written (`css.split(MARKER).join('')`) and then
   re-derives them, so litter from any source is removed, not re-attached.
 - `flushDecl` always emits its own `;` before the marker, so a block's last
@@ -374,7 +373,7 @@ full list."
 Things to know:
 
 - **Rendering is unaffected.** `writeStylesCss` imports `tokens/theme.css`
-  *before* `_ds_bundle.css`, which redeclares every one of those names with the
+  _before_ `_ds_bundle.css`, which redeclares every one of those names with the
   same value, so the cascade is identical. The file is documentation that
   happens to be valid CSS.
 - **The package name must stay `tariboy-ui`.** The README prints

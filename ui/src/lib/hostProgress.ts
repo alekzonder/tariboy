@@ -1,24 +1,10 @@
 export type HostOperationKind = "connect" | "provision" | "update";
 
-export type HostOperationStatus =
-  | "idle"
-  | "running"
-  | "succeeded"
-  | "failed";
+export type HostOperationStatus = "idle" | "running" | "succeeded" | "failed";
 
-export type HostProgressStep =
-  | "connect"
-  | "check"
-  | "upload"
-  | "install"
-  | "service"
-  | "reconnect";
+export type HostProgressStep = "connect" | "check" | "upload" | "install" | "service" | "reconnect";
 
-export type HostProgressStepState =
-  | "pending"
-  | "active"
-  | "complete"
-  | "failed";
+export type HostProgressStepState = "pending" | "active" | "complete" | "failed";
 
 export const HOST_PROGRESS_STEPS: ReadonlyArray<{
   id: HostProgressStep;
@@ -64,20 +50,20 @@ export function hostStepStates(
   current: HostProgressStep | null,
   status: HostOperationStatus,
 ): Record<HostProgressStep, HostProgressStepState> {
-  const currentIndex = current
-    ? HOST_PROGRESS_STEPS.findIndex((step) => step.id === current)
-    : -1;
-  return Object.fromEntries(HOST_PROGRESS_STEPS.map((step, index) => {
-    let state: HostProgressStepState = "pending";
-    if (status === "succeeded" || (currentIndex >= 0 && index < currentIndex)) {
-      state = "complete";
-    } else if (index === currentIndex && status === "running") {
-      state = "active";
-    } else if (index === currentIndex && status === "failed") {
-      state = "failed";
-    }
-    return [step.id, state];
-  })) as Record<HostProgressStep, HostProgressStepState>;
+  const currentIndex = current ? HOST_PROGRESS_STEPS.findIndex((step) => step.id === current) : -1;
+  return Object.fromEntries(
+    HOST_PROGRESS_STEPS.map((step, index) => {
+      let state: HostProgressStepState = "pending";
+      if (status === "succeeded" || (currentIndex >= 0 && index < currentIndex)) {
+        state = "complete";
+      } else if (index === currentIndex && status === "running") {
+        state = "active";
+      } else if (index === currentIndex && status === "failed") {
+        state = "failed";
+      }
+      return [step.id, state];
+    }),
+  ) as Record<HostProgressStep, HostProgressStepState>;
 }
 
 export function isTerminalHostOutput(stream: string): boolean {

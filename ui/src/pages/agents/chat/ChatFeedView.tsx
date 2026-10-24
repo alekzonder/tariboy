@@ -7,11 +7,17 @@ import { DayDivider, UnreadDivider } from "./ChatDivider";
 import type { AgentChatState } from "./useAgentChat";
 import type { useChatScroll } from "./useChatScroll";
 
-type FeedChat = Pick<AgentChatState,
+type FeedChat = Pick<
+  AgentChatState,
   "name" | "messages" | "shown" | "openQuestion" | "newCount" | "markRead" | "reply"
 >;
 
-export function ChatFeed({ chat, scroll, onOpenTask, onCreateTask }: {
+export function ChatFeed({
+  chat,
+  scroll,
+  onOpenTask,
+  onCreateTask,
+}: {
   chat: FeedChat;
   scroll: ReturnType<typeof useChatScroll>;
   onOpenTask: (key: string) => void;
@@ -59,7 +65,9 @@ export function ChatFeed({ chat, scroll, onOpenTask, onCreateTask }: {
             <span className="grid size-[22px] place-items-center rounded-[7px] bg-[color-mix(in_oklab,var(--status-running)_16%,transparent)]">
               <span className="size-[5px] rounded-full bg-[var(--status-running)]" />
             </span>
-            <span className="text-[11.5px] text-muted-foreground">{name} is waiting for an answer…</span>
+            <span className="text-[11.5px] text-muted-foreground">
+              {name} is waiting for an answer…
+            </span>
           </div>
         )}
         <div ref={bottom} />

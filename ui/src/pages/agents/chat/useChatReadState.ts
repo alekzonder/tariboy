@@ -4,7 +4,12 @@ import { ApiError, type ChatMessage } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 
 export function useChatReadState({
-  name, hostId, selected, chatId, messages, customer,
+  name,
+  hostId,
+  selected,
+  chatId,
+  messages,
+  customer,
 }: {
   name: string;
   hostId: string;
@@ -22,7 +27,10 @@ export function useChatReadState({
   const anchor = anchorState?.scope === scope ? anchorState.ts : null;
   const anchorRef = useRef<string | null>(null);
   const keepUnread = useRef(false);
-  const setAnchor = useCallback((ts: string) => setAnchorState({ scope: scopeRef.current, ts }), []);
+  const setAnchor = useCallback(
+    (ts: string) => setAnchorState({ scope: scopeRef.current, ts }),
+    [],
+  );
 
   useEffect(() => {
     scopeRef.current = scope;
@@ -30,19 +38,25 @@ export function useChatReadState({
     keepUnread.current = false;
   }, [scope]);
 
-  const captureAnchor = useCallback((readTS: string) => {
-    if (anchorRef.current === null) {
-      anchorRef.current = readTS;
-      setAnchor(readTS);
-    }
-  }, [setAnchor]);
+  const captureAnchor = useCallback(
+    (readTS: string) => {
+      if (anchorRef.current === null) {
+        anchorRef.current = readTS;
+        setAnchor(readTS);
+      }
+    },
+    [setAnchor],
+  );
 
-  const markShownRead = useCallback(async (newest?: ChatMessage) => {
-    // A hidden tab and an explicit Mark unread must never advance the mark.
-    if (newest && !keepUnread.current && document.visibilityState !== "hidden") {
-      await api.messages.chatRead(chatId, newest.ts);
-    }
-  }, [api, chatId]);
+  const markShownRead = useCallback(
+    async (newest?: ChatMessage) => {
+      // A hidden tab and an explicit Mark unread must never advance the mark.
+      if (newest && !keepUnread.current && document.visibilityState !== "hidden") {
+        await api.messages.chatRead(chatId, newest.ts);
+      }
+    },
+    [api, chatId],
+  );
 
   function markRead() {
     const newest = messages.at(-1);
@@ -65,7 +79,9 @@ export function useChatReadState({
     try {
       await api.messages.chatRead(chatId, back, { exact: true });
     } catch (error) {
-      toast.error(`Could not mark the chat unread: ${error instanceof ApiError ? error.message : String(error)}`);
+      toast.error(
+        `Could not mark the chat unread: ${error instanceof ApiError ? error.message : String(error)}`,
+      );
     }
   }
 

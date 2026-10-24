@@ -18,7 +18,11 @@ export function ActivityPeriodBar({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div role="group" aria-label="Period" className="flex overflow-hidden rounded-md border text-sm">
+      <div
+        role="group"
+        aria-label="Period"
+        className="flex overflow-hidden rounded-md border text-sm"
+      >
         {ACTIVITY_PERIODS.map(({ period, label }) => (
           <button
             key={period}
@@ -57,7 +61,9 @@ export function ActivityPeriodBar({
         </div>
       )}
       {window.error ? (
-        <span role="alert" className="text-sm text-destructive">{window.error}</span>
+        <span role="alert" className="text-sm text-destructive">
+          {window.error}
+        </span>
       ) : (
         <span className="text-xs text-muted-foreground">
           {fmtDateTime(window.since)} – {fmtDateTime(window.until)}
@@ -98,7 +104,11 @@ export function ActivityTabs<V extends string>({
   onSelect: (view: V) => void;
 }) {
   return (
-    <div role="tablist" aria-label="Activity view" className="scrollbar-none flex gap-1 overflow-x-auto">
+    <div
+      role="tablist"
+      aria-label="Activity view"
+      className="scrollbar-none flex gap-1 overflow-x-auto"
+    >
       {views.map(({ view, label }) => (
         <button
           key={view}
@@ -178,7 +188,10 @@ export function TaskActivityTable({
           ))}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={showAgents ? 9 : 8} className="px-3 py-4 text-center text-muted-foreground">
+              <td
+                colSpan={showAgents ? 9 : 8}
+                className="px-3 py-4 text-center text-muted-foreground"
+              >
                 No work on tasks in this period.
               </td>
             </tr>
@@ -213,7 +226,9 @@ export function AgentActivityTable({
           {agents.map((row) => (
             <tr key={row.agent} className="border-t">
               <td className="px-3 py-1.5">
-                <Link to={agentHref(row.agent)} className="text-primary hover:underline">{row.agent}</Link>
+                <Link to={agentHref(row.agent)} className="text-primary hover:underline">
+                  {row.agent}
+                </Link>
               </td>
               <td className="px-3 py-1.5 text-right font-mono">{row.tasks}</td>
               <td className="px-3 py-1.5 text-right font-mono">{row.completed}</td>

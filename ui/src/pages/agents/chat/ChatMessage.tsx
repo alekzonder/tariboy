@@ -19,7 +19,12 @@ function ReceiptMark({ item }: { item: FeedMessage }) {
   );
 }
 
-export default function ChatMessage({ item, onOpenTask, onReply, onCreateTask }: {
+export default function ChatMessage({
+  item,
+  onOpenTask,
+  onReply,
+  onCreateTask,
+}: {
   item: FeedMessage;
   onOpenTask: (key: string) => void;
   onReply: (item: FeedMessage) => void;
@@ -34,9 +39,12 @@ export default function ChatMessage({ item, onOpenTask, onReply, onCreateTask }:
   const actions = [
     { label: "Reply to this message", icon: CornerUpLeft, run: () => onReply(item) },
     {
-      label: "Copy message text", icon: Copy,
-      run: () => void navigator.clipboard?.writeText(message.text)
-        .catch(() => toast.error("Could not copy the message")),
+      label: "Copy message text",
+      icon: Copy,
+      run: () =>
+        void navigator.clipboard
+          ?.writeText(message.text)
+          .catch(() => toast.error("Could not copy the message")),
     },
     { label: "Create a task from this message", icon: ListPlus, run: () => onCreateTask(item) },
   ];
@@ -44,12 +52,14 @@ export default function ChatMessage({ item, onOpenTask, onReply, onCreateTask }:
     <div className="group relative flex gap-[9px] py-px pr-3.5 pl-3 hover:bg-muted">
       <div className="flex w-[22px] shrink-0 justify-center pt-0.5">
         {head ? (
-          <span className={cn(
-            "grid size-[22px] place-items-center text-[10.5px] font-semibold uppercase",
-            mine
-              ? "rounded-full bg-secondary text-muted-foreground"
-              : "rounded-[7px] bg-[color-mix(in_oklab,var(--status-running)_16%,transparent)] font-mono text-[var(--status-running)]",
-          )}>
+          <span
+            className={cn(
+              "grid size-[22px] place-items-center text-[10.5px] font-semibold uppercase",
+              mine
+                ? "rounded-full bg-secondary text-muted-foreground"
+                : "rounded-[7px] bg-[color-mix(in_oklab,var(--status-running)_16%,transparent)] font-mono text-[var(--status-running)]",
+            )}
+          >
             {author.charAt(0)}
           </span>
         ) : (
@@ -65,7 +75,10 @@ export default function ChatMessage({ item, onOpenTask, onReply, onCreateTask }:
             <span className="inline-flex h-[15px] shrink-0 items-center rounded-[5px] bg-muted px-[5px] font-mono text-[10px] text-muted-foreground">
               {role}
             </span>
-            <span className="shrink-0 font-mono text-[10.5px] text-muted-foreground tabular-nums" title={message.ts}>
+            <span
+              className="shrink-0 font-mono text-[10.5px] text-muted-foreground tabular-nums"
+              title={message.ts}
+            >
               {shortTime(message.ts)}
             </span>
           </div>

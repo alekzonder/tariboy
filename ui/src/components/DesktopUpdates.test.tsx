@@ -1,11 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  AppSettings,
-  DesktopUpdatesProvider,
-  UpdateBanner,
-} from "./DesktopUpdates";
+import { AppSettings, DesktopUpdatesProvider, UpdateBanner } from "./DesktopUpdates";
 import type { DesktopUpdateSnapshot } from "@/lib/desktop";
 
 const bridge = vi.hoisted(() => ({
@@ -42,7 +38,14 @@ function update(overrides: Partial<DesktopUpdateSnapshot> = {}): DesktopUpdateSn
   };
 }
 
-function renderUpdates(children = <><AppSettings /><UpdateBanner /></>) {
+function renderUpdates(
+  children = (
+    <>
+      <AppSettings />
+      <UpdateBanner />
+    </>
+  ),
+) {
   return render(
     <MemoryRouter>
       <DesktopUpdatesProvider>{children}</DesktopUpdatesProvider>
@@ -59,13 +62,13 @@ beforeEach(() => {
   bridge.state.mockReset().mockResolvedValue(update());
   bridge.download.mockReset().mockResolvedValue(update({ revision: 1, phase: "up-to-date" }));
   bridge.install.mockReset().mockResolvedValue(update({ revision: 1, phase: "installing" }));
-  bridge.subscribe.mockReset().mockImplementation(
-    (listener: (state: unknown) => void, registered: () => void) => {
+  bridge.subscribe
+    .mockReset()
+    .mockImplementation((listener: (state: unknown) => void, registered: () => void) => {
       bridge.listener = listener;
       void Promise.resolve().then(registered);
       return bridge.unsubscribe;
-    },
-  );
+    });
 });
 
 afterEach(() => {
@@ -93,7 +96,11 @@ describe("Desktop updates", () => {
   it("allows one manual check while automatic downloads are disabled", async () => {
     localStorage.setItem(AUTO_DOWNLOAD_KEY, "false");
     let finish: (state: DesktopUpdateSnapshot) => void = () => {};
-    bridge.download.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    bridge.download.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
     renderUpdates();
 
     const button = await screen.findByRole("button", {
@@ -118,7 +125,10 @@ describe("Desktop updates", () => {
   it("checks every six hours without catch-up loops after sleep", async () => {
     vi.useFakeTimers();
     renderUpdates();
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(bridge.download).toHaveBeenCalledTimes(1);
 
     act(() => vi.advanceTimersByTime(SIX_HOURS - 1));
@@ -139,12 +149,17 @@ describe("Desktop updates", () => {
   it("cancels the mounted timer when disabled and leaves it disabled after remount", async () => {
     vi.useFakeTimers();
     const first = renderUpdates();
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(bridge.download).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("switch", {
-      name: "Download updates automatically",
-    }));
+    fireEvent.click(
+      screen.getByRole("switch", {
+        name: "Download updates automatically",
+      }),
+    );
     expect(localStorage.getItem(AUTO_DOWNLOAD_KEY)).toBe("false");
     await act(async () => {
       vi.advanceTimersByTime(SIX_HOURS);
@@ -155,11 +170,16 @@ describe("Desktop updates", () => {
 
     bridge.download.mockClear();
     renderUpdates();
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(bridge.state).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole("switch", {
-      name: "Download updates automatically",
-    })).not.toBeChecked();
+    expect(
+      screen.getByRole("switch", {
+        name: "Download updates automatically",
+      }),
+    ).not.toBeChecked();
     expect(bridge.download).not.toHaveBeenCalled();
   });
 
@@ -168,11 +188,15 @@ describe("Desktop updates", () => {
     const storage = localStorage;
     vi.stubGlobal("localStorage", {
       getItem: storage.getItem.bind(storage),
-      setItem: () => { throw new Error("storage unavailable"); },
+      setItem: () => {
+        throw new Error("storage unavailable");
+      },
       removeItem: storage.removeItem.bind(storage),
       clear: storage.clear.bind(storage),
       key: storage.key.bind(storage),
-      get length() { return storage.length; },
+      get length() {
+        return storage.length;
+      },
     });
     renderUpdates();
 
@@ -190,16 +214,24 @@ describe("Desktop updates", () => {
   it("does not let an older initial snapshot replace a native event", async () => {
     localStorage.setItem(AUTO_DOWNLOAD_KEY, "false");
     let finishState: (state: DesktopUpdateSnapshot) => void = () => {};
-    bridge.state.mockReturnValue(new Promise((resolve) => { finishState = resolve; }));
+    bridge.state.mockReturnValue(
+      new Promise((resolve) => {
+        finishState = resolve;
+      }),
+    );
     renderUpdates();
     await waitFor(() => expect(bridge.state).toHaveBeenCalledTimes(1));
 
-    act(() => bridge.listener?.(update({
-      revision: 5,
-      phase: "downloading",
-      version: "2.0.0",
-      downloaded_bytes: 2048,
-    })));
+    act(() =>
+      bridge.listener?.(
+        update({
+          revision: 5,
+          phase: "downloading",
+          version: "2.0.0",
+          downloaded_bytes: 2048,
+        }),
+      ),
+    );
     await act(async () => finishState(update({ revision: 0 })));
 
     expect(screen.getByText("Downloaded 2048 bytes")).toBeInTheDocument();
@@ -207,13 +239,15 @@ describe("Desktop updates", () => {
 
   it("renders accessible indeterminate progress when the total is unknown", async () => {
     localStorage.setItem(AUTO_DOWNLOAD_KEY, "false");
-    bridge.state.mockResolvedValue(update({
-      revision: 2,
-      phase: "downloading",
-      version: "2.0.0",
-      downloaded_bytes: 512,
-      total_bytes: null,
-    }));
+    bridge.state.mockResolvedValue(
+      update({
+        revision: 2,
+        phase: "downloading",
+        version: "2.0.0",
+        downloaded_bytes: 512,
+        total_bytes: null,
+      }),
+    );
     renderUpdates();
 
     const progress = await screen.findByRole("progressbar", { name: "Downloading update" });
@@ -224,12 +258,14 @@ describe("Desktop updates", () => {
 
   it("reports signature failure without claiming an update is ready", async () => {
     localStorage.setItem(AUTO_DOWNLOAD_KEY, "false");
-    bridge.state.mockResolvedValue(update({
-      revision: 3,
-      phase: "error",
-      version: "2.0.0",
-      error: "Update signature verification failed.",
-    }));
+    bridge.state.mockResolvedValue(
+      update({
+        revision: 3,
+        phase: "error",
+        version: "2.0.0",
+        error: "Update signature verification failed.",
+      }),
+    );
     renderUpdates();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("signature verification");
@@ -273,7 +309,10 @@ describe("Desktop updates", () => {
     bridge.state.mockResolvedValue(update({ revision: 4, phase: "ready", version: "2.0.0" }));
     renderUpdates(
       <>
-        <nav><Link to="/">Workspace</Link><Link to="/app-settings">Settings</Link></nav>
+        <nav>
+          <Link to="/">Workspace</Link>
+          <Link to="/app-settings">Settings</Link>
+        </nav>
         <Routes>
           <Route path="/" element={<UpdateBanner />} />
           <Route path="/app-settings" element={<AppSettings />} />
@@ -284,8 +323,9 @@ describe("Desktop updates", () => {
     expect(await screen.findByText("Version 2.0.0 downloaded")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Settings" }));
 
-    expect(await screen.findByRole("heading", { name: "Application settings" }))
-      .toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Application settings" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("1.2.3")).toBeInTheDocument();
     expect(bridge.subscribe).toHaveBeenCalledTimes(1);
     expect(bridge.state).toHaveBeenCalledTimes(1);
@@ -295,8 +335,7 @@ describe("Desktop updates", () => {
     bridge.desktop = false;
     renderUpdates();
 
-    expect(screen.getByText("Updates are only available in the Desktop app."))
-      .toBeInTheDocument();
+    expect(screen.getByText("Updates are only available in the Desktop app.")).toBeInTheDocument();
     expect(bridge.subscribe).not.toHaveBeenCalled();
     expect(bridge.state).not.toHaveBeenCalled();
     expect(bridge.download).not.toHaveBeenCalled();

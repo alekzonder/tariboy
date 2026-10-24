@@ -1,11 +1,22 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 
 export function PathPromptDialog({
-  open, title, label, value, onValueChange, submitLabel, onSubmit, onOpenChange,
+  open,
+  title,
+  label,
+  value,
+  onValueChange,
+  submitLabel,
+  onSubmit,
+  onOpenChange,
 }: {
   open: boolean;
   title: string;
@@ -34,12 +45,21 @@ export function PathPromptDialog({
             autoFocus
             value={value}
             onChange={(e) => onValueChange(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submit();
+              }
+            }}
           />
         </label>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={submit} disabled={!value.trim()}>{submitLabel}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={!value.trim()}>
+            {submitLabel}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

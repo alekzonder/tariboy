@@ -14,7 +14,12 @@ import type { ImageRow } from "@/lib/api";
 // list — the same trick PathAutocomplete uses. `ariaLabel` lets the group
 // wizard give each row's image field a distinct accessible name.
 export function ImageCombobox({
-  images, value, onChange, id, invalid, ariaLabel = "image",
+  images,
+  value,
+  onChange,
+  id,
+  invalid,
+  ariaLabel = "image",
 }: {
   images: ImageRow[];
   value: string;
@@ -33,8 +38,14 @@ export function ImageCombobox({
       <Input
         id={id}
         value={open ? query : value}
-        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-        onFocus={() => { setQuery(""); setOpen(true); }}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => {
+          setQuery("");
+          setOpen(true);
+        }}
         onBlur={() => setOpen(false)}
         placeholder="image:tag (required)"
         aria-label={ariaLabel}
@@ -58,7 +69,10 @@ export function ImageCombobox({
                 role="option"
                 aria-selected={ref === value}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => { onChange(ref); setOpen(false); }}
+                onClick={() => {
+                  onChange(ref);
+                  setOpen(false);
+                }}
                 className="block w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
               >
                 {ref}

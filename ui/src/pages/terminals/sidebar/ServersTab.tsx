@@ -2,7 +2,10 @@ import type { ButtonHTMLAttributes } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { HostStatus } from "@/components/HostStatus";
 import { cn } from "@/lib/utils";
@@ -10,29 +13,43 @@ import type { HostAgents } from "@/lib/aggregate";
 import { hostUpdateAvailable, type DaemonMeta } from "@/lib/daemons";
 import { dragId } from "./sidebarDnd";
 import {
-  SECTION_ICON_CLASS, SECTION_TITLE_CLASS, SectionEmpty, SidebarSectionHeader,
+  SECTION_ICON_CLASS,
+  SECTION_TITLE_CLASS,
+  SectionEmpty,
+  SidebarSectionHeader,
 } from "./SidebarSectionHeader";
 import { SidebarAgentRow, type AgentRowActions } from "./SidebarAgentRow";
 import { hostAgents, ordered } from "./sidebarModel";
 
-function SortableButton({ dragKey, disabled, style, className, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & {
+function SortableButton({
+  dragKey,
+  disabled,
+  style,
+  className,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
   dragKey: string;
 }) {
   const drag = useDraggable({ id: dragKey, disabled });
   const drop = useDroppable({ id: dragKey, disabled });
-  return <button
-    ref={(node) => { drag.setNodeRef(node); drop.setNodeRef(node); }}
-    disabled={disabled}
-    style={{ ...style, opacity: drag.isDragging ? 0.45 : undefined }}
-    className={cn(
-      "cursor-grab active:cursor-grabbing",
-      drop.isOver && "ring-1 ring-primary",
-      className,
-    )}
-    {...props}
-    {...drag.attributes}
-    {...drag.listeners}
-  />;
+  return (
+    <button
+      ref={(node) => {
+        drag.setNodeRef(node);
+        drop.setNodeRef(node);
+      }}
+      disabled={disabled}
+      style={{ ...style, opacity: drag.isDragging ? 0.45 : undefined }}
+      className={cn(
+        "cursor-grab active:cursor-grabbing",
+        drop.isOver && "ring-1 ring-primary",
+        className,
+      )}
+      {...props}
+      {...drag.attributes}
+      {...drag.listeners}
+    />
+  );
 }
 /* eslint-enable react-hooks/refs */
 
@@ -52,7 +69,14 @@ export interface ServerTabActions {
  * order the operator dragged them into. The one tab that persists an order, so
  * the one tab whose rows are drag sources.
  */
-export function ServersTab({ hosts, filtering, daemonViews, appVersion, actions, servers }: {
+export function ServersTab({
+  hosts,
+  filtering,
+  daemonViews,
+  appVersion,
+  actions,
+  servers,
+}: {
   hosts: HostAgents[];
   /** A search is on, so a group with no surviving member is hidden. */
   filtering: boolean;
@@ -85,10 +109,12 @@ export function ServersTab({ hosts, filtering, daemonViews, appVersion, actions,
       {hosts.map((host) => {
         const view = viewFor(host.host.id);
         const agents = hostAgents(host);
-        const groupNames = [...new Set([
-          ...(host.groups ?? []).map((group) => group.name),
-          ...agents.map((row) => row.group).filter(Boolean),
-        ])];
+        const groupNames = [
+          ...new Set([
+            ...(host.groups ?? []).map((group) => group.name),
+            ...agents.map((row) => row.group).filter(Boolean),
+          ]),
+        ];
         const teams = new Map<string, typeof agents>();
         for (const name of ordered(groupNames, host.sidebarOrder?.groups ?? [], (name) => name)) {
           teams.set(name, []);
@@ -120,10 +146,12 @@ export function ServersTab({ hosts, filtering, daemonViews, appVersion, actions,
                   {host.host.label}
                 </SortableButton>
               }
-              state={host.error ? "offline" : view?.state ?? "ready"}
-              update={view && hostUpdateAvailable(view, appVersion)
-                ? () => servers.onEditServer(host.host.id)
-                : undefined}
+              state={host.error ? "offline" : (view?.state ?? "ready")}
+              update={
+                view && hostUpdateAvailable(view, appVersion)
+                  ? () => servers.onEditServer(host.host.id)
+                  : undefined
+              }
               updateLabel={`Update ${host.host.label}`}
               menu={
                 // The implicit local host has no registry entry (id ""), so
@@ -141,8 +169,12 @@ export function ServersTab({ hosts, filtering, daemonViews, appVersion, actions,
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => servers.onEditServer(host.host.id)}>Edit host</DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => servers.onRemoveServer(host.host.id)}>Remove host</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => servers.onEditServer(host.host.id)}>
+                        Edit host
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => servers.onRemoveServer(host.host.id)}>
+                        Remove host
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )
@@ -165,7 +197,9 @@ export function ServersTab({ hosts, filtering, daemonViews, appVersion, actions,
             {host.error && <div className="px-2 text-xs text-destructive">{host.error}</div>}
             {teams.size > 0 && (
               <div className="mt-1">
-                <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-[.02em] text-muted-foreground">Teams</div>
+                <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-[.02em] text-muted-foreground">
+                  Teams
+                </div>
                 {[...teams.entries()]
                   .filter(([, rows]) => !filtering || rows.length > 0)
                   .map(([name, rows]) => (
@@ -182,7 +216,9 @@ export function ServersTab({ hosts, filtering, daemonViews, appVersion, actions,
                             event.stopPropagation();
                             if (!disabled) servers.onSelectTeam(host.host.id, name);
                           }}
-                        >{name}</SortableButton>
+                        >
+                          {name}
+                        </SortableButton>
                       </summary>
                       <div className="pl-2">
                         {rows.map((row) => (
@@ -199,7 +235,9 @@ export function ServersTab({ hosts, filtering, daemonViews, appVersion, actions,
               </div>
             )}
             <div className="mt-1">
-              <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-[.02em] text-muted-foreground">Individual agents</div>
+              <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-[.02em] text-muted-foreground">
+                Individual agents
+              </div>
               {individuals.map((row) => (
                 <SidebarAgentRow
                   key={row.key}

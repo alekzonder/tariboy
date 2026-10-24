@@ -29,7 +29,11 @@ describe("HostStatus", () => {
   it("shows a connected host with missing tools as an error without a connect action", () => {
     render(
       <HostStatus
-        host={host({ state: "error", baseURL: "http://127.0.0.1:18444", message: "missing required tools: npx" })}
+        host={host({
+          state: "error",
+          baseURL: "http://127.0.0.1:18444",
+          message: "missing required tools: npx",
+        })}
         appVersion="0.11.5"
         onConnect={vi.fn()}
       />,

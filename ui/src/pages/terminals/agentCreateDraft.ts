@@ -73,8 +73,8 @@ export function cloneAgentDraft(source: AgentView): AgentCreateDraft {
     source.messages_max_queue === undefined ||
     source.goal_enabled === undefined ||
     source.goal_wait_customer_timeout_s === undefined ||
-    source.goal_delivery_cooldown_s === undefined
-    || source.ai_stall_timeout_s === undefined
+    source.goal_delivery_cooldown_s === undefined ||
+    source.ai_stall_timeout_s === undefined
   ) {
     throw new Error("Update the source host before making a complete clone");
   }

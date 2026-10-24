@@ -33,9 +33,32 @@ function stubFetch(): string[] {
         },
         rows:
           groupBy === "epic"
-            ? [{ key: "dev-t-3e1", title: "Per-agent Usage epic", requests: 3, input_tokens: 1200, output_tokens: 800, cache_write_tokens: 0, cache_read_tokens: 500, cost_usd: 0.35 }]
-            : [{ key: "iter-123", requests: 3, input_tokens: 1200, output_tokens: 800, cache_write_tokens: 0, cache_read_tokens: 500, cost_usd: 0.35 }],
-        series: [{ bucket_start: "2026-07-12T10:00:00Z", requests: 3, tokens: 2000, cost_usd: 0.35 }],
+            ? [
+                {
+                  key: "dev-t-3e1",
+                  title: "Per-agent Usage epic",
+                  requests: 3,
+                  input_tokens: 1200,
+                  output_tokens: 800,
+                  cache_write_tokens: 0,
+                  cache_read_tokens: 500,
+                  cost_usd: 0.35,
+                },
+              ]
+            : [
+                {
+                  key: "iter-123",
+                  requests: 3,
+                  input_tokens: 1200,
+                  output_tokens: 800,
+                  cache_write_tokens: 0,
+                  cache_read_tokens: 500,
+                  cost_usd: 0.35,
+                },
+              ],
+        series: [
+          { bucket_start: "2026-07-12T10:00:00Z", requests: 3, tokens: 2000, cost_usd: 0.35 },
+        ],
       };
       return Promise.resolve({
         ok: true,
@@ -79,7 +102,9 @@ it("widens the bucket for a from-only custom range instead of leaving it at 1h",
   fireEvent.change(screen.getByLabelText("from"), { target: { value: "2026-01-01T00:00" } });
   await waitFor(() => expect(paths.some((p) => p.includes("bucket=1d"))).toBe(true));
   // And it never requested the from-only range at the 1h default.
-  const customCalls = paths.filter((p) => p.includes("since=2026-01-01") || p.includes("since=2025-12-31"));
+  const customCalls = paths.filter(
+    (p) => p.includes("since=2026-01-01") || p.includes("since=2025-12-31"),
+  );
   expect(customCalls.length).toBeGreaterThan(0);
   expect(customCalls.every((p) => !p.includes("bucket=1h"))).toBe(true);
 });
@@ -107,11 +132,15 @@ it("uses the Activity period instead of its own presets", async () => {
   render(
     <MemoryRouter>
       <AgentNameContext.Provider value="alice">
-        <AgentUsagePage period={{ since: "2026-10-01T00:00:00.000Z", until: "2026-10-08T00:00:00.000Z" }} />
+        <AgentUsagePage
+          period={{ since: "2026-10-01T00:00:00.000Z", until: "2026-10-08T00:00:00.000Z" }}
+        />
       </AgentNameContext.Provider>
     </MemoryRouter>,
   );
-  await waitFor(() => expect(paths.some((p) => p.includes("since=2026-10-01") && p.includes("bucket=1d"))).toBe(true));
+  await waitFor(() =>
+    expect(paths.some((p) => p.includes("since=2026-10-01") && p.includes("bucket=1d"))).toBe(true),
+  );
   expect(screen.queryByText("Custom")).not.toBeInTheDocument();
 });
 
@@ -127,6 +156,10 @@ it("lists the totals as labelled usage metrics", async () => {
   const totals = screen.getByLabelText("Usage totals");
   await waitFor(() => expect(totals).toHaveTextContent("$0.3500"));
   expect(screen.getAllByRole("term").map((term) => term.textContent)).toEqual([
-    "Requests", "Tokens in", "Tokens out", "Cache w/r", "Cost",
+    "Requests",
+    "Tokens in",
+    "Tokens out",
+    "Cache w/r",
+    "Cost",
   ]);
 });

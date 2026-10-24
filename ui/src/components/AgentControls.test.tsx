@@ -12,8 +12,13 @@ const remoteApi = () => fakeApi({ agents: { agentDelete } }, target);
 
 // Block body on purpose: an arrow returning the mock hands vitest a "cleanup
 // function" that is the mock itself, which it then calls and awaits.
-beforeEach(() => { agentDelete.mockReset(); });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+beforeEach(() => {
+  agentDelete.mockReset();
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 function renderControls(alive: boolean) {
   return render(
@@ -29,27 +34,49 @@ function renderControls(alive: boolean) {
 
 it("posts the run-state action of the toggle to the route host", async () => {
   const calls: Array<{ method: string; path: string }> = [];
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-    calls.push({ method: init?.method ?? "GET", path });
-    return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: {} }) } as Response);
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      calls.push({ method: init?.method ?? "GET", path });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result: {} }),
+      } as Response);
+    }),
+  );
   const { unmount } = renderControls(false);
 
   fireEvent.click(screen.getByRole("button", { name: "Start" }));
-  await waitFor(() => expect(calls.some((c) => c.path === "/api/agents/alpha/start" && c.method === "POST")).toBe(true));
+  await waitFor(() =>
+    expect(calls.some((c) => c.path === "/api/agents/alpha/start" && c.method === "POST")).toBe(
+      true,
+    ),
+  );
   unmount();
 
   renderControls(true);
   fireEvent.click(screen.getByRole("button", { name: "Stop" }));
-  await waitFor(() => expect(calls.some((c) => c.path === "/api/agents/alpha/stop" && c.method === "POST")).toBe(true));
+  await waitFor(() =>
+    expect(calls.some((c) => c.path === "/api/agents/alpha/stop" && c.method === "POST")).toBe(
+      true,
+    ),
+  );
 });
 
 it("confirms before killing the session and does nothing when the confirm is declined", async () => {
   const calls: string[] = [];
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string) => {
-    calls.push(path);
-    return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: {} }) } as Response);
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((path: string) => {
+      calls.push(path);
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result: {} }),
+      } as Response);
+    }),
+  );
   vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
   renderControls(true);
 
@@ -116,7 +143,12 @@ describe("delete from the overflow menu", () => {
 
   it("disables dismissal and duplicate submission while deletion is pending", async () => {
     let resolveDelete!: (value: unknown) => void;
-    vi.mocked(agentDelete).mockImplementation(() => new Promise((resolve) => { resolveDelete = resolve; }));
+    vi.mocked(agentDelete).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDelete = resolve;
+        }),
+    );
     const { onDeleted } = renderWithDelete();
     await openDelete();
     fireEvent.click(screen.getByRole("button", { name: "Delete agent" }));
@@ -147,7 +179,9 @@ describe("delete from the overflow menu", () => {
 
 describe("Exec in the header", () => {
   const agentPost = vi.fn();
-  beforeEach(() => { agentPost.mockReset(); });
+  beforeEach(() => {
+    agentPost.mockReset();
+  });
 
   function renderExec({ alive = true, image = "basic:latest" } = {}) {
     const refresh = vi.fn();
@@ -193,9 +227,9 @@ describe("Exec in the header", () => {
     fireEvent.change(input, { target: { value: "continue this task" } });
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Exec" }));
 
-    await waitFor(() => expect(agentPost).toHaveBeenCalledWith(
-      "worker", "exec", { prompt: "continue this task" },
-    ));
+    await waitFor(() =>
+      expect(agentPost).toHaveBeenCalledWith("worker", "exec", { prompt: "continue this task" }),
+    );
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(refresh).toHaveBeenCalledOnce();
     expect(onExec).toHaveBeenCalledOnce();
@@ -203,7 +237,12 @@ describe("Exec in the header", () => {
 
   it("omits an empty prompt and prevents duplicate requests while pending", async () => {
     let resolveRequest!: (value: unknown) => void;
-    agentPost.mockImplementation(() => new Promise((resolve) => { resolveRequest = resolve; }));
+    agentPost.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        }),
+    );
     renderExec();
     fireEvent.click(screen.getByRole("button", { name: "Exec" }));
     const submit = within(screen.getByRole("dialog")).getByRole("button", { name: "Exec" });

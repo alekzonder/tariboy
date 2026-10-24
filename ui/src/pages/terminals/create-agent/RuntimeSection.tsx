@@ -41,10 +41,7 @@ export function RuntimeSection({
   | "addPlugin"
 >) {
   return (
-    <section
-      aria-labelledby="create-agent-runtime"
-      className="space-y-3 rounded border p-3"
-    >
+    <section aria-labelledby="create-agent-runtime" className="space-y-3 rounded border p-3">
       <div>
         <h3 id="create-agent-runtime" className="font-medium">
           Runtime
@@ -85,11 +82,7 @@ export function RuntimeSection({
             : "Attach a terminal console."
         }
       />
-      <EnvironmentFields
-        draft={draft}
-        updateDraft={updateDraft}
-        formDisabled={formDisabled}
-      />
+      <EnvironmentFields draft={draft} updateDraft={updateDraft} formDisabled={formDisabled} />
       <PluginsFields
         draft={draft}
         updateDraft={updateDraft}

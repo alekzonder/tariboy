@@ -2,16 +2,16 @@ import { HOST_PROGRESS_STEPS, hostStepStates } from "@/lib/hostProgress";
 import { HostDiagnostics } from "./HostDiagnostics";
 import type { ServerForm } from "./useServerForm";
 
-export function HostOperationProgress({ operation, displayHost, output }: Pick<
-  ServerForm,
-  | "operation"
-  | "displayHost"
-  | "output"
->) {
+export function HostOperationProgress({
+  operation,
+  displayHost,
+  output,
+}: Pick<ServerForm, "operation" | "displayHost" | "output">) {
   const stepStates = hostStepStates(operation.currentStep, operation.status);
-  const progressSteps = operation.kind === "connect"
-    ? HOST_PROGRESS_STEPS.filter((step) => step.id === "connect" || step.id === "reconnect")
-    : HOST_PROGRESS_STEPS;
+  const progressSteps =
+    operation.kind === "connect"
+      ? HOST_PROGRESS_STEPS.filter((step) => step.id === "connect" || step.id === "reconnect")
+      : HOST_PROGRESS_STEPS;
   return (
     <section className="min-w-0 space-y-2 rounded-lg border p-3">
       <h3 className="text-sm font-medium">
@@ -24,18 +24,14 @@ export function HostOperationProgress({ operation, displayHost, output }: Pick<
       <ol className="space-y-1.5 text-sm">
         {progressSteps.map((step) => {
           const state = stepStates[step.id];
-          const label = operation.kind === "update"
-            ? step.updateLabel
-            : operation.kind === "connect" && step.id === "reconnect"
-              ? "Check existing Tariboy"
-              : step.provisionLabel;
-          const marker = state === "complete"
-            ? "✓"
-            : state === "failed"
-              ? "×"
-              : state === "active"
-                ? "●"
-                : "○";
+          const label =
+            operation.kind === "update"
+              ? step.updateLabel
+              : operation.kind === "connect" && step.id === "reconnect"
+                ? "Check existing Tariboy"
+                : step.provisionLabel;
+          const marker =
+            state === "complete" ? "✓" : state === "failed" ? "×" : state === "active" ? "●" : "○";
           return (
             <li
               key={step.id}
@@ -84,11 +80,9 @@ export function HostOperationProgress({ operation, displayHost, output }: Pick<
       )}
 
       <HostDiagnostics
-
         displayHost={displayHost}
 
         output={output}
-
       />
     </section>
   );

@@ -1,8 +1,8 @@
-import type { ComponentProps } from "react"
+import type { ComponentProps } from "react";
 
-import { StatusDot, StatusPill } from "@/components/ui/status"
-import { agentTone } from "@/lib/statusTone"
-import { cn } from "@/lib/utils"
+import { StatusDot, StatusPill } from "@/components/ui/status";
+import { agentTone } from "@/lib/statusTone";
+import { cn } from "@/lib/utils";
 
 /**
  * One agent in the sidebar. 30px tall, and the selected one is the same
@@ -22,17 +22,17 @@ export function AgentRow({
   className,
   ...props
 }: ComponentProps<"button"> & {
-  name: string
-  state: string
+  name: string;
+  state: string;
   /** Budget exhausted — outranks the state in both the dot and the pill. */
-  outOfBudget?: boolean
-  selected?: boolean
+  outOfBudget?: boolean;
+  selected?: boolean;
   /** Unread chat messages from this agent. Zero renders nothing at all. */
-  unreadMessages?: number
+  unreadMessages?: number;
   /** false → the agent has no tty; shown as a quiet marker after the name. */
-  interactive?: boolean
+  interactive?: boolean;
 }) {
-  const tone = agentTone(state, outOfBudget)
+  const tone = agentTone(state, outOfBudget);
   return (
     <button
       type="button"
@@ -48,7 +48,10 @@ export function AgentRow({
       <StatusDot tone={tone} />
       <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
       {!interactive && (
-        <span className="shrink-0 text-[11px] text-muted-foreground" title="not interactive (no tty)">
+        <span
+          className="shrink-0 text-[11px] text-muted-foreground"
+          title="not interactive (no tty)"
+        >
           non-tty
         </span>
       )}
@@ -62,7 +65,11 @@ export function AgentRow({
         </span>
       )}
       {outOfBudget ? (
-        <StatusPill tone="danger" size="sm" title="Budget exhausted — agent paused until the cap is raised">
+        <StatusPill
+          tone="danger"
+          size="sm"
+          title="Budget exhausted — agent paused until the cap is raised"
+        >
           no budget
         </StatusPill>
       ) : (
@@ -71,5 +78,5 @@ export function AgentRow({
         </StatusPill>
       )}
     </button>
-  )
+  );
 }

@@ -43,12 +43,17 @@ export function useAgentChat(hostId: string) {
   const current = shared.find((chat) => chat.id === selected);
   // Only a participant's message can be unread, the rule the daemon counts by.
   const participants = useMemo(
-    () => (isKind(selected) ? [customer, `agent:${name}`] : current?.participants ?? []),
+    () => (isKind(selected) ? [customer, `agent:${name}`] : (current?.participants ?? [])),
     [selected, customer, name, current],
   );
 
   const { anchor, captureAnchor, markShownRead, markRead, markUnread } = useChatReadState({
-    name, hostId, selected, chatId, messages, customer,
+    name,
+    hostId,
+    selected,
+    chatId,
+    messages,
+    customer,
   });
 
   const load = useCallback(async () => {
@@ -99,26 +104,26 @@ export function useAgentChat(hostId: string) {
     onHint: (hint) => {
       if (hint.chat ? hint.chat === chatId : hint.agent === name) void load();
     },
-    onOpen: () => { void load(); },
+    onOpen: () => {
+      void load();
+    },
   });
 
   const feed = useMemo(
-    () => buildFeed(
-      pending ? [...messages, pending] : messages,
-      customer,
-      anchor ?? "",
-      participants,
-    ),
+    () =>
+      buildFeed(pending ? [...messages, pending] : messages, customer, anchor ?? "", participants),
     [messages, pending, customer, anchor, participants],
   );
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return feed;
-    return feed.filter((item) => item.kind !== "message" || item.message.text.toLowerCase().includes(needle));
+    return feed.filter(
+      (item) => item.kind !== "message" || item.message.text.toLowerCase().includes(needle),
+    );
   }, [feed, query]);
   const newCount = anchor === null ? 0 : unreadCount(messages, customer, anchor, participants);
-  const openQuestion = messages.at(-1)?.type === QUESTION_TYPE
-    && messages.at(-1)?.from !== customer;
+  const openQuestion =
+    messages.at(-1)?.type === QUESTION_TYPE && messages.at(-1)?.from !== customer;
 
   const toggleType = (type: string) => {
     const next = types.includes(type) ? types.filter((t) => t !== type) : [...types, type];
@@ -137,10 +142,18 @@ export function useAgentChat(hostId: string) {
     if (!text || sending) return;
     setSending(true);
     const chatChannel = `chat:${chatId}`;
-    setPending({ scope, message: {
-      id: `pending:${Date.now()}`, channel: chatChannel, ts: new Date().toISOString(),
-      from: customer, source: customer, type: "message", text,
-    } });
+    setPending({
+      scope,
+      message: {
+        id: `pending:${Date.now()}`,
+        channel: chatChannel,
+        ts: new Date().toISOString(),
+        from: customer,
+        source: customer,
+        type: "message",
+        text,
+      },
+    });
     try {
       // The chat owns this channel, so the agent reply lands here without the
       // client having to name a reply target.
@@ -158,15 +171,38 @@ export function useAgentChat(hostId: string) {
   };
 
   function reply(item: FeedMessage) {
-    const quoted = item.message.text.split("\n").map((line) => `> ${line}`).join("\n");
+    const quoted = item.message.text
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
     setDraft((current) => `${quoted}\n\n${current}`);
   }
 
   return {
-    name, messages, customer, types, draft, setDraft, query, setQuery,
-    sending, selected, setSelected, shared, current, writable, shown,
-    newCount, openQuestion, markRead, markUnread, toggleType, resetTypes,
-    send, reply, loadShared,
+    name,
+    messages,
+    customer,
+    types,
+    draft,
+    setDraft,
+    query,
+    setQuery,
+    sending,
+    selected,
+    setSelected,
+    shared,
+    current,
+    writable,
+    shown,
+    newCount,
+    openQuestion,
+    markRead,
+    markUnread,
+    toggleType,
+    resetTypes,
+    send,
+    reply,
+    loadShared,
   };
 }
 

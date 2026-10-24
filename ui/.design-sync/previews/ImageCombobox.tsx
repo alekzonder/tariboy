@@ -7,7 +7,13 @@ import { ImageCombobox, Label } from "tariboy-ui";
 // opens on focus. Fixtures follow ImageRow in src/lib/api.ts.
 
 const images = [
-  { name: "worker", tag: "v2", bare: false, built_at: "2026-09-11T09:14:00Z", current_agents: ["builder", "reviewer"] },
+  {
+    name: "worker",
+    tag: "v2",
+    bare: false,
+    built_at: "2026-09-11T09:14:00Z",
+    current_agents: ["builder", "reviewer"],
+  },
   { name: "worker", tag: "v1", bare: false, built_at: "2026-08-28T17:02:00Z" },
   { name: "bare", tag: "latest", bare: true, built_at: "2026-09-02T11:40:00Z" },
   { name: "packager", tag: "v3", bare: false, built_at: "2026-09-10T20:31:00Z" },
@@ -61,7 +67,15 @@ export const OpenList = () => {
 // The group wizard gives each row's picker a distinct accessible name and packs
 // it beside the agent name, so the field lives in a tight two-column grid.
 export const InGroupWizardRow = () => (
-  <div style={{ width: 460, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignItems: "end" }}>
+  <div
+    style={{
+      width: 460,
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 12,
+      alignItems: "end",
+    }}
+  >
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <Label htmlFor="wiz-name">name</Label>
       <div

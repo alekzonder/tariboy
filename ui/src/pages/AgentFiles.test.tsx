@@ -6,7 +6,11 @@ import AgentFiles from "./AgentFiles";
 
 afterEach(() => vi.restoreAllMocks());
 
-interface Call { method: string; url: string; body: unknown }
+interface Call {
+  method: string;
+  url: string;
+  body: unknown;
+}
 
 // Route each request by its path to a canned {ok,result} envelope and record
 // every call so mutation tests can assert method + body. The root listing
@@ -36,7 +40,12 @@ function stubFetch(): Call[] {
           entries: [{ name: "guide.txt", isDir: false, size: 3, mtime: 1752278400 }],
         };
       } else if (url.includes("/file?path=README.md")) {
-        result = { path: "README.md", kind: "text", content: "# Hello world\n\nbody text", size: 12 };
+        result = {
+          path: "README.md",
+          kind: "text",
+          content: "# Hello world\n\nbody text",
+          size: 12,
+        };
       }
       return Promise.resolve({
         ok: true,
@@ -80,7 +89,9 @@ it("opens a markdown file as a preview and toggles to source", async () => {
   fireEvent.click(screen.getByText("README.md"));
 
   // Preview renders markdown → an <h1> from the heading, not the raw "#".
-  await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hello world"));
+  await waitFor(() =>
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hello world"),
+  );
 
   // Toggle to Source shows the raw markdown text.
   fireEvent.click(screen.getByText("Source"));
@@ -93,7 +104,9 @@ it("saves the open file with PUT {path, content}", async () => {
 
   await waitFor(() => expect(screen.getByText("README.md")).toBeInTheDocument());
   fireEvent.click(screen.getByText("README.md"));
-  await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hello world"));
+  await waitFor(() =>
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hello world"),
+  );
 
   // Enter edit mode (Preview stays mounted — no CodeMirror needed) and save.
   fireEvent.click(screen.getByText("Edit"));
@@ -165,9 +178,15 @@ it("reveals a newly created nested directory by refreshing the nearest loaded an
       let result: unknown = {};
       if (url.includes("/file/list?path=&") || url.endsWith("/file/list?path=")) {
         // Root gains the new "sub" folder only once it has been created.
-        result = { path: "", entries: created ? [{ name: "sub", isDir: true, size: 0, mtime: 1752278400 }] : [] };
+        result = {
+          path: "",
+          entries: created ? [{ name: "sub", isDir: true, size: 0, mtime: 1752278400 }] : [],
+        };
       } else if (url.includes("/file/list?path=sub")) {
-        result = { path: "sub", entries: created ? [{ name: "a.txt", isDir: false, size: 0, mtime: 1752278400 }] : [] };
+        result = {
+          path: "sub",
+          entries: created ? [{ name: "a.txt", isDir: false, size: 0, mtime: 1752278400 }] : [],
+        };
       } else if ((init?.method ?? "GET") === "POST") {
         created = true;
         result = { path: "sub/a.txt", created: true };

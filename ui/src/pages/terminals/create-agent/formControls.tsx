@@ -41,12 +41,7 @@ export function SwitchRow({
         <Label htmlFor={id}>{label}</Label>
         <p className="text-xs text-muted-foreground">{help}</p>
       </div>
-      <Switch
-        id={id}
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        disabled={disabled}
-      />
+      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
     </div>
   );
 }

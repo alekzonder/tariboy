@@ -13,79 +13,139 @@ afterEach(() => {
   localStorage.clear();
 });
 
-interface Call { path: string; method: string; body: unknown }
+interface Call {
+  path: string;
+  method: string;
+  body: unknown;
+}
 
 const feed = [
   {
-    id: "m1", channel: "agent:worker:inbox", ts: "2026-09-15T10:00:00.000000000Z",
-    from: "user:customer", source: "user:customer", type: "message", text: "please look at this",
+    id: "m1",
+    channel: "agent:worker:inbox",
+    ts: "2026-09-15T10:00:00.000000000Z",
+    from: "user:customer",
+    source: "user:customer",
+    type: "message",
+    text: "please look at this",
   },
   {
-    id: "m2", channel: "user:customer", ts: "2026-09-15T10:05:00.000000000Z",
-    from: "agent:worker", source: "system:tasks", type: "task.question", text: "which option?",
-    data: { task_key: "TEST-7" }, subject: { task_key: "TEST-7" },
+    id: "m2",
+    channel: "user:customer",
+    ts: "2026-09-15T10:05:00.000000000Z",
+    from: "agent:worker",
+    source: "system:tasks",
+    type: "task.question",
+    text: "which option?",
+    data: { task_key: "TEST-7" },
+    subject: { task_key: "TEST-7" },
   },
   {
-    id: "m3", channel: "user:customer", ts: "2026-09-15T10:06:00.000000000Z",
-    from: "agent:worker", source: "agent:worker", type: "message", text: "done with TEST-8 now",
+    id: "m3",
+    channel: "user:customer",
+    ts: "2026-09-15T10:06:00.000000000Z",
+    from: "agent:worker",
+    source: "agent:worker",
+    type: "message",
+    text: "done with TEST-8 now",
   },
 ];
 
 // The agent's tasks chat is its own conversation: task notifications only.
 const tasksFeed = [
   {
-    id: "t1", channel: "chat:tasks:worker", ts: "2026-09-15T11:00:00.000000000Z",
-    from: "system:tasks", source: "system:tasks", type: "task.assigned",
-    text: "assigned to you", data: { task_key: "TEST-7" },
+    id: "t1",
+    channel: "chat:tasks:worker",
+    ts: "2026-09-15T11:00:00.000000000Z",
+    from: "system:tasks",
+    source: "system:tasks",
+    type: "task.assigned",
+    text: "assigned to you",
+    data: { task_key: "TEST-7" },
   },
 ];
 
 const taskDetail = {
   task: {
-    key: "TEST-7", queue: "TEST", parent_key: "", position: 0, priority: "P1",
-    title: "Answer the question", description: "", status: "open", pull_request: "",
-    author: "user:customer", customer: "user:customer", group: "", assignee: "agent:worker",
-    manual_block_reason: "", blocked: false, revision: 1,
-    created_at: "2026-09-15T10:00:00Z", updated_at: "2026-09-15T10:00:00Z", completed_at: "",
+    key: "TEST-7",
+    queue: "TEST",
+    parent_key: "",
+    position: 0,
+    priority: "P1",
+    title: "Answer the question",
+    description: "",
+    status: "open",
+    pull_request: "",
+    author: "user:customer",
+    customer: "user:customer",
+    group: "",
+    assignee: "agent:worker",
+    manual_block_reason: "",
+    blocked: false,
+    revision: 1,
+    created_at: "2026-09-15T10:00:00Z",
+    updated_at: "2026-09-15T10:00:00Z",
+    completed_at: "",
   },
-  comments: [], waiting_for: [], relations: [],
+  comments: [],
+  waiting_for: [],
+  relations: [],
 };
 
 /** `readTS` is the mark the daemon reports with the feed; an empty one is a
  *  chat that has never been read, which draws no unread rule. */
 function stubChat(messages = feed, readTS = "") {
   const calls: Call[] = [];
-  vi.stubGlobal("WebSocket", class {
-    close = vi.fn();
-  });
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-    calls.push({
-      path, method: init?.method ?? "GET",
-      body: init?.body ? JSON.parse(init.body as string) : undefined,
-    });
-    let result: unknown = { ok: true };
-    path = path.replace(/^https?:\/\/[^/]+/, "");
-    if (path.startsWith(`/api/chats/${encodeURIComponent("dm:worker")}`)) {
-      result = {
-        customer: "user:customer", agent: "worker", chat: "dm:worker", kind: "direct",
-        messages, count: messages.length, read_ts: readTS,
-      };
-    } else if (path.startsWith(`/api/chats/${encodeURIComponent("tasks:worker")}`)) {
-      result = {
-        customer: "user:customer", agent: "worker", chat: "tasks:worker", kind: "tasks",
-        messages: tasksFeed, count: tasksFeed.length, read_ts: "",
-      };
-    } else if (path.startsWith("/api/tasks/TEST-7/events")) {
-      result = { events: [], count: 0 };
-    } else if (path.startsWith("/api/tasks/TEST-7")) {
-      result = taskDetail;
-    } else if (path === "/api/task-principals") {
-      result = { customer: "user:customer", agents: ["worker"], groups: [] };
-    }
-    return Promise.resolve({
-      ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }),
-    } as Response);
-  }));
+  vi.stubGlobal(
+    "WebSocket",
+    class {
+      close = vi.fn();
+    },
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      calls.push({
+        path,
+        method: init?.method ?? "GET",
+        body: init?.body ? JSON.parse(init.body as string) : undefined,
+      });
+      let result: unknown = { ok: true };
+      path = path.replace(/^https?:\/\/[^/]+/, "");
+      if (path.startsWith(`/api/chats/${encodeURIComponent("dm:worker")}`)) {
+        result = {
+          customer: "user:customer",
+          agent: "worker",
+          chat: "dm:worker",
+          kind: "direct",
+          messages,
+          count: messages.length,
+          read_ts: readTS,
+        };
+      } else if (path.startsWith(`/api/chats/${encodeURIComponent("tasks:worker")}`)) {
+        result = {
+          customer: "user:customer",
+          agent: "worker",
+          chat: "tasks:worker",
+          kind: "tasks",
+          messages: tasksFeed,
+          count: tasksFeed.length,
+          read_ts: "",
+        };
+      } else if (path.startsWith("/api/tasks/TEST-7/events")) {
+        result = { events: [], count: 0 };
+      } else if (path.startsWith("/api/tasks/TEST-7")) {
+        result = taskDetail;
+      } else if (path === "/api/task-principals") {
+        result = { customer: "user:customer", agents: ["worker"], groups: [] };
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result }),
+      } as Response);
+    }),
+  );
   return calls;
 }
 
@@ -115,10 +175,12 @@ it("renders both halves of the conversation and marks it read at the newest show
 });
 
 it("renders message Markdown without executing anything inside it", async () => {
-  stubChat([{
-    ...feed[0],
-    text: "**bold** and `code`\n\n<img src=x onerror=\"window.pwned = true\">\n\n```sql\nSELECT 1;\n```",
-  }]);
+  stubChat([
+    {
+      ...feed[0],
+      text: '**bold** and `code`\n\n<img src=x onerror="window.pwned = true">\n\n```sql\nSELECT 1;\n```',
+    },
+  ]);
   const { container } = renderChat();
   expect(await screen.findByText("bold")).toHaveRole("strong");
   expect(screen.getByText("code").tagName).toBe("CODE");
@@ -138,7 +200,9 @@ it("sends into the agent's inbox with the customer channel as the reply target",
   await waitFor(() => {
     const sent = calls.find((call) => call.path === "/api/messages");
     expect(sent?.body).toEqual({
-      channel: "chat:dm:worker", type: "message", text: "on it",
+      channel: "chat:dm:worker",
+      type: "message",
+      text: "on it",
     });
   });
 });
@@ -147,9 +211,14 @@ it("sends with Meta+Enter from the composer", async () => {
   const calls = stubChat();
   renderChat();
   await screen.findByText("please look at this");
-  await userEvent.type(screen.getByLabelText("Message worker"), "quick answer{Meta>}{Enter}{/Meta}");
+  await userEvent.type(
+    screen.getByLabelText("Message worker"),
+    "quick answer{Meta>}{Enter}{/Meta}",
+  );
   await waitFor(() => {
-    expect(calls.find((call) => call.path === "/api/messages")?.body).toMatchObject({ text: "quick answer" });
+    expect(calls.find((call) => call.path === "/api/messages")?.body).toMatchObject({
+      text: "quick answer",
+    });
   });
 });
 
@@ -162,7 +231,9 @@ it("keeps a chosen message-type filter and refetches with it", async () => {
   await waitFor(() => {
     expect(calls.some((call) => call.path.includes(encodeURIComponent("task.goal")))).toBe(true);
   });
-  expect(JSON.parse(localStorage.getItem("terminals:chat-types:v1") ?? "[]")).toContain("task.goal");
+  expect(JSON.parse(localStorage.getItem("terminals:chat-types:v1") ?? "[]")).toContain(
+    "task.goal",
+  );
 });
 
 it("draws the unread rule once against the mark the chat was opened at", async () => {
@@ -189,7 +260,10 @@ it("marks the chat unread by moving the daemon's mark back to before the agent's
   // Nothing is new, so the toolbar offers the opposite action.
   await userEvent.click(screen.getByRole("button", { name: "Mark unread" }));
   await waitFor(() => {
-    expect(readCalls(calls).at(-1)?.body).toEqual({ ts: "2026-09-15T10:05:00.000000000Z", exact: true });
+    expect(readCalls(calls).at(-1)?.body).toEqual({
+      ts: "2026-09-15T10:05:00.000000000Z",
+      exact: true,
+    });
   });
   // The rule is back and the toolbar has flipped to the opposite action.
   expect(await screen.findByTestId("chat-unread-divider")).toBeInTheDocument();
@@ -218,7 +292,9 @@ it("opens the agent's tasks chat by its own id and keeps its task card", async (
 
   await userEvent.click(screen.getByRole("tab", { name: "Tasks" }));
   expect(await screen.findByText("assigned to you")).toBeInTheDocument();
-  expect(calls.some((call) => call.path.startsWith(`/api/chats/${encodeURIComponent("tasks:worker")}?`))).toBe(true);
+  expect(
+    calls.some((call) => call.path.startsWith(`/api/chats/${encodeURIComponent("tasks:worker")}?`)),
+  ).toBe(true);
   // The task key stays a button into the existing drawer, wherever it is read.
   await userEvent.click(screen.getByRole("button", { name: "TEST-7" }));
   expect(await screen.findByText("Answer the question")).toBeInTheDocument();
@@ -227,24 +303,53 @@ it("opens the agent's tasks chat by its own id and keeps its task card", async (
 it("refetches only the chat a live hint names", async () => {
   const sockets: Array<{ onmessage: ((event: MessageEvent) => void) | null }> = [];
   const calls = stubChat();
-  vi.stubGlobal("WebSocket", class {
-    onmessage: ((event: MessageEvent) => void) | null = null;
-    close = vi.fn();
-    constructor() { sockets.push(this as never); }
-  });
+  vi.stubGlobal(
+    "WebSocket",
+    class {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      close = vi.fn();
+      constructor() {
+        sockets.push(this as never);
+      }
+    },
+  );
   renderChat();
   await screen.findByText("please look at this");
   const before = calls.filter((call) => call.path.startsWith(`${DM}?`)).length;
 
-  sockets.forEach((socket) => socket.onmessage?.(new MessageEvent("message", {
-    data: JSON.stringify({ agent: "worker", chat: "tasks:worker", id: "t9", channel: "chat:tasks:worker", type: "task.assigned", from: "system:tasks", ts: "t" }),
-  })));
+  sockets.forEach((socket) =>
+    socket.onmessage?.(
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          agent: "worker",
+          chat: "tasks:worker",
+          id: "t9",
+          channel: "chat:tasks:worker",
+          type: "task.assigned",
+          from: "system:tasks",
+          ts: "t",
+        }),
+      }),
+    ),
+  );
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(calls.filter((call) => call.path.startsWith(`${DM}?`)).length).toBe(before);
 
-  sockets.forEach((socket) => socket.onmessage?.(new MessageEvent("message", {
-    data: JSON.stringify({ agent: "worker", chat: "dm:worker", id: "m9", channel: "chat:dm:worker", type: "message", from: "agent:worker", ts: "t" }),
-  })));
+  sockets.forEach((socket) =>
+    socket.onmessage?.(
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          agent: "worker",
+          chat: "dm:worker",
+          id: "m9",
+          channel: "chat:dm:worker",
+          type: "message",
+          from: "agent:worker",
+          ts: "t",
+        }),
+      }),
+    ),
+  );
   await waitFor(() => {
     expect(calls.filter((call) => call.path.startsWith(`${DM}?`)).length).toBeGreaterThan(before);
   });
@@ -252,7 +357,12 @@ it("refetches only the chat a live hint names", async () => {
 
 it("re-reads the conversation from the new endpoint after the host reconnects", async () => {
   stubChat();
-  const remote = (baseURL: string): Daemon => ({ id: "remote", label: "Remote", baseURL, token: "t" });
+  const remote = (baseURL: string): Daemon => ({
+    id: "remote",
+    label: "Remote",
+    baseURL,
+    token: "t",
+  });
   // The agent workspace is the boundary that names the host.
   const tree = (target: Daemon) => (
     <ApiProvider target={target}>
@@ -267,11 +377,15 @@ it("re-reads the conversation from the new endpoint after the host reconnects", 
   view.rerender(tree(remote("")));
   view.rerender(tree(remote("http://127.0.0.1:41002")));
 
-  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([path]) =>
-    String(path).startsWith(`http://127.0.0.1:41002${DM}`))).toBe(true));
+  await waitFor(() =>
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(([path]) => String(path).startsWith(`http://127.0.0.1:41002${DM}`)),
+    ).toBe(true),
+  );
   expect(screen.getByText("please look at this")).toBeInTheDocument();
 });
-
 
 it("keeps the composer draft after sending fails", async () => {
   stubChat();
@@ -279,8 +393,10 @@ it("keeps the composer draft after sending fails", async () => {
   vi.mocked(fetch).mockImplementation((...args) => {
     if (String(args[0]).endsWith("/api/messages")) {
       return Promise.resolve({
-        ok: false, status: 500,
-        text: async () => JSON.stringify({ ok: false, error: { code: "failed", message: "offline" } }),
+        ok: false,
+        status: 500,
+        text: async () =>
+          JSON.stringify({ ok: false, error: { code: "failed", message: "offline" } }),
       } as Response);
     }
     return fetchChat(...args);

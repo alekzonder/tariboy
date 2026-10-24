@@ -1,14 +1,36 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  isDesktop, isAndroidShell, hasLocalDaemon, androidBaseURLError, invokeDesktop, daemonState, daemonStart, daemonRestart,
-  daemonLogTail, installCli, hostsList, hostSaveSsh, hostSaveHttps,
-  hostSessionCredentials, hostHasToken, hostRemove, onDaemonState,
-  hostProvision, hostConnect, hostUpdate, hostPromptReply,
-  openAgentCwdInVSCode, openExternalUrl, opensWebLinks,
-  showTaskNotification, onTaskNotificationActivated,
-  onHostState, onHostProvisionOutput,
-  versionMismatch, missingHTTPListener,
+  isDesktop,
+  isAndroidShell,
+  hasLocalDaemon,
+  androidBaseURLError,
+  invokeDesktop,
+  daemonState,
+  daemonStart,
+  daemonRestart,
+  daemonLogTail,
+  installCli,
+  hostsList,
+  hostSaveSsh,
+  hostSaveHttps,
+  hostSessionCredentials,
+  hostHasToken,
+  hostRemove,
+  onDaemonState,
+  hostProvision,
+  hostConnect,
+  hostUpdate,
+  hostPromptReply,
+  openAgentCwdInVSCode,
+  openExternalUrl,
+  opensWebLinks,
+  showTaskNotification,
+  onTaskNotificationActivated,
+  onHostState,
+  onHostProvisionOutput,
+  versionMismatch,
+  missingHTTPListener,
   type DesktopDaemonState,
 } from "./desktop";
 
@@ -45,8 +67,9 @@ describe("desktop calls outside Tauri", () => {
     await expect(installCli()).resolves.toBeNull();
     await expect(hostsList()).resolves.toBeNull();
     await expect(hostSaveSsh({ label: "dev", ssh_alias: "devbox" })).resolves.toBeNull();
-    await expect(hostSaveHttps({ label: "prod", https_base_url: "https://prod" }, "token"))
-      .resolves.toBeNull();
+    await expect(
+      hostSaveHttps({ label: "prod", https_base_url: "https://prod" }, "token"),
+    ).resolves.toBeNull();
     await expect(hostSessionCredentials("host-id")).resolves.toBeNull();
     await expect(hostHasToken("host-id")).resolves.toBeNull();
     await expect(hostRemove("host-id")).resolves.toBeNull();
@@ -78,13 +101,15 @@ describe("desktop calls outside Tauri", () => {
   });
 
   it("task notifications are unavailable and activation safely unsubscribes outside Tauri", async () => {
-    await expect(showTaskNotification({
-      host_id: "remote-1",
-      notification_id: "tn_1",
-      task_key: "ASK-1",
-      server_label: "production",
-      agent_name: "alice",
-    })).resolves.toEqual({ outcome: "unavailable" });
+    await expect(
+      showTaskNotification({
+        host_id: "remote-1",
+        notification_id: "tn_1",
+        task_key: "ASK-1",
+        server_label: "production",
+        agent_name: "alice",
+      }),
+    ).resolves.toEqual({ outcome: "unavailable" });
 
     const activated = vi.fn();
     const unsubscribe = onTaskNotificationActivated(activated);
@@ -122,7 +147,9 @@ function makeState(overrides: Partial<DesktopDaemonState> = {}): DesktopDaemonSt
 
 describe("versionMismatch", () => {
   it("is false when daemon_version equals app_version", () => {
-    expect(versionMismatch(makeState({ daemon_version: "1.2.3", app_version: "1.2.3" }))).toBe(false);
+    expect(versionMismatch(makeState({ daemon_version: "1.2.3", app_version: "1.2.3" }))).toBe(
+      false,
+    );
   });
 
   it("is false when daemon_version is unknown (empty string)", () => {
@@ -130,7 +157,9 @@ describe("versionMismatch", () => {
   });
 
   it("is true when daemon_version differs from app_version", () => {
-    expect(versionMismatch(makeState({ daemon_version: "1.2.3", app_version: "1.3.0" }))).toBe(true);
+    expect(versionMismatch(makeState({ daemon_version: "1.2.3", app_version: "1.3.0" }))).toBe(
+      true,
+    );
   });
 });
 
@@ -140,7 +169,9 @@ describe("missingHTTPListener", () => {
   });
 
   it("is false when a base_url is present", () => {
-    expect(missingHTTPListener(makeState({ state: "ready", base_url: "http://127.0.0.1:9990" }))).toBe(false);
+    expect(
+      missingHTTPListener(makeState({ state: "ready", base_url: "http://127.0.0.1:9990" })),
+    ).toBe(false);
   });
 
   it("is false when starting even with an empty base_url", () => {
@@ -181,7 +212,12 @@ describe("android shell", () => {
 
     await expect(openExternalUrl("https://example.test/a?b=1")).resolves.toBeNull();
     expect(open).toHaveBeenCalledWith("https://example.test/a?b=1", "_self");
-    for (const bad of ["javascript:alert(1)", "file:///etc/passwd", "intent://x#Intent;end", "not a url"]) {
+    for (const bad of [
+      "javascript:alert(1)",
+      "file:///etc/passwd",
+      "intent://x#Intent;end",
+      "not a url",
+    ]) {
       await expect(openExternalUrl(bad), bad).rejects.toThrow();
     }
     expect(open).toHaveBeenCalledTimes(1);

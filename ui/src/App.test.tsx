@@ -38,14 +38,23 @@ beforeEach(() => {
     "fetch",
     vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
-      const result = url.includes("/api/usage") ? {
-          total_requests: 0, total_cost_usd: 0, total_input_tokens: 0,
-          total_output_tokens: 0, total_cache_write_tokens: 0, total_cache_read_tokens: 0,
-          rows: [], series: [], requests: [],
-        }
-        : url.includes("/api/groups") ? { groups: [], count: 0 }
-        : url.includes("/api/channels") ? { channels: [] }
-        : { agents: [], count: 0 };
+      const result = url.includes("/api/usage")
+        ? {
+            total_requests: 0,
+            total_cost_usd: 0,
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_cache_write_tokens: 0,
+            total_cache_read_tokens: 0,
+            rows: [],
+            series: [],
+            requests: [],
+          }
+        : url.includes("/api/groups")
+          ? { groups: [], count: 0 }
+          : url.includes("/api/channels")
+            ? { channels: [] }
+            : { agents: [], count: 0 };
       return {
         ok: true,
         status: 200,
@@ -68,10 +77,8 @@ describe("product routing", () => {
     for (const label of ["Workspace", "Agents", "Tasks", "Images", "Settings"]) {
       expect(within(titlebar).queryByRole("link", { name: label })).toBeNull();
     }
-    expect(within(titlebar).getByRole("button", { name: "Hide agents" }))
-      .toBeInTheDocument();
-    expect(within(titlebar).getByRole("button", { name: "Toggle theme" }))
-      .toBeInTheDocument();
+    expect(within(titlebar).getByRole("button", { name: "Hide agents" })).toBeInTheDocument();
+    expect(within(titlebar).getByRole("button", { name: "Toggle theme" })).toBeInTheDocument();
   });
 
   it("switches between Agents and All tasks through ?view=all on the current route", async () => {
@@ -79,15 +86,29 @@ describe("product routing", () => {
 
     const titlebar = screen.getByTestId("app-titlebar");
     const view = within(titlebar).getByRole("radiogroup", { name: "View" });
-    expect(within(view).getByRole("radio", { name: "Agents" })).toHaveAttribute("aria-checked", "true");
+    expect(within(view).getByRole("radio", { name: "Agents" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
 
     fireEvent.click(within(view).getByRole("radio", { name: "All tasks" }));
     // The navigation commits once the lazily loaded All tasks screen is ready.
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/builder/console?task=X-1&view=all"));
-    expect(within(view).getByRole("radio", { name: "All tasks" })).toHaveAttribute("aria-checked", "true");
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/agents/local/builder/console?task=X-1&view=all",
+      ),
+    );
+    expect(within(view).getByRole("radio", { name: "All tasks" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
 
     fireEvent.click(within(view).getByRole("radio", { name: "Agents" }));
-    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/agents/local/builder/console?task=X-1"));
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toBe(
+        "/agents/local/builder/console?task=X-1",
+      ),
+    );
   });
 
   it("hides the agents sidebar control in All tasks", () => {
@@ -112,8 +133,7 @@ describe("product routing", () => {
 
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app-settings"));
     expect(screen.getByRole("heading", { name: "Application settings" })).toBeInTheDocument();
-    expect(screen.getByText("Updates are only available in the Desktop app."))
-      .toBeInTheDocument();
+    expect(screen.getByText("Updates are only available in the Desktop app.")).toBeInTheDocument();
   });
 
   it("renders Tasks inside an explicit server workspace", async () => {
@@ -121,8 +141,7 @@ describe("product routing", () => {
 
     expect(await screen.findByLabelText("Search tasks")).toBeInTheDocument();
     expect(screen.getByTestId("tasks-workspace")).toHaveAttribute("data-scope-agent", "");
-    expect(screen.getByRole("navigation", { name: "Server workspace" }))
-      .toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Server workspace" })).toBeInTheDocument();
   });
 
   it.each([
@@ -151,8 +170,9 @@ describe("product routing", () => {
     fireEvent.click(toggle);
 
     expect(screen.getByRole("button", { name: "Show agents" })).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
-      .toMatchObject({ hidden: true });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!)).toMatchObject({
+      hidden: true,
+    });
   });
 
   it("keeps the macOS titlebar safe and draggable when the daemon banner is visible", async () => {
@@ -160,12 +180,11 @@ describe("product routing", () => {
     renderAt("/");
 
     const header = screen.getByTestId("app-titlebar");
-    const daemonBanner = await screen.findByText(
-      "daemon unreachable — is tariboyd running?",
-    );
+    const daemonBanner = await screen.findByText("daemon unreachable — is tariboyd running?");
     expect(header).toHaveAttribute("data-tauri-drag-region", "deep");
-    expect(screen.getByRole("button", { name: "Hide agents" }))
-      .not.toHaveAttribute("data-tauri-drag-region");
+    expect(screen.getByRole("button", { name: "Hide agents" })).not.toHaveAttribute(
+      "data-tauri-drag-region",
+    );
     for (const link of header.querySelectorAll("a")) {
       expect(link).not.toHaveAttribute("data-tauri-drag-region");
     }
@@ -184,18 +203,14 @@ describe("product routing", () => {
     localStorage.setItem(UI_MODE_KEY, "expert");
     renderAt("/terminals/local/worker");
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent(
-        "/agents/local/worker/console",
-      ),
+      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console"),
     );
   });
 
   it("redirects a legacy terminal route to Chat in Simple mode", async () => {
     renderAt("/terminals/local/worker");
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent(
-        "/agents/local/worker/chat",
-      ),
+      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/chat"),
     );
   });
 
@@ -221,9 +236,7 @@ describe("product routing", () => {
     localStorage.setItem("tariboy_active_daemon", "remote-1");
     renderAt("/agent/worker/logs");
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent(
-        "/agents/remote-1/worker/activity",
-      ),
+      expect(screen.getByTestId("location")).toHaveTextContent("/agents/remote-1/worker/activity"),
     );
   });
 
@@ -264,13 +277,29 @@ function stubMatchingQueries(...matching: string[]) {
 describe("compact screens", () => {
   beforeEach(() => {
     stubMatchingQueries("(max-width: 767.98px)", "(max-width: 1023.98px)");
-    vi.mocked(fetchAllAgents).mockResolvedValue([{
-      host: { id: "", label: "This daemon (local)" },
-      agents: [
-        { name: "alice", image: "bare:latest", state: "idle", harness: "claude", group: null, interactive: true },
-        { name: "bob", image: "bare:latest", state: "idle", harness: "claude", group: null, interactive: true },
-      ],
-    }] as never);
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      {
+        host: { id: "", label: "This daemon (local)" },
+        agents: [
+          {
+            name: "alice",
+            image: "bare:latest",
+            state: "idle",
+            harness: "claude",
+            group: null,
+            interactive: true,
+          },
+          {
+            name: "bob",
+            image: "bare:latest",
+            state: "idle",
+            harness: "claude",
+            group: null,
+            interactive: true,
+          },
+        ],
+      },
+    ] as never);
   });
 
   it("keeps the agent list behind a menu button and closes it after a pick", async () => {
@@ -284,7 +313,9 @@ describe("compact screens", () => {
     const drawer = await screen.findByRole("dialog", { name: "Agents" });
     expect(within(drawer).getByTestId("agents-sidebar")).toBeInTheDocument();
     // Focus in the search field would raise the on-screen keyboard on a phone.
-    expect(document.activeElement).not.toBe(within(drawer).getByRole("searchbox", { name: "Search agents" }));
+    expect(document.activeElement).not.toBe(
+      within(drawer).getByRole("searchbox", { name: "Search agents" }),
+    );
     expect(within(drawer).queryByRole("separator", { name: "resize sidebar" })).toBeNull();
     fireEvent.click(await within(drawer).findByRole("button", { name: "Open bob" }));
 
@@ -297,20 +328,31 @@ describe("compact screens", () => {
   it("closes the drawer on Back", async () => {
     function Back() {
       const navigate = useNavigate();
-      return <button type="button" onClick={() => navigate(-1)}>Back</button>;
+      return (
+        <button type="button" onClick={() => navigate(-1)}>
+          Back
+        </button>
+      );
     }
     render(
-      <MemoryRouter initialEntries={["/agents/local/bob/chat", "/agents/local/alice/chat"]} initialIndex={1}>
+      <MemoryRouter
+        initialEntries={["/agents/local/bob/chat", "/agents/local/alice/chat"]}
+        initialIndex={1}
+      >
         <App />
         <Back />
         <LocationProbe />
       </MemoryRouter>,
     );
-    fireEvent.click(within(screen.getByTestId("app-titlebar")).getByRole("button", { name: "Open menu" }));
+    fireEvent.click(
+      within(screen.getByTestId("app-titlebar")).getByRole("button", { name: "Open menu" }),
+    );
     await screen.findByRole("dialog", { name: "Agents" });
 
     // The drawer is modal, so Back comes from outside it, as Android's does.
-    act(() => { screen.getByText("Back", { selector: "button" }).click(); });
+    act(() => {
+      screen.getByText("Back", { selector: "button" }).click();
+    });
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Agents" })).toBeNull());
     expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/chat");
@@ -325,12 +367,21 @@ describe("compact screens", () => {
 describe("medium screens", () => {
   beforeEach(() => {
     stubMatchingQueries("(max-width: 1023.98px)");
-    vi.mocked(fetchAllAgents).mockResolvedValue([{
-      host: { id: "", label: "This daemon (local)" },
-      agents: [
-        { name: "alice", image: "bare:latest", state: "idle", harness: "claude", group: null, interactive: true },
-      ],
-    }] as never);
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      {
+        host: { id: "", label: "This daemon (local)" },
+        agents: [
+          {
+            name: "alice",
+            image: "bare:latest",
+            state: "idle",
+            harness: "claude",
+            group: null,
+            interactive: true,
+          },
+        ],
+      },
+    ] as never);
   });
 
   it("shows the agent column with a toggle that collapses it", async () => {

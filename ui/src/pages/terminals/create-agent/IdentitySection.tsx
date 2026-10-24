@@ -7,17 +7,9 @@ export function IdentitySection({
   draft,
   updateDraft,
   formDisabled,
-}: Pick<
-  CreateAgentForm,
-  | "draft"
-  | "updateDraft"
-  | "formDisabled"
->) {
+}: Pick<CreateAgentForm, "draft" | "updateDraft" | "formDisabled">) {
   return (
-    <section
-      aria-labelledby="create-agent-identity"
-      className="space-y-3 rounded border p-3"
-    >
+    <section aria-labelledby="create-agent-identity" className="space-y-3 rounded border p-3">
       <h3 id="create-agent-identity" className="font-medium">
         Identity
       </h3>

@@ -38,13 +38,15 @@ describe("SupportBundle", () => {
     const consent = screen.getByRole("checkbox", { name: "Include agent data (sensitive)" });
     expect(consent).not.toBeChecked();
     expect(screen.getByText(/newest 10 iterations for each agent/i)).toBeInTheDocument();
-    expect(screen.getByText(/never includes PROMPT\.md, transcripts, secrets, environment values, workdirs, or user files/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /never includes PROMPT\.md, transcripts, secrets, environment values, workdirs, or user files/i,
+      ),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Export support bundle" }));
 
-    await waitFor(() =>
-      expect(supportBundleExport).toHaveBeenCalledWith("ssh-1", false),
-    );
+    await waitFor(() => expect(supportBundleExport).toHaveBeenCalledWith("ssh-1", false));
     expect(await screen.findByRole("status")).toHaveTextContent("build-box");
   });
 
@@ -57,9 +59,7 @@ describe("SupportBundle", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Include agent data (sensitive)" }));
     fireEvent.click(screen.getByRole("button", { name: "Export support bundle" }));
 
-    await waitFor(() =>
-      expect(supportBundleExport).toHaveBeenCalledWith("https-1", true),
-    );
+    await waitFor(() => expect(supportBundleExport).toHaveBeenCalledWith("https-1", true));
     expect(screen.queryByRole("status")).toBeNull();
   });
 

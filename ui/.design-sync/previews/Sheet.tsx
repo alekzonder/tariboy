@@ -73,9 +73,7 @@ export const StatusHistory = () => (
       <SheetContent>
         <SheetHeader>
           <SheetTitle>Status history — reviewer</SheetTitle>
-          <SheetDescription>
-            Status updates, newest first, grouped by iteration.
-          </SheetDescription>
+          <SheetDescription>Status updates, newest first, grouped by iteration.</SheetDescription>
         </SheetHeader>
         <StatusList />
         <SheetFooter>
@@ -118,9 +116,7 @@ export const SideLeft = () => (
               }}
             >
               <span>{host.label}</span>
-              <span
-                style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted-foreground)" }}
-              >
+              <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted-foreground)" }}>
                 {host.note}
               </span>
             </div>
@@ -143,8 +139,7 @@ export const SideTop = () => (
         <SheetHeader>
           <SheetTitle>Tariboy 0.58.1 is installed</SheetTitle>
           <SheetDescription>
-            Every host on this workspace is now on 0.58.1. Agents kept their
-            sessions.
+            Every host on this workspace is now on 0.58.1. Agents kept their sessions.
           </SheetDescription>
         </SheetHeader>
         <SheetFooter>
@@ -169,9 +164,7 @@ export const SideBottom = () => (
       <SheetContent side="bottom">
         <SheetHeader>
           <SheetTitle>Send files to packager</SheetTitle>
-          <SheetDescription>
-            Files land in /work/inbox on This daemon (local).
-          </SheetDescription>
+          <SheetDescription>Files land in /work/inbox on This daemon (local).</SheetDescription>
         </SheetHeader>
         <div style={{ padding: "0 16px", display: "grid", gap: 6 }}>
           {["release-notes.md", "worker-manifest.json"].map((name) => (

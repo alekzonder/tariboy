@@ -19,7 +19,12 @@ const MARKS = [
 ] as const;
 
 export default function ChatComposer({
-  agent, value, onChange, onSend, sending, hint,
+  agent,
+  value,
+  onChange,
+  onSend,
+  sending,
+  hint,
 }: {
   agent: string;
   value: string;
@@ -63,7 +68,7 @@ export default function ChatComposer({
     area.style.height = `${Math.min(area.scrollHeight, 6 * 19 + 16)}px`;
   }, [value]);
 
-  function apply(mark: typeof MARKS[number]) {
+  function apply(mark: (typeof MARKS)[number]) {
     const area = box.current;
     if (!area) return;
     const start = area.selectionStart ?? value.length;
@@ -83,13 +88,20 @@ export default function ChatComposer({
       caret = end + mark.wrap.length * 2;
     }
     onChange(next);
-    requestAnimationFrame(() => { area.focus(); area.setSelectionRange(caret, caret); });
+    requestAnimationFrame(() => {
+      area.focus();
+      area.setSelectionRange(caret, caret);
+    });
   }
 
   return (
     <div className="shrink-0 px-3.5 pt-2 pb-3">
       <div className="overflow-hidden rounded-[10px] border border-input bg-card focus-within:ring-1 focus-within:ring-ring">
-        <div className="flex h-7 items-center gap-px border-b px-1.5 py-0.5" role="group" aria-label="Markdown marks">
+        <div
+          className="flex h-7 items-center gap-px border-b px-1.5 py-0.5"
+          role="group"
+          aria-label="Markdown marks"
+        >
           {MARKS.map((mark) => (
             <button
               key={mark.title}
@@ -103,7 +115,12 @@ export default function ChatComposer({
             </button>
           ))}
           <span className="mx-1.5 h-3.5 w-px bg-border" />
-          <input ref={file} type="file" className="hidden" onChange={(event) => void attach(event)} />
+          <input
+            ref={file}
+            type="file"
+            className="hidden"
+            onChange={(event) => void attach(event)}
+          />
           <button
             type="button"
             onClick={() => file.current?.click()}
@@ -113,13 +130,17 @@ export default function ChatComposer({
             <Paperclip className="size-3" />
             {uploading ? "Uploading…" : "Attach"}
           </button>
-          <span className="ml-auto text-[10.5px] text-muted-foreground opacity-80">Markdown supported</span>
+          <span className="ml-auto text-[10.5px] text-muted-foreground opacity-80">
+            Markdown supported
+          </span>
         </div>
         {preview ? (
           <div className="min-h-[52px] px-2.5 py-2">
-            {value.trim()
-              ? <ChatMarkdown onOpenTask={() => undefined}>{value}</ChatMarkdown>
-              : <p className="text-[12.5px] text-muted-foreground">Nothing to preview yet.</p>}
+            {value.trim() ? (
+              <ChatMarkdown onOpenTask={() => undefined}>{value}</ChatMarkdown>
+            ) : (
+              <p className="text-[12.5px] text-muted-foreground">Nothing to preview yet.</p>
+            )}
           </div>
         ) : (
           <textarea
@@ -150,7 +171,9 @@ export default function ChatComposer({
             >
               Preview
             </button>
-            <Button size="sm" onClick={onSend} disabled={sending || !value.trim()}>Send</Button>
+            <Button size="sm" onClick={onSend} disabled={sending || !value.trim()}>
+              Send
+            </Button>
           </div>
         </div>
       </div>

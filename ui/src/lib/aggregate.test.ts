@@ -4,12 +4,18 @@ import { addDaemon } from "@/lib/daemons";
 
 // Route the mocked fetch by the URL host so each daemon gets its own response +
 // its own token assertion (the federation discriminant).
-function routedFetch(routes: Record<string, { status: number; body: unknown }>, seen: Record<string, string>) {
+function routedFetch(
+  routes: Record<string, { status: number; body: unknown }>,
+  seen: Record<string, string>,
+) {
   return vi.fn().mockImplementation((url: string, init: RequestInit) => {
     const key = Object.keys(routes).find((k) => url.startsWith(k)) ?? "";
     const auth = (init.headers as Record<string, string> | undefined)?.["Authorization"] ?? "";
     if (key) seen[key] = auth;
-    const r = routes[key] ?? { status: 404, body: { ok: false, error: { code: "nf", message: "no route" } } };
+    const r = routes[key] ?? {
+      status: 404,
+      body: { ok: false, error: { code: "nf", message: "no route" } },
+    };
     return Promise.resolve({
       ok: r.status >= 200 && r.status < 300,
       status: r.status,
@@ -33,13 +39,55 @@ describe("fetchAllAgents", () => {
       "fetch",
       routedFetch(
         {
-          "/api/agents": { status: 200, body: { ok: true, result: { agents: [{ name: "local-a", image: "i", state: "running", harness: "claude", group: null }], count: 1 } } },
-          "/api/groups": { status: 200, body: { ok: true, result: { groups: [{ name: "empty-team", lead: "", members: 0 }], count: 1 } } },
-          "/api/daemon/config": { status: 200, body: { ok: true, result: { sidebar_order_v1: "{\"version\":1,\"groups\":[\"empty-team\"],\"agents\":[\"local-a\"]}" } } },
-          "https://prod:8765/api/agents": { status: 200, body: { ok: true, result: { agents: [{ name: "prod-a", image: "i", state: "running", harness: "claude", group: null }], count: 1 } } },
-          "https://prod:8765/api/groups": { status: 200, body: { ok: true, result: { groups: [], count: 0 } } },
+          "/api/agents": {
+            status: 200,
+            body: {
+              ok: true,
+              result: {
+                agents: [
+                  { name: "local-a", image: "i", state: "running", harness: "claude", group: null },
+                ],
+                count: 1,
+              },
+            },
+          },
+          "/api/groups": {
+            status: 200,
+            body: {
+              ok: true,
+              result: { groups: [{ name: "empty-team", lead: "", members: 0 }], count: 1 },
+            },
+          },
+          "/api/daemon/config": {
+            status: 200,
+            body: {
+              ok: true,
+              result: {
+                sidebar_order_v1: '{"version":1,"groups":["empty-team"],"agents":["local-a"]}',
+              },
+            },
+          },
+          "https://prod:8765/api/agents": {
+            status: 200,
+            body: {
+              ok: true,
+              result: {
+                agents: [
+                  { name: "prod-a", image: "i", state: "running", harness: "claude", group: null },
+                ],
+                count: 1,
+              },
+            },
+          },
+          "https://prod:8765/api/groups": {
+            status: 200,
+            body: { ok: true, result: { groups: [], count: 0 } },
+          },
           "https://prod:8765/api/daemon/config": { status: 200, body: { ok: true, result: {} } },
-          "https://stage:8765/api/agents": { status: 401, body: { ok: false, error: { code: "unauthorized", message: "nope" } } },
+          "https://stage:8765/api/agents": {
+            status: 401,
+            body: { ok: false, error: { code: "unauthorized", message: "nope" } },
+          },
         },
         seen,
       ),
@@ -49,7 +97,9 @@ describe("fetchAllAgents", () => {
     const byLabel = Object.fromEntries(out.map((h) => [h.host.label, h]));
     expect(byLabel["This daemon (local)"].agents.map((a) => a.name)).toEqual(["local-a"]);
     expect(byLabel["prod"].agents.map((a) => a.name)).toEqual(["prod-a"]);
-    expect(byLabel["This daemon (local)"].groups?.map((group) => group.name)).toEqual(["empty-team"]);
+    expect(byLabel["This daemon (local)"].groups?.map((group) => group.name)).toEqual([
+      "empty-team",
+    ]);
     expect(byLabel["This daemon (local)"].sidebarOrder).toEqual({
       version: 1,
       groups: ["empty-team"],
@@ -72,13 +122,20 @@ describe("fetchAllAgents in the Android app", () => {
     vi.stubEnv("VITE_TARIBOY_SHELL", "android");
     await addDaemon({ label: "fwd", baseURL: "http://127.0.0.1:9990", token: "" });
     const fetch = routedFetch(
-      { "http://127.0.0.1:9990/api/agents": { status: 200, body: { ok: true, result: { agents: [], count: 0 } } } },
+      {
+        "http://127.0.0.1:9990/api/agents": {
+          status: 200,
+          body: { ok: true, result: { agents: [], count: 0 } },
+        },
+      },
       {},
     );
     vi.stubGlobal("fetch", fetch);
 
     const out = await fetchAllAgents();
     expect(out.map((h) => h.host.label)).toEqual(["fwd"]);
-    expect(fetch.mock.calls.every(([url]) => String(url).startsWith("http://127.0.0.1:9990/"))).toBe(true);
+    expect(
+      fetch.mock.calls.every(([url]) => String(url).startsWith("http://127.0.0.1:9990/")),
+    ).toBe(true);
   });
 });

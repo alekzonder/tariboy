@@ -21,7 +21,11 @@ export default function Catalog() {
   if (error) return <p className="p-6 text-sm text-destructive">{error}</p>;
   if (!repos) return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
   if (repos.length === 0)
-    return <p className="p-6 text-sm text-muted-foreground">No repositories yet. Push an image with <code>tariboy push</code>.</p>;
+    return (
+      <p className="p-6 text-sm text-muted-foreground">
+        No repositories yet. Push an image with <code>tariboy push</code>.
+      </p>
+    );
 
   return (
     <div className="grid gap-3 p-6 sm:grid-cols-2 lg:grid-cols-3">

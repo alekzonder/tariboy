@@ -57,11 +57,11 @@ async function boot() {
   createRoot(root).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="system">
-        <Router>
-          <App />
-        </Router>
-      </ThemeProvider>
+        <ThemeProvider defaultTheme="system">
+          <Router>
+            <App />
+          </Router>
+        </ThemeProvider>
       </QueryClientProvider>
     </StrictMode>,
   );

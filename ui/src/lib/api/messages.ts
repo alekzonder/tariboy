@@ -91,7 +91,11 @@ export function messagesApi(t: Transport) {
       return t.agentGet<{ messages: InboxItem[]; count: number }>(name, `inbox?${q.toString()}`);
     },
     agentInboxClear: (name: string) =>
-      t.agentPost<{ deleted_deliveries: number; deleted_messages: number }>(name, "inbox/clear", {}),
+      t.agentPost<{ deleted_deliveries: number; deleted_messages: number }>(
+        name,
+        "inbox/clear",
+        {},
+      ),
     // Mark a pending row processed (operator ack). `result` is mandatory; the
     // backend prefixes it `operator:` so the audit trail distinguishes human acks.
     agentInboxProcessed: (name: string, id: string, result: string) =>
@@ -111,7 +115,11 @@ export function messagesApi(t: Transport) {
       }>(name, `inbox/${encodeURIComponent(id)}/reply`, { text }),
     // Requeue a DLQ'd row back to pending.
     agentInboxRequeue: (name: string, id: string) =>
-      t.agentPost<{ id: string; requeued: boolean }>(name, `inbox/${encodeURIComponent(id)}/requeue`, {}),
+      t.agentPost<{ id: string; requeued: boolean }>(
+        name,
+        `inbox/${encodeURIComponent(id)}/requeue`,
+        {},
+      ),
     chatList: (types?: string[]) =>
       t.get<{ customer: string; chats: ChatSummary[]; count: number }>(
         `/api/chats${types?.length ? `?types=${encodeURIComponent(types.join(","))}` : ""}`,
@@ -130,8 +138,13 @@ export function messagesApi(t: Transport) {
       if (opts.before) q.set("before", opts.before);
       const qs = q.toString();
       return t.get<{
-        customer: string; agent: string; chat: string; kind: string; title: string;
-        messages: ChatMessage[]; count: number;
+        customer: string;
+        agent: string;
+        chat: string;
+        kind: string;
+        title: string;
+        messages: ChatMessage[];
+        count: number;
         // The mark the chat was last read at, so a reader can tell what is new.
         read_ts?: string;
       }>(`${chatPath(chat)}${qs ? `?${qs}` : ""}`);
@@ -159,7 +172,10 @@ export function messagesApi(t: Transport) {
     // Membership is what carries delivery: an agent added here is subscribed to
     // the chat channel, and one removed keeps the deliveries it was already given.
     chatJoin: (chat: string, principal: string, role?: string) =>
-      t.post<ChatDetail>(`${chatPath(chat)}/participants`, role ? { principal, role } : { principal }),
+      t.post<ChatDetail>(
+        `${chatPath(chat)}/participants`,
+        role ? { principal, role } : { principal },
+      ),
     chatLeave: (chat: string, principal: string) =>
       t.delete<ChatDetail>(`${chatPath(chat)}/participants/${encodeURIComponent(principal)}`),
     // Publish as the customer. A message sent into a chat channel needs no

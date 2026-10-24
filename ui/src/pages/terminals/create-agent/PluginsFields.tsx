@@ -52,9 +52,7 @@ export function PluginsFields({
         ))}
       </div>
       {schemaV2 ? (
-        <p className="text-xs text-muted-foreground">
-          Plugins are owned by this schema-v2 image.
-        </p>
+        <p className="text-xs text-muted-foreground">Plugins are owned by this schema-v2 image.</p>
       ) : (
         <div className="flex gap-2">
           <Input

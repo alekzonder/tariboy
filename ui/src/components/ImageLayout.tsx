@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Link, NavLink, Outlet, useLocation, useNavigate, useParams,
-} from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
-  ApiError, createApi, type ApiClient, type ImageManifest, type ImageProvenance,
+  ApiError,
+  createApi,
+  type ApiClient,
+  type ImageManifest,
+  type ImageProvenance,
 } from "@/lib/api";
 import { resolveDaemon } from "@/lib/daemons";
 import { ApiProvider } from "@/components/ApiProvider";
@@ -15,8 +17,14 @@ import { useOptionalDaemons } from "@/components/daemonContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
@@ -33,21 +41,46 @@ function message(error: unknown): string {
   return error instanceof ApiError ? error.message : String(error);
 }
 
-export function ImageLayout({ hostId, basePath = "/images" }: {
+export function ImageLayout({
+  hostId,
+  basePath = "/images",
+}: {
   hostId?: string;
   basePath?: string;
 }) {
   const { name = "", tag = "" } = useParams();
   const hostKey = hostId ?? "";
-  return <ImageDetail key={`${hostKey}:${name}:${tag}`} hostKey={hostKey} name={name} tag={tag} basePath={basePath} />;
+  return (
+    <ImageDetail
+      key={`${hostKey}:${name}:${tag}`}
+      hostKey={hostKey}
+      name={name}
+      tag={tag}
+      basePath={basePath}
+    />
+  );
 }
 
-function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: string; tag: string; basePath: string }) {
+function ImageDetail({
+  hostKey,
+  name,
+  tag,
+  basePath,
+}: {
+  hostKey: string;
+  name: string;
+  tag: string;
+  basePath: string;
+}) {
   const ref = `${name}:${tag}`;
   const navigate = useNavigate();
   const location = useLocation();
   const daemonContext = useOptionalDaemons();
-  const [detail, setDetail] = useState<{ manifest: ImageManifest; provenance: ImageProvenance; api: ApiClient } | null>(null);
+  const [detail, setDetail] = useState<{
+    manifest: ImageManifest;
+    provenance: ImageProvenance;
+    api: ApiClient;
+  } | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [revision, setRevision] = useState(0);
@@ -74,10 +107,18 @@ function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: 
       const api = createApi(target);
       const manifest = await api.images.imageManifestGet(ref);
       const provenance = await api.images.imageProvenanceGet(ref, manifest.digest);
-      if (provenance.digest && provenance.digest !== manifest.digest) throw new ApiError(409, "image_changed", "Image changed; refresh to inspect the new build");
-      if (alive) { setDetail({ manifest, provenance, api }); setError(""); }
-    })().catch((cause) => { if (alive) onReadError(cause); });
-    return () => { alive = false; };
+      if (provenance.digest && provenance.digest !== manifest.digest)
+        throw new ApiError(409, "image_changed", "Image changed; refresh to inspect the new build");
+      if (alive) {
+        setDetail({ manifest, provenance, api });
+        setError("");
+      }
+    })().catch((cause) => {
+      if (alive) onReadError(cause);
+    });
+    return () => {
+      alive = false;
+    };
   }, [hostKey, ref, revision, onReadError]);
 
   const manifest = detail?.manifest;
@@ -97,16 +138,34 @@ function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: 
   return (
     <div className="flex h-full flex-col">
       <nav aria-label="Image breadcrumbs" className="flex gap-2 border-b px-4 py-2 text-sm">
-        <Link className="text-primary hover:underline" to={basePath}>Images</Link><span>/</span>
-        <Link className="text-primary hover:underline" to={`${basePath}/${encodeURIComponent(name)}`}>{name}</Link><span>/</span><span>{tag}</span>
+        <Link className="text-primary hover:underline" to={basePath}>
+          Images
+        </Link>
+        <span>/</span>
+        <Link
+          className="text-primary hover:underline"
+          to={`${basePath}/${encodeURIComponent(name)}`}
+        >
+          {name}
+        </Link>
+        <span>/</span>
+        <span>{tag}</span>
       </nav>
-      {notice && <p role="status" className="px-4 py-2 text-sm text-muted-foreground">{notice}</p>}
+      {notice && (
+        <p role="status" className="px-4 py-2 text-sm text-muted-foreground">
+          {notice}
+        </p>
+      )}
       <header className="flex flex-wrap items-center gap-3 border-b px-4 py-2">
         <span className="font-mono text-sm font-medium">{ref}</span>
-        {manifest && <span className="text-sm">{manifest.image_version || "Version not specified"}</span>}
+        {manifest && (
+          <span className="text-sm">{manifest.image_version || "Version not specified"}</span>
+        )}
         {bare && <Badge variant="secondary">Terminal-only</Badge>}
         {manifest?.digest && (
-          <span className="font-mono text-xs text-muted-foreground">{manifest.digest.slice(0, 16)}</span>
+          <span className="font-mono text-xs text-muted-foreground">
+            {manifest.digest.slice(0, 16)}
+          </span>
         )}
         {manifest?.built_at && (
           <span className="text-xs text-muted-foreground">built {manifest.built_at}</span>
@@ -119,14 +178,28 @@ function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: 
               Run Agent
             </Link>
           </Button>
-          {provenance?.source_cwd
-            ? <span className="font-mono text-xs" title={provenance.source_cwd}>{provenance.source_cwd}</span>
-            : <span className="text-xs text-muted-foreground">source provenance unavailable</span>}
-          {provenance?.source_cwd && provenance.source_available && canOpenAgentCwdInVSCode(hostKey, daemonContext?.daemons ?? []) && (
-            <Button size="sm" variant="outline" onClick={() => {
-              void openHostPathInVSCode(hostKey, provenance.source_cwd!).catch((error) => toast.error(`Open in VS Code failed: ${message(error)}`));
-            }}>Open in VS Code</Button>
+          {provenance?.source_cwd ? (
+            <span className="font-mono text-xs" title={provenance.source_cwd}>
+              {provenance.source_cwd}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">source provenance unavailable</span>
           )}
+          {provenance?.source_cwd &&
+            provenance.source_available &&
+            canOpenAgentCwdInVSCode(hostKey, daemonContext?.daemons ?? []) && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  void openHostPathInVSCode(hostKey, provenance.source_cwd!).catch((error) =>
+                    toast.error(`Open in VS Code failed: ${message(error)}`),
+                  );
+                }}
+              >
+                Open in VS Code
+              </Button>
+            )}
           {!bare && manifest && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -138,7 +211,8 @@ function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: 
                 <AlertDialogHeader>
                   <AlertDialogTitle>Remove image {ref}?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Deletes this runnable image tag. Original build files are not managed by Tariboy.
+                    Deletes this runnable image tag. Original build files are not managed by
+                    Tariboy.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -161,9 +235,7 @@ function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: 
             className={({ isActive }) =>
               cn(
                 "px-3 py-2 text-sm",
-                isActive
-                  ? "border-b-2 border-primary font-medium"
-                  : "text-muted-foreground",
+                isActive ? "border-b-2 border-primary font-medium" : "text-muted-foreground",
               )
             }
           >
@@ -173,10 +245,40 @@ function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: 
       </nav>
       <div className="flex-1 overflow-auto p-4">
         {error ? (
-          <div className="space-y-2"><p role="alert" className="text-sm text-destructive">{error}</p>
-            <Button variant="outline" onClick={() => { refreshes.current = 0; setError(""); setRevision((value) => value + 1); }}>Refresh image</Button></div>
+          <div className="space-y-2">
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => {
+                refreshes.current = 0;
+                setError("");
+                setRevision((value) => value + 1);
+              }}
+            >
+              Refresh image
+            </Button>
+          </div>
+        ) : detail ? (
+          <ApiProvider client={detail.api}>
+            <LazyBoundary resetKey={location.pathname}>
+              <Outlet
+                key={detail.manifest.digest}
+                context={
+                  {
+                    ref,
+                    manifest: detail.manifest,
+                    hostKey,
+                    provenance: detail.provenance,
+                    onReadError,
+                  } satisfies ImageOutletContext
+                }
+              />
+            </LazyBoundary>
+          </ApiProvider>
         ) : (
-          detail ? <ApiProvider client={detail.api}><LazyBoundary resetKey={location.pathname}><Outlet key={detail.manifest.digest} context={{ ref, manifest: detail.manifest, hostKey, provenance: detail.provenance, onReadError } satisfies ImageOutletContext} /></LazyBoundary></ApiProvider> : <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">Loading…</p>
         )}
       </div>
     </div>

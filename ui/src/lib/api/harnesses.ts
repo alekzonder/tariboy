@@ -9,7 +9,8 @@ export function harnessesApi(t: Transport) {
     // failures arrive in the error field of a 200 response.
     getHarnessModels: (harness: string) =>
       t.get<HarnessCatalog>(`/api/harnesses/${encodeURIComponent(harness)}/models`),
-    getCodexApproval: () => t.get<{ mode: CodexApprovalMode }>("/api/harnesses/codex/approval-mode"),
+    getCodexApproval: () =>
+      t.get<{ mode: CodexApprovalMode }>("/api/harnesses/codex/approval-mode"),
     setCodexApproval: (mode: CodexApprovalMode) =>
       t.post<{ mode: CodexApprovalMode }>("/api/harnesses/codex/approval-mode", { mode }),
   };

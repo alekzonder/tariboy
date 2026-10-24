@@ -43,24 +43,37 @@ async function createTask(
 
 async function keyByTitle(request: APIRequestContext, title: string) {
   let key = "";
-  await expect.poll(async () => {
-    const response = await request.get(`${daemonURL}/api/tasks?status_view=all&limit=500`);
-    if (!response.ok()) return "";
-    const envelope = await response.json();
-    const match = (envelope.result?.tasks ?? []).find((task: { title: string }) => task.title === title);
-    key = match?.key ?? "";
-    return key;
-  }, { timeout: 10_000 }).not.toBe("");
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(`${daemonURL}/api/tasks?status_view=all&limit=500`);
+        if (!response.ok()) return "";
+        const envelope = await response.json();
+        const match = (envelope.result?.tasks ?? []).find(
+          (task: { title: string }) => task.title === title,
+        );
+        key = match?.key ?? "";
+        return key;
+      },
+      { timeout: 10_000 },
+    )
+    .not.toBe("");
   return key;
 }
 
 async function visibleTaskKeys(page: Page) {
-  return page.locator("[data-testid^='task-row-']").evaluateAll((rows) =>
-    rows.map((row) => row.getAttribute("data-testid")?.replace("task-row-", "")),
-  );
+  return page
+    .locator("[data-testid^='task-row-']")
+    .evaluateAll((rows) =>
+      rows.map((row) => row.getAttribute("data-testid")?.replace("task-row-", "")),
+    );
 }
 
-async function pointerDrag(page: Page, source: ReturnType<Page["getByRole"]>, target: ReturnType<Page["getByTestId"]>) {
+async function pointerDrag(
+  page: Page,
+  source: ReturnType<Page["getByRole"]>,
+  target: ReturnType<Page["getByTestId"]>,
+) {
   const sourceBox = await source.boundingBox();
   const targetBox = await target.boundingBox();
   expect(sourceBox).not.toBeNull();
@@ -70,7 +83,9 @@ async function pointerDrag(page: Page, source: ReturnType<Page["getByRole"]>, ta
   await page.mouse.move(startX, startY);
   await page.mouse.down();
   await page.mouse.move(startX + 8, startY, { steps: 2 });
-  await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, { steps: 20 });
+  await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, {
+    steps: 20,
+  });
   // dnd-kit derives the drop destination from React pointer-move state. Do not
   // release the pointer until that state has observed the intended zone.
   const targetID = await target.getAttribute("data-testid");
@@ -87,12 +102,21 @@ async function assertNoLoadFailedToast(page: Page) {
   await expect(page.getByText(/network error: Load failed/i)).toHaveCount(0);
 }
 
-test("Tasks production workspace opens, closes, resizes, and restores the detail sheet", async ({ page, request }) => {
-  let response = await request.post(`${daemonURL}/api/task-queues`, { data: { prefix: "RESIZE", name: "Resize browser" } });
+test("Tasks production workspace opens, closes, resizes, and restores the detail sheet", async ({
+  page,
+  request,
+}) => {
+  let response = await request.post(`${daemonURL}/api/task-queues`, {
+    data: { prefix: "RESIZE", name: "Resize browser" },
+  });
   expect(response.ok()).toBe(true);
-  response = await request.post(`${daemonURL}/api/tasks`, { data: {
-    queue: "RESIZE", title: "Resize detail sheet", idempotency_key: "tasks-browser-resize-detail",
-  } });
+  response = await request.post(`${daemonURL}/api/tasks`, {
+    data: {
+      queue: "RESIZE",
+      title: "Resize detail sheet",
+      idempotency_key: "tasks-browser-resize-detail",
+    },
+  });
   expect(response.ok()).toBe(true);
   const resizeKey = (await response.json()).result.key as string;
   await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
@@ -104,11 +128,13 @@ test("Tasks production workspace opens, closes, resizes, and restores the detail
   await expect(detailHandle).toBeVisible();
 
   await expect.poll(async () => (await page.getByRole("dialog").boundingBox())?.width).toBe(720);
-  await expect.poll(async () => {
-    const box = await page.getByRole("dialog").boundingBox();
-    return box && box.x + box.width;
-    // The sheet is an island: it stops 8px short of the window edge.
-  }).toBe(1432);
+  await expect
+    .poll(async () => {
+      const box = await page.getByRole("dialog").boundingBox();
+      return box && box.x + box.width;
+      // The sheet is an island: it stops 8px short of the window edge.
+    })
+    .toBe(1432);
 
   const detailBox = await detailHandle.boundingBox();
   expect(detailBox).not.toBeNull();
@@ -117,7 +143,9 @@ test("Tasks production workspace opens, closes, resizes, and restores the detail
   await page.mouse.move(detailBox!.x - 62, detailBox!.y + 60, { steps: 8 });
   await page.mouse.up();
 
-  const persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"));
+  const persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"),
+  );
   expect(persisted).toMatchObject({ schemaVersion: 1 });
   expect(persisted.detailWidth).toBeGreaterThan(460);
 
@@ -132,24 +160,38 @@ test("Tasks production workspace opens, closes, resizes, and restores the detail
   await page.reload();
   await expect(page.getByLabel("Search tasks")).toBeVisible();
   await page.getByTestId(`task-row-${resizeKey}`).locator(".task-row-main").click();
-  await expect(page.getByRole("separator", { name: "Resize task details" }))
-    .toHaveAttribute("aria-valuenow", String(persisted.detailWidth));
+  await expect(page.getByRole("separator", { name: "Resize task details" })).toHaveAttribute(
+    "aria-valuenow",
+    String(persisted.detailWidth),
+  );
 
   await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 10, y: 10 } });
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByTestId(`task-row-${resizeKey}`).locator(".task-row-main").click();
   await page.getByRole("dialog").getByLabel("Title").fill("Unsaved resize detail");
   await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 10, y: 10 } });
-  await expect(page.getByText("Are you sure you want to close this task? Unsaved changes will be discarded.")).toBeVisible();
+  await expect(
+    page.getByText("Are you sure you want to close this task? Unsaved changes will be discarded."),
+  ).toBeVisible();
 });
 
-test("Tasks detail keeps its header reachable under a long description", async ({ page, request }) => {
+test("Tasks detail keeps its header reachable under a long description", async ({
+  page,
+  request,
+}) => {
   const description = Array.from({ length: 80 }, (_, index) => `- line ${index + 1}`).join("\n");
-  let response = await request.post(`${daemonURL}/api/task-queues`, { data: { prefix: "SCROLL", name: "Scroll browser" } });
+  let response = await request.post(`${daemonURL}/api/task-queues`, {
+    data: { prefix: "SCROLL", name: "Scroll browser" },
+  });
   expect(response.ok()).toBe(true);
-  response = await request.post(`${daemonURL}/api/tasks`, { data: {
-    queue: "SCROLL", title: "Long description scroll", description, idempotency_key: "tasks-browser-long-description",
-  } });
+  response = await request.post(`${daemonURL}/api/tasks`, {
+    data: {
+      queue: "SCROLL",
+      title: "Long description scroll",
+      description,
+      idempotency_key: "tasks-browser-long-description",
+    },
+  });
   expect(response.ok()).toBe(true);
   const key = (await response.json()).result.key as string;
   await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
@@ -164,21 +206,29 @@ test("Tasks detail keeps its header reachable under a long description", async (
   await dialog.getByText("Comment order").evaluate((element) => element.scrollIntoView());
   expect(await dialog.evaluate((element) => element.scrollTop)).toBe(0);
   const dialogTop = (await dialog.boundingBox())!.y;
-  expect((await dialog.locator("header").first().boundingBox())!.y).toBeGreaterThanOrEqual(dialogTop);
+  expect((await dialog.locator("header").first().boundingBox())!.y).toBeGreaterThanOrEqual(
+    dialogTop,
+  );
 });
 
-test("Tasks production workspace lists the agent pools of a queue",async ({ page, request }) => {
-  const response = await request.post(`${daemonURL}/api/task-queues`, { data: { prefix: "FLOW", name: "Pool browser" } })
-  expect(response.ok()).toBe(true)
+test("Tasks production workspace lists the agent pools of a queue", async ({ page, request }) => {
+  const response = await request.post(`${daemonURL}/api/task-queues`, {
+    data: { prefix: "FLOW", name: "Pool browser" },
+  });
+  expect(response.ok()).toBe(true);
 
-  await page.goto("/tests/tasks-fixture.html#/servers/local/tasks")
-  await page.getByRole("button", { name: "Queue: all" }).click()
-  await page.getByRole("menuitem", { name: "Manage queues…" }).click()
-  await page.getByRole("button", { name: /^Queue FLOW/ }).click()
-  await page.getByRole("tab", { name: "Pools" }).click()
-  await expect(page.getByRole("region", { name: "Agent pools FLOW" }).getByRole("button", { name: "Add pool" })).toBeVisible()
-  await assertNoLoadFailedToast(page)
-})
+  await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
+  await page.getByRole("button", { name: "Queue: all" }).click();
+  await page.getByRole("menuitem", { name: "Manage queues…" }).click();
+  await page.getByRole("button", { name: /^Queue FLOW/ }).click();
+  await page.getByRole("tab", { name: "Pools" }).click();
+  await expect(
+    page
+      .getByRole("region", { name: "Agent pools FLOW" })
+      .getByRole("button", { name: "Add pool" }),
+  ).toBeVisible();
+  await assertNoLoadFailedToast(page);
+});
 
 test("Tasks production workspace persists PATCH saves, release fields, and the full tree workflow", async ({
   page,
@@ -231,12 +281,16 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   const detail = page.locator(".task-detail-panel");
   await expect(detail.getByRole("heading", { name: rootKey })).toBeVisible();
   await detail.getByLabel("Title").fill("Root task updated");
-  await detail.getByRole("textbox", { name: "Description" }).fill("Edited from the production Tasks form");
+  await detail
+    .getByRole("textbox", { name: "Description" })
+    .fill("Edited from the production Tasks form");
   await detail.getByLabel("Status").selectOption("in_progress");
   await detail.getByLabel("Assignee").fill("worker-e2e");
   await detail.getByLabel("Manual block reason").fill("waiting on E2E fixture");
-  const taskPatchRequest = page.waitForRequest((request) =>
-    request.method() === "PATCH" && request.url() === `${daemonURL}/api/tasks/${rootKey}`);
+  const taskPatchRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "PATCH" && request.url() === `${daemonURL}/api/tasks/${rootKey}`,
+  );
   await detail.getByRole("button", { name: "Save task" }).click();
   expect((await taskPatchRequest).postDataJSON()).toMatchObject({
     title: "Root task updated",
@@ -263,7 +317,9 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await page.reload();
   await page.getByTestId(`task-row-${rootKey}`).locator(".task-row-main").click();
   await expect(detail.getByLabel("Status")).toHaveValue("wait_customer");
-  await expect(detail.getByLabel("Pull request")).toHaveValue("https://github.com/acme/tariboy/pull/43");
+  await expect(detail.getByLabel("Pull request")).toHaveValue(
+    "https://github.com/acme/tariboy/pull/43",
+  );
   await detail.getByLabel("Pull request").fill("");
   await detail.getByRole("button", { name: "Save task" }).click();
   await expect(page.getByText("Task updated", { exact: true }).last()).toBeVisible();
@@ -314,7 +370,10 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await detail.getByRole("button", { name: "Close task detail" }).click();
 
   const criticalRoot = await createTask(request, { title: "Critical root", priority: "P0" });
-  const secondCriticalRoot = await createTask(request, { title: "Second critical root", priority: "P0" });
+  const secondCriticalRoot = await createTask(request, {
+    title: "Second critical root",
+    priority: "P0",
+  });
   const lowRoot = await createTask(request, { title: "Low root", priority: "P3" });
   const criticalChild = await createTask(request, {
     title: "Critical child",
@@ -335,41 +394,74 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   expect(ordered.indexOf(rootKey)).toBeLessThan(ordered.indexOf(lowRoot.key));
   expect(ordered.indexOf(criticalChild.key)).toBeLessThan(ordered.indexOf(childKey));
   expect(ordered.indexOf(childKey)).toBeLessThan(ordered.indexOf(lowChild.key));
-  await expect(page.getByTestId(`task-row-${criticalRoot.key}`).getByLabel("P0 Critical")).toHaveText("P0");
+  await expect(
+    page.getByTestId(`task-row-${criticalRoot.key}`).getByLabel("P0 Critical"),
+  ).toHaveText("P0");
   await expect(page.getByTestId(`task-row-${lowRoot.key}`).getByLabel("P3 Low")).toHaveText("P3");
 
-  await pointerDrag(page, page.getByRole("button", { name: `Move ${secondCriticalRoot.key}` }), page.getByTestId(`drop-before-${criticalRoot.key}`));
-  await expect.poll(async () => {
-    const second = await taskFromAPI(request, secondCriticalRoot.key);
-    const first = await taskFromAPI(request, criticalRoot.key);
-    return second.position < first.position;
-  }).toBe(true);
+  await pointerDrag(
+    page,
+    page.getByRole("button", { name: `Move ${secondCriticalRoot.key}` }),
+    page.getByTestId(`drop-before-${criticalRoot.key}`),
+  );
+  await expect
+    .poll(async () => {
+      const second = await taskFromAPI(request, secondCriticalRoot.key);
+      const first = await taskFromAPI(request, criticalRoot.key);
+      return second.position < first.position;
+    })
+    .toBe(true);
 
   const lowPosition = (await taskFromAPI(request, lowRoot.key)).position;
-  await pointerDrag(page, page.getByRole("button", { name: `Move ${lowRoot.key}` }), page.getByTestId(`drop-before-${criticalRoot.key}`));
-  await expect.poll(async () => (await taskFromAPI(request, lowRoot.key)).position).toBe(lowPosition);
+  await pointerDrag(
+    page,
+    page.getByRole("button", { name: `Move ${lowRoot.key}` }),
+    page.getByTestId(`drop-before-${criticalRoot.key}`),
+  );
+  await expect
+    .poll(async () => (await taskFromAPI(request, lowRoot.key)).position)
+    .toBe(lowPosition);
   ordered = await visibleTaskKeys(page);
   expect(ordered.indexOf(criticalRoot.key)).toBeLessThan(ordered.indexOf(lowRoot.key));
 
-  await pointerDrag(page, page.getByRole("button", { name: `Move ${lowRoot.key}` }), page.getByTestId(`drop-inside-${rootKey}`));
+  await pointerDrag(
+    page,
+    page.getByRole("button", { name: `Move ${lowRoot.key}` }),
+    page.getByTestId(`drop-inside-${rootKey}`),
+  );
   await expect.poll(async () => (await taskFromAPI(request, lowRoot.key)).parent_key).toBe(rootKey);
   ordered = await visibleTaskKeys(page);
   expect(ordered.indexOf(childKey)).toBeLessThan(ordered.indexOf(lowChild.key));
   expect(ordered.indexOf(childKey)).toBeLessThan(ordered.indexOf(lowRoot.key));
 
-  await pointerDrag(page, page.getByRole("button", { name: `Move ${secondRootKey}` }), page.getByTestId(`drop-inside-${rootKey}`));
-  await expect.poll(async () => (await taskFromAPI(request, secondRootKey)).parent_key).toBe(rootKey);
+  await pointerDrag(
+    page,
+    page.getByRole("button", { name: `Move ${secondRootKey}` }),
+    page.getByTestId(`drop-inside-${rootKey}`),
+  );
+  await expect
+    .poll(async () => (await taskFromAPI(request, secondRootKey)).parent_key)
+    .toBe(rootKey);
   await expect(page.getByTestId(`task-row-${secondRootKey}`)).toBeVisible();
 
-  await pointerDrag(page, page.getByRole("button", { name: `Move ${secondRootKey}` }), page.getByTestId(`drop-before-${childKey}`));
-  await expect.poll(async () => {
-    const moved = await taskFromAPI(request, secondRootKey);
-    const first = await taskFromAPI(request, childKey);
-    return moved.position < first.position;
-  }).toBe(true);
+  await pointerDrag(
+    page,
+    page.getByRole("button", { name: `Move ${secondRootKey}` }),
+    page.getByTestId(`drop-before-${childKey}`),
+  );
+  await expect
+    .poll(async () => {
+      const moved = await taskFromAPI(request, secondRootKey);
+      const first = await taskFromAPI(request, childKey);
+      return moved.position < first.position;
+    })
+    .toBe(true);
 
   await page.getByRole("button", { name: "My tasks" }).click();
-  await expect(page.getByRole("button", { name: "My tasks" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "My tasks" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await page.getByRole("button", { name: "My tasks" }).click();
   await page.getByLabel("Search tasks").fill("Root task updated");
   await expect(page.getByTestId(`task-row-${rootKey}`)).toBeVisible();
@@ -406,23 +498,36 @@ statuses:
     terminal: true
 `;
 
-test("Tasks production workspace drives a workflow queue: bind, approve, secrets", async ({ page, request }) => {
+test("Tasks production workspace drives a workflow queue: bind, approve, secrets", async ({
+  page,
+  request,
+}) => {
   test.setTimeout(90_000);
   const started = Date.now();
-  const step = (name: string) => console.log(`[workflow-ui] ${((Date.now() - started) / 1000).toFixed(1)}s ${name}`);
+  const step = (name: string) =>
+    console.log(`[workflow-ui] ${((Date.now() - started) / 1000).toFixed(1)}s ${name}`);
 
   // Step 1: publish the fixture image through the daemon's build route, then
   // bind the queue from the queue settings.
   const source = mkdtempSync(path.join(tmpdir(), "tasks-e2e-workflow-"));
   mkdirSync(path.join(source, "statuses"));
   writeFileSync(path.join(source, "Workflowfile.yaml"), approvalWorkflow);
-  writeFileSync(path.join(source, "statuses", "approval.md"), "Approve the work when it looks right.\n");
-  let response = await request.post(`${daemonURL}/api/workflow-images/build`, { data: { path: source } });
+  writeFileSync(
+    path.join(source, "statuses", "approval.md"),
+    "Approve the work when it looks right.\n",
+  );
+  let response = await request.post(`${daemonURL}/api/workflow-images/build`, {
+    data: { path: source },
+  });
   rmSync(source, { recursive: true, force: true });
   expect(response.ok(), "step 1: the fixture workflow image must build").toBe(true);
-  response = await request.post(`${daemonURL}/api/task-queues`, { data: { prefix: "WFUI", name: "Workflow browser" } });
+  response = await request.post(`${daemonURL}/api/task-queues`, {
+    data: { prefix: "WFUI", name: "Workflow browser" },
+  });
   expect(response.ok()).toBe(true);
-  response = await request.post(`${daemonURL}/api/task-queues`, { data: { prefix: "WFLEX", name: "Flexible browser" } });
+  response = await request.post(`${daemonURL}/api/task-queues`, {
+    data: { prefix: "WFLEX", name: "Flexible browser" },
+  });
   expect(response.ok()).toBe(true);
 
   await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
@@ -435,7 +540,10 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   await expect(settings.getByText("No workflow")).toBeVisible();
   await settings.getByLabel("Workflow image").selectOption("wfui:latest");
   await settings.getByRole("button", { name: "Bind", exact: true }).click();
-  await expect(settings.getByTestId("binding"), "step 1: the binding shows after Bind").toContainText("wfui");
+  await expect(
+    settings.getByTestId("binding"),
+    "step 1: the binding shows after Bind",
+  ).toContainText("wfui");
   step("1 published and bound");
 
   // Step 2: a task in the bound queue.
@@ -461,23 +569,37 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   await expect(detail.getByText("wfui@0.1.0"), "step 4: the panel header").toBeVisible();
   await expect(detail.getByText("status approval")).toBeVisible();
   await expect(detail.getByRole("button", { name: "approved", exact: true })).toBeEnabled();
-  await expect(detail.getByRole("combobox", { name: "Status", exact: true }), "step 4: no status select").toHaveCount(0);
-  await expect(detail.getByLabel("Assignee", { exact: true }), "step 4: no assignee control").toHaveCount(0);
+  await expect(
+    detail.getByRole("combobox", { name: "Status", exact: true }),
+    "step 4: no status select",
+  ).toHaveCount(0);
+  await expect(
+    detail.getByLabel("Assignee", { exact: true }),
+    "step 4: no assignee control",
+  ).toHaveCount(0);
   step("4 drawer panel");
 
   // Step 5: approve; the task closes.
   await detail.getByRole("button", { name: "approved", exact: true }).click();
-  await expect(detail.getByText("status done"), "step 5: the panel shows the terminal status").toBeVisible({ timeout: 15_000 });
+  await expect(
+    detail.getByText("status done"),
+    "step 5: the panel shows the terminal status",
+  ).toBeVisible({ timeout: 15_000 });
   await expect.poll(async () => (await taskFromAPI(request, key)).status).toBe("done");
   await detail.getByRole("button", { name: "Close task detail" }).click();
   await page.getByRole("radio", { name: "Closed", exact: true }).click();
-  await expect(page.getByTestId(`task-row-${key}`), "step 5: the closed task is listed").toContainText("Done");
+  await expect(
+    page.getByTestId(`task-row-${key}`),
+    "step 5: the closed task is listed",
+  ).toContainText("Done");
   step("5 approved and closed");
 
   // Step 5b: the customer moves one task by hand and cancels another. The
   // confirmation opens above the detail sheet, so its buttons take the click.
   const createWorkflowTask = async (title: string) => {
-    const created = await request.post(`${daemonURL}/api/tasks`, { data: { queue: "WFUI", title, idempotency_key: `tasks-browser-${title}` } });
+    const created = await request.post(`${daemonURL}/api/tasks`, {
+      data: { queue: "WFUI", title, idempotency_key: `tasks-browser-${title}` },
+    });
     expect(created.ok()).toBe(true);
     return (await created.json()).result.key as string;
   };
@@ -489,14 +611,26 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   await detail.getByLabel("Target status").selectOption("done");
   await detail.getByLabel("Reason", { exact: true }).fill("closed by hand");
   await detail.getByRole("button", { name: "Move", exact: true }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Move task" }).click({ timeout: 5_000 });
-  await expect.poll(async () => (await taskFromAPI(request, moveKey)).status, "step 5b: the move lands").toBe("done");
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Move task" })
+    .click({ timeout: 5_000 });
+  await expect
+    .poll(async () => (await taskFromAPI(request, moveKey)).status, "step 5b: the move lands")
+    .toBe("done");
   await detail.getByRole("button", { name: "Close task detail" }).click();
   await page.getByTestId(`task-row-${cancelKey}`).locator(".task-row-main").click();
   await detail.getByRole("button", { name: "Cancel task" }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Cancel task" }).click({ timeout: 5_000 });
-  await expect.poll(async () => ((await taskFromAPI(request, cancelKey)) as { category?: string }).category,
-    "step 5b: the cancel lands").toBe("cancelled");
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Cancel task" })
+    .click({ timeout: 5_000 });
+  await expect
+    .poll(
+      async () => ((await taskFromAPI(request, cancelKey)) as { category?: string }).category,
+      "step 5b: the cancel lands",
+    )
+    .toBe("cancelled");
   await detail.getByRole("button", { name: "Close task detail" }).click();
   step("5b moved and cancelled by hand");
 
@@ -513,8 +647,13 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   await secrets.getByLabel("Secret key").fill("GH_TOKEN");
   await secrets.getByLabel("Secret value").fill("ghp_browser-secret-value");
   await secrets.getByRole("button", { name: "Set", exact: true }).click();
-  await expect(secrets.getByText("GH_TOKEN", { exact: true }), "step 6: the key is listed").toBeVisible();
-  await expect(page.locator("body"), "step 6: no value on the page").not.toContainText("ghp_browser-secret-value");
+  await expect(
+    secrets.getByText("GH_TOKEN", { exact: true }),
+    "step 6: the key is listed",
+  ).toBeVisible();
+  await expect(page.locator("body"), "step 6: no value on the page").not.toContainText(
+    "ghp_browser-secret-value",
+  );
   await expect(secrets.getByLabel("Secret value")).toHaveValue("");
   // After a reload the key is read back from the daemon, and the value never is.
   await page.reload();
@@ -524,8 +663,13 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   await page.getByRole("button", { name: /^Queue WFUI/ }).click();
   await page.getByRole("tab", { name: "Environment" }).click();
   const reloaded = page.getByRole("region", { name: "Secrets WFUI" });
-  await expect(reloaded.getByText("GH_TOKEN", { exact: true }), "step 6: the key is listed after a reload").toBeVisible();
-  expect(await page.content(), "step 6: no value in the reloaded page").not.toContain("ghp_browser-secret-value");
+  await expect(
+    reloaded.getByText("GH_TOKEN", { exact: true }),
+    "step 6: the key is listed after a reload",
+  ).toBeVisible();
+  expect(await page.content(), "step 6: no value in the reloaded page").not.toContain(
+    "ghp_browser-secret-value",
+  );
   await reloaded.getByRole("button", { name: "Remove GH_TOKEN" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Remove secret" }).click();
   await expect(reloaded.getByText("No secrets."), "step 6: the removed key is gone").toBeVisible();
@@ -533,20 +677,33 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
 
   // Step 7: a flexible queue keeps its status select and its assignee control.
   await page.getByRole("button", { name: "Close", exact: true }).click();
-  response = await request.post(`${daemonURL}/api/tasks`, { data: {
-    queue: "WFLEX", title: "Flexible stays flexible", idempotency_key: "tasks-browser-wfui-flex",
-  } });
+  response = await request.post(`${daemonURL}/api/tasks`, {
+    data: {
+      queue: "WFLEX",
+      title: "Flexible stays flexible",
+      idempotency_key: "tasks-browser-wfui-flex",
+    },
+  });
   expect(response.ok()).toBe(true);
   const flexKey = (await response.json()).result.key as string;
   await page.getByRole("radio", { name: "Active", exact: true }).click();
   await page.getByTestId(`task-row-${flexKey}`).locator(".task-row-main").click();
   const flexDetail = page.locator(".task-detail-panel");
-  await expect(flexDetail.getByRole("combobox", { name: "Status", exact: true }), "step 7: flexible task keeps its status select").toBeVisible();
-  await expect(flexDetail.getByLabel("Assignee", { exact: true }), "step 7: flexible task keeps its assignee control").toBeVisible();
+  await expect(
+    flexDetail.getByRole("combobox", { name: "Status", exact: true }),
+    "step 7: flexible task keeps its status select",
+  ).toBeVisible();
+  await expect(
+    flexDetail.getByLabel("Assignee", { exact: true }),
+    "step 7: flexible task keeps its assignee control",
+  ).toBeVisible();
   // The header menu opens above the detail sheet, so its item takes the click.
   await flexDetail.getByRole("button", { name: "Task actions" }).click();
   await page.getByRole("menuitem", { name: "Move to another server…" }).click({ timeout: 5_000 });
-  await expect(page.getByRole("dialog", { name: "Move to another server" }), "step 7: the menu item opens its dialog").toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Move to another server" }),
+    "step 7: the menu item opens its dialog",
+  ).toBeVisible();
   step("7 flexible unchanged");
 });
 
@@ -585,10 +742,14 @@ statuses:
     terminal: true
 `;
 
-test("Tasks production workspace explains a workflow task's problem, maps its steps, and returns it to the agent", async ({ page, request }) => {
+test("Tasks production workspace explains a workflow task's problem, maps its steps, and returns it to the agent", async ({
+  page,
+  request,
+}) => {
   test.setTimeout(90_000);
   const started = Date.now();
-  const step = (name: string) => console.log(`[workflow-problem-ui] ${((Date.now() - started) / 1000).toFixed(1)}s ${name}`);
+  const step = (name: string) =>
+    console.log(`[workflow-problem-ui] ${((Date.now() - started) / 1000).toFixed(1)}s ${name}`);
 
   // Step 1: publish the image with its scripts, give the pool an agent, and bind the queue.
   const source = mkdtempSync(path.join(tmpdir(), "tasks-e2e-workflow-problem-"));
@@ -596,23 +757,41 @@ test("Tasks production workspace explains a workflow task's problem, maps its st
   mkdirSync(path.join(source, "scripts"));
   writeFileSync(path.join(source, "Workflowfile.yaml"), problemWorkflow);
   writeFileSync(path.join(source, "statuses", "draft.md"), "Write the draft.\n");
-  writeFileSync(path.join(source, "statuses", "approval.md"), "Approve the draft, or send it back.\n");
+  writeFileSync(
+    path.join(source, "statuses", "approval.md"),
+    "Approve the draft, or send it back.\n",
+  );
   writeFileSync(path.join(source, "scripts", "check.sh"), "#!/bin/sh\nexit 0\n");
-  writeFileSync(path.join(source, "scripts", "fail.sh"), "#!/bin/sh\necho 'the probe answered 502' >&2\nexit 1\n");
+  writeFileSync(
+    path.join(source, "scripts", "fail.sh"),
+    "#!/bin/sh\necho 'the probe answered 502' >&2\nexit 1\n",
+  );
   chmodSync(path.join(source, "scripts", "check.sh"), 0o755);
   chmodSync(path.join(source, "scripts", "fail.sh"), 0o755);
-  let response = await request.post(`${daemonURL}/api/workflow-images/build`, { data: { path: source } });
+  let response = await request.post(`${daemonURL}/api/workflow-images/build`, {
+    data: { path: source },
+  });
   rmSync(source, { recursive: true, force: true });
   expect(response.ok(), "step 1: the fixture workflow image must build").toBe(true);
-  response = await request.post(`${daemonURL}/api/task-queues`, { data: { prefix: "WFPR", name: "Workflow problems" } });
+  response = await request.post(`${daemonURL}/api/task-queues`, {
+    data: { prefix: "WFPR", name: "Workflow problems" },
+  });
   expect(response.ok()).toBe(true);
-  const agent = await request.post(`${daemonURL}/api/agents`, { data: { name: "wfpr-writer", image: "bare:latest", cwd: "/tmp" } });
+  const agent = await request.post(`${daemonURL}/api/agents`, {
+    data: { name: "wfpr-writer", image: "bare:latest", cwd: "/tmp" },
+  });
   expect((await agent.json()).ok, "step 1: a pool needs an existing agent").toBe(true);
-  response = await request.patch(`${daemonURL}/api/task-queues/WFPR/pools/writers`, { data: { agents: ["wfpr-writer"], revision: 0, idempotency_key: "wfpr-pool" } });
+  response = await request.patch(`${daemonURL}/api/task-queues/WFPR/pools/writers`, {
+    data: { agents: ["wfpr-writer"], revision: 0, idempotency_key: "wfpr-pool" },
+  });
   expect(response.ok(), "step 1: the pool binds").toBe(true);
-  response = await request.put(`${daemonURL}/api/task-queues/WFPR/workflow`, { data: { ref: "wfui2:latest", revision: 0 } });
+  response = await request.put(`${daemonURL}/api/task-queues/WFPR/workflow`, {
+    data: { ref: "wfui2:latest", revision: 0 },
+  });
   expect(response.ok(), "step 1: the queue binds the image").toBe(true);
-  response = await request.post(`${daemonURL}/api/tasks`, { data: { queue: "WFPR", title: "Probe the release", idempotency_key: "tasks-browser-wfpr" } });
+  response = await request.post(`${daemonURL}/api/tasks`, {
+    data: { queue: "WFPR", title: "Probe the release", idempotency_key: "tasks-browser-wfpr" },
+  });
   expect(response.ok()).toBe(true);
   const key = (await response.json()).result.key as string;
   expect((await taskFromAPI(request, key)).status).toBe("approval");
@@ -629,9 +808,15 @@ test("Tasks production workspace explains a workflow task's problem, maps its st
   await expect(detail.getByText("step 2 of 4")).toBeVisible();
   const steps = detail.getByRole("list", { name: "Workflow steps" });
   await expect(steps.getByRole("button")).toHaveCount(4);
-  await expect(steps.getByRole("button", { name: /^approval/ })).toHaveAttribute("aria-current", "step");
+  await expect(steps.getByRole("button", { name: /^approval/ })).toHaveAttribute(
+    "aria-current",
+    "step",
+  );
   await steps.getByRole("button", { name: /^draft/ }).click();
-  await expect(detail.getByTestId("step-detail"), "step 2: a step opens to its gates").toContainText("The draft has a heading.");
+  await expect(
+    detail.getByTestId("step-detail"),
+    "step 2: a step opens to its gates",
+  ).toContainText("The draft has a heading.");
   await expect(detail.getByTestId("step-detail")).toContainText("owned by pool writers");
   step("2 step counter and stepper");
 
@@ -641,13 +826,26 @@ test("Tasks production workspace explains a workflow task's problem, maps its st
   await expect(detail.getByText("declares rework")).toBeVisible();
   await detail.getByLabel("Message to the agent").fill("Please add a heading");
   await detail.getByRole("button", { name: "Return to agent", exact: true }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Return to agent" }).click({ timeout: 5_000 });
-  await expect.poll(async () => (await taskFromAPI(request, key)).status, "step 3: the outcome lands").toBe("draft");
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Return to agent" })
+    .click({ timeout: 5_000 });
+  await expect
+    .poll(async () => (await taskFromAPI(request, key)).status, "step 3: the outcome lands")
+    .toBe("draft");
   response = await request.get(`${daemonURL}/api/tasks/${key}/workflow`);
-  const view = (await response.json()).result as { visits: { status: string; message?: string; left_at?: string }[] };
-  expect(view.visits.find((visit) => visit.status === "approval" && visit.left_at)?.message, "step 3: the message is the transition message").toBe("Please add a heading");
+  const view = (await response.json()).result as {
+    visits: { status: string; message?: string; left_at?: string }[];
+  };
+  expect(
+    view.visits.find((visit) => visit.status === "approval" && visit.left_at)?.message,
+    "step 3: the message is the transition message",
+  ).toBe("Please add a heading");
   // The pool's agent is stopped, so nobody takes the task: the panel says so.
-  await expect(detail.getByText("Waiting for an agent"), "step 3: the problem block explains the open pool status").toBeVisible();
+  await expect(
+    detail.getByText("Waiting for an agent"),
+    "step 3: the problem block explains the open pool status",
+  ).toBeVisible();
   await expect(detail.getByText("step 1 of 4")).toBeVisible();
   await expect(row.getByTitle("Step 1 of 4")).toHaveText("1/4");
   step("3 returned by outcome");
@@ -657,24 +855,53 @@ test("Tasks production workspace explains a workflow task's problem, maps its st
   await detail.getByLabel("Target status").selectOption("probe");
   await detail.getByLabel("Reason", { exact: true }).fill("probe it");
   await detail.getByRole("button", { name: "Move", exact: true }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Move task" }).click({ timeout: 5_000 });
-  await expect.poll(async () => ((await taskFromAPI(request, key)) as { workflow_paused_reason?: string }).workflow_paused_reason,
-    { timeout: 20_000, message: "step 4: the failed watch pauses the task" }).toBe("script_failures");
-  await expect(row.getByText("paused", { exact: true }), "step 4: the row shows the pause").toBeVisible();
-  await expect(detail.getByText(/Scripts failed too many times/), "step 4: the banner says why").toBeVisible();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Move task" })
+    .click({ timeout: 5_000 });
+  await expect
+    .poll(
+      async () =>
+        ((await taskFromAPI(request, key)) as { workflow_paused_reason?: string })
+          .workflow_paused_reason,
+      { timeout: 20_000, message: "step 4: the failed watch pauses the task" },
+    )
+    .toBe("script_failures");
+  await expect(
+    row.getByText("paused", { exact: true }),
+    "step 4: the row shows the pause",
+  ).toBeVisible();
+  await expect(
+    detail.getByText(/Scripts failed too many times/),
+    "step 4: the banner says why",
+  ).toBeVisible();
   const runs = detail.getByText("Script runs").locator("xpath=ancestor::section[1]");
-  await expect(runs.locator("li[data-tone='danger']").first(), "step 4: the failed run reads as one").toContainText("failure");
+  await expect(
+    runs.locator("li[data-tone='danger']").first(),
+    "step 4: the failed run reads as one",
+  ).toContainText("failure");
   step("4 watch failed and paused");
 
   // Step 5: return the paused task to the agent by a move; the pause ends.
   await detail.getByRole("button", { name: "Return to agent…" }).click();
   await expect(detail.getByLabel("Return to status")).toHaveValue("draft");
   await expect(detail.getByText("operator move")).toBeVisible();
-  await detail.getByLabel("Message to the agent").fill("The probe answers 502; fix the deployment first");
+  await detail
+    .getByLabel("Message to the agent")
+    .fill("The probe answers 502; fix the deployment first");
   await detail.getByRole("button", { name: "Return to agent", exact: true }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Return to agent" }).click({ timeout: 5_000 });
-  await expect.poll(async () => (await taskFromAPI(request, key)).status, "step 5: the move lands").toBe("draft");
-  expect(((await taskFromAPI(request, key)) as { workflow_paused_reason?: string }).workflow_paused_reason ?? "", "step 5: the pause is over").toBe("");
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Return to agent" })
+    .click({ timeout: 5_000 });
+  await expect
+    .poll(async () => (await taskFromAPI(request, key)).status, "step 5: the move lands")
+    .toBe("draft");
+  expect(
+    ((await taskFromAPI(request, key)) as { workflow_paused_reason?: string })
+      .workflow_paused_reason ?? "",
+    "step 5: the pause is over",
+  ).toBe("");
   await expect(detail.getByText("Waiting for an agent")).toBeVisible();
   step("5 returned by move");
 });

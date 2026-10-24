@@ -6,26 +6,46 @@ import { validChannel } from "./channelName";
 
 afterEach(() => vi.restoreAllMocks());
 
-interface Post { method: string; url: string; body?: string }
+interface Post {
+  method: string;
+  url: string;
+  body?: string;
+}
 
 function stub(posts: Array<Post>) {
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-    const method = init?.method ?? "GET";
-    if (method !== "GET") posts.push({ method, url, body: init?.body as string | undefined });
-    let result: unknown = {};
-    if (url.includes("/subscriptions")) result = { channels: [
-      { name: "agent:worker:inbox", kind: "agent_inbox", protected: true },
-      { name: "group:dev:inbox", kind: "group_inbox", protected: true },
-      { name: "chat:messenger:x", kind: "chat", protected: false },
-    ], count: 3 };
-    // chat:messenger:idle is a bound-but-idle chat W1 (dbu.1) now surfaces here; it
-    // is NOT in the subscriptions list, so it must show up as a Subscribe option.
-    else if (url === "/api/channels") result = { channels: [
-      { name: "chat:messenger:x", kind: "chat" }, { name: "chat:room", kind: "chat" },
-      { name: "chat:messenger:idle", kind: "chat" },
-    ], count: 3 };
-    return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }) } as Response);
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method !== "GET") posts.push({ method, url, body: init?.body as string | undefined });
+      let result: unknown = {};
+      if (url.includes("/subscriptions"))
+        result = {
+          channels: [
+            { name: "agent:worker:inbox", kind: "agent_inbox", protected: true },
+            { name: "group:dev:inbox", kind: "group_inbox", protected: true },
+            { name: "chat:messenger:x", kind: "chat", protected: false },
+          ],
+          count: 3,
+        };
+      // chat:messenger:idle is a bound-but-idle chat W1 (dbu.1) now surfaces here; it
+      // is NOT in the subscriptions list, so it must show up as a Subscribe option.
+      else if (url === "/api/channels")
+        result = {
+          channels: [
+            { name: "chat:messenger:x", kind: "chat" },
+            { name: "chat:room", kind: "chat" },
+            { name: "chat:messenger:idle", kind: "chat" },
+          ],
+          count: 3,
+        };
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result }),
+      } as Response);
+    }),
+  );
 }
 
 it("renders the left column at 40% width (w-2/5)", async () => {
@@ -95,8 +115,16 @@ it("unsubscribes an ad-hoc channel via DELETE with a channel query param", async
   render(<AgentSubscriptions name="worker" />);
   await waitFor(() => expect(screen.getByText("chat:messenger:x")).toBeInTheDocument());
   fireEvent.click(screen.getByRole("button", { name: "Unsubscribe" }));
-  await waitFor(() => expect(posts.some((p) =>
-    p.method === "DELETE" && p.url.includes("/api/agents/worker/subscriptions") && p.url.includes("channel=chat%3Amessenger%3Ax"))).toBe(true));
+  await waitFor(() =>
+    expect(
+      posts.some(
+        (p) =>
+          p.method === "DELETE" &&
+          p.url.includes("/api/agents/worker/subscriptions") &&
+          p.url.includes("channel=chat%3Amessenger%3Ax"),
+      ),
+    ).toBe(true),
+  );
 });
 
 it("offers a bound-but-idle chat as a Subscribe option", async () => {
@@ -121,7 +149,9 @@ it("subscribes to a free-text channel not in the list", async () => {
   await userEvent.type(input, "chat:custom:room");
   fireEvent.click(screen.getByRole("button", { name: "Subscribe" }));
   await waitFor(() => {
-    const p = posts.find((p) => p.method === "POST" && p.url.includes("/api/agents/worker/subscriptions"));
+    const p = posts.find(
+      (p) => p.method === "POST" && p.url.includes("/api/agents/worker/subscriptions"),
+    );
     expect(p).toBeTruthy();
     expect(JSON.parse(p!.body!)).toEqual({ channel: "chat:custom:room" });
   });
@@ -137,7 +167,9 @@ it("subscribes to a free-text channel via the Enter key", async () => {
   await userEvent.type(input, "chat:custom:room");
   fireEvent.keyDown(input, { key: "Enter" });
   await waitFor(() => {
-    const p = posts.find((p) => p.method === "POST" && p.url.includes("/api/agents/worker/subscriptions"));
+    const p = posts.find(
+      (p) => p.method === "POST" && p.url.includes("/api/agents/worker/subscriptions"),
+    );
     expect(p).toBeTruthy();
     expect(JSON.parse(p!.body!)).toEqual({ channel: "chat:custom:room" });
   });
@@ -165,9 +197,9 @@ it("validChannel mirrors the daemon bus.ValidChannel rules", () => {
   expect(validChannel("group:dev:inbox")).toBe(true);
   expect(validChannel("agent:w-1:inbox")).toBe(true);
   expect(validChannel("")).toBe(false);
-  expect(validChannel("noprefix")).toBe(false);       // no ':'
-  expect(validChannel("bogus:x")).toBe(false);          // unknown prefix
-  expect(validChannel("chat:Upper")).toBe(false);       // uppercase segment
-  expect(validChannel("chat:_lead")).toBe(false);       // segment starts with '_'
-  expect(validChannel("chat:a b")).toBe(false);         // space in segment
+  expect(validChannel("noprefix")).toBe(false); // no ':'
+  expect(validChannel("bogus:x")).toBe(false); // unknown prefix
+  expect(validChannel("chat:Upper")).toBe(false); // uppercase segment
+  expect(validChannel("chat:_lead")).toBe(false); // segment starts with '_'
+  expect(validChannel("chat:a b")).toBe(false); // space in segment
 });

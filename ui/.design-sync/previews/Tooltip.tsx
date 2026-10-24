@@ -1,10 +1,4 @@
-import {
-  Button,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "tariboy-ui";
+import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "tariboy-ui";
 import { CircleHelp, Trash2 } from "lucide-react";
 
 export const GoalHelp = () => (
@@ -19,9 +13,7 @@ export const GoalHelp = () => (
       }}
     >
       <span style={{ color: "var(--muted-foreground)" }}>Goal:</span>
-      <span style={{ fontFamily: "ui-monospace, monospace", color: "var(--primary)" }}>
-        TB-142
-      </span>
+      <span style={{ fontFamily: "ui-monospace, monospace", color: "var(--primary)" }}>TB-142</span>
       <Tooltip defaultOpen>
         <TooltipTrigger asChild>
           <Button

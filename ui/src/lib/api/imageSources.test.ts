@@ -17,21 +17,24 @@ const target: Daemon = {
 };
 
 function captureFetch(calls: Call[], results: unknown[] = []) {
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string, init: RequestInit) => {
-    const headers = (init.headers ?? {}) as Record<string, string>;
-    calls.push({
-      url,
-      method: init.method ?? "GET",
-      body: init.body ? JSON.parse(init.body as string) : undefined,
-      authorization: headers.Authorization,
-    });
-    const result = results.shift() ?? {};
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ ok: true, result }),
-    } as Response);
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string, init: RequestInit) => {
+      const headers = (init.headers ?? {}) as Record<string, string>;
+      calls.push({
+        url,
+        method: init.method ?? "GET",
+        body: init.body ? JSON.parse(init.body as string) : undefined,
+        authorization: headers.Authorization,
+      });
+      const result = results.shift() ?? {};
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result }),
+      } as Response);
+    }),
+  );
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -41,8 +44,15 @@ describe("managed image source client", () => {
     const calls: Call[] = [];
     captureFetch(calls);
     const {
-      buildImageSource, createImageSource, deleteImageSource, getImageSource, getImageSourceFile,
-      listImageSourceFiles, listImageSources, putImageSourceFile, validateImageSource,
+      buildImageSource,
+      createImageSource,
+      deleteImageSource,
+      getImageSource,
+      getImageSourceFile,
+      listImageSourceFiles,
+      listImageSources,
+      putImageSourceFile,
+      validateImageSource,
     } = createApi(target).imageSources;
 
     await listImageSources();
@@ -86,12 +96,14 @@ describe("managed image source client", () => {
 
   it("preserves structured validation diagnostics", async () => {
     const calls: Call[] = [];
-    captureFetch(calls, [{
-      valid: false,
-      diagnostics: [
-        { path: "Tariboyfile.yaml", field: "harness.type", message: "unsupported harness" },
-      ],
-    }]);
+    captureFetch(calls, [
+      {
+        valid: false,
+        diagnostics: [
+          { path: "Tariboyfile.yaml", field: "harness.type", message: "unsupported harness" },
+        ],
+      },
+    ]);
 
     const result = await createApi(null).imageSources.validateImageSource("reviewer");
 

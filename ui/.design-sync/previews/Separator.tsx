@@ -61,9 +61,7 @@ export const ListGroups = () => (
   <div style={{ ...panel, gap: 0, padding: 0, overflow: "hidden" }}>
     <div style={{ padding: "8px 12px", ...muted }}>Hosts</div>
     <Separator />
-    <div style={{ padding: "8px 12px", fontWeight: 500 }}>
-      This daemon (local)
-    </div>
+    <div style={{ padding: "8px 12px", fontWeight: 500 }}>This daemon (local)</div>
     <div style={{ padding: "8px 12px", fontWeight: 500 }}>build-01</div>
     <Separator />
     <div style={{ padding: "8px 12px", ...muted }}>Images</div>
@@ -77,9 +75,7 @@ export const DialogFooterRule = () => (
   <div style={{ ...panel, gap: 12 }}>
     <div>
       <div style={{ fontWeight: 500 }}>Remove worker:v1</div>
-      <div style={muted}>
-        Two agents still reference this image and will fail to restart.
-      </div>
+      <div style={muted}>Two agents still reference this image and will fail to restart.</div>
     </div>
     <Separator />
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, ...muted }}>

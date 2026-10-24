@@ -18,14 +18,13 @@ const LOADING: HarnessCatalogState = { loading: true, catalog: null, error: "" }
 // ApiProvider's, or a dialog's own client for the host it picked.
 export function useHarnessCatalog(api: ApiClient, harness: string): HarnessCatalogState {
   const key = harness ? `${api.target?.id ?? ""}\u0000${harness}` : "";
-  const [loaded, setLoaded] = useState<{ key: string; state: HarnessCatalogState } | null>(
-    null,
-  );
+  const [loaded, setLoaded] = useState<{ key: string; state: HarnessCatalogState } | null>(null);
 
   useEffect(() => {
     if (!key || cache.has(key)) return;
     let cancelled = false;
-    api.harnesses.getHarnessModels(harness)
+    api.harnesses
+      .getHarnessModels(harness)
       .then((catalog) => {
         if (!catalog.error) cache.set(key, catalog);
         if (!cancelled) {

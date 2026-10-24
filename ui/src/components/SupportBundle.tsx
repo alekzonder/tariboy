@@ -47,7 +47,9 @@ export function SupportBundle() {
       })
       .catch((cause) => {
         if (!cancelled) {
-          setError(`Could not load hosts: ${cause instanceof Error ? cause.message : String(cause)}`);
+          setError(
+            `Could not load hosts: ${cause instanceof Error ? cause.message : String(cause)}`,
+          );
         }
       })
       .finally(() => {
@@ -76,13 +78,13 @@ export function SupportBundle() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Support bundle</CardTitle>
-        <CardDescription>
-          Export a bounded, privacy-safe ZIP for troubleshooting.
-        </CardDescription>
+        <CardDescription>Export a bounded, privacy-safe ZIP for troubleshooting.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <div className="space-y-1">
-          <label className="font-medium" htmlFor="support-host">Host</label>
+          <label className="font-medium" htmlFor="support-host">
+            Host
+          </label>
           <select
             id="support-host"
             className="block h-9 w-full rounded-md border bg-background px-3"
@@ -115,25 +117,35 @@ export function SupportBundle() {
             Include agent data (sensitive)
           </label>
           <p className="text-muted-foreground">
-            Adds complete redacted result, shim, stdout, and stderr files from the newest 10 iterations
-            for each agent on this host. Agent and model output can contain private text; inspect the ZIP
-            before sharing it.
+            Adds complete redacted result, shim, stdout, and stderr files from the newest 10
+            iterations for each agent on this host. Agent and model output can contain private text;
+            inspect the ZIP before sharing it.
           </p>
         </div>
         <div>
           <div className="font-medium">Always excluded</div>
           <p className="text-muted-foreground">
-            The collector never includes PROMPT.md, transcripts, secrets, environment values, workdirs,
-            or user files. SSH aliases, configuration, audit, context, image, and provisioning data are
-            also excluded.
+            The collector never includes PROMPT.md, transcripts, secrets, environment values,
+            workdirs, or user files. SSH aliases, configuration, audit, context, image, and
+            provisioning data are also excluded.
           </p>
         </div>
         <Button disabled={!available || loading || busy || !hostId} onClick={() => void run()}>
           {busy ? "Exporting…" : "Export support bundle"}
         </Button>
-        {!available && <p className="text-muted-foreground">Support export is available in the desktop app.</p>}
-        {path && <p role="status" className="break-all text-muted-foreground">Saved to {path}</p>}
-        {error && <p role="alert" className="text-destructive">Export failed: {error}</p>}
+        {!available && (
+          <p className="text-muted-foreground">Support export is available in the desktop app.</p>
+        )}
+        {path && (
+          <p role="status" className="break-all text-muted-foreground">
+            Saved to {path}
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="text-destructive">
+            Export failed: {error}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

@@ -7,7 +7,15 @@ import { Command, CommandInput } from "./command";
 describe("shared text controls", () => {
   it("disable macOS text assistance by default", () => {
     vi.stubGlobal("__TAURI_INTERNALS__", {});
-    render(<><Input aria-label="input" /><Textarea aria-label="textarea" /><Command><CommandInput aria-label="command" /></Command></>);
+    render(
+      <>
+        <Input aria-label="input" />
+        <Textarea aria-label="textarea" />
+        <Command>
+          <CommandInput aria-label="command" />
+        </Command>
+      </>,
+    );
 
     for (const control of [
       screen.getByLabelText("input"),
@@ -29,14 +37,7 @@ describe("shared text controls", () => {
   });
 
   it("allows a documented field to override the defaults", () => {
-    render(
-      <Input
-        aria-label="override"
-        spellCheck
-        autoCorrect="on"
-        autoCapitalize="sentences"
-      />,
-    );
+    render(<Input aria-label="override" spellCheck autoCorrect="on" autoCapitalize="sentences" />);
 
     const control = screen.getByLabelText("override");
     expect(control).toHaveAttribute("spellcheck", "true");

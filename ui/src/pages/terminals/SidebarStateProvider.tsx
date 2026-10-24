@@ -15,12 +15,14 @@ export function SidebarStateProvider({ children }: PropsWithChildren) {
   // A wide window drops it, so turning the tablet back does not reopen it.
   if (!compact && openOn !== null) setOpenOn(null);
   return (
-    <SidebarStateContext.Provider value={{
-      ...sidebar,
-      compact,
-      drawerOpen: compact && openOn === key,
-      setDrawerOpen: (open) => setOpenOn(open ? key : null),
-    }}>
+    <SidebarStateContext.Provider
+      value={{
+        ...sidebar,
+        compact,
+        drawerOpen: compact && openOn === key,
+        setDrawerOpen: (open) => setOpenOn(open ? key : null),
+      }}
+    >
       {children}
     </SidebarStateContext.Provider>
   );

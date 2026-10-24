@@ -3,8 +3,15 @@ import { usePolling } from "@/hooks/usePolling";
 import { setLocalBaseURL } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import {
-  hasLocalDaemon, isDesktop, daemonState, daemonStart, daemonRestart, openDaemonLog,
-  onDaemonState, versionMismatch, missingHTTPListener,
+  hasLocalDaemon,
+  isDesktop,
+  daemonState,
+  daemonStart,
+  daemonRestart,
+  openDaemonLog,
+  onDaemonState,
+  versionMismatch,
+  missingHTTPListener,
   type DesktopDaemonState,
 } from "@/lib/desktop";
 

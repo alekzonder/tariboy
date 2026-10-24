@@ -10,10 +10,30 @@ describe("ImageSkills", () => {
 
   it("shows packaged skills in manifest order with complete metadata", () => {
     useImageContext.mockReturnValue({
-      manifest: { skills: [
-        { name: "review", description: "Review changes.", source: "./skills/review", category: "source", archive_root: "skills/review", file_count: 3, size: 2048, tree_sha256: "aaa" },
-        { name: "release", description: "Prepare releases.", source: "$PLUGINS/release", category: "plugin", archive_root: "skills/release", file_count: 2, size: 1024, tree_sha256: "bbb" },
-      ] },
+      manifest: {
+        skills: [
+          {
+            name: "review",
+            description: "Review changes.",
+            source: "./skills/review",
+            category: "source",
+            archive_root: "skills/review",
+            file_count: 3,
+            size: 2048,
+            tree_sha256: "aaa",
+          },
+          {
+            name: "release",
+            description: "Prepare releases.",
+            source: "$PLUGINS/release",
+            category: "plugin",
+            archive_root: "skills/release",
+            file_count: 2,
+            size: 1024,
+            tree_sha256: "bbb",
+          },
+        ],
+      },
     });
     render(<ImageSkills />);
     const cards = screen.getAllByRole("listitem");

@@ -31,11 +31,7 @@ export const AdvancedOptionsOpen = () => (
             style={{ height: 32, width: 168 }}
           />
           <span style={{ color: "var(--muted-foreground)" }}>=</span>
-          <Input
-            aria-label="env value 0"
-            defaultValue="team"
-            style={{ height: 32, width: 120 }}
-          />
+          <Input aria-label="env value 0" defaultValue="team" style={{ height: 32, width: 120 }} />
         </div>
       </div>
     </CollapsibleContent>
@@ -84,7 +80,9 @@ export const IterationDetail = () => (
           whiteSpace: "pre-wrap",
         }}
       >
-        {"claimed TB-142 from queue tasks\nimage worker:v2 · host This daemon (local)\nexit 0 · $0.14"}
+        {
+          "claimed TB-142 from queue tasks\nimage worker:v2 · host This daemon (local)\nexit 0 · $0.14"
+        }
       </pre>
     </CollapsibleContent>
   </Collapsible>

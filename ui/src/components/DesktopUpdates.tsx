@@ -78,12 +78,18 @@ export function DesktopUpdatesProvider({ children }: { children: ReactNode }) {
       setBridgeReady(true);
     };
     const unsubscribe = onDesktopUpdateState(
-      (next) => { if (active) accept(next); },
+      (next) => {
+        if (active) accept(next);
+      },
       () => {
         void desktopUpdateState()
-          .then((next) => { if (active) accept(next); })
+          .then((next) => {
+            if (active) accept(next);
+          })
           .catch(failed)
-          .finally(() => { if (active) setBridgeReady(true); });
+          .finally(() => {
+            if (active) setBridgeReady(true);
+          });
       },
       failed,
     );
@@ -93,25 +99,30 @@ export function DesktopUpdatesProvider({ children }: { children: ReactNode }) {
     };
   }, [accept, desktop]);
 
-  const request = useCallback(async (kind: Exclude<Pending, null>) => {
-    if (!desktop || inFlight.current) return;
-    const phase = snapshotRef.current?.phase;
-    if (kind === "download" && phase && !["idle", "up-to-date", "error"].includes(phase)) return;
-    if (kind === "install" && phase !== "ready") return;
-    inFlight.current = true;
-    setPending(kind);
-    setRequestError("");
-    try {
-      accept(await (kind === "download" ? desktopUpdateDownload() : desktopUpdateInstall()));
-    } catch {
-      setRequestError(kind === "download"
-        ? "Could not check for updates. Try again."
-        : "Could not install the update. Try again.");
-    } finally {
-      inFlight.current = false;
-      setPending(null);
-    }
-  }, [accept, desktop]);
+  const request = useCallback(
+    async (kind: Exclude<Pending, null>) => {
+      if (!desktop || inFlight.current) return;
+      const phase = snapshotRef.current?.phase;
+      if (kind === "download" && phase && !["idle", "up-to-date", "error"].includes(phase)) return;
+      if (kind === "install" && phase !== "ready") return;
+      inFlight.current = true;
+      setPending(kind);
+      setRequestError("");
+      try {
+        accept(await (kind === "download" ? desktopUpdateDownload() : desktopUpdateInstall()));
+      } catch {
+        setRequestError(
+          kind === "download"
+            ? "Could not check for updates. Try again."
+            : "Could not install the update. Try again.",
+        );
+      } finally {
+        inFlight.current = false;
+        setPending(null);
+      }
+    },
+    [accept, desktop],
+  );
 
   useEffect(() => {
     if (!desktop || !bridgeReady || !automatic) return;
@@ -139,16 +150,18 @@ export function DesktopUpdatesProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <DesktopUpdatesContext.Provider value={{
-      desktop,
-      snapshot,
-      automatic,
-      pending,
-      storageError,
-      requestError,
-      setAutomatic,
-      request,
-    }}>
+    <DesktopUpdatesContext.Provider
+      value={{
+        desktop,
+        snapshot,
+        automatic,
+        pending,
+        storageError,
+        requestError,
+        setAutomatic,
+        request,
+      }}
+    >
       {children}
     </DesktopUpdatesContext.Provider>
   );
@@ -167,7 +180,7 @@ function DownloadStatus({ snapshot }: { snapshot: DesktopUpdateSnapshot }) {
   if (snapshot.phase !== "downloading") return null;
   const knownTotal = snapshot.total_bytes !== null && snapshot.total_bytes > 0;
   const percent = knownTotal
-    ? Math.min(100, Math.round(snapshot.downloaded_bytes / snapshot.total_bytes! * 100))
+    ? Math.min(100, Math.round((snapshot.downloaded_bytes / snapshot.total_bytes!) * 100))
     : null;
   return (
     <div className="space-y-2" role="status">
@@ -176,9 +189,11 @@ function DownloadStatus({ snapshot }: { snapshot: DesktopUpdateSnapshot }) {
         className="w-full"
         {...(knownTotal ? { max: snapshot.total_bytes!, value: snapshot.downloaded_bytes } : {})}
       />
-      <p>{percent === null
-        ? `Downloaded ${snapshot.downloaded_bytes} bytes`
-        : `Downloaded ${percent}%`}</p>
+      <p>
+        {percent === null
+          ? `Downloaded ${snapshot.downloaded_bytes} bytes`
+          : `Downloaded ${percent}%`}
+      </p>
     </div>
   );
 }
@@ -186,35 +201,46 @@ function DownloadStatus({ snapshot }: { snapshot: DesktopUpdateSnapshot }) {
 export function AppSettings() {
   const updates = useDesktopUpdates();
   const mode = useUiMode();
-  const canCheck = !updates.snapshot
-    || ["idle", "up-to-date", "error"].includes(updates.snapshot.phase);
-  const error = updates.snapshot?.phase === "ready"
-    ? ""
-    : updates.requestError || updates.snapshot?.error;
+  const canCheck =
+    !updates.snapshot || ["idle", "up-to-date", "error"].includes(updates.snapshot.phase);
+  const error =
+    updates.snapshot?.phase === "ready" ? "" : updates.requestError || updates.snapshot?.error;
   return (
     <section className="h-full overflow-auto p-6">
       <div className="mx-auto max-w-2xl space-y-6">
-        <Button asChild variant="ghost"><Link to="/">Back to workspace</Link></Button>
+        <Button asChild variant="ghost">
+          <Link to="/">Back to workspace</Link>
+        </Button>
         <h1 className="text-2xl font-semibold">Application settings</h1>
         <Card>
-          <CardHeader><CardTitle>Interface mode</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Interface mode</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-3">
             <Segmented<UiMode>
               label="Interface mode"
               className="w-fit"
               value={mode}
               onChange={writeUiMode}
-              options={[{ value: "simple", label: "Simple" }, { value: "expert", label: "Expert" }]}
+              options={[
+                { value: "simple", label: "Simple" },
+                { value: "expert", label: "Expert" },
+              ]}
             />
             <p className="text-muted-foreground">
-              Simple shows an agent&apos;s Chat, Tasks, Terminal and Configuration. Expert shows every tab and chat.
+              Simple shows an agent&apos;s Chat, Tasks, Terminal and Configuration. Expert shows
+              every tab and chat.
             </p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>Desktop updates</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Desktop updates</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-5">
-            <p>Current Desktop version: <strong>{updates.snapshot?.current_version || "—"}</strong></p>
+            <p>
+              Current Desktop version: <strong>{updates.snapshot?.current_version || "—"}</strong>
+            </p>
             <div className="flex items-center justify-between gap-4">
               <Label htmlFor="desktop-auto-updates">Download updates automatically</Label>
               <Switch
@@ -224,7 +250,11 @@ export function AppSettings() {
                 onCheckedChange={updates.setAutomatic}
               />
             </div>
-            {updates.storageError && <p role="alert" className="text-destructive">{updates.storageError}</p>}
+            {updates.storageError && (
+              <p role="alert" className="text-destructive">
+                {updates.storageError}
+              </p>
+            )}
             {!updates.desktop ? (
               <p role="status" className="text-muted-foreground">
                 Updates are only available in the Desktop app.
@@ -239,7 +269,11 @@ export function AppSettings() {
                   Check for and download update
                 </Button>
                 {updates.snapshot && <DownloadStatus snapshot={updates.snapshot} />}
-                {error && <p role="alert" className="text-destructive">{error}</p>}
+                {error && (
+                  <p role="alert" className="text-destructive">
+                    {error}
+                  </p>
+                )}
               </>
             )}
           </CardContent>
@@ -253,12 +287,19 @@ export function UpdateBanner() {
   const updates = useDesktopUpdates();
   if (!updates.desktop) return null;
   if (updates.snapshot?.phase === "installing" || updates.pending === "install") {
-    return <div role="status" className="border-b bg-muted px-4 py-2">Installing update…</div>;
+    return (
+      <div role="status" className="border-b bg-muted px-4 py-2">
+        Installing update…
+      </div>
+    );
   }
   if (updates.snapshot?.phase !== "ready") return null;
   const error = updates.requestError || updates.snapshot.error;
   return (
-    <div role="status" className="flex flex-wrap items-center justify-center gap-3 border-b bg-muted px-4 py-2">
+    <div
+      role="status"
+      className="flex flex-wrap items-center justify-center gap-3 border-b bg-muted px-4 py-2"
+    >
       <span>Version {updates.snapshot.version} downloaded</span>
       <Button
         type="button"
@@ -268,7 +309,11 @@ export function UpdateBanner() {
       >
         Update
       </Button>
-      {error && <span role="alert" className="text-destructive">{error}</span>}
+      {error && (
+        <span role="alert" className="text-destructive">
+          {error}
+        </span>
+      )}
     </div>
   );
 }

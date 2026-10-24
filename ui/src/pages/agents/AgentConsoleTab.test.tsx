@@ -19,8 +19,13 @@ vi.mock("react-router-dom", async (importOriginal) => {
 
 vi.mock("@/hooks/useTerminalSocket", () => ({
   useTerminalSocket: vi.fn(() => ({
-    status: "open", absent: false, send: vi.fn(), sendResize: vi.fn(),
-    attachTerm: vi.fn(), name: "worker", reconnect,
+    status: "open",
+    absent: false,
+    send: vi.fn(),
+    sendResize: vi.fn(),
+    attachTerm: vi.fn(),
+    name: "worker",
+    reconnect,
   })),
 }));
 vi.mock("@/components/TuiScreen", () => ({ TuiScreen: () => <div data-testid="tui-screen" /> }));
@@ -28,7 +33,11 @@ vi.mock("@/components/SendFilesButton", () => ({
   SendFilesButton: function SendFiles({ name }: { name: string }) {
     // The button uploads to the server of the surrounding ApiProvider.
     const daemon = useApi().target;
-    return <button data-testid="send-files" data-agent-name={name} data-daemon-id={daemon?.id}>Send files</button>;
+    return (
+      <button data-testid="send-files" data-agent-name={name} data-daemon-id={daemon?.id}>
+        Send files
+      </button>
+    );
   },
 }));
 
@@ -39,8 +48,13 @@ let client: ApiClient;
 
 function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
   return {
-    name: "worker", image: "basic:latest", state: "stopped", harness: "stub",
-    group: null, interactive: false, ...overrides,
+    name: "worker",
+    image: "basic:latest",
+    state: "stopped",
+    harness: "stub",
+    group: null,
+    interactive: false,
+    ...overrides,
   };
 }
 
@@ -74,7 +88,8 @@ describe("AgentConsoleTab non-interactive uploads", () => {
     expect(screen.getByTestId("send-files")).toHaveAttribute("data-daemon-id", "remote");
     expect(screen.getByText("This agent has no interactive terminal.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Configuration" })).toHaveAttribute(
-      "href", "/agents/remote/worker/configuration",
+      "href",
+      "/agents/remote/worker/configuration",
     );
   });
 
@@ -88,7 +103,9 @@ describe("AgentConsoleTab non-interactive uploads", () => {
 
   it("case 6: drops on the non-interactive panel, uploads the files, and toasts the paths", async () => {
     const upload = serverUploadFile.mockResolvedValue({
-      path: "staged.txt", abs: "/cwd/staged.txt", bytes: 1,
+      path: "staged.txt",
+      abs: "/cwd/staged.txt",
+      bytes: 1,
     });
     const success = vi.spyOn(toast, "success");
     renderTab(agent({ interactive: false }));
@@ -114,18 +131,28 @@ describe("AgentConsoleTab and header Exec", () => {
   it("no longer renders its own Exec composer", () => {
     renderTab(agent({ interactive: true, state: "running" }));
     expect(screen.queryByRole("button", { name: "Exec" })).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("one-shot exec prompt (optional)")).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("one-shot exec prompt (optional)"),
+    ).not.toBeInTheDocument();
   });
 
   it("reconnects an interactive terminal when the header reports a started Exec", () => {
     const value = agent({ interactive: true, state: "running" });
     const { rerender } = render(
-      <MemoryRouter><ApiProvider client={client}><AgentConsoleTab hostId="remote" agent={value} refresh={vi.fn()} execCount={2} /></ApiProvider></MemoryRouter>,
+      <MemoryRouter>
+        <ApiProvider client={client}>
+          <AgentConsoleTab hostId="remote" agent={value} refresh={vi.fn()} execCount={2} />
+        </ApiProvider>
+      </MemoryRouter>,
     );
     expect(reconnect).not.toHaveBeenCalled();
 
     rerender(
-      <MemoryRouter><ApiProvider client={client}><AgentConsoleTab hostId="remote" agent={value} refresh={vi.fn()} execCount={3} /></ApiProvider></MemoryRouter>,
+      <MemoryRouter>
+        <ApiProvider client={client}>
+          <AgentConsoleTab hostId="remote" agent={value} refresh={vi.fn()} execCount={3} />
+        </ApiProvider>
+      </MemoryRouter>,
     );
     expect(reconnect).toHaveBeenCalledOnce();
   });

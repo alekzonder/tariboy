@@ -8,15 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "tariboy-ui";
-import {
-  Copy,
-  Download,
-  MoonIcon,
-  Pencil,
-  SunIcon,
-  Trash2,
-  Upload,
-} from "lucide-react";
+import { Copy, Download, MoonIcon, Pencil, SunIcon, Trash2, Upload } from "lucide-react";
 
 // The sidebar host row the "manage host" menu hangs off.
 const HostRow = ({ children }: { children?: React.ReactNode }) => (

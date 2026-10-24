@@ -1,18 +1,36 @@
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { PathPromptDialog } from "./PathPromptDialog";
 import type { useFileActions } from "./useFileActions";
 
-export function FileBrowserDialogs({ actions, canCreate, canRename }: {
+export function FileBrowserDialogs({
+  actions,
+  canCreate,
+  canRename,
+}: {
   actions: ReturnType<typeof useFileActions>;
   canCreate: boolean;
   canRename: boolean;
 }) {
   const {
-    newKind, setNewKind, rename, setRename, confirm, setConfirm,
-    promptValue, setPromptValue, doCreate, submitRename,
+    newKind,
+    setNewKind,
+    rename,
+    setRename,
+    confirm,
+    setConfirm,
+    promptValue,
+    setPromptValue,
+    doCreate,
+    submitRename,
   } = actions;
   return (
     <>
@@ -24,7 +42,9 @@ export function FileBrowserDialogs({ actions, canCreate, canRename }: {
           value={promptValue}
           onValueChange={setPromptValue}
           submitLabel="Create"
-          onOpenChange={(o) => { if (!o) setNewKind(null); }}
+          onOpenChange={(o) => {
+            if (!o) setNewKind(null);
+          }}
           onSubmit={(v) => newKind && doCreate(newKind, v)}
         />
       )}
@@ -37,12 +57,19 @@ export function FileBrowserDialogs({ actions, canCreate, canRename }: {
           value={promptValue}
           onValueChange={setPromptValue}
           submitLabel="Rename"
-          onOpenChange={(o) => { if (!o) setRename(null); }}
+          onOpenChange={(o) => {
+            if (!o) setRename(null);
+          }}
           onSubmit={submitRename}
         />
       )}
 
-      <AlertDialog open={confirm !== null} onOpenChange={(o) => { if (!o) setConfirm(null); }}>
+      <AlertDialog
+        open={confirm !== null}
+        onOpenChange={(o) => {
+          if (!o) setConfirm(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{confirm?.title}</AlertDialogTitle>
@@ -52,7 +79,10 @@ export function FileBrowserDialogs({ actions, canCreate, canRename }: {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              onClick={() => { confirm?.run(); setConfirm(null); }}
+              onClick={() => {
+                confirm?.run();
+                setConfirm(null);
+              }}
             >
               {confirm?.actionLabel}
             </AlertDialogAction>

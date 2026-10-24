@@ -1,5 +1,5 @@
-import { useCallback, useState, type DragEvent } from "react"
-import { toast } from "sonner"
+import { useCallback, useState, type DragEvent } from "react";
+import { toast } from "sonner";
 
 /** True when the drag carries files.
  *
@@ -18,9 +18,7 @@ import { toast } from "sonner"
  * This gate belongs to `dragover` only. `drop` prevents the default
  * unconditionally instead — see the comment on `onDrop` below. */
 function dragCarriesFiles(event: DragEvent<HTMLElement>): boolean {
-  return Array.from(event.dataTransfer.types ?? []).some(
-    (type) => type.toLowerCase() === "files",
-  )
+  return Array.from(event.dataTransfer.types ?? []).some((type) => type.toLowerCase() === "files");
 }
 
 /** The dropped files with directories removed, plus whether any were removed.
@@ -31,51 +29,54 @@ function dragCarriesFiles(event: DragEvent<HTMLElement>): boolean {
  * `items` or `webkitGetAsEntry` is unavailable the raw file list is used, so
  * no browser ends up worse off than before. */
 function droppedFiles(event: DragEvent<HTMLElement>): {
-  files: File[]
-  skippedDirectory: boolean
+  files: File[];
+  skippedDirectory: boolean;
 } {
-  const all = Array.from(event.dataTransfer.files ?? [])
+  const all = Array.from(event.dataTransfer.files ?? []);
   const fileItems = Array.from(event.dataTransfer.items ?? []).filter(
     (item) => item.kind === "file",
-  )
+  );
   const inspectable =
-    fileItems.length === all.length
-    && fileItems.every((item) => typeof item.webkitGetAsEntry === "function")
-  if (!inspectable) return { files: all, skippedDirectory: false }
+    fileItems.length === all.length &&
+    fileItems.every((item) => typeof item.webkitGetAsEntry === "function");
+  if (!inspectable) return { files: all, skippedDirectory: false };
 
-  const files = all.filter((_, index) => !fileItems[index].webkitGetAsEntry()?.isDirectory)
-  return { files, skippedDirectory: files.length !== all.length }
+  const files = all.filter((_, index) => !fileItems[index].webkitGetAsEntry()?.isDirectory);
+  return { files, skippedDirectory: files.length !== all.length };
 }
 
 /** Event handlers for targets that accept only real file drags. */
 export function useFileDropTarget(sendFiles: (files: File[]) => Promise<void>) {
-  const [dragActive, setDragActive] = useState(false)
+  const [dragActive, setDragActive] = useState(false);
 
   const onDragOver = useCallback((event: DragEvent<HTMLElement>) => {
-    if (!dragCarriesFiles(event)) return
-    event.preventDefault()
-    setDragActive(true)
-  }, [])
+    if (!dragCarriesFiles(event)) return;
+    event.preventDefault();
+    setDragActive(true);
+  }, []);
 
-  const onDragLeave = useCallback(() => setDragActive(false), [])
+  const onDragLeave = useCallback(() => setDragActive(false), []);
 
-  const onDrop = useCallback((event: DragEvent<HTMLElement>) => {
-    // Unconditional, and before anything can bail out: by the time `drop`
-    // fires our own `dragover` has already claimed the drag, so the browser
-    // would navigate away to the dropped item on every path that returns
-    // early — including a drag that advertises "Files" but yields none
-    // (promised/virtual files, a remote mount, a source that cancels late).
-    // No `dragleave` follows a drop either, so the ring must be cleared here
-    // too. `dragover` stays conditional for the opposite reason: preventing
-    // the default there is what claims the drag, and claiming every drag
-    // would suppress every other drop target on the page.
-    event.preventDefault()
-    setDragActive(false)
-    const { files, skippedDirectory } = droppedFiles(event)
-    if (skippedDirectory) toast.error("folders cannot be sent — drop files instead")
-    if (files.length === 0) return
-    void sendFiles(files).finally(() => setDragActive(false))
-  }, [sendFiles])
+  const onDrop = useCallback(
+    (event: DragEvent<HTMLElement>) => {
+      // Unconditional, and before anything can bail out: by the time `drop`
+      // fires our own `dragover` has already claimed the drag, so the browser
+      // would navigate away to the dropped item on every path that returns
+      // early — including a drag that advertises "Files" but yields none
+      // (promised/virtual files, a remote mount, a source that cancels late).
+      // No `dragleave` follows a drop either, so the ring must be cleared here
+      // too. `dragover` stays conditional for the opposite reason: preventing
+      // the default there is what claims the drag, and claiming every drag
+      // would suppress every other drop target on the page.
+      event.preventDefault();
+      setDragActive(false);
+      const { files, skippedDirectory } = droppedFiles(event);
+      if (skippedDirectory) toast.error("folders cannot be sent — drop files instead");
+      if (files.length === 0) return;
+      void sendFiles(files).finally(() => setDragActive(false));
+    },
+    [sendFiles],
+  );
 
-  return { dragActive, onDragOver, onDragLeave, onDrop }
+  return { dragActive, onDragOver, onDragLeave, onDrop };
 }

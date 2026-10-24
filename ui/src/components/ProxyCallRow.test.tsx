@@ -6,11 +6,22 @@ import type { Call } from "@/lib/api";
 afterEach(() => vi.restoreAllMocks());
 
 const base: Call = {
-  seq: 0, ts: "t", provider: "anthropic", model: "claude-opus-4",
+  seq: 0,
+  ts: "t",
+  provider: "anthropic",
+  model: "claude-opus-4",
   usage: { input: 1200, output: 800, cache_read: 0, cache_write: 0 },
-  cost_usd: 0.01, instructions: "Follow the rules.", instructions_changed: true,
+  cost_usd: 0.01,
+  instructions: "Follow the rules.",
+  instructions_changed: true,
   delta: [{ role: "user", blocks: [{ type: "text", text: "run tests" }] }],
-  response: { blocks: [{ type: "thinking", text: "check config first" }, { type: "text", text: "running" }], stop_reason: "end_turn" },
+  response: {
+    blocks: [
+      { type: "thinking", text: "check config first" },
+      { type: "text", text: "running" },
+    ],
+    stop_reason: "end_turn",
+  },
 };
 
 describe("ProxyCallRow", () => {
@@ -36,11 +47,26 @@ describe("ProxyCallRow", () => {
       ...base,
       provider: "openai",
       model: "gpt-5.6-sol",
-      delta: [{ role: "tool", blocks: [{ type: "tool_result", tool_use_id: "call-1", text: "3 files matched" }] }],
+      delta: [
+        {
+          role: "tool",
+          blocks: [{ type: "tool_result", tool_use_id: "call-1", text: "3 files matched" }],
+        },
+      ],
       response: {
         blocks: [
-          { type: "tool_use", tool_name: "exec_command", tool_use_id: "call-2", input: { cmd: "rg -n audit ui/src" } },
-          { type: "tool_use", tool_name: "Skill", tool_use_id: "call-3", input: { skill: "brainstorming" } },
+          {
+            type: "tool_use",
+            tool_name: "exec_command",
+            tool_use_id: "call-2",
+            input: { cmd: "rg -n audit ui/src" },
+          },
+          {
+            type: "tool_use",
+            tool_name: "Skill",
+            tool_use_id: "call-3",
+            input: { skill: "brainstorming" },
+          },
           { type: "text", text: "I found the audit renderer." },
         ],
         stop_reason: "completed",
@@ -63,7 +89,15 @@ describe("ProxyCallRow", () => {
     const codex: Call = {
       ...base,
       provider: "openai",
-      response: { blocks: [{ type: "tool_use", tool_name: "local_shell", input: { type: "exec", command: ["bash", "-lc", "make check"] } }] },
+      response: {
+        blocks: [
+          {
+            type: "tool_use",
+            tool_name: "local_shell",
+            input: { type: "exec", command: ["bash", "-lc", "make check"] },
+          },
+        ],
+      },
     };
     render(<ProxyCallRow call={codex} mode="full" name="a1" iteration="it" />);
     expect(screen.getByText("Command")).toBeInTheDocument();
@@ -106,7 +140,12 @@ describe("ProxyCallRow", () => {
   });
 
   it("unchanged later call still exposes viewable instructions", () => {
-    const later: Call = { ...base, seq: 3, instructions_changed: false, instructions: "Still follow the rules." };
+    const later: Call = {
+      ...base,
+      seq: 3,
+      instructions_changed: false,
+      instructions: "Still follow the rules.",
+    };
     render(<ProxyCallRow call={later} mode="enrich" name="a1" iteration="it" />);
     fireEvent.click(screen.getByText(/instructions/i));
     expect(screen.getByText("Still follow the rules.")).toBeInTheDocument();

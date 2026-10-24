@@ -25,9 +25,11 @@ describe("Desktop E2E diagnostics", () => {
       return true;
     };
 
-    await expect(Promise.race([
-      stopChild(child),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("stopChild hung")), 200)),
-    ])).resolves.toBeUndefined();
+    await expect(
+      Promise.race([
+        stopChild(child),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("stopChild hung")), 200)),
+      ]),
+    ).resolves.toBeUndefined();
   });
 });

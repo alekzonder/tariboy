@@ -23,11 +23,10 @@ export function iterationsApi(t: Transport) {
     // and accepts a batch of ids; the UI only ever edits one iteration at a
     // time, and a replace expresses both an added and a removed tag.
     setIterationTags: (name: string, iterationId: string, tags: string[]) =>
-      t.agentPost<{ tags: Record<string, string[]>; count: number }>(
-        name,
-        "iterations/tags/set",
-        { id: [iterationId], tag: tags },
-      ),
+      t.agentPost<{ tags: Record<string, string[]>; count: number }>(name, "iterations/tags/set", {
+        id: [iterationId],
+        tag: tags,
+      }),
   };
 }
 export type IterationsApi = ReturnType<typeof iterationsApi>;

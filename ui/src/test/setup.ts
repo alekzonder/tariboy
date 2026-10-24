@@ -1,24 +1,24 @@
-import "@testing-library/jest-dom"
-import { configure } from "@testing-library/react"
-import { TransformStream as NodeTransformStream } from "node:stream/web"
+import "@testing-library/jest-dom";
+import { configure } from "@testing-library/react";
+import { TransformStream as NodeTransformStream } from "node:stream/web";
 
 if (typeof globalThis.TransformStream === "undefined") {
   Object.defineProperty(globalThis, "TransformStream", {
     configurable: true,
     writable: true,
     value: NodeTransformStream,
-  })
+  });
 }
 
 // Radix UI popovers/menus (DropdownMenu, Select) probe APIs that jsdom does not
 // implement. Without these shims, opening a menu in a test throws.
 if (!Element.prototype.hasPointerCapture) {
-  Element.prototype.hasPointerCapture = () => false
-  Element.prototype.setPointerCapture = () => {}
-  Element.prototype.releasePointerCapture = () => {}
+  Element.prototype.hasPointerCapture = () => false;
+  Element.prototype.setPointerCapture = () => {};
+  Element.prototype.releasePointerCapture = () => {};
 }
 if (!Element.prototype.scrollIntoView) {
-  Element.prototype.scrollIntoView = () => {}
+  Element.prototype.scrollIntoView = () => {};
 }
 
 // Radix ScrollArea observes its viewport with ResizeObserver, which jsdom lacks.
@@ -29,7 +29,7 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     unobserve() {}
     disconnect() {}
   }
-  globalThis.ResizeObserver = FakeResizeObserver as unknown as typeof ResizeObserver
+  globalThis.ResizeObserver = FakeResizeObserver as unknown as typeof ResizeObserver;
 }
 
 // jsdom here runs without a usable localStorage/sessionStorage: components read
@@ -43,16 +43,16 @@ if (typeof globalThis.ResizeObserver === "undefined") {
 // localStorage.clear() throwing. Installation goes through defineProperty
 // because the platform global is not a plain writable property.
 function installStorageShim(name: "localStorage" | "sessionStorage"): void {
-  const existing = globalThis[name] as Storage | undefined
+  const existing = globalThis[name] as Storage | undefined;
   try {
     if (existing && typeof existing.clear === "function") {
-      existing.clear()
-      return // a real, working Storage — leave it alone
+      existing.clear();
+      return; // a real, working Storage — leave it alone
     }
   } catch {
     // Throws on access/use: treat as unusable and replace below.
   }
-  const store = new Map<string, string>()
+  const store = new Map<string, string>();
   Object.defineProperty(globalThis, name, {
     configurable: true,
     writable: true,
@@ -63,14 +63,14 @@ function installStorageShim(name: "localStorage" | "sessionStorage"): void {
       clear: () => store.clear(),
       key: (i: number) => Array.from(store.keys())[i] ?? null,
       get length() {
-        return store.size
+        return store.size;
       },
     } as Storage,
-  })
+  });
 }
 
-installStorageShim("localStorage")
-installStorageShim("sessionStorage")
+installStorageShim("localStorage");
+installStorageShim("sessionStorage");
 
 if (typeof globalThis.matchMedia === "undefined") {
   globalThis.matchMedia = (query: string) =>
@@ -83,7 +83,7 @@ if (typeof globalThis.matchMedia === "undefined") {
       addListener: () => {},
       removeListener: () => {},
       dispatchEvent: () => false,
-    }) as unknown as MediaQueryList
+    }) as unknown as MediaQueryList;
 }
 
 // jsdom has no EventSource; pages that open an SSE stream on mount
@@ -94,10 +94,10 @@ if (typeof globalThis.EventSource === "undefined") {
     addEventListener() {}
     removeEventListener() {}
   }
-  globalThis.EventSource = FakeEventSource as unknown as typeof EventSource
+  globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
 }
 
 // Screens and editors load lazily: the first findBy in a test file may wait
 // for a cold dynamic import, which under the parallel suite can take longer
 // than the 1 s default.
-configure({ asyncUtilTimeout: 5000 })
+configure({ asyncUtilTimeout: 5000 });

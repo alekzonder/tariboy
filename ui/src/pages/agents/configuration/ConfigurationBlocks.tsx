@@ -25,41 +25,83 @@ export interface BlockProps {
 
 export function ConfigurationBlocks(props: BlockProps) {
   const { block, draft, matched, dirty } = props;
-  const plain = (key: string) => <DraftField field={field(key)} draft={draft} matched={matched.has(key)} />;
+  const plain = (key: string) => (
+    <DraftField field={field(key)} draft={draft} matched={matched.has(key)} />
+  );
   let body;
   switch (block.id) {
-    case "general": body = <GeneralBlock {...props} />; break;
-    case "runtime": body = <RuntimeBlock {...props} />; break;
+    case "general":
+      body = <GeneralBlock {...props} />;
+      break;
+    case "runtime":
+      body = <RuntimeBlock {...props} />;
+      break;
     case "loop":
-      body = <>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">{plain("interval")}{plain("timeout")}{plain("hard-timeout")}</div>
-        <div className="space-y-1">
-          {plain("schedule")}
-          <ScheduleNextRun nextAt={props.sources.view?.schedule_next_at} />
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{plain("on-timeout")}{plain("on-error")}</div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{plain("max-idle")}{plain("ai-stall-timeout")}</div>
-      </>;
+      body = (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {plain("interval")}
+            {plain("timeout")}
+            {plain("hard-timeout")}
+          </div>
+          <div className="space-y-1">
+            {plain("schedule")}
+            <ScheduleNextRun nextAt={props.sources.view?.schedule_next_at} />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {plain("on-timeout")}
+            {plain("on-error")}
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {plain("max-idle")}
+            {plain("ai-stall-timeout")}
+          </div>
+        </>
+      );
       break;
     case "goal":
-      body = <>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {plain("goal-enabled")}{plain("goal-wait-customer-timeout")}{plain("goal-delivery-cooldown")}
-        </div>
-        <ReadOnly draft={draft} matched={matched} fieldKey="current-goal-task">
-          <Input id="current-goal-task" value={props.sources.view?.current_goal_task_key || "No current goal"} disabled aria-describedby="current-goal-task-help" />
-        </ReadOnly>
-      </>;
+      body = (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {plain("goal-enabled")}
+            {plain("goal-wait-customer-timeout")}
+            {plain("goal-delivery-cooldown")}
+          </div>
+          <ReadOnly draft={draft} matched={matched} fieldKey="current-goal-task">
+            <Input
+              id="current-goal-task"
+              value={props.sources.view?.current_goal_task_key || "No current goal"}
+              disabled
+              aria-describedby="current-goal-task-help"
+            />
+          </ReadOnly>
+        </>
+      );
       break;
     case "messages":
-      body = <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{plain("messages-batch")}{plain("messages-max-queue")}</div>;
+      body = (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {plain("messages-batch")}
+          {plain("messages-max-queue")}
+        </div>
+      );
       break;
-    case "budgets": body = <BudgetsBlock {...props} />; break;
-    case "environment": body = <EnvironmentBlock {...props} />; break;
-    case "retention": body = <RetentionBlock {...props} />; break;
+    case "budgets":
+      body = <BudgetsBlock {...props} />;
+      break;
+    case "environment":
+      body = <EnvironmentBlock {...props} />;
+      break;
+    case "retention":
+      body = <RetentionBlock {...props} />;
+      break;
   }
   return (
-    <ConfigBlockCard block={block} dirtyCount={dirty} action={block.id === "goal" ? <GoalHelp /> : undefined}>
+    <ConfigBlockCard
+      block={block}
+      dirtyCount={dirty}
+      action={block.id === "goal" ? <GoalHelp /> : undefined}
+    >
       {body}
     </ConfigBlockCard>
   );

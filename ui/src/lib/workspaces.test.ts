@@ -34,7 +34,9 @@ describe("workspaces", () => {
   it("creates, renames and moves a host, updating subscribers and storage", () => {
     const { result } = renderHook(() => useWorkspaces());
     let id = "";
-    act(() => { id = createWorkspace("  Production  ")!; });
+    act(() => {
+      id = createWorkspace("  Production  ")!;
+    });
     expect(result.current.workspaces.map((w) => w.name)).toEqual(["Default", "Production"]);
 
     act(() => moveHost("h1", id));
@@ -55,10 +57,14 @@ describe("workspaces", () => {
 
   it("ignores blank names and never renames or deletes Default", () => {
     const { result } = renderHook(() => useWorkspaces());
-    act(() => { expect(createWorkspace("   ")).toBeUndefined(); });
+    act(() => {
+      expect(createWorkspace("   ")).toBeUndefined();
+    });
     act(() => renameWorkspace(DEFAULT_WORKSPACE_ID, "Mine"));
     act(() => deleteWorkspace(DEFAULT_WORKSPACE_ID));
-    act(() => { renameWorkspace(createWorkspace("A")!, "  "); });
+    act(() => {
+      renameWorkspace(createWorkspace("A")!, "  ");
+    });
     expect(result.current.workspaces.map((w) => w.name)).toEqual(["Default", "A"]);
   });
 
@@ -80,7 +86,10 @@ describe("workspaces", () => {
 
   it("keeps the current workspace across a reload", () => {
     let id = "";
-    act(() => { id = createWorkspace("Lab")!; selectWorkspace(id); });
+    act(() => {
+      id = createWorkspace("Lab")!;
+      selectWorkspace(id);
+    });
     resetWorkspacesForTest();
     const { result } = renderHook(() => useWorkspaces());
     expect(result.current.active).toBe(id);
@@ -92,12 +101,15 @@ describe("workspaces", () => {
     expect(broken.result.current.workspaces).toHaveLength(1);
     broken.unmount();
 
-    localStorage.setItem(WORKSPACES_KEY, JSON.stringify({
-      version: 1,
-      workspaces: [{ id: "w1", name: "Lab" }, { id: 7 }, { id: DEFAULT_WORKSPACE_ID, name: "x" }],
-      hostWorkspace: { h1: "gone", h2: "w1", h3: 5 },
-      active: "gone",
-    }));
+    localStorage.setItem(
+      WORKSPACES_KEY,
+      JSON.stringify({
+        version: 1,
+        workspaces: [{ id: "w1", name: "Lab" }, { id: 7 }, { id: DEFAULT_WORKSPACE_ID, name: "x" }],
+        hostWorkspace: { h1: "gone", h2: "w1", h3: 5 },
+        active: "gone",
+      }),
+    );
     resetWorkspacesForTest();
     const { result } = renderHook(() => useWorkspaces());
     expect(result.current.workspaces).toEqual([

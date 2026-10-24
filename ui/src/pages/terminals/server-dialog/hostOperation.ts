@@ -1,10 +1,6 @@
 import type { DaemonMeta } from "@/lib/daemons";
 import type { DesktopHostView, HostOutputEvent } from "@/lib/desktop";
-import type {
-  HostOperationKind,
-  HostOperationStatus,
-  HostProgressStep,
-} from "@/lib/hostProgress";
+import type { HostOperationKind, HostOperationStatus, HostProgressStep } from "@/lib/hostProgress";
 
 export interface HostOperation {
   kind: HostOperationKind;

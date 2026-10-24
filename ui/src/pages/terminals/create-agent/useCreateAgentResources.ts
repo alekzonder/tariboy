@@ -26,14 +26,11 @@ export function useCreateAgentResources(
   const [manifestAttempt, setManifestAttempt] = useState(0);
   const runtimeInitializedForTarget = useRef("");
   const [imagesError, setImagesError] = useState("");
-  const selectedHostRevision =
-    hosts.find((entry) => entry.id === host)?.revision ?? "missing";
+  const selectedHostRevision = hosts.find((entry) => entry.id === host)?.revision ?? "missing";
   const targetIsCurrent = resolvedRevision === selectedHostRevision;
   const targetIsUsable = host === "" || target !== null;
   const loadingImages = !targetIsCurrent;
-  const targetImageAvailable = images.some(
-    (entry) => `${entry.name}:${entry.tag}` === draft.image,
-  );
+  const targetImageAvailable = images.some((entry) => `${entry.name}:${entry.tag}` === draft.image);
   const expectedManifestKey = `${selectedHostRevision}\u0000${draft.image}`;
   const runtimeTargetKey = `${host}\u0000${draft.image}`;
   const manifestIsCurrent =
@@ -51,13 +48,9 @@ export function useCreateAgentResources(
   const bare = currentManifest?.bare === true;
   const schemaV2 = currentManifest?.schema_version === 2;
   const defaultModel =
-    currentManifest?.schema_version === 1
-      ? (currentManifest.harness?.model ?? "")
-      : "";
+    currentManifest?.schema_version === 1 ? (currentManifest.harness?.model ?? "") : "";
   const defaultEffort =
-    currentManifest?.schema_version === 1
-      ? (currentManifest.harness?.effort ?? "")
-      : "";
+    currentManifest?.schema_version === 1 ? (currentManifest.harness?.effort ?? "") : "";
   const displayedPlugins = schemaV2
     ? (currentManifest?.plugins?.map((plugin) => plugin.name) ?? [])
     : draft.plugins;
@@ -87,35 +80,23 @@ export function useCreateAgentResources(
   }, [host, selectedHostRevision]);
 
   useEffect(() => {
-    if (!draft.image || loadingImages || !targetIsCurrent || !targetIsUsable)
-      return;
+    if (!draft.image || loadingImages || !targetIsCurrent || !targetIsUsable) return;
     if (!targetImageAvailable) return;
     let alive = true;
-    void api.images.imageManifestGet(draft.image)
+    void api.images
+      .imageManifestGet(draft.image)
       .then((next) => {
         if (!alive) return;
         setManifest(next);
         setManifestKey(expectedManifestKey);
         setManifestError("");
-        if (
-          !cloneSource &&
-          runtimeInitializedForTarget.current !== runtimeTargetKey
-        ) {
+        if (!cloneSource && runtimeInitializedForTarget.current !== runtimeTargetKey) {
           runtimeInitializedForTarget.current = runtimeTargetKey;
           setDraft((current) => ({
             ...current,
-            harness:
-              next.schema_version === 1
-                ? (next.harness?.type ?? "")
-                : current.harness,
-            model:
-              next.schema_version === 1
-                ? (next.harness?.model ?? "")
-                : current.model,
-            effort:
-              next.schema_version === 1
-                ? (next.harness?.effort ?? "")
-                : current.effort,
+            harness: next.schema_version === 1 ? (next.harness?.type ?? "") : current.harness,
+            model: next.schema_version === 1 ? (next.harness?.model ?? "") : current.model,
+            effort: next.schema_version === 1 ? (next.harness?.effort ?? "") : current.effort,
           }));
         }
       })
@@ -123,9 +104,7 @@ export function useCreateAgentResources(
         if (!alive) return;
         setManifest(null);
         setManifestKey(expectedManifestKey);
-        setManifestError(
-          `Could not load image ${draft.image}: ${errorMessage(error)}`,
-        );
+        setManifestError(`Could not load image ${draft.image}: ${errorMessage(error)}`);
       });
     return () => {
       alive = false;

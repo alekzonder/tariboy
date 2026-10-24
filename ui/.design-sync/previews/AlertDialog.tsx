@@ -77,8 +77,8 @@ export const DeleteAgent = () => (
         <AlertDialogHeader>
           <AlertDialogTitle>Delete agent builder?</AlertDialogTitle>
           <AlertDialogDescription>
-            This permanently deletes the agent and all of its durable data. This
-            action cannot be undone.
+            This permanently deletes the agent and all of its durable data. This action cannot be
+            undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -105,8 +105,7 @@ export const WithMedia = () => (
           </AlertDialogMedia>
           <AlertDialogTitle>Remove image worker:v2?</AlertDialogTitle>
           <AlertDialogDescription>
-            Deletes this immutable runnable image. Original build files are not
-            managed by Tariboy.
+            Deletes this immutable runnable image. Original build files are not managed by Tariboy.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -154,8 +153,8 @@ export const Pending = () => (
         <AlertDialogHeader>
           <AlertDialogTitle>Delete agent docs-bot?</AlertDialogTitle>
           <AlertDialogDescription>
-            This permanently deletes the agent and all of its durable data. This
-            action cannot be undone.
+            This permanently deletes the agent and all of its durable data. This action cannot be
+            undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

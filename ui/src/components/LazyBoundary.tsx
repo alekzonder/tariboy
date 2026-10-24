@@ -9,7 +9,11 @@ import { Button } from "@/components/ui/button";
  * reload, never an automatic retry loop. A new resetKey, such as the route
  * path, clears that error.
  */
-export function LazyBoundary({ resetKey, reload, children }: {
+export function LazyBoundary({
+  resetKey,
+  reload,
+  children,
+}: {
   resetKey: string;
   reload?: () => void;
   children: ReactNode;

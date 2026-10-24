@@ -7,38 +7,55 @@ afterEach(() => vi.restoreAllMocks());
 const resp = (body: unknown, ok = true, status = 200) =>
   Promise.resolve({ ok, status, text: async () => JSON.stringify(body) } as Response);
 
-interface Call { path: string; method: string; body: unknown }
+interface Call {
+  path: string;
+  method: string;
+  body: unknown;
+}
 
 // mockApi records every /api/groups and /api/agents POST into `calls` (in
 // order). `failAgentImages` is a set of image refs whose agent POST fails, so a
 // test can drive the partial-failure path.
 function mockApi(calls: Call[], failAgentImages = new Set<string>(), requests?: string[]) {
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-    requests?.push(path);
-    const method = init?.method ?? "GET";
-    const body = init?.body ? JSON.parse(init.body as string) : undefined;
-    if (path === "/api/groups" && method === "POST") {
-      calls.push({ path, method, body });
-      return resp({ ok: true, result: { name: body.name, lead: body.lead ?? "" } });
-    }
-    if (path === "/api/agents" && method === "POST") {
-      calls.push({ path, method, body });
-      if (failAgentImages.has(body.image as string))
-        return resp({ ok: false, error: { code: "bad_cwd", message: "no such dir" } }, false, 400);
-      return resp({ ok: true, result: { name: (body.name as string) || "gen", state: "running" } });
-    }
-    if (path.startsWith("/api/images"))
-      return resp({
-        ok: true,
-        result: { images: [
-          { name: "img", tag: "1", schema_version: 1 },
-          { name: "img", tag: "2", schema_version: 2 },
-        ], count: 2 },
-      });
-    if (path.startsWith("/api/fs/list"))
-      return resp({ ok: true, result: { path: "", parent: "", entries: [] } });
-    return resp({ ok: true, result: {} });
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      requests?.push(path);
+      const method = init?.method ?? "GET";
+      const body = init?.body ? JSON.parse(init.body as string) : undefined;
+      if (path === "/api/groups" && method === "POST") {
+        calls.push({ path, method, body });
+        return resp({ ok: true, result: { name: body.name, lead: body.lead ?? "" } });
+      }
+      if (path === "/api/agents" && method === "POST") {
+        calls.push({ path, method, body });
+        if (failAgentImages.has(body.image as string))
+          return resp(
+            { ok: false, error: { code: "bad_cwd", message: "no such dir" } },
+            false,
+            400,
+          );
+        return resp({
+          ok: true,
+          result: { name: (body.name as string) || "gen", state: "running" },
+        });
+      }
+      if (path.startsWith("/api/images"))
+        return resp({
+          ok: true,
+          result: {
+            images: [
+              { name: "img", tag: "1", schema_version: 1 },
+              { name: "img", tag: "2", schema_version: 2 },
+            ],
+            count: 2,
+          },
+        });
+      if (path.startsWith("/api/fs/list"))
+        return resp({ ok: true, result: { path: "", parent: "", entries: [] } });
+      return resp({ ok: true, result: {} });
+    }),
+  );
 }
 
 it("offers custom teams without requesting deleted built-in templates", async () => {
@@ -143,7 +160,7 @@ it("base cwd seeds every row; a per-row override wins for that row only", async 
 
   fireEvent.click(screen.getByRole("button", { name: /^Create group$/i }));
   await waitFor(() => expect(calls.length).toBe(3));
-  expect(calls[1].body).toMatchObject({ cwd: "/home/base" });   // row 0 → base
+  expect(calls[1].body).toMatchObject({ cwd: "/home/base" }); // row 0 → base
   expect(calls[2].body).toMatchObject({ cwd: "/home/special" }); // row 1 → override
 });
 

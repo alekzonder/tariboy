@@ -19,7 +19,11 @@ import { useChatScroll } from "./useChatScroll";
  * There is no conversation list here: the conversation is whichever agent the
  * sidebar has selected, one agent to one thread.
  */
-export default function AgentChat({ hostId = "", leading, personalOnly = false }: {
+export default function AgentChat({
+  hostId = "",
+  leading,
+  personalOnly = false,
+}: {
   hostId?: string;
   /** Simple mode: the conversation only, without the chat tablist. */
   personalOnly?: boolean;
@@ -29,8 +33,16 @@ export default function AgentChat({ hostId = "", leading, personalOnly = false }
 }) {
   const chat = useAgentChat(hostId);
   const {
-    name, draft, setDraft, sending, writable, openQuestion, selected,
-    setSelected, send, loadShared,
+    name,
+    draft,
+    setDraft,
+    sending,
+    writable,
+    openQuestion,
+    selected,
+    setSelected,
+    send,
+    loadShared,
   } = chat;
   const [creating, setCreating] = useState(false);
   const [taskKey, setTaskKey] = useState("");
@@ -45,12 +57,7 @@ export default function AgentChat({ hostId = "", leading, personalOnly = false }
         personalOnly={personalOnly}
         onCreate={() => setCreating(true)}
       />
-      <ChatFeed
-        chat={chat}
-        scroll={scroll}
-        onOpenTask={setTaskKey}
-        onCreateTask={setTaskFrom}
-      />
+      <ChatFeed chat={chat} scroll={scroll} onOpenTask={setTaskKey} onCreateTask={setTaskFrom} />
       {writable ? (
         <ChatComposer
           agent={name}
@@ -67,18 +74,16 @@ export default function AgentChat({ hostId = "", leading, personalOnly = false }
             : `Service wake-ups for ${name}: script results, goals and schedules.`}
         </p>
       )}
-      {taskKey && (
-        <TaskDrawer
-          key={taskKey}
-          taskKey={taskKey}
-          onClose={() => setTaskKey("")}
-        />
-      )}
+      {taskKey && <TaskDrawer key={taskKey} taskKey={taskKey} onClose={() => setTaskKey("")} />}
       {creating && (
         <ChatCreate
           agent={name}
           onClose={() => setCreating(false)}
-          onCreated={(chat) => { setCreating(false); setSelected(chat); void loadShared(); }}
+          onCreated={(chat) => {
+            setCreating(false);
+            setSelected(chat);
+            void loadShared();
+          }}
         />
       )}
       {taskFrom && (
@@ -86,7 +91,10 @@ export default function AgentChat({ hostId = "", leading, personalOnly = false }
           message={taskFrom}
           agent={name}
           onClose={() => setTaskFrom(null)}
-          onCreated={(key) => { setTaskFrom(null); setTaskKey(key); }}
+          onCreated={(key) => {
+            setTaskFrom(null);
+            setTaskKey(key);
+          }}
         />
       )}
     </div>

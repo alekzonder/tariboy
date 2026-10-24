@@ -17,24 +17,31 @@ import { DaemonProvider, TasksWorkspace, QueryClientProvider, createQueryClient 
 // The view is internal state with no prop, so the Queues and Notifications
 // stories click the real rail button from a mount effect, scoped to their own
 // frame so a multi-story card never cross-fires.
-const Shell = ({ children, frameRef }: {
+const Shell = ({
+  children,
+  frameRef,
+}: {
   children: ReactNode;
   frameRef?: RefObject<HTMLDivElement | null>;
 }) => {
   const [client] = useState(createQueryClient);
-  return <QueryClientProvider client={client}><div
-    ref={frameRef}
-    style={{
-      height: 620,
-      width: 1180,
-      overflow: "hidden",
-      border: "1px solid var(--border)",
-      borderRadius: "var(--radius)",
-      background: "var(--background)",
-    }}
-  >
-    {children}
-  </div></QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <div
+        ref={frameRef}
+        style={{
+          height: 620,
+          width: 1180,
+          overflow: "hidden",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius)",
+          background: "var(--background)",
+        }}
+      >
+        {children}
+      </div>
+    </QueryClientProvider>
+  );
 };
 
 // Click real buttons by their visible label, one per frame, so each click sees

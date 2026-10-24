@@ -23,13 +23,26 @@ describe("RepoDetail", () => {
     (getTags as ReturnType<typeof vi.fn>).mockResolvedValue({
       name: "demo",
       tags: [
-        { tag: "latest", digest: "deadbeef", built_at: "2026-07-06T00:00:00Z", pushed_at: "2026-07-06T01:00:00Z" },
+        {
+          tag: "latest",
+          digest: "deadbeef",
+          built_at: "2026-07-06T00:00:00Z",
+          pushed_at: "2026-07-06T01:00:00Z",
+        },
       ],
     });
     (getManifest as ReturnType<typeof vi.fn>).mockResolvedValue({
-      schema_version: 1, name: "demo", tag: "latest", digest: "deadbeef", built_at: "2026-07-06T00:00:00Z",
-      parents: [], plugins: [{ name: "status", version: ">=1.0" }], requires_secrets: ["OPENAI_API_KEY"],
-      harness: { type: "claude", model: "opus", interactive: false }, env: {}, policy: {},
+      schema_version: 1,
+      name: "demo",
+      tag: "latest",
+      digest: "deadbeef",
+      built_at: "2026-07-06T00:00:00Z",
+      parents: [],
+      plugins: [{ name: "status", version: ">=1.0" }],
+      requires_secrets: ["OPENAI_API_KEY"],
+      harness: { type: "claude", model: "opus", interactive: false },
+      env: {},
+      policy: {},
       layers: [],
     });
     renderAt("/repo/demo");
@@ -49,9 +62,17 @@ describe("RepoDetail", () => {
 
   it("keeps the latest-selected tag's manifest when an older request resolves later (out-of-order race)", async () => {
     const manifestOf = (t: string) => ({
-      schema_version: 1, name: "demo", tag: t, digest: `dig-${t}`, built_at: "t",
-      parents: [], plugins: [], requires_secrets: [],
-      harness: { type: "claude", model: `model-${t}`, interactive: false }, env: {}, policy: {},
+      schema_version: 1,
+      name: "demo",
+      tag: t,
+      digest: `dig-${t}`,
+      built_at: "t",
+      parents: [],
+      plugins: [],
+      requires_secrets: [],
+      harness: { type: "claude", model: `model-${t}`, interactive: false },
+      env: {},
+      policy: {},
       layers: [],
     });
 
@@ -65,8 +86,12 @@ describe("RepoDetail", () => {
 
     let resolveA!: (v: unknown) => void;
     let resolveB!: (v: unknown) => void;
-    const pendingA = new Promise((res) => { resolveA = res; });
-    const pendingB = new Promise((res) => { resolveB = res; });
+    const pendingA = new Promise((res) => {
+      resolveA = res;
+    });
+    const pendingB = new Promise((res) => {
+      resolveB = res;
+    });
 
     (getManifest as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce(manifestOf("a")) // auto-select on initial tags load

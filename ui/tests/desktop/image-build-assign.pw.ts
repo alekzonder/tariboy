@@ -5,7 +5,10 @@ async function bodyText(desktop: W3CClient): Promise<string> {
   return desktop.execute<string>("return document.body ? document.body.innerText : '';");
 }
 
-test("builds a transparent image from its original directory and assigns it to an existing agent", async ({ desktop, desktopWorker }) => {
+test("builds a transparent image from its original directory and assigns it to an existing agent", async ({
+  desktop,
+  desktopWorker,
+}) => {
   const sourceDir = await createTestImageSource(desktopWorker.baseDir);
   await waitForMainWindow(desktop);
   await desktop.execute(`window.__imageSetup = "pending";
@@ -18,24 +21,40 @@ test("builds a transparent image from its original directory and assigns it to a
       if (!response.ok || !payload.ok) throw new Error(payload?.error?.message || "agent create failed");
       window.__imageSetup = "ready";
     }).catch((error) => { window.__imageSetup = "failed: " + String(error); });`);
-  await expect.poll(() => desktop.execute<string>("return window.__imageSetup || '';"), { timeout: 60_000 }).toBe("ready");
+  await expect
+    .poll(() => desktop.execute<string>("return window.__imageSetup || '';"), { timeout: 60_000 })
+    .toBe("ready");
 
   await desktop.execute(`window.location.hash = "#/servers/local/images";`);
   await expect.poll(() => bodyText(desktop)).toContain("Build from directory");
-  await desktop.elementSendKeys(await desktop.findElement("css selector", 'input[aria-label="Image source directory"]'), sourceDir);
-  await desktop.elementSendKeys(await desktop.findElement("css selector", 'input[aria-label="Image name"]'), "transparent-e2e");
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Build']"));
-  await expect.poll(() => bodyText(desktop), { timeout: 60_000 }).toContain("transparent-e2e:latest");
+  await desktop.elementSendKeys(
+    await desktop.findElement("css selector", 'input[aria-label="Image source directory"]'),
+    sourceDir,
+  );
+  await desktop.elementSendKeys(
+    await desktop.findElement("css selector", 'input[aria-label="Image name"]'),
+    "transparent-e2e",
+  );
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Build']"),
+  );
+  await expect
+    .poll(() => bodyText(desktop), { timeout: 60_000 })
+    .toContain("transparent-e2e:latest");
 
   await desktop.execute(`window.location.hash = "#/servers/local/images/transparent-e2e/latest";`);
   await expect.poll(() => bodyText(desktop)).toContain(sourceDir);
-  await expect.poll(async () => {
-    try {
-      return await desktop.elementText(await desktop.findElement("xpath", "//button[normalize-space(.)='Open in VS Code']"));
-    } catch {
-      return "";
-    }
-  }).toBe("Open in VS Code");
+  await expect
+    .poll(async () => {
+      try {
+        return await desktop.elementText(
+          await desktop.findElement("xpath", "//button[normalize-space(.)='Open in VS Code']"),
+        );
+      } catch {
+        return "";
+      }
+    })
+    .toBe("Open in VS Code");
 
   await desktop.execute(`window.location.hash = "#/servers/local/images?tab=built";`);
   await expect.poll(() => bodyText(desktop)).toContain("transparent-e2e:latest");
@@ -44,23 +63,48 @@ test("builds a transparent image from its original directory and assigns it to a
     window.__TAURI_INTERNALS__.invoke("image_transfer_target_test")
       .then(() => { window.__desktopTransferTarget = "ready"; })
       .catch((error) => { window.__desktopTransferTarget = "failed: " + String(error); });`);
-  await expect.poll(() => desktop.execute<string>("return window.__desktopTransferTarget || '';"))
+  await expect
+    .poll(() => desktop.execute<string>("return window.__desktopTransferTarget || '';"))
     .toBe("ready");
   await desktop.execute(`window.location.hash = "#/servers/local/settings/hosts";`);
   await expect.poll(() => bodyText(desktop)).toContain("Desktop transfer target");
   await desktop.execute(`window.location.hash = ${JSON.stringify(sourceImagesRoute)};`);
   await expect.poll(() => bodyText(desktop)).toContain("transparent-e2e:latest");
-  await expect.poll(() => desktop.execute<boolean>(`const button = document.querySelector('button[aria-label="Upload to servers transparent-e2e:latest"]');
-    return button instanceof HTMLButtonElement && !button.disabled;`)).toBe(true);
-  await desktop.elementClick(await desktop.findElement("css selector", 'button[aria-label="Upload to servers transparent-e2e:latest"]'));
-  await desktop.elementClick(await desktop.findElement("css selector", 'input[aria-label="Transfer to Desktop transfer target"]'));
-  await expect.poll(() => desktop.execute<boolean>(`const button = [...document.querySelectorAll("button")]
+  await expect
+    .poll(() =>
+      desktop.execute<boolean>(`const button = document.querySelector('button[aria-label="Upload to servers transparent-e2e:latest"]');
+    return button instanceof HTMLButtonElement && !button.disabled;`),
+    )
+    .toBe(true);
+  await desktop.elementClick(
+    await desktop.findElement(
+      "css selector",
+      'button[aria-label="Upload to servers transparent-e2e:latest"]',
+    ),
+  );
+  await desktop.elementClick(
+    await desktop.findElement(
+      "css selector",
+      'input[aria-label="Transfer to Desktop transfer target"]',
+    ),
+  );
+  await expect
+    .poll(() =>
+      desktop.execute<boolean>(`const button = [...document.querySelectorAll("button")]
     .find((candidate) => candidate.textContent?.trim() === "Start transfer");
-    return button instanceof HTMLButtonElement && !button.disabled;`)).toBe(true);
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Start transfer']"));
+    return button instanceof HTMLButtonElement && !button.disabled;`),
+    )
+    .toBe(true);
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Start transfer']"),
+  );
   await expect.poll(() => bodyText(desktop)).toContain("Desktop transfer target: Already present");
-  await expect.poll(() => desktop.execute<string>("return window.location.hash;")).toBe(sourceImagesRoute);
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Cancel']"));
+  await expect
+    .poll(() => desktop.execute<string>("return window.location.hash;"))
+    .toBe(sourceImagesRoute);
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Cancel']"),
+  );
 
   const exportStarted = await desktop.execute<boolean>(`window.__desktopImageArchive = null;
     window.__desktopImageDownloadName = "";
@@ -72,14 +116,23 @@ test("builds a transparent image from its original directory and assigns it to a
     button.click();
     return true;`);
   expect(exportStarted).toBe(true);
-  await expect.poll(() => desktop.execute<number>("return window.__desktopImageArchive ? window.__desktopImageArchive.size : 0;"))
+  await expect
+    .poll(() =>
+      desktop.execute<number>(
+        "return window.__desktopImageArchive ? window.__desktopImageArchive.size : 0;",
+      ),
+    )
     .toBeGreaterThan(0);
-  await expect.poll(() => desktop.execute<string>("return window.__desktopImageDownloadName || '';"))
+  await expect
+    .poll(() => desktop.execute<string>("return window.__desktopImageDownloadName || '';"))
     .toBe("transparent-e2e-latest.tariboy-image.tar.gz");
-  await expect.poll(() => bodyText(desktop)).toContain(
-    "image transparent-e2e:latest saved to file transparent-e2e-latest.tariboy-image.tar.gz",
-  );
-  const uploadStarted = await desktop.execute<boolean>(`const input = document.querySelector('input[aria-label="Import image archive"]');
+  await expect
+    .poll(() => bodyText(desktop))
+    .toContain(
+      "image transparent-e2e:latest saved to file transparent-e2e-latest.tariboy-image.tar.gz",
+    );
+  const uploadStarted =
+    await desktop.execute<boolean>(`const input = document.querySelector('input[aria-label="Import image archive"]');
     if (!(input instanceof HTMLInputElement) || !window.__desktopImageArchive) return false;
     const transfer = new DataTransfer();
     transfer.items.add(new File([window.__desktopImageArchive], "transparent-e2e-latest.tariboy-image.tar.gz", { type: "application/gzip" }));
@@ -88,30 +141,50 @@ test("builds a transparent image from its original directory and assigns it to a
     return true;`);
   expect(uploadStarted).toBe(true);
   await expect.poll(() => bodyText(desktop)).toContain("Import image");
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Import image']"));
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Import image']"),
+  );
   await expect.poll(() => bodyText(desktop)).toContain("image imported");
 
-  await desktop.execute(`window.location.hash = "#/servers/local/images/transparent-e2e/latest/template";`);
+  await desktop.execute(
+    `window.location.hash = "#/servers/local/images/transparent-e2e/latest/template";`,
+  );
   await expect.poll(() => bodyText(desktop)).toContain("Template");
   await expect.poll(() => bodyText(desktop)).toContain("identity");
   await expect.poll(() => bodyText(desktop)).toContain("./skills/loop/finish.md");
 
   await desktop.execute(`window.location.hash = "#/agents/local/image-select-e2e/configuration";`);
   await expect.poll(() => bodyText(desktop)).toContain("Agent image");
-  await expect.poll(() => desktop.execute<string>(`return [...document.querySelectorAll("a")]
-    .find((candidate) => candidate.textContent?.trim() === "basic:latest")?.getAttribute("href") || "";`))
+  await expect
+    .poll(() =>
+      desktop.execute<string>(`return [...document.querySelectorAll("a")]
+    .find((candidate) => candidate.textContent?.trim() === "basic:latest")?.getAttribute("href") || "";`),
+    )
     .toBe("#/servers/local/images/basic/latest");
   const selector = await desktop.findElement("css selector", 'button[aria-label="Agent image"]');
   await desktop.elementClick(selector);
-  const option = await expect.poll(async () => {
-    try {
-      return await desktop.findElement("xpath", "//*[@role='option' and normalize-space(.)='transparent-e2e:latest']");
-    } catch {
-      return null;
-    }
-  }).not.toBeNull().then(() => desktop.findElement("xpath", "//*[@role='option' and normalize-space(.)='transparent-e2e:latest']"));
+  const option = await expect
+    .poll(async () => {
+      try {
+        return await desktop.findElement(
+          "xpath",
+          "//*[@role='option' and normalize-space(.)='transparent-e2e:latest']",
+        );
+      } catch {
+        return null;
+      }
+    })
+    .not.toBeNull()
+    .then(() =>
+      desktop.findElement(
+        "xpath",
+        "//*[@role='option' and normalize-space(.)='transparent-e2e:latest']",
+      ),
+    );
   await desktop.elementClick(option);
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Save']"));
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Save']"),
+  );
   await expect.poll(() => bodyText(desktop)).toContain("Pending: transparent-e2e:latest");
 
   await desktop.execute(`window.__imageActivation = "pending";
@@ -142,5 +215,9 @@ test("builds a transparent image from its original directory and assigns it to a
       }
       throw new Error("activated image snapshot not observed");
     }).catch((error) => { window.__imageActivation = "failed: " + String(error); });`);
-  await expect.poll(() => desktop.execute<string>("return window.__imageActivation || '';"), { timeout: 70_000 }).toBe("ready");
+  await expect
+    .poll(() => desktop.execute<string>("return window.__imageActivation || '';"), {
+      timeout: 70_000,
+    })
+    .toBe("ready");
 });

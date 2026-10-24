@@ -79,14 +79,9 @@ export const InAgentList = () => (
         badge: <Badge variant="secondary">Terminal-only</Badge>,
       },
     ].map((agent) => (
-      <div
-        key={agent.name}
-        style={{ display: "flex", alignItems: "center", gap: 8 }}
-      >
+      <div key={agent.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontWeight: 500 }}>{agent.name}</span>
-        <span style={{ color: "var(--muted-foreground)", fontSize: 12 }}>
-          {agent.image}
-        </span>
+        <span style={{ color: "var(--muted-foreground)", fontSize: 12 }}>{agent.image}</span>
         <span style={{ marginLeft: "auto" }}>{agent.badge}</span>
       </div>
     ))}

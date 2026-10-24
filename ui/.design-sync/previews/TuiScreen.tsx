@@ -28,7 +28,9 @@ const SESSION = [
   "\x1b[38;5;244magent@builder\x1b[0m:\x1b[38;5;39m~/github/tariboy\x1b[0m$ ",
 ].join("\r\n");
 
-interface TermLike { write: (data: string) => void }
+interface TermLike {
+  write: (data: string) => void;
+}
 
 const liveController = {
   status: "open" as const,

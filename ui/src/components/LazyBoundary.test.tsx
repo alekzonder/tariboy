@@ -6,11 +6,18 @@ import { LazyBoundary } from "./LazyBoundary";
 function deferredPage() {
   let resolve!: (page: { default: () => React.JSX.Element }) => void;
   let reject!: (error: Error) => void;
-  const Page = lazy(() => new Promise<{ default: () => React.JSX.Element }>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  }));
-  return { Page, resolve: (text: string) => resolve({ default: () => <h1>{text}</h1> }), reject: (e: Error) => reject(e) };
+  const Page = lazy(
+    () =>
+      new Promise<{ default: () => React.JSX.Element }>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      }),
+  );
+  return {
+    Page,
+    resolve: (text: string) => resolve({ default: () => <h1>{text}</h1> }),
+    reject: (e: Error) => reject(e),
+  };
 }
 
 afterEach(() => {
@@ -20,7 +27,14 @@ afterEach(() => {
 describe("LazyBoundary", () => {
   it("shows an accessible loading status until the module loads", async () => {
     const page = deferredPage();
-    render(<><header>Titlebar</header><LazyBoundary resetKey="/a"><page.Page /></LazyBoundary></>);
+    render(
+      <>
+        <header>Titlebar</header>
+        <LazyBoundary resetKey="/a">
+          <page.Page />
+        </LazyBoundary>
+      </>,
+    );
 
     expect(screen.getByRole("status")).toHaveTextContent("Loading…");
     expect(screen.getByText("Titlebar")).toBeInTheDocument();
@@ -34,7 +48,11 @@ describe("LazyBoundary", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const reload = vi.fn();
     const page = deferredPage();
-    render(<LazyBoundary resetKey="/a" reload={reload}><page.Page /></LazyBoundary>);
+    render(
+      <LazyBoundary resetKey="/a" reload={reload}>
+        <page.Page />
+      </LazyBoundary>,
+    );
 
     await act(async () => page.reject(new Error("Failed to fetch dynamically imported module")));
 
@@ -48,11 +66,19 @@ describe("LazyBoundary", () => {
   it("clears the error when the reset key changes", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const broken = deferredPage();
-    const { rerender } = render(<LazyBoundary resetKey="/a"><broken.Page /></LazyBoundary>);
+    const { rerender } = render(
+      <LazyBoundary resetKey="/a">
+        <broken.Page />
+      </LazyBoundary>,
+    );
     await act(async () => broken.reject(new Error("offline")));
     expect(screen.getByRole("alert")).toBeInTheDocument();
 
-    rerender(<LazyBoundary resetKey="/b"><h1>Other screen</h1></LazyBoundary>);
+    rerender(
+      <LazyBoundary resetKey="/b">
+        <h1>Other screen</h1>
+      </LazyBoundary>,
+    );
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Other screen" })).toBeInTheDocument();

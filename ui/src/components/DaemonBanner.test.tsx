@@ -40,8 +40,14 @@ const POLL_MS = 3000;
 const PROBE_MS = 10000;
 
 const base: DesktopDaemonState = {
-  state: "ready", base_url: "http://127.0.0.1:9990", daemon_version: "1.0.0",
-  app_version: "1.0.0", base_dir: "/base", pid: 42, adopted: false, message: "",
+  state: "ready",
+  base_url: "http://127.0.0.1:9990",
+  daemon_version: "1.0.0",
+  app_version: "1.0.0",
+  base_dir: "/base",
+  pid: 42,
+  adopted: false,
+  message: "",
 };
 
 function stubDesktop(state: DesktopDaemonState) {
@@ -73,7 +79,9 @@ async function settle(ms = 0) {
 
 const okResponse = () =>
   ({
-    ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: {} }),
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ ok: true, result: {} }),
   }) as unknown as Response;
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -127,8 +135,13 @@ describe("DaemonBanner in the desktop app", () => {
 
   it("names the missing host tools the daemon reports", async () => {
     fetchMock.mockResolvedValue({
-      ok: true, status: 200,
-      text: async () => JSON.stringify({ ok: true, result: { state: "error", message: "missing required tools: tmux, npx" } }),
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          ok: true,
+          result: { state: "error", message: "missing required tools: tmux, npx" },
+        }),
     } as unknown as Response);
     vi.useFakeTimers();
     stubDesktop(base);

@@ -31,25 +31,13 @@ const Row = ({
 
 export const SettingsRows = () => (
   <div style={{ display: "grid", gap: 14, width: 400 }}>
-    <Row
-      id="preview-switch-interactive"
-      label="Interactive"
-      hint="Attach a terminal console."
-    >
+    <Row id="preview-switch-interactive" label="Interactive" hint="Attach a terminal console.">
       <Switch id="preview-switch-interactive" defaultChecked />
     </Row>
-    <Row
-      id="preview-switch-goal"
-      label="Goal"
-      hint="Deliver the agent's current Native Task goal."
-    >
+    <Row id="preview-switch-goal" label="Goal" hint="Deliver the agent's current Native Task goal.">
       <Switch id="preview-switch-goal" />
     </Row>
-    <Row
-      id="preview-switch-start"
-      label="Start now"
-      hint="Off creates the agent in stopped state."
-    >
+    <Row id="preview-switch-start" label="Start now" hint="Off creates the agent in stopped state.">
       <Switch id="preview-switch-start" defaultChecked />
     </Row>
   </div>

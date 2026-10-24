@@ -6,12 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { validChannel } from "./channelName";
-import {
-  Command, CommandInput, CommandItem, CommandList,
-} from "@/components/ui/command";
+import { Command, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
-interface Sub { name: string; kind: string; protected: boolean }
-interface Chan { name: string; kind: string }
+interface Sub {
+  name: string;
+  kind: string;
+  protected: boolean;
+}
+interface Chan {
+  name: string;
+  kind: string;
+}
 
 const errmsg = (e: unknown) => (e instanceof ApiError ? e.message : String(e));
 
@@ -21,10 +26,15 @@ const errmsg = (e: unknown) => (e instanceof ApiError ? e.message : String(e));
 // the agent is not already subscribed to (including bound-but-idle chats, which
 // GET /api/channels now surfaces), and also accepts a free-text channel name so
 // an operator can subscribe to a channel that is not yet in the list.
-export function AgentSubscriptions(
-  { name, selected = null, onSelect }:
-  { name: string; selected?: string | null; onSelect?: (ch: string) => void },
-) {
+export function AgentSubscriptions({
+  name,
+  selected = null,
+  onSelect,
+}: {
+  name: string;
+  selected?: string | null;
+  onSelect?: (ch: string) => void;
+}) {
   const api = useApi();
   const [subs, setSubs] = useState<Sub[]>([]);
   const [channels, setChannels] = useState<Chan[]>([]);
@@ -33,12 +43,18 @@ export function AgentSubscriptions(
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    api.get<{ channels: Sub[] }>(`/api/agents/${encodeURIComponent(name)}/subscriptions`)
-      .then((r) => setSubs(r.channels)).catch(() => setSubs([]));
-    api.get<{ channels: Chan[] }>("/api/channels")
-      .then((r) => setChannels(r.channels)).catch(() => setChannels([]));
+    api
+      .get<{ channels: Sub[] }>(`/api/agents/${encodeURIComponent(name)}/subscriptions`)
+      .then((r) => setSubs(r.channels))
+      .catch(() => setSubs([]));
+    api
+      .get<{ channels: Chan[] }>("/api/channels")
+      .then((r) => setChannels(r.channels))
+      .catch(() => setChannels([]));
   }, [api, name]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Channels not already subscribed, filtered by what the operator has typed so
   // the dropdown narrows as a substring match (case-insensitive).
@@ -53,18 +69,32 @@ export function AgentSubscriptions(
 
   const run = async (label: string, fn: () => Promise<unknown>) => {
     setBusy(true);
-    try { await fn(); toast.success(label); load(); }
-    catch (e) { toast.error(`${label} failed: ${errmsg(e)}`); }
-    finally { setBusy(false); }
+    try {
+      await fn();
+      toast.success(label);
+      load();
+    } catch (e) {
+      toast.error(`${label} failed: ${errmsg(e)}`);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const subscribe = () => {
     if (!trimmed || invalid) return;
-    void run("subscribed", () => api.post(`/api/agents/${encodeURIComponent(name)}/subscriptions`, { channel: trimmed }))
-      .then(() => { setPick(""); setOpen(false); });
+    void run("subscribed", () =>
+      api.post(`/api/agents/${encodeURIComponent(name)}/subscriptions`, { channel: trimmed }),
+    ).then(() => {
+      setPick("");
+      setOpen(false);
+    });
   };
   const unsubscribe = (ch: string) =>
-    void run("unsubscribed", () => api.delete(`/api/agents/${encodeURIComponent(name)}/subscriptions?channel=${encodeURIComponent(ch)}`));
+    void run("unsubscribed", () =>
+      api.delete(
+        `/api/agents/${encodeURIComponent(name)}/subscriptions?channel=${encodeURIComponent(ch)}`,
+      ),
+    );
 
   return (
     <div className="w-2/5 min-w-[12rem] shrink-0 overflow-auto">
@@ -80,18 +110,34 @@ export function AgentSubscriptions(
         // button, never nested inside it: an interactive element may not contain
         // another (invalid ARIA), which is why the row wrapper itself is a plain,
         // non-interactive container that only carries the hover/selected accent.
-        <div key={s.name}
-          className={cn("flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent",
-            selected === s.name && "bg-accent")}>
-          <button type="button" onClick={() => onSelect?.(s.name)}
-            className="flex min-w-0 flex-1 cursor-pointer items-center text-left">
+        <div
+          key={s.name}
+          className={cn(
+            "flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent",
+            selected === s.name && "bg-accent",
+          )}
+        >
+          <button
+            type="button"
+            onClick={() => onSelect?.(s.name)}
+            className="flex min-w-0 flex-1 cursor-pointer items-center text-left"
+          >
             <span className="truncate font-mono text-xs">{s.name}</span>
           </button>
           {s.protected ? (
-            <Badge variant="outline" className="ml-auto shrink-0" title="managed by system/group">🔒</Badge>
+            <Badge variant="outline" className="ml-auto shrink-0" title="managed by system/group">
+              🔒
+            </Badge>
           ) : (
-            <Button size="sm" variant="outline" className="ml-auto h-6 shrink-0" disabled={busy}
-              onClick={() => unsubscribe(s.name)}>Unsubscribe</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-auto h-6 shrink-0"
+              disabled={busy}
+              onClick={() => unsubscribe(s.name)}
+            >
+              Unsubscribe
+            </Button>
           )}
         </div>
       ))}
@@ -100,27 +146,42 @@ export function AgentSubscriptions(
         <Command shouldFilter={false} className="relative overflow-visible bg-transparent">
           <CommandInput
             value={pick}
-            onValueChange={(v) => { setPick(v); setOpen(true); }}
+            onValueChange={(v) => {
+              setPick(v);
+              setOpen(true);
+            }}
             onFocus={() => setOpen(true)}
             // Close on blur so the dropdown does not linger; item selection uses
             // onMouseDown/preventDefault to fire before this blur closes the list.
             onBlur={() => setOpen(false)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); subscribe(); } }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.stopPropagation();
+                subscribe();
+              }
+            }}
             placeholder="pick or type a channel…"
             aria-label="channel"
             aria-invalid={invalid}
           />
           {open && options.length > 0 && (
-            <CommandList
-              className="absolute top-full left-0 z-50 mt-1 w-full rounded-lg border bg-popover shadow-md"
-            >
+            <CommandList className="absolute top-full left-0 z-50 mt-1 w-full rounded-lg border bg-popover shadow-md">
               {options.map((c) => (
-                <CommandItem key={c.name} value={c.name}
+                <CommandItem
+                  key={c.name}
+                  value={c.name}
                   onMouseDown={(ev) => ev.preventDefault()}
-                  onSelect={() => { setPick(c.name); setOpen(false); }}>
+                  onSelect={() => {
+                    setPick(c.name);
+                    setOpen(false);
+                  }}
+                >
                   <span className="truncate font-mono text-xs">{c.name}</span>
                   {c.kind === "chat" && (
-                    <Badge variant="outline" className="ml-auto shrink-0">chat</Badge>
+                    <Badge variant="outline" className="ml-auto shrink-0">
+                      chat
+                    </Badge>
                   )}
                 </CommandItem>
               ))}
@@ -132,7 +193,9 @@ export function AgentSubscriptions(
             Invalid channel name — use prefix:segment (e.g. chat:room), lowercase a–z, 0–9, _ or -.
           </p>
         )}
-        <Button size="sm" disabled={busy || !trimmed || invalid} onClick={subscribe}>Subscribe</Button>
+        <Button size="sm" disabled={busy || !trimmed || invalid} onClick={subscribe}>
+          Subscribe
+        </Button>
       </div>
     </div>
   );

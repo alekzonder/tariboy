@@ -23,8 +23,7 @@ export interface ConfigDraft {
   reset: () => void;
 }
 
-const PARTIAL_FAILURE =
-  "Some changes were not saved. Review the highlighted fields and try again.";
+const PARTIAL_FAILURE = "Some changes were not saved. Review the highlighted fields and try again.";
 const INVALID = "Fix the highlighted fields before saving.";
 
 // useConfigDraft owns the page's one save contract: one draft over every
@@ -63,7 +62,9 @@ export function useConfigDraft({
     Object.entries(values).map(([key, raw]) => [key, normalizeField(key, raw)]),
   );
   const dirtyKeys = units.flatMap((unit) =>
-    unit.keys.filter((key) => key in drafts && key in baseline && normalized[key] !== baseline[key]),
+    unit.keys.filter(
+      (key) => key in drafts && key in baseline && normalized[key] !== baseline[key],
+    ),
   );
 
   const setField = useCallback((key: string, value: string) => {

@@ -9,7 +9,12 @@ export const AgentWorkspace = () => (
   <div style={{ width: 720, display: "flex", flexDirection: "column", gap: 8 }}>
     <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
       <span style={{ fontSize: 15, fontWeight: 600 }}>builder</span>
-      <span style={{ font: "12px ui-monospace, SFMono-Regular, Menlo, monospace", color: "var(--muted-foreground)" }}>
+      <span
+        style={{
+          font: "12px ui-monospace, SFMono-Regular, Menlo, monospace",
+          color: "var(--muted-foreground)",
+        }}
+      >
         worker:v2 · claude · running
       </span>
     </div>
@@ -21,7 +26,12 @@ export const StoppedAgent = () => (
   <div style={{ width: 720, display: "flex", flexDirection: "column", gap: 8 }}>
     <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
       <span style={{ fontSize: 15, fontWeight: 600 }}>docs-bot</span>
-      <span style={{ font: "12px ui-monospace, SFMono-Regular, Menlo, monospace", color: "var(--muted-foreground)" }}>
+      <span
+        style={{
+          font: "12px ui-monospace, SFMono-Regular, Menlo, monospace",
+          color: "var(--muted-foreground)",
+        }}
+      >
         bare:latest · codex · stopped
       </span>
     </div>

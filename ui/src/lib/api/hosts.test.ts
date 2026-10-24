@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { createApi, getActiveDaemon, getLocalBaseURL, resolveTarget, setActiveDaemon, setLocalBaseURL } from "@/lib/api";
+import {
+  createApi,
+  getActiveDaemon,
+  getLocalBaseURL,
+  resolveTarget,
+  setActiveDaemon,
+  setLocalBaseURL,
+} from "@/lib/api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -24,10 +31,17 @@ describe("active daemon", () => {
 describe("local daemon base URL", () => {
   it("defaults to empty, keeping same-origin relative paths", async () => {
     let url = "";
-    vi.stubGlobal("fetch", vi.fn().mockImplementation((u: string) => {
-      url = u;
-      return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: {} }) } as Response);
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((u: string) => {
+        url = u;
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ ok: true, result: {} }),
+        } as Response);
+      }),
+    );
     await createApi(undefined).get("/api/agents");
     expect(url).toBe("/api/agents");
     expect(getLocalBaseURL()).toBe("");

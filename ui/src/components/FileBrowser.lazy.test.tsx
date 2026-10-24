@@ -19,11 +19,16 @@ vi.mock("./file-browser/FileViewer", async () => {
 
 describe("FileBrowser loading", () => {
   it("shows the tree while the file viewer loads", async () => {
-    render(<FileBrowser
-      sourceKey="one"
-      listDir={async (path) => ({ path, entries: [{ name: "readme.md", isDir: false, size: 1, mtime: 0 }] })}
-      readFile={async (path) => ({ path, kind: "text", content: "", size: 0 })}
-    />);
+    render(
+      <FileBrowser
+        sourceKey="one"
+        listDir={async (path) => ({
+          path,
+          entries: [{ name: "readme.md", isDir: false, size: 1, mtime: 0 }],
+        })}
+        readFile={async (path) => ({ path, kind: "text", content: "", size: 0 })}
+      />,
+    );
 
     expect(await screen.findByRole("button", { name: "readme.md" })).toBeInTheDocument();
     expect(screen.getByText("Loading…", { selector: "[role=status]" })).toBeInTheDocument();

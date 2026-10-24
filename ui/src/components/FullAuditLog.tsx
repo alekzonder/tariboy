@@ -33,7 +33,10 @@ export function FullAuditLog({ name }: { name: string }) {
   const setFilter = (nextType: string, nextQuery: string) => {
     setType(nextType);
     setQuery(nextQuery);
-    if (nextType.trim() === "" && nextQuery.trim() === "") { setFiltered(null); setCapped(false); }
+    if (nextType.trim() === "" && nextQuery.trim() === "") {
+      setFiltered(null);
+      setCapped(false);
+    }
   };
   const rootRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -46,23 +49,31 @@ export function FullAuditLog({ name }: { name: string }) {
   // eventsRef mirrors events so the tail/scroll closures read the latest seqs
   // without re-subscribing the SSE stream on every append.
   const eventsRef = useRef<AuditEvent[]>([]);
-  useEffect(() => { eventsRef.current = events; }, [events]);
-  const newestSeq = () => (eventsRef.current.length ? eventsRef.current[eventsRef.current.length - 1].seq : 0);
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+  const newestSeq = () =>
+    eventsRef.current.length ? eventsRef.current[eventsRef.current.length - 1].seq : 0;
   const oldestSeq = () => (eventsRef.current.length ? eventsRef.current[0].seq : 0);
 
   // Initial load: recent 50, reversed to chronological (oldest first).
   useEffect(() => {
     if (!name) return;
     let live = true;
-    void api.audit.listAuditEvents(name)
+    void api.audit
+      .listAuditEvents(name)
       .then((r) => {
         if (!live) return;
         const recent = (r.events ?? []).slice().reverse();
         hasMore.current = (r.events?.length ?? 0) >= PAGE;
         setEvents(recent);
       })
-      .catch(() => { if (live) setEvents([]); });
-    return () => { live = false; };
+      .catch(() => {
+        if (live) setEvents([]);
+      });
+    return () => {
+      live = false;
+    };
   }, [api, name]);
 
   // Preset type list, enumerated from the real audit data (distinct types),
@@ -70,10 +81,15 @@ export function FullAuditLog({ name }: { name: string }) {
   useEffect(() => {
     if (!name) return;
     let live = true;
-    void api.audit.listAuditEventTypes(name)
-      .then((r) => { if (live) setPresets(r.types ?? []); })
+    void api.audit
+      .listAuditEventTypes(name)
+      .then((r) => {
+        if (live) setPresets(r.types ?? []);
+      })
       .catch(() => {});
-    return () => { live = false; };
+    return () => {
+      live = false;
+    };
   }, [api, name]);
 
   // Filtered mode: debounce, then scan the whole log server-side and show the
@@ -86,15 +102,24 @@ export function FullAuditLog({ name }: { name: string }) {
       const qs = new URLSearchParams();
       if (type.trim()) qs.set("type", type.trim());
       if (query.trim()) qs.set("q", query.trim());
-      void api.audit.listAuditEvents(name, qs.toString())
+      void api.audit
+        .listAuditEvents(name, qs.toString())
         .then((r) => {
           if (!live) return;
           setFiltered((r.events ?? []).slice().reverse()); // newest-first → chronological
           setCapped(!!r.capped);
         })
-        .catch(() => { if (live) { setFiltered([]); setCapped(false); } });
+        .catch(() => {
+          if (live) {
+            setFiltered([]);
+            setCapped(false);
+          }
+        });
     }, 250);
-    return () => { live = false; window.clearTimeout(t); };
+    return () => {
+      live = false;
+      window.clearTimeout(t);
+    };
   }, [api, name, filtering, type, query]);
 
   // Live tail: append events newer than what we hold. Reads newestSeq via the
@@ -103,7 +128,8 @@ export function FullAuditLog({ name }: { name: string }) {
   useEffect(() => {
     if (!name || filtering) return;
     const tail = () =>
-      void api.audit.listAuditEvents(name, `since=${newestSeq()}`)
+      void api.audit
+        .listAuditEvents(name, `since=${newestSeq()}`)
         .then((r) => {
           const fresh = r.events ?? [];
           if (fresh.length) setEvents((prev) => [...prev, ...fresh]);
@@ -111,7 +137,10 @@ export function FullAuditLog({ name }: { name: string }) {
         .catch(() => {});
     const t = window.setInterval(tail, 3000);
     const off = api.agents.subscribeAgentEvents(name, ["audit", "iteration"], () => tail());
-    return () => { window.clearInterval(t); off(); };
+    return () => {
+      window.clearInterval(t);
+      off();
+    };
   }, [api, name, filtering]);
 
   const loadOlder = useCallback(() => {
@@ -119,15 +148,20 @@ export function FullAuditLog({ name }: { name: string }) {
     loadingOlder.current = true;
     const v = viewport();
     anchor.current = v ? v.scrollHeight : null;
-    void api.audit.listAuditEvents(name, `before=${oldestSeq()}&limit=${PAGE}`)
+    void api.audit
+      .listAuditEvents(name, `before=${oldestSeq()}&limit=${PAGE}`)
       .then((r) => {
         const older = r.events ?? [];
         hasMore.current = older.length >= PAGE;
         if (older.length) setEvents((prev) => [...older, ...prev]);
         else anchor.current = null;
       })
-      .catch(() => { anchor.current = null; })
-      .finally(() => { loadingOlder.current = false; });
+      .catch(() => {
+        anchor.current = null;
+      })
+      .finally(() => {
+        loadingOlder.current = false;
+      });
   }, [api, name]);
 
   // Scroll: track stick-to-bottom, and page older when near the top. Inactive
@@ -180,7 +214,9 @@ export function FullAuditLog({ name }: { name: string }) {
           className="h-8 w-56"
         />
         <datalist id={FILTER_DATALIST}>
-          {presets.map((t) => <option key={t} value={t} />)}
+          {presets.map((t) => (
+            <option key={t} value={t} />
+          ))}
         </datalist>
         <Input
           aria-label="Search text"

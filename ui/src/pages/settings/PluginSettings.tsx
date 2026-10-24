@@ -1,9 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  ApiError,
-  type PluginContribution,
-  type PluginSettingField,
-} from "@/lib/api";
+import { ApiError, type PluginContribution, type PluginSettingField } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,21 +40,31 @@ export default function PluginSettings({ name }: { name: string }) {
 
   useEffect(() => {
     let current = true;
-    void Promise.resolve().then(() => {
-      if (!current) return null;
-      setLoading(true);
-      setError("");
-      return Promise.all([api.plugins.getPluginContributions(), api.plugins.getPluginStatus(name)]);
-    })
+    void Promise.resolve()
+      .then(() => {
+        if (!current) return null;
+        setLoading(true);
+        setError("");
+        return Promise.all([
+          api.plugins.getPluginContributions(),
+          api.plugins.getPluginStatus(name),
+        ]);
+      })
       .then((result) => {
         if (!current || !result) return;
         const [contributions, nextStatus] = result;
         setPlugin(contributions.plugins.find((item) => item.name === name));
         setStatus(nextStatus);
       })
-      .catch((cause) => { if (current) setError(message(cause)); })
-      .finally(() => { if (current) setLoading(false); });
-    return () => { current = false; };
+      .catch((cause) => {
+        if (current) setError(message(cause));
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
+    return () => {
+      current = false;
+    };
   }, [name, api]);
 
   const act = async (action: string, fieldNames: string[], fields: PluginSettingField[]) => {
@@ -91,18 +97,27 @@ export default function PluginSettings({ name }: { name: string }) {
   };
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading integration…</p>;
-  if (!plugin?.settings) return <p role="alert" className="text-sm text-destructive">{error || "Integration settings not found"}</p>;
+  if (!plugin?.settings)
+    return (
+      <p role="alert" className="text-sm text-destructive">
+        {error || "Integration settings not found"}
+      </p>
+    );
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="space-y-2">
         <h2 className="text-xl font-semibold">{plugin.settings.title}</h2>
-        {plugin.description && <p className="text-sm text-muted-foreground">{plugin.description}</p>}
+        {plugin.description && (
+          <p className="text-sm text-muted-foreground">{plugin.description}</p>
+        )}
       </div>
       {!!plugin.settings.status?.length && (
         <div className="space-y-1 rounded-lg border p-4 text-sm">
           {plugin.settings.status.map((item) => (
-            <p key={item.name}>{item.label}: {statusValue(status[item.name])}</p>
+            <p key={item.name}>
+              {item.label}: {statusValue(status[item.name])}
+            </p>
           ))}
         </div>
       )}
@@ -120,13 +135,21 @@ export default function PluginSettings({ name }: { name: string }) {
                   inputMode={field.type === "integer-list" ? "numeric" : undefined}
                   autoComplete={field.type === "password" ? "off" : undefined}
                   value={values[field.name] ?? ""}
-                  onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, [field.name]: event.target.value }))
+                  }
                 />
                 {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
               </div>
             ))}
-            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-            <p role="status" className="text-sm text-muted-foreground">{notice}</p>
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+            <p role="status" className="text-sm text-muted-foreground">
+              {notice}
+            </p>
             <div className="flex gap-2">
               {section.actions?.map((button) => (
                 <Button

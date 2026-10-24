@@ -6,7 +6,9 @@ async function bodyText(desktop: W3CClient): Promise<string> {
 }
 
 async function openConsole(desktop: W3CClient, name: string): Promise<void> {
-  await desktop.execute(`window.location.hash = ${JSON.stringify(`#/agents/local/${name}/console`)}; return true;`);
+  await desktop.execute(
+    `window.location.hash = ${JSON.stringify(`#/agents/local/${name}/console`)}; return true;`,
+  );
   await expect.poll(() => bodyText(desktop)).toContain(name);
 }
 
@@ -39,25 +41,42 @@ test("agent deletion requires confirmation in the production Desktop", async ({ 
       .catch((error) => { window.__agentDeleteSetup = "error: " + String(error); });
     return true;
   `);
-  await expect.poll(() => desktop.execute<string>("return window.__agentDeleteSetup || '';"), {
-    timeout: 60_000,
-  }).toBe("ready");
+  await expect
+    .poll(() => desktop.execute<string>("return window.__agentDeleteSetup || '';"), {
+      timeout: 60_000,
+    })
+    .toBe("ready");
 
   await openConsole(desktop, "delete-confirmation-e2e");
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Delete']"));
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Delete']"),
+  );
 
   await expect.poll(() => bodyText(desktop)).toContain("Delete agent delete-confirmation-e2e?");
-  await expect.poll(() => desktop.execute<number>("return window.__agentDeleteCalls.length;")).toBe(0);
+  await expect
+    .poll(() => desktop.execute<number>("return window.__agentDeleteCalls.length;"))
+    .toBe(0);
 
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Cancel']"));
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Cancel']"),
+  );
   await expect.poll(() => bodyText(desktop)).not.toContain("This action cannot be undone.");
-  await expect.poll(() => desktop.execute<number>("return window.__agentDeleteCalls.length;")).toBe(0);
+  await expect
+    .poll(() => desktop.execute<number>("return window.__agentDeleteCalls.length;"))
+    .toBe(0);
 
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Delete']"));
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Delete agent']"));
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Delete']"),
+  );
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Delete agent']"),
+  );
 
-  await expect.poll(() => desktop.execute<number>("return window.__agentDeleteCalls.length;")).toBe(1);
+  await expect
+    .poll(() => desktop.execute<number>("return window.__agentDeleteCalls.length;"))
+    .toBe(1);
   await expect.poll(() => desktop.execute<string>("return window.location.hash;")).toBe("#/");
-  expect(await desktop.execute<string>("return window.__agentDeleteCalls[0];"))
-    .toContain("/api/agents/delete-confirmation-e2e?force=true&purge=true");
+  expect(await desktop.execute<string>("return window.__agentDeleteCalls[0];")).toContain(
+    "/api/agents/delete-confirmation-e2e?force=true&purge=true",
+  );
 });

@@ -31,7 +31,9 @@ go build ./... >/dev/null 2>&1 || true
 const loadGlobal = () => Promise.resolve(GLOBAL_SCRIPT);
 const loadAgent = () => Promise.resolve(AGENT_SCRIPT);
 const loadFailed = () =>
-  Promise.reject(new Error("host build-01 is not ready: dial tcp 10.0.4.11:7777: connection refused"));
+  Promise.reject(
+    new Error("host build-01 is not ready: dial tcp 10.0.4.11:7777: connection refused"),
+  );
 const save = () => Promise.resolve();
 
 const Frame = ({ children }: { children: React.ReactNode }) => (

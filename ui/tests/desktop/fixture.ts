@@ -1,6 +1,17 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { constants } from "node:fs";
-import { access, chmod, mkdir, mkdtemp, open, readFile, readdir, readlink, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  readdir,
+  readlink,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
@@ -65,7 +76,10 @@ export class TailBuffer {
   append(chunk: string | Buffer): void {
     const incoming = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     const combined = Buffer.concat([this.value, incoming]);
-    this.value = combined.length <= this.capacity ? combined : combined.subarray(combined.length - this.capacity);
+    this.value =
+      combined.length <= this.capacity
+        ? combined
+        : combined.subarray(combined.length - this.capacity);
   }
 
   bytes(): Buffer {
@@ -78,13 +92,20 @@ export class TailBuffer {
 }
 
 export async function waitForMainWindow(desktop: W3CClient): Promise<void> {
-  await expect.poll(() => desktop.execute<boolean>(
-    `return typeof window.__TAURI_INTERNALS__ === "object"
+  await expect
+    .poll(() =>
+      desktop.execute<boolean>(
+        `return typeof window.__TAURI_INTERNALS__ === "object"
       && document.body?.innerText.includes("New agent") === true`,
-  )).toBe(true);
+      ),
+    )
+    .toBe(true);
   // These specs drive Console and the other Expert tabs; Simple is the default.
   await desktop.execute(`localStorage.setItem("app:ui-mode:v1", "expert"); return true;`);
-  await expect.poll(() => desktop.execute<boolean>(`
+  await expect
+    .poll(
+      () =>
+        desktop.execute<boolean>(`
     if (window.__tariboyDaemonReady === true) return true;
     if (window.__tariboyDaemonProbePending !== true) {
       window.__tariboyDaemonProbePending = true;
@@ -97,20 +118,34 @@ export async function waitForMainWindow(desktop: W3CClient): Promise<void> {
         .finally(() => { window.__tariboyDaemonProbePending = false; });
     }
     return false;
-  `), { timeout: 30_000 }).toBe(true);
+  `),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
 }
 
 export async function createTestImageSource(root: string): Promise<string> {
   const source = join(root, "test-image-source");
   await mkdir(join(source, "skills/loop/scripts"), { recursive: true, mode: 0o700 });
   await mkdir(join(source, "skills/whoami"), { recursive: true, mode: 0o700 });
-  await writeFile(join(source, "skills/whoami/SKILL.md"), "---\nname: whoami\ndescription: Test identity capability.\n---\n");
-  await writeFile(join(source, "skills/loop/SKILL.md"), "---\nname: loop\ndescription: Test iteration completion.\n---\n");
-  await writeFile(join(source, "skills/loop/finish.md"), "Finish the iteration by calling i-am-done.\n");
+  await writeFile(
+    join(source, "skills/whoami/SKILL.md"),
+    "---\nname: whoami\ndescription: Test identity capability.\n---\n",
+  );
+  await writeFile(
+    join(source, "skills/loop/SKILL.md"),
+    "---\nname: loop\ndescription: Test iteration completion.\n---\n",
+  );
+  await writeFile(
+    join(source, "skills/loop/finish.md"),
+    "Finish the iteration by calling i-am-done.\n",
+  );
   const launcher = join(source, "skills/loop/scripts/loop.sh");
   await writeFile(launcher, "#!/bin/sh\nexit 0\n");
   await chmod(launcher, 0o700);
-  await writeFile(join(source, "Tariboyfile.yaml"), `schema_version: 2
+  await writeFile(
+    join(source, "Tariboyfile.yaml"),
+    `schema_version: 2
 plugins:
   - name: whoami
   - name: loop
@@ -120,18 +155,24 @@ skills:
 prompts:
   - runtime: identity
   - file: ./skills/loop/finish.md
-`);
+`,
+  );
   return source;
 }
 
 function executable(name: string, override?: string): string {
   const candidates = override
     ? [override]
-    : (process.env.PATH ?? "").split(delimiter).filter(Boolean).map((directory) => join(directory, name));
+    : (process.env.PATH ?? "")
+        .split(delimiter)
+        .filter(Boolean)
+        .map((directory) => join(directory, name));
   for (const candidate of candidates) {
     if (spawnSync("test", ["-x", candidate], { stdio: "ignore" }).status === 0) return candidate;
   }
-  throw new Error(`${name} is required for Desktop E2E tests${override ? `: ${override}` : " (not found in PATH)"}`);
+  throw new Error(
+    `${name} is required for Desktop E2E tests${override ? `: ${override}` : " (not found in PATH)"}`,
+  );
 }
 
 async function assertExecutable(path: string, label: string): Promise<void> {
@@ -151,11 +192,17 @@ async function freePort(): Promise<number> {
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("cannot allocate loopback port");
   const port = address.port;
-  await new Promise<void>((resolveClose, reject) => server.close((error) => error ? reject(error) : resolveClose()));
+  await new Promise<void>((resolveClose, reject) =>
+    server.close((error) => (error ? reject(error) : resolveClose())),
+  );
   return port;
 }
 
-async function waitFor(description: string, timeoutMs: number, operation: () => Promise<boolean>): Promise<void> {
+async function waitFor(
+  description: string,
+  timeoutMs: number,
+  operation: () => Promise<boolean>,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let lastError: unknown;
   while (Date.now() < deadline) {
@@ -172,21 +219,22 @@ async function waitFor(description: string, timeoutMs: number, operation: () => 
 
 export async function stopChild(child: ChildProcess | null): Promise<void> {
   if (!child || child.exitCode !== null) return;
-  const waitForExit = (timeoutMs: number): Promise<boolean> => new Promise((resolveExit) => {
-    const finish = (exited: boolean): void => {
-      clearTimeout(timer);
-      child.off("exit", onExit);
-      resolveExit(exited);
-    };
-    const onExit = (): void => finish(true);
-    child.once("exit", onExit);
-    const timer = setTimeout(() => finish(child.exitCode !== null), timeoutMs);
-    if (child.exitCode !== null) finish(true);
-  });
+  const waitForExit = (timeoutMs: number): Promise<boolean> =>
+    new Promise((resolveExit) => {
+      const finish = (exited: boolean): void => {
+        clearTimeout(timer);
+        child.off("exit", onExit);
+        resolveExit(exited);
+      };
+      const onExit = (): void => finish(true);
+      child.once("exit", onExit);
+      const timer = setTimeout(() => finish(child.exitCode !== null), timeoutMs);
+      if (child.exitCode !== null) finish(true);
+    });
 
   const terminated = waitForExit(5_000);
   child.kill("SIGTERM");
-  if (await terminated || child.exitCode !== null) return;
+  if ((await terminated) || child.exitCode !== null) return;
 
   const killed = waitForExit(2_000);
   child.kill("SIGKILL");
@@ -195,7 +243,9 @@ export async function stopChild(child: ChildProcess | null): Promise<void> {
   }
 }
 
-async function startDisplay(log: TailBuffer): Promise<{ child: ChildProcess | null; display: string; lock?: string }> {
+async function startDisplay(
+  log: TailBuffer,
+): Promise<{ child: ChildProcess | null; display: string; lock?: string }> {
   if (process.env.DISPLAY) return { child: null, display: process.env.DISPLAY };
   const xvfb = executable("Xvfb", process.env.TARIBOY_XVFB_BIN);
   let displayNumber = 0;
@@ -223,7 +273,9 @@ async function startDisplay(log: TailBuffer): Promise<{ child: ChildProcess | nu
     stdio: ["ignore", "pipe", "pipe"],
   });
   let spawnError: Error | null = null;
-  child.once("error", (error) => { spawnError = error; });
+  child.once("error", (error) => {
+    spawnError = error;
+  });
   child.stdout?.on("data", (chunk: Buffer) => log.append(chunk));
   child.stderr?.on("data", (chunk: Buffer) => log.append(chunk));
   try {
@@ -277,7 +329,11 @@ async function readTail(path: string, limit = MAX_LOG_BYTES): Promise<Buffer> {
   }
 }
 
-async function stopIsolatedDaemon(runtimeDir: string, environment: NodeJS.ProcessEnv, log: TailBuffer): Promise<void> {
+async function stopIsolatedDaemon(
+  runtimeDir: string,
+  environment: NodeJS.ProcessEnv,
+  log: TailBuffer,
+): Promise<void> {
   const pidFile = join(runtimeDir, "tariboyd.pid");
   const socket = join(runtimeDir, "tariboyd.sock");
   let pidText: string;
@@ -306,8 +362,14 @@ async function stopIsolatedDaemon(runtimeDir: string, environment: NodeJS.Proces
     throw new Error(`refusing to signal unverified daemon PID ${pid}: ${processExecutable}`);
   }
 
-  const stopped = spawnSync(cli, ["daemon", "stop"], { env: environment, encoding: "utf8", timeout: 10_000 });
-  log.append(`daemon stop status=${String(stopped.status)} signal=${String(stopped.signal)} error=${String(stopped.error ?? "")}\n`);
+  const stopped = spawnSync(cli, ["daemon", "stop"], {
+    env: environment,
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+  log.append(
+    `daemon stop status=${String(stopped.status)} signal=${String(stopped.signal)} error=${String(stopped.error ?? "")}\n`,
+  );
   log.append(stopped.stdout ?? "");
   log.append(stopped.stderr ?? "");
   try {
@@ -359,7 +421,11 @@ async function seedUsageDatabase(
     throw error;
   }
 
-  const seeded = spawnSync("python3", ["-c", `
+  const seeded = spawnSync(
+    "python3",
+    [
+      "-c",
+      `
 import json, sqlite3, sys
 
 payload = json.loads(sys.argv[2])
@@ -382,166 +448,247 @@ try:
              request["inputTokens"], request["outputTokens"], request["costUSD"], group, group))
 finally:
     db.close()
-`, join(baseDir, "tariboyd.db"), JSON.stringify(seed)], {
-    encoding: "utf8",
-    timeout: 10_000,
-  });
-  log.append(`usage seed status=${String(seeded.status)} signal=${String(seeded.signal)} error=${String(seeded.error ?? "")}\n`);
+`,
+      join(baseDir, "tariboyd.db"),
+      JSON.stringify(seed),
+    ],
+    {
+      encoding: "utf8",
+      timeout: 10_000,
+    },
+  );
+  log.append(
+    `usage seed status=${String(seeded.status)} signal=${String(seeded.signal)} error=${String(seeded.error ?? "")}\n`,
+  );
   log.append(seeded.stdout ?? "");
   log.append(seeded.stderr ?? "");
   if (seeded.status !== 0) {
-    throw new Error(`cannot seed isolated Desktop usage database: ${seeded.stderr || seeded.stdout}`);
+    throw new Error(
+      `cannot seed isolated Desktop usage database: ${seeded.stderr || seeded.stdout}`,
+    );
   }
 }
 
 export const test = base.extend<DesktopFixtures>({
   usageSeed: [undefined, { option: true }],
-  desktopWorker: [async ({ usageSeed }, provide) => {
-    await Promise.all([
-      assertExecutable(application, "Tauri Desktop E2E application"),
-      assertExecutable(daemon, "bundled test daemon"),
-      assertExecutable(cli, "bundled test CLI"),
-      assertExecutable(daemonWrapper, "Desktop E2E daemon wrapper"),
-    ]);
-    const driver = executable("tauri-driver", process.env.TAURI_DRIVER_BIN);
-    const nativeDriver = executable("WebKitWebDriver", process.env.WEBKIT_WEBDRIVER_BIN);
-    const root = await mkdtemp(join(tmpdir(), "tariboy-desktop-e2e-"));
-    const baseDir = join(root, "base");
-    const runtimeDir = join(root, "runtime");
-    const appDataDir = join(root, "app-data");
-    await Promise.all([baseDir, runtimeDir, appDataDir].map((path) => mkdir(path, { mode: 0o700 })));
-    await chmod(root, 0o700);
-    // Created empty and owner-only here rather than left to the app, so a test
-    // can tell "no open was accepted" from "the observer was never wired up".
-    const externalOpenLog = join(root, "external-opens.log");
-    await (await open(externalOpenLog, "w", 0o600)).close();
+  desktopWorker: [
+    async ({ usageSeed }, provide) => {
+      await Promise.all([
+        assertExecutable(application, "Tauri Desktop E2E application"),
+        assertExecutable(daemon, "bundled test daemon"),
+        assertExecutable(cli, "bundled test CLI"),
+        assertExecutable(daemonWrapper, "Desktop E2E daemon wrapper"),
+      ]);
+      const driver = executable("tauri-driver", process.env.TAURI_DRIVER_BIN);
+      const nativeDriver = executable("WebKitWebDriver", process.env.WEBKIT_WEBDRIVER_BIN);
+      const root = await mkdtemp(join(tmpdir(), "tariboy-desktop-e2e-"));
+      const baseDir = join(root, "base");
+      const runtimeDir = join(root, "runtime");
+      const appDataDir = join(root, "app-data");
+      await Promise.all(
+        [baseDir, runtimeDir, appDataDir].map((path) => mkdir(path, { mode: 0o700 })),
+      );
+      await chmod(root, 0o700);
+      // Created empty and owner-only here rather than left to the app, so a test
+      // can tell "no open was accepted" from "the observer was never wired up".
+      const externalOpenLog = join(root, "external-opens.log");
+      await (await open(externalOpenLog, "w", 0o600)).close();
 
-    const log = new TailBuffer();
-    let display: Awaited<ReturnType<typeof startDisplay>> | null = null;
-    let driverProcess: ChildProcess | null = null;
-    let session: W3CClient | null = null;
-    let primaryError: unknown;
-    const cleanupAgents = new Set<string>();
-    const environment: NodeJS.ProcessEnv = {
-      ...process.env,
-      TARIBOY_BASE_DIR: baseDir,
-      TARIBOY_RUNTIME_DIR: runtimeDir,
-      TARIBOY_DESKTOP_APP_DATA_DIR: appDataDir,
-      TARIBOY_DESKTOP_EXTERNAL_OPEN_LOG: externalOpenLog,
-      TARIBOY_DESKTOP_NOTIFICATION_TEST: "1",
-      TARIBOY_DESKTOP_IMAGE_TRANSFER_TEST: "1",
-      // Never let a Desktop E2E process discover or contact the host's real
-      // notification service. Tests that need activation use the guarded
-      // Tauri command instead.
-      DBUS_SESSION_BUS_ADDRESS: `unix:path=${join(root, "unavailable-notification-bus")}`,
-      TARIBOY_DAEMON_BIN: daemonWrapper,
-      TARIBOY_REAL_DAEMON_BIN: daemon,
-      TARIBOY_STUB_HARNESS: join(repositoryRoot, "scripts/stub-harness.sh"),
-    };
+      const log = new TailBuffer();
+      let display: Awaited<ReturnType<typeof startDisplay>> | null = null;
+      let driverProcess: ChildProcess | null = null;
+      let session: W3CClient | null = null;
+      let primaryError: unknown;
+      const cleanupAgents = new Set<string>();
+      const environment: NodeJS.ProcessEnv = {
+        ...process.env,
+        TARIBOY_BASE_DIR: baseDir,
+        TARIBOY_RUNTIME_DIR: runtimeDir,
+        TARIBOY_DESKTOP_APP_DATA_DIR: appDataDir,
+        TARIBOY_DESKTOP_EXTERNAL_OPEN_LOG: externalOpenLog,
+        TARIBOY_DESKTOP_NOTIFICATION_TEST: "1",
+        TARIBOY_DESKTOP_IMAGE_TRANSFER_TEST: "1",
+        // Never let a Desktop E2E process discover or contact the host's real
+        // notification service. Tests that need activation use the guarded
+        // Tauri command instead.
+        DBUS_SESSION_BUS_ADDRESS: `unix:path=${join(root, "unavailable-notification-bus")}`,
+        TARIBOY_DAEMON_BIN: daemonWrapper,
+        TARIBOY_REAL_DAEMON_BIN: daemon,
+        TARIBOY_STUB_HARNESS: join(repositoryRoot, "scripts/stub-harness.sh"),
+      };
 
-    try {
-      if (usageSeed) {
-        await seedUsageDatabase(usageSeed, baseDir, runtimeDir, environment, log);
-      }
-      display = await startDisplay(log);
-      environment.DISPLAY = display.display;
-      const port = await freePort();
-      const nativePort = await freePort();
-      driverProcess = spawn(driver, ["--port", String(port), "--native-port", String(nativePort), "--native-driver", nativeDriver], {
-        env: environment,
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-      driverProcess.stdout?.on("data", (chunk: Buffer) => log.append(chunk));
-      driverProcess.stderr?.on("data", (chunk: Buffer) => log.append(chunk));
-      driverProcess.once("exit", (code, signal) => log.append(`tauri-driver exited code=${String(code)} signal=${String(signal)}\n`));
-      await waitFor("tauri-driver", 15_000, async () => (await fetch(`http://127.0.0.1:${port}/status`)).ok);
-      session = new W3CClient(`http://127.0.0.1:${port}`, 60_000);
-      await session.createSession({ "tauri:options": { application } });
-      const handles = await session.windowHandles();
-      if (handles.length !== 1) {
-        throw new Error(`Desktop must expose exactly one main window, got ${JSON.stringify(handles)}`);
-      }
-      await session.switchToWindow(handles[0]);
-      await waitForMainWindow(session);
-      const source = await createTestImageSource(baseDir);
-      const built = spawnSync(cli, ["image", "build", "--name", "basic", "--tag", "latest", "--path", source], {
-        env: environment,
-        encoding: "utf8",
-        timeout: 30_000,
-      });
-      log.append(`basic image build status=${String(built.status)} signal=${String(built.signal)} error=${String(built.error ?? "")}\n`);
-      log.append(built.stdout ?? "");
-      log.append(built.stderr ?? "");
-      if (built.status !== 0) throw new Error(`cannot seed basic Desktop image: ${built.stderr || built.stdout}`);
-      await provide({
-        client: session,
-        log,
-        baseDir,
-        runtimeDir,
-        registerAgentForCleanup: (name) => cleanupAgents.add(name),
-        externalOpenLog,
-      });
-    } catch (error) {
-      primaryError = error;
-    }
-
-    const cleanupErrors: unknown[] = [];
-    for (const name of cleanupAgents) {
-      const killed = spawnSync(cli, ["agent", "kill", name], {
-        env: environment,
-        encoding: "utf8",
-        timeout: 10_000,
-      });
-      log.append(`agent kill ${name} status=${String(killed.status)} signal=${String(killed.signal)} error=${String(killed.error ?? "")}\n`);
-      log.append(killed.stdout ?? "");
-      log.append(killed.stderr ?? "");
-      if (killed.status !== 0) {
-        if ((await fixtureAgentProcesses(root, name)).length > 0) {
-          cleanupErrors.push(new Error(`cannot kill fixture agent ${name}: ${killed.stderr || killed.stdout}`));
+      try {
+        if (usageSeed) {
+          await seedUsageDatabase(usageSeed, baseDir, runtimeDir, environment, log);
         }
-        continue;
+        display = await startDisplay(log);
+        environment.DISPLAY = display.display;
+        const port = await freePort();
+        const nativePort = await freePort();
+        driverProcess = spawn(
+          driver,
+          [
+            "--port",
+            String(port),
+            "--native-port",
+            String(nativePort),
+            "--native-driver",
+            nativeDriver,
+          ],
+          {
+            env: environment,
+            stdio: ["ignore", "pipe", "pipe"],
+          },
+        );
+        driverProcess.stdout?.on("data", (chunk: Buffer) => log.append(chunk));
+        driverProcess.stderr?.on("data", (chunk: Buffer) => log.append(chunk));
+        driverProcess.once("exit", (code, signal) =>
+          log.append(`tauri-driver exited code=${String(code)} signal=${String(signal)}\n`),
+        );
+        await waitFor(
+          "tauri-driver",
+          15_000,
+          async () => (await fetch(`http://127.0.0.1:${port}/status`)).ok,
+        );
+        session = new W3CClient(`http://127.0.0.1:${port}`, 60_000);
+        await session.createSession({ "tauri:options": { application } });
+        const handles = await session.windowHandles();
+        if (handles.length !== 1) {
+          throw new Error(
+            `Desktop must expose exactly one main window, got ${JSON.stringify(handles)}`,
+          );
+        }
+        await session.switchToWindow(handles[0]);
+        await waitForMainWindow(session);
+        const source = await createTestImageSource(baseDir);
+        const built = spawnSync(
+          cli,
+          ["image", "build", "--name", "basic", "--tag", "latest", "--path", source],
+          {
+            env: environment,
+            encoding: "utf8",
+            timeout: 30_000,
+          },
+        );
+        log.append(
+          `basic image build status=${String(built.status)} signal=${String(built.signal)} error=${String(built.error ?? "")}\n`,
+        );
+        log.append(built.stdout ?? "");
+        log.append(built.stderr ?? "");
+        if (built.status !== 0)
+          throw new Error(`cannot seed basic Desktop image: ${built.stderr || built.stdout}`);
+        await provide({
+          client: session,
+          log,
+          baseDir,
+          runtimeDir,
+          registerAgentForCleanup: (name) => cleanupAgents.add(name),
+          externalOpenLog,
+        });
+      } catch (error) {
+        primaryError = error;
+      }
+
+      const cleanupErrors: unknown[] = [];
+      for (const name of cleanupAgents) {
+        const killed = spawnSync(cli, ["agent", "kill", name], {
+          env: environment,
+          encoding: "utf8",
+          timeout: 10_000,
+        });
+        log.append(
+          `agent kill ${name} status=${String(killed.status)} signal=${String(killed.signal)} error=${String(killed.error ?? "")}\n`,
+        );
+        log.append(killed.stdout ?? "");
+        log.append(killed.stderr ?? "");
+        if (killed.status !== 0) {
+          if ((await fixtureAgentProcesses(root, name)).length > 0) {
+            cleanupErrors.push(
+              new Error(`cannot kill fixture agent ${name}: ${killed.stderr || killed.stdout}`),
+            );
+          }
+          continue;
+        }
+        try {
+          await waitFor(`fixture agent ${name} shim cleanup`, 10_000, async () => {
+            try {
+              await access(join(runtimeDir, `${name}.shim.sock`));
+              return false;
+            } catch {
+              return true;
+            }
+          });
+          await waitFor(
+            `fixture agent ${name} process cleanup`,
+            10_000,
+            async () => (await fixtureAgentProcesses(root, name)).length === 0,
+          );
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
+      }
+      if (session) {
+        try {
+          await session.deleteSession();
+        } catch (error) {
+          log.append(`delete WebDriver session: ${String(error)}\n`);
+        }
       }
       try {
-        await waitFor(`fixture agent ${name} shim cleanup`, 10_000, async () => {
-          try {
-            await access(join(runtimeDir, `${name}.shim.sock`));
-            return false;
-          } catch {
-            return true;
-          }
-        });
-        await waitFor(`fixture agent ${name} process cleanup`, 10_000, async () => (
-          (await fixtureAgentProcesses(root, name)).length === 0
-        ));
+        await stopChild(driverProcess);
       } catch (error) {
         cleanupErrors.push(error);
       }
-    }
-    if (session) {
-      try { await session.deleteSession(); } catch (error) { log.append(`delete WebDriver session: ${String(error)}\n`); }
-    }
-    try { await stopChild(driverProcess); } catch (error) { cleanupErrors.push(error); }
-    try { await stopIsolatedDaemon(runtimeDir, environment, log); } catch (error) { cleanupErrors.push(error); }
-    try { await stopChild(display?.child ?? null); } catch (error) { cleanupErrors.push(error); }
-    if (display?.lock) {
-      try { await rm(display.lock, { recursive: true, force: true }); } catch (error) { cleanupErrors.push(error); }
-    }
-    try { log.append(await readTail(join(runtimeDir, "tariboyd.log"))); } catch { /* daemon may not have logged */ }
-    if (cleanupErrors.length === 0) await rm(root, { recursive: true, force: true });
-    if (cleanupErrors.length > 0) {
-      const cleanupError = new AggregateError(cleanupErrors, "Desktop E2E cleanup failed");
-      throw new Error(`Desktop E2E could not prove process shutdown; state retained at ${root}\n${String(cleanupError)}\n${log.toString()}`, { cause: cleanupError });
-    }
-    if (primaryError) {
-      const detail = primaryError instanceof Error ? `${primaryError.name}: ${primaryError.message}` : String(primaryError);
-      throw new Error(`${detail}\nDesktop E2E process log (tail):\n${log.toString()}`, { cause: primaryError });
-    }
-  }, { scope: "test" }],
+      try {
+        await stopIsolatedDaemon(runtimeDir, environment, log);
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+      try {
+        await stopChild(display?.child ?? null);
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+      if (display?.lock) {
+        try {
+          await rm(display.lock, { recursive: true, force: true });
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
+      }
+      try {
+        log.append(await readTail(join(runtimeDir, "tariboyd.log")));
+      } catch {
+        /* daemon may not have logged */
+      }
+      if (cleanupErrors.length === 0) await rm(root, { recursive: true, force: true });
+      if (cleanupErrors.length > 0) {
+        const cleanupError = new AggregateError(cleanupErrors, "Desktop E2E cleanup failed");
+        throw new Error(
+          `Desktop E2E could not prove process shutdown; state retained at ${root}\n${String(cleanupError)}\n${log.toString()}`,
+          { cause: cleanupError },
+        );
+      }
+      if (primaryError) {
+        const detail =
+          primaryError instanceof Error
+            ? `${primaryError.name}: ${primaryError.message}`
+            : String(primaryError);
+        throw new Error(`${detail}\nDesktop E2E process log (tail):\n${log.toString()}`, {
+          cause: primaryError,
+        });
+      }
+    },
+    { scope: "test" },
+  ],
 
   desktop: async ({ desktopWorker }, provide, testInfo) => {
     await provide(desktopWorker.client);
     if (testInfo.status !== testInfo.expectedStatus) {
-      await testInfo.attach("desktop-e2e.log", { body: desktopWorker.log.bytes(), contentType: "text/plain" });
+      await testInfo.attach("desktop-e2e.log", {
+        body: desktopWorker.log.bytes(),
+        contentType: "text/plain",
+      });
     }
   },
 });

@@ -39,7 +39,9 @@ function Harness({ onSelect = () => {} }: { onSelect?: (id: string) => void }) {
         open={manager !== null}
         initialId={manager?.id ?? DEFAULT_WORKSPACE_ID}
         focusNew={manager?.focusNew ?? false}
-        onOpenChange={(open) => { if (!open) setManager(null); }}
+        onOpenChange={(open) => {
+          if (!open) setManager(null);
+        }}
       />
       <output data-testid="active">{state.active}</output>
     </>
@@ -56,7 +58,10 @@ describe("WorkspaceSwitcher", () => {
     await userEvent.click(screen.getByRole("button", { name: "Workspace: Default" }));
     const menu = await screen.findByRole("menu");
     expect(within(menu).getByText("Workspaces")).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitemradio", { name: /Default\s*2 hosts/ })).toHaveAttribute("aria-checked", "true");
+    expect(within(menu).getByRole("menuitemradio", { name: /Default\s*2 hosts/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     await userEvent.click(within(menu).getByRole("menuitemradio", { name: /Lab\s*1 host/ }));
 
     expect(screen.getByTestId("active")).toHaveTextContent(lab);
@@ -101,8 +106,9 @@ describe("WorkspaceManager", () => {
     await userEvent.type(name, "Production{Enter}");
 
     expect(within(dialog).getByLabelText("Workspace name")).toHaveValue("Production");
-    expect(within(dialog).getByText("No hosts yet. Open another workspace and move a host here."))
-      .toBeInTheDocument();
+    expect(
+      within(dialog).getByText("No hosts yet. Open another workspace and move a host here."),
+    ).toBeInTheDocument();
 
     await userEvent.click(within(dialog).getByRole("button", { name: /^Default/ }));
     await userEvent.click(within(dialog).getByRole("button", { name: "Move hetzner-01 to…" }));
@@ -129,7 +135,9 @@ describe("WorkspaceManager", () => {
     const input = within(dialog).getByLabelText("Workspace name");
     await userEvent.clear(input);
     await userEvent.type(input, "Staging");
-    expect(screen.getByRole("button", { name: "Workspace: Staging", hidden: true })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Workspace: Staging", hidden: true }),
+    ).toBeInTheDocument();
 
     await userEvent.clear(input);
     fireEvent.blur(input);

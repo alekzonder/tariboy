@@ -8,16 +8,20 @@ it("leaves the reading position alone when messages arrive away from the bottom"
   const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView");
   function Feed({ count }: { count: number }) {
     const { bottom, atBottom, onScroll } = useChatScroll(count);
-    return <div data-testid="feed" onScroll={onScroll}>
-      <span>{atBottom ? "Following" : "Reading older messages"}</span>
-      <div ref={bottom} />
-    </div>;
+    return (
+      <div data-testid="feed" onScroll={onScroll}>
+        <span>{atBottom ? "Following" : "Reading older messages"}</span>
+        <div ref={bottom} />
+      </div>
+    );
   }
   const view = render(<Feed count={1} />);
   expect(scroll).toHaveBeenCalledTimes(1);
   const feed = screen.getByTestId("feed");
   Object.defineProperties(feed, {
-    scrollHeight: { value: 1000 }, clientHeight: { value: 200 }, scrollTop: { value: 100, writable: true },
+    scrollHeight: { value: 1000 },
+    clientHeight: { value: 200 },
+    scrollTop: { value: 100, writable: true },
   });
   fireEvent.scroll(feed);
   view.rerender(<Feed count={2} />);

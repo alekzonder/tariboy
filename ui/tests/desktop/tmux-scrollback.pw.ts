@@ -45,13 +45,15 @@ async function keySends(desktop: W3CClient): Promise<string[]> {
     // xterm answers device-attribute and foreground/background colour probes
     // over the same socket as operator input. Those replies can arrive after
     // resetSends on a slower WebView and are not terminal-toolbar keystrokes.
-    const csiDeviceReply = frame.charCodeAt(0) === 0x1b
-      && frame[1] === "["
-      && (frame[2] === "?" || frame[2] === ">")
-      && frame.endsWith("c");
-    const oscColourReply = frame.charCodeAt(0) === 0x1b
-      && (frame.startsWith("\x1b]10;rgb:") || frame.startsWith("\x1b]11;rgb:"))
-      && frame.charCodeAt(frame.length - 1) === 0x5c;
+    const csiDeviceReply =
+      frame.charCodeAt(0) === 0x1b &&
+      frame[1] === "[" &&
+      (frame[2] === "?" || frame[2] === ">") &&
+      frame.endsWith("c");
+    const oscColourReply =
+      frame.charCodeAt(0) === 0x1b &&
+      (frame.startsWith("\x1b]10;rgb:") || frame.startsWith("\x1b]11;rgb:")) &&
+      frame.charCodeAt(frame.length - 1) === 0x5c;
     return !csiDeviceReply && !oscColourReply;
   });
 }
@@ -67,11 +69,17 @@ async function resetSends(desktop: W3CClient): Promise<void> {
  * 404 "no such element". Every lookup in this file therefore polls the DOM
  * from the page itself and only then asks the driver for the element. */
 async function clickButton(desktop: W3CClient, label: string): Promise<void> {
-  await expect.poll(async () => desktop.execute<boolean>(`
+  await expect
+    .poll(
+      async () =>
+        desktop.execute<boolean>(`
     return [...document.querySelectorAll("button")].some(
       (candidate) => (candidate.textContent || "").replace(/\\s+/g, " ").trim() === ${JSON.stringify(label)},
     );
-  `), { timeout: 60_000 }).toBe(true);
+  `),
+      { timeout: 60_000 },
+    )
+    .toBe(true);
   const button = await desktop.findElement("xpath", `//button[normalize-space(.)='${label}']`);
   await desktop.elementClick(button);
 }
@@ -85,12 +93,18 @@ async function toolbarText(desktop: W3CClient): Promise<string> {
 
 /** Wait until a live terminal of the given surface has mounted its toolbar. */
 async function awaitLiveTerminal(desktop: W3CClient, surface: string): Promise<void> {
-  await expect.poll(async () => desktop.execute<string>(`
+  await expect
+    .poll(
+      async () =>
+        desktop.execute<string>(`
     const screen = document.querySelector('[data-terminal-surface="${surface}"]');
     const toolbar = document.querySelector('[data-testid="terminal-toolbar"]');
     if (!screen || !toolbar) return "no live terminal";
     return toolbar.innerText.includes("Scrollback") ? "ready" : "no scrollback control";
-  `), { timeout: 60_000 }).toBe("ready");
+  `),
+      { timeout: 60_000 },
+    )
+    .toBe("ready");
 }
 
 /** Drive one terminal surface through the whole scrollback cycle. */
@@ -171,9 +185,11 @@ test("the shared terminal toolbar browses tmux scrollback on Console", async ({ 
       .catch((error) => { window.__scrollbackSetup = "error: " + String(error); });
     return true;
   `);
-  await expect.poll(() => desktop.execute<string>("return window.__scrollbackSetup || '';"), {
-    timeout: 60_000,
-  }).toBe("ready");
+  await expect
+    .poll(() => desktop.execute<string>("return window.__scrollbackSetup || '';"), {
+      timeout: 60_000,
+    })
+    .toBe("ready");
 
   // CLAUDE.md isolation: this run must drive the fixture's throwaway daemon, not
   // the operator's live one on 127.0.0.1:9990 under ~/.tariboy.

@@ -1,16 +1,11 @@
-import { HelpCircle, Keyboard } from "lucide-react"
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ClipboardEvent as ReactClipboardEvent,
-} from "react"
-import { toast } from "sonner"
-import { FitAddon } from "@xterm/addon-fit"
-import { WebLinksAddon } from "@xterm/addon-web-links"
-import { Terminal } from "@xterm/xterm"
-import "@xterm/xterm/css/xterm.css"
-import { Button } from "@/components/ui/button"
+import { HelpCircle, Keyboard } from "lucide-react";
+import { useEffect, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from "react";
+import { toast } from "sonner";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { Terminal } from "@xterm/xterm";
+import "@xterm/xterm/css/xterm.css";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -18,21 +13,21 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
-import { SendFilesButton } from "@/components/SendFilesButton"
-import { useFileDropTarget } from "@/hooks/useFileDropTarget"
-import { useSendFiles } from "@/hooks/useSendFiles"
-import type { TerminalSocketController } from "@/hooks/useTerminalSocket"
-import { isAndroidShell, openExternalUrl } from "@/lib/desktop"
-import { HOTKEY_BYTES } from "@/lib/terminalBytes"
-import { buildPathsText, useTuiDraft } from "@/lib/tui"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { SendFilesButton } from "@/components/SendFilesButton";
+import { useFileDropTarget } from "@/hooks/useFileDropTarget";
+import { useSendFiles } from "@/hooks/useSendFiles";
+import type { TerminalSocketController } from "@/hooks/useTerminalSocket";
+import { isAndroidShell, openExternalUrl } from "@/lib/desktop";
+import { HOTKEY_BYTES } from "@/lib/terminalBytes";
+import { buildPathsText, useTuiDraft } from "@/lib/tui";
+import { cn } from "@/lib/utils";
 
 // Tailwind's default `font-mono` stack — mirrored here so the xterm canvas
 // renders in the same monospace face as the rest of the app.
 const MONO_FONT =
-  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
 
 // Zinc dark palette matching the old snapshot terminal (bg zinc-950, fg zinc-100).
 const TERM_THEME = {
@@ -41,7 +36,7 @@ const TERM_THEME = {
   cursor: "#e4e4e7",
   cursorAccent: "#09090b",
   selectionBackground: "#3f3f46",
-}
+};
 
 // One-click hotkeys, each a raw byte sequence written straight to the socket.
 const HOTKEYS: { label: string; bytes: string }[] = [
@@ -50,7 +45,7 @@ const HOTKEYS: { label: string; bytes: string }[] = [
   { label: "Ctrl-C", bytes: HOTKEY_BYTES.ctrlc },
   { label: "↑", bytes: HOTKEY_BYTES.up },
   { label: "↓", bytes: HOTKEY_BYTES.down },
-]
+];
 
 // Tmux copy-mode ("scrollback") key sequences, written raw to the same socket
 // as the hotkeys. `\x02[` is tmux's default prefix C-b followed by `[`, which
@@ -62,22 +57,22 @@ const COPY_MODE_BYTES = {
   exit: "q",
   pageBack: "\x1b[5~",
   pageForward: "\x1b[6~",
-} as const
+} as const;
 
 const SCROLLBACK_HINT =
   "Live input is paused while you browse history — press q in the terminal or " +
-  "use Exit scrollback to return to live output."
+  "use Exit scrollback to return to live output.";
 
 // Announced when the operator actually returns to live output. It renders
 // inside the toolbar, and ui/tests/desktop/tmux-scrollback.pw.ts asserts the
 // whole toolbar's text contains neither "Viewing scrollback" nor "Exit
 // scrollback" once scrollback is left — so this wording must keep containing
 // neither substring. That spec is the only independent check on it.
-const SCROLLBACK_EXIT_ANNOUNCEMENT = "Returned to live output"
+const SCROLLBACK_EXIT_ANNOUNCEMENT = "Returned to live output";
 
 // Failure text for an external open. Fixed on purpose: the terminal line — and
 // therefore any token in its query string — must never reach a toast or a log.
-const WEB_LINK_ERROR = "Could not open web link"
+const WEB_LINK_ERROR = "Could not open web link";
 
 /** Open a Command-clicked terminal link in the operator's browser.
  *
@@ -89,19 +84,19 @@ const WEB_LINK_ERROR = "Could not open web link"
  * boundary. A phone has no Command key, so in the Android app a tap on the
  * link opens it. */
 async function openWebLink(event: MouseEvent, text: string) {
-  if (!event.metaKey && !isAndroidShell()) return
-  let url: URL
+  if (!event.metaKey && !isAndroidShell()) return;
+  let url: URL;
   try {
-    url = new URL(text)
+    url = new URL(text);
   } catch {
     // Not an absolute URL (bare host, path, protocol-relative, malformed).
-    return
+    return;
   }
-  if (url.protocol !== "http:" && url.protocol !== "https:") return
+  if (url.protocol !== "http:" && url.protocol !== "https:") return;
   try {
-    await openExternalUrl(url.toString())
+    await openExternalUrl(url.toString());
   } catch {
-    toast.error(WEB_LINK_ERROR)
+    toast.error(WEB_LINK_ERROR);
   }
 }
 
@@ -110,7 +105,7 @@ const HELP_TEXT =
   "session in real time. Use the hotkey buttons for Esc/Enter/Ctrl-C/arrows, or " +
   "the Compose button to draft a multi-line message and inject it (no trailing " +
   "Enter). Double-click selects a word natively; drag to select and copy. " +
-  "Scrollback opens tmux's pane history; leave it with q or Exit scrollback."
+  "Scrollback opens tmux's pane history; leave it with q or Exit scrollback.";
 
 /** The interactive terminal screen. Mounts a live xterm.js terminal driven by
  * the streaming websocket {@link TerminalSocketController}: PTY bytes are
@@ -125,28 +120,28 @@ export function TuiScreen({
   persistDraft = true,
   surface = "standalone",
 }: {
-  controller: TerminalSocketController
-  onStart?: () => void
+  controller: TerminalSocketController;
+  onStart?: () => void;
   /** Fill the parent's height (flex column) instead of a fixed 32rem screen. */
-  fill?: boolean
+  fill?: boolean;
   /** Retain compose text in localStorage. Workspace tiles disable this so
    * operator text and uploaded paths never enter persisted workspace state. */
-  persistDraft?: boolean
+  persistDraft?: boolean;
   /** Standalone Terminal tab chrome or a flush surface embedded in a Workspace pane. */
-  surface?: "standalone" | "workspace"
+  surface?: "standalone" | "workspace";
 }) {
-  const { absent, name, send, sendResize, attachTerm, status } = controller
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const [focused, setFocused] = useState(false)
+  const { absent, name, send, sendResize, attachTerm, status } = controller;
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [focused, setFocused] = useState(false);
   // Set by the mount effect below; lets other effects (re)fit the live terminal
   // without owning its lifetime. Null while no terminal is mounted.
-  const refitRef = useRef<(() => void) | null>(null)
+  const refitRef = useRef<(() => void) | null>(null);
 
   // Compose modal: Agent mode persists its per-agent draft, while Workspace
   // keeps the draft in component memory only. On Send the text is written to
   // the stream as-is.
-  const [modalOpen, setModalOpen] = useState(false)
-  const [helpOpen, setHelpOpen] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   // We asked tmux to enter copy-mode; there is no authoritative tmux mode event
   // on this socket, so this tracks the *requested* state only and every label
   // reads as a request ("Viewing scrollback"), never as verified tmux state.
@@ -156,43 +151,43 @@ export function TuiScreen({
   // other way still strands the banner — notably Escape, which cancels under
   // tmux's default emacs table (including via the toolbar's own Esc hotkey) but
   // only clears the selection under copy-mode-vi, so we cannot infer it.
-  const [copyModeRequested, setCopyModeRequested] = useState(false)
+  const [copyModeRequested, setCopyModeRequested] = useState(false);
   // Text of the "you are back on live output" announcement, held separately
   // from `copyModeRequested` on purpose: content derived from that flag alone
   // would claim a return on first mount, before any exit ever happened. Empty
   // until a return has genuinely occurred in *this* mounted terminal.
-  const [exitAnnouncement, setExitAnnouncement] = useState("")
+  const [exitAnnouncement, setExitAnnouncement] = useState("");
   // Mirrors `copyModeRequested` for the xterm data handler, which owns the
   // terminal instance and cannot list the state in its deps (that would remount
   // the terminal on every scrollback toggle) and would otherwise read a stale
   // closure. Kept in step below, after the render-phase resets.
-  const copyModeRef = useRef(copyModeRequested)
+  const copyModeRef = useRef(copyModeRequested);
   // The Scrollback control survives leaving scrollback, unlike the Exit button
   // that was focused; focus is handed back to it so keyboard navigation does
   // not restart from <body>.
-  const scrollbackButtonRef = useRef<HTMLButtonElement | null>(null)
-  const draft = useTuiDraft(name, "terminal", persistDraft)
-  const workspaceSurface = surface === "workspace"
+  const scrollbackButtonRef = useRef<HTMLButtonElement | null>(null);
+  const draft = useTuiDraft(name, "terminal", persistDraft);
+  const workspaceSurface = surface === "workspace";
   const liveUpload = useSendFiles({
     onUploaded: (paths) => {
-      draft.append(buildPathsText(paths))
-      setModalOpen(true)
+      draft.append(buildPathsText(paths));
+      setModalOpen(true);
     },
-  })
+  });
   const absentUpload = useSendFiles({
     onUploaded: (paths) => toast.success(`uploaded: ${paths.join(", ")}`),
-  })
-  const liveDrop = useFileDropTarget(liveUpload.sendFiles)
-  const absentDrop = useFileDropTarget(absentUpload.sendFiles)
+  });
+  const liveDrop = useFileDropTarget(liveUpload.sendFiles);
+  const absentDrop = useFileDropTarget(absentUpload.sendFiles);
 
   // Mount exactly one Terminal + FitAddon into the container, wire input to the
   // socket, and keep it fitted to the container via ResizeObserver + window
   // resize. Torn down on unmount. Guarded by `absent`: the container only
   // exists in the live branch, so this effect re-runs when we leave `absent`.
   useEffect(() => {
-    if (absent) return
-    const el = containerRef.current
-    if (!el) return
+    if (absent) return;
+    const el = containerRef.current;
+    if (!el) return;
 
     const term = new Terminal({
       convertEol: false,
@@ -200,17 +195,17 @@ export function TuiScreen({
       fontSize: 12,
       fontFamily: MONO_FONT,
       theme: TERM_THEME,
-    })
-    const fitAddon = new FitAddon()
-    term.loadAddon(fitAddon)
+    });
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
     // One web-links addon per mounted terminal, owned by this effect. No
     // matcher is supplied: the addon's default already recognises only explicit
     // `http://`/`https://` text, so file paths and other schemes never become
     // clickable in the first place.
-    const webLinksAddon = new WebLinksAddon(openWebLink)
-    term.loadAddon(webLinksAddon)
-    term.open(el)
-    attachTerm(term)
+    const webLinksAddon = new WebLinksAddon(openWebLink);
+    term.loadAddon(webLinksAddon);
+    term.open(el);
+    attachTerm(term);
     term.onData((d) => {
       // `q` is copy-mode's quit key and the very byte our own Exit scrollback
       // button sends, so tracking it is exactly as accurate as tracking that
@@ -223,22 +218,22 @@ export function TuiScreen({
         // ordinary shell (leaving a pager, opening vi) must not speak. The
         // mirror ref answers "was scrollback showing when this byte arrived?"
         // without reading the state itself. The clear below stays unconditional.
-        if (copyModeRef.current) setExitAnnouncement(SCROLLBACK_EXIT_ANNOUNCEMENT)
-        setCopyModeRequested(false)
+        if (copyModeRef.current) setExitAnnouncement(SCROLLBACK_EXIT_ANNOUNCEMENT);
+        setCopyModeRequested(false);
       }
-      send(d)
-    })
+      send(d);
+    });
 
     const fitNow = () => {
       try {
-        fitAddon.fit()
+        fitAddon.fit();
       } catch {
         // fit() throws if the element has no layout yet (e.g. hidden tab);
         // ignore and let the next ResizeObserver tick retry.
-        return
+        return;
       }
-      if (term.cols > 0 && term.rows > 0) sendResize(term.cols, term.rows)
-    }
+      if (term.cols > 0 && term.rows > 0) sendResize(term.cols, term.rows);
+    };
 
     // Deferred refit, coalesced into one animation frame. Needed because a
     // synchronous fit right after open() (or right after a layout change) can
@@ -246,34 +241,34 @@ export function TuiScreen({
     // silently leave the terminal at its 80x24 default — which is what made a
     // freshly switched-to agent render into a small corner of the pane. It also
     // collapses ResizeObserver + window-resize bursts into a single fit.
-    let raf = 0
+    let raf = 0;
     const refit = () => {
-      if (raf) cancelAnimationFrame(raf)
+      if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
-        raf = 0
-        fitNow()
-      })
-    }
-    refitRef.current = refit
+        raf = 0;
+        fitNow();
+      });
+    };
+    refitRef.current = refit;
 
-    fitNow()
-    refit()
+    fitNow();
+    refit();
 
-    const ro = new ResizeObserver(refit)
-    ro.observe(el)
-    window.addEventListener("resize", refit)
+    const ro = new ResizeObserver(refit);
+    ro.observe(el);
+    window.addEventListener("resize", refit);
 
     return () => {
-      refitRef.current = null
-      if (raf) cancelAnimationFrame(raf)
-      window.removeEventListener("resize", refit)
-      ro.disconnect()
-      webLinksAddon.dispose()
-      term.dispose()
-    }
+      refitRef.current = null;
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener("resize", refit);
+      ro.disconnect();
+      webLinksAddon.dispose();
+      term.dispose();
+    };
     // attachTerm/send/sendResize are stable useCallbacks, so this re-runs only
     // on the agent name or the absent→live transition.
-  }, [absent, name, attachTerm, send, sendResize])
+  }, [absent, name, attachTerm, send, sendResize]);
 
   // Re-fit whenever a socket opens (agent switch, backoff reconnect, redial):
   // the mount-effect's fit can land while the ws is still CONNECTING, so its
@@ -281,8 +276,8 @@ export function TuiScreen({
   // size it was dialed at. Re-fitting here re-sends the true size on a live
   // socket. Cheap and idempotent when the size has not changed.
   useEffect(() => {
-    if (status === "open") refitRef.current?.()
-  }, [status])
+    if (status === "open") refitRef.current?.();
+  }, [status]);
 
   // A replacement session must never inherit a stale scrollback banner: drop
   // the requested state whenever the terminal identity changes or the session
@@ -290,19 +285,19 @@ export function TuiScreen({
   // state derived from props) rather than in an effect keeps the stale banner
   // from being painted for one frame first. Unmount needs no cleanup — the
   // state dies with the component.
-  const terminalIdentity = `${name}:${absent}`
-  const [lastIdentity, setLastIdentity] = useState(terminalIdentity)
+  const terminalIdentity = `${name}:${absent}`;
+  const [lastIdentity, setLastIdentity] = useState(terminalIdentity);
   if (lastIdentity !== terminalIdentity) {
-    setLastIdentity(terminalIdentity)
-    setCopyModeRequested(false)
+    setLastIdentity(terminalIdentity);
+    setCopyModeRequested(false);
     // A replacement session must not inherit the previous one's announcement
     // either — it never left scrollback, and nothing returned to live output.
-    setExitAnnouncement("")
+    setExitAnnouncement("");
   }
   // A closed socket ended copy-mode with the session, so the banner would
   // otherwise outlive the PTY it describes. Same render-phase adjustment for
   // the same reason; the `copyModeRequested` guard is what terminates it.
-  if (status === "closed" && copyModeRequested) setCopyModeRequested(false)
+  if (status === "closed" && copyModeRequested) setCopyModeRequested(false);
   // Kept in step after every render — including the two render-phase resets
   // above, which re-render with the cleared value — so the mirror equals the
   // state at every point a keystroke can arrive: a `q` typed once the socket
@@ -310,36 +305,36 @@ export function TuiScreen({
   // effect rather than during render because writing a ref mid-render is a lint
   // error here (and React may discard that render).
   useEffect(() => {
-    copyModeRef.current = copyModeRequested
-  })
+    copyModeRef.current = copyModeRequested;
+  });
 
   // Never write to a closed socket: the controller is gone once the PTY ended,
   // so a late toolbar click must be a no-op rather than a lost/queued write.
   const sendCopyModeKeys = (bytes: string) => {
-    if (status === "closed") return
-    send(bytes)
-  }
+    if (status === "closed") return;
+    send(bytes);
+  };
 
   const sendModal = () => {
-    const text = draft.text
+    const text = draft.text;
     if (!text) {
-      setModalOpen(false)
-      return
+      setModalOpen(false);
+      return;
     }
-    send(text)
-    draft.clear()
-    setModalOpen(false)
-  }
+    send(text);
+    draft.clear();
+    setModalOpen(false);
+  };
 
   // Paste into the (focused, empty) terminal wrapper composes instead of
   // dropping a raw multi-line paste straight onto the shell.
   const onPaste = (e: ReactClipboardEvent) => {
-    const text = e.clipboardData.getData("text")
-    if (!text) return
-    e.preventDefault()
-    draft.append(text)
-    setModalOpen(true)
-  }
+    const text = e.clipboardData.getData("text");
+    if (!text) return;
+    e.preventDefault();
+    draft.append(text);
+    setModalOpen(true);
+  };
 
   if (absent) {
     return (
@@ -350,11 +345,11 @@ export function TuiScreen({
         onDragLeave={absentDrop.onDragLeave}
         onDrop={absentDrop.onDrop}
         className={cn(
-        "flex flex-col items-center justify-center gap-2 bg-zinc-950 text-zinc-400",
-        workspaceSurface ? "border-0" : "rounded-md border",
-        fill ? "h-full" : "h-[32rem]",
-        absentDrop.dragActive && "ring-2 ring-primary",
-      )}
+          "flex flex-col items-center justify-center gap-2 bg-zinc-950 text-zinc-400",
+          workspaceSurface ? "border-0" : "rounded-md border",
+          fill ? "h-full" : "h-[32rem]",
+          absentDrop.dragActive && "ring-2 ring-primary",
+        )}
       >
         <div>Session not running or not interactive</div>
         <div className="text-xs">
@@ -368,26 +363,22 @@ export function TuiScreen({
           )}
           {/* Files still upload to the server even with no live session,
               so the operator can pre-stage them; report the saved paths. */}
-          <SendFilesButton
-            onUploaded={(paths) => toast.success(`uploaded: ${paths.join(", ")}`)}
-          />
+          <SendFilesButton onUploaded={(paths) => toast.success(`uploaded: ${paths.join(", ")}`)} />
         </div>
       </div>
-    )
+    );
   }
 
   return (
     // In fill mode this is a flex child of the pane's column: `min-h-0 flex-1`
     // makes it take exactly the space left by the pane header (and shrink with
     // the window) instead of claiming 100% of the pane and overflowing it.
-    <div className={cn(
-      fill
-        ? "flex min-h-0 flex-1 flex-col"
-        : workspaceSurface
-          ? "flex flex-col"
-          : "space-y-2",
-      fill && !workspaceSurface && "gap-2",
-    )}>
+    <div
+      className={cn(
+        fill ? "flex min-h-0 flex-1 flex-col" : workspaceSurface ? "flex flex-col" : "space-y-2",
+        fill && !workspaceSurface && "gap-2",
+      )}
+    >
       <div
         ref={containerRef}
         data-testid="tui-screen"
@@ -418,16 +409,11 @@ export function TuiScreen({
       >
         <SendFilesButton
           onUploaded={(paths) => {
-            draft.append(buildPathsText(paths))
-            setModalOpen(true)
+            draft.append(buildPathsText(paths));
+            setModalOpen(true);
           }}
         />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setModalOpen(true)}
-        >
+        <Button type="button" variant="outline" size="sm" onClick={() => setModalOpen(true)}>
           <Keyboard className="size-4" />
           Compose
         </Button>
@@ -449,11 +435,11 @@ export function TuiScreen({
           disabled={status === "closed"}
           ref={scrollbackButtonRef}
           onClick={() => {
-            sendCopyModeKeys(COPY_MODE_BYTES.enter)
-            if (status !== "closed") setCopyModeRequested(true)
+            sendCopyModeKeys(COPY_MODE_BYTES.enter);
+            if (status !== "closed") setCopyModeRequested(true);
             // Drop a previous announcement on the way in, so the next exit is a
             // content change the live region actually re-announces.
-            setExitAnnouncement("")
+            setExitAnnouncement("");
           }}
         >
           Scrollback
@@ -481,14 +467,14 @@ export function TuiScreen({
               variant="outline"
               size="sm"
               onClick={() => {
-                sendCopyModeKeys(COPY_MODE_BYTES.exit)
-                setCopyModeRequested(false)
-                setExitAnnouncement(SCROLLBACK_EXIT_ANNOUNCEMENT)
+                sendCopyModeKeys(COPY_MODE_BYTES.exit);
+                setCopyModeRequested(false);
+                setExitAnnouncement(SCROLLBACK_EXIT_ANNOUNCEMENT);
                 // This button is about to unmount; without this the focus falls
                 // back to <body> and keyboard navigation restarts from the top
                 // of the document. Only this path steals focus — after `q` the
                 // focus belongs to the terminal and must stay there.
-                scrollbackButtonRef.current?.focus()
+                scrollbackButtonRef.current?.focus();
               }}
             >
               Exit scrollback
@@ -504,9 +490,7 @@ export function TuiScreen({
           role="status"
           aria-live="polite"
           className={
-            copyModeRequested
-              ? "flex min-w-0 flex-col text-xs text-muted-foreground"
-              : "sr-only"
+            copyModeRequested ? "flex min-w-0 flex-col text-xs text-muted-foreground" : "sr-only"
           }
         >
           {copyModeRequested && (
@@ -543,8 +527,8 @@ export function TuiScreen({
           <DialogHeader>
             <DialogTitle>Send text to the terminal</DialogTitle>
             <DialogDescription>
-              The text is injected as-is, with no trailing Enter — submit it yourself in
-              the terminal.
+              The text is injected as-is, with no trailing Enter — submit it yourself in the
+              terminal.
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -557,8 +541,8 @@ export function TuiScreen({
             <Button
               variant="outline"
               onClick={() => {
-                draft.clear()
-                setModalOpen(false)
+                draft.clear();
+                setModalOpen(false);
               }}
             >
               Cancel
@@ -568,5 +552,5 @@ export function TuiScreen({
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

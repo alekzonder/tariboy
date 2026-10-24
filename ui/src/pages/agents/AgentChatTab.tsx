@@ -13,7 +13,7 @@ const VIEWS = [
   ["channels", "Channels"],
   ["queue", "Queue"],
 ] as const;
-type View = typeof VIEWS[number][0];
+type View = (typeof VIEWS)[number][0];
 
 function isView(value: string | null): value is View {
   return VIEWS.some(([key]) => key === value);
@@ -32,16 +32,22 @@ export default function AgentChatTab({ hostId = "" }: { hostId?: string }) {
   /* The switch is rendered into each view's own toolbar rather than above it,
      so the section keeps one 48px control row instead of stacking two. */
   const segment = (
-    <div role="group" aria-label="Messaging view" className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5">
+    <div
+      role="group"
+      aria-label="Messaging view"
+      className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5"
+    >
       {VIEWS.map(([key, label]) => (
         <button
           key={key}
           type="button"
           aria-pressed={view === key}
           onClick={() => pick(key)}
-          className={`h-[22px] rounded-[7px] px-[9px] text-[11.5px] ${view === key
-            ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
-            : "text-muted-foreground hover:text-foreground"}`}
+          className={`h-[22px] rounded-[7px] px-[9px] text-[11.5px] ${
+            view === key
+              ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
         >
           {label}
         </button>

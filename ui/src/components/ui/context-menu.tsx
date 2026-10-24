@@ -1,20 +1,18 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { ContextMenu as ContextMenuPrimitive } from "radix-ui"
+import * as React from "react";
+import { ContextMenu as ContextMenuPrimitive } from "radix-ui";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
-function ContextMenu({
-  ...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
-  return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />
+function ContextMenu({ ...props }: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
+  return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />;
 }
 
 function ContextMenuTrigger({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Trigger>) {
-  return <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} />
+  return <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} />;
 }
 
 function ContextMenuContent({
@@ -32,7 +30,7 @@ function ContextMenuContent({
         {...props}
       />
     </ContextMenuPrimitive.Portal>
-  )
+  );
 }
 
 function ContextMenuItem({
@@ -48,12 +46,7 @@ function ContextMenuItem({
       )}
       {...props}
     />
-  )
+  );
 }
 
-export {
-  ContextMenu,
-  ContextMenuTrigger,
-  ContextMenuContent,
-  ContextMenuItem,
-}
+export { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem };

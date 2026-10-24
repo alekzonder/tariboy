@@ -35,7 +35,9 @@ describe("CodexApprovalCard", () => {
     fireEvent.click(await screen.findByRole("radio", { name: "Approve for me" }));
     await waitFor(() => expect(setCodexApproval).toHaveBeenCalledWith("approve-for-me"));
     expect(api.target).toBe(target);
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Approve for me" })).toBeChecked());
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: "Approve for me" })).toBeChecked(),
+    );
   });
 
   it("keeps the previous mode and reports a failed save", async () => {

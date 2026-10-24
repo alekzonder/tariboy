@@ -46,7 +46,11 @@ export function filesApi(t: Transport) {
   return {
     serverUploadFile: async (file: File): Promise<PushResult> => {
       if (file.size > 1024 * 1024 * 1024) throw new Error("File exceeds 1 GiB");
-      const response = await t.raw("PUT", `/api/files/raw?name=${encodeURIComponent(file.name)}`, file);
+      const response = await t.raw(
+        "PUT",
+        `/api/files/raw?name=${encodeURIComponent(file.name)}`,
+        file,
+      );
       return readResult<PushResult>(response);
     },
     // Root listing uses an empty path. The path rides as a query param; the
@@ -62,9 +66,15 @@ export function filesApi(t: Transport) {
     agentFileCreate: (name: string, path: string, type: "file" | "dir") =>
       t.agentPost<{ path: string; created: boolean }>(name, "file", { path, type }),
     agentFileRename: (name: string, from: string, to: string) =>
-      t.agentPost<{ from: string; to: string; renamed: boolean }>(name, "file/rename", { from, to }),
+      t.agentPost<{ from: string; to: string; renamed: boolean }>(name, "file/rename", {
+        from,
+        to,
+      }),
     agentFileDelete: (name: string, path: string) =>
-      t.agentDelete<{ path: string; deleted: boolean }>(name, `file?path=${encodeURIComponent(path)}`),
+      t.agentDelete<{ path: string; deleted: boolean }>(
+        name,
+        `file?path=${encodeURIComponent(path)}`,
+      ),
     // fsList lists the subdirectories of `path` under the filesystem root. An
     // empty path lists the root itself and is omitted so the daemon applies its
     // root default.

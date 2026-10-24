@@ -26,34 +26,47 @@ test("shows the effective agent cwd and its VS Code action", async ({ desktop })
   `);
   expect(started).toBe(true);
 
-  await expect.poll(async () => {
-    const value = await desktop.execute<{ state: string; message?: string }>(
-      "return window.__agentCwdSetup || { state: 'missing' };",
-    );
-    return value.state === "error" ? `error: ${value.message ?? "unknown"}` : value.state;
-  }, { timeout: 60_000 }).toBe("ready");
+  await expect
+    .poll(
+      async () => {
+        const value = await desktop.execute<{ state: string; message?: string }>(
+          "return window.__agentCwdSetup || { state: 'missing' };",
+        );
+        return value.state === "error" ? `error: ${value.message ?? "unknown"}` : value.state;
+      },
+      { timeout: 60_000 },
+    )
+    .toBe("ready");
   const setup = await desktop.execute<{ state: string; cwd: string }>(
     "return window.__agentCwdSetup;",
   );
 
-  await desktop.execute(`window.location.hash = "#/agents/local/cwd-vscode-e2e/console"; return true;`);
+  await desktop.execute(
+    `window.location.hash = "#/agents/local/cwd-vscode-e2e/console"; return true;`,
+  );
 
-  const cwd = await expect.poll(async () => {
-    try {
-      const element = await desktop.findElement("css selector", '[data-testid="agent-cwd"]');
-      return await desktop.elementText(element);
-    } catch {
-      return "";
-    }
-  }).toBe(setup.cwd).then(async () => desktop.findElement("css selector", '[data-testid="agent-cwd"]'));
+  const cwd = await expect
+    .poll(async () => {
+      try {
+        const element = await desktop.findElement("css selector", '[data-testid="agent-cwd"]');
+        return await desktop.elementText(element);
+      } catch {
+        return "";
+      }
+    })
+    .toBe(setup.cwd)
+    .then(async () => desktop.findElement("css selector", '[data-testid="agent-cwd"]'));
   await expect(desktop.elementText(cwd)).resolves.toBe(setup.cwd);
 
-  const action = await expect.poll(async () => {
-    try {
-      return await desktop.findElement("css selector", '[data-testid="open-agent-cwd-vscode"]');
-    } catch {
-      return null;
-    }
-  }).not.toBeNull().then(() => desktop.findElement("css selector", '[data-testid="open-agent-cwd-vscode"]'));
+  const action = await expect
+    .poll(async () => {
+      try {
+        return await desktop.findElement("css selector", '[data-testid="open-agent-cwd-vscode"]');
+      } catch {
+        return null;
+      }
+    })
+    .not.toBeNull()
+    .then(() => desktop.findElement("css selector", '[data-testid="open-agent-cwd-vscode"]'));
   await expect(desktop.elementText(action)).resolves.toBe("Open in VS Code");
 });

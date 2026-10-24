@@ -42,9 +42,7 @@ export const Sizes = () => (
         <span style={{ display: "grid", placeItems: "center", width: 14 }}>
           <StatusDot tone="live" size={size} />
         </span>
-        <span style={{ fontSize: 11.5, color: "var(--muted-foreground)" }}>
-          {size}px
-        </span>
+        <span style={{ fontSize: 11.5, color: "var(--muted-foreground)" }}>{size}px</span>
       </div>
     ))}
   </div>

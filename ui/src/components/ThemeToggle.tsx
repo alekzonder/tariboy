@@ -1,26 +1,29 @@
-import { MoonIcon, SunIcon } from "lucide-react"
-import type { VariantProps } from "class-variance-authority"
+import { MoonIcon, SunIcon } from "lucide-react";
+import type { VariantProps } from "class-variance-authority";
 
-import { Button, type buttonVariants } from "@/components/ui/button"
+import { Button, type buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuCheckItem,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { useTheme, type Theme } from "@/components/themeContext"
+} from "@/components/ui/dropdown-menu";
+import { useTheme, type Theme } from "@/components/themeContext";
 
 const OPTIONS: { value: Theme; label: string }[] = [
   { value: "system", label: "System" },
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
-]
+];
 
-export function ThemeToggle({ className, variant = "outline" }: {
-  className?: string
-  variant?: VariantProps<typeof buttonVariants>["variant"]
+export function ThemeToggle({
+  className,
+  variant = "outline",
+}: {
+  className?: string;
+  variant?: VariantProps<typeof buttonVariants>["variant"];
 }) {
-  const { theme, setTheme } = useTheme()
+  const { theme, setTheme } = useTheme();
 
   return (
     <DropdownMenu>
@@ -49,5 +52,5 @@ export function ThemeToggle({ className, variant = "outline" }: {
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  )
+  );
 }

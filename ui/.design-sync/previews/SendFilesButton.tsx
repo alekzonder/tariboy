@@ -38,9 +38,7 @@ export const TerminalToolbar = () => (
       <Button size="sm" variant="outline">
         Paste
       </Button>
-      <span
-        style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted-foreground)" }}
-      >
+      <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted-foreground)" }}>
         uploads land in /work/files on build-01
       </span>
     </div>
@@ -99,8 +97,8 @@ export const Disabled = () => (
       style={{ height: 92 }}
     />
     <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
-      Saving the comment — the button is disabled, the same visual it shows while
-      an upload of its own is in flight.
+      Saving the comment — the button is disabled, the same visual it shows while an upload of its
+      own is in flight.
     </span>
   </Panel>
 );

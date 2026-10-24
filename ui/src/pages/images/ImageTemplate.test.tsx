@@ -10,28 +10,40 @@ vi.mock("@/components/imageContext", () => ({
 afterEach(() => vi.restoreAllMocks());
 
 it("renders static layers and runtime placeholders in declared order", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    text: async () => JSON.stringify({
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
       ok: true,
-      result: {
-        schema_version: 2,
-        sha256: "template-sha",
-        entries: [
-          {
-            kind: "file", source: "$STORE/prompts/iteration-finish.md", category: "store",
-            archive_path: "prompt/layers/000-iteration-finish.md", size: 220, sha256: "abcdef0123456789",
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          ok: true,
+          result: {
+            schema_version: 2,
+            sha256: "template-sha",
+            entries: [
+              {
+                kind: "file",
+                source: "$STORE/prompts/iteration-finish.md",
+                category: "store",
+                archive_path: "prompt/layers/000-iteration-finish.md",
+                size: 220,
+                sha256: "abcdef0123456789",
+              },
+              { kind: "runtime", runtime: "identity" },
+              {
+                kind: "file",
+                source: "/srv/prompts/reviewer.md",
+                category: "absolute",
+                archive_path: "prompt/layers/002-reviewer.md",
+                size: 42,
+                sha256: "9876543210fedcba",
+              },
+            ],
           },
-          { kind: "runtime", runtime: "identity" },
-          {
-            kind: "file", source: "/srv/prompts/reviewer.md", category: "absolute",
-            archive_path: "prompt/layers/002-reviewer.md", size: 42, sha256: "9876543210fedcba",
-          },
-        ],
-      },
-    }),
-  } as Response));
+        }),
+    } as Response),
+  );
 
   render(<ImageTemplate />, { wrapper: apiWrapper() });
 

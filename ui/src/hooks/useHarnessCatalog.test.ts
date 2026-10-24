@@ -51,9 +51,7 @@ describe("useHarnessCatalog", () => {
   });
 
   it("reports a daemon without the route instead of failing", async () => {
-    getHarnessModels.mockRejectedValue(
-      new ApiError(404, "http_404", "HTTP 404"),
-    );
+    getHarnessModels.mockRejectedValue(new ApiError(404, "http_404", "HTTP 404"));
 
     const localApi = clientFor(null);
     const { result } = renderHook(() => useHarnessCatalog(localApi, "codex"));
