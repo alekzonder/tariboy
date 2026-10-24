@@ -1,13 +1,18 @@
 import { renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
-import type { WorkflowDefinition, WorkflowImage } from "@/lib/tasks"
+import type { WorkflowDefinition, WorkflowImage } from "@/lib/api"
+import type { Daemon } from "@/lib/daemons"
+import { apiWrapper, fakeApi } from "@/test/api"
 import { boundTo, effectiveLimits, groupWorkflowImages, ownerLabel, useQueueBindings } from "./workflowImages"
 
-const api = vi.hoisted(() => ({ listTaskQueues: vi.fn(), getQueueWorkflow: vi.fn() }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  ...api,
-}))
+const api = { listTaskQueues: vi.fn(), getQueueWorkflow: vi.fn() }
+// The hook reads the host of the nearest ApiProvider.
+const on = (target: Daemon | null) => ({
+  wrapper: apiWrapper(fakeApi({
+    tasks: { listTaskQueues: api.listTaskQueues },
+    workflows: { getQueueWorkflow: api.getQueueWorkflow },
+  }, target)),
+})
 
 const remote = { id: "remote", label: "Remote", baseURL: "https://remote", token: "t" }
 const image = (name: string, tag: string, digest = "d"): WorkflowImage =>
@@ -36,24 +41,24 @@ it("collects the queues bound to each digest and marks the unreadable ones", asy
     if (queue === "RES") return null
     return { queue, digest: "aaa" }
   })
-  const { result } = renderHook(() => useQueueBindings(remote))
+  const { result } = renderHook(() => useQueueBindings(), on(remote))
   await waitFor(() => expect(result.current.loaded).toBe(true))
-  expect(api.listTaskQueues).toHaveBeenCalledWith(remote)
-  for (const queue of ["DEV", "OPS", "RES", "BAD"]) expect(api.getQueueWorkflow).toHaveBeenCalledWith(queue, remote)
+  expect(api.listTaskQueues).toHaveBeenCalledWith()
+  for (const queue of ["DEV", "OPS", "RES", "BAD"]) expect(api.getQueueWorkflow).toHaveBeenCalledWith(queue)
   expect(boundTo(result.current, "aaa")).toEqual({ text: "DEV, OPS, unknown", title: "Could not read the binding of BAD" })
   expect(boundTo(result.current, "bbb")).toEqual({ text: "unknown", title: "Could not read the binding of BAD" })
 })
 
 it("shows unknown everywhere when the queue list fails", async () => {
   api.listTaskQueues.mockRejectedValue(new Error("offline"))
-  const { result } = renderHook(() => useQueueBindings(null))
+  const { result } = renderHook(() => useQueueBindings(), on(null))
   await waitFor(() => expect(result.current.loaded).toBe(true))
   expect(boundTo(result.current, "aaa")).toEqual({ text: "unknown", title: "Could not list queues: offline" })
 })
 
 it("shows a dash for an image no queue binds", async () => {
   api.listTaskQueues.mockResolvedValue({ queues: [], count: 0 })
-  const { result } = renderHook(() => useQueueBindings(null))
+  const { result } = renderHook(() => useQueueBindings(), on(null))
   await waitFor(() => expect(result.current.loaded).toBe(true))
   expect(boundTo(result.current, "aaa")).toEqual({ text: "—", title: undefined })
 })

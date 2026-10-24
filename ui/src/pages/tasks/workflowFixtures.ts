@@ -1,5 +1,5 @@
 import type { Daemon } from "@/lib/daemons"
-import type { AgentPool, ScriptRun, Task, WorkflowManifest, WorkflowView } from "@/lib/tasks"
+import type { AgentPool, WorkflowScriptRun, Task, WorkflowManifest, WorkflowView } from "@/lib/api"
 
 /** Test fixtures for the workflow panel and its sections. */
 
@@ -32,7 +32,7 @@ export const workflowTask: Task = {
   completed_at: "",
 }
 
-export const checkRun: ScriptRun = {
+export const checkRun: WorkflowScriptRun = {
   id: 7,
   task_key: "REL-1",
   kind: "check",
@@ -48,7 +48,7 @@ export const checkRun: ScriptRun = {
   request_id: 11,
 }
 
-export const watchRun: ScriptRun = {
+export const watchRun: WorkflowScriptRun = {
   id: 9,
   task_key: "REL-1",
   kind: "watch",

@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { isConnectionError, type ApiTarget } from "@/lib/api"
-import { listTasks, type Task, type TaskFilters, type TaskStatusView } from "@/lib/tasks"
+import { createApi, isConnectionError, type Task, type TaskFilters, type TasksApi, type TaskStatusView } from "@/lib/api"
 import { targetFor } from "@/lib/terminalsHost"
 
 // listAllTasks follows the cursor to the end and reports the newest event
 // sequence seen, which is where a live socket for the same list resumes.
 export async function listAllTasks(
   filters: TaskFilters,
-  target?: ApiTarget,
+  api: TasksApi,
   signal?: AbortSignal,
 ): Promise<{ tasks: Task[]; sequence: number }> {
   const tasks: Task[] = []
@@ -17,8 +16,8 @@ export async function listAllTasks(
   do {
     signal?.throwIfAborted()
     const page = await (signal
-      ? listTasks({ ...filters, limit: 500, after }, target, signal)
-      : listTasks({ ...filters, limit: 500, after }, target))
+      ? api.listTasks({ ...filters, limit: 500, after }, signal)
+      : api.listTasks({ ...filters, limit: 500, after }))
     tasks.push(...(page.tasks ?? []))
     sequence = Math.max(sequence, page.sequence ?? 0)
     after = page.next_cursor ?? ""
@@ -72,7 +71,8 @@ export function useAllServersTasks(
     inflight.current.set(id, false)
     const current = () => requests.current.get(id) === request
     const filter = `${text}\u0001${statusView}`
-    listAllTasks({ text, status_view: statusView }, targetFor(id))
+    // Each read gets a client bound to that server's current endpoint.
+    listAllTasks({ text, status_view: statusView }, createApi(targetFor(id)).tasks)
       .then(({ tasks, sequence }) => {
         if (current()) setState((all) => ({ ...all, [id]: { tasks, sequence, filter } }))
       })

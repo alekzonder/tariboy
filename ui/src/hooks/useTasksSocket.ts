@@ -1,11 +1,6 @@
 import { useEffect, useRef, useState } from "react"
-import {
-  getLocalBaseURL,
-  resolveTarget,
-  type ApiTarget,
-} from "@/lib/api"
+import { getLocalBaseURL, type TaskEventHint } from "@/lib/api"
 import type { Daemon } from "@/lib/daemons"
-import type { TaskEventHint } from "@/lib/tasks"
 
 const RECONNECT_MIN_MS = 250
 const RECONNECT_MAX_MS = 5000
@@ -13,7 +8,8 @@ const RECONNECT_MAX_MS = 5000
 export type TasksSocketStatus = "connecting" | "open" | "closed"
 
 export interface UseTasksSocketOptions {
-  target?: ApiTarget
+  /** The resolved host to subscribe to (null = local); callers pass their client's target. */
+  target: Daemon | null
   after?: number
   enabled?: boolean
   onHint: (hint: TaskEventHint) => void
@@ -57,8 +53,7 @@ export function useTasksSocket({
     onResetRef.current = onReset
   }, [onHint, onReset])
 
-  const resolved = resolveTarget(target)
-  const targetKey = JSON.stringify(resolved)
+  const targetKey = JSON.stringify(target)
 
   useEffect(() => {
     sequenceRef.current = after

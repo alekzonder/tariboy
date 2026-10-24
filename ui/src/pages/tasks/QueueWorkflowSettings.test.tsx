@@ -1,16 +1,20 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import type { ReactElement } from "react"
+import { fireEvent, render as renderWith, screen, waitFor, within } from "@/test/queryRender"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, expect, it, vi } from "vitest"
-import { ApiError } from "@/lib/api"
+import { ApiError, type AgentPool } from "@/lib/api"
 import QueueWorkflowSettings from "./QueueWorkflowSettings"
-import type { AgentPool } from "@/lib/tasks"
 import { agentPool, developmentManifest, remoteTarget } from "./workflowFixtures"
+import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({
   getQueueWorkflow: vi.fn(), setQueueWorkflow: vi.fn(), clearQueueWorkflow: vi.fn(),
   listWorkflowImages: vi.fn(), getWorkflowImage: vi.fn(),
 }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/tasks")>(), ...api }))
+// The mocks are methods of a client bound to the remote host, so each call
+// they record went to that host.
+const remoteApi = fakeApi({ workflows: { getQueueWorkflow: api.getQueueWorkflow, setQueueWorkflow: api.setQueueWorkflow, clearQueueWorkflow: api.clearQueueWorkflow, listWorkflowImages: api.listWorkflowImages, getWorkflowImage: api.getWorkflowImage } }, remoteTarget)
+const render = (ui: ReactElement) => renderWith(ui, { api: remoteApi })
 
 const digest = "0123456789abcdef0123456789abcdef"
 const binding = { queue: "REL", name: "release", version: "1.2.0", digest, tag: "", revision: 3, updated_at: "2026-10-02T10:00:00Z" }
@@ -21,7 +25,7 @@ const images = [
 ]
 const handlers = { onOpenTab: vi.fn(), onPoolsMissing: vi.fn(), onSecretsMissing: vi.fn(), onChanged: vi.fn() }
 const view = (pools: AgentPool[] = []) => <MemoryRouter initialEntries={["/servers/h1/tasks"]}><Routes><Route path="/servers/:hostId/tasks"
-  element={<QueueWorkflowSettings queue="REL" target={remoteTarget} pools={pools} {...handlers} />} /></Routes></MemoryRouter>
+  element={<QueueWorkflowSettings queue="REL" pools={pools} {...handlers} />} /></Routes></MemoryRouter>
 const renderIt = (pools: AgentPool[] = []) => render(view(pools))
 
 beforeEach(() => {
@@ -38,7 +42,7 @@ it("renders No workflow when unbound and lists images sorted with latest first",
   const options = screen.getAllByRole("option").map((option) => option.textContent)
   expect(options).toEqual(["Choose an image", "audit:2", "release:latest", "release:1.2.0"])
   expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled()
-  expect(api.getQueueWorkflow).toHaveBeenCalledWith("REL", remoteTarget)
+  expect(api.getQueueWorkflow).toHaveBeenCalledWith("REL")
 })
 
 it("renders a binding with a short digest and the full digest in a title", async () => {
@@ -64,7 +68,7 @@ it("binds NAME:TAG with revision 0 when unbound", async () => {
   await screen.findByRole("option", { name: "audit:2" })
   fireEvent.change(screen.getByLabelText("Workflow image"), { target: { value: "release:latest" } })
   fireEvent.click(screen.getByRole("button", { name: "Bind" }))
-  await waitFor(() => expect(api.setQueueWorkflow).toHaveBeenCalledWith("REL", "release:latest", 0, remoteTarget))
+  await waitFor(() => expect(api.setQueueWorkflow).toHaveBeenCalledWith("REL", "release:latest", 0))
   expect(await screen.findByText(digest.slice(0, 12))).toBeInTheDocument()
   expect(handlers.onChanged).toHaveBeenCalled()
 })
@@ -77,7 +81,7 @@ it("sends the current revision and reloads on a revision conflict", async () => 
   await screen.findByRole("option", { name: "audit:2" })
   fireEvent.change(screen.getByLabelText("Workflow image"), { target: { value: "audit:2" } })
   fireEvent.click(screen.getByRole("button", { name: "Bind" }))
-  await waitFor(() => expect(api.setQueueWorkflow).toHaveBeenCalledWith("REL", "audit:2", 3, remoteTarget))
+  await waitFor(() => expect(api.setQueueWorkflow).toHaveBeenCalledWith("REL", "audit:2", 3))
   expect(await screen.findByText(/changed elsewhere/i)).toBeInTheDocument()
   expect(api.getQueueWorkflow).toHaveBeenCalledTimes(2)
   expect(screen.getByTestId("binding")).toHaveTextContent("audit")
@@ -139,7 +143,7 @@ it("asks before clearing and does nothing when declined", async () => {
   expect(api.clearQueueWorkflow).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole("button", { name: "Clear" }))
   fireEvent.click(await screen.findByRole("button", { name: "Clear binding" }))
-  await waitFor(() => expect(api.clearQueueWorkflow).toHaveBeenCalledWith("REL", 3, remoteTarget))
+  await waitFor(() => expect(api.clearQueueWorkflow).toHaveBeenCalledWith("REL", 3))
   expect(await screen.findByText("No workflow")).toBeInTheDocument()
 })
 
@@ -201,7 +205,7 @@ it("shows the statuses of the bound workflow with its pools", async () => {
   api.getQueueWorkflow.mockResolvedValue(binding)
   renderIt([agentPool("developers", ["dev-a"])])
   expect(await screen.findByRole("table", { name: "Statuses" })).toBeInTheDocument()
-  expect(api.getWorkflowImage).toHaveBeenCalledWith("release", digest, remoteTarget)
+  expect(api.getWorkflowImage).toHaveBeenCalledWith("release", digest)
   expect(screen.getByRole("button", { name: "Pool developers, 1 agent" })).toBeInTheDocument()
   fireEvent.click(screen.getByRole("button", { name: "Pool reviewers, no agents" }))
   expect(handlers.onOpenTab).toHaveBeenCalledWith("pools")
@@ -214,5 +218,5 @@ it("previews the statuses of a chosen image before it is bound", async () => {
   expect(screen.queryByRole("table", { name: "Statuses" })).not.toBeInTheDocument()
   fireEvent.change(screen.getByLabelText("Workflow image"), { target: { value: "audit:2" } })
   expect(await screen.findByRole("table", { name: "Statuses" })).toBeInTheDocument()
-  expect(api.getWorkflowImage).toHaveBeenCalledWith("audit", "2", remoteTarget)
+  expect(api.getWorkflowImage).toHaveBeenCalledWith("audit", "2")
 })

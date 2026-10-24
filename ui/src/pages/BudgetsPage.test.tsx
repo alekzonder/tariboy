@@ -1,5 +1,5 @@
 import { it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@/test/queryRender";
 import BudgetsPage from "./BudgetsPage";
 
 afterEach(() => vi.restoreAllMocks());

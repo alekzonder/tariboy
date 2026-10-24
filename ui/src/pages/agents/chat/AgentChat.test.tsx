@@ -5,15 +5,9 @@ import AgentChat from "./AgentChat";
 import { AgentNameContext } from "@/lib/agent";
 import { DEFAULT_CHAT_TYPES } from "./chatTypes";
 import type { Daemon } from "@/lib/daemons";
-
-const host = vi.hoisted(() => ({ target: undefined as Daemon | undefined }));
-vi.mock("@/lib/terminalsHost", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/terminalsHost")>();
-  return { ...actual, targetFor: (id: string) => host.target ?? actual.targetFor(id) };
-});
+import { ApiProvider } from "@/components/ApiProvider";
 
 afterEach(() => {
-  host.target = undefined;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   localStorage.clear();
@@ -259,19 +253,19 @@ it("refetches only the chat a live hint names", async () => {
 it("re-reads the conversation from the new endpoint after the host reconnects", async () => {
   stubChat();
   const remote = (baseURL: string): Daemon => ({ id: "remote", label: "Remote", baseURL, token: "t" });
-  const tree = () => (
-    <AgentNameContext.Provider value="worker">
-      <AgentChat hostId="remote" />
-    </AgentNameContext.Provider>
+  // The agent workspace is the boundary that names the host.
+  const tree = (target: Daemon) => (
+    <ApiProvider target={target}>
+      <AgentNameContext.Provider value="worker">
+        <AgentChat hostId="remote" />
+      </AgentNameContext.Provider>
+    </ApiProvider>
   );
-  host.target = remote("http://127.0.0.1:41001");
-  const view = render(tree());
+  const view = render(tree(remote("http://127.0.0.1:41001")));
   expect(await screen.findByText("please look at this")).toBeInTheDocument();
 
-  host.target = remote("");
-  view.rerender(tree());
-  host.target = remote("http://127.0.0.1:41002");
-  view.rerender(tree());
+  view.rerender(tree(remote("")));
+  view.rerender(tree(remote("http://127.0.0.1:41002")));
 
   await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([path]) =>
     String(path).startsWith(`http://127.0.0.1:41002${DM}`))).toBe(true));

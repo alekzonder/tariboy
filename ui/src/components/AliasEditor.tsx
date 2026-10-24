@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAgentName } from "@/lib/agent";
-import { getAlias, setAlias, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -11,18 +12,19 @@ const err = (e: unknown) => toast.error(e instanceof ApiError ? e.message : Stri
 // operator set, edit, or clear the friendly alias. It self-fetches by agent name.
 export function AliasEditor() {
   const name = useAgentName();
+  const api = useApi();
   const [alias, setLocal] = useState("");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
 
   useEffect(() => {
-    getAlias(name).then((r) => setLocal(r.alias ?? ""), err);
-  }, [name]);
+    api.agents.getAlias(name).then((r) => setLocal(r.alias ?? ""), err);
+  }, [api, name]);
 
   const save = (value: string) => {
     setLocal(value);
     setEditing(false);
-    setAlias(name, value).then(() => toast.success("alias saved"), err);
+    api.agents.setAlias(name, value).then(() => toast.success("alias saved"), err);
   };
 
   if (editing) {

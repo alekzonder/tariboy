@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { ChevronLeft, Plus } from "lucide-react"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import type { ApiTarget } from "@/lib/api"
-import {
-  getQueueWorkflow, getWorkflowImage, listAgentPools, listTaskPrincipals,
-  type AgentPool, type CreateQueueInput, type QueueWorkflow, type TaskQueue, type UpdateQueueInput, type WorkflowDefinition,
-} from "@/lib/tasks"
+import type { AgentPool, ApiClient, CreateQueueInput, QueueWorkflow, TaskQueue, UpdateQueueInput, WorkflowDefinition } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { EMPTY, LABEL, MONO } from "./panelStyles"
 import QueuePools from "./QueuePools"
@@ -24,10 +21,10 @@ type Entry = { state: QueueState; error?: undefined } | { state?: undefined; err
 type Tab = "general" | "workflow" | "pools" | "environment" | "sources"
 const TAB_LABELS: Record<Tab, string> = { general: "General", workflow: "Workflow", pools: "Pools", environment: "Environment", sources: "Sources" }
 
-async function loadQueue(prefix: string, target?: ApiTarget): Promise<QueueState> {
-  const [binding, pools] = await Promise.all([getQueueWorkflow(prefix, target), listAgentPools(prefix, target)])
+async function loadQueue(prefix: string, api: ApiClient): Promise<QueueState> {
+  const [binding, pools] = await Promise.all([api.workflows.getQueueWorkflow(prefix), api.tasks.listAgentPools(prefix)])
   // A bound digest stays readable: the daemon refuses to remove a bound image.
-  const definition = binding ? (await getWorkflowImage(binding.name, binding.digest, target)).definition : null
+  const definition = binding ? (await api.workflows.getWorkflowImage(binding.name, binding.digest)).definition : null
   return { binding, definition, pools: pools.items ?? [] }
 }
 
@@ -45,7 +42,6 @@ export default function QueueSettingsDialog({ open, onOpenChange, ...props }: {
   queues: TaskQueue[]
   onCreate: (input: CreateQueueInput) => Promise<void>
   onUpdate: (prefix: string, input: UpdateQueueInput) => Promise<void>
-  target?: ApiTarget
 }) {
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="flex h-[min(760px,calc(100dvh-2rem))] w-[min(1100px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none max-sm:h-dvh max-sm:w-screen max-sm:rounded-none">
@@ -58,12 +54,12 @@ export default function QueueSettingsDialog({ open, onOpenChange, ...props }: {
   </Dialog>
 }
 
-function QueueSettings({ queues, onCreate, onUpdate, target }: {
+function QueueSettings({ queues, onCreate, onUpdate }: {
   queues: TaskQueue[]
   onCreate: (input: CreateQueueInput) => Promise<void>
   onUpdate: (prefix: string, input: UpdateQueueInput) => Promise<void>
-  target?: ApiTarget
 }) {
+  const api = useApi()
   const [selected, setSelected] = useState(queues[0]?.prefix ?? "")
   const [creating, setCreating] = useState(false)
   // On a phone the list shows until a queue is chosen.
@@ -78,12 +74,12 @@ function QueueSettings({ queues, onCreate, onUpdate, target }: {
 
   const load = useCallback(async (prefix: string) => {
     try {
-      const state = await loadQueue(prefix, target)
+      const state = await loadQueue(prefix, api)
       setEntries((current) => ({ ...current, [prefix]: { state } }))
     } catch (err) {
       setEntries((current) => ({ ...current, [prefix]: { error: errorText(err) } }))
     }
-  }, [target])
+  }, [api])
 
   useEffect(() => {
     const fresh = queues.map((queue) => queue.prefix).filter((prefix) => !requested.current.has(prefix))
@@ -92,8 +88,8 @@ function QueueSettings({ queues, onCreate, onUpdate, target }: {
   }, [queues, load])
   useEffect(() => {
     // Without the agent list the agent fields stay plain inputs.
-    void listTaskPrincipals(target).then((principals) => setAgents(principals.agents), () => setAgents([]))
-  }, [target])
+    void api.tasks.listTaskPrincipals().then((principals) => setAgents(principals.agents), () => setAgents([]))
+  }, [api])
 
   const savePool = (prefix: string, pool: AgentPool) => setEntries((current) => {
     const state = current[prefix]?.state
@@ -176,24 +172,24 @@ function QueueSettings({ queues, onCreate, onUpdate, target }: {
             </TabsContent>
             {/* Mounted while hidden, so a refused bind and pool drafts survive a trip to another tab. */}
             <TabsContent value="workflow" forceMount className="data-[state=inactive]:hidden">
-              <QueueWorkflowSettings key={queue.prefix} queue={queue.prefix} target={target} pools={state?.pools ?? []}
+              <QueueWorkflowSettings key={queue.prefix} queue={queue.prefix} pools={state?.pools ?? []}
                 onOpenTab={setTab} onChanged={() => void load(queue.prefix)}
                 onPoolsMissing={(names) => setPoolsMissing(names && { queue: queue.prefix, names })}
                 onSecretsMissing={(missing) => setSecretsMissing(missing && { queue: queue.prefix, ...missing })} />
             </TabsContent>
             <TabsContent value="pools" forceMount className="data-[state=inactive]:hidden">
-              {state ? <QueuePools key={queue.prefix} queue={queue.prefix} target={target} pools={state.pools}
+              {state ? <QueuePools key={queue.prefix} queue={queue.prefix} pools={state.pools}
                 required={required} agents={agents}
                 onSaved={(pool) => savePool(queue.prefix, pool)} onReload={() => void load(queue.prefix)} />
                 : !loadError && <span className={EMPTY}>Loading agent pools…</span>}
             </TabsContent>
             <TabsContent value="environment">
-              <QueueEnvironment key={`${queue.prefix}:${state?.binding?.digest ?? ""}`} queue={queue.prefix} target={target}
+              <QueueEnvironment key={`${queue.prefix}:${state?.binding?.digest ?? ""}`} queue={queue.prefix}
                 missing={secretsMissing?.queue === queue.prefix ? secretsMissing.names : undefined}
                 missingMessage={secretsMissing?.queue === queue.prefix ? secretsMissing.message : undefined} />
             </TabsContent>
             {state?.binding && <TabsContent value="sources">
-              <QueueSources key={`${queue.prefix}:${state.binding.digest}`} queue={queue.prefix} target={target} />
+              <QueueSources key={`${queue.prefix}:${state.binding.digest}`} queue={queue.prefix} />
             </TabsContent>}
           </div>
         </Tabs>

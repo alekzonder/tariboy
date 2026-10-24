@@ -6,13 +6,30 @@ import { DaemonProvider } from "@/components/DaemonProvider";
 import { addDaemon } from "@/lib/daemons";
 import AgentWorkspace from "./AgentWorkspace";
 import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
-import { agentGetOn, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import type { Daemon } from "@/lib/daemons";
 import * as desktop from "@/lib/desktop";
 import { UI_MODE_KEY } from "@/lib/uiMode";
 
+// Every agent-scoped GET the workspace sends, recorded with the host of the
+// client that sent it: (host, agent, action).
+const agentGetOn = vi.hoisted(() => vi.fn<(target: Daemon | null, name: string, action: string) => Promise<unknown>>());
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, agentGetOn: vi.fn() };
+  const createApi: typeof actual.createApi = (target) => {
+    const client = actual.createApi(target);
+    const get = <T,>(name: string, action: string) => agentGetOn(client.target, name, action) as Promise<T>;
+    return {
+      ...client,
+      agentGet: get,
+      agents: {
+        ...client.agents,
+        getAgent: (name: string) => get(name, ""),
+        getAgentStatus: (name: string) => get(name, "status"),
+      },
+    } as typeof client;
+  };
+  return { ...actual, createApi };
 });
 vi.mock("@/hooks/useTerminalSocket", () => ({
   useTerminalSocket: vi.fn(() => ({
@@ -45,7 +62,7 @@ beforeEach(() => {
   sessionStorage.clear();
   // These cases cover the full workspace; Simple mode has its own block below.
   localStorage.setItem(UI_MODE_KEY, "expert");
-  vi.mocked(agentGetOn).mockResolvedValue({
+  agentGetOn.mockResolvedValue({
     name: "worker",
     state: "running",
     iterations: 0,
@@ -98,7 +115,7 @@ describe("AgentWorkspace", () => {
   });
 
   it("shows the configured harness, model, and effort before Goal", async () => {
-    vi.mocked(agentGetOn).mockImplementation(async (_target, _name, action) => {
+    agentGetOn.mockImplementation(async (_target, _name, action) => {
       if (action === "") return { ...agent, harness: "codex", model: "gpt-5-codex", effort: "high" };
       return {
         name: "worker", state: "running", iterations: 0,
@@ -123,7 +140,7 @@ describe("AgentWorkspace", () => {
   });
 
   it("omits model and effort the harness does not report", async () => {
-    vi.mocked(agentGetOn).mockImplementation(async (_target, _name, action) => {
+    agentGetOn.mockImplementation(async (_target, _name, action) => {
       if (action === "") return { ...agent, harness: "opencode", model: "", effort: "" };
       return {
         name: "worker", state: "running", iterations: 0,
@@ -146,7 +163,7 @@ describe("AgentWorkspace", () => {
   });
 
   it("shows daemon-authoritative message queue saturation", async () => {
-    vi.mocked(agentGetOn).mockResolvedValue({
+    agentGetOn.mockResolvedValue({
       name: "worker", state: "running", iterations: 0,
       last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
       messages_pending: 100, messages_max_queue: 100, messages_queue_full: true,
@@ -166,7 +183,7 @@ describe("AgentWorkspace", () => {
   });
 
   it("shows why the loop halted, so a failed iteration launch is visible on every tab", async () => {
-    vi.mocked(agentGetOn).mockResolvedValue({
+    agentGetOn.mockResolvedValue({
       name: "worker", state: "error", iterations: 0,
       last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
       halt_kind: "error",
@@ -193,7 +210,7 @@ describe("AgentWorkspace", () => {
   it("keeps the last status in the header while a status poll cannot reach the host", async () => {
     vi.useFakeTimers();
     let reachable = true;
-    vi.mocked(agentGetOn).mockImplementation(async (_target, _name, action) => {
+    agentGetOn.mockImplementation(async (_target, _name, action) => {
       if (!reachable) throw new ApiError(0, "network_error", "network error: Failed to fetch");
       return action === "status"
         ? { name: "worker", state: "error", iterations: 0, last_iteration: null,
@@ -219,7 +236,7 @@ describe("AgentWorkspace", () => {
   });
 
   it("renders configured budget rows when an older daemon omits exhausted periods", async () => {
-    vi.mocked(agentGetOn).mockResolvedValue({
+    agentGetOn.mockResolvedValue({
       name: "worker", state: "running", iterations: 0,
       last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
       budget: {
@@ -293,7 +310,7 @@ describe("AgentWorkspace", () => {
   it("retries effective cwd inspection after a transient failure", async () => {
     vi.useFakeTimers();
     let inspections = 0;
-    vi.mocked(agentGetOn).mockImplementation(async (_target, _name, action) => {
+    agentGetOn.mockImplementation(async (_target, _name, action) => {
       if (action !== "") {
         return {
           name: "worker", state: "running", iterations: 0,
@@ -418,7 +435,7 @@ describe("AgentWorkspace", () => {
     );
 
     await waitFor(() =>
-      expect(vi.mocked(agentGetOn).mock.calls).toContainEqual([
+      expect(agentGetOn.mock.calls).toContainEqual([
         expect.objectContaining({ id: host.id }),
         "worker",
         "",

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@/test/queryRender";
 import type { DesktopDaemonState } from "@/lib/desktop";
 
 // Every listener `onDaemonState` hands out, so a test can emit a `daemon://state`

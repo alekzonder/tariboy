@@ -1,15 +1,16 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { usePolling } from "@/hooks/usePolling";
-import { listAgents, getDaemonStatus } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function Home() {
-  const { data: agentsData } = usePolling(listAgents, 2000);
-  const { data: status } = usePolling(getDaemonStatus, 5000);
+  const api = useApi();
+  const { data: agentsData } = usePolling(api.agents.listAgents, 2000);
+  const { data: status } = usePolling(api.daemon.getDaemonStatus, 5000);
   const [q, setQ] = useState("");
   const agents = (agentsData?.agents ?? []).filter((a) => a.name.toLowerCase().includes(q.toLowerCase()));
 

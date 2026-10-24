@@ -1,6 +1,8 @@
 import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { setLocalBaseURL } from "@/lib/api"
+import { createElement, type PropsWithChildren } from "react"
+import { createApi, setLocalBaseURL, type ApiClient } from "@/lib/api"
+import { ApiProvider } from "@/components/ApiProvider"
 import type { Daemon } from "@/lib/daemons"
 import { messagesWsUrl, useAgentStatesSocket, useMessagesSocket } from "./useMessagesSocket"
 
@@ -111,5 +113,26 @@ describe("agent states websocket", () => {
     })
     expect(onHint).toHaveBeenCalledTimes(1)
     expect(onHint.mock.calls[0][0].agent).toBe("worker")
+  })
+})
+
+describe("socket host", () => {
+  const remote: Daemon = { id: "r", label: "Remote", baseURL: "https://r.example", token: "one" }
+
+  it("watches the provider's host and survives ordinary re-renders", () => {
+    let client: ApiClient = createApi(remote)
+    const { rerender } = renderHook(() => useMessagesSocket({ onHint: vi.fn() }), {
+      wrapper: ({ children }: PropsWithChildren) => createElement(ApiProvider, { client, children }),
+    })
+    expect(FakeWebSocket.instances).toHaveLength(1)
+    expect(FakeWebSocket.instances[0].url).toBe("wss://r.example/api/messages/ws?token=one")
+    client = createApi({ ...remote })
+    rerender()
+    expect(FakeWebSocket.instances).toHaveLength(1)
+    client = createApi({ ...remote, token: "two" })
+    rerender()
+    expect(FakeWebSocket.instances).toHaveLength(2)
+    expect(FakeWebSocket.instances[0].close).toHaveBeenCalled()
+    expect(FakeWebSocket.instances[1].url).toContain("token=two")
   })
 })

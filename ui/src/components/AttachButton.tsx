@@ -2,13 +2,14 @@ import { useRef, useState, type ChangeEvent } from "react"
 import { Paperclip } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { serverUploadFile, ApiError } from "@/lib/api"
-import type { Daemon } from "@/lib/daemons"
+import { ApiError } from "@/lib/api"
+import { useApi } from "@/components/apiContext"
 
 /** Pick a file, upload it to the server's shared directory, and hand
  * the saved absolute host path back to the caller (which inserts it into the
  * issue description). Mirrors the "Send files" flow in TuiScreen. */
-export function AttachButton({ onAttached, daemon }: { onAttached: (path: string) => void; daemon?: Daemon | null }) {
+export function AttachButton({ onAttached }: { onAttached: (path: string) => void }) {
+  const api = useApi()
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
 
@@ -18,7 +19,7 @@ export function AttachButton({ onAttached, daemon }: { onAttached: (path: string
     if (!file) return
     setBusy(true)
     try {
-      const { abs } = await serverUploadFile(file, daemon)
+      const { abs } = await api.files.serverUploadFile(file)
       onAttached(abs)
       toast.success(`file uploaded: ${abs}`)
     } catch (err) {

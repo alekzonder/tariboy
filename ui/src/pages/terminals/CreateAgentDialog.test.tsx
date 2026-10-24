@@ -1,34 +1,58 @@
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@/test/queryRender";
 import { CreateAgentDialog } from "./CreateAgentDialog";
-import {
-  agentGetOn,
-  createAgent,
-  getHarnessModelsOn,
-  imageManifestGet,
-  listImages,
-  startAgent,
-  type ImageManifest,
+import type {
+  CreateAgentResult,
+  CreateAgentSpec,
+  ImageManifest,
+  ImageRow,
 } from "@/lib/api";
-import type { AgentView } from "@/lib/types";
+import type { AgentLifecycleResult, AgentView } from "@/lib/types";
 import { targetFor } from "@/lib/terminalsHost";
-import { resolveDaemon } from "@/lib/daemons";
+import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import { RUNTIME_PRESETS_STORAGE_KEY } from "@/lib/runtimePresets";
 import { clearHarnessCatalogCache } from "@/hooks/useHarnessCatalog";
+import { useApi } from "@/components/apiContext";
 import type { HarnessCatalog } from "@/lib/types";
+
+// The dialog's requests, each recorded with the host of the client that sent
+// it, so a test can assert which host a request was pinned to.
+const calls = vi.hoisted(() => ({
+  agentGetOn: vi.fn<(target: Daemon | null, name: string, action: string) => Promise<AgentView>>(),
+  createAgent: vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<CreateAgentResult>>(),
+  getHarnessModelsOn: vi.fn<(target: Daemon | null, harness: string) => Promise<HarnessCatalog>>(),
+  imageManifestGet: vi.fn<(ref: string, target: Daemon | null) => Promise<ImageManifest>>(),
+  listImages: vi.fn<(target: Daemon | null) => Promise<{ images: ImageRow[]; count: number }>>(),
+  startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentLifecycleResult>>(),
+}));
+const { agentGetOn, createAgent, getHarnessModelsOn, imageManifestGet, listImages, startAgent } = calls;
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return {
-    ...actual,
-    agentGetOn: vi.fn(),
-    createAgent: vi.fn(),
-    getHarnessModelsOn: vi.fn(),
-    imageManifestGet: vi.fn(),
-    listImages: vi.fn(),
-    startAgent: vi.fn(),
+  const createApi: typeof actual.createApi = (target) => {
+    const client = actual.createApi(target);
+    const host = client.target;
+    return {
+      ...client,
+      agents: {
+        ...client.agents,
+        getAgent: (name: string) => calls.agentGetOn(host, name, ""),
+        createAgent: (spec: CreateAgentSpec) => calls.createAgent(spec, host),
+        startAgent: (name: string) => calls.startAgent(name, host),
+      },
+      harnesses: {
+        ...client.harnesses,
+        getHarnessModels: (harness: string) => calls.getHarnessModelsOn(host, harness),
+      },
+      images: {
+        ...client.images,
+        listImages: () => calls.listImages(host),
+        imageManifestGet: (ref: string) => calls.imageManifestGet(ref, host),
+      },
+    } as typeof client;
   };
+  return { ...actual, createApi };
 });
 
 vi.mock("@/lib/daemons", async (importOriginal) => {
@@ -37,27 +61,29 @@ vi.mock("@/lib/daemons", async (importOriginal) => {
 });
 
 vi.mock("@/components/PathAutocomplete", () => ({
-  PathAutocomplete: ({
+  PathAutocomplete: function PathAutocomplete({
     value,
     onChange,
     id,
-    daemon,
     "aria-label": ariaLabel,
   }: {
     value: string;
     onChange: (value: string) => void;
     id?: string;
-    daemon?: { id?: string } | null;
     "aria-label"?: string;
-  }) => (
-    <input
-      id={id}
-      aria-label={ariaLabel}
-      data-host={daemon?.id ?? "local"}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    />
-  ),
+  }) {
+    // Lists directories on the server of the surrounding ApiProvider.
+    const daemon = useApi().target;
+    return (
+      <input
+        id={id}
+        aria-label={ariaLabel}
+        data-host={daemon?.id ?? "local"}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    );
+  },
 }));
 
 const hosts = [
@@ -203,7 +229,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   clearHarnessCatalogCache();
-  vi.mocked(getHarnessModelsOn).mockImplementation(
+  getHarnessModelsOn.mockImplementation(
     async (_target, harness) =>
       harnessCatalogs[harness] ?? {
         harness,
@@ -213,20 +239,20 @@ beforeEach(() => {
       },
   );
   vi.mocked(resolveDaemon).mockImplementation(async (id) => targetFor(id));
-  vi.mocked(listImages).mockResolvedValue({
+  listImages.mockResolvedValue({
     images: [
       { name: "worker", tag: "v1", bare: false },
       { name: "bare", tag: "latest", bare: true },
     ],
     count: 2,
   });
-  vi.mocked(imageManifestGet).mockResolvedValue(manifest());
-  vi.mocked(agentGetOn).mockResolvedValue(cloneSource);
-  vi.mocked(createAgent).mockResolvedValue({
+  imageManifestGet.mockResolvedValue(manifest());
+  agentGetOn.mockResolvedValue(cloneSource);
+  createAgent.mockResolvedValue({
     name: "created",
     state: "stopped",
   });
-  vi.mocked(startAgent).mockResolvedValue({ name: "created", action: "start" });
+  startAgent.mockResolvedValue({ name: "created", action: "start" });
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -317,7 +343,7 @@ it("loads a complete clone draft from the explicit source host and submits every
 });
 
 it("retries a failed source load without allowing a partial clone", async () => {
-  vi.mocked(agentGetOn)
+  agentGetOn
     .mockRejectedValueOnce(new Error("source unavailable"))
     .mockResolvedValueOnce(cloneSource);
   renderDialog({
@@ -343,7 +369,7 @@ it("retries a failed source load without allowing a partial clone", async () => 
 it("requires a daemon with the complete clone projection", async () => {
   const oldProjection: AgentView = { ...cloneSource };
   delete oldProjection.configured_cwd;
-  vi.mocked(agentGetOn).mockResolvedValueOnce(oldProjection);
+  agentGetOn.mockResolvedValueOnce(oldProjection);
   renderDialog({
     imageRef: undefined,
     cloneSource: { hostId: "d1", agentName: "source", hostLabel: "prod" },
@@ -358,7 +384,7 @@ it("requires a daemon with the complete clone projection", async () => {
 
 it("retains clone drafts while target host and image readiness change", async () => {
   const source = { ...cloneSource, interactive: false };
-  vi.mocked(agentGetOn).mockResolvedValueOnce(source);
+  agentGetOn.mockResolvedValueOnce(source);
   renderDialog({
     imageRef: undefined,
     hosts: [...hosts, { id: "d2", label: "staging" }],
@@ -382,7 +408,7 @@ it("retains clone drafts while target host and image readiness change", async ()
   expect(screen.getByLabelText("alias")).toHaveValue("Source alias");
   expect(screen.getByLabelText("model")).toHaveValue("clone-model");
 
-  vi.mocked(imageManifestGet).mockResolvedValueOnce(
+  imageManifestGet.mockResolvedValueOnce(
     manifest({
       name: "bare",
       tag: "latest",
@@ -398,7 +424,7 @@ it("retains clone drafts while target host and image readiness change", async ()
   expect(screen.getByLabelText("alias")).toHaveValue("Source alias");
   expect(screen.getByLabelText("model")).toHaveValue("clone-model");
 
-  vi.mocked(imageManifestGet).mockResolvedValueOnce(manifest());
+  imageManifestGet.mockResolvedValueOnce(manifest());
   fireEvent.focus(screen.getByLabelText("image"));
   fireEvent.click(await screen.findByRole("option", { name: "worker:v1" }));
   await waitFor(() =>
@@ -408,14 +434,14 @@ it("retains clone drafts while target host and image readiness change", async ()
 });
 
 it("keeps schema-v1 plugins editable and makes schema-v2 plugins image-owned", async () => {
-  vi.mocked(listImages).mockResolvedValue({
+  listImages.mockResolvedValue({
     images: [
       { name: "worker", tag: "v1", bare: false },
       { name: "worker", tag: "v2", bare: false },
     ],
     count: 2,
   });
-  vi.mocked(imageManifestGet).mockImplementation(async (ref) =>
+  imageManifestGet.mockImplementation(async (ref) =>
     ref === "worker:v2"
       ? manifest({
           schema_version: 2,
@@ -462,14 +488,14 @@ it("keeps schema-v1 plugins editable and makes schema-v2 plugins image-owned", a
 });
 
 it("keeps Interactive on for a schema-v2 image after a bare image was selected", async () => {
-  vi.mocked(listImages).mockResolvedValue({
+  listImages.mockResolvedValue({
     images: [
       { name: "bare", tag: "latest", bare: true },
       { name: "worker", tag: "v2", bare: false },
     ],
     count: 2,
   });
-  vi.mocked(imageManifestGet).mockImplementation(async (ref) =>
+  imageManifestGet.mockImplementation(async (ref) =>
     ref === "worker:v2"
       ? manifest({ schema_version: 2, tag: "v2" })
       : manifest({
@@ -545,7 +571,7 @@ describe.each([
         completeOrdinarySpec({ interactive }),
         targetFor("d1"),
       );
-      expect(vi.mocked(createAgent).mock.calls[0][0]).not.toHaveProperty("loop");
+      expect(createAgent.mock.calls[0][0]).not.toHaveProperty("loop");
       if (startNow) {
         await waitFor(() =>
           expect(startAgent).toHaveBeenCalledWith("created", targetFor("d1")),
@@ -754,7 +780,7 @@ it("keeps runtime drafts when the same selected image is reloaded", async () => 
 });
 
 it("initializes defaults again when the same image is selected on another host", async () => {
-  vi.mocked(imageManifestGet)
+  imageManifestGet
     .mockResolvedValueOnce(manifest())
     .mockResolvedValueOnce(
       manifest({
@@ -813,7 +839,7 @@ it("remembers unknown model and effort after successful creation", async () => {
 });
 
 it("does not remember custom runtime values when creation fails", async () => {
-  vi.mocked(createAgent).mockRejectedValueOnce(new Error("rejected"));
+  createAgent.mockRejectedValueOnce(new Error("rejected"));
   renderDialog();
   await screen.findByDisplayValue("o3");
   fireEvent.change(screen.getByLabelText("model"), {
@@ -833,7 +859,7 @@ describe.each([{ startNow: false }, { startNow: true }])(
   "bare terminal session with startNow=$startNow",
   ({ startNow }) => {
     it("keeps bare selected, locks its modes, and supports stopped or started creation", async () => {
-      vi.mocked(imageManifestGet).mockResolvedValue(
+      imageManifestGet.mockResolvedValue(
         manifest({
           name: "bare",
           tag: "latest",
@@ -877,7 +903,7 @@ describe.each([{ startNow: false }, { startNow: true }])(
 );
 
 it("keeps the created stopped agent and retries only start after a start failure", async () => {
-  vi.mocked(startAgent)
+  startAgent
     .mockRejectedValueOnce(new Error("daemon unavailable"))
     .mockResolvedValueOnce({ name: "created", action: "start" });
   const { onCreated, onOpenChange } = renderDialog();
@@ -912,7 +938,7 @@ describe("Create agent blocker", () => {
   };
 
   it("names a pending image manifest next to the disabled button", async () => {
-    vi.mocked(imageManifestGet).mockReturnValue(new Promise(() => {}));
+    imageManifestGet.mockReturnValue(new Promise(() => {}));
     renderDialog(clone);
 
     expect(
@@ -922,7 +948,7 @@ describe("Create agent blocker", () => {
   });
 
   it("keeps a manifest failure visible across an image reload and retries it", async () => {
-    vi.mocked(imageManifestGet).mockRejectedValue(new Error("tunnel closed"));
+    imageManifestGet.mockRejectedValue(new Error("tunnel closed"));
     const props: ComponentProps<typeof CreateAgentDialog> = {
       open: true,
       hostId: "d1",
@@ -948,7 +974,7 @@ describe("Create agent blocker", () => {
     );
     expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
 
-    vi.mocked(imageManifestGet).mockResolvedValue(manifest());
+    imageManifestGet.mockResolvedValue(manifest());
     fireEvent.click(screen.getByRole("button", { name: "Retry image" }));
     await waitFor(() =>
       expect(

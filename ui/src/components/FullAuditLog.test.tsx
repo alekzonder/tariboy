@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@/test/queryRender";
 import { FullAuditLog } from "./FullAuditLog";
 
 const mk = (seq: number, kind: string, extra: Record<string, unknown> = {}) =>

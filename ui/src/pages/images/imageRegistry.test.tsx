@@ -1,8 +1,13 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { setActiveDaemon } from "@/lib/api";
+import { createApi, setActiveDaemon } from "@/lib/api";
+import { resolveDaemon, unresolvedDaemon, type Daemon } from "@/lib/daemons";
+import { apiWrapper } from "@/test/api";
 import BuiltImages from "./BuiltImages";
+
+// BuiltImages renders under the route host's ApiProvider.
+const on = (target: Daemon | null) => ({ wrapper: apiWrapper(createApi(target)) });
 
 vi.mock("@/components/DaemonProvider", () => ({ useOptionalDaemons: () => null }));
 afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); setActiveDaemon(null); });
@@ -20,7 +25,7 @@ it("groups names and distinguishes latest from newest by parsed build date with 
   { name: "old", tag: "latest" },
  ];
  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { images } }) }));
- render(<MemoryRouter><BuiltImages hostId="" basePath="/servers/local/images" /></MemoryRouter>);
+ render(<MemoryRouter><BuiltImages hostId="" basePath="/servers/local/images" /></MemoryRouter>, on(null));
  const reviewer = (await screen.findByRole("link", { name: "reviewer" })).closest("tr")!;
  expect(within(reviewer).getByText("1.0.0")).toBeInTheDocument();
  expect(within(reviewer).getByText("2.0.0")).toBeInTheDocument();
@@ -51,7 +56,7 @@ it("opens a name's encoded tags on the explicit host and keeps actions at tag le
  const { default: ImageTags } = await import("./ImageTags");
  render(<MemoryRouter initialEntries={["/servers/route/images/reviewer"]}><Routes>
   <Route path="/servers/:hostId/images/:name" element={<ImageTags hostId={source.id} basePath="/servers/route/images" />} />
- </Routes></MemoryRouter>);
+ </Routes></MemoryRouter>, on(await resolveDaemon(source.id)));
  expect(await screen.findByRole("link", { name: "1.2.3+build.7" })).toHaveAttribute("href", "/servers/route/images/reviewer/1.2.3%2Bbuild.7");
  expect(screen.getByRole("link", { name: "Images" })).toHaveAttribute("href", "/servers/route/images");
  expect(screen.getByText("full-digest")).toBeInTheDocument();
@@ -65,7 +70,7 @@ it("opens a name's encoded tags on the explicit host and keeps actions at tag le
 
 it("shows an empty tag list without import controls", async () => {
  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: true, result: { images: [] } }))));
- render(<MemoryRouter><BuiltImages hostId="" imageName="missing" /></MemoryRouter>);
+ render(<MemoryRouter><BuiltImages hostId="" imageName="missing" /></MemoryRouter>, on(null));
  expect(await screen.findByText("No tags for this image on this host.")).toBeInTheDocument();
  expect(screen.queryByLabelText("Import image archive")).toBeNull();
 });
@@ -74,7 +79,7 @@ it("reports an unavailable explicit host without reading the active host", async
  setActiveDaemon({ id: "other", label: "Other", baseURL: "https://other", token: "" });
  const fetchMock = vi.fn();
  vi.stubGlobal("fetch", fetchMock);
- render(<MemoryRouter><BuiltImages hostId="missing-host" /></MemoryRouter>);
- expect(await screen.findByText("host missing-host is not available")).toBeInTheDocument();
+ render(<MemoryRouter><BuiltImages hostId="missing-host" /></MemoryRouter>, on(unresolvedDaemon("missing-host")));
+ expect(await screen.findByText("host missing-host is not ready")).toBeInTheDocument();
  expect(fetchMock).not.toHaveBeenCalled();
 });

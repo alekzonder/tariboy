@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@/test/queryRender";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { setActiveDaemon } from "@/lib/api";
 import { addDaemon } from "@/lib/daemons";

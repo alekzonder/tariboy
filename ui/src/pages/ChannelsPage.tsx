@@ -1,7 +1,8 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
   // subscriptions (AgentSubscriptions); the global mount (no :name) keeps the
   // browse-all-channels + tail/send panel. messenger chat-routes (bind/create) live
   // on the Plugins tab now — they are plugin-global config, not per-agent.
+  const api = useApi();
   const { name: routeName } = useParams<{ name?: string }>();
   const contextName = useAgentName();
   const name = routeName || contextName || undefined;
@@ -30,31 +32,31 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
   const [text, setText] = useState("");
   const [type, setType] = useState("note");
 
-  const loadTail = (ch: string) =>
-    apiGet<{ messages: Msg[] }>(`/api/channels/${encodeURIComponent(ch)}/messages`).then((r) => setMsgs(r.messages)).catch(() => setMsgs([]));
-  const loadWatches = (ch: string) =>
-    apiGet<{ watches: Watch[] }>(`/api/channels/${encodeURIComponent(ch)}/watches`).then((r) => setWatches(r.watches ?? [])).catch(() => setWatches([]));
+  const loadTail = useCallback((ch: string) =>
+    api.get<{ messages: Msg[] }>(`/api/channels/${encodeURIComponent(ch)}/messages`).then((r) => setMsgs(r.messages)).catch(() => setMsgs([])), [api]);
+  const loadWatches = useCallback((ch: string) =>
+    api.get<{ watches: Watch[] }>(`/api/channels/${encodeURIComponent(ch)}/watches`).then((r) => setWatches(r.watches ?? [])).catch(() => setWatches([])), [api]);
 
   // The global channel list backs the browse panel; under an agent the left
   // column is AgentSubscriptions, so we only fetch here when unscoped.
   useEffect(() => {
     if (name) return;
-    apiGet<{ channels: Channel[] }>("/api/channels")
+    api.get<{ channels: Channel[] }>("/api/channels")
       .then((r) => { setChannels(r.channels); setSel(null); })
       .catch(() => setChannels([]));
-  }, [name]);
+  }, [api, name]);
   useEffect(() => {
     if (!sel) { setWatches([]); return; }
     void loadTail(sel);
     void loadWatches(sel);
     const t = window.setInterval(() => void loadTail(sel), 2000);
     return () => window.clearInterval(t);
-  }, [sel]);
+  }, [loadTail, loadWatches, sel]);
 
   const send = async () => {
     if (!sel) return;
     try {
-      await apiPost("/api/messages", { channel: sel, type, text });
+      await api.post("/api/messages", { channel: sel, type, text });
       setText("");
       toast.success("sent");
       void loadTail(sel);

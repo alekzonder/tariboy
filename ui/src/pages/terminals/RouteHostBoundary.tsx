@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { ApiProvider } from "@/components/ApiProvider";
 import { useDaemons } from "@/components/DaemonProvider";
 import { getActiveDaemon } from "@/lib/api";
 import { hostConnected } from "@/lib/desktop";
@@ -20,7 +21,6 @@ export function RouteHostBoundary({ hostId, unavailable = false, children }: {
   const hostReady = hostId === "" || (
     !!host?.baseURL && (host.kind !== "ssh" || hostConnected(host.state))
   );
-  const renderChildren = () => typeof children === "function" ? children(getActiveDaemon()) : children;
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +49,7 @@ export function RouteHostBoundary({ hostId, unavailable = false, children }: {
   // One tree shape for ready and reconnecting: switching wrappers would
   // remount the page and drop its loaded data and unsent drafts.
   const reconnecting = !hostReady || unavailable;
+  const target = getActiveDaemon();
   return (
     <div className="flex h-full min-h-0 flex-col">
       {reconnecting && (
@@ -61,7 +62,10 @@ export function RouteHostBoundary({ hostId, unavailable = false, children }: {
         aria-disabled={reconnecting || undefined}
         className={reconnecting ? "min-h-0 flex-1 opacity-60" : "min-h-0 flex-1"}
       >
-        {renderChildren()}
+        {/* The route host is the server of everything below. */}
+        <ApiProvider target={target}>
+          {typeof children === "function" ? children(target) : children}
+        </ApiProvider>
       </div>
     </div>
   );

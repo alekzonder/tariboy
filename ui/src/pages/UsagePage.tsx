@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePolling } from "@/hooks/usePolling";
-import { getUsage, listGroups, type GroupRow } from "@/lib/api";
+import type { GroupRow } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { fmtTokens } from "@/lib/audit";
 import { fmtDateTime } from "@/lib/time";
 import type { UsagePoint, UsageReport } from "@/lib/types";
@@ -13,6 +14,7 @@ function fmtCost(cost: number) {
 }
 
 export default function UsagePage() {
+  const api = useApi();
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [selectedGroup, setSelectedGroup] = useState("");
   const selectedGroupRef = useRef(selectedGroup);
@@ -20,15 +22,15 @@ export default function UsagePage() {
   const { refresh } = usePolling(
     async () => {
       const group = selectedGroupRef.current;
-      const report = await getUsage(group ? { group } : {});
+      const report = await api.usage.getUsage(group ? { group } : {});
       if (selectedGroupRef.current === group) setAcceptedUsage({ group, report });
     },
     5000,
   );
 
   useEffect(() => {
-    void listGroups().then((result) => setGroups(result.groups)).catch(() => setGroups([]));
-  }, []);
+    void api.groups.listGroups().then((result) => setGroups(result.groups)).catch(() => setGroups([]));
+  }, [api]);
   useEffect(() => {
     void refresh();
   }, [selectedGroup, refresh]);

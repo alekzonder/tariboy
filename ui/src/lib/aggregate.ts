@@ -1,4 +1,4 @@
-import { apiOn, ApiError, chatListOn, type ChatSummary } from "@/lib/api";
+import { ApiError, createApi, type ChatSummary } from "@/lib/api";
 import { listDaemons, resolveDaemon } from "@/lib/daemons";
 import { hasLocalDaemon } from "@/lib/desktop";
 import type { AgentSummary } from "@/lib/types";
@@ -26,15 +26,15 @@ export async function fetchAllAgents(): Promise<HostAgents[]> {
   return Promise.all(
     targets.map(async (t) => {
       try {
-        const target = await resolveDaemon(t.id);
+        const api = createApi(await resolveDaemon(t.id));
         const [res, groupResult, config, chats] = await Promise.all([
-          apiOn<{ agents: AgentSummary[]; count: number }>(target, "GET", "/api/agents"),
-          apiOn<{ groups: Array<{ name: string; lead: string; members: number }>; count: number }>(target, "GET", "/api/groups"),
-          apiOn<Record<string, string>>(target, "GET", "/api/daemon/config?key=sidebar_order_v1")
+          api.request<{ agents: AgentSummary[]; count: number }>("GET", "/api/agents"),
+          api.request<{ groups: Array<{ name: string; lead: string; members: number }>; count: number }>("GET", "/api/groups"),
+          api.request<Record<string, string>>("GET", "/api/daemon/config?key=sidebar_order_v1")
             .catch((): Record<string, string> => ({})),
           // Chats are additive: a host whose daemon does not project them yet
           // degrades to no chat order rather than to an unreachable host.
-          chatListOn(target).then((r) => r.chats ?? []).catch((): ChatSummary[] => []),
+          api.messages.chatList().then((r) => r.chats ?? []).catch((): ChatSummary[] => []),
         ]);
         let sidebarOrder: HostAgents["sidebarOrder"];
         try {

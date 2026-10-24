@@ -1,8 +1,8 @@
 import { useState } from "react"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import type { ApiTarget } from "@/lib/api"
-import { advanceTask, moveTaskWorkflow, type WorkflowView } from "@/lib/tasks"
+import type { WorkflowView } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { EMPTY, LABEL, SelectShell } from "./panelStyles"
 import { useWorkflowConfirm } from "./WorkflowConfirm"
@@ -20,20 +20,20 @@ const MAX_MESSAGE = 4096
  * Either way the agent reads the message in its goal as the transition
  * message of the status it enters.
  */
-export default function ReturnToAgent({ taskKey, view, target, onChanged, onDone }: {
+export default function ReturnToAgent({ taskKey, view, onChanged, onDone }: {
   taskKey: string
   view: WorkflowView
-  target?: ApiTarget
   /** The task went back: refetch the view and the task. */
   onChanged: () => void
   onDone: () => void
 }) {
+  const api = useApi()
   const targets = returnTargets(view)
   const [status, setStatus] = useState(() => defaultReturnTarget(view, targets)?.status ?? "")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [sending, setSending] = useState(false)
-  const { checking, follow } = useFollowRequest(taskKey, target)
+  const { checking, follow } = useFollowRequest(taskKey)
   const { confirm, dialog } = useWorkflowConfirm()
   const mountedRef = useMounted()
   const chosen = targets.find((candidate) => candidate.status === status)
@@ -52,10 +52,10 @@ export default function ReturnToAgent({ taskKey, view, target, onChanged, onDone
       onDone()
     }
     if (candidate.via === "move") {
-      moveTaskWorkflow(taskKey, candidate.status, text, target).then(() => done(), done)
+      api.workflows.moveTaskWorkflow(taskKey, candidate.status, text).then(() => done(), done)
       return
     }
-    void follow(() => advanceTask(taskKey, candidate.outcome!, text, view.status, target), (result) => {
+    void follow(() => api.workflows.advanceTask(taskKey, candidate.outcome!, text, view.status), (result) => {
       if (result.kind === "applied") { done(); return }
       done(result.kind === "timeout" ? "The checks of the outcome are still running; the task moves once they pass."
         : result.kind === "error" ? result.message

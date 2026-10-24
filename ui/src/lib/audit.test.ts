@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { tone, pretty, isBoundary, descriptor, salientArg, hhmmss, collapseThinking, fmtTokens, hasHarnessOutput, mergeProxyCalls, type AuditEvent, type DisplayRow } from "./audit";
-import type { Call } from "@/lib/transcript";
+import type { Call } from "@/lib/api";
 
 const ev = (over: Partial<AuditEvent>): AuditEvent =>
   ({ seq: 1, kind: "iteration_started", source: "system", at: "t", data: "{}", iteration_id: "it-1", ...over });

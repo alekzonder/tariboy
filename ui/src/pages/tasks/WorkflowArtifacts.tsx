@@ -1,8 +1,8 @@
 import { useState } from "react"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import type { ApiTarget } from "@/lib/api"
-import { getTaskArtifactHistory, setTaskArtifact, type WorkflowArtifact, type WorkflowDeclaredArtifact } from "@/lib/tasks"
+import type { WorkflowArtifact, WorkflowDeclaredArtifact } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { COUNT, DANGER_FILL, EMPTY, LABEL, MONO, QUIET_ACTION } from "./panelStyles"
 import { MarkdownContent, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown"
@@ -25,7 +25,7 @@ const COLLAPSED_CHARS = 600
  * current status needs first; in both, missing ones come before set ones and
  * each names the transition that requires it.
  */
-export default function WorkflowArtifacts({ taskKey, artifacts, declared, editable, required, step, onShowAll, target, onChanged }: {
+export default function WorkflowArtifacts({ taskKey, artifacts, declared, editable, required, step, onShowAll, onChanged }: {
   taskKey: string
   artifacts: WorkflowArtifact[]
   /** Every artifact the manifest declares, so one with no value can be set. */
@@ -36,14 +36,13 @@ export default function WorkflowArtifacts({ taskKey, artifacts, declared, editab
   /** The selected step and what it needs; absent shows every artifact. */
   step?: { status: string } & StepArtifacts
   onShowAll?: () => void
-  target?: ApiTarget
   onChanged: () => void
 }) {
   const unset = declared.filter((item) => !artifacts.some((artifact) => artifact.name === item.name))
   const describe = (name: string) => declared.find((item) => item.name === name)?.description
   const value = (name: string) => artifacts.find((artifact) => artifact.name === name)
   const item = (name: string, requirements?: Requirement[]) => <ArtifactItem key={name} taskKey={taskKey} name={name}
-    artifact={value(name)} description={describe(name)} requirements={requirements} editable={editable} target={target} onChanged={onChanged} />
+    artifact={value(name)} description={describe(name)} requirements={requirements} editable={editable} onChanged={onChanged} />
   const all = [...artifacts.map((artifact) => artifact.name), ...unset.map(({ name }) => name)]
   // Missing first: what blocks the transition is what to look at.
   const missingFirst = (names: string[]) => [...names].sort((a, b) => Number(!!value(a)) - Number(!!value(b)))
@@ -86,7 +85,7 @@ export default function WorkflowArtifacts({ taskKey, artifacts, declared, editab
   )
 }
 
-function ArtifactItem({ taskKey, name, artifact, description, requirements, editable, target, onChanged }: {
+function ArtifactItem({ taskKey, name, artifact, description, requirements, editable, onChanged }: {
   taskKey: string
   name: string
   artifact?: WorkflowArtifact
@@ -95,9 +94,9 @@ function ArtifactItem({ taskKey, name, artifact, description, requirements, edit
   /** The transitions that require the artifact. */
   requirements?: Requirement[]
   editable: boolean
-  target?: ApiTarget
   onChanged: () => void
 }) {
+  const api = useApi()
   const [draft, setDraft] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
@@ -108,7 +107,7 @@ function ArtifactItem({ taskKey, name, artifact, description, requirements, edit
     if (draft === null) return
     setSaving(true)
     setError("")
-    setTaskArtifact(taskKey, name, draft, target)
+    api.workflows.setTaskArtifact(taskKey, name, draft)
       .then(() => { setDraft(null); setHistory(null); onChanged() })
       .catch((failure) => setError(errorText(failure)))
       .finally(() => setSaving(false))
@@ -116,7 +115,7 @@ function ArtifactItem({ taskKey, name, artifact, description, requirements, edit
   const toggleHistory = () => {
     if (history) { setHistory(null); return }
     setHistoryError("")
-    getTaskArtifactHistory(taskKey, name, target)
+    api.workflows.getTaskArtifactHistory(taskKey, name)
       .then(setHistory)
       .catch((failure) => setHistoryError(errorText(failure)))
   }

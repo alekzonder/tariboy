@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { ScriptRun, TransitionRequest, WorkflowView } from "@/lib/tasks"
+import type { WorkflowScriptRun, TransitionRequest, WorkflowView } from "@/lib/api"
 import { customerView, poolView } from "./workflowFixtures"
 import { explainProblem } from "./explainWorkflowProblem"
 
@@ -7,7 +7,7 @@ const request = (state: TransitionRequest["state"], extra: Partial<TransitionReq
   id: 12, task_key: "REL-1", outcome: "drafted", actor: "agent:writer", state, created_at: "2026-10-01T10:05:00Z", ...extra,
 })
 
-const failedRun: ScriptRun = { id: 8, task_key: "REL-1", kind: "check", script: "./checks/notes.sh", run_as: "queue", state: "finished",
+const failedRun: WorkflowScriptRun = { id: 8, task_key: "REL-1", kind: "check", script: "./checks/notes.sh", run_as: "queue", state: "finished",
   verdict: "failure", exit_code: 3, message: "the script failed with exit 3", request_id: 12,
   created_at: "2026-10-01T10:05:00Z", started_at: "2026-10-01T10:05:01Z", finished_at: "2026-10-01T10:05:02Z", log_path: "/l" }
 
@@ -65,7 +65,7 @@ describe("explainProblem", () => {
   })
 
   it("explains a failed watch with its run", () => {
-    const watch: ScriptRun = { id: 9, task_key: "REL-1", kind: "watch", script: "./scripts/ci.sh", run_as: "queue", state: "finished", verdict: "failure",
+    const watch: WorkflowScriptRun = { id: 9, task_key: "REL-1", kind: "watch", script: "./scripts/ci.sh", run_as: "queue", state: "finished", verdict: "failure",
       exit_code: 1, message: "GitHub answered 502\nmore", created_at: "2026-10-01T10:09:00Z", started_at: "2026-10-01T10:09:01Z", finished_at: "2026-10-01T10:09:02Z" }
     const view = withCounters({ ...customerView, status: "publish", owner: "script", waiting_on: "script", outcomes: [], runs: [watch],
       visits: [{ id: 3, sequence: 3, status: "publish", entered_at: "2026-10-01T10:08:00Z", entered_by: "u" }] }, { script_failures: 2 })

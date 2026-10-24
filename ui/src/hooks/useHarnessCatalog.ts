@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError, getHarnessModelsOn, resolveTarget, type ApiTarget } from "@/lib/api";
+import { ApiError, type ApiClient } from "@/lib/api";
 import type { HarnessCatalogState } from "@/lib/runtimePresets";
 import type { HarnessCatalog } from "@/lib/types";
 
@@ -14,9 +14,10 @@ export function clearHarnessCatalogCache(): void {
 const IDLE: HarnessCatalogState = { loading: false, catalog: null, error: "" };
 const LOADING: HarnessCatalogState = { loading: true, catalog: null, error: "" };
 
-export function useHarnessCatalog(target: ApiTarget, harness: string): HarnessCatalogState {
-  const daemon = resolveTarget(target);
-  const key = harness ? `${daemon?.id ?? ""}\u0000${harness}` : "";
+// `api` is the client of the host whose catalog is wanted: the surrounding
+// ApiProvider's, or a dialog's own client for the host it picked.
+export function useHarnessCatalog(api: ApiClient, harness: string): HarnessCatalogState {
+  const key = harness ? `${api.target?.id ?? ""}\u0000${harness}` : "";
   const [loaded, setLoaded] = useState<{ key: string; state: HarnessCatalogState } | null>(
     null,
   );
@@ -24,7 +25,7 @@ export function useHarnessCatalog(target: ApiTarget, harness: string): HarnessCa
   useEffect(() => {
     if (!key || cache.has(key)) return;
     let cancelled = false;
-    getHarnessModelsOn(daemon, harness)
+    api.harnesses.getHarnessModels(harness)
       .then((catalog) => {
         if (!catalog.error) cache.set(key, catalog);
         if (!cancelled) {
@@ -43,7 +44,7 @@ export function useHarnessCatalog(target: ApiTarget, harness: string): HarnessCa
     return () => {
       cancelled = true;
     };
-  }, [key, daemon, harness]);
+  }, [key, api, harness]);
 
   if (!key) return IDLE;
   const cached = cache.get(key);

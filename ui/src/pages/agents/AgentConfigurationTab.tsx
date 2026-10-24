@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { RunStateActions } from "@/components/AgentControls";
 import { useAgentName, useAgentStatus } from "@/lib/agent";
-import type { Daemon } from "@/lib/daemons";
+import { useApi } from "@/components/apiContext";
 import type { AgentStatus } from "@/lib/types";
 import { BLOCKS, blockOfKey, filterBlocks } from "./configuration/registry";
 import { useConfigDraft } from "./configuration/useConfigDraft";
@@ -13,36 +13,21 @@ import { ConfigurationBlocks } from "./configuration/ConfigurationBlocks";
 import TabPage from "@/components/TabPage";
 
 export default function AgentConfigurationTab({
-  target,
   refresh,
 }: {
-  target: Daemon | null;
   refresh: () => void;
 }) {
   const name = useAgentName();
   const { status } = useAgentStatus();
-  const targetId = target?.id;
-  const targetLabel = target?.label;
-  const targetBaseURL = target?.baseURL;
-  const targetToken = target?.token;
-  // Host registry refreshes replace the descriptor object even when its API
-  // endpoint is unchanged. Keep a stable request target so those parent
-  // renders cannot reload the sources over an in-progress draft.
-  const requestTarget = useMemo<Daemon | null>(
-    () => targetId === undefined ? null : {
-      id: targetId,
-      label: targetLabel ?? targetId,
-      baseURL: targetBaseURL ?? "",
-      token: targetToken ?? "",
-    },
-    [targetBaseURL, targetId, targetLabel, targetToken],
-  );
+  // The host is the surrounding ApiProvider's. Its client keeps its identity
+  // while the endpoint and token are unchanged, so host registry refreshes
+  // cannot reload the sources over an in-progress draft.
+  const targetId = useApi().target?.id;
   // One draft per scope (one agent on one host): a reconnect keeps the scope
   // and the draft; another agent or host starts clean.
   return (
     <ConfigurationPage
       key={`${targetId ?? ""}\u0000${name}`}
-      target={requestTarget}
       name={name}
       status={status}
       refresh={refresh}
@@ -51,17 +36,16 @@ export default function AgentConfigurationTab({
 }
 
 function ConfigurationPage({
-  target,
   name,
   status,
   refresh,
 }: {
-  target: Daemon | null;
   name: string;
   status: AgentStatus | null;
   refresh: () => void;
 }) {
-  const sources = useConfigSources(target, name, status);
+  const api = useApi();
+  const sources = useConfigSources(name, status);
   const { view, imageStatus } = sources;
   const baseline = useMemo(() => readBaseline({
     view,
@@ -70,7 +54,7 @@ function ConfigurationPage({
     retention: sources.retention.value,
     secrets: sources.secrets.value,
   }), [view, imageStatus, sources.script.value, sources.retention.value, sources.secrets.value]);
-  const units = useMemo(() => buildUnits(target, name), [target, name]);
+  const units = useMemo(() => buildUnits(api, name), [api, name]);
   const [query, setQuery] = useState("");
   const [changedOnly, setChangedOnly] = useState(false);
 
@@ -158,7 +142,6 @@ function ConfigurationPage({
             matched={filtered.matched}
             dirty={dirtyByBlock.get(block.id) ?? 0}
             sources={sources}
-            target={target}
             name={name}
             stopped={stopped}
             refresh={refresh}

@@ -1,8 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
-import { renderHook, act } from "@testing-library/react"
+import { renderHook as rtlRenderHook, act, type RenderHookOptions } from "@testing-library/react"
+import { createElement, type PropsWithChildren } from "react"
 import { useTerminalSocket } from "@/hooks/useTerminalSocket"
 import { terminalWsUrl } from "./useTerminalSocket"
-import { setLocalBaseURL } from "@/lib/api"
+import { createApi, setLocalBaseURL, type ApiClient } from "@/lib/api"
+import { ApiProvider } from "@/components/ApiProvider"
+import { apiWrapper } from "@/test/api"
+import type { Daemon } from "@/lib/daemons"
+
+// The terminal is on the server of the surrounding ApiProvider (local here).
+function renderHook<Result, Props>(
+  callback: (props: Props) => Result,
+  options: RenderHookOptions<Props> = {},
+) {
+  return rtlRenderHook(callback, { wrapper: apiWrapper(createApi(null)), ...options })
+}
 
 /** Minimal fake WebSocket: captures the constructor args, exposes settable
  * on* handlers the test can fire directly, and spies on send()/close() so
@@ -522,6 +534,36 @@ describe("useTerminalSocket", () => {
       const second = FakeWebSocket.instances[1]
       expect(second.url).toContain("/api/agents/agent-b/terminal")
     })
+  })
+})
+
+describe("useTerminalSocket host", () => {
+  const remote: Daemon = { id: "r", label: "Remote", baseURL: "https://r.example", token: "one" }
+  function HostWrapper({ host, children }: PropsWithChildren<{ host: Daemon }>) {
+    return createElement(ApiProvider, { target: host, children })
+  }
+
+  it("dials the provider's host and keeps the socket across ordinary re-renders", () => {
+    const { rerender } = rtlRenderHook(() => useTerminalSocket("bob", true), {
+      wrapper: ({ children }: PropsWithChildren) => createElement(HostWrapper, { host: { ...remote }, children }),
+    })
+    expect(FakeWebSocket.instances).toHaveLength(1)
+    expect(FakeWebSocket.last!.url).toBe("wss://r.example/api/agents/bob/terminal?cols=80&rows=24&token=one")
+    rerender()
+    expect(FakeWebSocket.instances).toHaveLength(1)
+  })
+
+  it("re-dials when the provider's token changes", () => {
+    let client: ApiClient = createApi(remote)
+    const { rerender } = rtlRenderHook(() => useTerminalSocket("bob", true), {
+      wrapper: ({ children }: PropsWithChildren) => createElement(ApiProvider, { client, children }),
+    })
+    expect(FakeWebSocket.instances).toHaveLength(1)
+    client = createApi({ ...remote, token: "two" })
+    rerender()
+    expect(FakeWebSocket.instances).toHaveLength(2)
+    expect(FakeWebSocket.instances[0].close).toHaveBeenCalled()
+    expect(FakeWebSocket.last!.url).toContain("token=two")
   })
 })
 

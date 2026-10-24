@@ -1,5 +1,5 @@
 import { it, expect, vi, beforeEach, afterEach } from "vitest"
-import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor } from "@/test/queryRender"
 import { AgentColorSwatch } from "./AgentColorSwatch"
 
 beforeEach(() => localStorage.clear())

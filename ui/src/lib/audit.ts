@@ -1,6 +1,7 @@
-import type { Call } from "@/lib/transcript";
+import type { AuditEvent, Call } from "@/lib/api";
 
-export interface AuditEvent { seq: number; kind: string; source: string; data: string; at: string; iteration_id: string }
+export type { AuditEvent };
+
 
 // parseData turns the JSON-string data field back into an object. On any parse
 // failure it returns {} so callers never throw on a malformed record.

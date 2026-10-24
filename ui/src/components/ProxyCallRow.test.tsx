@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent } from "@/test/queryRender";
 import { ProxyCallRow } from "@/components/ProxyCallRow";
-import type { Call } from "@/lib/transcript";
+import type { Call } from "@/lib/api";
 
 afterEach(() => vi.restoreAllMocks());
 

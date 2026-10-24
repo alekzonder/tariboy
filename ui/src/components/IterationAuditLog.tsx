@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { agentGet, subscribeAgentEvents } from "@/lib/api";
+import type { Call } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AuditRow } from "@/components/AuditRow";
 import { collapseThinking, hasHarnessOutput, mergeProxyCalls, type AuditEvent } from "@/lib/audit";
-import { fetchTranscript, type Call } from "@/lib/transcript";
 import { AuditExportActions } from "@/components/AuditExportActions";
 
 // shortIter condenses an iteration id (<agent>-<timestamp>-<n>) to a readable
@@ -37,6 +37,7 @@ export function IterationAuditLog({
   // it when no iteration is selected, in which case the header is unchanged.
   iterationProductive?: boolean;
 }) {
+  const api = useApi();
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [calls, setCalls] = useState<Call[]>([]);
   const [open, setOpen] = useState<Set<number>>(new Set());
@@ -58,13 +59,13 @@ export function IterationAuditLog({
     setEvents([]);
     setCalls([]);
     const load = () =>
-      void agentGet<{ events: AuditEvent[] }>(name, `logs?iteration=${encodeURIComponent(iterationId)}`)
+      void api.audit.listAuditEvents(name, `iteration=${encodeURIComponent(iterationId)}`)
         .then((r) => { if (active) setEvents(r.events ?? []); })
         .catch(() => { /* keep last events on a transient failure */ });
     const loadTranscript = () => {
       if (transcriptInFlight) return;
       transcriptInFlight = true;
-      void fetchTranscript(name, iterationId, controller.signal)
+      void api.audit.fetchTranscript(name, iterationId, controller.signal)
         .then((next) => { if (active) setCalls(next); })
         .catch(() => { /* keep last transcript on a transient failure */ })
         .finally(() => { transcriptInFlight = false; });
@@ -73,14 +74,14 @@ export function IterationAuditLog({
     loadTranscript();
     const refresh = () => { load(); if (running) loadTranscript(); };
     const t = window.setInterval(refresh, 3000);
-    const off = subscribeAgentEvents(name, ["audit", "iteration", "proxy"], refresh);
+    const off = api.agents.subscribeAgentEvents(name, ["audit", "iteration", "proxy"], refresh);
     return () => {
       active = false;
       controller.abort();
       window.clearInterval(t);
       off();
     };
-  }, [name, iterationId, iterationStatus]);
+  }, [api, name, iterationId, iterationStatus]);
 
   useEffect(() => {
     const v = viewport();

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
-import type { ApiTarget } from "@/lib/api"
-import { getQueueSourceRunLog, listQueueSources, type QueueSource } from "@/lib/tasks"
+import type { QueueSource } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { COUNT, EMPTY, LABEL, MONO, QUIET_ACTION } from "./panelStyles"
 import RunRow from "./RunRow"
@@ -13,7 +13,8 @@ import { errorText } from "./workflowShared"
  * newest runs (at most 20, newest first), whose logs are read on demand. The
  * list is read once and on Reload; it does not poll.
  */
-export default function QueueSources({ queue, target }: { queue: string; target?: ApiTarget }) {
+export default function QueueSources({ queue }: { queue: string }) {
+  const api = useApi()
   const [sources, setSources] = useState<QueueSource[]>([])
   // Until a load succeeds the list is unknown, so "No sources" would be a guess.
   const [loaded, setLoaded] = useState(false)
@@ -23,11 +24,11 @@ export default function QueueSources({ queue, target }: { queue: string; target?
   const load = useCallback(async () => {
     setBusy(true)
     try {
-      setSources(await listQueueSources(queue, target))
+      setSources(await api.workflows.listQueueSources(queue))
       setLoaded(true)
       setError("")
     } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
-  }, [queue, target])
+  }, [queue, api])
   useEffect(() => { void Promise.resolve().then(load) }, [load])
 
   return (
@@ -64,7 +65,7 @@ export default function QueueSources({ queue, target }: { queue: string; target?
                 startedAt={run.started_at} finishedAt={run.finished_at}
                 message={[run.tasks_created > 0 ? `${run.tasks_created} tasks created` : "", run.message ?? ""].filter(Boolean).join("\n")}
                 going={run.state === "running"}
-                readLog={() => getQueueSourceRunLog(queue, run.id, undefined, target)} />
+                readLog={() => api.workflows.getQueueSourceRunLog(queue, run.id, undefined)} />
             ))}
           </ul>
         </div>

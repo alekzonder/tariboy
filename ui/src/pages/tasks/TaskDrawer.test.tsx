@@ -1,8 +1,11 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender"
+import type { ReactElement } from "react"
+import { act, fireEvent, render as renderWith, screen, waitFor, within } from "@/test/queryRender"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
-import { ApiError } from "@/lib/api"
-import type { Task, TaskDetail as Detail } from "@/lib/tasks"
+import { ApiProvider } from "@/components/ApiProvider"
+import { ApiError, type ApiClient, type Task, type TaskDetail as Detail } from "@/lib/api"
+import type { Daemon } from "@/lib/daemons"
+import { fakeApi } from "@/test/api"
 import TaskDrawer from "./TaskDrawer"
 import { customerView, workflowTask } from "./workflowFixtures"
 
@@ -25,10 +28,19 @@ const taskSocket = vi.hoisted(() => ({
   } | undefined,
 }))
 
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  ...api,
-}))
+// One fake client per host identity, each with the same mocks: a test that
+// switches hosts sees the drawer get a new client, as ApiProvider would give it.
+const clients = new Map<string, ApiClient>()
+function hostApi(target: Daemon | null): ApiClient {
+  const identity = JSON.stringify(target)
+  if (!clients.has(identity)) {
+    const { getTaskWorkflow, ...tasks } = api
+    clients.set(identity, fakeApi({ tasks, workflows: { getTaskWorkflow } }, target))
+  }
+  return clients.get(identity)!
+}
+const render = (ui: ReactElement) => renderWith(ui, { api: hostApi(null) })
+const onHost = (target: Daemon, ui: ReactElement) => <ApiProvider client={hostApi(target)}>{ui}</ApiProvider>
 vi.mock("@/hooks/useTasksSocket", () => ({
   useTasksSocket: vi.fn((options) => {
     taskSocket.options = options
@@ -64,10 +76,10 @@ const detail: Detail = { task, comments: [], waiting_for: [], relations: [] }
 it("does not show one server's detail while the same key loads on another", async () => {
   const first = { id: "first", label: "First", baseURL: "https://first.test", token: "" }
   const second = { ...first, id: "second", baseURL: "https://second.test" }
-  const mounted = render(<TaskDrawer target={first} taskKey="TEST-1" onClose={vi.fn()} />)
+  const mounted = render(onHost(first, <TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />))
   await screen.findByText("Ship the drawer")
   api.getTask.mockReturnValue(new Promise(() => {}))
-  mounted.rerender(<TaskDrawer target={second} taskKey="TEST-1" onClose={vi.fn()} />)
+  mounted.rerender(onHost(second, <TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />))
   expect(screen.queryByText("Ship the drawer")).not.toBeInTheDocument()
   expect(screen.getByText("Loading task…")).toBeInTheDocument()
 })
@@ -94,13 +106,13 @@ it("aborts a detail read when its last consumer closes", async () => {
   api.getTask.mockReturnValue(new Promise(() => {}))
   const mounted = render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />)
   await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(1))
-  const signal = api.getTask.mock.calls[0][2] as AbortSignal | undefined
+  const signal = api.getTask.mock.calls[0][1] as AbortSignal | undefined
   mounted.unmount()
   expect(signal?.aborted).toBe(true)
 })
 
 it("does not read an unresolved host or fall back to the local server", async () => {
-  render(<TaskDrawer target={{ id: "offline", label: "Offline", baseURL: "", token: "" }} taskKey="TEST-1" onClose={vi.fn()} />)
+  render(onHost({ id: "offline", label: "Offline", baseURL: "", token: "" }, <TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />))
   await act(async () => {})
   expect(api.getTask).not.toHaveBeenCalled()
   expect(api.listTasks).not.toHaveBeenCalled()
@@ -109,10 +121,10 @@ it("does not read an unresolved host or fall back to the local server", async ()
 
 it("clears the old account's detail before reading with changed credentials", async () => {
   const host = { id: "remote", label: "Remote", baseURL: "https://remote.test", token: "old" }
-  const mounted = render(<TaskDrawer target={host} taskKey="TEST-1" onClose={vi.fn()} />)
+  const mounted = render(onHost(host, <TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />))
   await screen.findByText("Ship the drawer")
   api.getTask.mockReturnValue(new Promise(() => {}))
-  mounted.rerender(<TaskDrawer target={{ ...host, token: "new" }} taskKey="TEST-1" onClose={vi.fn()} />)
+  mounted.rerender(onHost({ ...host, token: "new" }, <TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />))
   expect(screen.queryByText("Ship the drawer")).not.toBeInTheDocument()
 })
 
@@ -127,6 +139,7 @@ it("removes a loaded detail when access is denied during refresh", async () => {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  clients.clear()
   localStorage.clear()
   taskSocket.options = undefined
   api.getTask.mockResolvedValue(detail)
@@ -141,7 +154,7 @@ it("loads the task it was given and closes without touching the tasks list", asy
   const onClose = vi.fn()
   render(<TaskDrawer taskKey="TEST-1" onClose={onClose} />)
   expect(await screen.findByText("Ship the drawer")).toBeInTheDocument()
-  expect(api.getTask).toHaveBeenCalledWith("TEST-1", null, expect.any(AbortSignal))
+  expect(api.getTask).toHaveBeenCalledWith("TEST-1", expect.any(AbortSignal))
   await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
   expect(onClose).toHaveBeenCalled()
 })
@@ -154,7 +167,6 @@ it("saves task edits from the drawer itself", async () => {
   await waitFor(() => expect(api.updateTask).toHaveBeenCalledWith(
     "TEST-1",
     expect.objectContaining({ revision: 2, status: "in_progress" }),
-    null,
   ))
 })
 
@@ -166,7 +178,7 @@ it("posts a comment and reloads the task", async () => {
   await userEvent.type(screen.getByLabelText("Comment"), "on it")
   await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
   await waitFor(() => expect(api.addTaskComment).toHaveBeenCalledWith(
-    "TEST-1", expect.stringContaining("on it"), null, expect.any(String),
+    "TEST-1", expect.stringContaining("on it"), expect.any(String),
   ))
   await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(2))
 })

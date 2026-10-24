@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation, useOutletContext } from "react-router-dom";
-import { getGlobalAgentShellScriptOn, getPluginContributionsOn, setGlobalAgentShellScriptOn, type ApiTarget, type PluginContribution } from "@/lib/api";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import type { PluginContribution } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { cn } from "@/lib/utils";
 import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
 import { ShellScriptEditor } from "@/components/ShellScriptEditor";
@@ -26,21 +27,21 @@ const ADVANCED = [
   ["channels", "Raw channels"],
 ] as const;
 
-export default function SettingsPage({ basePath = "/settings", target = null }: {
+export default function SettingsPage({ basePath = "/settings" }: {
   basePath?: string;
-  target?: ApiTarget;
 }) {
+  const api = useApi();
   const location = useLocation();
   const advanced = location.pathname.startsWith(`${basePath}/advanced`);
   const strip = useActiveLinkIntoView<HTMLElement>();
   const [integrations, setIntegrations] = useState<PluginContribution[]>([]);
   useEffect(() => {
     let current = true;
-    void getPluginContributionsOn(target)
+    void api.plugins.getPluginContributions()
       .then((result) => { if (current) setIntegrations(result.plugins.filter((plugin) => plugin.settings)); })
       .catch(() => { if (current) setIntegrations([]); });
     return () => { current = false; };
-  }, [target]);
+  }, [api]);
   // Below lg the side column is one sideways-scrolling strip above the page.
   const group = "max-lg:mt-0 max-lg:flex max-lg:shrink-0 max-lg:items-center max-lg:gap-1 max-lg:border-t-0 max-lg:border-l max-lg:pt-0 max-lg:pl-2";
   const link = ({ isActive }: { isActive: boolean }) =>
@@ -91,7 +92,7 @@ export default function SettingsPage({ basePath = "/settings", target = null }: 
         )}
       </aside>
       <section className="min-w-0 flex-1 overflow-auto p-5 max-sm:p-3">
-        <Outlet context={target} />
+        <Outlet />
       </section>
     </div>
   );
@@ -107,9 +108,10 @@ function Copy({ title, children }: { title: string; children: React.ReactNode })
 }
 
 export function GeneralSettings() {
-  const target = useOutletContext<ApiTarget>();
-  const load = useCallback(async () => (await getGlobalAgentShellScriptOn(target)).script, [target]);
-  const save = useCallback((script: string) => setGlobalAgentShellScriptOn(target, script), [target]);
+  const api = useApi();
+  const target = api.target;
+  const load = useCallback(async () => (await api.daemon.getGlobalAgentShellScript()).script, [api]);
+  const save = useCallback((script: string) => api.daemon.setGlobalAgentShellScript(script), [api]);
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="space-y-3">
@@ -124,8 +126,8 @@ export function GeneralSettings() {
         load={load}
         save={save}
       />
-      <CodexApprovalCard key={target?.id ?? "active"} target={target} />
-      <MaintenanceSettingsCard key={target?.id ?? "active"} target={target} />
+      <CodexApprovalCard key={target?.id ?? "active"} />
+      <MaintenanceSettingsCard key={target?.id ?? "active"} />
       <SupportBundle />
     </div>
   );

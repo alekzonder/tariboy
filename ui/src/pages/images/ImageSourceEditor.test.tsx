@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import * as sourceApi from "@/lib/imageSources";
+import { apiWrapper, fakeApi } from "@/test/api";
 import ImageSourceEditor from "./ImageSourceEditor";
 
 vi.mock("@uiw/react-codemirror", () => ({
@@ -20,25 +20,23 @@ vi.mock("@uiw/react-codemirror", () => ({
   ),
 }));
 
-vi.mock("@/lib/imageSources", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/imageSources")>("@/lib/imageSources");
-  return {
-    ...actual,
+const api = fakeApi({
+  imageSources: {
     getImageSource: vi.fn(),
     listImageSourceFiles: vi.fn(),
     getImageSourceFile: vi.fn(),
     putImageSourceFile: vi.fn(),
     validateImageSource: vi.fn(),
     buildImageSource: vi.fn(),
-  };
+  },
 });
 
-const getSource = vi.mocked(sourceApi.getImageSource);
-const listFiles = vi.mocked(sourceApi.listImageSourceFiles);
-const getFile = vi.mocked(sourceApi.getImageSourceFile);
-const putFile = vi.mocked(sourceApi.putImageSourceFile);
-const validate = vi.mocked(sourceApi.validateImageSource);
-const build = vi.mocked(sourceApi.buildImageSource);
+const getSource = vi.mocked(api.imageSources.getImageSource);
+const listFiles = vi.mocked(api.imageSources.listImageSourceFiles);
+const getFile = vi.mocked(api.imageSources.getImageSourceFile);
+const putFile = vi.mocked(api.imageSources.putImageSourceFile);
+const validate = vi.mocked(api.imageSources.validateImageSource);
+const build = vi.mocked(api.imageSources.buildImageSource);
 
 function seed() {
   getSource.mockResolvedValue({
@@ -76,6 +74,7 @@ function renderEditor() {
         <Route path="/images/sources/:name" element={<ImageSourceEditor />} />
       </Routes>
     </MemoryRouter>,
+    { wrapper: apiWrapper(api) },
   );
 }
 

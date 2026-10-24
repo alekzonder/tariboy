@@ -1,5 +1,6 @@
 import { useState } from "react"
-import { isWorkflowTask, type Task, type TaskStatus, type TaskPriority } from "@/lib/tasks"
+import type { Task, TaskStatus, TaskPriority } from "@/lib/api"
+import { isWorkflowTask } from "@/lib/tasks"
 import type { TaskDetailProps } from "./TaskDetailTypes"
 
 export function useTaskDetailDraft(task: Task, onSave: TaskDetailProps["onSave"]) {

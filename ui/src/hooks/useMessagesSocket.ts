@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react"
-import { getLocalBaseURL, resolveTarget, type ApiTarget } from "@/lib/api"
+import { useContext, useEffect, useRef, useState } from "react"
+import { ApiContext } from "@/components/apiContext"
+import { getLocalBaseURL } from "@/lib/api"
 import type { Daemon } from "@/lib/daemons"
 
 const RECONNECT_MIN_MS = 250
@@ -55,7 +56,9 @@ export function messagesWsUrl(target: Daemon | null): string {
 }
 
 type HintSocketOptions<T> = {
-  target?: ApiTarget
+  /** An explicit host (null = same-origin local). Omitted, the socket watches
+   *  the server of the surrounding ApiProvider. */
+  target?: Daemon | null
   enabled?: boolean
   onHint: (hint: T) => void
   onOpen?: () => void
@@ -104,7 +107,11 @@ function useHintSocket<T>(
     acceptRef.current = accept
   }, [onHint, onOpen, accept])
 
-  const targetKey = JSON.stringify(resolveTarget(target))
+  const provided = useContext(ApiContext)
+  if (target === undefined && !provided) throw new Error("useApi must be used within an ApiProvider")
+  // Keyed by the host's value: an equal descriptor (or an ordinary re-render)
+  // keeps the socket, a new host, endpoint or token re-dials.
+  const targetKey = JSON.stringify(target === undefined ? provided!.target : target)
 
   useEffect(() => {
     if (!enabled) {

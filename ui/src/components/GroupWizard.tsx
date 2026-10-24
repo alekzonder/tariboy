@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
-import {
-  ApiError, apiOn, createAgent, getActiveDaemon, listImages,
-  type CreateAgentSpec, type ImageRow,
-} from "@/lib/api";
+import { ApiError, type CreateAgentSpec, type ImageRow } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { EFFORT_PRESETS } from "@/components/ComboField";
 import { PathAutocomplete } from "@/components/PathAutocomplete";
 import { ImageCombobox, serializeEnv, commaFieldError, type EnvRow } from "@/components/AgentFormFields";
@@ -63,7 +61,10 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
   const [leaderIdx, setLeaderIdx] = useState(0);
   const [nextId, setNextId] = useState(1);
   const [agents, setAgents] = useState<AgentDraft[]>([emptyDraft(0)]);
-  const [target] = useState(() => getActiveDaemon());
+  // The host is fixed when the wizard opens: a later host switch never sends the
+  // rest of a half-created group somewhere else.
+  const current = useApi();
+  const [api] = useState(() => current);
 
   const [busy, setBusy] = useState(false);
   const [groupCreated, setGroupCreated] = useState(false);
@@ -72,8 +73,8 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
   const [rowStatus, setRowStatus] = useState<Record<number, RowStatus>>({});
 
   useEffect(() => {
-    void listImages(target).then((r) => setImages(r.images ?? [])).catch(() => setImages([]));
-  }, [target]);
+    void api.images.listImages().then((r) => setImages(r.images ?? [])).catch(() => setImages([]));
+  }, [api]);
 
   const patch = (id: number, up: Partial<AgentDraft>) =>
     setAgents((rows) => rows.map((r) => (r.id === id ? { ...r, ...up } : r)));
@@ -124,7 +125,7 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
     setBusy(true);
     if (createGroup) {
       try {
-        await apiOn(target, "POST", "/api/groups", { name: name.trim(), lead: leaderName || undefined });
+        await api.request("POST", "/api/groups", { name: name.trim(), lead: leaderName || undefined });
         setGroupCreated(true);
         setGroupErr(null);
       } catch (e) {
@@ -136,7 +137,7 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
     for (const a of drafts) {
       setRowStatus((s) => ({ ...s, [a.id]: { kind: "creating" } }));
       try {
-        const r = await createAgent(specFor(a), target);
+        const r = await api.agents.createAgent(specFor(a));
         setRowStatus((s) => ({ ...s, [a.id]: { kind: "created", name: r.name } }));
       } catch (e) {
         const reason = e instanceof ApiError ? e.message : String(e);

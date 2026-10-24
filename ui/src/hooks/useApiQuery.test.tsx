@@ -1,17 +1,27 @@
 import { QueryClientProvider, keepPreviousData } from "@tanstack/react-query"
 import { act, render, screen, waitFor } from "@/test/queryRender"
 import { expect, it, vi } from "vitest"
-import { ApiError, setActiveDaemon, type ApiTarget } from "@/lib/api"
+import { ApiProvider } from "@/components/ApiProvider"
+import { useApi } from "@/components/apiContext"
+import { ApiError, createApi, setActiveDaemon, type ApiTarget } from "@/lib/api"
 import { addDaemon, resolveDaemon, setDaemonToken } from "@/lib/daemons"
 import { queryClient, apiServerKey } from "@/lib/queryClient"
-import { useApiQuery, useApiTarget } from "./useApiQuery"
+import { useApiQuery } from "./useApiQuery"
 
 const host = { id: "remote", label: "Remote", baseURL: "https://first.test", token: "secret-one" }
 
-function Resource({ target: input, read, filter }: { target?: ApiTarget; filter?: string; read: (target: ApiTarget, signal: AbortSignal) => Promise<string> }) {
-  const target = useApiTarget(input)
-  const result = useApiQuery({ queryKey: [...apiServerKey(target), "example", ...(filter ? [filter] : [])], queryFn: ({ signal }) => read(target, signal), placeholderData: keepPreviousData }, target)
+type ResourceProps = { filter?: string; read: (target: ApiTarget, signal: AbortSignal) => Promise<string> }
+
+function Reader({ read, filter }: ResourceProps) {
+  const api = useApi()
+  const result = useApiQuery({ queryKey: [...apiServerKey(api.target), "example", ...(filter ? [filter] : [])], queryFn: ({ signal }) => read(api.target, signal), placeholderData: keepPreviousData })
   return <div data-placeholder={result.isPlaceholderData}>{result.data ?? result.error?.message ?? "Loading"}</div>
+}
+
+// Without a target the resource reads through the surrounding provider's client.
+function Resource({ target, ...props }: ResourceProps & { target?: ApiTarget }) {
+  if (target === undefined) return <Reader {...props} />
+  return <ApiProvider target={target}><Reader {...props} /></ApiProvider>
 }
 
 it("keeps server identity across a new port and cancels the old endpoint's read", async () => {
@@ -40,7 +50,7 @@ it("separates explicit local and active remote requests without putting credenti
   setActiveDaemon(host)
   const read = vi.fn(async (target: ApiTarget) => target ? "Remote" : "Local")
   try {
-    const mounted = render(<><Resource read={read} /><Resource target={null} read={read} /></>)
+    const mounted = render(<><Resource read={read} /><Resource target={null} read={read} /></>, { api: createApi(undefined) })
     expect(await screen.findByText("Remote")).toBeInTheDocument()
     expect(await screen.findByText("Local")).toBeInTheDocument()
     expect(read.mock.calls.map(([target]) => target)).toEqual([host, null])

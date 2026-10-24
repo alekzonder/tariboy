@@ -2,14 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { TerminalPane } from "./TerminalPane";
-import { agentDeleteOn, agentPostOn } from "@/lib/api";
 import { resolveDaemon } from "@/lib/daemons";
 import type { AgentSummary } from "@/lib/types";
 
-vi.mock("@/lib/api", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, agentPostOn: vi.fn(), agentDeleteOn: vi.fn() };
-});
 vi.mock("@/hooks/useTerminalSocket", () => ({
   useTerminalSocket: vi.fn(() => ({
     status: "open", absent: false, send: vi.fn(), sendResize: vi.fn(),
@@ -54,8 +49,6 @@ beforeEach(async () => {
   );
   sessionStorage.setItem(`tariboy_daemon_token_${remoteTarget.id}`, remoteTarget.token);
   await resolveDaemon(remoteTarget.id);
-  vi.mocked(agentPostOn).mockReset();
-  vi.mocked(agentDeleteOn).mockReset();
 });
 afterEach(() => vi.restoreAllMocks());
 

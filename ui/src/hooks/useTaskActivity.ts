@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getTaskActivityOn, type ApiTarget } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import type { ActivityWindow } from "@/lib/activityPeriod";
 import type { TaskActivityReport } from "@/lib/types";
 
@@ -8,7 +8,9 @@ const POLL_MS = 10000;
 /** Loads and polls the task summary for one window. A response for an older
  *  window or host never replaces the current one; a failed poll keeps the last
  *  report on screen and reports the error. */
-export function useTaskActivity(target: ApiTarget, window: ActivityWindow, agent?: string) {
+export function useTaskActivity(window: ActivityWindow, agent?: string) {
+  const api = useApi();
+  const target = api.target;
   const { since, until, error: windowError } = window;
   const key = `${target?.id ?? ""}\0${since}\0${until}\0${agent ?? ""}`;
   const [state, setState] = useState<{ key: string; report: TaskActivityReport | null; error: string }>(
@@ -19,7 +21,7 @@ export function useTaskActivity(target: ApiTarget, window: ActivityWindow, agent
     if (windowError || !since) return;
     const controller = new AbortController();
     const load = () => {
-      void getTaskActivityOn(target, { since, until, agent }, controller.signal)
+      void api.usage.getTaskActivity({ since, until, agent }, controller.signal)
         .then((report) => {
           if (!controller.signal.aborted) setState({ key, report, error: "" });
         })
@@ -35,7 +37,7 @@ export function useTaskActivity(target: ApiTarget, window: ActivityWindow, agent
       controller.abort();
       globalThis.clearInterval(timer);
     };
-  }, [key, target, since, until, agent, windowError]);
+  }, [key, api, since, until, agent, windowError]);
 
   return { report: state.report, error: state.key === key ? state.error : "", current: state.key === key };
 }

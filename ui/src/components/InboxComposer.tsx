@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { apiPost, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { SendFilesButton } from "@/components/SendFilesButton";
@@ -9,6 +10,7 @@ import { SendFilesButton } from "@/components/SendFilesButton";
 // (agent:<name>:inbox) so the next iteration picks it up. Fixed type="message";
 // the server stamps source="operator".
 export function InboxComposer({ name }: { name: string }) {
+  const api = useApi();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -17,7 +19,7 @@ export function InboxComposer({ name }: { name: string }) {
     if (!body || busy) return;
     setBusy(true);
     try {
-      await apiPost("/api/messages", { channel: `agent:${name}:inbox`, type: "message", text: body });
+      await api.post("/api/messages", { channel: `agent:${name}:inbox`, type: "message", text: body });
       setText("");
       toast.success("sent to inbox");
     } catch (e) {

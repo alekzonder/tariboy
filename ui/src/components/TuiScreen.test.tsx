@@ -1,9 +1,14 @@
-import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react"
+import { act, render as renderWithApi, screen, fireEvent, waitFor, within } from "@/test/queryRender"
+import type { ReactElement } from "react"
 import userEvent from "@testing-library/user-event"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { TuiScreen } from "@/components/TuiScreen"
 import type { TerminalSocketController } from "@/hooks/useTerminalSocket"
-import * as api from "@/lib/api"
+import { createApi, type ApiClient } from "@/lib/api"
+
+// The client uploads go through; spies replace its methods per test.
+let api: ApiClient = createApi(null)
+const render = (el: ReactElement) => renderWithApi(el, { api })
 import { openExternalUrl } from "@/lib/desktop"
 import { toast } from "sonner"
 
@@ -93,6 +98,7 @@ function ctrl(over: Partial<TerminalSocketController> = {}): TerminalSocketContr
 
 describe("TuiScreen", () => {
   beforeEach(() => {
+    api = createApi(null)
     vi.clearAllMocks()
     termInstances.length = 0
     webLinkAddons.length = 0
@@ -232,7 +238,7 @@ describe("TuiScreen", () => {
   })
 
   it("case 1: drops one file on the live terminal, uploads it, appends its path, and opens compose", async () => {
-    const upload = vi.spyOn(api, "serverUploadFile").mockResolvedValue({
+    const upload = vi.spyOn(api.files, "serverUploadFile").mockResolvedValue({
       path: "one.txt", abs: "/cwd/.tariboy/files/one.txt", bytes: 1,
     })
     render(<TuiScreen controller={ctrl()} />)
@@ -241,12 +247,12 @@ describe("TuiScreen", () => {
       dataTransfer: { files: [new File(["one"], "one.txt")] },
     })
 
-    await waitFor(() => expect(upload).toHaveBeenCalledWith(expect.any(File), undefined))
+    await waitFor(() => expect(upload).toHaveBeenCalledWith(expect.any(File)))
     expect(await screen.findByLabelText("Text to inject")).toHaveValue("/cwd/.tariboy/files/one.txt")
   })
 
   it("case 2: drops multiple files on the live terminal and uploads every file", async () => {
-    const upload = vi.spyOn(api, "serverUploadFile")
+    const upload = vi.spyOn(api.files, "serverUploadFile")
       .mockResolvedValueOnce({ path: "one.txt", abs: "/cwd/one.txt", bytes: 1 })
       .mockResolvedValueOnce({ path: "two.txt", abs: "/cwd/two.txt", bytes: 1 })
     render(<TuiScreen controller={ctrl()} />)
@@ -272,7 +278,7 @@ describe("TuiScreen", () => {
   })
 
   it("case 4: ignores a text-only drag without uploading", async () => {
-    const upload = vi.spyOn(api, "serverUploadFile")
+    const upload = vi.spyOn(api.files, "serverUploadFile")
     render(<TuiScreen controller={ctrl()} />)
     const target = screen.getByTestId("tui-screen")
 
@@ -286,7 +292,7 @@ describe("TuiScreen", () => {
   })
 
   it("case 5: drops on the absent panel, uploads paths, and toasts them without opening compose", async () => {
-    const upload = vi.spyOn(api, "serverUploadFile").mockResolvedValue({
+    const upload = vi.spyOn(api.files, "serverUploadFile").mockResolvedValue({
       path: "staged.txt", abs: "/cwd/staged.txt", bytes: 1,
     })
     const success = vi.spyOn(toast, "success")
@@ -302,7 +308,7 @@ describe("TuiScreen", () => {
   })
 
   it("case 7: shows a file-drop affordance and clears it after dragleave and drop", async () => {
-    const upload = vi.spyOn(api, "serverUploadFile").mockResolvedValue({
+    const upload = vi.spyOn(api.files, "serverUploadFile").mockResolvedValue({
       path: "x.txt", abs: "/cwd/x.txt", bytes: 1,
     })
     render(<TuiScreen controller={ctrl()} />)
@@ -319,7 +325,7 @@ describe("TuiScreen", () => {
   })
 
   it("case 8: clears the drop affordance and toasts when an upload fails", async () => {
-    vi.spyOn(api, "serverUploadFile").mockRejectedValue(new Error("upload failed"))
+    vi.spyOn(api.files, "serverUploadFile").mockRejectedValue(new Error("upload failed"))
     const error = vi.spyOn(toast, "error")
     render(<TuiScreen controller={ctrl()} />)
     const target = screen.getByTestId("tui-screen")
@@ -360,7 +366,7 @@ describe("TuiScreen", () => {
   it("case 11: refuses a drop of only directories with a single toast and no upload", async () => {
     // Resolve rather than reject, so the only toast this test can observe is
     // the folder refusal — never an upload failure leaking in from elsewhere.
-    const upload = vi.spyOn(api, "serverUploadFile").mockResolvedValue({
+    const upload = vi.spyOn(api.files, "serverUploadFile").mockResolvedValue({
       path: "folder", abs: "/cwd/folder", bytes: 0,
     })
     const error = vi.spyOn(toast, "error")
@@ -377,7 +383,7 @@ describe("TuiScreen", () => {
   })
 
   it("case 12: uploads only the file when a drop mixes a file and a directory", async () => {
-    const upload = vi.spyOn(api, "serverUploadFile").mockResolvedValue({
+    const upload = vi.spyOn(api.files, "serverUploadFile").mockResolvedValue({
       path: "one.txt", abs: "/cwd/one.txt", bytes: 1,
     })
     const error = vi.spyOn(toast, "error")
@@ -396,7 +402,7 @@ describe("TuiScreen", () => {
   })
 
   it("case 13: still uploads an ordinary file dropped through the items path", async () => {
-    const upload = vi.spyOn(api, "serverUploadFile").mockResolvedValue({
+    const upload = vi.spyOn(api.files, "serverUploadFile").mockResolvedValue({
       path: "one.txt", abs: "/cwd/one.txt", bytes: 1,
     })
     const error = vi.spyOn(toast, "error")

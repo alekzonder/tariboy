@@ -1,5 +1,5 @@
 import { it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@/test/queryRender";
 import { AgentNameContext } from "@/lib/agent";
 import AgentPrompt from "./AgentPrompt";
 

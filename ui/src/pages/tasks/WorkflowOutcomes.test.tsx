@@ -1,17 +1,17 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import type { ReactElement } from "react"
+import { act, fireEvent, render as renderWith, screen, within } from "@/test/queryRender"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-import { ApiError } from "@/lib/api"
-import type { TransitionRequest } from "@/lib/tasks"
+import { ApiError, type TransitionRequest } from "@/lib/api"
 import WorkflowOutcomes from "./WorkflowOutcomes"
 import { customerView, poolView, remoteTarget } from "./workflowFixtures"
+import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ advanceTask: vi.fn(), getTransitionRequest: vi.fn(), retryTransitionRequest: vi.fn() }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  ...api,
-}))
+// The mocks are methods of a client bound to the remote host, so each call
+// they record went to that host.
+const remoteApi = fakeApi({ workflows: { advanceTask: api.advanceTask, getTransitionRequest: api.getTransitionRequest, retryTransitionRequest: api.retryTransitionRequest } }, remoteTarget)
+const render = (ui: ReactElement) => renderWith(ui, { api: remoteApi })
 
-const target = remoteTarget
 const request = (state: TransitionRequest["state"], extra: Partial<TransitionRequest> = {}): TransitionRequest => ({
   id: 11, task_key: "REL-1", outcome: "approve", actor: "user:owner", state, created_at: "2026-10-01T10:06:00Z", ...extra,
 })
@@ -23,7 +23,7 @@ function renderOutcomes(view = customerView) {
   const onChanged = vi.fn()
   const onRefresh = vi.fn()
   const element = (next: typeof view) =>
-    <WorkflowOutcomes taskKey="REL-1" view={next} target={target} onChanged={onChanged} onRefresh={onRefresh} />
+    <WorkflowOutcomes taskKey="REL-1" view={next} onChanged={onChanged} onRefresh={onRefresh} />
   const { unmount, rerender } = render(element(view))
   return { onChanged, onRefresh, unmount, rerender: (next: typeof view) => rerender(element(next)) }
 }
@@ -52,7 +52,7 @@ it("advances from the shown status and reports the change when it applies at onc
   const { onChanged } = renderOutcomes()
   fireEvent.change(screen.getByLabelText("Outcome message"), { target: { value: "needs more" } })
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "rework" })) })
-  expect(api.advanceTask).toHaveBeenCalledWith("REL-1", "rework", "needs more", "review", target)
+  expect(api.advanceTask).toHaveBeenCalledWith("REL-1", "rework", "needs more", "review")
   expect(onChanged).toHaveBeenCalledTimes(1)
   expect(api.getTransitionRequest).not.toHaveBeenCalled()
 })
@@ -68,7 +68,7 @@ it("polls a pending request every second with the buttons disabled until it appl
   expect(screen.getByText("checking…")).toBeInTheDocument()
   expect(screen.getByRole("button", { name: "rework" })).toBeDisabled()
   await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
-  expect(api.getTransitionRequest).toHaveBeenCalledWith("REL-1", 11, target)
+  expect(api.getTransitionRequest).toHaveBeenCalledWith("REL-1", 11)
   expect(onChanged).not.toHaveBeenCalled()
   await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
   expect(api.getTransitionRequest).toHaveBeenCalledTimes(2)

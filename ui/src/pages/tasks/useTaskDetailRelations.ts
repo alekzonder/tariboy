@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useMutation } from "@tanstack/react-query"
-import type { TaskRelationType } from "@/lib/tasks"
+import type { TaskRelationType } from "@/lib/api"
 import type { TaskDetailProps } from "./TaskDetailTypes"
 
 export function useTaskDetailRelations(

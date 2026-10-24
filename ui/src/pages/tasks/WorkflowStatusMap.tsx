@@ -1,4 +1,4 @@
-import type { AgentPool, WorkflowDefinition } from "@/lib/tasks"
+import type { AgentPool, WorkflowDefinition } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { DANGER_FILL, MONO, PRIMARY_FILL } from "./panelStyles"
 

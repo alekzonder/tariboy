@@ -1,23 +1,49 @@
-import { afterEach, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import * as imageTransferApi from "@/lib/teamApi";
-import { ApiError } from "@/lib/api";
-import { StrictMode, useState } from "react";
+import { ApiError, createApi, type ApiClient, type ImageArchiveUpload } from "@/lib/api";
+import type { Daemon } from "@/lib/daemons";
+import { apiWrapper } from "@/test/api";
+import { StrictMode, useState, type ReactElement } from "react";
 import {
   ImageTransferDialog,
 } from "./ImageTransferDialog";
 import { eligibleImageTransferTargets } from "./imageTransferTargets";
 
-vi.mock("@/lib/teamApi", () => ({
-  downloadImageArchiveOn: vi.fn(),
-  uploadImageArchiveOn: vi.fn(),
-  applyImageArchiveOn: vi.fn(),
-}));
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>();
+  return { ...actual, createApi: vi.fn(actual.createApi) };
+});
 
-const downloadImageArchiveOn = vi.mocked(imageTransferApi.downloadImageArchiveOn);
-const uploadImageArchiveOn = vi.mocked(imageTransferApi.uploadImageArchiveOn);
-const applyImageArchiveOn = vi.mocked(imageTransferApi.applyImageArchiveOn);
+const actualApi = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+
+// Each archive call records the host of the client that made it, so the
+// assertions name the source and every destination explicitly.
+const downloadImageArchiveOn = vi.fn<(target: Daemon | null, ref: string) => Promise<Blob>>();
+const uploadImageArchiveOn = vi.fn<(target: Daemon | null, archive: Blob) => Promise<ImageArchiveUpload>>();
+const applyImageArchiveOn = vi.fn<(target: Daemon | null, importID: string, ref?: string) => Promise<unknown>>();
+
+function archiveClient(target: Daemon | null): ApiClient {
+  const client = actualApi.createApi(target);
+  return {
+    ...client,
+    images: {
+      ...client.images,
+      downloadImageArchive: (ref: string) => downloadImageArchiveOn(target, ref),
+      uploadImageArchive: (archive: Blob) => uploadImageArchiveOn(target, archive),
+      applyImageArchive: (importID: string, ref?: string) => applyImageArchiveOn(target, importID, ref),
+    },
+  };
+}
+
+// The dialog's source is the host it is rendered for.
+function render(element: ReactElement, source: Daemon | null = null) {
+  return rtlRender(element, { wrapper: apiWrapper(archiveClient(source)) });
+}
+
+beforeEach(() => {
+  vi.mocked(createApi).mockImplementation((target) => archiveClient(actualApi.resolveTarget(target)));
+});
 
 afterEach(() => vi.resetAllMocks());
 
@@ -43,11 +69,11 @@ it("selects every eligible target and permits individual deselection", () => {
     <ImageTransferDialog
       open
       onOpenChange={() => undefined}
-      source={source}
       imageRef="reviewer:v1"
       daemons={[source, ready, offline]}
       onComplete={() => undefined}
     />,
+    source,
   );
 
   const selectAll = screen.getByRole("button", { name: "All servers" });
@@ -71,7 +97,6 @@ it("disables transfer when no target is eligible", () => {
     <ImageTransferDialog
       open
       onOpenChange={() => undefined}
-      source={null}
       imageRef="reviewer:v1"
       daemons={[offline]}
       onComplete={() => undefined}
@@ -99,7 +124,6 @@ it("exports once, continues after a failed target, and reports an idempotent tar
     <ImageTransferDialog
       open
       onOpenChange={() => undefined}
-      source={null}
       imageRef="reviewer:v3"
       daemons={[targetA, targetB]}
       onComplete={() => undefined}
@@ -129,7 +153,7 @@ it("cancels before starting the next selected target", async () => {
   applyImageArchiveOn.mockImplementationOnce(() => new Promise<void>((resolve) => { finishFirstApply = resolve; }));
   const user = userEvent.setup();
 
-  render(<ImageTransferDialog open onOpenChange={() => undefined} source={null} imageRef="reviewer:v3" daemons={[targetA, targetB]} onComplete={() => undefined} />);
+  render(<ImageTransferDialog open onOpenChange={() => undefined} imageRef="reviewer:v3" daemons={[targetA, targetB]} onComplete={() => undefined} />);
   await user.click(screen.getByRole("button", { name: "All servers" }));
   await user.click(screen.getByRole("button", { name: "Start transfer" }));
   await waitFor(() => expect(applyImageArchiveOn).toHaveBeenCalledTimes(1));
@@ -154,7 +178,7 @@ it("retags and retries only the conflicted target without another export", async
     .mockResolvedValueOnce({ reused: false });
   const user = userEvent.setup();
 
-  render(<ImageTransferDialog open onOpenChange={() => undefined} source={null} imageRef="reviewer:v3" daemons={[target]} onComplete={() => undefined} />);
+  render(<ImageTransferDialog open onOpenChange={() => undefined} imageRef="reviewer:v3" daemons={[target]} onComplete={() => undefined} />);
   await user.click(screen.getByRole("button", { name: "All servers" }));
   await user.click(screen.getByRole("button", { name: "Start transfer" }));
   const retryRef = await screen.findByRole("textbox", { name: "Retag and retry for Target A" });
@@ -180,7 +204,7 @@ it("clears staged retry state when the dialog closes", async () => {
   const user = userEvent.setup();
   const Harness = () => {
     const [open, setOpen] = useState(true);
-    return <><button onClick={() => setOpen(true)}>Reopen</button><ImageTransferDialog open={open} onOpenChange={setOpen} source={null} imageRef="reviewer:v3" daemons={[target]} onComplete={() => undefined} /></>;
+    return <><button onClick={() => setOpen(true)}>Reopen</button><ImageTransferDialog open={open} onOpenChange={setOpen} imageRef="reviewer:v3" daemons={[target]} onComplete={() => undefined} /></>;
   };
 
   render(<Harness />);
@@ -209,7 +233,7 @@ it("cancels an in-flight transfer when its parent closes the dialog", async () =
     return <>
       <button data-testid="parent-close" onClick={() => setOpen(false)}>Parent close</button>
       <button data-testid="parent-reopen" onClick={() => setOpen(true)}>Parent reopen</button>
-      <ImageTransferDialog open={open} onOpenChange={setOpen} source={null} imageRef="reviewer:v3" daemons={[targetA, targetB]} onComplete={() => undefined} />
+      <ImageTransferDialog open={open} onOpenChange={setOpen} imageRef="reviewer:v3" daemons={[targetA, targetB]} onComplete={() => undefined} />
     </>;
   };
 
@@ -236,7 +260,7 @@ it("completes a transfer when React StrictMode replays its mount effect", async 
   applyImageArchiveOn.mockResolvedValue({ reused: false });
   const user = userEvent.setup();
 
-  render(<StrictMode><ImageTransferDialog open onOpenChange={() => undefined} source={null} imageRef="reviewer:v3" daemons={[target]} onComplete={onComplete} /></StrictMode>);
+  render(<StrictMode><ImageTransferDialog open onOpenChange={() => undefined} imageRef="reviewer:v3" daemons={[target]} onComplete={onComplete} /></StrictMode>);
   await user.click(screen.getByRole("button", { name: "All servers" }));
   await user.click(screen.getByRole("button", { name: "Start transfer" }));
 
@@ -255,7 +279,7 @@ it("keeps the selected target snapshot when the registry changes during export",
     const [daemons, setDaemons] = useState([target]);
     return <>
       <button onClick={() => setDaemons([])}>Remove target</button>
-      <ImageTransferDialog open onOpenChange={() => undefined} source={null} imageRef="reviewer:v3" daemons={daemons} onComplete={() => undefined} />
+      <ImageTransferDialog open onOpenChange={() => undefined} imageRef="reviewer:v3" daemons={daemons} onComplete={() => undefined} />
     </>;
   };
 
@@ -278,7 +302,7 @@ it("reports exporting and blocks cancellation until the source archive is ready"
   applyImageArchiveOn.mockImplementationOnce(() => new Promise<void>(() => undefined));
   const user = userEvent.setup();
 
-  render(<ImageTransferDialog open onOpenChange={() => undefined} source={null} imageRef="reviewer:v3" daemons={[target]} onComplete={() => undefined} />);
+  render(<ImageTransferDialog open onOpenChange={() => undefined} imageRef="reviewer:v3" daemons={[target]} onComplete={() => undefined} />);
   await user.click(screen.getByRole("button", { name: "All servers" }));
   await user.click(screen.getByRole("button", { name: "Start transfer" }));
 

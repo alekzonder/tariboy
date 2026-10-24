@@ -1,13 +1,8 @@
 import type { ReactNode } from "react"
-import type { ApiTarget } from "@/lib/api"
-import type {
-  TaskDetail as Detail, Task, TaskEvent, TaskPrincipals, TaskPriority,
-  TaskRelationType, TaskStatus,
-} from "@/lib/tasks"
+import type { TaskDetail as Detail, Task, TaskEvent, TaskPrincipals, TaskPriority, TaskRelationType, TaskStatus } from "@/lib/api"
 
 export interface TaskDetailProps {
   detail: Detail
-  target?: ApiTarget
   events: TaskEvent[]
   /**
    * The sequence of the last realtime hint about this task, for an owner

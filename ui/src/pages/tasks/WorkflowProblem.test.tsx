@@ -1,20 +1,21 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import type { ReactElement } from "react"
+import { act, fireEvent, render as renderWith, screen, within } from "@/test/queryRender"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-import type { ScriptRun, TransitionRequest, WorkflowView } from "@/lib/tasks"
+import type { WorkflowScriptRun, TransitionRequest, WorkflowView } from "@/lib/api"
 import WorkflowProblem from "./WorkflowProblem"
 import { customerView, poolView, remoteTarget } from "./workflowFixtures"
+import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ getTransitionRequest: vi.fn(), retryTransitionRequest: vi.fn(), getTaskScriptRunLog: vi.fn() }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  ...api,
-}))
+// The mocks are methods of a client bound to the remote host, so each call
+// they record went to that host.
+const remoteApi = fakeApi({ workflows: { getTransitionRequest: api.getTransitionRequest, retryTransitionRequest: api.retryTransitionRequest, getTaskScriptRunLog: api.getTaskScriptRunLog } }, remoteTarget)
+const render = (ui: ReactElement) => renderWith(ui, { api: remoteApi })
 
-const target = remoteTarget
 const request = (state: TransitionRequest["state"], extra: Partial<TransitionRequest> = {}): TransitionRequest => ({
   id: 11, task_key: "REL-1", outcome: "approve", actor: "user:owner", state, created_at: "2026-10-01T10:06:00Z", ...extra,
 })
-const failedRun: ScriptRun = { id: 8, task_key: "REL-1", kind: "check", script: "./checks/notes.sh", run_as: "queue", state: "finished",
+const failedRun: WorkflowScriptRun = { id: 8, task_key: "REL-1", kind: "check", script: "./checks/notes.sh", run_as: "queue", state: "finished",
   verdict: "failure", exit_code: 3, message: "the script failed with exit 3", request_id: 11,
   created_at: "2026-10-01T10:06:00Z", started_at: "2026-10-01T10:06:01Z", finished_at: "2026-10-01T10:06:02Z", log_path: "/l" }
 
@@ -27,7 +28,7 @@ afterEach(() => { vi.useRealTimers() })
 function renderProblem(view: WorkflowView) {
   const onChanged = vi.fn()
   const onRefresh = vi.fn()
-  const element = (next: WorkflowView) => <WorkflowProblem taskKey="REL-1" view={next} target={target} onChanged={onChanged} onRefresh={onRefresh} />
+  const element = (next: WorkflowView) => <WorkflowProblem taskKey="REL-1" view={next} onChanged={onChanged} onRefresh={onRefresh} />
   const { rerender, unmount } = render(element(view))
   return { onChanged, onRefresh, unmount, rerender: (next: WorkflowView) => rerender(element(next)) }
 }
@@ -40,7 +41,7 @@ it("explains a failed request with its run's log open and a Retry", async () => 
   expect(within(problem).getByText("the script failed with exit 3")).toBeInTheDocument()
   expect(problem).not.toHaveTextContent("log: /x/run.log")
   expect(problem).toHaveTextContent(/then Retry/)
-  expect(api.getTaskScriptRunLog).toHaveBeenCalledWith("REL-1", 8, undefined, target)
+  expect(api.getTaskScriptRunLog).toHaveBeenCalledWith("REL-1", 8, undefined)
   expect(problem.querySelector("pre")!.textContent).toContain("the script failed with exit 3")
   expect(within(problem).getByRole("listitem").querySelector("pre")!.textContent).toBe("Traceback: boom")
   expect(within(problem).getByRole("button", { name: "Retry" })).toBeEnabled()
@@ -52,10 +53,10 @@ it("retries the last failed request, even in a pool status, and follows it like 
   api.getTransitionRequest.mockResolvedValueOnce(request("applied", { id: 12 }))
   const { onChanged } = renderProblem({ ...poolView, last_request: request("failed", { result_message: "GitHub answered HTTP 401" }) })
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Retry" })) })
-  expect(api.retryTransitionRequest).toHaveBeenCalledWith("REL-1", 11, target)
+  expect(api.retryTransitionRequest).toHaveBeenCalledWith("REL-1", 11)
   expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled()
   await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
-  expect(api.getTransitionRequest).toHaveBeenCalledWith("REL-1", 12, target)
+  expect(api.getTransitionRequest).toHaveBeenCalledWith("REL-1", 12)
   expect(onChanged).toHaveBeenCalledTimes(1)
 })
 
@@ -105,7 +106,7 @@ it("says nothing on a closed or paused task, or while a request is checking", ()
 })
 
 it("explains a failed watch with its log open and the failures counted", async () => {
-  const watch: ScriptRun = { ...failedRun, id: 9, kind: "watch", script: "./scripts/ci.sh", request_id: undefined, message: "GitHub answered 502" }
+  const watch: WorkflowScriptRun = { ...failedRun, id: 9, kind: "watch", script: "./scripts/ci.sh", request_id: undefined, message: "GitHub answered 502" }
   await act(async () => {
     renderProblem({ ...customerView, status: "publish", owner: "script", waiting_on: "script", outcomes: [], runs: [watch],
       visits: [{ id: 3, sequence: 3, status: "publish", entered_at: "2026-10-01T10:05:00Z", entered_by: "u", script_failures: 2 }] })
@@ -114,7 +115,7 @@ it("explains a failed watch with its log open and the failures counted", async (
   expect(problem).toHaveAttribute("data-problem", "watch_failed")
   expect(problem).toHaveTextContent("The watch script failed")
   expect(problem).toHaveTextContent("2 of 3 script failures")
-  expect(api.getTaskScriptRunLog).toHaveBeenCalledWith("REL-1", 9, undefined, target)
+  expect(api.getTaskScriptRunLog).toHaveBeenCalledWith("REL-1", 9, undefined)
 })
 
 it("says a pool status waits for an agent, and counts idle iterations quietly", () => {

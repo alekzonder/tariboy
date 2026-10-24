@@ -1,16 +1,17 @@
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import type { ReactElement } from "react"
+import { act, cleanup, fireEvent, render as renderWith, screen, within } from "@/test/queryRender"
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
 import WorkflowPauseBanner from "./WorkflowPauseBanner"
 import { remoteTarget } from "./workflowFixtures"
+import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ resumeTaskWorkflow: vi.fn(), cancelWorkflowTask: vi.fn() }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  ...api,
-}))
+// The mocks are methods of a client bound to the remote host, so each call
+// they record went to that host.
+const remoteApi = fakeApi({ workflows: { resumeTaskWorkflow: api.resumeTaskWorkflow, cancelWorkflowTask: api.cancelWorkflowTask } }, remoteTarget)
+const render = (ui: ReactElement) => renderWith(ui, { api: remoteApi })
 
-const target = remoteTarget
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -20,7 +21,7 @@ beforeEach(() => {
 
 function renderBanner(reason = "rejected_requests", pool = true) {
   const onChanged = vi.fn()
-  render(<WorkflowPauseBanner taskKey="REL-1" reason={reason} pool={pool} target={target} onChanged={onChanged} />)
+  render(<WorkflowPauseBanner taskKey="REL-1" reason={reason} pool={pool} onChanged={onChanged} />)
   return { onChanged }
 }
 
@@ -63,7 +64,7 @@ it("continues after confirmation and reports the change", async () => {
   const { onChanged } = renderBanner()
   fireEvent.click(screen.getByRole("button", { name: "Continue" }))
   await confirm("Continue")
-  expect(api.resumeTaskWorkflow).toHaveBeenCalledWith("REL-1", "continue", target)
+  expect(api.resumeTaskWorkflow).toHaveBeenCalledWith("REL-1", "continue")
   expect(onChanged).toHaveBeenCalled()
 })
 
@@ -71,7 +72,7 @@ it("releases the holder after confirmation", async () => {
   const { onChanged } = renderBanner()
   fireEvent.click(screen.getByRole("button", { name: "Release holder" }))
   await confirm("Release holder")
-  expect(api.resumeTaskWorkflow).toHaveBeenCalledWith("REL-1", "release", target)
+  expect(api.resumeTaskWorkflow).toHaveBeenCalledWith("REL-1", "release")
   expect(onChanged).toHaveBeenCalled()
 })
 
@@ -79,7 +80,7 @@ it("cancels the task after confirmation", async () => {
   const { onChanged } = renderBanner()
   fireEvent.click(screen.getByRole("button", { name: "Cancel task" }))
   await confirm("Cancel task")
-  expect(api.cancelWorkflowTask).toHaveBeenCalledWith("REL-1", target)
+  expect(api.cancelWorkflowTask).toHaveBeenCalledWith("REL-1")
   expect(api.resumeTaskWorkflow).not.toHaveBeenCalled()
   expect(onChanged).toHaveBeenCalled()
 })

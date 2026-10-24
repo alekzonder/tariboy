@@ -2,16 +2,21 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
-import type { WorkflowManifest } from "@/lib/tasks"
+import type { WorkflowManifest } from "@/lib/api"
+import { apiWrapper, fakeApi } from "@/test/api"
 import WorkflowImageDetail from "./WorkflowImageDetail"
 
-const api = vi.hoisted(() => ({
+const api = {
   getWorkflowImage: vi.fn(), removeWorkflowImage: vi.fn(), listTaskQueues: vi.fn(), getQueueWorkflow: vi.fn(),
-}))
-vi.mock("@/lib/tasks", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/tasks")>(), ...api }))
+}
 vi.mock("@/components/DaemonProvider", () => ({ useOptionalDaemons: () => ({ daemons: [] }) }))
 
 const remote = { id: "remote", label: "Remote", baseURL: "https://remote", token: "t" }
+// The detail page reads the route host through its ApiProvider.
+const remoteApi = fakeApi({
+  workflows: { getWorkflowImage: api.getWorkflowImage, removeWorkflowImage: api.removeWorkflowImage, getQueueWorkflow: api.getQueueWorkflow },
+  tasks: { listTaskQueues: api.listTaskQueues },
+}, remote)
 const digest = "c".repeat(64)
 const manifest: WorkflowManifest = {
   schema_version: 1, name: "development", version: "0.1.0", digest, built_at: "2026-10-01T00:00:00Z",
@@ -41,16 +46,16 @@ beforeEach(() => {
 function renderDetail(tag = "0.1.0") {
   return render(<MemoryRouter initialEntries={[`/w/development/${tag}`]}>
     <Routes>
-      <Route path="/w/:name/:tag" element={<WorkflowImageDetail target={remote} name="development" tag={tag} basePath="/w" />} />
+      <Route path="/w/:name/:tag" element={<WorkflowImageDetail name="development" tag={tag} basePath="/w" />} />
       <Route path="/w" element={<p>list page</p>} />
     </Routes>
-  </MemoryRouter>)
+  </MemoryRouter>, { wrapper: apiWrapper(remoteApi) })
 }
 
 it("shows the status graph, limits, and declared parts of the manifest", async () => {
   renderDetail()
   const statuses = await screen.findByRole("table", { name: "Statuses" })
-  expect(api.getWorkflowImage).toHaveBeenCalledWith("development", "0.1.0", remote)
+  expect(api.getWorkflowImage).toHaveBeenCalledWith("development", "0.1.0")
   const rows = within(statuses).getAllByRole("row").slice(1)
   expect(rows[0]).toHaveTextContent("plan")
   expect(rows[0]).toHaveTextContent("initial")
@@ -91,7 +96,7 @@ it("removes the tag on the target and returns to the list", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "Remove tag" }))
   fireEvent.click(await screen.findByRole("button", { name: "Remove development:0.1.0" }))
   expect(await screen.findByText("list page")).toBeInTheDocument()
-  expect(api.removeWorkflowImage).toHaveBeenCalledWith("development", "0.1.0", remote)
+  expect(api.removeWorkflowImage).toHaveBeenCalledWith("development", "0.1.0")
 })
 
 it("explains workflow_in_use inline with the bound queues", async () => {

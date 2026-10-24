@@ -4,10 +4,10 @@ import {
 } from "react-router-dom";
 import { toast } from "sonner";
 import {
-  ApiError, imageManifestGet, imageProvenanceGet, removeImage,
-  type ImageManifest, type ImageProvenance,
+  ApiError, createApi, type ApiClient, type ImageManifest, type ImageProvenance,
 } from "@/lib/api";
-import { resolveDaemon, type Daemon } from "@/lib/daemons";
+import { resolveDaemon } from "@/lib/daemons";
+import { ApiProvider } from "@/components/ApiProvider";
 import { openHostPathInVSCode } from "@/lib/desktop";
 import { canOpenAgentCwdInVSCode } from "@/pages/agents/agentCwdVSCode";
 import { useOptionalDaemons } from "@/components/DaemonProvider";
@@ -25,7 +25,6 @@ export interface ImageOutletContext {
   manifest: ImageManifest | null;
   hostKey: string;
   provenance: ImageProvenance | null;
-  target: Daemon | null;
   onReadError: (error: unknown) => void;
 }
 
@@ -57,7 +56,7 @@ function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: 
   const ref = `${name}:${tag}`;
   const navigate = useNavigate();
   const daemonContext = useOptionalDaemons();
-  const [detail, setDetail] = useState<{ manifest: ImageManifest; provenance: ImageProvenance; target: Daemon | null } | null>(null);
+  const [detail, setDetail] = useState<{ manifest: ImageManifest; provenance: ImageProvenance; api: ApiClient } | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [revision, setRevision] = useState(0);
@@ -79,10 +78,13 @@ function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: 
     void (async () => {
       const target = await resolveDaemon(hostKey);
       if (hostKey && !target) throw new Error(`host ${hostKey} is not available`);
-      const manifest = await imageManifestGet(ref, target);
-      const provenance = await imageProvenanceGet(ref, target, manifest.digest);
+      // The image's host is resolved here, so this layout is the server
+      // boundary of its tabs: they read through the same client.
+      const api = createApi(target);
+      const manifest = await api.images.imageManifestGet(ref);
+      const provenance = await api.images.imageProvenanceGet(ref, manifest.digest);
       if (provenance.digest && provenance.digest !== manifest.digest) throw new ApiError(409, "image_changed", "Image changed; refresh to inspect the new build");
-      if (alive) { setDetail({ manifest, provenance, target }); setError(""); }
+      if (alive) { setDetail({ manifest, provenance, api }); setError(""); }
     })().catch((cause) => { if (alive) onReadError(cause); });
     return () => { alive = false; };
   }, [hostKey, ref, revision, onReadError]);
@@ -93,7 +95,7 @@ function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: 
   const remove = async () => {
     try {
       if (!detail) return;
-      await removeImage(ref, detail.target);
+      await detail.api.images.removeImage(ref);
       toast.success(`image ${ref} removed`);
       navigate(`${basePath}/${encodeURIComponent(name)}`);
     } catch (err) {
@@ -183,7 +185,7 @@ function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: 
           <div className="space-y-2"><p role="alert" className="text-sm text-destructive">{error}</p>
             <Button variant="outline" onClick={() => { refreshes.current = 0; setError(""); setRevision((value) => value + 1); }}>Refresh image</Button></div>
         ) : (
-          detail ? <Outlet key={detail.manifest.digest} context={{ ref, manifest: detail.manifest, hostKey, provenance: detail.provenance, target: detail.target, onReadError } satisfies ImageOutletContext} /> : <p className="text-sm text-muted-foreground">Loading…</p>
+          detail ? <ApiProvider client={detail.api}><Outlet key={detail.manifest.digest} context={{ ref, manifest: detail.manifest, hostKey, provenance: detail.provenance, onReadError } satisfies ImageOutletContext} /></ApiProvider> : <p className="text-sm text-muted-foreground">Loading…</p>
         )}
       </div>
     </div>

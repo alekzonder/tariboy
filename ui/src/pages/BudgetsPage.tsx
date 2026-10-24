@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,18 +10,19 @@ import { Badge } from "@/components/ui/badge";
 interface StatusRow { scope: string; limit_usd: number; spent_usd: number; mode: string; over: boolean }
 
 export default function BudgetsPage() {
+  const api = useApi();
   const [rows, setRows] = useState<StatusRow[]>([]);
   const [scope, setScope] = useState("global");
   const [limit, setLimit] = useState("");
   const [period, setPeriod] = useState("24h");
   const [mode, setMode] = useState("warn");
 
-  const load = () => apiGet<{ budgets: StatusRow[] }>("/api/budgets/status").then((r) => setRows(r.budgets)).catch(() => setRows([]));
-  useEffect(() => { void load(); }, []);
+  const load = useCallback(() => api.get<{ budgets: StatusRow[] }>("/api/budgets/status").then((r) => setRows(r.budgets)).catch(() => setRows([])), [api]);
+  useEffect(() => { void load(); }, [load]);
 
   const save = async () => {
     try {
-      await apiPost("/api/budgets", { scope, "limit-usd": limit, period, mode });
+      await api.post("/api/budgets", { scope, "limit-usd": limit, period, mode });
       toast.success("budget saved");
       setLimit("");
       void load();

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
+import { ApiProvider } from "@/components/ApiProvider"
 import { Input } from "@/components/ui/input"
 import { useTasksSocket } from "@/hooks/useTasksSocket"
 import type { HostAgents } from "@/lib/aggregate"
+import { createApi, type TaskPriority, type TaskQueue, type TaskStatusView } from "@/lib/api"
 import { buildTaskForest, flattenVisible, type VisibleTaskRow } from "@/lib/taskTree"
-import { createTask, listTaskQueues, updateTask, type TaskPriority, type TaskQueue, type TaskStatusView } from "@/lib/tasks"
 import { hostToParam, targetFor } from "@/lib/terminalsHost"
 import { TaskFilterBar } from "./TaskFilterBar"
 import TaskDrawer, { type AssigneeChoice } from "./TaskDrawer"
@@ -128,7 +129,7 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
 
   const changePriority = async (task: ServerTask, priority: TaskPriority) => {
     try {
-      await updateTask(task.key, { priority, revision: task.revision }, targetFor(task.serverId))
+      await createApi(targetFor(task.serverId)).tasks.updateTask(task.key, { priority, revision: task.revision })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     }
@@ -229,18 +230,20 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
         )}
       </main>
       {open && (
-        <TaskDrawer
-          key={`${open.serverId}\u0000${open.key}`}
-          taskKey={open.key}
-          target={targetFor(open.serverId)}
-          assignees={assignees}
-          onClose={() => setOpen(null)}
-          onMoved={(serverId) => {
-            reload(open.serverId)
-            reload(serverId)
-            setOpen({ serverId, key: open.key })
-          }}
-        />
+        // The task opens on its own server: everything inside addresses it.
+        <ApiProvider target={targetFor(open.serverId)}>
+          <TaskDrawer
+            key={`${open.serverId}\u0000${open.key}`}
+            taskKey={open.key}
+            assignees={assignees}
+            onClose={() => setOpen(null)}
+            onMoved={(serverId) => {
+              reload(open.serverId)
+              reload(serverId)
+              setOpen({ serverId, key: open.key })
+            }}
+          />
+        </ApiProvider>
       )}
     </div>
   )
@@ -270,7 +273,7 @@ function NewTaskForm({
   useEffect(() => {
     if (hostId === undefined) return
     let alive = true
-    listTaskQueues(targetFor(hostId))
+    createApi(targetFor(hostId)).tasks.listTaskQueues()
       .then((page) => {
         if (!alive) return
         const queues = page.queues ?? []
@@ -295,9 +298,8 @@ function NewTaskForm({
     if (!picked || !queue || !title.trim()) return
     setBusy(true)
     try {
-      const created = await createTask(
+      const created = await createApi(targetFor(picked.hostId)).tasks.createTask(
         { queue, title: title.trim(), assignee: `agent:${picked.name}` },
-        targetFor(picked.hostId),
       )
       rememberQueue(hostToParam(picked.hostId), queue)
       onCreated(picked.hostId, created.key)

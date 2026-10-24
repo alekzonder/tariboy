@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { DaemonProvider } from "@/components/DaemonProvider";
-import { addDaemon } from "@/lib/daemons";
+import { ApiProvider } from "@/components/ApiProvider";
+import { addDaemon, type Daemon } from "@/lib/daemons";
 import ImagesPage from "./ImagesPage";
 
 interface Call { url: string; method: string; body?: string }
@@ -42,11 +43,14 @@ function stubApi(calls: Call[]) {
   }));
 }
 
-function renderPage(hostId = "") {
+// An explicit host is mounted the way RouteHostBoundary mounts a route host:
+// as the ApiProvider of the page.
+function renderPage(host?: Daemon) {
+  const page = <ImagesPage hostId={host?.id ?? ""} />;
   return render(
     <MemoryRouter>
       <DaemonProvider>
-        <ImagesPage hostId={hostId} />
+        {host ? <ApiProvider target={host}>{page}</ApiProvider> : page}
       </DaemonProvider>
     </MemoryRouter>,
   );
@@ -93,10 +97,10 @@ describe("Images workspace", () => {
   });
 
   it("loads built images from the explicit host", async () => {
-    const host = await addDaemon({ label: "prod", baseURL: "https://prod:8765", token: "tp" });
+    const host = { ...await addDaemon({ label: "prod", baseURL: "https://prod:8765", token: "tp" }), token: "tp" };
     const calls: Call[] = [];
     stubApi(calls);
-    renderPage(host.id);
+    renderPage(host);
     await screen.findByRole("link", { name: "reviewer" });
 
     await waitFor(() => {

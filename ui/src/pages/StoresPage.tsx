@@ -1,23 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ApiError, targetReady } from "@/lib/api";
-import type { Daemon } from "@/lib/daemons";
 import {
-  addStore,
-  buildStoreImage,
-  buildStoreWorkflow,
-  getStore,
-  listStores,
-  refreshStore,
-  removeStore,
-  setStoreAuto,
+  ApiError,
   type Store,
   type StoreDetail,
   type StoreImage,
   type StoreWorkflow,
   TARIBOY_STORE,
-} from "@/lib/stores";
-import { listWorkflowImages, type WorkflowImage } from "@/lib/tasks";
+  type WorkflowImage,
+} from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -59,11 +51,11 @@ const workflowStatus = (workflow: StoreWorkflow, latest: string | null | undefin
   return latest === workflow.version ? "Up to date" : "Update needed";
 };
 
-export default function StoresPage({ target, name, basePath }: {
-  target: Daemon | null;
+export default function StoresPage({ name, basePath }: {
   name?: string;
   basePath: string;
 }) {
+  const api = useApi();
   const navigate = useNavigate();
   const mounted = useRef(true);
   const [stores, setStores] = useState<Store[]>([]);
@@ -90,9 +82,9 @@ export default function StoresPage({ target, name, basePath }: {
   }, []);
 
   useEffect(() => {
-    if (!targetReady(target)) return;
+    if (!api.ready) return;
     let current = true;
-    const request = name ? getStore(target, name) : listStores(target);
+    const request = name ? api.stores.getStore(name) : api.stores.listStores();
     void request.then((result) => {
       if (!current) return;
       if (name) {
@@ -110,13 +102,13 @@ export default function StoresPage({ target, name, basePath }: {
       if (current) setLoading(false);
     });
     if (name) {
-      void listWorkflowImages(target).then(
+      void api.workflows.listWorkflowImages().then(
         (images) => { if (current) setWorkflowImages(images); },
         () => { if (current) setWorkflowImages(null); },
       );
     }
     return () => { current = false; };
-  }, [name, target]);
+  }, [api, name]);
 
   const add = async (input: { name: string; source: string }, busyKey = "add") => {
     if (!input.name || !input.source) return;
@@ -124,7 +116,7 @@ export default function StoresPage({ target, name, basePath }: {
     setError("");
     setStatus("");
     try {
-      const added = await addStore(target, input);
+      const added = await api.stores.addStore(input);
       if (mounted.current) navigate(`${basePath}/${encodeURIComponent(added.name)}`);
     } catch (cause) {
       if (mounted.current) setError(message(cause));
@@ -140,7 +132,7 @@ export default function StoresPage({ target, name, basePath }: {
     setError("");
     setStatus("");
     try {
-      const refreshed = await refreshStore(target, name);
+      const refreshed = await api.stores.refreshStore(name);
       if (mounted.current) {
         setDetail(refreshed);
         setStatus(`Refreshed ${name}.`);
@@ -160,7 +152,7 @@ export default function StoresPage({ target, name, basePath }: {
     setError("");
     setStatus("");
     try {
-      const built = await buildStoreImage(target, { source: `${name}/${imageName}` });
+      const built = await api.stores.buildStoreImage({ source: `${name}/${imageName}` });
       if (isCurrent()) {
         setStatus(built.tag === "latest"
           ? `Built ${built.name}:latest.`
@@ -170,7 +162,7 @@ export default function StoresPage({ target, name, basePath }: {
       }
       if (!isCurrent()) return;
       try {
-        const refreshed = await getStore(target, name);
+        const refreshed = await api.stores.getStore(name);
         if (isCurrent()) setDetail(refreshed);
       } catch (cause) {
         if (isCurrent()) setError(message(cause));
@@ -190,14 +182,14 @@ export default function StoresPage({ target, name, basePath }: {
     setError("");
     setStatus("");
     try {
-      const built = await buildStoreWorkflow(target, `${name}/${workflowName}`);
+      const built = await api.stores.buildStoreWorkflow(`${name}/${workflowName}`);
       if (!isCurrent()) return;
       setStatus(`Built ${built.name} ${built.version} (tags: ${built.tags.join(", ")}).`);
       setBusy("");
       window.dispatchEvent(new Event("tariboy:workflow-image-built"));
       const [refreshed, images] = await Promise.all([
-        getStore(target, name),
-        listWorkflowImages(target).catch(() => null),
+        api.stores.getStore(name),
+        api.workflows.listWorkflowImages().catch(() => null),
       ]);
       if (isCurrent()) {
         setDetail(refreshed);
@@ -225,7 +217,7 @@ export default function StoresPage({ target, name, basePath }: {
     setError("");
     setStatus("");
     try {
-      const saved = await setStoreAuto(target, name, { interval, image: autoImages });
+      const saved = await api.stores.setStoreAuto(name, { interval, image: autoImages });
       if (mounted.current) {
         setDetail(saved);
         setAutoInterval(String(saved.auto?.interval_minutes ?? 0));
@@ -249,7 +241,7 @@ export default function StoresPage({ target, name, basePath }: {
     setRemoveError("");
     setStatus("");
     try {
-      await removeStore(target, name);
+      await api.stores.removeStore(name);
       if (mounted.current) navigate(basePath);
     } catch (cause) {
       if (mounted.current) {

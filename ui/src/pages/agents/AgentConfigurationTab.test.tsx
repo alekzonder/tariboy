@@ -7,6 +7,7 @@ import type { AgentImageStatus } from "@/lib/api";
 import type { AgentStatus, AgentView } from "@/lib/types";
 import { clearHarnessCatalogCache } from "@/hooks/useHarnessCatalog";
 import { RUNTIME_PRESETS_STORAGE_KEY } from "@/lib/runtimePresets";
+import { ApiProvider } from "@/components/ApiProvider";
 import AgentConfigurationTab from "./AgentConfigurationTab";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -164,11 +165,14 @@ function fakeServer(opts: {
 function tree(target: Daemon | null = remote, name = "worker", status: AgentStatus | null = null, refresh = vi.fn()) {
   return (
     <MemoryRouter>
-      <AgentNameContext.Provider value={name}>
-        <AgentStatusContext.Provider value={{ status, refresh: async () => {} }}>
-          <AgentConfigurationTab target={target} refresh={refresh} />
-        </AgentStatusContext.Provider>
-      </AgentNameContext.Provider>
+      {/* The agent workspace is the boundary that names the host. */}
+      <ApiProvider target={target}>
+        <AgentNameContext.Provider value={name}>
+          <AgentStatusContext.Provider value={{ status, refresh: async () => {} }}>
+            <AgentConfigurationTab refresh={refresh} />
+          </AgentStatusContext.Provider>
+        </AgentNameContext.Provider>
+      </ApiProvider>
     </MemoryRouter>
   );
 }

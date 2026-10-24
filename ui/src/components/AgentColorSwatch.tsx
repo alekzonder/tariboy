@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ApiError, setColor } from "@/lib/api"
+import { ApiError } from "@/lib/api"
+import { useApi } from "@/components/apiContext"
 import { setCachedColor } from "@/lib/colorCache"
 import { isValidHex, randomHex, swatchStyle } from "@/lib/utils"
 
@@ -37,6 +38,7 @@ export function AgentColorSwatch({
   color?: string
   onSaved?: (hex: string) => void | Promise<void>
 }) {
+  const api = useApi()
   const [open, setOpen] = useState(false)
   // The text input value (may be mid-edit / invalid).
   const [text, setText] = useState(FALLBACK)
@@ -64,7 +66,7 @@ export function AgentColorSwatch({
     const hex = text.trim().toLowerCase()
     setSaving(true)
     try {
-      await setColor(name, hex)
+      await api.agents.setColor(name, hex)
       // Reset the cache immediately so a reload paints the new color (and the
       // cache agrees with the optimistic value) without waiting on a poll.
       setCachedColor(name, hex)

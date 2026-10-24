@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   listDaemons, getActiveId, peekActiveId, setActiveId, resolveDaemon,
-  unresolvedDaemon, type DaemonMeta,
+  unresolvedDaemon, type Daemon, type DaemonMeta,
 } from "@/lib/daemons";
-import { setActiveDaemon } from "@/lib/api";
+import { getActiveDaemon, setActiveDaemon } from "@/lib/api";
+import { ApiProvider } from "./ApiProvider";
 import { daemonState, onHostState } from "@/lib/desktop";
 
 interface DaemonCtx {
@@ -17,8 +18,9 @@ interface DaemonCtx {
 const Ctx = createContext<DaemonCtx | null>(null);
 
 // DaemonProvider owns the registry state and is the single place that pushes the
-// active daemon into the api.ts client (setActiveDaemon), so every fetch/SSE
-// after a switch targets the selected host. On mount it re-applies the persisted
+// active daemon into the API layer (setActiveDaemon). It also mounts the
+// ApiProvider for the active host, so components outside a narrower server
+// boundary address the selected host. On mount it re-applies the persisted
 // active id (null = same-origin).
 export function DaemonProvider({ children }: { children: ReactNode }) {
   const [daemons, setDaemons] = useState<DaemonMeta[]>([]);
@@ -28,6 +30,11 @@ export function DaemonProvider({ children }: { children: ReactNode }) {
     setActiveDaemon(id ? unresolvedDaemon(id) : null);
     return id;
   });
+  const [active, setActiveState] = useState<Daemon | null>(getActiveDaemon);
+  const applyActive = useCallback((next: Daemon | null) => {
+    setActiveDaemon(next);
+    setActiveState(next);
+  }, []);
   const [registryError, setRegistryError] = useState("");
   // Every explicit selection invalidates older async hydration/refresh work.
   // Without this guard, the provider's mount fetch can finish after an agent
@@ -63,12 +70,12 @@ export function DaemonProvider({ children }: { children: ReactNode }) {
       if (revision !== selectionRevision.current) return;
       setDaemons(next);
       setActiveIdState(selected);
-      setActiveDaemon(active);
+      applyActive(active);
       setRegistryError(error);
     } catch (error) {
       if (revision === selectionRevision.current) setRegistryError(String(error));
     }
-  }, []);
+  }, [applyActive]);
 
   const select = useCallback(async (id: string) => {
     const revision = ++selectionRevision.current;
@@ -81,7 +88,7 @@ export function DaemonProvider({ children }: { children: ReactNode }) {
         await setActiveId(id);
         if (revision !== selectionRevision.current) return false;
         setActiveIdState(id);
-        setActiveDaemon(active);
+        applyActive(active);
         setRegistryError("");
         return true;
       } catch (error) {
@@ -91,7 +98,7 @@ export function DaemonProvider({ children }: { children: ReactNode }) {
     });
     selectionQueue.current = operation.then(() => undefined, () => undefined);
     return operation;
-  }, []);
+  }, [applyActive]);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,7 +125,7 @@ export function DaemonProvider({ children }: { children: ReactNode }) {
         if (cancelled || revision !== selectionRevision.current) return;
         setDaemons(next);
         setActiveIdState(selected);
-        setActiveDaemon(active);
+        applyActive(active);
         setRegistryError(error);
       } catch (error) {
         if (!cancelled) setRegistryError(String(error));
@@ -127,7 +134,7 @@ export function DaemonProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyActive]);
 
   useEffect(() => onHostState(() => void refresh()), [refresh]);
 
@@ -152,7 +159,7 @@ export function DaemonProvider({ children }: { children: ReactNode }) {
           Host registry: {registryError}
         </div>
       )}
-      {children}
+      <ApiProvider target={active}>{children}</ApiProvider>
     </Ctx.Provider>
   );
 }

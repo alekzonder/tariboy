@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { Task } from "./tasks"
+import type { Task } from "./api"
 import {
   buildTaskForest,
   canReorderTaskBeside,

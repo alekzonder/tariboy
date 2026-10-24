@@ -1,5 +1,5 @@
-import type { ApiTarget } from "@/lib/api"
-import { getTaskScriptRunLog, type ScriptRun } from "@/lib/tasks"
+import { useApi } from "@/components/apiContext"
+import type { WorkflowScriptRun } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { COUNT, EMPTY, LABEL, MONO } from "./panelStyles"
 import RunRow from "./RunRow"
@@ -8,11 +8,11 @@ import RunRow from "./RunRow"
  * The task's script runs, newest first. The view carries only the latest 20.
  * A log is read only when asked for, at the daemon's default size.
  */
-export default function WorkflowRuns({ taskKey, runs, target }: {
+export default function WorkflowRuns({ taskKey, runs }: {
   taskKey: string
-  runs: ScriptRun[]
-  target?: ApiTarget
+  runs: WorkflowScriptRun[]
 }) {
+  const api = useApi()
   const sorted = [...runs].sort((a, b) => b.id - a.id)
   return (
     <section className="flex min-w-0 flex-col gap-1.5">
@@ -32,7 +32,7 @@ export default function WorkflowRuns({ taskKey, runs, target }: {
             state={run.state} verdict={run.verdict} exitCode={run.exit_code}
             startedAt={run.started_at ?? run.created_at} finishedAt={run.finished_at} message={run.message}
             going={run.state === "pending" || run.state === "running"}
-            readLog={() => getTaskScriptRunLog(taskKey, run.id, undefined, target)} />
+            readLog={() => api.workflows.getTaskScriptRunLog(taskKey, run.id, undefined)} />
         ))}
       </ul>
     </section>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { getStatusHistory, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import type { StatusHistoryEvent } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -10,9 +11,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 // status-message timeline (read from the audit log). History is lazy-fetched
 // when the sheet opens, so a closed history costs nothing.
 export function StatusChatHistory({ name }: { name: string }) {
+  const api = useApi();
   const [events, setEvents] = useState<StatusHistoryEvent[]>([]);
   const load = () =>
-    getStatusHistory(name).then(
+    api.agents.getStatusHistory(name).then(
       (r) => setEvents(r.events ?? []),
       (e) => toast.error(e instanceof ApiError ? e.message : String(e)),
     );

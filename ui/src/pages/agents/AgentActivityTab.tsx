@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import AuditLogPage from "@/pages/AuditLogPage";
 import AgentUsagePage from "@/pages/AgentUsagePage";
-import { getStatusHistory } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { useAgentName } from "@/lib/agent";
 import { useActivityWindow } from "@/lib/activityPeriod";
-import { paramToHost, targetFor } from "@/lib/terminalsHost";
 import type { StatusHistoryEvent } from "@/lib/types";
 import { fmtDateTime } from "@/lib/time";
 import { useTaskActivity } from "@/hooks/useTaskActivity";
@@ -36,12 +35,11 @@ function viewFrom(params: URLSearchParams): View {
 
 export default function AgentActivityTab() {
   const name = useAgentName();
-  const { hostId: hostParam = "local" } = useParams();
   const { window, setPeriod, setCustom } = useActivityWindow();
   const [searchParams, setSearchParams] = useSearchParams();
   const view = viewFrom(searchParams);
-  const target = targetFor(paramToHost(hostParam));
-  const { report, error } = useTaskActivity(target, window, name);
+  const api = useApi();
+  const { report, error } = useTaskActivity(window, name);
   const [taskKey, setTaskKey] = useState("");
   // An invalid custom range shows its error and leaves the views unbounded.
   const bounds = { since: window.since, until: window.until };
@@ -49,8 +47,8 @@ export default function AgentActivityTab() {
   const [history, setHistory] = useState<StatusHistoryEvent[]>([]);
   useEffect(() => {
     if (view !== "status") return;
-    void getStatusHistory(name).then((result) => setHistory(result.events)).catch(() => setHistory([]));
-  }, [name, view]);
+    void api.agents.getStatusHistory(name).then((result) => setHistory(result.events)).catch(() => setHistory([]));
+  }, [api, name, view]);
   const inPeriod = history.filter((event) => {
     const at = Date.parse(event.ts);
     return !bounds.since || (at >= Date.parse(bounds.since) && at < Date.parse(bounds.until));
@@ -93,7 +91,7 @@ export default function AgentActivityTab() {
           </div>
         )}
       </div>
-      {taskKey && <TaskDrawer key={taskKey} taskKey={taskKey} target={target} onClose={() => setTaskKey("")} />}
+      {taskKey && <TaskDrawer key={taskKey} taskKey={taskKey} onClose={() => setTaskKey("")} />}
     </TabPage>
   );
 }

@@ -6,8 +6,9 @@ import { TuiScreen } from "@/components/TuiScreen";
 import { useFileDropTarget } from "@/hooks/useFileDropTarget";
 import { useSendFiles } from "@/hooks/useSendFiles";
 import { useTerminalSocket } from "@/hooks/useTerminalSocket";
-import { agentPostOn, ApiError } from "@/lib/api";
-import { hostToParam, targetFor } from "@/lib/terminalsHost";
+import { ApiError } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
+import { hostToParam } from "@/lib/terminalsHost";
 import type { AgentSummary } from "@/lib/types";
 
 export default function AgentConsoleTab({ hostId, agent, refresh, execCount = 0 }: {
@@ -17,12 +18,11 @@ export default function AgentConsoleTab({ hostId, agent, refresh, execCount = 0 
   /** Bumped by the header after each successful Exec. */
   execCount?: number;
 }) {
-  const target = targetFor(hostId);
+  const api = useApi();
   const interactive = agent.interactive !== false;
   const alive = agent.enabled ?? agent.state !== "stopped";
-  const controller = useTerminalSocket(agent.name, interactive && alive, target);
+  const controller = useTerminalSocket(agent.name, interactive && alive);
   const absentUpload = useSendFiles({
-    daemon: target,
     onUploaded: (paths) => toast.success(`uploaded: ${paths.join(", ")}`),
   });
   const absentDrop = useFileDropTarget(absentUpload.sendFiles);
@@ -37,7 +37,7 @@ export default function AgentConsoleTab({ hostId, agent, refresh, execCount = 0 
   };
 
   const start = () => act(async () => {
-    await agentPostOn(target, agent.name, "start");
+    await api.agents.startAgent(agent.name);
     controller.reconnect();
   });
   // Exec lives in the header; an interactive terminal reconnects after it.
@@ -65,7 +65,6 @@ export default function AgentConsoleTab({ hostId, agent, refresh, execCount = 0 
           <p>This agent has no interactive terminal.</p>
           <Link className="text-primary underline" to={configuration}>Open Configuration</Link>
           <SendFilesButton
-            daemon={target}
             onUploaded={(paths) => toast.success(`uploaded: ${paths.join(", ")}`)}
           />
         </div>
@@ -75,7 +74,7 @@ export default function AgentConsoleTab({ hostId, agent, refresh, execCount = 0 
           <p>Agent is stopped.</p>
         </div>
       ) : (
-        <TuiScreen controller={controller} fill daemon={target} onStart={start} />
+        <TuiScreen controller={controller} fill onStart={start} />
       )}
     </div>
   );

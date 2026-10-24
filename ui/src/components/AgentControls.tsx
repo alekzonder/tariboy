@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { MoreVertical, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { agentDeleteOn, agentPost, agentPostOn, ApiError } from "@/lib/api";
-import type { Daemon } from "@/lib/daemons";
+import { ApiError } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -36,13 +36,14 @@ function useAction(refresh?: () => void) {
 // handlers instead of hand-rolling a second start/stop control — and without
 // carrying Kill, Delete and the overflow menu onto that page.
 export function RunStateActions({ name, refresh }: { name: string; refresh?: () => void }) {
+  const api = useApi();
   const run = useAction(refresh);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" onClick={() => run("start", () => agentPost(name, "start"))}>Start</Button>
-      <Button size="sm" variant="secondary" onClick={() => run("stop", () => agentPost(name, "stop"))}>Stop</Button>
-      <Button size="sm" variant="secondary" onClick={() => run("restart", () => agentPost(name, "restart"))}>Restart</Button>
+      <Button size="sm" onClick={() => run("start", () => api.agentPost(name, "start"))}>Start</Button>
+      <Button size="sm" variant="secondary" onClick={() => run("stop", () => api.agentPost(name, "stop"))}>Stop</Button>
+      <Button size="sm" variant="secondary" onClick={() => run("restart", () => api.agentPost(name, "restart"))}>Restart</Button>
     </div>
   );
 }
@@ -57,13 +58,12 @@ export function RunStateActions({ name, refresh }: { name: string; refresh?: () 
  * Exec (a one-shot iteration with an optional prompt) sits in front of the
  * toggle and only while the agent is enabled.
  *
- * Every call is host-scoped (`agentPostOn(target, …)`): the workspace is
- * addressed by route, and must never fall back to the active daemon.
+ * Every call goes through the client of the nearest ApiProvider: the workspace
+ * is addressed by route, and must never fall back to the active daemon.
  */
 export function AgentControls({
-  target, name, alive, image, disabled = false, configurationPath, refresh, onExec, onDeleted,
+  name, alive, image, disabled = false, configurationPath, refresh, onExec, onDeleted,
 }: {
-  target: Daemon | null;
   name: string;
   /** The agent is up — the toggle offers Stop; otherwise it offers Start. */
   alive: boolean;
@@ -78,6 +78,7 @@ export function AgentControls({
   /** Called after the agent is deleted, so the caller can leave the route. */
   onDeleted?: () => void;
 }) {
+  const api = useApi();
   const run = useAction(refresh);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
@@ -89,7 +90,7 @@ export function AgentControls({
     if (execPending) return;
     setExecPending(true);
     try {
-      await agentPostOn(target, name, "exec", prompt ? { prompt } : undefined);
+      await api.agentPost(name, "exec", prompt ? { prompt } : undefined);
       setPrompt("");
       setExecOpen(false);
       refresh?.();
@@ -106,7 +107,7 @@ export function AgentControls({
     if (deletePending) return;
     setDeletePending(true);
     try {
-      await agentDeleteOn(target, name, { force: true, purge: true });
+      await api.agents.agentDelete(name, { force: true, purge: true });
       refresh?.();
       onDeleted?.();
     } catch (error) {
@@ -123,10 +124,10 @@ export function AgentControls({
       )}
       {alive ? (
         <Button size="sm" variant="secondary" disabled={disabled}
-          onClick={() => run("stop", () => agentPostOn(target, name, "stop"))}>Stop</Button>
+          onClick={() => run("stop", () => api.agentPost(name, "stop"))}>Stop</Button>
       ) : (
         <Button size="sm" disabled={disabled}
-          onClick={() => run("start", () => agentPostOn(target, name, "start"))}>Start</Button>
+          onClick={() => run("start", () => api.agentPost(name, "start"))}>Start</Button>
       )}
       <Button
         size="sm"
@@ -135,7 +136,7 @@ export function AgentControls({
         className="text-destructive"
         onClick={() => {
           if (window.confirm(`Kill the session for ${name}?`)) {
-            void run("kill", () => agentPostOn(target, name, "kill"));
+            void run("kill", () => api.agentPost(name, "kill"));
           }
         }}
       >

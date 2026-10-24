@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@/test/queryRender";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import ServerActivityPage from "./ServerActivityPage";
 
@@ -38,7 +38,7 @@ afterEach(() => vi.restoreAllMocks());
 const renderPage = () => render(
   <MemoryRouter initialEntries={["/servers/local/activity?period=week"]}>
     <Location />
-    <ServerActivityPage hostId="" target={null} />
+    <ServerActivityPage hostId="" />
   </MemoryRouter>,
 );
 

@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { render as renderWithApi, screen, waitFor } from "@/test/queryRender";
 import { IterationAuditLog } from "./IterationAuditLog";
-import * as api from "@/lib/api";
-import * as transcript from "@/lib/transcript";
+import { createApi, type ApiClient, type Call } from "@/lib/api";
+
+// One client per test; spies replace its domain methods.
+let api: ApiClient;
+const render = (el: ReactElement) => renderWithApi(el, { api });
 
 let urls: string[] = [];
 const ITER = "dev-worker-20260709065606-3";
@@ -12,6 +16,7 @@ const EVENTS = [
 ];
 
 beforeEach(() => {
+  api = createApi(null);
   urls = [];
   vi.stubGlobal("EventSource", class { addEventListener() {} removeEventListener() {} close() {} } as unknown as typeof EventSource);
   vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) => {
@@ -26,7 +31,7 @@ afterEach(() => {
 
 describe("IterationAuditLog", () => {
   it("fetches the iteration's events and shows a chip with id + status", async () => {
-    const subSpy = vi.spyOn(api, "subscribeAgentEvents");
+    const subSpy = vi.spyOn(api.agents, "subscribeAgentEvents");
     render(<IterationAuditLog name="dev-worker" iterationId={ITER} iterationStatus="running" />);
     await waitFor(() => expect(screen.getByText("manual")).toBeInTheDocument());
     expect(urls.some((u) => u.includes(`iteration=${ITER}`))).toBe(true);
@@ -51,11 +56,11 @@ describe("IterationAuditLog transcript enrichment", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("renders a proxycall row from the fetched transcript", async () => {
-    vi.spyOn(api, "agentGet").mockResolvedValue({
+    vi.spyOn(api.audit, "listAuditEvents").mockResolvedValue({
       events: [{ seq: 1, kind: "harness_output", source: "harness", data: "{}", at: "2026-07-10T00:00:03Z", iteration_id: "it" }],
     } as unknown as never);
-    vi.spyOn(api, "subscribeAgentEvents").mockReturnValue(() => {});
-    vi.spyOn(transcript, "fetchTranscript").mockResolvedValue([
+    vi.spyOn(api.agents, "subscribeAgentEvents").mockReturnValue(() => {});
+    vi.spyOn(api.audit, "fetchTranscript").mockResolvedValue([
       { seq: 0, ts: "2026-07-10T00:00:02Z", provider: "anthropic", model: "claude-opus-4", instructions: "S", instructions_changed: true, delta: [], response: { blocks: [{ type: "thinking", text: "hmm" }] } },
     ]);
     render(<IterationAuditLog name="a1" iterationId="it" iterationStatus="running" />);
@@ -63,9 +68,9 @@ describe("IterationAuditLog transcript enrichment", () => {
   });
 
   it("renders proxy-call content in full mode (no harness_output events)", async () => {
-    vi.spyOn(api, "agentGet").mockResolvedValue({ events: [] } as unknown as never);
-    vi.spyOn(api, "subscribeAgentEvents").mockReturnValue(() => {});
-    vi.spyOn(transcript, "fetchTranscript").mockResolvedValue([
+    vi.spyOn(api.audit, "listAuditEvents").mockResolvedValue({ events: [] } as unknown as never);
+    vi.spyOn(api.agents, "subscribeAgentEvents").mockReturnValue(() => {});
+    vi.spyOn(api.audit, "fetchTranscript").mockResolvedValue([
       {
         seq: 0,
         ts: "2026-07-10T00:00:02Z",
@@ -86,10 +91,10 @@ describe("IterationAuditLog transcript enrichment", () => {
 
   it("loads a terminal iteration transcript only once", async () => {
     vi.useFakeTimers();
-    vi.spyOn(api, "agentGet").mockResolvedValue({ events: [] } as unknown as never);
-    let notify: Parameters<typeof api.subscribeAgentEvents>[2] = () => {};
-    vi.spyOn(api, "subscribeAgentEvents").mockImplementation((_name, _types, callback) => { notify = callback; return () => {}; });
-    const fetchSpy = vi.spyOn(transcript, "fetchTranscript").mockResolvedValue([]);
+    vi.spyOn(api.audit, "listAuditEvents").mockResolvedValue({ events: [] } as unknown as never);
+    let notify: Parameters<ApiClient["agents"]["subscribeAgentEvents"]>[2] = () => {};
+    vi.spyOn(api.agents, "subscribeAgentEvents").mockImplementation((_name, _types, callback) => { notify = callback; return () => {}; });
+    const fetchSpy = vi.spyOn(api.audit, "fetchTranscript").mockResolvedValue([]);
     render(<IterationAuditLog name="a1" iterationId="done-1" iterationStatus="done" />);
     await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
     notify({} as never);
@@ -100,10 +105,10 @@ describe("IterationAuditLog transcript enrichment", () => {
 
   it("does not overlap a running transcript request from timer or events", async () => {
     vi.useFakeTimers();
-    vi.spyOn(api, "agentGet").mockResolvedValue({ events: [] } as unknown as never);
-    let notify: Parameters<typeof api.subscribeAgentEvents>[2] = () => {};
-    vi.spyOn(api, "subscribeAgentEvents").mockImplementation((_name, _types, callback) => { notify = callback; return () => {}; });
-    const fetchSpy = vi.spyOn(transcript, "fetchTranscript").mockReturnValue(new Promise(() => {}));
+    vi.spyOn(api.audit, "listAuditEvents").mockResolvedValue({ events: [] } as unknown as never);
+    let notify: Parameters<ApiClient["agents"]["subscribeAgentEvents"]>[2] = () => {};
+    vi.spyOn(api.agents, "subscribeAgentEvents").mockImplementation((_name, _types, callback) => { notify = callback; return () => {}; });
+    const fetchSpy = vi.spyOn(api.audit, "fetchTranscript").mockReturnValue(new Promise(() => {}));
     render(<IterationAuditLog name="a1" iterationId="running-1" iterationStatus="running" />);
     await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
     notify({} as never);
@@ -113,12 +118,12 @@ describe("IterationAuditLog transcript enrichment", () => {
   });
 
   it("aborts and ignores a previous iteration transcript", async () => {
-    vi.spyOn(api, "agentGet").mockResolvedValue({ events: [] } as unknown as never);
-    vi.spyOn(api, "subscribeAgentEvents").mockReturnValue(() => {});
-    let resolveOld!: (calls: transcript.Call[]) => void;
-    const old = new Promise<transcript.Call[]>((resolve) => { resolveOld = resolve; });
+    vi.spyOn(api.audit, "listAuditEvents").mockResolvedValue({ events: [] } as unknown as never);
+    vi.spyOn(api.agents, "subscribeAgentEvents").mockReturnValue(() => {});
+    let resolveOld!: (calls: Call[]) => void;
+    const old = new Promise<Call[]>((resolve) => { resolveOld = resolve; });
     const current = [{ seq: 0, ts: "t", provider: "openai", model: "current-model", instructions: "", instructions_changed: true, delta: [], response: { blocks: [] } }];
-    const fetchSpy = vi.spyOn(transcript, "fetchTranscript").mockImplementation((_name, iteration) => iteration === "old" ? old : Promise.resolve(current));
+    const fetchSpy = vi.spyOn(api.audit, "fetchTranscript").mockImplementation((_name, iteration) => iteration === "old" ? old : Promise.resolve(current));
     const view = render(<IterationAuditLog name="a1" iterationId="old" iterationStatus="running" />);
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
     view.rerender(<IterationAuditLog name="a1" iterationId="new" iterationStatus="done" />);

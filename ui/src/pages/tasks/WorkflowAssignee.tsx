@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useApiQuery, useApiTarget } from "@/hooks/useApiQuery"
-import type { ApiTarget } from "@/lib/api"
-import { reassignTaskWorkflow, type Task } from "@/lib/tasks"
+import { useApi } from "@/components/apiContext"
+import { useApiQuery } from "@/hooks/useApiQuery"
+import type { Task } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { FIELD_MONO, LABEL, MONO, SelectShell } from "./panelStyles"
 import { taskQueries, writeTask } from "./taskQueries"
@@ -12,21 +12,20 @@ import { errorText } from "./workflowShared"
  * customer picks another member of that pool, and the daemon hands the status
  * to it at once; anywhere else the workflow alone decides, so it is text.
  */
-export default function WorkflowAssignee({ task, target: inputTarget, onTaskChanged }: {
+export default function WorkflowAssignee({ task, onTaskChanged }: {
   task: Task
-  target?: ApiTarget
   onTaskChanged?: () => void
 }) {
-  const target = useApiTarget(inputTarget)
+  const api = useApi()
   const client = useQueryClient()
-  const view = useApiQuery(taskQueries.workflow(target, task.key), target).data
+  const view = useApiQuery(taskQueries.workflow(api, task.key)).data
   const editable = task.access !== "context" && task.access !== "respond"
   const pool = editable && view && !view.paused_reason && view.waiting_on !== "pause" && view.owner.startsWith("pool:")
     && task.category !== "done" && task.category !== "cancelled" ? view.owner.slice("pool:".length) : ""
-  const pools = useApiQuery(taskQueries.pools(target, pool ? task.queue : ""), target).data
+  const pools = useApiQuery(taskQueries.pools(api, pool ? task.queue : "")).data
   const members = pools?.items.find((item) => item.name === pool)?.agents ?? []
   const reassign = useMutation({
-    mutationFn: (agent: string) => writeTask(client, target, () => reassignTaskWorkflow(task.key, agent, target)),
+    mutationFn: (agent: string) => writeTask(client, api, () => api.workflows.reassignTaskWorkflow(task.key, agent)),
     onSuccess: () => onTaskChanged?.(),
   })
 

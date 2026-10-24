@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@/test/queryRender";
 import userEvent from "@testing-library/user-event";
 import { SendFilesButton } from "./SendFilesButton";
-import * as api from "@/lib/api";
+import { createApi } from "@/lib/api";
 
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) => {
@@ -29,7 +29,7 @@ describe("SendFilesButton", () => {
       text: async () => JSON.stringify(envelope),
       json: async () => envelope,
     } as Response)).mockRejectedValueOnce(new Error("Upload failed"));
-    render(<SendFilesButton daemon={null} onUploaded={onUploaded} />);
+    render(<SendFilesButton onUploaded={onUploaded} />, { api: createApi(null) });
     await userEvent.upload(document.querySelector('input[type="file"]') as HTMLInputElement, [new File(["a"], "a.txt"), new File(["b"], "b.txt")]);
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(["/server/files/one/a.txt"]));
     expect(screen.getByRole("button", { name: "Send files" })).toBeEnabled();
@@ -62,19 +62,21 @@ describe("SendFilesButton", () => {
     expect(calls[0][1].body).toBe(a);
   });
 
-  it("passes the target daemon to serverUploadFile", async () => {
+  it("uploads through the client of the surrounding host", async () => {
     const d = { id: "d1", label: "x", baseURL: "https://h", token: "t" };
+    const api = createApi(d);
     const spy = vi
-      .spyOn(api, "serverUploadFile")
+      .spyOn(api.files, "serverUploadFile")
       .mockResolvedValue({ path: "a.txt", abs: "/cwd/a.txt", bytes: 1 });
     const onUploaded = vi.fn();
-    render(<SendFilesButton daemon={d} onUploaded={onUploaded} />);
+    render(<SendFilesButton onUploaded={onUploaded} />, { api });
 
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     const a = new File(["a"], "a.txt", { type: "text/plain" });
     await userEvent.upload(input, [a]);
 
     await waitFor(() => expect(onUploaded).toHaveBeenCalled());
-    expect(spy).toHaveBeenCalledWith(expect.anything(), d);
+    expect(spy).toHaveBeenCalledWith(a);
+    expect(api.target).toBe(d);
   });
 });

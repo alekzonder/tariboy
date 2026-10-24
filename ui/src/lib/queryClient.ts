@@ -1,7 +1,8 @@
 import { QueryCache, QueryClient } from "@tanstack/react-query"
-import { ApiError, type ApiTarget } from "./api"
+import { ApiError } from "./api"
+import type { Daemon } from "./daemons"
 
-export const apiServerKey = (target: Exclude<ApiTarget, undefined>) => ["server", target?.id ?? "local"] as const
+export const apiServerKey = (target: Daemon | null) => ["server", target?.id ?? "local"] as const
 export const errorText = (error: unknown): string => error instanceof Error ? error.message : String(error)
 export const isAccessError = (error: unknown) => error instanceof ApiError && (error.status === 401 || error.status === 403)
 

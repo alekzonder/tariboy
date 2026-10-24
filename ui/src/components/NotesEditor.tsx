@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAgentName } from "@/lib/agent";
-import { getNotes, setNotes, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -11,17 +12,18 @@ const err = (e: unknown) => toast.error(e instanceof ApiError ? e.message : Stri
 // the text actually changed). It self-fetches by agent name.
 export function NotesEditor() {
   const name = useAgentName();
+  const api = useApi();
   const [notes, setLocal] = useState("");
   const [loaded, setLoaded] = useState("");
 
   useEffect(() => {
-    getNotes(name).then((r) => { setLocal(r.notes ?? ""); setLoaded(r.notes ?? ""); }, err);
-  }, [name]);
+    api.agents.getNotes(name).then((r) => { setLocal(r.notes ?? ""); setLoaded(r.notes ?? ""); }, err);
+  }, [api, name]);
 
   const saveOnBlur = () => {
     if (notes === loaded) return;
     setLoaded(notes);
-    setNotes(name, notes).then(() => toast.success("notes saved"), err);
+    api.agents.setNotes(name, notes).then(() => toast.success("notes saved"), err);
   };
 
   return (

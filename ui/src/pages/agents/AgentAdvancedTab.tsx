@@ -7,7 +7,7 @@ import AgentScripts from "@/pages/AgentScripts";
 import AuditLogPage from "@/pages/AuditLogPage";
 import AgentUsagePage from "@/pages/AgentUsagePage";
 import { Button } from "@/components/ui/button";
-import { getAgent, getAgentStatus } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { useAgentName } from "@/lib/agent";
 import TabPage from "@/components/TabPage";
 
@@ -32,12 +32,13 @@ function isView(value: string | null): value is View {
 
 function RawSnapshot() {
   const name = useAgentName();
+  const api = useApi();
   const [snapshot, setSnapshot] = useState<unknown>(null);
   useEffect(() => {
-    void Promise.all([getAgent(name), getAgentStatus(name)])
+    void Promise.all([api.agents.getAgent(name), api.agents.getAgentStatus(name)])
       .then(([configuration, status]) => setSnapshot({ configuration, status }))
       .catch((error) => setSnapshot({ error: String(error) }));
-  }, [name]);
+  }, [api, name]);
   return <pre className="overflow-auto rounded-md border bg-muted/30 p-4 text-xs">{JSON.stringify(snapshot, null, 2)}</pre>;
 }
 

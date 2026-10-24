@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { agentDeleteOn, agentPostOn } from "@/lib/api";
-import * as api from "@/lib/api";
 import { toast } from "sonner";
-import { resolveDaemon } from "@/lib/daemons";
+import { ApiProvider } from "@/components/ApiProvider";
+import { useApi } from "@/components/apiContext";
+import type { ApiClient } from "@/lib/api";
+import { fakeApi } from "@/test/api";
 import type { AgentSummary } from "@/lib/types";
 import AgentConsoleTab from "./AgentConsoleTab";
 
@@ -16,10 +17,6 @@ vi.mock("react-router-dom", async (importOriginal) => {
   return { ...actual, useNavigate: () => navigate };
 });
 
-vi.mock("@/lib/api", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, agentPostOn: vi.fn(), agentDeleteOn: vi.fn() };
-});
 vi.mock("@/hooks/useTerminalSocket", () => ({
   useTerminalSocket: vi.fn(() => ({
     status: "open", absent: false, send: vi.fn(), sendResize: vi.fn(),
@@ -28,12 +25,17 @@ vi.mock("@/hooks/useTerminalSocket", () => ({
 }));
 vi.mock("@/components/TuiScreen", () => ({ TuiScreen: () => <div data-testid="tui-screen" /> }));
 vi.mock("@/components/SendFilesButton", () => ({
-  SendFilesButton: ({ name, daemon }: { name: string; daemon?: { id: string } | null }) => (
-    <button data-testid="send-files" data-agent-name={name} data-daemon-id={daemon?.id}>Send files</button>
-  ),
+  SendFilesButton: function SendFiles({ name }: { name: string }) {
+    // The button uploads to the server of the surrounding ApiProvider.
+    const daemon = useApi().target;
+    return <button data-testid="send-files" data-agent-name={name} data-daemon-id={daemon?.id}>Send files</button>;
+  },
 }));
 
 const target = { id: "remote", label: "Remote", baseURL: "https://remote.test", token: "secret" };
+const serverUploadFile = vi.fn();
+const startAgent = vi.fn();
+let client: ApiClient;
 
 function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
   return {
@@ -46,22 +48,19 @@ function renderTab(value = agent()) {
   const refresh = vi.fn();
   render(
     <MemoryRouter>
-      <AgentConsoleTab hostId="remote" agent={value} refresh={refresh} />
+      <ApiProvider client={client}>
+        <AgentConsoleTab hostId="remote" agent={value} refresh={refresh} />
+      </ApiProvider>
     </MemoryRouter>,
   );
   return refresh;
 }
 
-beforeEach(async () => {
-  localStorage.clear();
-  sessionStorage.clear();
-  localStorage.setItem("tariboy_daemons", JSON.stringify([
-    { id: target.id, label: target.label, baseURL: target.baseURL },
-  ]));
-  sessionStorage.setItem(`tariboy_daemon_token_${target.id}`, target.token);
-  await resolveDaemon(target.id);
-  vi.mocked(agentDeleteOn).mockReset();
-  vi.mocked(agentPostOn).mockReset();
+beforeEach(() => {
+  serverUploadFile.mockReset();
+  startAgent.mockReset();
+  // The agent workspace is the boundary that names the route host.
+  client = fakeApi({ files: { serverUploadFile }, agents: { startAgent } }, target);
   navigate.mockReset();
   reconnect.mockReset();
 });
@@ -88,7 +87,7 @@ describe("AgentConsoleTab non-interactive uploads", () => {
   });
 
   it("case 6: drops on the non-interactive panel, uploads the files, and toasts the paths", async () => {
-    const upload = vi.spyOn(api, "serverUploadFile").mockResolvedValue({
+    const upload = serverUploadFile.mockResolvedValue({
       path: "staged.txt", abs: "/cwd/staged.txt", bytes: 1,
     });
     const success = vi.spyOn(toast, "success");
@@ -98,7 +97,8 @@ describe("AgentConsoleTab non-interactive uploads", () => {
       dataTransfer: { files: [new File(["staged"], "staged.txt")] },
     });
 
-    await waitFor(() => expect(upload).toHaveBeenCalledWith(expect.any(File), target));
+    await waitFor(() => expect(upload).toHaveBeenCalledWith(expect.any(File)));
+    expect(client.target).toEqual(target);
     expect(success).toHaveBeenCalledWith("uploaded: /cwd/staged.txt");
   });
 });
@@ -120,12 +120,12 @@ describe("AgentConsoleTab and header Exec", () => {
   it("reconnects an interactive terminal when the header reports a started Exec", () => {
     const value = agent({ interactive: true, state: "running" });
     const { rerender } = render(
-      <MemoryRouter><AgentConsoleTab hostId="remote" agent={value} refresh={vi.fn()} execCount={2} /></MemoryRouter>,
+      <MemoryRouter><ApiProvider client={client}><AgentConsoleTab hostId="remote" agent={value} refresh={vi.fn()} execCount={2} /></ApiProvider></MemoryRouter>,
     );
     expect(reconnect).not.toHaveBeenCalled();
 
     rerender(
-      <MemoryRouter><AgentConsoleTab hostId="remote" agent={value} refresh={vi.fn()} execCount={3} /></MemoryRouter>,
+      <MemoryRouter><ApiProvider client={client}><AgentConsoleTab hostId="remote" agent={value} refresh={vi.fn()} execCount={3} /></ApiProvider></MemoryRouter>,
     );
     expect(reconnect).toHaveBeenCalledOnce();
   });

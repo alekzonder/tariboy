@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import type { ApiTarget } from "@/lib/api"
-import { listQueueSecrets, removeQueueSecret, setQueueSecret, type QueueSecretInfo } from "@/lib/tasks"
+import type { QueueSecretInfo } from "@/lib/api"
 import { COUNT, EMPTY, FIELD, LABEL, QUIET_ACTION } from "./panelStyles"
 import { formatTaskTime } from "./taskTime"
 import { useWorkflowConfirm } from "./WorkflowConfirm"
@@ -14,9 +14,8 @@ import { errorText, keyProblem } from "./workflowShared"
  * write-only: it lives in the password input until submit, then is cleared,
  * and nothing here ever reads or renders one.
  */
-export default function QueueSecrets({ queue, target, missing = [], missingMessage = "", revision = 0, envKeys = [], onKeys, onChanged }: {
+export default function QueueSecrets({ queue, missing = [], missingMessage = "", revision = 0, envKeys = [], onKeys, onChanged }: {
   queue: string
-  target?: ApiTarget
   /** Names a failed bind reported without a value. */
   missing?: string[]
   missingMessage?: string
@@ -28,6 +27,7 @@ export default function QueueSecrets({ queue, target, missing = [], missingMessa
   /** Told of a change instead of reloading only this list. */
   onChanged?: () => void
 }) {
+  const api = useApi()
   const [secrets, setSecrets] = useState<QueueSecretInfo[]>([])
   const [globalEnv, setGlobalEnv] = useState<string[]>([])
   const [key, setKey] = useState("")
@@ -40,13 +40,13 @@ export default function QueueSecrets({ queue, target, missing = [], missingMessa
 
   const load = useCallback(async () => {
     try {
-      const list = await listQueueSecrets(queue, target)
+      const list = await api.workflows.listQueueSecrets(queue)
       setSecrets(list.secrets)
       setGlobalEnv(list.global_env)
       onKeys?.(list.secrets.map((secret) => secret.key))
       setLoaded(true)
     } catch (err) { setError(errorText(err)) }
-  }, [queue, target, onKeys])
+  }, [queue, api, onKeys])
   useEffect(() => { void Promise.resolve().then(load) }, [load, revision])
   const reload = onChanged ?? load
 
@@ -61,7 +61,7 @@ export default function QueueSecrets({ queue, target, missing = [], missingMessa
       setError("")
       setBusy(true)
       try {
-        await setQueueSecret(queue, name, secret, target)
+        await api.workflows.setQueueSecret(queue, name, secret)
         setKey("")
         await reload()
       } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
@@ -82,7 +82,7 @@ export default function QueueSecrets({ queue, target, missing = [], missingMessa
     run: () => {
       setError("")
       setBusy(true)
-      removeQueueSecret(queue, name, target).then(reload, (err) => setError(errorText(err))).finally(() => setBusy(false))
+      api.workflows.removeQueueSecret(queue, name).then(reload, (err) => setError(errorText(err))).finally(() => setBusy(false))
     },
   })
   const stillMissing = missing.filter((name) => !envKeys.includes(name) && !secrets.some((secret) => secret.key === name))

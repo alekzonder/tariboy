@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
-  ApiError, createAgent, imageManifestGet, listGroups, listImages,
+  ApiError,
   type CreateAgentSpec, type GroupRow, type ImageManifest, type ImageRow,
 } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { EditablePresetCombobox } from "@/components/EditablePresetCombobox";
 import { PathAutocomplete } from "@/components/PathAutocomplete";
 import { HARNESSES, ImageCombobox, serializeEnv, commaFieldError, type EnvRow } from "@/components/AgentFormFields";
@@ -21,6 +22,7 @@ import {
 import { rememberRuntimePreset, runtimePresetOptions } from "@/lib/runtimePresets";
 
 export default function AgentCreate() {
+  const api = useApi();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [images, setImages] = useState<ImageRow[]>([]);
@@ -45,14 +47,14 @@ export default function AgentCreate() {
   const [fieldErr, setFieldErr] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    void listImages().then((r) => setImages(r.images ?? [])).catch(() => setImages([]));
-    void listGroups().then((r) => setGroups(r.groups ?? [])).catch(() => setGroups([]));
-  }, []);
+    void api.images.listImages().then((r) => setImages(r.images ?? [])).catch(() => setImages([]));
+    void api.groups.listGroups().then((r) => setGroups(r.groups ?? [])).catch(() => setGroups([]));
+  }, [api]);
 
   useEffect(() => {
     if (!image) return;
     let alive = true;
-    void imageManifestGet(image)
+    void api.images.imageManifestGet(image)
       .then((next) => {
         if (!alive) return;
         setManifest(next);
@@ -69,7 +71,7 @@ export default function AgentCreate() {
     return () => {
       alive = false;
     };
-  }, [image]);
+  }, [api, image]);
 
   const currentManifest = manifestImage === image ? manifest : null;
   const allowsPluginOverrides = currentManifest?.schema_version === 1;
@@ -113,7 +115,7 @@ export default function AgentCreate() {
     };
     setBusy(true);
     try {
-      const r = await createAgent(spec);
+      const r = await api.agents.createAgent(spec);
       if (model.trim()&&model.trim()!==defaultModel) {
         rememberRuntimePreset(harness, "models", model);
       }

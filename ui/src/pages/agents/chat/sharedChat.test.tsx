@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@/test/queryRender";
 import userEvent from "@testing-library/user-event";
 import AgentChat from "./AgentChat";
 import { chatIdFromTitle, sharedChats } from "./chatModel";

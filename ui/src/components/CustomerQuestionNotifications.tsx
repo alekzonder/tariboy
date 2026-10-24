@@ -4,12 +4,7 @@ import { useDaemons } from "@/components/DaemonProvider"
 import { useTasksSocket } from "@/hooks/useTasksSocket"
 import { hasLocalDaemon, onTaskNotificationActivated, showTaskNotification } from "@/lib/desktop"
 import { resolveDaemon, type Daemon } from "@/lib/daemons"
-import {
-  listTaskNotifications,
-  listTasks,
-  markTaskNotificationRead,
-  type TaskNotification,
-} from "@/lib/tasks"
+import { createApi, type ApiClient, type TaskNotification } from "@/lib/api"
 import { serverPath } from "@/lib/terminalsHost"
 import {
   CustomerQuestionNotificationsContext,
@@ -120,8 +115,9 @@ export function CustomerQuestionNotifications({ children }: { children: ReactNod
           CUSTOMER_QUESTION_ACTIVATION_TIMEOUT_MS,
         )
         if (activation.host_id !== "" && (!target || target.id !== activation.host_id)) return
+        // Each watched host has its own client; the activation names the host.
         await withTimeout(
-          markTaskNotificationRead(activation.notification_id, target),
+          createApi(target ?? null).tasks.markTaskNotificationRead(activation.notification_id),
           CUSTOMER_QUESTION_ACTIVATION_TIMEOUT_MS,
         )
       } catch {
@@ -174,7 +170,8 @@ function HostQuestionWatcher({
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const generationRef = useRef(0)
   const labelRef = useRef(label)
-  const refreshTargetRef = useRef<Daemon | null | undefined>(undefined)
+  // The client of the last successful baseline; undefined while recovering.
+  const refreshClientRef = useRef<ApiClient | undefined>(undefined)
   const previousSocketStatus = useRef<"connecting" | "open" | "closed">("closed")
 
   useEffect(() => {
@@ -194,16 +191,16 @@ function HostQuestionWatcher({
   }, [hostId, onSnapshot])
 
   const readAuthoritativeSnapshot = useCallback(async (
-    resolved: Daemon | null,
+    client: ApiClient,
     baseline: boolean,
     generation: number,
   ) => {
     const [inbox, taskPage] = await Promise.all([
-      listTaskNotifications(false, resolved),
-      listTasks({ limit: 1, status_view: "all" }, resolved),
+      client.tasks.listTaskNotifications(false),
+      client.tasks.listTasks({ limit: 1, status_view: "all" }),
     ])
     if (generationRef.current !== generation) return false
-    if (baseline) refreshTargetRef.current = resolved
+    if (baseline) refreshClientRef.current = client
     const notifications = inbox.notifications ?? []
     const fresh: FreshQuestion[] = []
     for (const notification of notifications) {
@@ -231,8 +228,8 @@ function HostQuestionWatcher({
   }, [])
 
   const refresh = useCallback(async () => {
-    const refreshTarget = refreshTargetRef.current
-    if (refreshTarget === undefined) return
+    const refreshClient = refreshClientRef.current
+    if (refreshClient === undefined) return
     if (refreshState.current.running) {
       refreshState.current.pending = true
       return
@@ -242,13 +239,13 @@ function HostQuestionWatcher({
     try {
       do {
         refreshState.current.pending = false
-        if (!await readAuthoritativeSnapshot(refreshTarget, false, generation)) break
+        if (!await readAuthoritativeSnapshot(refreshClient, false, generation)) break
       } while (generationRef.current === generation && refreshState.current.pending)
     } catch {
       // Preserve the last successful snapshot, but recover through the same
       // silent baseline used at mount so an outage cannot replay alerts.
       if (generationRef.current === generation) {
-        refreshTargetRef.current = undefined
+        refreshClientRef.current = undefined
         setHealth("recovering")
         setSocketEnabled(false)
         setTarget(undefined)
@@ -270,14 +267,14 @@ function HostQuestionWatcher({
       if (hostId && !resolved) throw new Error(`host ${hostId} is unavailable`)
       if (generationRef.current !== generation) return
       setTarget(resolved)
-      const applied = await readAuthoritativeSnapshot(resolved, true, generation)
+      const applied = await readAuthoritativeSnapshot(createApi(resolved), true, generation)
       if (generationRef.current === generation && applied) {
         setHealth("healthy")
         setSocketEnabled(true)
       }
     } catch {
       if (generationRef.current === generation) {
-        refreshTargetRef.current = undefined
+        refreshClientRef.current = undefined
         setHealth("recovering")
         scheduleBaselineRetry(generation)
       }
@@ -291,7 +288,7 @@ function HostQuestionWatcher({
 
     return () => {
       generationRef.current += 1
-      refreshTargetRef.current = undefined
+      refreshClientRef.current = undefined
       if (retryTimer.current) clearTimeout(retryTimer.current)
       retryTimer.current = null
       onRemove(hostId)
@@ -304,7 +301,8 @@ function HostQuestionWatcher({
   }, [beginBaseline, retryRequest])
 
   const socketStatus = useTasksSocket({
-    target,
+    // Unresolved hosts keep the socket disabled until the baseline lands.
+    target: target ?? null,
     after: sequence,
     enabled: socketEnabled,
     onHint: () => void refresh(),

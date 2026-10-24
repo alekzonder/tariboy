@@ -5,9 +5,14 @@ import { toast } from "sonner";
 import { useLayoutEffect, useState } from "react";
 import { addDaemon, updateDaemon, type Daemon, type DaemonMeta } from "@/lib/daemons";
 import * as daemonsApi from "@/lib/daemons";
-import { setActiveDaemon } from "@/lib/api";
-import * as imageTransferApi from "@/lib/teamApi";
+import { createApi, setActiveDaemon } from "@/lib/api";
+import { ApiProvider } from "@/components/ApiProvider";
+import { apiWrapper } from "@/test/api";
 import BuiltImages from "./BuiltImages";
+
+// BuiltImages renders under the route host's ApiProvider.
+const on = (target: Daemon | null) => ({ wrapper: apiWrapper(createApi(target)) });
+const routeHost = async (id: string) => on(await daemonsApi.resolveDaemon(id));
 
 const daemonContext = vi.hoisted(() => ({ daemons: [] as DaemonMeta[] }));
 
@@ -30,20 +35,28 @@ it("starts transfer from the route source instead of the active daemon", async (
   await updateDaemon(target.id, { label: "Target", baseURL: "https://target-reconnected" });
   const activeTarget = { id: "active", label: "Active", baseURL: "https://active", token: "active-token" };
   setActiveDaemon(activeTarget);
-  const download = vi.spyOn(imageTransferApi, "downloadImageArchiveOn").mockResolvedValue(new Blob(["archive"]));
-  vi.spyOn(imageTransferApi, "uploadImageArchiveOn").mockResolvedValue({ import_id: "import-1", ref: "built:v1", digest: "digest" });
-  vi.spyOn(imageTransferApi, "applyImageArchiveOn").mockResolvedValue({});
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
-    if (String(input) === "https://source/api/images") {
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path === "https://source/api/images") {
       return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { images: [
         { name: "built", tag: "v1", bare: false, exportable: true },
         { name: "basic", tag: "latest", bare: false, exportable: false },
       ] } }), { status: 200 }));
     }
-    return Promise.reject(new Error(`unexpected request ${String(input)}`));
-  }));
+    if (path === "https://source/api/images/built%3Av1/export") {
+      return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(new Blob(["archive"])) } as Response);
+    }
+    if (path === "https://target-reconnected/api/image-imports") {
+      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { import_id: "import-1", ref: "built:v1", digest: "digest" } }), { status: 200 }));
+    }
+    if (path === "https://target-reconnected/api/image-imports/import-1/apply") {
+      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 }));
+    }
+    return Promise.reject(new Error(`unexpected request ${path}`));
+  });
+  vi.stubGlobal("fetch", fetchMock);
 
-  render(<MemoryRouter><BuiltImages imageName="built" hostId={source.id} /></MemoryRouter>);
+  render(<MemoryRouter><BuiltImages imageName="built" hostId={source.id} /></MemoryRouter>, await routeHost(source.id));
 
   await screen.findByRole("button", { name: "Upload to servers built:v1" });
   expect(screen.queryByRole("button", { name: /Upload to servers basic:latest/ })).toBeNull();
@@ -51,14 +64,17 @@ it("starts transfer from the route source instead of the active daemon", async (
   fireEvent.click(await screen.findByRole("button", { name: "All servers" }));
   fireEvent.click(screen.getByRole("button", { name: "Start transfer" }));
 
-  await waitFor(() => expect(download).toHaveBeenCalledWith(
-    expect.objectContaining({ id: source.id, baseURL: "https://source" }),
-    "built:v1",
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+    "https://source/api/images/built%3Av1/export",
+    expect.objectContaining({ method: "GET" }),
   ));
-  expect(download).not.toHaveBeenCalledWith(activeTarget, "built:v1");
-  await waitFor(() => expect(imageTransferApi.uploadImageArchiveOn).toHaveBeenCalledWith(
-    expect.objectContaining({ id: target.id, baseURL: "https://target-reconnected" }),
-    expect.any(Blob),
+  expect(fetchMock).not.toHaveBeenCalledWith(
+    expect.stringContaining(activeTarget.baseURL),
+    expect.anything(),
+  );
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+    "https://target-reconnected/api/image-imports",
+    expect.objectContaining({ method: "POST", body: expect.any(Blob) }),
   ));
 });
 
@@ -83,7 +99,7 @@ it("exports from the route host instead of the active daemon", async () => {
   let downloaded = "";
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) { downloaded = this.download; });
 
-  render(<MemoryRouter><BuiltImages imageName="reviewer" hostId={source.id} /></MemoryRouter>);
+  render(<MemoryRouter><BuiltImages imageName="reviewer" hostId={source.id} /></MemoryRouter>, await routeHost(source.id));
 
   fireEvent.click(await screen.findByRole("button", { name: "Export reviewer:v3" }));
   await waitFor(() => expect(downloaded).toBe("reviewer-v3.tariboy-image.tar.gz"));
@@ -111,7 +127,7 @@ it("imports into the route host instead of the active daemon", async () => {
   });
   vi.stubGlobal("fetch", fetchMock);
 
-  render(<MemoryRouter><BuiltImages hostId={source.id} /></MemoryRouter>);
+  render(<MemoryRouter><BuiltImages hostId={source.id} /></MemoryRouter>, await routeHost(source.id));
 
   const archiveInput = await screen.findByLabelText("Import image archive");
   await waitFor(() => expect(archiveInput).toBeEnabled());
@@ -143,7 +159,7 @@ it("removes from the route host instead of the active daemon", async () => {
   });
   vi.stubGlobal("fetch", fetchMock);
 
-  render(<MemoryRouter><BuiltImages imageName="reviewer" hostId={source.id} /></MemoryRouter>);
+  render(<MemoryRouter><BuiltImages imageName="reviewer" hostId={source.id} /></MemoryRouter>, await routeHost(source.id));
 
   fireEvent.click(await screen.findByRole("button", { name: "Remove reviewer:v3" }));
   fireEvent.click(screen.getByRole("button", { name: "Remove image" }));
@@ -168,7 +184,7 @@ it("waits for the current destination generation before opening a transfer", asy
     { name: "built", tag: "v1", bare: false, exportable: true },
   ] } }), { status: 200 })));
 
-  render(<MemoryRouter><BuiltImages imageName="built" hostId={source.id} /></MemoryRouter>);
+  render(<MemoryRouter><BuiltImages imageName="built" hostId={source.id} /></MemoryRouter>, on(resolvedSource));
 
   const action = await screen.findByRole("button", { name: "Upload to servers built:v1" });
   expect(action).toBeDisabled();
@@ -196,6 +212,10 @@ it("does not invoke an upload action bound to the previous route host", async ()
     return Promise.reject(new Error(`unexpected request ${String(input)}`));
   }));
 
+  const hosts = {
+    [sourceA.id]: await daemonsApi.resolveDaemon(sourceA.id),
+    [sourceB.id]: await daemonsApi.resolveDaemon(sourceB.id),
+  };
   const RouteTransition = () => {
     const [hostId, setHostId] = useState(sourceA.id);
     useLayoutEffect(() => {
@@ -206,7 +226,7 @@ it("does not invoke an upload action bound to the previous route host", async ()
     }, [hostId]);
     return <>
       <button onClick={() => setHostId(sourceB.id)}>Switch route</button>
-      <BuiltImages imageName="built" hostId={hostId} />
+      <ApiProvider target={hosts[hostId]}><BuiltImages imageName="built" hostId={hostId} /></ApiProvider>
     </>;
   };
 
@@ -233,6 +253,7 @@ it("exports runnable images and distinguishes original builds from imports", asy
       <BuiltImages hostId="" basePath="/servers/local/images" />
       {["built", "imported", "missing", "bare"].map((name) => <BuiltImages key={name} imageName={name} hostId="" basePath="/servers/local/images" />)}
     </MemoryRouter>,
+    on(null),
   );
 
   expect(await screen.findByRole("button", { name: "Export built:v1" })).toBeEnabled();
@@ -268,7 +289,7 @@ it("downloads the runnable bundle and confirms the saved portable filename", asy
   const success = vi.spyOn(toast, "success");
   let downloaded = "";
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) { downloaded = this.download; });
-  render(<MemoryRouter><BuiltImages imageName="reviewer" hostId="" /></MemoryRouter>);
+  render(<MemoryRouter><BuiltImages imageName="reviewer" hostId="" /></MemoryRouter>, on(null));
 
   fireEvent.click(await screen.findByRole("button", { name: "Export reviewer:v3" }));
   await waitFor(() => expect(downloaded).toBe("reviewer-v3.tariboy-image.tar.gz"));
@@ -292,7 +313,7 @@ it("lets the operator retag a conflicting image import", async () => {
     return Promise.reject(new Error(`unexpected request ${init?.method} ${path}`));
   });
   vi.stubGlobal("fetch", fetchMock);
-  render(<MemoryRouter><BuiltImages hostId="" /></MemoryRouter>);
+  render(<MemoryRouter><BuiltImages hostId="" /></MemoryRouter>, on(null));
 
   const archiveInput = screen.getByLabelText("Import image archive");
   await waitFor(() => expect(archiveInput).toBeEnabled());

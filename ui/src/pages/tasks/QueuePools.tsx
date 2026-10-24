@@ -1,9 +1,9 @@
 import { useId, useState } from "react"
 import { X } from "lucide-react"
 import { toast } from "sonner"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
-import { ApiError, type ApiTarget } from "@/lib/api"
-import { rebindAgentPool, type AgentPool } from "@/lib/tasks"
+import { ApiError, type AgentPool } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { EMPTY, FIELD, MONO } from "./panelStyles"
 import { errorText } from "./workflowShared"
@@ -17,9 +17,8 @@ function actionKey(): string {
  * even before they exist, then the queue's other pools and the rows added here.
  * A row saves its whole agent list with the pool's revision.
  */
-export default function QueuePools({ queue, target, pools, required, agents, onSaved, onReload }: {
+export default function QueuePools({ queue, pools, required, agents, onSaved, onReload }: {
   queue: string
-  target?: ApiTarget
   pools: AgentPool[]
   /** Pool name → the workflow statuses that use it; none for a pool a refused bind named. */
   required: Map<string, string[]>
@@ -50,7 +49,7 @@ export default function QueuePools({ queue, target, pools, required, agents, onS
     {names.length === 0 && <p className={EMPTY}>No pools. A workflow names the pools its statuses use.</p>}
     {names.map((name) => {
       const pool = pools.find((item) => item.name === name)
-      return <PoolRow key={`${name}:${pool?.revision ?? 0}`} queue={queue} target={target} name={name} pool={pool}
+      return <PoolRow key={`${name}:${pool?.revision ?? 0}`} queue={queue} name={name} pool={pool}
         statuses={required.get(name)} listId={listId}
         onSaved={(saved) => { setNotice(""); onSaved(saved) }}
         onConflict={() => { setNotice("Configuration changed elsewhere. Current revisions were reloaded; review and retry."); onReload() }} />
@@ -64,9 +63,8 @@ export default function QueuePools({ queue, target, pools, required, agents, onS
   </section>
 }
 
-function PoolRow({ queue, target, name, pool, statuses, listId, onSaved, onConflict }: {
+function PoolRow({ queue, name, pool, statuses, listId, onSaved, onConflict }: {
   queue: string
-  target?: ApiTarget
   name: string
   pool?: AgentPool
   statuses?: string[]
@@ -74,6 +72,7 @@ function PoolRow({ queue, target, name, pool, statuses, listId, onSaved, onConfl
   onSaved: (pool: AgentPool) => void
   onConflict: () => void
 }) {
+  const api = useApi()
   const saved = pool?.agents ?? []
   const [draft, setDraft] = useState(saved)
   const [entry, setEntry] = useState("")
@@ -92,7 +91,7 @@ function PoolRow({ queue, target, name, pool, statuses, listId, onSaved, onConfl
     setBusy(true)
     setError("")
     try {
-      const updated = await rebindAgentPool(queue, name, draft, pool?.revision ?? 0, actionKey(), target)
+      const updated = await api.tasks.rebindAgentPool(queue, name, draft, pool?.revision ?? 0, actionKey())
       onSaved(updated)
       toast.success(`Pool ${name} saved`)
     } catch (err) {

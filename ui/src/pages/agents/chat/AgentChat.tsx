@@ -29,7 +29,7 @@ export default function AgentChat({ hostId = "", leading, personalOnly = false }
 }) {
   const chat = useAgentChat(hostId);
   const {
-    name, target, draft, setDraft, sending, writable, openQuestion, selected,
+    name, draft, setDraft, sending, writable, openQuestion, selected,
     setSelected, send, loadShared,
   } = chat;
   const [creating, setCreating] = useState(false);
@@ -54,7 +54,6 @@ export default function AgentChat({ hostId = "", leading, personalOnly = false }
       {writable ? (
         <ChatComposer
           agent={name}
-          target={target}
           value={draft}
           onChange={setDraft}
           onSend={() => void send()}
@@ -72,14 +71,12 @@ export default function AgentChat({ hostId = "", leading, personalOnly = false }
         <TaskDrawer
           key={taskKey}
           taskKey={taskKey}
-          target={target}
           onClose={() => setTaskKey("")}
         />
       )}
       {creating && (
         <ChatCreate
           agent={name}
-          target={target}
           onClose={() => setCreating(false)}
           onCreated={(chat) => { setCreating(false); setSelected(chat); void loadShared(); }}
         />
@@ -88,7 +85,6 @@ export default function AgentChat({ hostId = "", leading, personalOnly = false }
         <ChatTaskFromMessage
           message={taskFrom}
           agent={name}
-          target={target}
           onClose={() => setTaskFrom(null)}
           onCreated={(key) => { setTaskFrom(null); setTaskKey(key); }}
         />

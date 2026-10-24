@@ -2,28 +2,29 @@ import { useEffect, useState } from "react";
 import { useAgentName } from "@/lib/agent";
 import {
   ApiError,
-  agentPromptGet, agentUserPromptGet, agentUserPromptSet,
   type AgentPromptLayer,
 } from "@/lib/api";
 import { guard } from "@/lib/toast-guard";
+import { useApi } from "@/components/apiContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 function UserPromptEditor({ name }: { name: string }) {
+  const api = useApi();
   const [text, setText] = useState("");
   useEffect(() => {
-    void agentUserPromptGet(name).then((r) => setText(r.user_prompt)).catch(() => setText(""));
-  }, [name]);
+    void api.agents.agentUserPromptGet(name).then((r) => setText(r.user_prompt)).catch(() => setText(""));
+  }, [api, name]);
   return (
     <Card>
       <CardHeader className="pb-2"><CardTitle className="text-base">User prompt</CardTitle></CardHeader>
       <CardContent className="space-y-2">
         <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} className="font-mono text-xs" />
         <div className="flex gap-2">
-          <Button size="sm" onClick={() => guard("user-prompt", () => agentUserPromptSet(name, text))}>Save prompt</Button>
+          <Button size="sm" onClick={() => guard("user-prompt", () => api.agents.agentUserPromptSet(name, text))}>Save prompt</Button>
           <Button size="sm" variant="secondary"
-            onClick={() => { setText(""); void guard("user-prompt", () => agentUserPromptSet(name, "")); }}>
+            onClick={() => { setText(""); void guard("user-prompt", () => api.agents.agentUserPromptSet(name, "")); }}>
             Clear
           </Button>
         </div>
@@ -33,14 +34,15 @@ function UserPromptEditor({ name }: { name: string }) {
 }
 
 function PromptPreview({ name }: { name: string }) {
+  const api = useApi();
   const [prompt, setPrompt] = useState("");
   const [layers, setLayers] = useState<AgentPromptLayer[]>([]);
   const [error, setError] = useState("");
   useEffect(() => {
-    void agentPromptGet(name)
+    void api.agents.agentPromptGet(name)
       .then((r) => { setPrompt(r.prompt); setLayers(r.layers ?? []); setError(""); })
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-  }, [name]);
+  }, [api, name]);
   return (
     <Card>
       <CardHeader className="pb-2"><CardTitle className="text-base">Prompt preview</CardTitle></CardHeader>

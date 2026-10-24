@@ -3,15 +3,10 @@ import { toast } from "sonner";
 import { useAgentName } from "@/lib/agent";
 import {
   ApiError,
-  agentInboxClear,
-  agentInboxList,
-  agentInboxProcessed,
-  agentInboxReply,
-  agentInboxRequeue,
-  subscribeAgentEvents,
   type InboxItem,
   type InboxStatus,
 } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -125,6 +120,7 @@ function MessageRow({
 // mutate then reload the active view; live refresh rides the SSE `message`
 // stream with a poll fallback.
 export default function AgentMessages({ leading }: { leading?: ReactNode } = {}) {
+  const api = useApi();
   const name = useAgentName();
   const [view, setView] = useState<View>("queue");
   const [page, setPage] = useState<{ view: View; items: InboxItem[] }>({ view: "queue", items: [] });
@@ -135,10 +131,10 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
 
   const load = useCallback(
     (v: View) =>
-      agentInboxList(name, VIEW_STATUS[v])
+      api.messages.agentInboxList(name, VIEW_STATUS[v])
         .then((r) => setPage({ view: v, items: r.messages ?? [] }))
         .catch(() => { /* keep last rows on a transient failure */ }),
-    [name],
+    [api, name],
   );
   const items = page.view === view ? page.items : [];
 
@@ -148,9 +144,9 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
     if (!name) return;
     void load(view);
     const t = window.setInterval(() => void load(view), 3000);
-    const off = subscribeAgentEvents(name, ["message"], () => void load(view));
+    const off = api.agents.subscribeAgentEvents(name, ["message"], () => void load(view));
     return () => { window.clearInterval(t); off(); };
-  }, [name, view, load]);
+  }, [api, name, view, load]);
 
   const toggle = (id: string) =>
     setExpanded((prev) => {
@@ -178,13 +174,13 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
     setBusy(true);
     try {
       if (dialog.mode === "clear") {
-        const result = await agentInboxClear(name);
+        const result = await api.messages.agentInboxClear(name);
         toast.success(`deleted ${result.deleted_deliveries} deliveries and ${result.deleted_messages} messages`);
       } else if (dialog.mode === "processed") {
-        await agentInboxProcessed(name, dialog.item.id, text);
+        await api.messages.agentInboxProcessed(name, dialog.item.id, text);
         toast.success("marked processed");
       } else {
-        await agentInboxReply(name, dialog.item.id, text);
+        await api.messages.agentInboxReply(name, dialog.item.id, text);
         toast.success("replied");
       }
       setDialog(null);
@@ -198,7 +194,7 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
 
   const requeue = async (item: InboxItem) => {
     try {
-      await agentInboxRequeue(name, item.id);
+      await api.messages.agentInboxRequeue(name, item.id);
       toast.success("requeued");
       await load(view);
     } catch (e) {

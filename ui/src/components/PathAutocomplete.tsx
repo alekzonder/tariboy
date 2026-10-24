@@ -7,8 +7,8 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
-import { fsList, type FsEntry } from "@/lib/api"
-import type { Daemon } from "@/lib/daemons"
+import type { FsEntry } from "@/lib/api"
+import { useApi } from "@/components/apiContext"
 import { cn } from "@/lib/utils"
 
 export interface PathAutocompleteProps {
@@ -21,9 +21,6 @@ export interface PathAutocompleteProps {
   "aria-label"?: string
   /** Debounce before a listing request; 0 in tests for determinism. */
   debounceMs?: number
-  /** Target host for the listing (undefined = active daemon, null =
-   * same-origin), for cross-host views like /terminals. */
-  daemon?: Daemon | null
 }
 
 // splitPath breaks a full path into the parent listing *prefix* (everything up
@@ -52,8 +49,9 @@ export function PathAutocomplete({
   className,
   debounceMs = 150,
   "aria-label": ariaLabel,
-  daemon,
 }: PathAutocompleteProps) {
+  // The listing addresses the surrounding ApiProvider's host.
+  const api = useApi()
   const { prefix, tail } = useMemo(() => splitPath(value), [value])
   const [entries, setEntries] = useState<FsEntry[]>([])
   const [open, setOpen] = useState(false)
@@ -63,7 +61,7 @@ export function PathAutocomplete({
   const reqSeq = useRef(0)
   // Cache keys are prefixed by daemon id so switching targets never serves a
   // stale listing from a different host under the same path.
-  const daemonKey = daemon?.id ?? ""
+  const daemonKey = api.target?.id ?? ""
 
   // Fetch the listing for the current prefix, debounced, with a per-prefix cache
   // so moving within one segment never refetches. A monotonically increasing
@@ -80,7 +78,7 @@ export function PathAutocomplete({
       return
     }
     const timer = setTimeout(() => {
-      fsList(prefix, daemon)
+      api.files.fsList(prefix)
         .then((r) => {
           if (seq !== reqSeq.current) return
           cache.current.set(cacheKey, r.entries)
@@ -93,8 +91,7 @@ export function PathAutocomplete({
         })
     }, debounceMs)
     return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- daemon serialized as daemonKey to avoid identity churn
-  }, [prefix, debounceMs, daemonKey])
+  }, [api, prefix, debounceMs, daemonKey])
 
   const filtered = useMemo(
     () =>

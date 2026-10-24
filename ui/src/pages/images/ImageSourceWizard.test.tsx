@@ -2,15 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ApiError } from "@/lib/api";
-import * as sourceApi from "@/lib/imageSources";
+import { apiWrapper, fakeApi } from "@/test/api";
 import ImageSourceWizard from "./ImageSourceWizard";
 
-vi.mock("@/lib/imageSources", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/imageSources")>("@/lib/imageSources");
-  return { ...actual, createImageSource: vi.fn() };
-});
-
-const create = vi.mocked(sourceApi.createImageSource);
+const api = fakeApi({ imageSources: { createImageSource: vi.fn() } });
+const create = vi.mocked(api.imageSources.createImageSource);
 
 function renderWizard() {
   return render(
@@ -20,6 +16,7 @@ function renderWizard() {
         <Route path="/images/sources/:name" element={<div>source editor</div>} />
       </Routes>
     </MemoryRouter>,
+    { wrapper: apiWrapper(api) },
   );
 }
 

@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { usePolling } from "@/hooks/usePolling";
 import { closestBucket } from "@/lib/activityPeriod";
 import { useAgentName } from "@/lib/agent";
-import { getAgentUsage } from "@/lib/api";
 import { fmtTokens } from "@/lib/audit";
 import { fmtDateTime } from "@/lib/time";
-import { paramToHost, targetFor } from "@/lib/terminalsHost";
 import { cn } from "@/lib/utils";
+import { useApi } from "@/components/apiContext";
 import TaskDrawer from "@/pages/tasks/TaskDrawer";
 
 // Window presets: label → (span in ms, series bucket). The bucket widens with
@@ -35,8 +34,8 @@ function fmtCost(usd: number): string {
 // period, when given, is the Activity tab's shared window: it replaces the
 // page's own window presets.
 export default function AgentUsagePage({ period }: { period?: { since: string; until: string } } = {}) {
+  const api = useApi();
   const name = useAgentName();
-  const { hostId: hostParam = "local" } = useParams();
   const [preset, setPreset] = useState<Preset>("24h");
   // datetime-local strings (local wall-clock), only used when preset==='custom'.
   const [customSince, setCustomSince] = useState("");
@@ -73,7 +72,7 @@ export default function AgentUsagePage({ period }: { period?: { since: string; u
     return { since: new Date(Date.now() - ms).toISOString(), group_by: groupBy, bucket };
   }, [managed, periodSince, periodUntil, preset, customSince, customUntil, groupBy]);
 
-  const { data, refresh } = usePolling(() => getAgentUsage(name, buildParams()), 10000);
+  const { data, refresh } = usePolling(() => api.usage.getAgentUsage(name, buildParams()), 10000);
 
   // Refetch immediately when the window or grouping changes, rather than waiting
   // for the next poll tick.
@@ -197,7 +196,6 @@ export default function AgentUsagePage({ period }: { period?: { since: string; u
         <TaskDrawer
           key={taskKey}
           taskKey={taskKey}
-          target={targetFor(paramToHost(hostParam))}
           onClose={() => setTaskKey("")}
         />
       )}
