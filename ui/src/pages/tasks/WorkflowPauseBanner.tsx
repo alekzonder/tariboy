@@ -17,7 +17,7 @@ const REASONS: Record<string, string> = {
 };
 
 const BUTTON =
-  "h-6 shrink-0 rounded-[7px] px-2.5 text-[12px] text-status-failed hover:bg-[color-mix(in_oklab,var(--status-failed)_10%,transparent)] hover:text-status-failed";
+  "h-6 shrink-0 rounded-control px-2.5 text-ui text-status-failed hover:bg-[color-mix(in_oklab,var(--status-failed)_10%,transparent)] hover:text-status-failed";
 
 /**
  * The paused task asks the customer to decide: continue with the same holder,
@@ -48,10 +48,10 @@ export default function WorkflowPauseBanner({
       .finally(() => setBusy(false));
   };
   return (
-    <div className={cn("flex flex-col gap-2 rounded-[8px] px-2.5 py-2", DANGER_FILL)}>
-      <div role="alert" className="flex items-start gap-[9px]">
+    <div className={cn("flex flex-col gap-2 rounded-md px-2.5 py-2", DANGER_FILL)}>
+      <div role="alert" className="flex items-start gap-2.25">
         <PauseCircle className="mt-0.5 size-3.5 shrink-0 [stroke-width:1.4]" />
-        <p className="min-w-0 flex-1 text-[12.5px] leading-[1.45] font-medium text-pretty">
+        <p className="min-w-0 flex-1 text-body-sm leading-[1.45] font-medium text-pretty">
           Paused: {REASONS[reason] ?? reason} The workflow waits for your decision.
         </p>
       </div>
@@ -112,7 +112,7 @@ export default function WorkflowPauseBanner({
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-[12px]">
+        <p role="alert" className="text-ui">
           {error}
         </p>
       )}

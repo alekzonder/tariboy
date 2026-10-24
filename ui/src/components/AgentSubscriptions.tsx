@@ -98,7 +98,7 @@ export function AgentSubscriptions({
     <div className="w-2/5 min-w-[12rem] shrink-0 overflow-auto">
       <div className="p-2 text-xs font-medium text-muted-foreground">SUBSCRIPTIONS</div>
       {/* These are the agent's event triggers. */}
-      <p className="px-2 pb-2 text-[11.5px] leading-[1.45] text-muted-foreground">
+      <p className="px-2 pb-2 text-meta leading-[1.45] text-muted-foreground">
         Every message on these channels wakes this agent while it is started.
       </p>
       {subs.map((s) => (

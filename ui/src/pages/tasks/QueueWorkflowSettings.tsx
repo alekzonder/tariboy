@@ -184,7 +184,7 @@ export default function QueueWorkflowSettings({
       <span className={LABEL}>Workflow</span>
       {loaded &&
         (binding ? (
-          <p data-testid="binding" className="text-[12.5px]">
+          <p data-testid="binding" className="text-body-sm">
             {/* The queue settings live at /servers/:hostId/tasks; the image page is a sibling section. */}
             <Link
               relative="path"
@@ -208,13 +208,13 @@ export default function QueueWorkflowSettings({
           <span className={EMPTY}>No workflow</span>
         ))}
       {loadError && (
-        <div role="alert" className="flex items-center gap-2 text-[12px] text-destructive">
+        <div role="alert" className="flex items-center gap-2 text-ui text-destructive">
           <span>{loadError}</span>
           <Button
             type="button"
             size="sm"
             variant="secondary"
-            className="h-[26px]"
+            className="h-6.5"
             onClick={() => void loadBinding()}
           >
             Retry
@@ -225,7 +225,7 @@ export default function QueueWorkflowSettings({
         <SelectShell
           aria-label="Workflow image"
           value={ref}
-          className="h-[26px] w-auto text-[12px] md:text-[12px]"
+          className="h-6.5 w-auto text-ui md:text-ui"
           onChange={(event) => setRef(event.target.value)}
         >
           <option value="">Choose an image</option>
@@ -238,7 +238,7 @@ export default function QueueWorkflowSettings({
         <Button
           type="button"
           size="sm"
-          className="h-[26px]"
+          className="h-6.5"
           disabled={busy || !ref || !loaded}
           onClick={() => void bind()}
         >
@@ -248,7 +248,7 @@ export default function QueueWorkflowSettings({
           type="button"
           size="sm"
           variant="secondary"
-          className="h-[26px]"
+          className="h-6.5"
           disabled={busy || !loaded || !binding}
           onClick={clear}
         >
@@ -256,12 +256,12 @@ export default function QueueWorkflowSettings({
         </Button>
       </div>
       {notice && (
-        <p role="status" className="text-[12px] text-muted-foreground">
+        <p role="status" className="text-ui text-muted-foreground">
           {notice}
         </p>
       )}
       {error && (
-        <p role="alert" className="text-[12px] text-destructive">
+        <p role="alert" className="text-ui text-destructive">
           {error}
         </p>
       )}
@@ -269,7 +269,7 @@ export default function QueueWorkflowSettings({
         <div
           role="alert"
           aria-label="Pools needed"
-          className="flex flex-col gap-1 text-[12px] text-destructive"
+          className="flex flex-col gap-1 text-ui text-destructive"
         >
           <p>{emptyPools.message}</p>
           <p className="font-mono">{stillEmpty.join(", ")}</p>
@@ -277,7 +277,7 @@ export default function QueueWorkflowSettings({
             type="button"
             size="sm"
             variant="secondary"
-            className="h-[26px] self-start"
+            className="h-6.5 self-start"
             onClick={() => onOpenTab("pools")}
           >
             Open Pools
@@ -288,7 +288,7 @@ export default function QueueWorkflowSettings({
         <div
           role="alert"
           aria-label="Secrets needed"
-          className="flex flex-col gap-1 text-[12px] text-destructive"
+          className="flex flex-col gap-1 text-ui text-destructive"
         >
           <p>{missingSecrets.message}</p>
           <p className="font-mono">{missingSecrets.names.join(", ")}</p>
@@ -296,7 +296,7 @@ export default function QueueWorkflowSettings({
             type="button"
             size="sm"
             variant="secondary"
-            className="h-[26px] self-start"
+            className="h-6.5 self-start"
             onClick={() => onOpenTab("environment")}
           >
             Open Environment
@@ -315,7 +315,7 @@ export default function QueueWorkflowSettings({
               onPool={() => onOpenTab("pools")}
             />
           ) : (
-            <p role="alert" className="text-[12px] text-destructive">
+            <p role="alert" className="text-ui text-destructive">
               {definition.error}
             </p>
           )}

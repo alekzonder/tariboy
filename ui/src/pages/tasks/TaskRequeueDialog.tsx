@@ -76,7 +76,7 @@ export default function TaskRequeueDialog({
         if (!busy) onOpenChange(next);
       }}
     >
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="sm:max-w-105">
         <DialogHeader>
           <DialogTitle>Move to another queue</DialogTitle>
           <DialogDescription>
@@ -104,7 +104,7 @@ export default function TaskRequeueDialog({
           </SelectShell>
         </label>
         {error && (
-          <p role="alert" className="text-[12.5px] text-destructive">
+          <p role="alert" className="text-body-sm text-destructive">
             {error}
           </p>
         )}

@@ -68,7 +68,7 @@ export default function AgentChat({
           hint={openQuestion ? "Answers the agent's open question" : undefined}
         />
       ) : (
-        <p className="border-t px-4 py-3 text-[12px] text-muted-foreground">
+        <p className="border-t px-4 py-3 text-ui text-muted-foreground">
           {selected === "tasks"
             ? `Task notifications addressed to ${name}. Answer a task in its own drawer.`
             : `Service wake-ups for ${name}: script results, goals and schedules.`}

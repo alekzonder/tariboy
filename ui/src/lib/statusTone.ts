@@ -69,7 +69,7 @@ export const TONE_TEXT: Record<StatusTone, string> = {
 /** Status dot. Only a live dot carries the halo; a quiet one is the flat
  *  stopped grey, which is a different token from muted text on purpose. */
 export const TONE_DOT: Record<StatusTone, string> = {
-  live: "bg-status-running ring-[3px] ring-status-running/18",
+  live: "bg-status-running ring-3 ring-status-running/18",
   attention: "bg-primary",
   danger: "bg-status-failed",
   quiet: "bg-status-stopped",

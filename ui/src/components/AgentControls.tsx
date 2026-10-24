@@ -196,7 +196,7 @@ export function AgentControls({
             variant="ghost"
             size="icon-sm"
             aria-label="Agent settings"
-            className="size-7 rounded-[8px] text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <MoreVertical className="size-3.5" />
           </Button>
@@ -205,17 +205,17 @@ export function AgentControls({
             surface, same family as the content island. */}
         <DropdownMenuContent
           align="end"
-          className="min-w-[164px] rounded-[12px] p-[5px] shadow-[var(--lift)] ring-0"
+          className="min-w-41 rounded-card p-1.25 shadow-[var(--lift)] ring-0"
         >
-          <DropdownMenuItem asChild className="h-7 rounded-[7px] px-[9px] text-[13px]">
+          <DropdownMenuItem asChild className="h-7 rounded-control px-2.25 text-body">
             <Link to={configurationPath}>
               <Settings2 aria-hidden="true" />
               Settings
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuSeparator className="mx-[3px] my-1" />
+          <DropdownMenuSeparator className="mx-0.75 my-1" />
           <DropdownMenuItem
-            className="h-7 rounded-[7px] px-[9px] text-[13px] text-destructive focus:bg-destructive/10 focus:text-destructive"
+            className="h-7 rounded-control px-2.25 text-body text-destructive focus:bg-destructive/10 focus:text-destructive"
             onSelect={() => setDeleteOpen(true)}
           >
             <Trash2 aria-hidden="true" />

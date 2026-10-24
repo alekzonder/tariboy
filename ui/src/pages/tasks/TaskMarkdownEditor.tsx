@@ -143,7 +143,7 @@ export default function MarkdownEditor({
         role: "textbox",
         "aria-multiline": "true",
         ...(placeholder ? { "aria-label": placeholder, "data-placeholder": placeholder } : {}),
-        class: `${markdownStyles} min-h-32 px-3 py-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring`,
+        class: `${markdownStyles} min-h-32 px-3 py-2.75 outline-none focus-visible:ring-2 focus-visible:ring-ring`,
       },
     },
     onUpdate: ({ editor: current }) => onChange(editorMarkdown(current)),
@@ -257,7 +257,7 @@ export default function MarkdownEditor({
      `--muted` block at radius 8, and its chrome rows are separated by
      padding rather than by rules. */
   return (
-    <div className={`min-w-0 rounded-[8px] ${surface === "card" ? "bg-card" : "bg-muted"}`}>
+    <div className={`min-w-0 rounded-md ${surface === "card" ? "bg-card" : "bg-muted"}`}>
       {!mode && (
         <div
           className="flex flex-wrap items-center gap-1 p-1.5 pb-0"
@@ -283,7 +283,7 @@ export default function MarkdownEditor({
             disabled={disabled}
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            className="min-h-32 rounded-none border-0 bg-transparent font-mono text-[12.5px] shadow-none focus-visible:ring-0"
+            className="min-h-32 rounded-none border-0 bg-transparent font-mono text-body-sm shadow-none focus-visible:ring-0"
           />
         </>
       ) : (
@@ -439,7 +439,7 @@ export default function MarkdownEditor({
             {editor?.isEmpty && placeholder && (
               <p
                 aria-hidden="true"
-                className="pointer-events-none absolute top-[11px] left-3 text-[12.5px] text-muted-foreground"
+                className="pointer-events-none absolute top-2.75 left-3 text-body-sm text-muted-foreground"
               >
                 {placeholder}
               </p>

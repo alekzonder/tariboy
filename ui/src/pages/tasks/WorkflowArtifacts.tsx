@@ -84,7 +84,7 @@ export default function WorkflowArtifacts({
     const group = (title: string, names: string[]) =>
       names.length > 0 && (
         <>
-          <span className="text-[11.5px] text-muted-foreground">{title}</span>
+          <span className="text-meta text-muted-foreground">{title}</span>
           <ul aria-label={title} className="flex min-w-0 flex-col gap-2.5">
             {missingFirst(names).map((name) => item(name, both(name)))}
           </ul>
@@ -95,7 +95,7 @@ export default function WorkflowArtifacts({
         {header}
         <div
           data-testid="artifact-filter"
-          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-muted-foreground"
+          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-ui text-muted-foreground"
         >
           <span className="min-w-0">
             Step <span className={cn(MONO, "break-all text-foreground")}>{step.status}</span> ·{" "}
@@ -234,9 +234,7 @@ function ArtifactItem({
       {(description || (requirements ?? []).length > 0) && (
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
           {description && (
-            <span className="min-w-0 text-[12px] break-words text-muted-foreground">
-              {description}
-            </span>
+            <span className="min-w-0 text-ui break-words text-muted-foreground">{description}</span>
           )}
           {(requirements ?? []).map((requirement) => (
             <span
@@ -244,7 +242,7 @@ function ArtifactItem({
               data-requirement={requirement.missing ? "missing" : "set"}
               className={cn(
                 MONO,
-                "rounded-[5px] px-1.5",
+                "rounded-chip px-1.5",
                 requirement.missing ? DANGER_FILL : "bg-muted text-muted-foreground",
               )}
             >
@@ -261,7 +259,7 @@ function ArtifactItem({
             value={draft}
             disabled={saving}
             onChange={(event) => setDraft(event.target.value)}
-            className="min-h-20 rounded-[8px] border-0 bg-muted font-mono text-[11.5px] md:text-[11.5px]"
+            className="min-h-20 rounded-md border-0 bg-muted font-mono text-meta md:text-meta"
           />
           <div className="flex gap-1.5">
             <Button
@@ -292,12 +290,12 @@ function ArtifactItem({
         artifact && <ArtifactValue value={artifact.value} markdown={mode === "rich"} />
       )}
       {error && (
-        <p role="alert" className="text-[12px] text-status-failed">
+        <p role="alert" className="text-ui text-status-failed">
           {error}
         </p>
       )}
       {historyError && (
-        <p role="alert" className="text-[12px] text-status-failed">
+        <p role="alert" className="text-ui text-status-failed">
           {historyError}
         </p>
       )}
@@ -327,11 +325,11 @@ function ArtifactValue({ value, markdown }: { value: string; markdown: boolean }
   return (
     <div className="flex min-w-0 flex-col items-start gap-0.5">
       {markdown ? (
-        <div className="w-full min-w-0 rounded-[8px] bg-muted px-2.5 py-2">
+        <div className="w-full min-w-0 rounded-md bg-muted px-2.5 py-2">
           <MarkdownContent>{shown}</MarkdownContent>
         </div>
       ) : (
-        <pre className="w-full min-w-0 rounded-[8px] bg-muted px-2.5 py-2 font-mono text-[11.5px] whitespace-pre-wrap break-words">
+        <pre className="w-full min-w-0 rounded-md bg-muted px-2.5 py-2 font-mono text-meta whitespace-pre-wrap break-words">
           {shown}
         </pre>
       )}

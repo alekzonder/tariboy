@@ -440,7 +440,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
               aria-describedby={undefined}
               // Focus in the search field would raise the on-screen keyboard.
               onOpenAutoFocus={(e) => e.preventDefault()}
-              className="w-[85vw] max-w-[340px] gap-0 bg-background px-1.5 pt-3 pb-2"
+              className="w-[85vw] max-w-85 gap-0 bg-background px-1.5 pt-3 pb-2"
             >
               <SheetTitle className="sr-only">Agents</SheetTitle>
               <AgentSidebar {...sidebarProps} drawer />

@@ -233,7 +233,7 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
         <div
           role="tablist"
           aria-label="Queue view"
-          className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5"
+          className="flex shrink-0 gap-0.5 rounded-panel bg-muted p-0.5"
         >
           {VIEWS.map(([key, label]) => (
             <button
@@ -242,7 +242,7 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
               role="tab"
               aria-selected={view === key}
               onClick={() => setView(key)}
-              className={`h-[22px] rounded-[7px] px-[9px] text-[11.5px] ${
+              className={`h-5.5 rounded-control px-2.25 text-meta ${
                 view === key
                   ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
                   : "text-muted-foreground hover:text-foreground"
@@ -252,7 +252,7 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
             </button>
           ))}
         </div>
-        <span className="text-[11.5px] text-muted-foreground">
+        <span className="text-meta text-muted-foreground">
           {items.length} message{items.length === 1 ? "" : "s"}
         </span>
         {view === "queue" && items.length > 0 && (

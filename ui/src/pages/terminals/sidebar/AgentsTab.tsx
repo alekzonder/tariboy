@@ -16,7 +16,7 @@ export function AgentsTab({
   actions: AgentRowActions;
 }) {
   if (pinned.length === 0 && rest.length === 0) {
-    return <div className="px-2 pt-1.5 text-[12.5px] text-muted-foreground">No agents.</div>;
+    return <div className="px-2 pt-1.5 text-body-sm text-muted-foreground">No agents.</div>;
   }
   return (
     <div className="pt-1.5">

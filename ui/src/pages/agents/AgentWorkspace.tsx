@@ -227,21 +227,21 @@ function AgentWorkspaceContent({
           <header className="shrink-0">
             {/* Below lg the identity wraps and the lifecycle cluster takes a
                 row of its own, so neither ever covers the other. */}
-            <div className="flex flex-wrap items-start gap-2.5 px-4 pt-3.5 pb-[11px] lg:flex-nowrap">
-              <div className="flex min-w-0 flex-1 flex-col gap-[5px] max-lg:basis-full">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-[9px] gap-y-1 lg:flex-nowrap">
+            <div className="flex flex-wrap items-start gap-2.5 px-4 pt-3.5 pb-2.75 lg:flex-nowrap">
+              <div className="flex min-w-0 flex-1 flex-col gap-1.25 max-lg:basis-full">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2.25 gap-y-1 lg:flex-nowrap">
                   <StatusDot tone={tone} size={8} />
-                  <h1 className="min-w-0 truncate text-[15px] font-semibold tracking-[-.01em] lg:shrink-0">
+                  <h1 className="min-w-0 truncate text-title font-semibold tracking-[-.01em] lg:shrink-0">
                     {agent.name}
                   </h1>
                   <StatusPill tone={tone}>{outOfBudget ? "no budget" : agent.state}</StatusPill>
-                  <span className="shrink-0 text-[12.5px] whitespace-nowrap text-muted-foreground">
+                  <span className="shrink-0 text-body-sm whitespace-nowrap text-muted-foreground">
                     {hostLabel || (hostId ? hostId : "Local")}
                   </span>
                   <span
                     title={agent.image}
                     data-testid="agent-image"
-                    className="inline-flex h-5 max-w-full min-w-0 items-center gap-[5px] rounded-[6px] bg-muted px-[7px] font-mono text-[11.5px] whitespace-nowrap text-muted-foreground lg:shrink-0"
+                    className="inline-flex h-5 max-w-full min-w-0 items-center gap-1.25 rounded-sm bg-muted px-1.75 font-mono text-meta whitespace-nowrap text-muted-foreground lg:shrink-0"
                   >
                     <Container className="size-2.5 shrink-0" aria-hidden="true" />
                     <span className="truncate">{agent.image}</span>
@@ -250,17 +250,17 @@ function AgentWorkspaceContent({
                     <span
                       data-testid="agent-runtime"
                       title={`Harness · model · effort: ${runtime}`}
-                      className="inline-flex h-5 max-w-full min-w-0 items-center rounded-[6px] bg-muted px-[7px] font-mono text-[11.5px] whitespace-nowrap text-muted-foreground lg:shrink-0"
+                      className="inline-flex h-5 max-w-full min-w-0 items-center rounded-sm bg-muted px-1.75 font-mono text-meta whitespace-nowrap text-muted-foreground lg:shrink-0"
                     >
                       <span className="truncate">{runtime}</span>
                     </span>
                   )}
-                  <span className="flex min-w-0 flex-1 items-center gap-[5px] overflow-hidden text-[12.5px] whitespace-nowrap text-muted-foreground max-lg:flex-none">
+                  <span className="flex min-w-0 flex-1 items-center gap-1.25 overflow-hidden text-body-sm whitespace-nowrap text-muted-foreground max-lg:flex-none">
                     <span className="shrink-0">Goal:</span>
                     {agent.current_goal_task_key ? (
                       <button
                         type="button"
-                        className="shrink-0 border-b border-dotted border-border font-mono text-[11.5px] font-medium text-foreground tabular-nums hover:border-foreground"
+                        className="shrink-0 border-b border-dotted border-border font-mono text-meta font-medium text-foreground tabular-nums hover:border-foreground"
                         onClick={() => setGoalTask(agent.current_goal_task_key ?? "")}
                       >
                         {agent.current_goal_task_key}
@@ -274,13 +274,10 @@ function AgentWorkspaceContent({
                 {/* The reference ellipsises the path to hold the header to one
                     line; this app shows it whole on purpose (a wrapped cwd is
                     better than a path the operator cannot read), so it wraps. */}
-                <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1 text-[12px]">
+                <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1 text-ui">
                   <span className="flex min-w-0 items-baseline gap-1.5">
                     <span className="shrink-0 text-muted-foreground">cwd:</span>
-                    <span
-                      data-testid="agent-cwd"
-                      className="min-w-0 break-all font-mono text-[11.5px]"
-                    >
+                    <span data-testid="agent-cwd" className="min-w-0 break-all font-mono text-meta">
                       {effectiveCwd || "…"}
                     </span>
                   </span>
@@ -290,7 +287,7 @@ function AgentWorkspaceContent({
                       data-testid="open-agent-cwd-vscode"
                       variant="link"
                       size="xs"
-                      className="h-auto shrink-0 px-0 py-0 text-[12px] font-medium text-foreground"
+                      className="h-auto shrink-0 px-0 py-0 text-ui font-medium text-foreground"
                       disabled={unavailable}
                       onClick={() =>
                         void openHostPathInVSCode(hostId, effectiveCwd).catch((error) =>
@@ -320,7 +317,7 @@ function AgentWorkspaceContent({
               <p
                 data-testid="agent-halt-reason"
                 className={cn(
-                  "px-4 pb-2 text-[11px] font-medium",
+                  "px-4 pb-2 text-caption font-medium",
                   status.halt_kind === "idle_limit" ? "text-muted-foreground" : "text-destructive",
                 )}
               >
@@ -328,7 +325,7 @@ function AgentWorkspaceContent({
               </p>
             )}
             {status?.messages_queue_full && (
-              <p className="px-4 pb-2 text-[11px] font-medium text-destructive">
+              <p className="px-4 pb-2 text-caption font-medium text-destructive">
                 Message queue full: {status.messages_pending} / {status.messages_max_queue}
               </p>
             )}
@@ -337,7 +334,7 @@ function AgentWorkspaceContent({
                 status.budget.day_usd > 0 ||
                 status.budget.week_usd > 0 ||
                 status.budget.month_usd > 0) && (
-                <div className="px-4 pb-2 text-[11px]" data-testid="agent-budget-header">
+                <div className="px-4 pb-2 text-caption" data-testid="agent-budget-header">
                   {exhaustedPeriods.length > 0 && (
                     <p className="font-medium text-destructive">
                       Out of budget: {exhaustedPeriods.join(", ")}
@@ -366,7 +363,7 @@ function AgentWorkspaceContent({
                   to={`${base}/${key}`}
                   className={({ isActive }) =>
                     cn(
-                      "flex h-[34px] shrink-0 items-center border-b-2 border-transparent px-2.5 text-[13px] whitespace-nowrap text-muted-foreground hover:text-foreground",
+                      "flex h-8.5 shrink-0 items-center border-b-2 border-transparent px-2.5 text-body whitespace-nowrap text-muted-foreground hover:text-foreground",
                       isActive && "border-primary font-medium text-foreground",
                     )
                   }
@@ -377,7 +374,7 @@ function AgentWorkspaceContent({
                       role="img"
                       aria-label={`${unreadChat} unread message${unreadChat === 1 ? "" : "s"} from ${agent.name}`}
                       title={`${unreadChat} unread message${unreadChat === 1 ? "" : "s"}`}
-                      className="ml-1.5 size-[5px] rounded-full bg-primary"
+                      className="ml-1.5 size-1.25 rounded-full bg-primary"
                     />
                   )}
                   {key === "tasks" && questionTasks > 0 && (
@@ -385,7 +382,7 @@ function AgentWorkspaceContent({
                       role="img"
                       aria-label={`${questionTasks} task${questionTasks === 1 ? "" : "s"} with unread agent questions`}
                       title={`${questionTasks} task${questionTasks === 1 ? "" : "s"} with unread agent questions`}
-                      className="ml-1.5 rounded-full bg-primary px-1.5 text-[11px] font-medium leading-4 text-primary-foreground"
+                      className="ml-1.5 rounded-full bg-primary px-1.5 text-caption font-medium leading-4 text-primary-foreground"
                     >
                       {questionTasks}
                     </span>

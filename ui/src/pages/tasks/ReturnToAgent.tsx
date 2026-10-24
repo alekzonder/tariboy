@@ -97,7 +97,7 @@ export default function ReturnToAgent({
   const busy = sending || checking;
   return (
     <form
-      className="flex min-w-0 flex-col gap-1.5 rounded-[8px] bg-muted/50 p-2.5"
+      className="flex min-w-0 flex-col gap-1.5 rounded-md bg-muted/50 p-2.5"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -110,7 +110,7 @@ export default function ReturnToAgent({
           autoFocus
           aria-label="Return to status"
           value={status}
-          className="h-[26px] w-auto max-w-full text-[12px] md:text-[12px]"
+          className="h-6.5 w-auto max-w-full text-ui md:text-ui"
           onChange={(event) => setStatus(event.target.value)}
         >
           {byOutcome.length > 0 && (
@@ -146,13 +146,13 @@ export default function ReturnToAgent({
         disabled={busy}
         maxLength={MAX_MESSAGE}
         onChange={(event) => setMessage(event.target.value)}
-        className="min-h-16 rounded-[8px] border-0 bg-muted text-[12.5px] md:text-[12.5px]"
+        className="min-h-16 rounded-md border-0 bg-muted text-body-sm md:text-body-sm"
       />
       <div className="flex items-center gap-1.5">
         <Button
           type="submit"
           size="sm"
-          className={cn("h-[26px]")}
+          className={cn("h-6.5")}
           disabled={busy || !chosen || !message.trim()}
         >
           {checking ? "Checking…" : "Return to agent"}
@@ -161,7 +161,7 @@ export default function ReturnToAgent({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-[26px]"
+          className="h-6.5"
           disabled={busy}
           onClick={onDone}
         >
@@ -169,7 +169,7 @@ export default function ReturnToAgent({
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-[12px] text-status-failed">
+        <p role="alert" className="text-ui text-status-failed">
           {error}
         </p>
       )}

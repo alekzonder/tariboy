@@ -106,22 +106,20 @@ export default function TaskComments({
        panel; the vertical rhythm is padding, not a rule between comments. */
     <div key="list" className="task-comment-list">
       {comments.map((comment) => (
-        <article key={comment.id} className="flex min-w-0 gap-[9px] py-[7px]">
+        <article key={comment.id} className="flex min-w-0 gap-2.25 py-1.75">
           <span
             aria-hidden="true"
-            className="mt-px grid size-[22px] shrink-0 place-items-center rounded-full bg-muted font-mono text-[10.5px] text-muted-foreground"
+            className="mt-px grid size-5.5 shrink-0 place-items-center rounded-full bg-muted font-mono text-tiny text-muted-foreground"
           >
             {initials(comment.author)}
           </span>
-          <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.75">
             <header className="flex min-w-0 items-center gap-2">
-              <strong className="shrink-0 font-mono text-[11.5px] font-medium">
-                {comment.author}
-              </strong>
+              <strong className="shrink-0 font-mono text-meta font-medium">{comment.author}</strong>
               {asking.has(comment.id) && (
                 <span
                   className={cn(
-                    "inline-flex h-[17px] shrink-0 items-center rounded-[5px] px-1.5 text-[10.5px] font-medium",
+                    "inline-flex h-4.25 shrink-0 items-center rounded-chip px-1.5 text-tiny font-medium",
                     PRIMARY_FILL,
                   )}
                 >
@@ -130,7 +128,7 @@ export default function TaskComments({
               )}
               <span className="task-comment-actions ml-auto flex shrink-0 items-center gap-1">
                 <time
-                  className="font-mono text-[11px] tabular-nums text-muted-foreground"
+                  className="font-mono text-caption tabular-nums text-muted-foreground"
                   dateTime={comment.created_at}
                   title={new Date(comment.created_at).toLocaleString()}
                 >
@@ -140,7 +138,7 @@ export default function TaskComments({
                   type="button"
                   size="icon-xs"
                   variant="ghost"
-                  className="task-comment-copy size-5 rounded-[6px] text-muted-foreground"
+                  className="task-comment-copy size-5 rounded-sm text-muted-foreground"
                   aria-label="Copy comment Markdown"
                   title="Copy comment Markdown"
                   onClick={() => void copyComment(comment.body)}
@@ -154,21 +152,17 @@ export default function TaskComments({
         </article>
       ))}
       {comments.length === 0 && (
-        <p className="pt-0.5 text-[12px] text-muted-foreground opacity-80">No comments yet.</p>
+        <p className="pt-0.5 text-ui text-muted-foreground opacity-80">No comments yet.</p>
       )}
     </div>
   );
   const commentForm = (
-    <form
-      key="form"
-      className="rounded-[8px] bg-muted p-3"
-      onSubmit={(event) => void submit(event)}
-    >
+    <form key="form" className="rounded-md bg-muted p-3" onSubmit={(event) => void submit(event)}>
       <label className="flex min-w-0 items-center gap-2">
         <span className={LABEL}>Ask</span>
         <SelectShell
           aria-label="Ask"
-          className="h-6 bg-card pl-2.5 text-[11.5px] md:text-[11.5px]"
+          className="h-6 bg-card pl-2.5 text-meta md:text-meta"
           value={ask.principal}
           onChange={(event) => setAsk({ assignee, principal: event.target.value })}
         >
@@ -181,7 +175,7 @@ export default function TaskComments({
         </SelectShell>
       </label>
       <div>
-        <div className="flex items-center gap-2 pb-[7px]">
+        <div className="flex items-center gap-2 pb-1.75">
           <label htmlFor="task-comment" className={LABEL}>
             Comment
           </label>
@@ -220,7 +214,7 @@ export default function TaskComments({
             type="button"
             size="sm"
             variant="secondary"
-            className="h-7 rounded-[7px]"
+            className="h-7 rounded-control"
             disabled={busy || uploading}
             onClick={() => void send(askText("Ok"), false)}
           >
@@ -243,7 +237,7 @@ export default function TaskComments({
           <span className="sr-only">Comment order</span>
           <SelectShell
             aria-label="Comment order"
-            className="h-6 pl-2.5 text-[11.5px] md:text-[11.5px] text-muted-foreground"
+            className="h-6 pl-2.5 text-meta md:text-meta text-muted-foreground"
             value={order}
             onChange={(event) => onOrderChange(event.target.value as "newest" | "oldest")}
           >

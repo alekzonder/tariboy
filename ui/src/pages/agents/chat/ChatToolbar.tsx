@@ -88,7 +88,7 @@ export function ChatToolbar({
         <div
           role="tablist"
           aria-label="Agent chats"
-          className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5"
+          className="flex shrink-0 gap-0.5 rounded-panel bg-muted p-0.5"
         >
           {[
             ...KINDS.map(([key, label]) => [key, label] as [string, string]),
@@ -100,7 +100,7 @@ export function ChatToolbar({
               role="tab"
               aria-selected={selected === key}
               onClick={() => setSelected(key)}
-              className={`h-[22px] max-w-[140px] truncate rounded-[7px] px-[9px] text-[11.5px] ${
+              className={`h-5.5 max-w-35 truncate rounded-control px-2.25 text-meta ${
                 selected === key
                   ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
                   : "text-muted-foreground hover:text-foreground"
@@ -114,13 +114,13 @@ export function ChatToolbar({
             aria-label="New chat"
             title="Start a chat with this agent and others"
             onClick={onCreate}
-            className="grid size-[22px] place-items-center rounded-[7px] text-muted-foreground hover:bg-card hover:text-foreground"
+            className="grid size-5.5 place-items-center rounded-control text-muted-foreground hover:bg-card hover:text-foreground"
           >
             <Plus className="size-3.5" aria-hidden />
           </button>
         </div>
       )}
-      <label className="flex h-7 w-[232px] items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-muted-foreground">
+      <label className="flex h-7 w-58 items-center gap-1.75 rounded-md bg-muted px-2.25 text-muted-foreground">
         <Search className="size-3 shrink-0" aria-hidden />
         <input
           type="search"
@@ -128,10 +128,10 @@ export function ChatToolbar({
           placeholder="Search messages"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          className="w-full bg-transparent text-[12px] outline-none"
+          className="w-full bg-transparent text-ui outline-none"
         />
       </label>
-      <span className="truncate text-[11.5px] text-muted-foreground">
+      <span className="truncate text-meta text-muted-foreground">
         {/* A shared chat says who is in it: in a multi-agent conversation the
             author of a message is not deducible from the thread it is in. */}
         {current
@@ -145,7 +145,7 @@ export function ChatToolbar({
           <button
             type="button"
             onClick={markRead}
-            className="flex h-[26px] items-center gap-1.5 rounded-[7px] bg-primary/12 px-2.5 text-[12px] font-medium text-primary hover:bg-primary/18"
+            className="flex h-6.5 items-center gap-1.5 rounded-control bg-primary/12 px-2.5 text-ui font-medium text-primary hover:bg-primary/18"
           >
             <Check className="size-3.5" aria-hidden />
             Mark read
@@ -156,7 +156,7 @@ export function ChatToolbar({
             onClick={() => void markUnread()}
             disabled={messages.length === 0}
             title="Mark this chat unread"
-            className="flex h-[26px] items-center gap-1.5 rounded-[7px] px-2.5 text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+            className="flex h-6.5 items-center gap-1.5 rounded-control px-2.5 text-ui text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
           >
             <Mail className="size-3.5" aria-hidden />
             Mark unread
@@ -168,14 +168,14 @@ export function ChatToolbar({
           title="Export transcript"
           onClick={exportTranscript}
           disabled={messages.length === 0}
-          className="grid size-[26px] place-items-center rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+          className="grid size-6.5 place-items-center rounded-control text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
         >
           <Download className="size-3.5" />
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label="Chat menu"
-            className="grid size-[26px] place-items-center rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="grid size-6.5 place-items-center rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <MoreHorizontal className="size-3.5" />
           </DropdownMenuTrigger>

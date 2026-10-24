@@ -98,7 +98,7 @@ export function ServersTab({
           <Button
             variant="outline"
             size="sm"
-            className="h-5 rounded-[6px] border-border px-[7px] text-[10.5px] font-medium tracking-[.02em] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+            className="h-5 rounded-sm border-border px-1.75 text-tiny font-medium tracking-[.02em] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
             title="Update all servers with available updates"
             onClick={() => servers.onUpdateAll(pendingUpdates.map((host) => host.host.id))}
           >
@@ -197,7 +197,7 @@ export function ServersTab({
             {host.error && <div className="px-2 text-xs text-destructive">{host.error}</div>}
             {teams.size > 0 && (
               <div className="mt-1">
-                <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-[.02em] text-muted-foreground">
+                <div className="px-2 pt-1.5 pb-1 text-caption font-medium tracking-[.02em] text-muted-foreground">
                   Teams
                 </div>
                 {[...teams.entries()]
@@ -235,7 +235,7 @@ export function ServersTab({
               </div>
             )}
             <div className="mt-1">
-              <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-[.02em] text-muted-foreground">
+              <div className="px-2 pt-1.5 pb-1 text-caption font-medium tracking-[.02em] text-muted-foreground">
                 Individual agents
               </div>
               {individuals.map((row) => (

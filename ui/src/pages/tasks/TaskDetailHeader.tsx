@@ -38,20 +38,20 @@ export function TaskDetailHeader({
   const workflow = isWorkflowTask(task);
   const closed = task.category === "done" || task.category === "cancelled";
   return (
-    <header className="sticky top-0 z-[3] flex items-start gap-2.5 bg-card px-3.5 pt-[11px] pb-2.5 shadow-[var(--raise)]">
+    <header className="sticky top-0 z-[3] flex items-start gap-2.5 bg-card px-3.5 pt-2.75 pb-2.5 shadow-[var(--raise)]">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex min-w-0 items-center gap-[9px]">
+        <div className="flex min-w-0 items-center gap-2.25">
           <DialogTitle asChild>
-            <h2 className="shrink-0 font-mono text-[12px] font-medium tabular-nums text-muted-foreground">
+            <h2 className="shrink-0 font-mono text-ui font-medium tabular-nums text-muted-foreground">
               {task.key}
             </h2>
           </DialogTitle>
           {/* The only 600 in the panel. */}
-          <span className="min-w-0 truncate text-[15px] font-semibold tracking-[-.01em]">
+          <span className="min-w-0 truncate text-title font-semibold tracking-[-.01em]">
             {task.title}
           </span>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[12px]">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-ui">
           <StatusPill tone={taskTone(task.category)}>{taskStatusLabel(task)}</StatusPill>
           <MetaInline label="agent" value={task.assignee || "unassigned"} />
           <MetaInline label="updated" value={formatTaskTime(task.updated_at)} />
@@ -80,7 +80,7 @@ export function TaskDetailHeader({
                 size="icon"
                 aria-label="Task actions"
                 disabled={pending}
-                className="size-7 rounded-[8px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <MoreHorizontal className="size-3.5" />
               </Button>
@@ -106,7 +106,7 @@ export function TaskDetailHeader({
           aria-label="Close task detail"
           disabled={pending}
           onClick={close}
-          className="size-7 rounded-[8px] text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <X className="size-3.5" />
         </Button>

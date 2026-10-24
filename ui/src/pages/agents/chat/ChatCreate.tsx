@@ -84,7 +84,7 @@ export default function ChatCreate({
               onChange={(event) => setTitle(event.target.value)}
               placeholder="Team alpha"
             />
-            <p className="text-[11.5px] text-muted-foreground">
+            <p className="text-meta text-muted-foreground">
               {id ? (
                 <>
                   Chat id <span className="font-mono">{id}</span>
@@ -95,13 +95,13 @@ export default function ChatCreate({
             </p>
           </div>
           <fieldset className="space-y-1.5">
-            <legend className="text-[13px] font-medium">Agents</legend>
-            <p className="text-[11.5px] text-muted-foreground">
+            <legend className="text-body font-medium">Agents</legend>
+            <p className="text-meta text-muted-foreground">
               {agent} is in this chat. Add any others.
             </p>
             <div className="max-h-48 overflow-auto rounded border p-1">
               {others.map((row) => (
-                <label key={row.name} className="flex items-center gap-2 px-1.5 py-1 text-[12.5px]">
+                <label key={row.name} className="flex items-center gap-2 px-1.5 py-1 text-body-sm">
                   <input
                     type="checkbox"
                     checked={picked.includes(row.name)}
@@ -117,7 +117,7 @@ export default function ChatCreate({
                 </label>
               ))}
               {others.length === 0 && (
-                <p className="px-1.5 py-1 text-[12px] text-muted-foreground">No other agents.</p>
+                <p className="px-1.5 py-1 text-ui text-muted-foreground">No other agents.</p>
               )}
             </div>
           </fieldset>

@@ -149,7 +149,7 @@ function QueueEnv({
       ) : (
         <ul className="flex min-w-0 flex-col gap-1">
           {items.map((item) => (
-            <li key={item.key} className="flex min-w-0 items-center gap-2 text-[12px]">
+            <li key={item.key} className="flex min-w-0 items-center gap-2 text-ui">
               <span className="shrink-0 font-mono">{item.key}</span>
               <span className="text-muted-foreground">=</span>
               <span className="min-w-0 flex-1 truncate font-mono" title={item.value}>
@@ -178,27 +178,22 @@ function QueueEnv({
           aria-label="Env key"
           placeholder="KEY"
           value={key}
-          className={`${FIELD} h-[26px] min-w-[100px] flex-1`}
+          className={`${FIELD} h-6.5 min-w-25 flex-1`}
           onChange={(event) => setKey(event.target.value)}
         />
         <Input
           aria-label="Env value"
           placeholder="Value"
           value={value}
-          className={`${FIELD} h-[26px] min-w-[100px] flex-1`}
+          className={`${FIELD} h-6.5 min-w-25 flex-1`}
           onChange={(event) => setValue(event.target.value)}
         />
-        <Button
-          type="submit"
-          size="sm"
-          className="h-[26px]"
-          disabled={busy || !key.trim() || !value}
-        >
+        <Button type="submit" size="sm" className="h-6.5" disabled={busy || !key.trim() || !value}>
           Set
         </Button>
       </form>
       {error && (
-        <p role="alert" className="text-[12px] text-destructive">
+        <p role="alert" className="text-ui text-destructive">
           {error}
         </p>
       )}

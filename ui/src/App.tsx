@@ -90,7 +90,7 @@ function MainApp() {
       {/* Topbar: 42px, no bottom border — the separation between chrome and the
           content island is made by the background, not by a line. */}
       <header
-        className="flex h-[42px] shrink-0 items-center gap-2.5 px-3"
+        className="flex h-10.5 shrink-0 items-center gap-2.5 px-3"
         data-tauri-drag-region="deep"
         data-testid="app-titlebar"
       >
@@ -101,7 +101,7 @@ function MainApp() {
             <div
               aria-hidden="true"
               data-testid="titlebar-window-controls-gap"
-              className="h-full w-[72px] shrink-0"
+              className="h-full w-18 shrink-0"
             />
           )}
           {sidebarRoute && !allTasks && sidebar.compact && (
@@ -109,13 +109,13 @@ function MainApp() {
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="size-9 shrink-0 rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="size-9 shrink-0 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
               aria-label="Open menu"
               title="Open menu"
               aria-expanded={sidebar.drawerOpen}
               onClick={() => sidebar.setDrawerOpen(true)}
             >
-              <Menu className="size-[18px]" />
+              <Menu className="size-4.5" />
             </Button>
           )}
           {sidebarRoute && !allTasks && !sidebar.compact && (
@@ -123,7 +123,7 @@ function MainApp() {
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="size-[26px] shrink-0 rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="size-6.5 shrink-0 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
               aria-label={sidebar.hidden ? "Show agents" : "Hide agents"}
               title={sidebar.hidden ? "Show agents" : "Hide agents"}
               onClick={() => sidebar.setHidden(!sidebar.hidden)}
@@ -164,15 +164,15 @@ function MainApp() {
             asChild
             variant="ghost"
             size="icon-sm"
-            className="size-[26px] rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="size-6.5 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <Link to="/app-settings" aria-label="Application settings" title="Application settings">
-              <Settings className="size-[15px]" />
+              <Settings className="size-3.75" />
             </Link>
           </Button>
           <ThemeToggle
             variant="ghost"
-            className="size-[26px] rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="size-6.5 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
           />
         </div>
       </header>

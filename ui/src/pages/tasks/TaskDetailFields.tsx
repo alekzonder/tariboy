@@ -51,7 +51,7 @@ export function TaskDetailFields({
         <span className={LABEL}>Title</span>
         <Input className={FIELD} value={title} onChange={(event) => setTitle(event.target.value)} />
       </label>
-      <div className="task-description flex min-w-0 flex-col gap-[7px]">
+      <div className="task-description flex min-w-0 flex-col gap-1.75">
         <div className="flex items-center gap-2">
           <label htmlFor="task-description" className={LABEL}>
             Description
@@ -132,7 +132,7 @@ export function TaskDetailFields({
           </SelectField>
         )}
         {!workflow && !assigneeOptions && (
-          <label className="flex min-w-0 flex-col gap-[5px]">
+          <label className="flex min-w-0 flex-col gap-1.25">
             <span className={LABEL}>Assignee</span>
             <Input
               aria-label="Assignee"
@@ -148,7 +148,7 @@ export function TaskDetailFields({
             </datalist>
           </label>
         )}
-        <label className="flex min-w-0 flex-col gap-[5px]">
+        <label className="flex min-w-0 flex-col gap-1.25">
           <span className={LABEL}>Pull request</span>
           <Input
             className={cn(FIELD, FIELD_MONO)}
@@ -156,7 +156,7 @@ export function TaskDetailFields({
             onChange={(event) => setPullRequest(event.target.value)}
           />
         </label>
-        <label className="flex min-w-0 flex-col gap-[5px]">
+        <label className="flex min-w-0 flex-col gap-1.25">
           <span className={LABEL}>Manual block reason</span>
           <Input
             className={FIELD}

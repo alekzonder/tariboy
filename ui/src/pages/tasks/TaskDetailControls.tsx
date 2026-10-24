@@ -16,7 +16,7 @@ export function MetaInline({ label, value }: { label: string; value: string }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
       {label}
-      <span className="min-w-0 truncate font-mono text-[11.5px] tabular-nums text-foreground">
+      <span className="min-w-0 truncate font-mono text-meta tabular-nums text-foreground">
         {value}
       </span>
     </span>
@@ -35,8 +35,8 @@ export function Meta({
 }) {
   return (
     <div className="flex min-w-0 items-baseline gap-2.5">
-      <dt className={cn(LABEL, "w-[76px] shrink-0 font-normal")}>{label}</dt>
-      <dd className={cn("min-w-0 truncate", mono ? MONO : "text-[12.5px]")}>{value || "—"}</dd>
+      <dt className={cn(LABEL, "w-19 shrink-0 font-normal")}>{label}</dt>
+      <dd className={cn("min-w-0 truncate", mono ? MONO : "text-body-sm")}>{value || "—"}</dd>
     </div>
   );
 }
@@ -77,12 +77,12 @@ export function Banner({
     <div
       role={role}
       className={cn(
-        "flex items-start gap-[9px] rounded-[8px] px-2.5 py-2",
+        "flex items-start gap-2.25 rounded-md px-2.5 py-2",
         tone === "danger" ? DANGER_FILL : PRIMARY_FILL,
       )}
     >
       <span className="shrink-0">{icon}</span>
-      <span className="min-w-0 flex-1 self-center text-[12.5px] leading-[1.45] font-medium text-pretty">
+      <span className="min-w-0 flex-1 self-center text-body-sm leading-[1.45] font-medium text-pretty">
         {text}
       </span>
       {actions}
@@ -105,7 +105,7 @@ export function BannerButton({
       variant="ghost"
       {...props}
       className={cn(
-        "h-6 shrink-0 rounded-[7px] px-2.5 text-[12px]",
+        "h-6 shrink-0 rounded-control px-2.5 text-ui",
         tone === "danger"
           ? "bg-[color-mix(in_oklab,var(--status-failed)_14%,transparent)] text-status-failed hover:bg-[color-mix(in_oklab,var(--status-failed)_20%,transparent)] hover:text-status-failed"
           : "text-status-failed hover:bg-[color-mix(in_oklab,var(--status-failed)_10%,transparent)] hover:text-status-failed",
@@ -132,7 +132,7 @@ export function SelectField({
   children: ReactNode;
 }) {
   return (
-    <label className="flex min-w-0 flex-col gap-[5px]">
+    <label className="flex min-w-0 flex-col gap-1.25">
       <span className={LABEL}>{label}</span>
       <SelectShell
         className={cn("flex", mono && FIELD_MONO)}

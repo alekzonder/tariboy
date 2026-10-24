@@ -10,7 +10,7 @@ import { principalName, shortTime, taskKeysOf, type FeedMessage } from "./chatFe
 function ReceiptMark({ item }: { item: FeedMessage }) {
   if (!item.receipt) return null;
   return (
-    <div className="flex items-center gap-1.5 pt-0.5 text-[10.5px] text-muted-foreground">
+    <div className="flex items-center gap-1.5 pt-0.5 text-tiny text-muted-foreground">
       {item.receipt === "sent" && <Check className="size-3 opacity-60" aria-hidden />}
       {item.receipt === "delivered" && <CheckCheck className="size-3 opacity-70" aria-hidden />}
       {item.receipt === "read" && <CheckCheck className="size-3 text-primary" aria-hidden />}
@@ -49,34 +49,34 @@ export default function ChatMessage({
     { label: "Create a task from this message", icon: ListPlus, run: () => onCreateTask(item) },
   ];
   return (
-    <div className="group relative flex gap-[9px] py-px pr-3.5 pl-3 hover:bg-muted">
-      <div className="flex w-[22px] shrink-0 justify-center pt-0.5">
+    <div className="group relative flex gap-2.25 py-px pr-3.5 pl-3 hover:bg-muted">
+      <div className="flex w-5.5 shrink-0 justify-center pt-0.5">
         {head ? (
           <span
             className={cn(
-              "grid size-[22px] place-items-center text-[10.5px] font-semibold uppercase",
+              "grid size-5.5 place-items-center text-tiny font-semibold uppercase",
               mine
                 ? "rounded-full bg-secondary text-muted-foreground"
-                : "rounded-[7px] bg-[color-mix(in_oklab,var(--status-running)_16%,transparent)] font-mono text-[var(--status-running)]",
+                : "rounded-control bg-[color-mix(in_oklab,var(--status-running)_16%,transparent)] font-mono text-[var(--status-running)]",
             )}
           >
             {author.charAt(0)}
           </span>
         ) : (
-          <span className="pt-[3px] font-mono text-[10px] text-muted-foreground opacity-0 tabular-nums group-hover:opacity-55">
+          <span className="pt-0.75 font-mono text-micro text-muted-foreground opacity-0 tabular-nums group-hover:opacity-55">
             {shortTime(message.ts)}
           </span>
         )}
       </div>
       <div className="min-w-0 flex-1 pb-px">
         {head && (
-          <div className="flex min-w-0 items-baseline gap-[7px] pb-px">
-            <span className="truncate text-[12.5px] font-semibold">{author}</span>
-            <span className="inline-flex h-[15px] shrink-0 items-center rounded-[5px] bg-muted px-[5px] font-mono text-[10px] text-muted-foreground">
+          <div className="flex min-w-0 items-baseline gap-1.75 pb-px">
+            <span className="truncate text-body-sm font-semibold">{author}</span>
+            <span className="inline-flex h-3.75 shrink-0 items-center rounded-chip bg-muted px-1.25 font-mono text-micro text-muted-foreground">
               {role}
             </span>
             <span
-              className="shrink-0 font-mono text-[10.5px] text-muted-foreground tabular-nums"
+              className="shrink-0 font-mono text-tiny text-muted-foreground tabular-nums"
               title={message.ts}
             >
               {shortTime(message.ts)}
@@ -91,7 +91,7 @@ export default function ChatMessage({
                 key={key}
                 type="button"
                 onClick={() => onOpenTask(key)}
-                className="rounded-[5px] border px-1.5 font-mono text-[10.5px] hover:bg-primary/10"
+                className="rounded-chip border px-1.5 font-mono text-tiny hover:bg-primary/10"
               >
                 {key}
               </button>
@@ -100,7 +100,7 @@ export default function ChatMessage({
         )}
         <ReceiptMark item={item} />
       </div>
-      <div className="absolute top-0 right-2 hidden items-center gap-0.5 rounded-[7px] border bg-card p-0.5 group-focus-within:flex group-hover:flex">
+      <div className="absolute top-0 right-2 hidden items-center gap-0.5 rounded-control border bg-card p-0.5 group-focus-within:flex group-hover:flex">
         {actions.map(({ label, icon: Icon, run }) => (
           <button
             key={label}
@@ -108,7 +108,7 @@ export default function ChatMessage({
             aria-label={label}
             title={label}
             onClick={run}
-            className="grid size-[22px] place-items-center rounded-[5px] text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="grid size-5.5 place-items-center rounded-chip text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <Icon className="size-3.5" />
           </button>

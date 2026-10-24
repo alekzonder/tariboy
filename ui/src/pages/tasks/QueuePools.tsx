@@ -55,7 +55,7 @@ export default function QueuePools({
         ))}
       </datalist>
       {notice && (
-        <p role="status" className="text-[12px] text-muted-foreground">
+        <p role="status" className="text-ui text-muted-foreground">
           {notice}
         </p>
       )}
@@ -90,7 +90,7 @@ export default function QueuePools({
           <input
             aria-label="New pool name"
             autoFocus
-            className={cn(FIELD, MONO, "h-[28px] w-48")}
+            className={cn(FIELD, MONO, "h-7 w-48")}
             value={newName}
             onChange={(event) => setNewName(event.target.value)}
             placeholder="pool name"
@@ -98,7 +98,7 @@ export default function QueuePools({
           <Button
             type="submit"
             size="sm"
-            className="h-[28px]"
+            className="h-7"
             aria-label="Create pool row"
             disabled={!newName.trim()}
           >
@@ -108,7 +108,7 @@ export default function QueuePools({
             type="button"
             size="sm"
             variant="secondary"
-            className="h-[28px]"
+            className="h-7"
             onClick={() => setAdding(false)}
           >
             Cancel
@@ -120,7 +120,7 @@ export default function QueuePools({
             type="button"
             size="sm"
             variant="outline"
-            className="h-[28px] border-dashed"
+            className="h-7 border-dashed"
             onClick={() => setAdding(true)}
           >
             Add pool
@@ -189,15 +189,15 @@ function PoolRow({
       role="group"
       aria-label={`Pool ${name}`}
       className={cn(
-        "grid gap-2 rounded-[10px] border p-3 sm:grid-cols-[180px_minmax(0,1fr)_auto] sm:items-start",
+        "grid gap-2 rounded-lg border p-3 sm:grid-cols-[180px_minmax(0,1fr)_auto] sm:items-start",
         statuses &&
           empty &&
           "border-[color-mix(in_oklab,var(--status-failed)_35%,transparent)] bg-[color-mix(in_oklab,var(--status-failed)_5%,transparent)]",
       )}
     >
       <div className="flex min-w-0 flex-col gap-0.5">
-        <strong className={cn(MONO, "text-[12.5px] font-medium")}>{name}</strong>
-        <span className="text-[11px] text-muted-foreground">
+        <strong className={cn(MONO, "text-body-sm font-medium")}>{name}</strong>
+        <span className="text-caption text-muted-foreground">
           {!statuses
             ? "not used by the workflow"
             : statuses.length
@@ -206,7 +206,10 @@ function PoolRow({
         </span>
         {empty && (
           <span
-            className={cn("text-[11px]", statuses ? "text-status-failed" : "text-muted-foreground")}
+            className={cn(
+              "text-caption",
+              statuses ? "text-status-failed" : "text-muted-foreground",
+            )}
           >
             no agents
           </span>
@@ -218,7 +221,7 @@ function PoolRow({
             key={agent}
             className={cn(
               MONO,
-              "inline-flex items-center gap-0.5 rounded-[6px] bg-muted py-0.5 pr-0.5 pl-2",
+              "inline-flex items-center gap-0.5 rounded-sm bg-muted py-0.5 pr-0.5 pl-2",
             )}
           >
             {agent}
@@ -236,7 +239,7 @@ function PoolRow({
           <input
             aria-label={`Add agent to ${name}`}
             list={listId}
-            className={cn(FIELD, "h-[26px] w-40")}
+            className={cn(FIELD, "h-6.5 w-40")}
             value={entry}
             placeholder="Add agent…"
             onChange={(event) => setEntry(event.target.value)}
@@ -251,7 +254,7 @@ function PoolRow({
             type="button"
             size="sm"
             variant="secondary"
-            className="h-[26px]"
+            className="h-6.5"
             disabled={!entry.trim()}
             onClick={add}
           >
@@ -262,7 +265,7 @@ function PoolRow({
       <Button
         type="button"
         size="sm"
-        className="h-[28px] justify-self-start"
+        className="h-7 justify-self-start"
         aria-label={`Save pool ${name}`}
         disabled={busy || !changed}
         onClick={() => void save()}
@@ -270,7 +273,7 @@ function PoolRow({
         Save
       </Button>
       {error && (
-        <p role="alert" className="text-[12px] text-destructive sm:col-span-3">
+        <p role="alert" className="text-ui text-destructive sm:col-span-3">
           {error}
         </p>
       )}

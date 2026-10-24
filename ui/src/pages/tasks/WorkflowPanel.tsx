@@ -90,7 +90,7 @@ export function WorkflowPanel({
   };
 
   const failure = error && (
-    <div role="alert" className="flex items-center gap-2 text-[12px] text-status-failed">
+    <div role="alert" className="flex items-center gap-2 text-ui text-status-failed">
       <span className="min-w-0 flex-1">{error}</span>
       <Button type="button" variant="ghost" className={QUIET_ACTION} onClick={refresh}>
         Retry
@@ -179,7 +179,7 @@ export function WorkflowPanel({
   };
 
   return (
-    <div className="flex min-w-0 flex-col gap-[18px]">
+    <div className="flex min-w-0 flex-col gap-4.5">
       {view.waiting_on === "pause" && (
         <WorkflowPauseBanner
           taskKey={task.key}
@@ -191,7 +191,7 @@ export function WorkflowPanel({
       <WorkflowProblem taskKey={task.key} view={view} onChanged={changed} onRefresh={refresh} />
       <WorkflowStepper view={view} selected={selected} onSelect={setChosen} />
       <div className="flex min-w-0 items-center gap-2">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[12px] text-muted-foreground">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-0.5 text-ui text-muted-foreground">
           <span className={cn(MONO, "font-medium text-foreground")} title={view.digest}>
             {view.name}@{view.version}
           </span>
@@ -267,7 +267,7 @@ export function WorkflowPanel({
       </div>
       {failure}
       {cancellation.error && (
-        <p role="alert" className="text-[12px] text-status-failed">
+        <p role="alert" className="text-ui text-status-failed">
           {errorText(cancellation.error)}
         </p>
       )}
@@ -315,7 +315,7 @@ export function WorkflowPanel({
                   {formatTaskTime(visit.entered_at)} · {visit.entered_by}
                 </span>
                 {visit.left_at ? (
-                  <span className="text-[12px] text-muted-foreground">
+                  <span className="text-ui text-muted-foreground">
                     {visit.outcome ? (
                       <>
                         left by <span className={MONO}>{visit.outcome}</span>
@@ -325,10 +325,10 @@ export function WorkflowPanel({
                     )}
                   </span>
                 ) : (
-                  <span className="text-[12px] text-muted-foreground">current</span>
+                  <span className="text-ui text-muted-foreground">current</span>
                 )}
                 {visit.message && (
-                  <span className="w-full min-w-0 text-[12px] break-words whitespace-pre-wrap">
+                  <span className="w-full min-w-0 text-ui break-words whitespace-pre-wrap">
                     {visit.message}
                   </span>
                 )}
@@ -387,7 +387,7 @@ function MoveForm({
   };
   return (
     <form
-      className="flex min-w-0 flex-col gap-1.5 rounded-[8px] bg-muted/50 p-2.5"
+      className="flex min-w-0 flex-col gap-1.5 rounded-md bg-muted/50 p-2.5"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -399,7 +399,7 @@ function MoveForm({
           autoFocus
           aria-label="Target status"
           value={to}
-          className="h-[26px] w-auto max-w-full text-[12px] md:text-[12px]"
+          className="h-6.5 w-auto max-w-full text-ui md:text-ui"
           onChange={(event) => setTo(event.target.value)}
         >
           <option value="">Choose a status</option>
@@ -422,23 +422,18 @@ function MoveForm({
           aria-label="Reason"
           placeholder="Reason (required)"
           value={reason}
-          className={cn(FIELD, "h-[26px] min-w-[160px] flex-1")}
+          className={cn(FIELD, "h-6.5 min-w-40 flex-1")}
           onChange={(event) => setReason(event.target.value)}
         />
-        <Button
-          type="submit"
-          size="sm"
-          className="h-[26px]"
-          disabled={busy || !to || !reason.trim()}
-        >
+        <Button type="submit" size="sm" className="h-6.5" disabled={busy || !to || !reason.trim()}>
           Move
         </Button>
-        <Button type="button" variant="ghost" size="sm" className="h-[26px]" onClick={onDone}>
+        <Button type="button" variant="ghost" size="sm" className="h-6.5" onClick={onDone}>
           Close
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-[12px] text-status-failed">
+        <p role="alert" className="text-ui text-status-failed">
           {error}
         </p>
       )}
@@ -475,7 +470,7 @@ function UpgradeForm({
   };
   return (
     <form
-      className="flex min-w-0 flex-col gap-1.5 rounded-[8px] bg-muted/50 p-2.5"
+      className="flex min-w-0 flex-col gap-1.5 rounded-md bg-muted/50 p-2.5"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -488,18 +483,18 @@ function UpgradeForm({
           aria-label="Upgrade reason"
           placeholder="Reason (optional)"
           value={reason}
-          className={cn(FIELD, "h-[26px] min-w-[160px] flex-1")}
+          className={cn(FIELD, "h-6.5 min-w-40 flex-1")}
           onChange={(event) => setReason(event.target.value)}
         />
-        <Button type="submit" size="sm" className="h-[26px]" disabled={busy}>
+        <Button type="submit" size="sm" className="h-6.5" disabled={busy}>
           Upgrade
         </Button>
-        <Button type="button" variant="ghost" size="sm" className="h-[26px]" onClick={onDone}>
+        <Button type="button" variant="ghost" size="sm" className="h-6.5" onClick={onDone}>
           Close
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-[12px] text-status-failed">
+        <p role="alert" className="text-ui text-status-failed">
           {error}
         </p>
       )}

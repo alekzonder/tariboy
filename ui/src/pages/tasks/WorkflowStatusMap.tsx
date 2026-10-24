@@ -16,9 +16,9 @@ export default function WorkflowStatusMap({
   onPool: (name: string) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-[10px] border">
-      <table aria-label="Statuses" className="w-full text-[12.5px]">
-        <thead className="bg-muted/50 text-left text-[11.5px] text-muted-foreground">
+    <div className="overflow-x-auto rounded-lg border">
+      <table aria-label="Statuses" className="w-full text-body-sm">
+        <thead className="bg-muted/50 text-left text-meta text-muted-foreground">
           <tr>
             {["Status", "Owner", "Outcomes"].map((label) => (
               <th key={label} className={cn(CELL, "font-medium")}>
@@ -43,7 +43,7 @@ export default function WorkflowStatusMap({
                     .map((label) => (
                       <span
                         key={String(label)}
-                        className="ml-1.5 rounded bg-muted px-1 text-[10.5px] text-muted-foreground"
+                        className="ml-1.5 rounded bg-muted px-1 text-tiny text-muted-foreground"
                       >
                         {label}
                       </span>
@@ -56,7 +56,7 @@ export default function WorkflowStatusMap({
                       data-empty={agents === 0}
                       aria-label={`Pool ${pool}, ${agents === 0 ? "no agents" : agents === 1 ? "1 agent" : `${agents} agents`}`}
                       className={cn(
-                        "rounded-[6px] px-2 py-0.5 hover:underline",
+                        "rounded-sm px-2 py-0.5 hover:underline",
                         MONO,
                         agents === 0 ? DANGER_FILL : PRIMARY_FILL,
                       )}

@@ -25,7 +25,7 @@ const keepOpen = (action: () => void) => (event: Event) => {
   action();
 };
 
-const stepClass = "size-7 justify-center rounded-[7px] p-0";
+const stepClass = "size-7 justify-center rounded-control p-0";
 
 /** The touch path to the column layout: order and width per column of the
  *  current table, and a reset. */
@@ -37,13 +37,13 @@ export default function TaskColumnsMenu({ mode }: { mode: TaskRowMode }) {
         <button
           type="button"
           aria-label="Columns"
-          className="flex h-7 shrink-0 items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground max-sm:hidden"
+          className="flex h-7 shrink-0 items-center gap-1.75 rounded-md bg-muted px-2.25 text-ui text-muted-foreground hover:bg-accent hover:text-foreground max-sm:hidden"
         >
           <Columns3 aria-hidden="true" className="size-3" />
           Columns
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[240px] rounded-[12px] p-[5px]">
+      <DropdownMenuContent align="end" className="min-w-60 rounded-card p-1.25">
         {columns.map((column, index) => {
           const label = TASK_COLUMN_LABELS[column.id];
           const id = column.id;
@@ -53,12 +53,12 @@ export default function TaskColumnsMenu({ mode }: { mode: TaskRowMode }) {
               key={id}
               data-testid="task-column-menu-row"
               data-column={id}
-              className="flex h-8 items-center gap-0.5 pl-[9px] text-[12.5px]"
+              className="flex h-8 items-center gap-0.5 pl-2.25 text-body-sm"
             >
               <span className="min-w-0 flex-1 truncate">{label}</span>
               {id !== "task" && width !== undefined && (
                 <>
-                  <span className="w-9 text-right text-[11.5px] text-muted-foreground tabular-nums">
+                  <span className="w-9 text-right text-meta text-muted-foreground tabular-nums">
                     {width}
                   </span>
                   <DropdownMenuItem
@@ -101,7 +101,7 @@ export default function TaskColumnsMenu({ mode }: { mode: TaskRowMode }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={resetTaskColumns}
-          className="h-7 gap-2 rounded-[7px] px-[9px] text-[12.5px]"
+          className="h-7 gap-2 rounded-control px-2.25 text-body-sm"
         >
           <RotateCcw aria-hidden="true" className="size-3" />
           Reset columns

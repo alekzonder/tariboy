@@ -217,7 +217,7 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
             key={serverId}
             data-testid="server-warning"
             title={message}
-            className="px-4 pb-1.5 text-[12px] text-muted-foreground"
+            className="px-4 pb-1.5 text-ui text-muted-foreground"
           >
             {labelOf(serverId)} unavailable ·{" "}
             <button
@@ -232,7 +232,7 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
         {loading ? (
           <div aria-label="Loading tasks" role="status">
             {Array.from({ length: 6 }, (_, index) => (
-              <div key={index} className="mx-4 my-[5px] h-5 animate-pulse rounded-[6px] bg-muted" />
+              <div key={index} className="mx-4 my-1.25 h-5 animate-pulse rounded-sm bg-muted" />
             ))}
           </div>
         ) : (
@@ -263,8 +263,8 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
             })}
             {rows.length === 0 && (
               <div className="flex flex-col items-center gap-1 py-12">
-                <span className="text-[13px] font-medium">No tasks</span>
-                <span className="text-[12px] text-muted-foreground">
+                <span className="text-body font-medium">No tasks</span>
+                <span className="text-ui text-muted-foreground">
                   {filtersActive
                     ? "Nothing matches the current filters."
                     : "No server has tasks yet."}
@@ -272,7 +272,7 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
                 {filtersActive && (
                   <button
                     type="button"
-                    className="text-[12px] text-primary hover:underline"
+                    className="text-ui text-primary hover:underline"
                     onClick={clearFilters}
                   >
                     Clear filters
