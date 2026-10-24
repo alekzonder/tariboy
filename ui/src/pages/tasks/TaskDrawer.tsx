@@ -2,7 +2,8 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useApi } from "@/components/apiContext";
 import { useApiQuery } from "@/hooks/useApiQuery";
-import { errorText as errorMessage, isAccessError } from "@/lib/queryClient";
+import { errorText } from "@/lib/errors";
+import { isAccessError } from "@/lib/queryClient";
 import { taskQueries, refreshTasks, writeTask, retainTaskRevision } from "./taskQueries";
 import { useTaskQueryEvents } from "./useTaskQueryEvents";
 import { toast } from "sonner";
@@ -21,10 +22,7 @@ import TaskDetail, { TaskDetailLoading } from "./TaskDetail";
 import TaskPanelResizeHandle from "./TaskPanelResizeHandle";
 import { clampTaskDetailWidth, useTaskPanelWidths } from "./useTaskPanelWidths";
 import "./tasks.css";
-
-function idempotencyKey(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `task-action-${Date.now()}-${Math.random()}`;
-}
+import { idempotencyKey } from "@/lib/ids";
 
 type TaskEdit = {
   revision: number;
@@ -87,7 +85,7 @@ function TaskDrawerContent({
   useEffect(() => {
     const error = detailQuery.error ?? historyQuery.error;
     if (!error || isConnectionError(error)) return;
-    toast.error(errorMessage(error));
+    toast.error(errorText(error));
     if (!detailQuery.data && !isAccessError(error)) onClose();
   }, [detailQuery.error, detailQuery.data, historyQuery.error, onClose]);
 
@@ -118,7 +116,11 @@ function TaskDrawerContent({
     const imported = await destination.tasks.importTask({ ...bundle, tasks });
     let result = imported;
     try {
-      await api.tasks.addTaskComment(key, `Moved to ${label} as ${key}.`, idempotencyKey());
+      await api.tasks.addTaskComment(
+        key,
+        `Moved to ${label} as ${key}.`,
+        idempotencyKey("task-action"),
+      );
       const left = await api.tasks.getTask(key);
       await api.tasks.updateTask(key, { status: "cancelled", revision: left.task.revision });
       const arrived = await destination.tasks.getTask(key);
@@ -128,7 +130,7 @@ function TaskDrawerContent({
       });
       toast.success(`${key} moved to ${label}`);
     } catch (error) {
-      toast.error(`${key} moved to ${label}, but the move did not finish: ${errorMessage(error)}`);
+      toast.error(`${key} moved to ${label}, but the move did not finish: ${errorText(error)}`);
     }
     await refreshTasks(client, destination);
     onMoved?.(hostId);
@@ -144,7 +146,7 @@ function TaskDrawerContent({
         onClose={onClose}
         error={
           detailQuery.error || historyQuery.error
-            ? errorMessage(detailQuery.error ?? historyQuery.error)
+            ? errorText(detailQuery.error ?? historyQuery.error)
             : undefined
         }
       />
@@ -167,7 +169,13 @@ function TaskDrawerContent({
         const label = host.label || host.id;
         const destination = createApi(host);
         await write(() =>
-          transferTask(detail.task.key, api.tasks, destination.tasks, label, idempotencyKey()),
+          transferTask(
+            detail.task.key,
+            api.tasks,
+            destination.tasks,
+            label,
+            idempotencyKey("task-action"),
+          ),
         );
         await refreshTasks(client, destination);
         toast.success(`${detail.task.key} moved to ${label}`);
@@ -207,7 +215,7 @@ function TaskDrawerContent({
           toast.success("Task updated");
           return retainTaskRevision(client, api, updated);
         } catch (error) {
-          toast.error(errorMessage(error));
+          toast.error(errorText(error));
           throw error;
         }
       }}
@@ -215,7 +223,7 @@ function TaskDrawerContent({
         try {
           await write(() => api.tasks.addTaskComment(detail.task.key, body, key));
         } catch (error) {
-          toast.error(errorMessage(error));
+          toast.error(errorText(error));
           throw error;
         }
       }}
@@ -226,7 +234,7 @@ function TaskDrawerContent({
             targetKey,
             type,
             detail.task.revision,
-            idempotencyKey(),
+            idempotencyKey("task-action"),
           ),
         );
       }}
@@ -236,7 +244,7 @@ function TaskDrawerContent({
             detail.task.key,
             relationID,
             detail.task.revision,
-            idempotencyKey(),
+            idempotencyKey("task-action"),
           ),
         );
       }}

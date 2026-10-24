@@ -22,7 +22,7 @@ import QueueEnvironment from "./QueueEnvironment";
 import QueueSources from "./QueueSources";
 import QueueWorkflowSettings from "./QueueWorkflowSettings";
 import { emptyPools, requiredPools } from "./workflowPools";
-import { errorText } from "./workflowShared";
+import { errorText } from "@/lib/errors";
 
 interface QueueState {
   binding: QueueWorkflow | null;

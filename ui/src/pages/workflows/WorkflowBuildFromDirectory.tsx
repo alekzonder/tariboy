@@ -4,7 +4,7 @@ import { ApiError, type WorkflowValidation, type WorkflowValidationError } from 
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { errorText } from "@/pages/tasks/workflowShared";
+import { errorText } from "@/lib/errors";
 
 /** Validate and build a workflow source directory on the host of the nearest ApiProvider. */
 export default function WorkflowBuildFromDirectory({ onBuilt }: { onBuilt: () => void }) {

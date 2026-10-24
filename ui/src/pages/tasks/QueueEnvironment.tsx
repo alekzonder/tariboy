@@ -7,7 +7,8 @@ import { COUNT, EMPTY, FIELD, LABEL, QUIET_ACTION } from "./panelStyles";
 import QueueSecrets from "./QueueSecrets";
 import { formatTaskTime } from "./taskTime";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
-import { errorText, keyProblem } from "./workflowShared";
+import { errorText } from "@/lib/errors";
+import { keyProblem } from "./workflowShared";
 
 /**
  * The Environment tab of a queue: plain env vars and secrets in two blocks.

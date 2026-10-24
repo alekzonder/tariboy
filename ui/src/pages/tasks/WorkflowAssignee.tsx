@@ -5,7 +5,7 @@ import type { Task } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { FIELD_MONO, LABEL, MONO, SelectShell } from "./panelStyles";
 import { taskQueries, writeTask } from "./taskQueries";
-import { errorText } from "./workflowShared";
+import { errorText } from "@/lib/errors";
 
 /**
  * The assignee of a workflow task. In an open, unpaused pool status the

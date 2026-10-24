@@ -6,8 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { errorText } from "@/lib/errors";
 
-const reason = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const mib = (n: number) => `${(n / 1048576).toFixed(1)} MiB`;
 
 function describeRun(run: MaintenanceRun) {
@@ -46,7 +46,7 @@ export function MaintenanceSettingsCard() {
         setError(r.last_run?.error ?? "");
       })
       .catch((e) => {
-        if (current) setError(reason(e));
+        if (current) setError(errorText(e));
       });
     api.daemon
       .getIterationRetentionDefault()
@@ -61,7 +61,7 @@ export function MaintenanceSettingsCard() {
         setSavedRet(p);
       })
       .catch((e) => {
-        if (current) setError(reason(e));
+        if (current) setError(errorText(e));
       });
     return () => {
       current = false;
@@ -74,7 +74,7 @@ export function MaintenanceSettingsCard() {
     try {
       await fn();
     } catch (e) {
-      setError(reason(e));
+      setError(errorText(e));
     }
     setBusy(false);
   };

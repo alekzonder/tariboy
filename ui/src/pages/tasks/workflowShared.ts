@@ -5,9 +5,7 @@ import type { StatusTone } from "@/lib/statusTone";
 
 /** Helpers shared by the workflow panel and the queue workflow settings. */
 
-/** The message of a failed request, as a person reads it. */
-export { errorText } from "@/lib/queryClient";
-import { errorText } from "@/lib/queryClient";
+import { errorText } from "@/lib/errors";
 
 // A queue env or secret key: the daemon's rule (internal/tasks/workflow_secrets.go), shared by env vars.
 const KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;

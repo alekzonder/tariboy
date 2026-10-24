@@ -4,7 +4,8 @@ import { StatusPill } from "@/components/ui/status";
 import { cn } from "@/lib/utils";
 import { EMPTY, MONO, QUIET_ACTION } from "./panelStyles";
 import { formatTaskTime } from "./taskTime";
-import { errorText, runTone } from "./workflowShared";
+import { errorText } from "@/lib/errors";
+import { runTone } from "./workflowShared";
 
 /** The left bar of a run row, by tone: the eye finds a failed run in a list. */
 const TONE_BAR: Record<ReturnType<typeof runTone>, string> = {

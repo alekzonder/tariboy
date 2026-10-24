@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { eligibleImageTransferTargets } from "@/pages/images/imageTransferTargets";
-import { errorText } from "@/pages/tasks/workflowShared";
+import { errorText } from "@/lib/errors";
 
 type Status =
   | "queued"

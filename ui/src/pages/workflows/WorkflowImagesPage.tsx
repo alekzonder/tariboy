@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { WorkflowImage } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
-import { errorText } from "@/pages/tasks/workflowShared";
+import { errorText } from "@/lib/errors";
 import WorkflowBuildFromDirectory from "./WorkflowBuildFromDirectory";
 import { WorkflowTransferDialog } from "./WorkflowTransferDialog";
 import {

@@ -12,7 +12,7 @@ import {
 import { EMPTY, LABEL, MONO, SelectShell } from "./panelStyles";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
 import WorkflowStatusMap from "./WorkflowStatusMap";
-import { errorText } from "./workflowShared";
+import { errorText } from "@/lib/errors";
 
 function detailList(error: ApiError, name: string): string[] {
   const list = error.details?.[name];

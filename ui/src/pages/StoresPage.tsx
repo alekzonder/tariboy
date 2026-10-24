@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  ApiError,
   type Store,
   type StoreDetail,
   type StoreImage,
@@ -25,8 +24,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-
-const message = (error: unknown) => (error instanceof ApiError ? error.message : String(error));
+import { errorText } from "@/lib/errors";
 
 const imageStatuses = (image: StoreImage) => {
   const statuses: string[] = [];
@@ -109,7 +107,7 @@ export default function StoresPage({ name, basePath }: { name?: string; basePath
         } else setStores(result as Store[]);
       })
       .catch((cause) => {
-        if (current) setError(message(cause));
+        if (current) setError(errorText(cause));
       })
       .finally(() => {
         if (current) setLoading(false);
@@ -138,7 +136,7 @@ export default function StoresPage({ name, basePath }: { name?: string; basePath
       const added = await api.stores.addStore(input);
       if (mounted.current) navigate(`${basePath}/${encodeURIComponent(added.name)}`);
     } catch (cause) {
-      if (mounted.current) setError(message(cause));
+      if (mounted.current) setError(errorText(cause));
     } finally {
       if (mounted.current) setBusy("");
     }
@@ -157,7 +155,7 @@ export default function StoresPage({ name, basePath }: { name?: string; basePath
         setStatus(`Refreshed ${name}.`);
       }
     } catch (cause) {
-      if (mounted.current) setError(message(cause));
+      if (mounted.current) setError(errorText(cause));
     } finally {
       if (mounted.current) setBusy("");
     }
@@ -186,10 +184,10 @@ export default function StoresPage({ name, basePath }: { name?: string; basePath
         const refreshed = await api.stores.getStore(name);
         if (isCurrent()) setDetail(refreshed);
       } catch (cause) {
-        if (isCurrent()) setError(message(cause));
+        if (isCurrent()) setError(errorText(cause));
       }
     } catch (cause) {
-      if (isCurrent()) setError(message(cause));
+      if (isCurrent()) setError(errorText(cause));
     } finally {
       if (isCurrent()) setBusy("");
     }
@@ -216,7 +214,7 @@ export default function StoresPage({ name, basePath }: { name?: string; basePath
         setWorkflowImages(images);
       }
     } catch (cause) {
-      if (isCurrent()) setError(message(cause));
+      if (isCurrent()) setError(errorText(cause));
     } finally {
       if (isCurrent()) setBusy("");
     }
@@ -251,7 +249,7 @@ export default function StoresPage({ name, basePath }: { name?: string; basePath
         );
       }
     } catch (cause) {
-      if (mounted.current) setError(message(cause));
+      if (mounted.current) setError(errorText(cause));
     } finally {
       if (mounted.current) setBusy("");
     }
@@ -269,7 +267,7 @@ export default function StoresPage({ name, basePath }: { name?: string; basePath
       if (mounted.current) navigate(basePath);
     } catch (cause) {
       if (mounted.current) {
-        const failure = message(cause);
+        const failure = errorText(cause);
         setError(failure);
         setRemoveError(failure);
       }

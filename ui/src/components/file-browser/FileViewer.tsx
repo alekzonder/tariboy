@@ -7,10 +7,11 @@ import CodeMirror from "@uiw/react-codemirror";
 import { Loader2 } from "lucide-react";
 import { useTheme } from "@/components/themeContext";
 import type { FileContent } from "@/lib/api";
-import { errMsg, isMarkdown } from "./paths";
+import { isMarkdown } from "./paths";
 import { langFor } from "./languages";
 import { FileViewerToolbar } from "./FileViewerToolbar";
 import "@/styles/hljs-github.css";
+import { errorText } from "@/lib/errors";
 
 export function FileViewer({
   path,
@@ -44,7 +45,7 @@ export function FileViewer({
         if (alive) setFile(r);
       })
       .catch((e) => {
-        if (alive) toast.error(errMsg(e));
+        if (alive) toast.error(errorText(e));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -80,7 +81,7 @@ export function FileViewer({
         toast.success("Saved");
         onSaved(path);
       })
-      .catch((e) => toast.error(errMsg(e)))
+      .catch((e) => toast.error(errorText(e)))
       .finally(() => setSaving(false));
   }, [path, file, writeFile, draft, onSaved]);
 

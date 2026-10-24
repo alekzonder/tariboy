@@ -1,4 +1,4 @@
-import { errorText as errorMessage } from "@/lib/queryClient";
+import { errorText } from "@/lib/errors";
 import QueueSettingsDialog from "./QueueSettingsDialog";
 import { TaskFilterBar } from "./TaskFilterBar";
 import TaskDetail, { TaskDetailLoading } from "./TaskDetail";
@@ -137,7 +137,7 @@ export function TasksWorkspaceContent({
           </div>
         ) : treeQuery.error && !treeQuery.data ? (
           <div className="tasks-empty" role="alert">
-            {errorMessage(treeQuery.error)}
+            {errorText(treeQuery.error)}
           </div>
         ) : loading ? (
           <div className="tasks-empty">Loading tasks…</div>
@@ -177,7 +177,7 @@ export function TasksWorkspaceContent({
           taskKey={loadingKey}
           error={
             detailQuery.error || historyQuery.error
-              ? errorMessage(detailQuery.error ?? historyQuery.error)
+              ? errorText(detailQuery.error ?? historyQuery.error)
               : undefined
           }
           width={effectiveDetailWidth}

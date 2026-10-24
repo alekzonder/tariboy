@@ -25,7 +25,8 @@ import WorkflowPauseBanner from "./WorkflowPauseBanner";
 import WorkflowProblem from "./WorkflowProblem";
 import WorkflowRuns from "./WorkflowRuns";
 import WorkflowStepper from "./WorkflowStepper";
-import { errorText, useMounted } from "./workflowShared";
+import { errorText } from "@/lib/errors";
+import { useMounted } from "./workflowShared";
 
 /** A mono value that may be a 64-character ID: it wraps rather than overflows. */
 const MONO_ID = cn(MONO, "min-w-0 break-all");

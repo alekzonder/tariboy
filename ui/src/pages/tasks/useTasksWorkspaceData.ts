@@ -4,7 +4,7 @@ import { keepPreviousData, useMutation, useQueries, useQueryClient } from "@tans
 import { useApi } from "@/components/apiContext";
 import { useApiQuery } from "@/hooks/useApiQuery";
 import { isConnectionError, type Task, type TaskNotification } from "@/lib/api";
-import { errorText as errorMessage } from "@/lib/queryClient";
+import { errorText } from "@/lib/errors";
 import { taskKeys, taskQueries } from "./taskQueries";
 import { useTaskQueryEvents } from "./useTaskQueryEvents";
 import type { TasksWorkspaceView } from "./useTasksWorkspaceView";
@@ -29,7 +29,7 @@ export function useTasksWorkspaceData(
   const notifications = useMemo(() => inboxQuery.data?.notifications ?? [], [inboxQuery.data]);
   const principalFilter = !scopeAgent && view !== "" ? principals?.customer : undefined;
   const principalMetadataError =
-    !scopeAgent && view !== "" && peopleQuery.error ? errorMessage(peopleQuery.error) : "";
+    !scopeAgent && view !== "" && peopleQuery.error ? errorText(peopleQuery.error) : "";
   const waitingForPrincipal = !scopeAgent && view !== "" && !principalFilter;
   const filters = {
     text: query,
@@ -74,7 +74,7 @@ export function useTasksWorkspaceData(
   useTaskQueryEvents(treeQuery.data?.sequence);
   useEffect(() => {
     const error = treeQuery.error ?? peopleQuery.error ?? detailQuery.error ?? historyQuery.error;
-    if (error && !isConnectionError(error)) toast.error(errorMessage(error));
+    if (error && !isConnectionError(error)) toast.error(errorText(error));
   }, [treeQuery.error, peopleQuery.error, detailQuery.error, historyQuery.error]);
   const markRead = useMutation({
     mutationFn: async (unread: TaskNotification[]) => {

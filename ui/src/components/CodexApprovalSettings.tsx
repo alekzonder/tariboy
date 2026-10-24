@@ -3,8 +3,7 @@ import type { CodexApprovalMode } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/segmented";
-
-const reason = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { errorText } from "@/lib/errors";
 
 const options = [
   { value: "yolo", label: "Yolo" },
@@ -34,7 +33,7 @@ export function CodexApprovalCard() {
         if (current) setMode(r.mode);
       })
       .catch((e) => {
-        if (current) setError(reason(e));
+        if (current) setError(errorText(e));
       });
     return () => {
       current = false;
@@ -48,7 +47,7 @@ export function CodexApprovalCard() {
     try {
       setMode((await api.harnesses.setCodexApproval(next)).mode);
     } catch (e) {
-      setError(reason(e));
+      setError(errorText(e));
     }
     setBusy(false);
   };

@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { eligibleImageTransferTargets, type ImageTransferTarget } from "./imageTransferTargets";
+import { errorText } from "@/lib/errors";
 
 interface ImageTransferDialogProps {
   open: boolean;
@@ -40,7 +41,6 @@ interface TransferRow {
 
 type DestinationTarget = ImageTransferTarget & { api: ApiClient };
 
-const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const isConflict = (error: unknown) => error instanceof ApiError && error.status === 409;
 const completedRows = (rows: Record<string, TransferRow>) =>
   Object.values(rows).filter(
@@ -148,7 +148,7 @@ function ImageTransferDialogSession({
       archive.current = await source.images.downloadImageArchive(imageRef);
       if (!mounted.current || transfer.current !== run) return;
     } catch (error) {
-      const failure = { status: "failed" as const, error: errorMessage(error) };
+      const failure = { status: "failed" as const, error: errorText(error) };
       if (mounted.current && transfer.current === run)
         setRows(Object.fromEntries(selectedTargets.map((target) => [target.id, failure])));
       if (mounted.current && transfer.current === run) setPhase("idle");
@@ -184,7 +184,7 @@ function ImageTransferDialogSession({
           target.id,
           {
             status: "failed",
-            error: errorMessage(error),
+            error: errorText(error),
             ...(isConflict(error) ? { retryRef: imageRef } : {}),
           },
           run,
@@ -220,7 +220,7 @@ function ImageTransferDialogSession({
         targetID,
         {
           status: "failed",
-          error: errorMessage(error),
+          error: errorText(error),
           ...(isConflict(error) ? { retryRef } : {}),
         },
         run,

@@ -4,7 +4,8 @@ import { ApiError, type WorkflowManifest } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { useWorkflowConfirm } from "@/pages/tasks/WorkflowConfirm";
-import { errorText, useMounted } from "@/pages/tasks/workflowShared";
+import { errorText } from "@/lib/errors";
+import { useMounted } from "@/pages/tasks/workflowShared";
 import { WorkflowTransferDialog } from "./WorkflowTransferDialog";
 import {
   boundTo,

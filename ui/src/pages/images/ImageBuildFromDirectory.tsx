@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { ApiError, type ImageDiagnostic, type ImageValidationResult } from "@/lib/api";
+import { type ImageDiagnostic, type ImageValidationResult } from "@/lib/api";
 import { notifyImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-const message = (error: unknown) => (error instanceof ApiError ? error.message : String(error));
+import { errorText } from "@/lib/errors";
 
 export default function ImageBuildFromDirectory() {
   const api = useApi();
@@ -35,7 +34,7 @@ export default function ImageBuildFromDirectory() {
       setDiagnostics(result.diagnostics ?? []);
       if (result.valid) toast.success("Tariboyfile is valid");
     } catch (error) {
-      toast.error(message(error));
+      toast.error(errorText(error));
     } finally {
       setBusy(false);
     }
@@ -57,7 +56,7 @@ export default function ImageBuildFromDirectory() {
       toast.success(`built ${result.name}:${result.tag}`);
       notifyImagesChanged();
     } catch (error) {
-      toast.error(`build failed: ${message(error)}`);
+      toast.error(`build failed: ${errorText(error)}`);
     } finally {
       setBusy(false);
     }

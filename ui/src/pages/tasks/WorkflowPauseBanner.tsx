@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { DANGER_FILL } from "./panelStyles";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
-import { errorText } from "./workflowShared";
+import { errorText } from "@/lib/errors";
 
 /** The four reasons the daemon pauses a task, as a person reads them. */
 const REASONS: Record<string, string> = {

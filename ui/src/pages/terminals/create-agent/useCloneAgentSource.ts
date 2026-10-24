@@ -3,7 +3,7 @@ import { createApi } from "@/lib/api";
 import { resolveDaemon } from "@/lib/daemons";
 import { cloneAgentDraft, type AgentCreateDraft } from "../agentCreateDraft";
 import type { CloneAgentSource } from "../CreateAgentDialog";
-import { errorMessage } from "./errorMessage";
+import { errorText } from "@/lib/errors";
 
 export function useCloneAgentSource(
   cloneSource: CloneAgentSource | undefined,
@@ -36,7 +36,7 @@ export function useCloneAgentSource(
       (error) => {
         if (!alive) return;
         setSourceState("error");
-        setSourceError(`Could not load source agent: ${errorMessage(error)}`);
+        setSourceError(`Could not load source agent: ${errorText(error)}`);
       },
     );
     return () => {
@@ -55,7 +55,7 @@ export function useCloneAgentSource(
       },
       (error) => {
         setSourceState("error");
-        setSourceError(`Could not load source agent: ${errorMessage(error)}`);
+        setSourceError(`Could not load source agent: ${errorText(error)}`);
       },
     );
   };
