@@ -1,17 +1,14 @@
-import * as React from "react"
-import { Command as CommandPrimitive } from "cmdk"
+import * as React from "react";
+import { Command as CommandPrimitive } from "cmdk";
 
-import { isDesktop } from "@/lib/desktop"
-import { cn } from "@/lib/utils"
+import { isDesktop } from "@/lib/desktop";
+import { cn } from "@/lib/utils";
 
 // shadcn/ui Command primitives (thin styled wrappers over cmdk). Added for the
 // cwd PathAutocomplete typeahead; the full CommandDialog/shortcut set is
 // intentionally omitted until something needs it.
 
-function Command({
-  className,
-  ...props
-}: React.ComponentProps<typeof CommandPrimitive>) {
+function Command({ className, ...props }: React.ComponentProps<typeof CommandPrimitive>) {
   return (
     <CommandPrimitive
       data-slot="command"
@@ -21,7 +18,7 @@ function Command({
       )}
       {...props}
     />
-  )
+  );
 }
 
 function CommandInput({
@@ -42,20 +39,17 @@ function CommandInput({
       {...desktopInputAssistance}
       {...props}
     />
-  )
+  );
 }
 
-function CommandList({
-  className,
-  ...props
-}: React.ComponentProps<typeof CommandPrimitive.List>) {
+function CommandList({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.List>) {
   return (
     <CommandPrimitive.List
       data-slot="command-list"
       className={cn("max-h-64 overflow-y-auto overflow-x-hidden p-1", className)}
       {...props}
     />
-  )
+  );
 }
 
 function CommandEmpty({
@@ -68,7 +62,7 @@ function CommandEmpty({
       className={cn("py-4 text-center text-sm text-muted-foreground", className)}
       {...props}
     />
-  )
+  );
 }
 
 function CommandGroup({
@@ -84,13 +78,10 @@ function CommandGroup({
       )}
       {...props}
     />
-  )
+  );
 }
 
-function CommandItem({
-  className,
-  ...props
-}: React.ComponentProps<typeof CommandPrimitive.Item>) {
+function CommandItem({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.Item>) {
   return (
     <CommandPrimitive.Item
       data-slot="command-item"
@@ -100,7 +91,7 @@ function CommandItem({
       )}
       {...props}
     />
-  )
+  );
 }
 
 function CommandSeparator({
@@ -113,7 +104,7 @@ function CommandSeparator({
       className={cn("-mx-1 h-px bg-border", className)}
       {...props}
     />
-  )
+  );
 }
 
 export {
@@ -124,4 +115,4 @@ export {
   CommandGroup,
   CommandItem,
   CommandSeparator,
-}
+};

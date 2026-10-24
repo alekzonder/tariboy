@@ -4,7 +4,13 @@ import type { FileEntry } from "@/lib/api";
 import type { FileTreeApi } from "./useFileTree";
 import { TreeRow } from "./TreeRow";
 
-export function FileTree({ tree, selected, onSelect, onRename, onDelete }: {
+export function FileTree({
+  tree,
+  selected,
+  onSelect,
+  onRename,
+  onDelete,
+}: {
   tree: FileTreeApi;
   selected: string | null;
   onSelect: (path: string) => void;

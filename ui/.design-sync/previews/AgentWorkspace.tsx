@@ -1,11 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import {
-  AgentWorkspace,
-  DaemonProvider,
-  MemoryRouter,
-  Route,
-  Routes,
-} from "tariboy-ui";
+import { AgentWorkspace, DaemonProvider, MemoryRouter, Route, Routes } from "tariboy-ui";
 
 // AgentWorkspace is the per-agent screen: the identity header (name, run state,
 // host, image, goal task key, cwd) and the six-tab strip, over whichever tab the
@@ -45,7 +39,6 @@ try {
 } catch {
   // private mode / blocked storage — the default registry is what we want anyway
 }
-
 
 // The render check measures the root the instant the network goes idle. These
 // page trees are heavy enough (router, flexlayout, xterm, the whole surface)

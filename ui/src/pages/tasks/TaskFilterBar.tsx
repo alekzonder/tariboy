@@ -1,32 +1,48 @@
-import { Check, ChevronDown, Inbox, ListFilter, Plus, RefreshCw, Search, Server, Settings, UserRound, X } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import {
+  Check,
+  ChevronDown,
+  Inbox,
+  ListFilter,
+  Plus,
+  RefreshCw,
+  Search,
+  Server,
+  Settings,
+  UserRound,
+  X,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Segmented } from "@/components/ui/segmented"
-import { cn } from "@/lib/utils"
-import type { TaskQueue, TaskStatusView } from "@/lib/api"
-import TaskColumnsMenu from "./TaskColumnsMenu"
-import type { TaskRowMode } from "./taskColumns"
+} from "@/components/ui/dropdown-menu";
+import { Segmented } from "@/components/ui/segmented";
+import { cn } from "@/lib/utils";
+import type { TaskQueue, TaskStatusView } from "@/lib/api";
+import TaskColumnsMenu from "./TaskColumnsMenu";
+import type { TaskRowMode } from "./taskColumns";
 
 const STATUS_OPTIONS = [
   { value: "active", label: "Active" },
   { value: "closed", label: "Closed" },
   { value: "all", label: "All" },
-] as const satisfies ReadonlyArray<{ value: TaskStatusView; label: string }>
+] as const satisfies ReadonlyArray<{ value: TaskStatusView; label: string }>;
 
 /** The two daemon-side narrowings that used to be rail entries. They are
  *  filters, not sections, so they live here as chips and are off by default. */
-export type TaskPrincipalFilter = "" | "mine" | "waiting"
+export type TaskPrincipalFilter = "" | "mine" | "waiting";
 
 const PRINCIPAL_OPTIONS = [
   { value: "mine", label: "My tasks", icon: UserRound },
   { value: "waiting", label: "Waiting for me", icon: Inbox },
-] as const satisfies ReadonlyArray<{ value: Exclude<TaskPrincipalFilter, "">; label: string; icon: typeof UserRound }>
+] as const satisfies ReadonlyArray<{
+  value: Exclude<TaskPrincipalFilter, "">;
+  label: string;
+  icon: typeof UserRound;
+}>;
 
 /**
  * The bar above the task table: what to search, which statuses to show, which
@@ -56,39 +72,43 @@ export function TaskFilterBar({
   onRefresh,
   onCreate,
 }: {
-  mode: TaskRowMode
-  query: string
-  onQuery: (value: string) => void
-  statusView: TaskStatusView
-  onStatusView: (value: TaskStatusView) => void
-  principalFilter?: TaskPrincipalFilter
-  onPrincipalFilter?: (value: TaskPrincipalFilter) => void
-  queues: ReadonlyArray<Pick<TaskQueue, "prefix">>
+  mode: TaskRowMode;
+  query: string;
+  onQuery: (value: string) => void;
+  statusView: TaskStatusView;
+  onStatusView: (value: TaskStatusView) => void;
+  principalFilter?: TaskPrincipalFilter;
+  onPrincipalFilter?: (value: TaskPrincipalFilter) => void;
+  queues: ReadonlyArray<Pick<TaskQueue, "prefix">>;
   /** Empty means every queue. */
-  queue: string
-  onQueue: (prefix: string) => void
+  queue: string;
+  onQueue: (prefix: string) => void;
   /** Listed tasks per queue prefix, for the menu's trailing counts. */
-  queueCounts: ReadonlyMap<string, number>
+  queueCounts: ReadonlyMap<string, number>;
   /** Queues belong to one server, so the every-server table cannot manage them. */
-  onManageQueues?: () => void
+  onManageQueues?: () => void;
   /** The every-server table's server menu; an unavailable server is listed but
    *  cannot be picked. */
-  servers?: ReadonlyArray<{ id: string; label: string; count: number; unavailable: boolean }>
+  servers?: ReadonlyArray<{ id: string; label: string; count: number; unavailable: boolean }>;
   /** Empty means every server. */
-  server?: string
-  onServer?: (id: string) => void
+  server?: string;
+  onServer?: (id: string) => void;
   /** Set when the table is scoped to one agent; shown as a removable chip. */
-  scopeAgent?: string
-  onClearScopeAgent?: () => void
-  refreshing: boolean
-  onRefresh: () => void
-  onCreate: () => void
+  scopeAgent?: string;
+  onClearScopeAgent?: () => void;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onCreate: () => void;
 }) {
-  const queueLabel = queue || "all"
-  const total = [...queueCounts.values()].reduce((sum, count) => sum + count, 0)
+  const queueLabel = queue || "all";
+  const total = [...queueCounts.values()].reduce((sum, count) => sum + count, 0);
   const items = [{ prefix: "", label: "All queues", count: total }].concat(
-    queues.map((item) => ({ prefix: item.prefix, label: item.prefix, count: queueCounts.get(item.prefix) ?? 0 })),
-  )
+    queues.map((item) => ({
+      prefix: item.prefix,
+      label: item.prefix,
+      count: queueCounts.get(item.prefix) ?? 0,
+    })),
+  );
   return (
     <div className="flex flex-wrap items-center gap-1.5 px-4 pt-[11px] pb-[9px]">
       <label className="flex h-7 w-[220px] shrink-0 items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-muted-foreground">
@@ -131,23 +151,29 @@ export function TaskFilterBar({
                 item.prefix === queue && "bg-accent",
               )}
             >
-              <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] font-medium">{item.label}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] font-medium">
+                {item.label}
+              </span>
               <span className="text-muted-foreground tabular-nums">{item.count}</span>
-              {item.prefix === queue
-                ? <Check aria-hidden="true" className="size-[11px] text-primary" />
-                : <span aria-hidden="true" className="w-[11px]" />}
+              {item.prefix === queue ? (
+                <Check aria-hidden="true" className="size-[11px] text-primary" />
+              ) : (
+                <span aria-hidden="true" className="w-[11px]" />
+              )}
             </DropdownMenuItem>
           ))}
-          {onManageQueues && <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={onManageQueues}
-              className="h-7 gap-2 rounded-[7px] px-[9px] text-[12.5px]"
-            >
-              <Settings aria-hidden="true" className="size-3" />
-              Manage queues…
-            </DropdownMenuItem>
-          </>}
+          {onManageQueues && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={onManageQueues}
+                className="h-7 gap-2 rounded-[7px] px-[9px] text-[12.5px]"
+              >
+                <Settings aria-hidden="true" className="size-3" />
+                Manage queues…
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {servers && onServer && (
@@ -167,44 +193,65 @@ export function TaskFilterBar({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="min-w-[214px] rounded-[12px] p-[5px]">
-            {[{ id: "", label: "All servers", count: servers.reduce((sum, item) => sum + item.count, 0), unavailable: false }]
-              .concat(servers).map((item) => (
+            {[
+              {
+                id: "",
+                label: "All servers",
+                count: servers.reduce((sum, item) => sum + item.count, 0),
+                unavailable: false,
+              },
+            ]
+              .concat(servers)
+              .map((item) => (
                 <DropdownMenuItem
                   key={item.id || "__all__"}
                   disabled={item.unavailable}
                   onSelect={() => onServer(item.id)}
-                  className={cn("h-7 gap-2 rounded-[7px] px-[9px] text-[12.5px]", item.id === server && "bg-accent")}
+                  className={cn(
+                    "h-7 gap-2 rounded-[7px] px-[9px] text-[12.5px]",
+                    item.id === server && "bg-accent",
+                  )}
                 >
                   {item.unavailable && (
-                    <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-status-failed" />
+                    <span
+                      aria-hidden="true"
+                      className="size-1.5 shrink-0 rounded-full bg-status-failed"
+                    />
                   )}
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] font-medium">{item.label}</span>
-                  <span className="text-muted-foreground tabular-nums">{item.unavailable ? "unavailable" : item.count}</span>
-                  {item.id === server
-                    ? <Check aria-hidden="true" className="size-[11px] text-primary" />
-                    : <span aria-hidden="true" className="w-[11px]" />}
+                  <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] font-medium">
+                    {item.label}
+                  </span>
+                  <span className="text-muted-foreground tabular-nums">
+                    {item.unavailable ? "unavailable" : item.count}
+                  </span>
+                  {item.id === server ? (
+                    <Check aria-hidden="true" className="size-[11px] text-primary" />
+                  ) : (
+                    <span aria-hidden="true" className="w-[11px]" />
+                  )}
                 </DropdownMenuItem>
               ))}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
-      {mode !== "servers" && PRINCIPAL_OPTIONS.map(({ value, label, icon: Icon }) => (
-        <button
-          key={value}
-          type="button"
-          aria-pressed={principalFilter === value}
-          onClick={() => onPrincipalFilter?.(principalFilter === value ? "" : value)}
-          className={cn(
-            "flex h-7 shrink-0 items-center gap-[6px] rounded-[8px] px-[9px] text-[12px]",
-            principalFilter === value
-              ? "bg-primary/12 font-medium text-primary"
-              : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
-          )}
-        >
-          <Icon aria-hidden="true" className="size-3" />
-          {label}
-        </button>
-      ))}
+      {mode !== "servers" &&
+        PRINCIPAL_OPTIONS.map(({ value, label, icon: Icon }) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={principalFilter === value}
+            onClick={() => onPrincipalFilter?.(principalFilter === value ? "" : value)}
+            className={cn(
+              "flex h-7 shrink-0 items-center gap-[6px] rounded-[8px] px-[9px] text-[12px]",
+              principalFilter === value
+                ? "bg-primary/12 font-medium text-primary"
+                : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
+            )}
+          >
+            <Icon aria-hidden="true" className="size-3" />
+            {label}
+          </button>
+        ))}
       {scopeAgent && (
         <span className="inline-flex h-7 shrink-0 items-center rounded-[8px] bg-primary/12 pr-1.5 pl-2.5 text-[12px] font-medium text-primary">
           {scopeAgent}
@@ -239,5 +286,5 @@ export function TaskFilterBar({
         </Button>
       </div>
     </div>
-  )
+  );
 }

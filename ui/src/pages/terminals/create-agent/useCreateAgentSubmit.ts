@@ -9,7 +9,15 @@ import { errorMessage } from "./errorMessage";
 
 export function useCreateAgentSubmit(
   draft: AgentCreateDraft,
-  { host, api, targetIsUsable, bare, schemaV2, defaultModel, defaultEffort }: ReturnType<typeof useCreateAgentResources>,
+  {
+    host,
+    api,
+    targetIsUsable,
+    bare,
+    schemaV2,
+    defaultModel,
+    defaultEffort,
+  }: ReturnType<typeof useCreateAgentResources>,
   blocker: { message: string } | null,
   { onCreated, onOpenChange }: CreateAgentDialogProps,
 ) {

@@ -12,11 +12,7 @@ import { ConfigSaveBar, ConfigSearch } from "./configuration/ConfigControls";
 import { ConfigurationBlocks } from "./configuration/ConfigurationBlocks";
 import TabPage from "@/components/TabPage";
 
-export default function AgentConfigurationTab({
-  refresh,
-}: {
-  refresh: () => void;
-}) {
+export default function AgentConfigurationTab({ refresh }: { refresh: () => void }) {
   const name = useAgentName();
   const { status } = useAgentStatus();
   // The host is the surrounding ApiProvider's. Its client keeps its identity
@@ -47,13 +43,17 @@ function ConfigurationPage({
   const api = useApi();
   const sources = useConfigSources(name, status);
   const { view, imageStatus } = sources;
-  const baseline = useMemo(() => readBaseline({
-    view,
-    imageStatus,
-    script: sources.script.value,
-    retention: sources.retention.value,
-    secrets: sources.secrets.value,
-  }), [view, imageStatus, sources.script.value, sources.retention.value, sources.secrets.value]);
+  const baseline = useMemo(
+    () =>
+      readBaseline({
+        view,
+        imageStatus,
+        script: sources.script.value,
+        retention: sources.retention.value,
+        secrets: sources.secrets.value,
+      }),
+    [view, imageStatus, sources.script.value, sources.retention.value, sources.secrets.value],
+  );
   const units = useMemo(() => buildUnits(api, name), [api, name]);
   const [query, setQuery] = useState("");
   const [changedOnly, setChangedOnly] = useState(false);
@@ -120,16 +120,34 @@ function ConfigurationPage({
         changedOnly={changedOnly}
         onChangedOnly={setChangedOnly}
         dirtyCount={draft.dirtyKeys.length}
-        chips={available.map((block) => ({ id: block.id, title: block.title, dirty: dirtyByBlock.get(block.id) ?? 0 }))}
+        chips={available.map((block) => ({
+          id: block.id,
+          title: block.title,
+          dirty: dirtyByBlock.get(block.id) ?? 0,
+        }))}
         resultText={filtering ? `${visible.length} of ${available.length} blocks match` : ""}
       />
       {!view ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : visible.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center">
-          <p className="text-sm font-medium">{query.trim() ? `No settings match “${query.trim()}”` : "No blocks have unsaved changes"}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Unsaved changes in hidden blocks are kept.</p>
-          <Button variant="outline" size="sm" className="mt-3" onClick={() => { setQuery(""); setChangedOnly(false); }}>
+          <p className="text-sm font-medium">
+            {query.trim()
+              ? `No settings match “${query.trim()}”`
+              : "No blocks have unsaved changes"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Unsaved changes in hidden blocks are kept.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={() => {
+              setQuery("");
+              setChangedOnly(false);
+            }}
+          >
             Clear search
           </Button>
         </div>
@@ -150,7 +168,9 @@ function ConfigurationPage({
       )}
       <ConfigSaveBar
         draft={draft}
-        blockTitles={available.filter((block) => dirtyByBlock.has(block.id)).map((block) => block.title)}
+        blockTitles={available
+          .filter((block) => dirtyByBlock.has(block.id))
+          .map((block) => block.title)}
       />
     </TabPage>
   );

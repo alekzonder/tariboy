@@ -25,43 +25,97 @@ declare global {
 
 const fixtureMode = new URLSearchParams(window.location.search).get("mode") ?? "built";
 
-const envelope = (result: unknown) => new Response(JSON.stringify({ ok: true, result }), {
-  status: 200,
-  headers: { "content-type": "application/json" },
-});
+const envelope = (result: unknown) =>
+  new Response(JSON.stringify({ ok: true, result }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
 
-const failure = (status: number, message: string) => new Response(JSON.stringify({
-  ok: false,
-  error: { code: "image_ref_conflict", message },
-}), {
-  status,
-  headers: { "content-type": "application/json" },
-});
+const failure = (status: number, message: string) =>
+  new Response(
+    JSON.stringify({
+      ok: false,
+      error: { code: "image_ref_conflict", message },
+    }),
+    {
+      status,
+      headers: { "content-type": "application/json" },
+    },
+  );
 
 const transferHosts = [
   { id: "source", label: "Source server", baseURL: "https://source.tariboy.test", state: "ready" },
-  { id: "conflict", label: "Conflict target", baseURL: "https://conflict.tariboy.test", state: "ready" },
+  {
+    id: "conflict",
+    label: "Conflict target",
+    baseURL: "https://conflict.tariboy.test",
+    state: "ready",
+  },
   { id: "ready", label: "Ready target", baseURL: "https://ready.tariboy.test", state: "ready" },
-  { id: "present", label: "Already present target", baseURL: "https://present.tariboy.test", state: "ready" },
-  { id: "unavailable", label: "Unavailable target", baseURL: "https://unavailable.tariboy.test", state: "error" },
+  {
+    id: "present",
+    label: "Already present target",
+    baseURL: "https://present.tariboy.test",
+    state: "ready",
+  },
+  {
+    id: "unavailable",
+    label: "Unavailable target",
+    baseURL: "https://unavailable.tariboy.test",
+    state: "error",
+  },
 ];
 
 const cancellationTransferHosts = [
   { id: "source", label: "Source server", baseURL: "https://source.tariboy.test", state: "ready" },
-  { id: "in-flight", label: "In-flight target", baseURL: "https://in-flight.tariboy.test", state: "ready" },
-  { id: "cancelled-a", label: "Cancelled target A", baseURL: "https://cancelled-a.tariboy.test", state: "ready" },
-  { id: "cancelled-b", label: "Cancelled target B", baseURL: "https://cancelled-b.tariboy.test", state: "ready" },
+  {
+    id: "in-flight",
+    label: "In-flight target",
+    baseURL: "https://in-flight.tariboy.test",
+    state: "ready",
+  },
+  {
+    id: "cancelled-a",
+    label: "Cancelled target A",
+    baseURL: "https://cancelled-a.tariboy.test",
+    state: "ready",
+  },
+  {
+    id: "cancelled-b",
+    label: "Cancelled target B",
+    baseURL: "https://cancelled-b.tariboy.test",
+    state: "ready",
+  },
 ];
 
-const fixtureTransferHosts = fixtureMode === "transfer-cancel" ? cancellationTransferHosts : transferHosts;
+const fixtureTransferHosts =
+  fixtureMode === "transfer-cancel" ? cancellationTransferHosts : transferHosts;
 
 let pendingRef = "";
 let activated = false;
 const agentView: AgentView = {
-  name: "worker", image: "basic:latest", digest: "basic-digest", state: "stopped", cwd: "/srv/worker",
-  harness: "codex", model: "", effort: "", interactive: false, enabled: false,
-  interval_s: 0, timeout_s: 60, hard_timeout_s: 120, on_timeout: "restart", on_error: "restart",
-  max_idle_iterations: 0, user_prompt: "", env: {}, plugins: [], group: null, alias: "", notes: "",
+  name: "worker",
+  image: "basic:latest",
+  digest: "basic-digest",
+  state: "stopped",
+  cwd: "/srv/worker",
+  harness: "codex",
+  model: "",
+  effort: "",
+  interactive: false,
+  enabled: false,
+  interval_s: 0,
+  timeout_s: 60,
+  hard_timeout_s: 120,
+  on_timeout: "restart",
+  on_error: "restart",
+  max_idle_iterations: 0,
+  user_prompt: "",
+  env: {},
+  plugins: [],
+  group: null,
+  alias: "",
+  notes: "",
 };
 
 window.fetch = async (input, init) => {
@@ -73,48 +127,119 @@ window.fetch = async (input, init) => {
     window.__imageTransferRequests.push({ method, url: requestURL.toString() });
   };
   if (path === "/api/images/validate" && method === "POST") {
-    return envelope({ valid: true, schema_version: 2, plugins: ["loop"], template: { schema_version: 2, sha256: "template-sha", entries: [
-      { kind: "runtime", runtime: "identity" },
-      { kind: "file", source: "$CURRENT_VERSION_STORE/prompts/iteration-finish.md", category: "current_version_store", archive_path: "prompt/layers/001-iteration-finish.md", size: 42, sha256: "layer-sha" },
-      { kind: "runtime", runtime: "context" },
-    ] } });
+    return envelope({
+      valid: true,
+      schema_version: 2,
+      plugins: ["loop"],
+      template: {
+        schema_version: 2,
+        sha256: "template-sha",
+        entries: [
+          { kind: "runtime", runtime: "identity" },
+          {
+            kind: "file",
+            source: "$CURRENT_VERSION_STORE/prompts/iteration-finish.md",
+            category: "current_version_store",
+            archive_path: "prompt/layers/001-iteration-finish.md",
+            size: 42,
+            sha256: "layer-sha",
+          },
+          { kind: "runtime", runtime: "context" },
+        ],
+      },
+    });
   }
   if (path === "/api/images/build" && method === "POST") {
     window.__imageBuild = JSON.parse(String(init.body));
     return envelope({ name: "browser-built", tag: "latest", digest: "built-digest", layers: 1 });
   }
   if (path === "/api/images") {
-    return envelope({ images: [
-      { name: "reviewer", tag: "v3", bare: false, exportable: true, source_cwd: "/srv/images/reviewer", source_available: true },
-      { name: "browser-built", tag: "latest", bare: false, exportable: true, source_cwd: "/srv/images/browser-built", source_available: true },
-      { name: "basic", tag: "latest", bare: false, exportable: false },
-      { name: "imported", tag: "v1", bare: false, exportable: true },
-      { name: "missing", tag: "v1", bare: false, exportable: true, source_cwd: "/srv/images/missing", source_available: false },
-    ] });
+    return envelope({
+      images: [
+        {
+          name: "reviewer",
+          tag: "v3",
+          bare: false,
+          exportable: true,
+          source_cwd: "/srv/images/reviewer",
+          source_available: true,
+        },
+        {
+          name: "browser-built",
+          tag: "latest",
+          bare: false,
+          exportable: true,
+          source_cwd: "/srv/images/browser-built",
+          source_available: true,
+        },
+        { name: "basic", tag: "latest", bare: false, exportable: false },
+        { name: "imported", tag: "v1", bare: false, exportable: true },
+        {
+          name: "missing",
+          tag: "v1",
+          bare: false,
+          exportable: true,
+          source_cwd: "/srv/images/missing",
+          source_available: false,
+        },
+      ],
+    });
   }
   if (path === "/api/images/reviewer%3Av3/template") {
-    return envelope({ schema_version: 2, sha256: "template-sha", entries: [
-      { kind: "runtime", runtime: "identity" }, { kind: "runtime", runtime: "context" },
-    ] });
+    return envelope({
+      schema_version: 2,
+      sha256: "template-sha",
+      entries: [
+        { kind: "runtime", runtime: "identity" },
+        { kind: "runtime", runtime: "context" },
+      ],
+    });
   }
   if (path === "/api/images/reviewer%3Av3/provenance") {
-    return envelope({ ref: "reviewer:v3", digest: "reviewer-digest", source_cwd: "/srv/images/reviewer", source_available: true });
+    return envelope({
+      ref: "reviewer:v3",
+      digest: "reviewer-digest",
+      source_cwd: "/srv/images/reviewer",
+      source_available: true,
+    });
   }
   if (path === "/api/images/reviewer%3Av3") {
-    return envelope({ schema_version: 2, name: "reviewer", tag: "v3", digest: "reviewer-digest", built_at: "2026-08-17T00:00:00Z", parents: [], plugins: [], requires_secrets: [], env: {}, layers: [], prompt_template_sha256: "template-sha" });
+    return envelope({
+      schema_version: 2,
+      name: "reviewer",
+      tag: "v3",
+      digest: "reviewer-digest",
+      built_at: "2026-08-17T00:00:00Z",
+      parents: [],
+      plugins: [],
+      requires_secrets: [],
+      env: {},
+      layers: [],
+      prompt_template_sha256: "template-sha",
+    });
   }
   if (path === "/api/images/reviewer%3Av3/export") {
     if (requestURL.origin === "https://source.tariboy.test") recordTransferRequest();
-    return new Response(new Blob(["portable-image"]), { status: 200, headers: { "content-type": "application/gzip" } });
+    return new Response(new Blob(["portable-image"]), {
+      status: 200,
+      headers: { "content-type": "application/gzip" },
+    });
   }
   if (path === "/api/image-imports" && method === "POST") {
-    if ((fixtureMode === "transfer" || fixtureMode === "transfer-cancel") && requestURL.origin === window.location.origin) {
+    if (
+      (fixtureMode === "transfer" || fixtureMode === "transfer-cancel") &&
+      requestURL.origin === window.location.origin
+    ) {
       recordTransferRequest();
       return envelope({ import_id: "local-import", ref: "reviewer:v3", digest: "local-digest" });
     }
     if (requestURL.origin === "https://in-flight.tariboy.test") {
       recordTransferRequest();
-      return envelope({ import_id: "in-flight-import", ref: "reviewer:v3", digest: "in-flight-digest" });
+      return envelope({
+        import_id: "in-flight-import",
+        ref: "reviewer:v3",
+        digest: "in-flight-digest",
+      });
     }
     if (requestURL.origin === "https://ready.tariboy.test") {
       recordTransferRequest();
@@ -122,11 +247,19 @@ window.fetch = async (input, init) => {
     }
     if (requestURL.origin === "https://present.tariboy.test") {
       recordTransferRequest();
-      return envelope({ import_id: "present-import", ref: "reviewer:v3", digest: "present-digest" });
+      return envelope({
+        import_id: "present-import",
+        ref: "reviewer:v3",
+        digest: "present-digest",
+      });
     }
     if (requestURL.origin === "https://conflict.tariboy.test") {
       recordTransferRequest();
-      return envelope({ import_id: "conflict-import", ref: "reviewer:v3", digest: "conflict-digest" });
+      return envelope({
+        import_id: "conflict-import",
+        ref: "reviewer:v3",
+        digest: "conflict-digest",
+      });
     }
     return envelope({ import_id: "browser-import", ref: "reviewer:v3", digest: "digest" });
   }
@@ -159,41 +292,101 @@ window.fetch = async (input, init) => {
   }
   if (path === "/api/agents/worker/image" && method === "POST") {
     pendingRef = (JSON.parse(String(init.body)) as { image: string }).image;
-    return envelope({ name: "worker", current: { ref: "basic:latest", digest: "basic-digest" }, pending: { ref: pendingRef, digest: "built-digest", error: "" } });
+    return envelope({
+      name: "worker",
+      current: { ref: "basic:latest", digest: "basic-digest" },
+      pending: { ref: pendingRef, digest: "built-digest", error: "" },
+    });
   }
   if (path === "/api/agents/worker/image") {
-    const current = activated ? { ref: "browser-built:latest", digest: "built-digest" } : { ref: "basic:latest", digest: "basic-digest" };
-    return envelope({ name: "worker", current, pending: { ref: activated ? "" : pendingRef, digest: activated ? "" : "built-digest", error: "" } });
+    const current = activated
+      ? { ref: "browser-built:latest", digest: "built-digest" }
+      : { ref: "basic:latest", digest: "basic-digest" };
+    return envelope({
+      name: "worker",
+      current,
+      pending: {
+        ref: activated ? "" : pendingRef,
+        digest: activated ? "" : "built-digest",
+        error: "",
+      },
+    });
   }
   if (path === "/api/agents/worker/secrets") return envelope({ keys: [] });
-  if (path === "/api/agents/worker/retention") return envelope({ keep_iterations: 20, keep_days: 30, max_bytes: 0, override: { keep_iterations: 20, keep_days: 30, max_bytes: 0 }, default: { keep_iterations: 0, keep_days: 0, max_bytes: 0 } });
+  if (path === "/api/agents/worker/retention")
+    return envelope({
+      keep_iterations: 20,
+      keep_days: 30,
+      max_bytes: 0,
+      override: { keep_iterations: 20, keep_days: 30, max_bytes: 0 },
+      default: { keep_iterations: 0, keep_days: 0, max_bytes: 0 },
+    });
   if (path === "/api/agents/worker" || path.startsWith("/api/agents/worker/")) {
-    return envelope(activated ? { ...agentView, image: "browser-built:latest", digest: "built-digest" } : agentView);
+    return envelope(
+      activated
+        ? { ...agentView, image: "browser-built:latest", digest: "built-digest" }
+        : agentView,
+    );
   }
   throw new Error(`unexpected fixture request ${method} ${requestURL.toString()}`);
 };
 
 export function AgentFixture() {
   const [generation, setGeneration] = useState(0);
-  return <AgentNameContext.Provider value="worker">
-    <AgentStatusContext.Provider value={{ status: null, refresh: async () => {} }}>
-      <button type="button" onClick={() => { activated = true; pendingRef = ""; setGeneration((value) => value + 1); }}>Simulate next iteration</button>
-      <div key={generation}><AgentConfigurationTab refresh={() => {}} /></div>
-    </AgentStatusContext.Provider>
-  </AgentNameContext.Provider>;
+  return (
+    <AgentNameContext.Provider value="worker">
+      <AgentStatusContext.Provider value={{ status: null, refresh: async () => {} }}>
+        <button
+          type="button"
+          onClick={() => {
+            activated = true;
+            pendingRef = "";
+            setGeneration((value) => value + 1);
+          }}
+        >
+          Simulate next iteration
+        </button>
+        <div key={generation}>
+          <AgentConfigurationTab refresh={() => {}} />
+        </div>
+      </AgentStatusContext.Provider>
+    </AgentNameContext.Provider>
+  );
 }
 
 const mode = fixtureMode;
 if (mode === "transfer" || mode === "transfer-cancel") {
   localStorage.setItem("tariboy_daemons", JSON.stringify(fixtureTransferHosts));
   localStorage.setItem("tariboy_active_daemon", "source");
-  for (const host of fixtureTransferHosts) sessionStorage.setItem(`tariboy_daemon_token_${host.id}`, `${host.id}-token`);
+  for (const host of fixtureTransferHosts)
+    sessionStorage.setItem(`tariboy_daemon_token_${host.id}`, `${host.id}-token`);
 }
 let content = <BuiltImages hostId="" basePath="/servers/local/images" />;
-if (mode === "build") content = <DaemonProvider><ImagesPage hostId="" basePath="/servers/local/images" /></DaemonProvider>;
-if (mode === "detail") content = <Routes><Route path="/servers/local/images/:name/:tag" element={<ImageLayout hostId="" basePath="/servers/local/images" />}><Route index element={<ImageOverview />} /><Route path="template" element={<ImageTemplate />} /></Route></Routes>;
+if (mode === "build")
+  content = (
+    <DaemonProvider>
+      <ImagesPage hostId="" basePath="/servers/local/images" />
+    </DaemonProvider>
+  );
+if (mode === "detail")
+  content = (
+    <Routes>
+      <Route
+        path="/servers/local/images/:name/:tag"
+        element={<ImageLayout hostId="" basePath="/servers/local/images" />}
+      >
+        <Route index element={<ImageOverview />} />
+        <Route path="template" element={<ImageTemplate />} />
+      </Route>
+    </Routes>
+  );
 if (mode === "agent") content = <AgentFixture />;
-if (mode === "transfer" || mode === "transfer-cancel") content = <DaemonProvider><BuiltImages hostId="source" basePath="/servers/source/images" /></DaemonProvider>;
+if (mode === "transfer" || mode === "transfer-cancel")
+  content = (
+    <DaemonProvider>
+      <BuiltImages hostId="source" basePath="/servers/source/images" />
+    </DaemonProvider>
+  );
 createRoot(document.getElementById("root")!).render(
   <MemoryRouter initialEntries={mode === "detail" ? ["/servers/local/images/reviewer/v3"] : ["/"]}>
     {/* The local daemon serves every mode; the DaemonProvider modes mount their own. */}

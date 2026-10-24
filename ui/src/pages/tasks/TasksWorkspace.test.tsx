@@ -1,16 +1,25 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender"
-import userEvent from "@testing-library/user-event"
-import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { ReactElement } from "react"
-import { ApiProvider } from "@/components/ApiProvider"
-import { ApiError, setActiveDaemon, type Task, type TaskDetail, type TaskNotification, type TaskQueue } from "@/lib/api"
-import { taskKeys } from "./taskQueries"
-import TasksWorkspace from "./TasksWorkspace"
-import { customerView } from "@/test/fixtures/workflowFixtures"
-import type { Daemon } from "@/lib/daemons"
+import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
+import { ApiProvider } from "@/components/ApiProvider";
+import {
+  ApiError,
+  setActiveDaemon,
+  type Task,
+  type TaskDetail,
+  type TaskNotification,
+  type TaskQueue,
+} from "@/lib/api";
+import { taskKeys } from "./taskQueries";
+import TasksWorkspace from "./TasksWorkspace";
+import { customerView } from "@/test/fixtures/workflowFixtures";
+import type { Daemon } from "@/lib/daemons";
 
 /** The workspace below a server-selection boundary for `target`. */
-const onHost = (target: Daemon | null, ui: ReactElement) => <ApiProvider target={target}>{ui}</ApiProvider>
+const onHost = (target: Daemon | null, ui: ReactElement) => (
+  <ApiProvider target={target}>{ui}</ApiProvider>
+);
 
 const api = vi.hoisted(() => ({
   addTaskComment: vi.fn(),
@@ -33,60 +42,78 @@ const api = vi.hoisted(() => ({
   moveTask: vi.fn(),
   updateTask: vi.fn(),
   updateTaskQueue: vi.fn(),
-}))
-const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }))
-const daemonContext = vi.hoisted(() => ({ activeId: "" }))
-const taskSocket = vi.hoisted(() => ({ options: undefined as { onHint?: (event: { sequence: number }) => void } | undefined }))
+}));
+const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+const daemonContext = vi.hoisted(() => ({ activeId: "" }));
+const taskSocket = vi.hoisted(() => ({
+  options: undefined as { onHint?: (event: { sequence: number }) => void } | undefined,
+}));
 
 function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (reason?: unknown) => void
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
   const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
-  return { promise, resolve, reject }
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 // Where each request takes the host it goes to in the mocks: every client
 // passes its own host there, so an assertion that names a host (null = local)
 // proves the request went through that host's client.
 const hostArgument = vi.hoisted((): Record<string, number> => ({
-  addTaskComment: 2, addTaskRelation: 4, createTask: 1, createTaskQueue: 1, deleteTaskRelation: 3,
-  advanceTask: 4, getTask: 1, getTaskWorkflow: 1, getQueueWorkflow: 1, listAgentPools: 1, rebindAgentPool: 5,
-  listTaskNotifications: 1, listTaskEvents: 3, listTaskPrincipals: 0, listTaskQueues: 0, listTasks: 1,
-  markTaskNotificationRead: 1, moveTask: 2, updateTask: 2, updateTaskQueue: 2,
-}))
+  addTaskComment: 2,
+  addTaskRelation: 4,
+  createTask: 1,
+  createTaskQueue: 1,
+  deleteTaskRelation: 3,
+  advanceTask: 4,
+  getTask: 1,
+  getTaskWorkflow: 1,
+  getQueueWorkflow: 1,
+  listAgentPools: 1,
+  rebindAgentPool: 5,
+  listTaskNotifications: 1,
+  listTaskEvents: 3,
+  listTaskPrincipals: 0,
+  listTaskQueues: 0,
+  listTasks: 1,
+  markTaskNotificationRead: 1,
+  moveTask: 2,
+  updateTask: 2,
+  updateTaskQueue: 2,
+}));
 vi.mock("@/lib/api", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/api")>()
+  const actual = await importOriginal<typeof import("@/lib/api")>();
   return {
     ...actual,
     createApi: (target: Parameters<typeof actual.createApi>[0]) => {
-      const client = actual.createApi(target)
-      const tasks: Record<string, unknown> = { ...client.tasks }
-      const workflows: Record<string, unknown> = { ...client.workflows }
+      const client = actual.createApi(target);
+      const tasks: Record<string, unknown> = { ...client.tasks };
+      const workflows: Record<string, unknown> = { ...client.workflows };
       for (const [name, at] of Object.entries(hostArgument)) {
-        const domain = name in tasks ? tasks : workflows
+        const domain = name in tasks ? tasks : workflows;
         domain[name] = (...args: unknown[]) => {
-          args.splice(at, 0, client.target)
-          return (api as Record<string, (...values: unknown[]) => unknown>)[name](...args)
-        }
+          args.splice(at, 0, client.target);
+          return (api as Record<string, (...values: unknown[]) => unknown>)[name](...args);
+        };
       }
-      return { ...client, tasks, workflows }
+      return { ...client, tasks, workflows };
     },
-  }
-})
+  };
+});
 vi.mock("@/hooks/useTasksSocket", () => ({
   useTasksSocket: vi.fn((options) => {
-    taskSocket.options = options
-    return "open"
+    taskSocket.options = options;
+    return "open";
   }),
-}))
-vi.mock("sonner", () => ({ toast }))
+}));
+vi.mock("sonner", () => ({ toast }));
 vi.mock("@/components/daemonContext", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/components/daemonContext")>(),
+  ...(await importOriginal<typeof import("@/components/daemonContext")>()),
   useOptionalDaemons: () => ({ activeId: daemonContext.activeId }),
-}))
+}));
 
 const queue: TaskQueue = {
   prefix: "TEST",
@@ -97,7 +124,7 @@ const queue: TaskQueue = {
   revision: 1,
   created_at: "2026-07-31T10:00:00Z",
   updated_at: "2026-07-31T10:00:00Z",
-}
+};
 const root: Task = {
   key: "TEST-1",
   queue: "TEST",
@@ -119,7 +146,7 @@ const root: Task = {
   created_at: "2026-07-31T10:00:00Z",
   updated_at: "2026-07-31T10:00:00Z",
   completed_at: "",
-}
+};
 const child: Task = {
   ...root,
   key: "TEST-2",
@@ -130,32 +157,36 @@ const child: Task = {
   category: "open",
   assignee: "",
   revision: 1,
-}
+};
 const detail: TaskDetail = {
   task: root,
-  comments: [{
-    id: 1,
-    task_key: root.key,
-    author: "agent:worker",
-    body: "Starting now",
-    revision: 1,
-    created_at: root.created_at,
-    updated_at: root.updated_at,
-  }],
+  comments: [
+    {
+      id: 1,
+      task_key: root.key,
+      author: "agent:worker",
+      body: "Starting now",
+      revision: 1,
+      created_at: root.created_at,
+      updated_at: root.updated_at,
+    },
+  ],
   waiting_for: [],
-  relations: [{
-    id: 9,
-    source_key: "TEST-1",
-    source_title: root.title,
-    source_status: "open",
-    target_key: "TEST-2",
-    target_title: "Child task",
-    target_status: "in_progress",
-    type: "blocks",
-    created_by: "user:owner",
-    created_at: root.created_at,
-  }],
-}
+  relations: [
+    {
+      id: 9,
+      source_key: "TEST-1",
+      source_title: root.title,
+      source_status: "open",
+      target_key: "TEST-2",
+      target_title: "Child task",
+      target_status: "in_progress",
+      type: "blocks",
+      created_by: "user:owner",
+      created_at: root.created_at,
+    },
+  ],
+};
 const notification: TaskNotification = {
   id: "notification-1",
   channel: "user:owner",
@@ -168,314 +199,449 @@ const notification: TaskNotification = {
   published_at: root.created_at,
   read_at: "",
   dismissed_at: "",
-}
+};
 
 beforeEach(() => {
-  vi.clearAllMocks()
-  localStorage.clear()
-  sessionStorage.clear()
-  setActiveDaemon(null)
-  daemonContext.activeId = ""
-  taskSocket.options = undefined
-  api.listTaskQueues.mockResolvedValue({ queues: [queue], count: 1 })
+  vi.clearAllMocks();
+  localStorage.clear();
+  sessionStorage.clear();
+  setActiveDaemon(null);
+  daemonContext.activeId = "";
+  taskSocket.options = undefined;
+  api.listTaskQueues.mockResolvedValue({ queues: [queue], count: 1 });
   api.listTaskPrincipals.mockResolvedValue({
     customer: "user:owner",
     agents: ["worker", "triager"],
     groups: ["platform"],
-  })
-  api.listTasks.mockResolvedValue({ tasks: [root, child], sequence: 10 })
-  api.getTask.mockResolvedValue(detail)
-  api.listAgentPools.mockResolvedValue({ items: [], count: 0 })
-  api.getQueueWorkflow.mockResolvedValue(null)
-  api.listTaskNotifications.mockResolvedValue({ notifications: [notification], count: 1 })
+  });
+  api.listTasks.mockResolvedValue({ tasks: [root, child], sequence: 10 });
+  api.getTask.mockResolvedValue(detail);
+  api.listAgentPools.mockResolvedValue({ items: [], count: 0 });
+  api.getQueueWorkflow.mockResolvedValue(null);
+  api.listTaskNotifications.mockResolvedValue({ notifications: [notification], count: 1 });
   api.listTaskEvents.mockResolvedValue({
-    events: [{
-      sequence: 3,
-      event_id: "event-3",
-      task_key: root.key,
-      queue: "TEST",
-      kind: "task.updated",
-      actor: "user:owner",
-      task_revision: 2,
-      payload: { status: "in_progress" },
-      created_at: root.updated_at,
-    }],
+    events: [
+      {
+        sequence: 3,
+        event_id: "event-3",
+        task_key: root.key,
+        queue: "TEST",
+        kind: "task.updated",
+        actor: "user:owner",
+        task_revision: 2,
+        payload: { status: "in_progress" },
+        created_at: root.updated_at,
+      },
+    ],
     count: 1,
-  })
-  api.createTask.mockResolvedValue(child)
-  api.updateTask.mockResolvedValue({ ...root, assignee: "freelance-reviewer", revision: 3 })
-  api.updateTaskQueue.mockResolvedValue({ ...queue, name: "Tests updated", revision: 2 })
-  api.addTaskComment.mockResolvedValue({ comment: detail.comments[0], created_waits: [], resolved_waits: [] })
-  api.addTaskRelation.mockResolvedValue(detail.relations[0])
-  api.deleteTaskRelation.mockResolvedValue({ deleted: true, relation_id: 9 })
-  api.moveTask.mockResolvedValue({ ...child, parent_key: "", revision: 2 })
-  api.markTaskNotificationRead.mockResolvedValue({ ...notification, read_at: root.updated_at })
-  api.createTaskQueue.mockResolvedValue({ ...queue, prefix: "OPS", name: "Operations" })
-})
+  });
+  api.createTask.mockResolvedValue(child);
+  api.updateTask.mockResolvedValue({ ...root, assignee: "freelance-reviewer", revision: 3 });
+  api.updateTaskQueue.mockResolvedValue({ ...queue, name: "Tests updated", revision: 2 });
+  api.addTaskComment.mockResolvedValue({
+    comment: detail.comments[0],
+    created_waits: [],
+    resolved_waits: [],
+  });
+  api.addTaskRelation.mockResolvedValue(detail.relations[0]);
+  api.deleteTaskRelation.mockResolvedValue({ deleted: true, relation_id: 9 });
+  api.moveTask.mockResolvedValue({ ...child, parent_key: "", revision: 2 });
+  api.markTaskNotificationRead.mockResolvedValue({ ...notification, read_at: root.updated_at });
+  api.createTaskQueue.mockResolvedValue({ ...queue, prefix: "OPS", name: "Operations" });
+});
 
 describe("TasksWorkspace", () => {
   it("refreshes the list row after a drawer action, without waiting for the socket", async () => {
-    const workflowRoot: Task = { ...root, status: "approval", category: "wait_customer", waiting_on: "customer",
-      workflow_digest: "abc", workflow_name: "release", workflow_version: "1.0.0" }
-    const approved: Task = { ...workflowRoot, status: "done", category: "done", waiting_on: undefined, revision: 3 }
-    api.listTasks.mockResolvedValue({ tasks: [workflowRoot, child], sequence: 10 })
-    api.getTask.mockResolvedValue({ ...detail, task: workflowRoot })
-    api.getTaskWorkflow.mockResolvedValue({ ...customerView, status: "approval",
-      outcomes: [{ on: "approved", to: "done" }], visits: [], last_request: undefined })
-    api.advanceTask.mockResolvedValue({ id: 1, task_key: root.key, outcome: "approved", actor: "user:owner", state: "applied", created_at: "" })
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    const approve = await screen.findByRole("button", { name: "approved" })
-    const listed = api.listTasks.mock.calls.length
-    const inboxReads = api.listTaskNotifications.mock.calls.length
-    const workflowReads = api.getTaskWorkflow.mock.calls.length
-    const detailReads = api.getTask.mock.calls.length
-    api.listTasks.mockResolvedValue({ tasks: [approved, child], sequence: 10 })
-    api.getTask.mockResolvedValue({ ...detail, task: approved })
-    await userEvent.click(approve)
-    await waitFor(() => expect(api.listTasks.mock.calls.length).toBeGreaterThan(listed))
+    const workflowRoot: Task = {
+      ...root,
+      status: "approval",
+      category: "wait_customer",
+      waiting_on: "customer",
+      workflow_digest: "abc",
+      workflow_name: "release",
+      workflow_version: "1.0.0",
+    };
+    const approved: Task = {
+      ...workflowRoot,
+      status: "done",
+      category: "done",
+      waiting_on: undefined,
+      revision: 3,
+    };
+    api.listTasks.mockResolvedValue({ tasks: [workflowRoot, child], sequence: 10 });
+    api.getTask.mockResolvedValue({ ...detail, task: workflowRoot });
+    api.getTaskWorkflow.mockResolvedValue({
+      ...customerView,
+      status: "approval",
+      outcomes: [{ on: "approved", to: "done" }],
+      visits: [],
+      last_request: undefined,
+    });
+    api.advanceTask.mockResolvedValue({
+      id: 1,
+      task_key: root.key,
+      outcome: "approved",
+      actor: "user:owner",
+      state: "applied",
+      created_at: "",
+    });
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    const approve = await screen.findByRole("button", { name: "approved" });
+    const listed = api.listTasks.mock.calls.length;
+    const inboxReads = api.listTaskNotifications.mock.calls.length;
+    const workflowReads = api.getTaskWorkflow.mock.calls.length;
+    const detailReads = api.getTask.mock.calls.length;
+    api.listTasks.mockResolvedValue({ tasks: [approved, child], sequence: 10 });
+    api.getTask.mockResolvedValue({ ...detail, task: approved });
+    await userEvent.click(approve);
+    await waitFor(() => expect(api.listTasks.mock.calls.length).toBeGreaterThan(listed));
     // No socket hint was delivered: the drawer action alone refreshed the row.
-    const row = screen.getByTestId(`task-row-${root.key}`)
-    await waitFor(() => expect(row).toHaveTextContent("Done"))
-    await act(async () => {})
-    expect(api.listTasks).toHaveBeenCalledTimes(listed + 1)
-    expect(api.listTaskNotifications).toHaveBeenCalledTimes(inboxReads + 1)
-    expect(api.getTask).toHaveBeenCalledTimes(detailReads + 1)
-    expect(api.getTaskWorkflow).toHaveBeenCalledTimes(workflowReads + 1)
-  })
+    const row = screen.getByTestId(`task-row-${root.key}`);
+    await waitFor(() => expect(row).toHaveTextContent("Done"));
+    await act(async () => {});
+    expect(api.listTasks).toHaveBeenCalledTimes(listed + 1);
+    expect(api.listTaskNotifications).toHaveBeenCalledTimes(inboxReads + 1);
+    expect(api.getTask).toHaveBeenCalledTimes(detailReads + 1);
+    expect(api.getTaskWorkflow).toHaveBeenCalledTimes(workflowReads + 1);
+  });
 
   it("uploads files without an agent to the task host and appends only to the selected draft", async () => {
-    const target = { id: "remote", label: "Remote", baseURL: "https://remote.example", token: "test" }
-    api.getTask.mockResolvedValue({ ...detail, task: { ...root, assignee: "" } })
-    const upload = deferred<Response>()
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockReturnValue(upload.promise)
-    render(onHost(target, <TasksWorkspace />))
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    const description = (await screen.findByLabelText("Description")).closest(".task-description")!
-    const comments = screen.getByText("Comments").closest("section")!
-    expect(within(description as HTMLElement).getByRole("button", { name: "Send files" })).toBeEnabled()
-    expect(within(comments).getByRole("button", { name: "Send files" })).toBeEnabled()
-    await userEvent.click(within(description as HTMLElement).getByRole("button", { name: "Markdown" }))
-    await userEvent.click(within(comments).getByRole("button", { name: "Markdown" }))
-    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Comment draft" } })
-    const file = new File(["hello"], "notes.txt")
-    await userEvent.upload(description.querySelector('input[type="file"]') as HTMLInputElement, file)
-    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Still typing" } })
-    expect(screen.getByRole("button", { name: "Save task" })).toBeDisabled()
-    const envelope = { ok: true, result: { path: "files/one/notes.txt", abs: "/server/files/one/notes.txt", bytes: 5 } }
-    await act(async () => upload.resolve({ ok: true, status: 200, text: async () => JSON.stringify(envelope), json: async () => envelope } as Response))
-    await waitFor(() => expect(screen.getByLabelText("Description")).toHaveValue("Still typing\n/server/files/one/notes.txt"))
-    expect(screen.getByLabelText("Comment")).toHaveValue("Comment draft")
-    expect(fetchMock).toHaveBeenCalledWith("https://remote.example/api/files/raw?name=notes.txt", expect.objectContaining({ method: "PUT", body: file }))
-    await userEvent.upload(comments.querySelector('input[type="file"]') as HTMLInputElement, new File(["hello"], "notes.txt"))
-    await waitFor(() => expect(screen.getByLabelText("Comment")).toHaveValue("Comment draft\n/server/files/one/notes.txt"))
-    expect(screen.getByLabelText("Description")).toHaveValue("Still typing\n/server/files/one/notes.txt")
-    expect(api.updateTask).not.toHaveBeenCalled()
-    expect(api.addTaskComment).not.toHaveBeenCalled()
-    fetchMock.mockRestore()
-  })
+    const target = {
+      id: "remote",
+      label: "Remote",
+      baseURL: "https://remote.example",
+      token: "test",
+    };
+    api.getTask.mockResolvedValue({ ...detail, task: { ...root, assignee: "" } });
+    const upload = deferred<Response>();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockReturnValue(upload.promise);
+    render(onHost(target, <TasksWorkspace />));
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    const description = (await screen.findByLabelText("Description")).closest(".task-description")!;
+    const comments = screen.getByText("Comments").closest("section")!;
+    expect(
+      within(description as HTMLElement).getByRole("button", { name: "Send files" }),
+    ).toBeEnabled();
+    expect(within(comments).getByRole("button", { name: "Send files" })).toBeEnabled();
+    await userEvent.click(
+      within(description as HTMLElement).getByRole("button", { name: "Markdown" }),
+    );
+    await userEvent.click(within(comments).getByRole("button", { name: "Markdown" }));
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Comment draft" } });
+    const file = new File(["hello"], "notes.txt");
+    await userEvent.upload(
+      description.querySelector('input[type="file"]') as HTMLInputElement,
+      file,
+    );
+    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Still typing" } });
+    expect(screen.getByRole("button", { name: "Save task" })).toBeDisabled();
+    const envelope = {
+      ok: true,
+      result: { path: "files/one/notes.txt", abs: "/server/files/one/notes.txt", bytes: 5 },
+    };
+    await act(async () =>
+      upload.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(envelope),
+        json: async () => envelope,
+      } as Response),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Description")).toHaveValue(
+        "Still typing\n/server/files/one/notes.txt",
+      ),
+    );
+    expect(screen.getByLabelText("Comment")).toHaveValue("Comment draft");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://remote.example/api/files/raw?name=notes.txt",
+      expect.objectContaining({ method: "PUT", body: file }),
+    );
+    await userEvent.upload(
+      comments.querySelector('input[type="file"]') as HTMLInputElement,
+      new File(["hello"], "notes.txt"),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Comment")).toHaveValue(
+        "Comment draft\n/server/files/one/notes.txt",
+      ),
+    );
+    expect(screen.getByLabelText("Description")).toHaveValue(
+      "Still typing\n/server/files/one/notes.txt",
+    );
+    expect(api.updateTask).not.toHaveBeenCalled();
+    expect(api.addTaskComment).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
 
   it("opens details only on selection and protects an unsaved title on outside close", async () => {
-    render(<TasksWorkspace />)
-    const row = await screen.findByRole("button", { name: /Ship native tasks/ })
-    expect(screen.queryByText("Select a task")).not.toBeInTheDocument()
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
-    await userEvent.click(row)
-    expect(await screen.findByRole("dialog")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Close task detail" })).toHaveFocus()
-    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Unsaved title" } })
-    await userEvent.click(document.querySelector('[data-slot="dialog-overlay"]') as HTMLElement)
-    expect(screen.getByDisplayValue("Unsaved title")).toBeInTheDocument()
-    expect(screen.getByText("Are you sure you want to close this task? Unsaved changes will be discarded.")).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("button", { name: "Keep editing" }))
-    expect(screen.getByDisplayValue("Unsaved title")).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
-    await userEvent.click(screen.getByRole("button", { name: "Discard changes" }))
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
-    expect(row).toHaveFocus()
-  })
+    render(<TasksWorkspace />);
+    const row = await screen.findByRole("button", { name: /Ship native tasks/ });
+    expect(screen.queryByText("Select a task")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await userEvent.click(row);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close task detail" })).toHaveFocus();
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Unsaved title" } });
+    await userEvent.click(document.querySelector('[data-slot="dialog-overlay"]') as HTMLElement);
+    expect(screen.getByDisplayValue("Unsaved title")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Are you sure you want to close this task? Unsaved changes will be discarded.",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(screen.getByDisplayValue("Unsaved title")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
+    await userEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(row).toHaveFocus();
+  });
 
   it("opens the drawer at once in a loading state and fills it when the task arrives", async () => {
-    const pending = deferred<TaskDetail>()
-    api.getTask.mockReturnValue(pending.promise)
-    render(<TasksWorkspace />)
-    const row = await screen.findByRole("button", { name: /Ship native tasks/ })
-    await userEvent.click(row)
-    const dialog = await screen.findByRole("dialog", { name: "TEST-1" })
-    expect(within(dialog).getByText("Loading task…")).toBeInTheDocument()
-    pending.resolve(detail)
-    expect(await screen.findByLabelText("Title")).toHaveValue("Ship native tasks")
-    expect(screen.queryByText("Loading task…")).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Close task detail" })).toHaveFocus()
-    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
-    expect(row).toHaveFocus()
-  })
+    const pending = deferred<TaskDetail>();
+    api.getTask.mockReturnValue(pending.promise);
+    render(<TasksWorkspace />);
+    const row = await screen.findByRole("button", { name: /Ship native tasks/ });
+    await userEvent.click(row);
+    const dialog = await screen.findByRole("dialog", { name: "TEST-1" });
+    expect(within(dialog).getByText("Loading task…")).toBeInTheDocument();
+    pending.resolve(detail);
+    expect(await screen.findByLabelText("Title")).toHaveValue("Ship native tasks");
+    expect(screen.queryByText("Loading task…")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close task detail" })).toHaveFocus();
+    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
+    expect(row).toHaveFocus();
+  });
 
   it("closes a loading drawer and keeps it closed when the task arrives", async () => {
-    const pending = deferred<TaskDetail>()
-    api.getTask.mockReturnValue(pending.promise)
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    await screen.findByText("Loading task…")
-    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
-    await act(async () => pending.resolve(detail))
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
-  })
+    const pending = deferred<TaskDetail>();
+    api.getTask.mockReturnValue(pending.promise);
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await screen.findByText("Loading task…");
+    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await act(async () => pending.resolve(detail));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 
   it("shows the next task loading at once and refreshes the open one without a skeleton", async () => {
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    await screen.findByRole("heading", { name: "TEST-1" })
-    const refresh = deferred<TaskDetail>()
-    api.getTask.mockReturnValue(refresh.promise)
-    await act(async () => taskSocket.options?.onHint?.({ sequence: 11 }))
-    expect(screen.queryByText("Loading task…")).not.toBeInTheDocument()
-    expect(screen.getByLabelText("Title")).toBeInTheDocument()
-    await act(async () => refresh.resolve(detail))
-    const next = deferred<TaskDetail>()
-    api.getTask.mockReturnValue(next.promise)
-    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
-    await userEvent.click(screen.getByRole("button", { name: "Expand TEST-1" }))
-    await userEvent.click(screen.getByRole("button", { name: /Desktop tree/ }))
-    expect(await screen.findByRole("dialog", { name: "TEST-2" })).toHaveTextContent("Loading task…")
-    next.resolve({ ...detail, task: child })
-    expect(await screen.findByLabelText("Title")).toHaveValue(child.title)
-  })
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await screen.findByRole("heading", { name: "TEST-1" });
+    const refresh = deferred<TaskDetail>();
+    api.getTask.mockReturnValue(refresh.promise);
+    await act(async () => taskSocket.options?.onHint?.({ sequence: 11 }));
+    expect(screen.queryByText("Loading task…")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Title")).toBeInTheDocument();
+    await act(async () => refresh.resolve(detail));
+    const next = deferred<TaskDetail>();
+    api.getTask.mockReturnValue(next.promise);
+    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
+    await userEvent.click(screen.getByRole("button", { name: "Expand TEST-1" }));
+    await userEvent.click(screen.getByRole("button", { name: /Desktop tree/ }));
+    expect(await screen.findByRole("dialog", { name: "TEST-2" })).toHaveTextContent(
+      "Loading task…",
+    );
+    next.resolve({ ...detail, task: child });
+    expect(await screen.findByLabelText("Title")).toHaveValue(child.title);
+  });
 
   it("closes a clean task when the backdrop is clicked", async () => {
-    render(<TasksWorkspace />)
-    const row = await screen.findByRole("button", { name: /Ship native tasks/ })
-    await userEvent.click(row)
+    render(<TasksWorkspace />);
+    const row = await screen.findByRole("button", { name: /Ship native tasks/ });
+    await userEvent.click(row);
 
-    await userEvent.click(document.querySelector('[data-slot="dialog-overlay"]') as HTMLElement)
+    await userEvent.click(document.querySelector('[data-slot="dialog-overlay"]') as HTMLElement);
 
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
-    expect(row).toHaveFocus()
-  })
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(row).toHaveFocus();
+  });
 
   it("keeps a newer authoritative revision after saving an older mutation result", async () => {
-    const mounted = render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Saved" } })
-    api.updateTask.mockResolvedValue({ ...root, title: "Saved", revision: 3 })
-    api.getTask.mockResolvedValue({ ...detail, task: { ...root, title: "Newer", revision: 4 } })
-    api.listTasks.mockResolvedValue({ tasks: [{ ...root, title: "Newer", revision: 4 }], sequence: 12 })
-    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Task updated"))
-    expect(mounted.client.getQueryData<TaskDetail>(taskKeys.detail(null, root.key))?.task.revision).toBe(4)
-    const lists = mounted.client.getQueriesData<{ tasks: Task[] }>({ queryKey: [...taskKeys.server(null), "list"] })
-    expect(lists[0][1]?.tasks[0].revision).toBe(4)
-    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Next edit" } })
-    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
-    expect(api.updateTask).toHaveBeenLastCalledWith(root.key, expect.objectContaining({ revision: 4 }), null)
-  })
+    const mounted = render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Saved" } });
+    api.updateTask.mockResolvedValue({ ...root, title: "Saved", revision: 3 });
+    api.getTask.mockResolvedValue({ ...detail, task: { ...root, title: "Newer", revision: 4 } });
+    api.listTasks.mockResolvedValue({
+      tasks: [{ ...root, title: "Newer", revision: 4 }],
+      sequence: 12,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Task updated"));
+    expect(
+      mounted.client.getQueryData<TaskDetail>(taskKeys.detail(null, root.key))?.task.revision,
+    ).toBe(4);
+    const lists = mounted.client.getQueriesData<{ tasks: Task[] }>({
+      queryKey: [...taskKeys.server(null), "list"],
+    });
+    expect(lists[0][1]?.tasks[0].revision).toBe(4);
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Next edit" } });
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }));
+    expect(api.updateTask).toHaveBeenLastCalledWith(
+      root.key,
+      expect.objectContaining({ revision: 4 }),
+      null,
+    );
+  });
 
   it("does not restore unread notifications from a read started during mark-read", async () => {
-    const pendingWrite = deferred<TaskNotification>()
-    const staleInbox = deferred<{ notifications: TaskNotification[]; count: number }>()
-    api.markTaskNotificationRead.mockReturnValue(pendingWrite.promise)
-    const mounted = render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    await waitFor(() => expect(api.markTaskNotificationRead).toHaveBeenCalledTimes(1))
-    api.listTaskNotifications.mockReturnValueOnce(staleInbox.promise)
-    await act(async () => { void mounted.client.invalidateQueries({ queryKey: taskKeys.notifications(null) }) })
-    api.listTaskNotifications.mockResolvedValue({ notifications: [{ ...notification, read_at: "now" }], count: 1 })
-    await act(async () => pendingWrite.resolve({ ...notification, read_at: "now" }))
-    await waitFor(() => expect(mounted.client.getQueryData<{ notifications: TaskNotification[] }>(taskKeys.notifications(null))?.notifications[0].read_at).toBeTruthy())
-    await act(async () => staleInbox.resolve({ notifications: [notification], count: 1 }))
-    expect(mounted.client.getQueryData<{ notifications: TaskNotification[] }>(taskKeys.notifications(null))?.notifications[0].read_at).toBeTruthy()
-    expect(api.markTaskNotificationRead).toHaveBeenCalledTimes(1)
-  })
+    const pendingWrite = deferred<TaskNotification>();
+    const staleInbox = deferred<{ notifications: TaskNotification[]; count: number }>();
+    api.markTaskNotificationRead.mockReturnValue(pendingWrite.promise);
+    const mounted = render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await waitFor(() => expect(api.markTaskNotificationRead).toHaveBeenCalledTimes(1));
+    api.listTaskNotifications.mockReturnValueOnce(staleInbox.promise);
+    await act(async () => {
+      void mounted.client.invalidateQueries({ queryKey: taskKeys.notifications(null) });
+    });
+    api.listTaskNotifications.mockResolvedValue({
+      notifications: [{ ...notification, read_at: "now" }],
+      count: 1,
+    });
+    await act(async () => pendingWrite.resolve({ ...notification, read_at: "now" }));
+    await waitFor(() =>
+      expect(
+        mounted.client.getQueryData<{ notifications: TaskNotification[] }>(
+          taskKeys.notifications(null),
+        )?.notifications[0].read_at,
+      ).toBeTruthy(),
+    );
+    await act(async () => staleInbox.resolve({ notifications: [notification], count: 1 }));
+    expect(
+      mounted.client.getQueryData<{ notifications: TaskNotification[] }>(
+        taskKeys.notifications(null),
+      )?.notifications[0].read_at,
+    ).toBeTruthy();
+    expect(api.markTaskNotificationRead).toHaveBeenCalledTimes(1);
+  });
 
   it("keeps unsaved fields through a remote revision and failed save", async () => {
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "My draft" } })
-    api.getTask.mockResolvedValue({ ...detail, task: { ...root, revision: 3, title: "Remote title" } })
-    await act(async () => taskSocket.options?.onHint?.({ sequence: 11 }))
-    await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(2))
-    expect(screen.getByDisplayValue("My draft")).toBeInTheDocument()
-    api.updateTask.mockRejectedValue(new Error("Save failed"))
-    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Save failed"))
-    expect(screen.getByDisplayValue("My draft")).toBeInTheDocument()
-  })
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "My draft" } });
+    api.getTask.mockResolvedValue({
+      ...detail,
+      task: { ...root, revision: 3, title: "Remote title" },
+    });
+    await act(async () => taskSocket.options?.onHint?.({ sequence: 11 }));
+    await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(2));
+    expect(screen.getByDisplayValue("My draft")).toBeInTheDocument();
+    api.updateTask.mockRejectedValue(new Error("Save failed"));
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Save failed"));
+    expect(screen.getByDisplayValue("My draft")).toBeInTheDocument();
+  });
 
   it("retains a draft when background detail refresh fails", async () => {
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Keep this draft" } })
-    api.getTask.mockRejectedValueOnce(new Error("Refresh failed"))
-    await act(async () => taskSocket.options?.onHint?.({ sequence: 12 }))
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Refresh failed"))
-    expect(screen.getByDisplayValue("Keep this draft")).toBeInTheDocument()
-  })
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Keep this draft" } });
+    api.getTask.mockRejectedValueOnce(new Error("Refresh failed"));
+    await act(async () => taskSocket.options?.onHint?.({ sequence: 12 }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Refresh failed"));
+    expect(screen.getByDisplayValue("Keep this draft")).toBeInTheDocument();
+  });
 
   it("recovers a conflict explicitly while preserving draft and unrelated remote fields", async () => {
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "My title" } })
-    api.getTask.mockResolvedValue({ ...detail, task: { ...root, title: "Remote title", priority: "P1", revision: 3 } })
-    api.updateTask.mockRejectedValueOnce(new ApiError(409, "conflict", "revision conflict"))
-    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
-    await userEvent.click(await screen.findByRole("button", { name: "Keep my edits" }))
-    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
-    expect(api.updateTask).toHaveBeenLastCalledWith(root.key, expect.objectContaining({
-      title: "My title", priority: "P1", revision: 3,
-    }), null)
-  })
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "My title" } });
+    api.getTask.mockResolvedValue({
+      ...detail,
+      task: { ...root, title: "Remote title", priority: "P1", revision: 3 },
+    });
+    api.updateTask.mockRejectedValueOnce(new ApiError(409, "conflict", "revision conflict"));
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Keep my edits" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }));
+    expect(api.updateTask).toHaveBeenLastCalledWith(
+      root.key,
+      expect.objectContaining({
+        title: "My title",
+        priority: "P1",
+        revision: 3,
+      }),
+      null,
+    );
+  });
 
   it("opens the detail sheet at half width and restores its persisted resize", async () => {
-    localStorage.setItem("tasks:workspace:v1", JSON.stringify({
-      schemaVersion: 1,
-      navigationWidth: 280,
-      detailWidth: 520,
-    }))
+    localStorage.setItem(
+      "tasks:workspace:v1",
+      JSON.stringify({
+        schemaVersion: 1,
+        navigationWidth: 280,
+        detailWidth: 520,
+      }),
+    );
 
-    render(<TasksWorkspace />)
+    render(<TasksWorkspace />);
 
-    const workspace = await screen.findByTestId("tasks-workspace")
-    expect(workspace.style.getPropertyValue("--tasks-detail-width")).toBe("")
-    expect(screen.queryByRole("separator", { name: "Resize task details" })).not.toBeInTheDocument()
+    const workspace = await screen.findByTestId("tasks-workspace");
+    expect(workspace.style.getPropertyValue("--tasks-detail-width")).toBe("");
+    expect(
+      screen.queryByRole("separator", { name: "Resize task details" }),
+    ).not.toBeInTheDocument();
 
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
 
-    expect(screen.getByRole("separator", { name: "Resize task details" })).toHaveAttribute("aria-valuenow", "520")
-    expect(screen.getByRole("dialog").style.getPropertyValue("--tasks-detail-width")).toBe("520px")
-  })
+    expect(screen.getByRole("separator", { name: "Resize task details" })).toHaveAttribute(
+      "aria-valuenow",
+      "520",
+    );
+    expect(screen.getByRole("dialog").style.getPropertyValue("--tasks-detail-width")).toBe("520px");
+  });
 
   it("uses half the viewport for the first detail sheet", async () => {
-    vi.stubGlobal("innerWidth", 1200)
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    vi.stubGlobal("innerWidth", 1200);
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
 
-    expect(screen.getByRole("separator", { name: "Resize task details" })).toHaveAttribute("aria-valuenow", "600")
-    expect(screen.getByRole("dialog").style.getPropertyValue("--tasks-detail-width")).toBe("600px")
-    vi.unstubAllGlobals()
-  })
+    expect(screen.getByRole("separator", { name: "Resize task details" })).toHaveAttribute(
+      "aria-valuenow",
+      "600",
+    );
+    expect(screen.getByRole("dialog").style.getPropertyValue("--tasks-detail-width")).toBe("600px");
+    vi.unstubAllGlobals();
+  });
 
   it("resizes the detail sheet with the keyboard and keeps the legacy storage record readable", async () => {
-    localStorage.setItem("tasks:workspace:v1", JSON.stringify({
+    localStorage.setItem(
+      "tasks:workspace:v1",
+      JSON.stringify({
+        schemaVersion: 1,
+        navigationWidth: 280,
+        detailWidth: 512,
+      }),
+    );
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize task details" }), {
+      key: "ArrowRight",
+    });
+    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}")).toEqual({
       schemaVersion: 1,
-      navigationWidth: 280,
+      detailWidth: 504,
+    });
+
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize task details" }), {
+      key: "Home",
+    });
+    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}")).toEqual({
+      schemaVersion: 1,
       detailWidth: 512,
-    }))
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-
-    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize task details" }), { key: "ArrowRight" })
-    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toEqual({ schemaVersion: 1, detailWidth: 504 })
-
-    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize task details" }), { key: "Home" })
-    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toEqual({ schemaVersion: 1, detailWidth: 512 })
-  })
+    });
+  });
 
   it("drags the detail handle, stops at pointer-up, and resets on double-click", async () => {
-    render(<TasksWorkspace />)
-    const workspace = await screen.findByTestId("tasks-workspace")
+    render(<TasksWorkspace />);
+    const workspace = await screen.findByTestId("tasks-workspace");
     vi.spyOn(workspace, "getBoundingClientRect").mockReturnValue({
       x: 100,
       y: 0,
@@ -486,254 +652,392 @@ describe("TasksWorkspace", () => {
       width: 1100,
       height: 800,
       toJSON: () => ({}),
-    })
-    fireEvent(window, new Event("resize"))
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    const handle = screen.getByRole("separator", { name: "Resize task details" })
+    });
+    fireEvent(window, new Event("resize"));
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    const handle = screen.getByRole("separator", { name: "Resize task details" });
 
-    fireEvent.pointerDown(handle, { pointerId: 1, button: 0, isPrimary: true })
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 420 })
-    fireEvent.pointerUp(window, { pointerId: 1 })
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 300 })
-    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toMatchObject({ detailWidth: 780 })
+    fireEvent.pointerDown(handle, { pointerId: 1, button: 0, isPrimary: true });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 420 });
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 300 });
+    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}")).toMatchObject({
+      detailWidth: 780,
+    });
 
-    fireEvent.doubleClick(handle)
-    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toEqual({ schemaVersion: 1, detailWidth: 512 })
-  })
+    fireEvent.doubleClick(handle);
+    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}")).toEqual({
+      schemaVersion: 1,
+      detailWidth: 512,
+    });
+  });
 
   it("cleans up an active resize on pointer cancellation and unmount", async () => {
-    const view = render(<TasksWorkspace />)
-    const workspace = await screen.findByTestId("tasks-workspace")
+    const view = render(<TasksWorkspace />);
+    const workspace = await screen.findByTestId("tasks-workspace");
     vi.spyOn(workspace, "getBoundingClientRect").mockReturnValue({
-      x: 0, y: 0, left: 0, right: 1400, top: 0, bottom: 800, width: 1400, height: 800,
+      x: 0,
+      y: 0,
+      left: 0,
+      right: 1400,
+      top: 0,
+      bottom: 800,
+      width: 1400,
+      height: 800,
       toJSON: () => ({}),
-    })
-    fireEvent(window, new Event("resize"))
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    const handle = screen.getByRole("separator", { name: "Resize task details" })
+    });
+    fireEvent(window, new Event("resize"));
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    const handle = screen.getByRole("separator", { name: "Resize task details" });
 
-    fireEvent.pointerDown(handle, { pointerId: 7, button: 0, isPrimary: true })
-    fireEvent.pointerMove(window, { pointerId: 7, clientX: 1000 })
-    fireEvent.pointerCancel(window, { pointerId: 7 })
-    fireEvent.pointerMove(window, { pointerId: 7, clientX: 900 })
-    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toMatchObject({ detailWidth: 400 })
-    expect(document.body.style.cursor).toBe("")
-    expect(document.body.style.userSelect).toBe("")
+    fireEvent.pointerDown(handle, { pointerId: 7, button: 0, isPrimary: true });
+    fireEvent.pointerMove(window, { pointerId: 7, clientX: 1000 });
+    fireEvent.pointerCancel(window, { pointerId: 7 });
+    fireEvent.pointerMove(window, { pointerId: 7, clientX: 900 });
+    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}")).toMatchObject({
+      detailWidth: 400,
+    });
+    expect(document.body.style.cursor).toBe("");
+    expect(document.body.style.userSelect).toBe("");
 
-    fireEvent.pointerDown(handle, { pointerId: 8, button: 0, isPrimary: true })
-    view.unmount()
-    fireEvent.pointerMove(window, { pointerId: 8, clientX: 800 })
-    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toMatchObject({ detailWidth: 400 })
-    expect(document.body.style.cursor).toBe("")
-    expect(document.body.style.userSelect).toBe("")
-  })
+    fireEvent.pointerDown(handle, { pointerId: 8, button: 0, isPrimary: true });
+    view.unmount();
+    fireEvent.pointerMove(window, { pointerId: 8, clientX: 800 });
+    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}")).toMatchObject({
+      detailWidth: 400,
+    });
+    expect(document.body.style.cursor).toBe("");
+    expect(document.body.style.userSelect).toBe("");
+  });
 
   it("clamps the detail resize to the workspace width", async () => {
-    render(<TasksWorkspace />)
-    const workspace = await screen.findByTestId("tasks-workspace")
+    render(<TasksWorkspace />);
+    const workspace = await screen.findByTestId("tasks-workspace");
     vi.spyOn(workspace, "getBoundingClientRect").mockReturnValue({
-      x: 0, y: 0, left: 0, right: 1100, top: 0, bottom: 800, width: 1100, height: 800,
+      x: 0,
+      y: 0,
+      left: 0,
+      right: 1100,
+      top: 0,
+      bottom: 800,
+      width: 1100,
+      height: 800,
       toJSON: () => ({}),
-    })
-    fireEvent(window, new Event("resize"))
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    const handle = screen.getByRole("separator", { name: "Resize task details" })
-    expect(handle).toHaveAttribute("aria-valuemax", "1020")
+    });
+    fireEvent(window, new Event("resize"));
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    const handle = screen.getByRole("separator", { name: "Resize task details" });
+    expect(handle).toHaveAttribute("aria-valuemax", "1020");
 
-    fireEvent.pointerDown(handle, { pointerId: 9, button: 0, isPrimary: true })
-    fireEvent.pointerMove(window, { pointerId: 9, clientX: -5000 })
-    fireEvent.pointerUp(window, { pointerId: 9 })
+    fireEvent.pointerDown(handle, { pointerId: 9, button: 0, isPrimary: true });
+    fireEvent.pointerMove(window, { pointerId: 9, clientX: -5000 });
+    fireEvent.pointerUp(window, { pointerId: 9 });
 
     // The handle stops at the workspace, the stored width at the viewport.
-    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toMatchObject({ detailWidth: 944 })
-  })
+    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}")).toMatchObject({
+      detailWidth: 944,
+    });
+  });
 
   it("opens the task named by an initial deep-link key after loading the workspace", async () => {
-    const asked = { ...root, key: "ASK-7", title: "Choose the release date", description: "Customer needs a date" }
-    const askedDetail = { ...detail, task: asked }
-    api.listTasks.mockResolvedValue({ tasks: [asked], sequence: 10 })
-    api.getTask.mockResolvedValue(askedDetail)
+    const asked = {
+      ...root,
+      key: "ASK-7",
+      title: "Choose the release date",
+      description: "Customer needs a date",
+    };
+    const askedDetail = { ...detail, task: asked };
+    api.listTasks.mockResolvedValue({ tasks: [asked], sequence: 10 });
+    api.getTask.mockResolvedValue(askedDetail);
 
-    render(<TasksWorkspace initialTaskKey="ASK-7" />)
+    render(<TasksWorkspace initialTaskKey="ASK-7" />);
 
-    expect(await screen.findByRole("heading", { name: "ASK-7" })).toBeInTheDocument()
-    expect(screen.getByRole("textbox", { name: "Description" })).toHaveTextContent("Customer needs a date")
-  })
+    expect(await screen.findByRole("heading", { name: "ASK-7" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveTextContent(
+      "Customer needs a date",
+    );
+  });
 
   it("keeps a closed deep-linked task closed when the host target is re-created", async () => {
-    const asked = { ...root, key: "ASK-7", title: "Choose the release date" }
-    api.listTasks.mockResolvedValue({ tasks: [asked], sequence: 10 })
-    api.getTask.mockResolvedValue({ ...detail, task: asked })
-    const target = () => ({ id: "remote", label: "Remote", baseURL: "https://remote.example", token: "test" })
+    const asked = { ...root, key: "ASK-7", title: "Choose the release date" };
+    api.listTasks.mockResolvedValue({ tasks: [asked], sequence: 10 });
+    api.getTask.mockResolvedValue({ ...detail, task: asked });
+    const target = () => ({
+      id: "remote",
+      label: "Remote",
+      baseURL: "https://remote.example",
+      token: "test",
+    });
 
-    const view = render(onHost(target(), <TasksWorkspace initialTaskKey="ASK-7" />))
-    expect(await screen.findByRole("heading", { name: "ASK-7" })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
-    const loads = api.listTaskEvents.mock.calls.length
+    const view = render(onHost(target(), <TasksWorkspace initialTaskKey="ASK-7" />));
+    expect(await screen.findByRole("heading", { name: "ASK-7" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
+    const loads = api.listTaskEvents.mock.calls.length;
 
-    view.rerender(onHost(target(), <TasksWorkspace initialTaskKey="ASK-7" />))
-    await act(async () => {})
+    view.rerender(onHost(target(), <TasksWorkspace initialTaskKey="ASK-7" />));
+    await act(async () => {});
 
-    expect(api.listTaskEvents).toHaveBeenCalledTimes(loads)
-    expect(screen.queryByRole("heading", { name: "ASK-7" })).not.toBeInTheDocument()
-  })
+    expect(api.listTaskEvents).toHaveBeenCalledTimes(loads);
+    expect(screen.queryByRole("heading", { name: "ASK-7" })).not.toBeInTheDocument();
+  });
 
   it("keeps the list, the open task and its drafts while the host reconnects", async () => {
-    const remote = (baseURL: string) => ({ id: "remote", label: "Remote", baseURL, token: "test" })
-    const view = render(onHost(remote("http://127.0.0.1:41001"), <TasksWorkspace />))
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    await screen.findByRole("heading", { name: root.key })
-    const comments = screen.getByText("Comments").closest("section")!
-    await userEvent.click(within(comments).getByRole("button", { name: "Markdown" }))
-    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Unsent comment" } })
-    const loads = api.listTasks.mock.calls.length
+    const remote = (baseURL: string) => ({ id: "remote", label: "Remote", baseURL, token: "test" });
+    const view = render(onHost(remote("http://127.0.0.1:41001"), <TasksWorkspace />));
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await screen.findByRole("heading", { name: root.key });
+    const comments = screen.getByText("Comments").closest("section")!;
+    await userEvent.click(within(comments).getByRole("button", { name: "Markdown" }));
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Unsent comment" } });
+    const loads = api.listTasks.mock.calls.length;
 
-    const offline = remote("")
-    view.rerender(onHost(offline, <TasksWorkspace />))
-    await act(async () => {})
-    expect(api.listTasks.mock.calls.filter(([, target]) => target === offline)).toHaveLength(0)
-    const back = remote("http://127.0.0.1:41002")
-    view.rerender(onHost(back, <TasksWorkspace />))
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(expect.anything(), back, expect.any(AbortSignal)))
+    const offline = remote("");
+    view.rerender(onHost(offline, <TasksWorkspace />));
+    await act(async () => {});
+    expect(api.listTasks.mock.calls.filter(([, target]) => target === offline)).toHaveLength(0);
+    const back = remote("http://127.0.0.1:41002");
+    view.rerender(onHost(back, <TasksWorkspace />));
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.anything(),
+        back,
+        expect.any(AbortSignal),
+      ),
+    );
 
-    expect(api.listTasks.mock.calls.length).toBe(loads + 1)
-    expect(screen.getByTestId(`task-row-${root.key}`)).toBeInTheDocument()
-    expect(screen.getByRole("heading", { name: root.key })).toBeInTheDocument()
-    expect(screen.getByLabelText("Comment")).toHaveValue("Unsent comment")
-    expect(toast.error).not.toHaveBeenCalled()
-  })
+    expect(api.listTasks.mock.calls.length).toBe(loads + 1);
+    expect(screen.getByTestId(`task-row-${root.key}`)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: root.key })).toBeInTheDocument();
+    expect(screen.getByLabelText("Comment")).toHaveValue("Unsent comment");
+    expect(toast.error).not.toHaveBeenCalled();
+  });
 
   it("updates the selected task when the deep-link key changes", async () => {
-    const first = { ...root, key: "ASK-7", title: "First question", description: "First answer needed" }
-    const second = { ...root, key: "ASK-8", title: "Second question", description: "Second answer needed" }
-    api.listTasks.mockResolvedValue({ tasks: [first, second], sequence: 10 })
+    const first = {
+      ...root,
+      key: "ASK-7",
+      title: "First question",
+      description: "First answer needed",
+    };
+    const second = {
+      ...root,
+      key: "ASK-8",
+      title: "Second question",
+      description: "Second answer needed",
+    };
+    api.listTasks.mockResolvedValue({ tasks: [first, second], sequence: 10 });
     api.getTask.mockImplementation(async (key: string) => ({
       ...detail,
       task: key === "ASK-8" ? second : first,
-    }))
+    }));
 
-    const view = render(<TasksWorkspace initialTaskKey="ASK-7" />)
-    expect(await screen.findByRole("heading", { name: "ASK-7" })).toBeInTheDocument()
+    const view = render(<TasksWorkspace initialTaskKey="ASK-7" />);
+    expect(await screen.findByRole("heading", { name: "ASK-7" })).toBeInTheDocument();
 
-    view.rerender(<TasksWorkspace initialTaskKey="ASK-8" />)
+    view.rerender(<TasksWorkspace initialTaskKey="ASK-8" />);
 
-    expect(await screen.findByRole("heading", { name: "ASK-8" })).toBeInTheDocument()
-    expect(screen.getByRole("textbox", { name: "Description" })).toHaveTextContent("Second answer needed")
-  })
+    expect(await screen.findByRole("heading", { name: "ASK-8" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveTextContent(
+      "Second answer needed",
+    );
+  });
 
   it("shows newest comments first and can switch to oldest first", async () => {
-    const oldComment = { ...detail.comments[0], id: 1, body: "Oldest" }
-    const newComment = { ...detail.comments[0], id: 2, body: "Newest", created_at: "2026-08-01T10:00:00Z" }
-    api.getTask.mockResolvedValue({ ...detail, comments: [oldComment, newComment] })
+    const oldComment = { ...detail.comments[0], id: 1, body: "Oldest" };
+    const newComment = {
+      ...detail.comments[0],
+      id: 2,
+      body: "Newest",
+      created_at: "2026-08-01T10:00:00Z",
+    };
+    api.getTask.mockResolvedValue({ ...detail, comments: [oldComment, newComment] });
 
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
 
-    const comments = screen.getByText("Comments").closest("section")!
-    const commentList = comments.querySelector(".task-comment-list")!
-    const commentForm = comments.querySelector("form")!
-    expect(within(comments).getAllByRole("article")[0]).toHaveTextContent("Newest")
-    expect(commentForm.compareDocumentPosition(commentList)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
-    await userEvent.selectOptions(screen.getByLabelText("Comment order"), "oldest")
-    expect(within(comments).getAllByRole("article")[0]).toHaveTextContent("Oldest")
-    expect(commentList.compareDocumentPosition(commentForm)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
-  })
+    const comments = screen.getByText("Comments").closest("section")!;
+    const commentList = comments.querySelector(".task-comment-list")!;
+    const commentForm = comments.querySelector("form")!;
+    expect(within(comments).getAllByRole("article")[0]).toHaveTextContent("Newest");
+    expect(commentForm.compareDocumentPosition(commentList)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    await userEvent.selectOptions(screen.getByLabelText("Comment order"), "oldest");
+    expect(within(comments).getAllByRole("article")[0]).toHaveTextContent("Oldest");
+    expect(commentList.compareDocumentPosition(commentForm)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
 
   it("copies the original comment Markdown", async () => {
-    const markdown = "# Status\n\n- **ready**\n- `tested`"
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } })
+    const markdown = "# Status\n\n- **ready**\n- `tested`";
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
     api.getTask.mockResolvedValue({
       ...detail,
       comments: [{ ...detail.comments[0], body: markdown }],
-    })
+    });
 
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    await userEvent.click(screen.getByRole("button", { name: "Copy comment Markdown" }))
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Copy comment Markdown" }));
 
-    expect(writeText).toHaveBeenCalledWith(markdown)
-    expect(toast.success).toHaveBeenCalledWith("Comment Markdown copied")
-  })
+    expect(writeText).toHaveBeenCalledWith(markdown);
+    expect(toast.success).toHaveBeenCalledWith("Comment Markdown copied");
+  });
 
   it("keeps the latest task selected during a real-time refresh", async () => {
-    const first = deferred<TaskDetail>()
-    const second = deferred<TaskDetail>()
-    const secondDetail = { ...detail, task: child }
-    api.getTask.mockImplementation((key: string) => key === "TEST-1" ? first.promise : Promise.resolve(secondDetail))
+    const first = deferred<TaskDetail>();
+    const second = deferred<TaskDetail>();
+    const secondDetail = { ...detail, task: child };
+    api.getTask.mockImplementation((key: string) =>
+      key === "TEST-1" ? first.promise : Promise.resolve(secondDetail),
+    );
 
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    first.resolve(detail)
-    await screen.findByRole("heading", { name: "TEST-1" })
-    api.getTask.mockImplementation((key: string) => key === "TEST-2" ? second.promise : Promise.resolve(detail))
-    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
-    await userEvent.click(screen.getByRole("button", { name: "Expand TEST-1" }))
-    await userEvent.click(screen.getByRole("button", { name: /Desktop tree/ }))
-    await act(async () => taskSocket.options?.onHint?.({ sequence: 11 }))
-    second.resolve(secondDetail)
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    first.resolve(detail);
+    await screen.findByRole("heading", { name: "TEST-1" });
+    api.getTask.mockImplementation((key: string) =>
+      key === "TEST-2" ? second.promise : Promise.resolve(detail),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
+    await userEvent.click(screen.getByRole("button", { name: "Expand TEST-1" }));
+    await userEvent.click(screen.getByRole("button", { name: /Desktop tree/ }));
+    await act(async () => taskSocket.options?.onHint?.({ sequence: 11 }));
+    second.resolve(secondDetail);
 
-    expect(await screen.findByRole("heading", { name: "TEST-2" })).toBeInTheDocument()
-  })
+    expect(await screen.findByRole("heading", { name: "TEST-2" })).toBeInTheDocument();
+  });
 
   it("edits explicit pools in the queue dialog", async () => {
-    api.listAgentPools.mockResolvedValue({ items: [{ id: 4, queue: "TEST", name: "developers", agents: ["dev-a"], revision: 2, created_at: root.created_at, updated_at: root.updated_at }], count: 1 })
-    api.rebindAgentPool.mockResolvedValue({ id: 4, queue: "TEST", name: "developers", agents: ["dev-a", "dev-b"], revision: 3, created_at: root.created_at, updated_at: root.updated_at })
+    api.listAgentPools.mockResolvedValue({
+      items: [
+        {
+          id: 4,
+          queue: "TEST",
+          name: "developers",
+          agents: ["dev-a"],
+          revision: 2,
+          created_at: root.created_at,
+          updated_at: root.updated_at,
+        },
+      ],
+      count: 1,
+    });
+    api.rebindAgentPool.mockResolvedValue({
+      id: 4,
+      queue: "TEST",
+      name: "developers",
+      agents: ["dev-a", "dev-b"],
+      revision: 3,
+      created_at: root.created_at,
+      updated_at: root.updated_at,
+    });
 
-    render(<TasksWorkspace />)
-    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }))
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }))
-    expect(await screen.findByRole("dialog", { name: "Queues" })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("tab", { name: "Pools" }))
-    const developers = await screen.findByRole("group", { name: "Pool developers" })
+    render(<TasksWorkspace />);
+    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }));
+    expect(await screen.findByRole("dialog", { name: "Queues" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Pools" }));
+    const developers = await screen.findByRole("group", { name: "Pool developers" });
 
-    fireEvent.change(within(developers).getByLabelText("Add agent to developers"), { target: { value: "dev-b" } })
-    await userEvent.click(within(developers).getByRole("button", { name: "Add" }))
-    await userEvent.click(within(developers).getByRole("button", { name: "Save pool developers" }))
-    expect(api.rebindAgentPool).toHaveBeenCalledWith("TEST", "developers", ["dev-a", "dev-b"], 2, expect.any(String), null)
-  })
+    fireEvent.change(within(developers).getByLabelText("Add agent to developers"), {
+      target: { value: "dev-b" },
+    });
+    await userEvent.click(within(developers).getByRole("button", { name: "Add" }));
+    await userEvent.click(within(developers).getByRole("button", { name: "Save pool developers" }));
+    expect(api.rebindAgentPool).toHaveBeenCalledWith(
+      "TEST",
+      "developers",
+      ["dev-a", "dev-b"],
+      2,
+      expect.any(String),
+      null,
+    );
+  });
 
   it("retries a queue whose pools failed to load and refreshes revisions after a conflict", async () => {
     api.listAgentPools
       .mockRejectedValueOnce(Object.assign(new Error("permission denied"), { status: 403 }))
-      .mockResolvedValueOnce({ items: [{ id: 4, queue: "TEST", name: "developers", agents: ["dev-a"], revision: 6, created_at: root.created_at, updated_at: root.updated_at }], count: 1 })
-      .mockResolvedValueOnce({ items: [{ id: 4, queue: "TEST", name: "developers", agents: ["dev-a"], revision: 7, created_at: root.created_at, updated_at: root.updated_at }], count: 1 })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 4,
+            queue: "TEST",
+            name: "developers",
+            agents: ["dev-a"],
+            revision: 6,
+            created_at: root.created_at,
+            updated_at: root.updated_at,
+          },
+        ],
+        count: 1,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 4,
+            queue: "TEST",
+            name: "developers",
+            agents: ["dev-a"],
+            revision: 7,
+            created_at: root.created_at,
+            updated_at: root.updated_at,
+          },
+        ],
+        count: 1,
+      });
 
-    render(<TasksWorkspace />)
-    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }))
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }))
-    expect(await screen.findByRole("alert", { name: "Queue TEST error" })).toHaveTextContent("permission denied")
-    await userEvent.click(screen.getByRole("button", { name: "Retry" }))
-    await userEvent.click(screen.getByRole("tab", { name: "Pools" }))
-    let developers = await screen.findByRole("group", { name: "Pool developers" })
+    render(<TasksWorkspace />);
+    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }));
+    expect(await screen.findByRole("alert", { name: "Queue TEST error" })).toHaveTextContent(
+      "permission denied",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Pools" }));
+    let developers = await screen.findByRole("group", { name: "Pool developers" });
 
     api.rebindAgentPool
-      .mockRejectedValueOnce(new ApiError(409, "revision_conflict", "agent pool was changed by another actor"))
-      .mockResolvedValueOnce({ id: 4, queue: "TEST", name: "developers", agents: ["dev-a", "dev-b"], revision: 8, created_at: root.created_at, updated_at: root.updated_at })
-    fireEvent.change(within(developers).getByLabelText("Add agent to developers"), { target: { value: "dev-b" } })
-    await userEvent.click(within(developers).getByRole("button", { name: "Add" }))
-    await userEvent.click(within(developers).getByRole("button", { name: "Save pool developers" }))
-    expect(await screen.findByText(/Configuration changed elsewhere/)).toBeInTheDocument()
-    expect(api.listAgentPools).toHaveBeenCalledTimes(3)
-    developers = await screen.findByRole("group", { name: "Pool developers" })
-    fireEvent.change(within(developers).getByLabelText("Add agent to developers"), { target: { value: "dev-b" } })
-    await userEvent.click(within(developers).getByRole("button", { name: "Add" }))
-    await userEvent.click(within(developers).getByRole("button", { name: "Save pool developers" }))
-    expect(api.rebindAgentPool).toHaveBeenLastCalledWith("TEST", "developers", ["dev-a", "dev-b"], 7, expect.any(String), null)
-  })
+      .mockRejectedValueOnce(
+        new ApiError(409, "revision_conflict", "agent pool was changed by another actor"),
+      )
+      .mockResolvedValueOnce({
+        id: 4,
+        queue: "TEST",
+        name: "developers",
+        agents: ["dev-a", "dev-b"],
+        revision: 8,
+        created_at: root.created_at,
+        updated_at: root.updated_at,
+      });
+    fireEvent.change(within(developers).getByLabelText("Add agent to developers"), {
+      target: { value: "dev-b" },
+    });
+    await userEvent.click(within(developers).getByRole("button", { name: "Add" }));
+    await userEvent.click(within(developers).getByRole("button", { name: "Save pool developers" }));
+    expect(await screen.findByText(/Configuration changed elsewhere/)).toBeInTheDocument();
+    expect(api.listAgentPools).toHaveBeenCalledTimes(3);
+    developers = await screen.findByRole("group", { name: "Pool developers" });
+    fireEvent.change(within(developers).getByLabelText("Add agent to developers"), {
+      target: { value: "dev-b" },
+    });
+    await userEvent.click(within(developers).getByRole("button", { name: "Add" }));
+    await userEvent.click(within(developers).getByRole("button", { name: "Save pool developers" }));
+    expect(api.rebindAgentPool).toHaveBeenLastCalledWith(
+      "TEST",
+      "developers",
+      ["dev-a", "dev-b"],
+      7,
+      expect.any(String),
+      null,
+    );
+  });
 
   it("names a dependency by its title and status, and the parent only once", async () => {
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    const row = (await screen.findByText("Child task")).closest("div")!
-    expect(within(row).getByText("TEST-2")).toBeInTheDocument()
-    expect(within(row).getByText("In progress")).toBeInTheDocument()
-  })
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    const row = (await screen.findByText("Child task")).closest("div")!;
+    expect(within(row).getByText("TEST-2")).toBeInTheDocument();
+    expect(within(row).getByText("In progress")).toBeInTheDocument();
+  });
 
   it("shows one accessible question indicator only for task rows with active question notifications", async () => {
     api.listTaskNotifications.mockResolvedValue({
@@ -744,81 +1048,139 @@ describe("TasksWorkspace", () => {
         { ...notification, id: "dismissed", task_key: child.key, dismissed_at: root.updated_at },
       ],
       count: 4,
-    })
+    });
 
-    render(<TasksWorkspace />)
+    render(<TasksWorkspace />);
 
-    const rootRow = await screen.findByTestId("task-row-TEST-1")
-    expect(await within(rootRow).findByRole("img", { name: "Unread question notification for TEST-1" })).toBeVisible()
-    await userEvent.click(within(rootRow).getByRole("button", { name: "Expand TEST-1" }))
-    const childRow = await screen.findByTestId("task-row-TEST-2")
-    expect(within(childRow).queryByRole("img", { name: "Unread question notification for TEST-2" })).toBeNull()
-  })
+    const rootRow = await screen.findByTestId("task-row-TEST-1");
+    expect(
+      await within(rootRow).findByRole("img", { name: "Unread question notification for TEST-1" }),
+    ).toBeVisible();
+    await userEvent.click(within(rootRow).getByRole("button", { name: "Expand TEST-1" }));
+    const childRow = await screen.findByTestId("task-row-TEST-2");
+    expect(
+      within(childRow).queryByRole("img", { name: "Unread question notification for TEST-2" }),
+    ).toBeNull();
+  });
 
   it("marks a task's question notification read when the task is opened, clearing its indicator", async () => {
-    render(<TasksWorkspace />)
+    render(<TasksWorkspace />);
 
-    const rootRow = await screen.findByTestId("task-row-TEST-1")
-    expect(await within(rootRow).findByRole("img", { name: "Unread question notification for TEST-1" })).toBeVisible()
-    await userEvent.click(within(rootRow).getByRole("button", { name: /Ship native tasks/ }))
+    const rootRow = await screen.findByTestId("task-row-TEST-1");
+    expect(
+      await within(rootRow).findByRole("img", { name: "Unread question notification for TEST-1" }),
+    ).toBeVisible();
+    await userEvent.click(within(rootRow).getByRole("button", { name: /Ship native tasks/ }));
 
-    await waitFor(() => expect(api.markTaskNotificationRead).toHaveBeenCalledWith("notification-1", null))
-    expect(within(await screen.findByTestId("task-row-TEST-1")).queryByRole("img", { name: "Unread question notification for TEST-1" })).toBeNull()
-  })
+    await waitFor(() =>
+      expect(api.markTaskNotificationRead).toHaveBeenCalledWith("notification-1", null),
+    );
+    expect(
+      within(await screen.findByTestId("task-row-TEST-1")).queryByRole("img", {
+        name: "Unread question notification for TEST-1",
+      }),
+    ).toBeNull();
+  });
 
   it("keeps a closed task with an unread question in Active until it is opened", async () => {
-    const closed: Task = { ...root, key: "TEST-9", title: "Closed with a question", status: "done", category: "done" }
-    api.getTask.mockImplementation(async (key: string) => key === closed.key ? { ...detail, task: closed } : detail)
+    const closed: Task = {
+      ...root,
+      key: "TEST-9",
+      title: "Closed with a question",
+      status: "done",
+      category: "done",
+    };
+    api.getTask.mockImplementation(async (key: string) =>
+      key === closed.key ? { ...detail, task: closed } : detail,
+    );
     api.listTaskNotifications.mockResolvedValue({
-      notifications: [notification, { ...notification, id: "closed-question", task_key: closed.key }],
+      notifications: [
+        notification,
+        { ...notification, id: "closed-question", task_key: closed.key },
+      ],
       count: 2,
-    })
+    });
 
-    render(<TasksWorkspace />)
+    render(<TasksWorkspace />);
 
-    const closedRow = await screen.findByTestId("task-row-TEST-9")
-    expect(await within(closedRow).findByRole("img", { name: "Unread question notification for TEST-9" })).toBeVisible()
-    expect(api.getTask).toHaveBeenCalledWith("TEST-9", null, expect.any(AbortSignal))
-    expect(api.getTask).not.toHaveBeenCalledWith("TEST-1", null)
-    await userEvent.click(within(closedRow).getByRole("button", { name: /Closed with a question/ }))
-    await waitFor(() => expect(api.markTaskNotificationRead).toHaveBeenCalledWith("closed-question", null))
-  })
+    const closedRow = await screen.findByTestId("task-row-TEST-9");
+    expect(
+      await within(closedRow).findByRole("img", {
+        name: "Unread question notification for TEST-9",
+      }),
+    ).toBeVisible();
+    expect(api.getTask).toHaveBeenCalledWith("TEST-9", null, expect.any(AbortSignal));
+    expect(api.getTask).not.toHaveBeenCalledWith("TEST-1", null);
+    await userEvent.click(
+      within(closedRow).getByRole("button", { name: /Closed with a question/ }),
+    );
+    await waitFor(() =>
+      expect(api.markTaskNotificationRead).toHaveBeenCalledWith("closed-question", null),
+    );
+  });
 
   it("pulls in only the scoped agent's closed questions", async () => {
-    const closed: Task = { ...root, key: "TEST-9", title: "Closed with a question", status: "done", category: "done" }
-    api.getTask.mockImplementation(async (key: string) => key === closed.key ? { ...detail, task: closed } : detail)
+    const closed: Task = {
+      ...root,
+      key: "TEST-9",
+      title: "Closed with a question",
+      status: "done",
+      category: "done",
+    };
+    api.getTask.mockImplementation(async (key: string) =>
+      key === closed.key ? { ...detail, task: closed } : detail,
+    );
     api.listTaskNotifications.mockResolvedValue({
-      notifications: [{ ...notification, id: "other-agent", task_key: closed.key, requesting_principal: "agent:triager" }],
+      notifications: [
+        {
+          ...notification,
+          id: "other-agent",
+          task_key: closed.key,
+          requesting_principal: "agent:triager",
+        },
+      ],
       count: 1,
-    })
+    });
 
-    render(<TasksWorkspace scopeAgent="worker" />)
+    render(<TasksWorkspace scopeAgent="worker" />);
 
-    await screen.findByTestId("task-row-TEST-1")
-    await act(async () => {})
-    expect(screen.queryByTestId("task-row-TEST-9")).toBeNull()
-    expect(api.getTask).not.toHaveBeenCalled()
-  })
+    await screen.findByTestId("task-row-TEST-1");
+    await act(async () => {});
+    expect(screen.queryByTestId("task-row-TEST-9")).toBeNull();
+    expect(api.getTask).not.toHaveBeenCalled();
+  });
 
   it("has no notification inbox of its own: the task rows carry the questions", async () => {
-    render(<TasksWorkspace />)
+    render(<TasksWorkspace />);
 
-    await screen.findByTestId("task-row-TEST-1")
-    expect(screen.queryByRole("button", { name: /Notifications/ })).toBeNull()
-    expect(screen.queryByText("Need a product decision")).toBeNull()
-  })
+    await screen.findByTestId("task-row-TEST-1");
+    expect(screen.queryByRole("button", { name: /Notifications/ })).toBeNull();
+    expect(screen.queryByText("Need a product decision")).toBeNull();
+  });
 
   it("updates task row question indicators when realtime refreshes the notification inbox", async () => {
-    render(<TasksWorkspace />)
+    render(<TasksWorkspace />);
 
-    const rootRow = await screen.findByTestId("task-row-TEST-1")
-    expect(await within(rootRow).findByRole("img", { name: "Unread question notification for TEST-1" })).toBeVisible()
-    api.listTaskNotifications.mockResolvedValue({ notifications: [], count: 0 })
-    const onHint = taskSocket.options?.onHint as (hint: { sequence: number; kind: string; task_key: string }) => void
-    act(() => onHint({ sequence: 11, kind: "task.question", task_key: root.key }))
+    const rootRow = await screen.findByTestId("task-row-TEST-1");
+    expect(
+      await within(rootRow).findByRole("img", { name: "Unread question notification for TEST-1" }),
+    ).toBeVisible();
+    api.listTaskNotifications.mockResolvedValue({ notifications: [], count: 0 });
+    const onHint = taskSocket.options?.onHint as (hint: {
+      sequence: number;
+      kind: string;
+      task_key: string;
+    }) => void;
+    act(() => onHint({ sequence: 11, kind: "task.question", task_key: root.key }));
 
-    await waitFor(() => expect(within(screen.getByTestId("task-row-TEST-1")).queryByRole("img", { name: "Unread question notification for TEST-1" })).toBeNull())
-  })
+    await waitFor(() =>
+      expect(
+        within(screen.getByTestId("task-row-TEST-1")).queryByRole("img", {
+          name: "Unread question notification for TEST-1",
+        }),
+      ).toBeNull(),
+    );
+  });
 
   it("labels nested in-progress tasks visibly and accessibly without changing open rows", async () => {
     api.listTasks.mockResolvedValue({
@@ -827,784 +1189,1003 @@ describe("TasksWorkspace", () => {
         { ...child, status: "in_progress", category: "in_progress" },
       ],
       sequence: 10,
-    })
+    });
 
-    render(<TasksWorkspace />)
+    render(<TasksWorkspace />);
 
-    const parentRow = await screen.findByTestId("task-row-TEST-1")
-    await userEvent.click(within(parentRow).getByRole("button", { name: "Expand TEST-1" }))
-    const childRow = await screen.findByTestId("task-row-TEST-2")
+    const parentRow = await screen.findByTestId("task-row-TEST-1");
+    await userEvent.click(within(parentRow).getByRole("button", { name: "Expand TEST-1" }));
+    const childRow = await screen.findByTestId("task-row-TEST-2");
     // The status is its own column now, not a badge inside the row's button:
     // visible text, and the tone that carries the meaning.
-    const badge = within(childRow).getByText("In progress")
-    expect(badge).toBeVisible()
-    expect(badge).toHaveAttribute("data-tone", "live")
-    expect(within(parentRow).queryByText("In progress")).toBeNull()
-  })
+    const badge = within(childRow).getByText("In progress");
+    expect(badge).toBeVisible();
+    expect(badge).toHaveAttribute("data-tone", "live");
+    expect(within(parentRow).queryByText("In progress")).toBeNull();
+  });
 
   it("defaults to Active and accepts only the latest status-view tree", async () => {
-    const closedPage = deferred<{ tasks: Task[]; sequence: number }>()
-    const allPage = deferred<{ tasks: Task[]; sequence: number }>()
+    const closedPage = deferred<{ tasks: Task[]; sequence: number }>();
+    const allPage = deferred<{ tasks: Task[]; sequence: number }>();
     api.listTasks
       .mockResolvedValueOnce({ tasks: [root, child], sequence: 10 })
       .mockReturnValueOnce(closedPage.promise)
-      .mockReturnValueOnce(allPage.promise)
+      .mockReturnValueOnce(allPage.promise);
 
-    render(<TasksWorkspace />)
+    render(<TasksWorkspace />);
 
-    await screen.findByText("Ship native tasks")
+    await screen.findByText("Ship native tasks");
     expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ status_view: "active" }),
-      null, expect.any(AbortSignal))
+      null,
+      expect.any(AbortSignal),
+    );
 
-    await userEvent.click(within(screen.getByRole("radiogroup", { name: "Task status" })).getByRole("radio", { name: "Closed" }))
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ status_view: "closed" }),
-      null, expect.any(AbortSignal)))
-    await userEvent.click(within(screen.getByRole("radiogroup", { name: "Task status" })).getByRole("radio", { name: "All" }))
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ status_view: "all" }),
-      null, expect.any(AbortSignal)))
+    await userEvent.click(
+      within(screen.getByRole("radiogroup", { name: "Task status" })).getByRole("radio", {
+        name: "Closed",
+      }),
+    );
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ status_view: "closed" }),
+        null,
+        expect.any(AbortSignal),
+      ),
+    );
+    await userEvent.click(
+      within(screen.getByRole("radiogroup", { name: "Task status" })).getByRole("radio", {
+        name: "All",
+      }),
+    );
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ status_view: "all" }),
+        null,
+        expect.any(AbortSignal),
+      ),
+    );
 
-    await act(async () => closedPage.resolve({ tasks: [], sequence: 11 }))
-    expect(screen.getByText("Ship native tasks")).toBeInTheDocument()
-    await act(async () => allPage.resolve({ tasks: [{ ...root, title: "Completed task", status: "done", category: "done" }], sequence: 12 }))
-    expect(await screen.findByText("Completed task")).toBeInTheDocument()
-    expect(screen.queryByText("Ship native tasks")).toBeNull()
+    await act(async () => closedPage.resolve({ tasks: [], sequence: 11 }));
+    expect(screen.getByText("Ship native tasks")).toBeInTheDocument();
+    await act(async () =>
+      allPage.resolve({
+        tasks: [{ ...root, title: "Completed task", status: "done", category: "done" }],
+        sequence: 12,
+      }),
+    );
+    expect(await screen.findByText("Completed task")).toBeInTheDocument();
+    expect(screen.queryByText("Ship native tasks")).toBeNull();
 
-    api.listTasks.mockResolvedValueOnce({ tasks: [{ ...root, title: "Completed task", status: "done", category: "done" }], sequence: 13 })
-    const onHint = taskSocket.options?.onHint as (hint: { sequence: number; kind: string; task_key: string }) => void
-    act(() => onHint({ sequence: 13, kind: "task.updated", task_key: root.key }))
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ status_view: "all" }),
-      null, expect.any(AbortSignal)))
-  })
+    api.listTasks.mockResolvedValueOnce({
+      tasks: [{ ...root, title: "Completed task", status: "done", category: "done" }],
+      sequence: 13,
+    });
+    const onHint = taskSocket.options?.onHint as (hint: {
+      sequence: number;
+      kind: string;
+      task_key: string;
+    }) => void;
+    act(() => onHint({ sequence: 13, kind: "task.updated", task_key: root.key }));
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ status_view: "all" }),
+        null,
+        expect.any(AbortSignal),
+      ),
+    );
+  });
 
   it("waits for the accepted initial sequence and coalesces a replay burst into one refresh", async () => {
-    const firstPage = deferred<{ tasks: Task[]; sequence: number }>()
-    const refreshPage = deferred<{ tasks: Task[]; sequence: number }>()
-    api.listTasks.mockReturnValueOnce(firstPage.promise)
+    const firstPage = deferred<{ tasks: Task[]; sequence: number }>();
+    const refreshPage = deferred<{ tasks: Task[]; sequence: number }>();
+    api.listTasks.mockReturnValueOnce(firstPage.promise);
 
-    render(<TasksWorkspace />)
+    render(<TasksWorkspace />);
 
-    expect(taskSocket.options).toEqual(expect.objectContaining({ after: 0, enabled: false }))
-    await act(async () => firstPage.resolve({ tasks: [root, child], sequence: 10 }))
-    await screen.findByText("Ship native tasks")
-    await waitFor(() => expect(taskSocket.options).toEqual(expect.objectContaining({ after: 10, enabled: true })))
+    expect(taskSocket.options).toEqual(expect.objectContaining({ after: 0, enabled: false }));
+    await act(async () => firstPage.resolve({ tasks: [root, child], sequence: 10 }));
+    await screen.findByText("Ship native tasks");
+    await waitFor(() =>
+      expect(taskSocket.options).toEqual(expect.objectContaining({ after: 10, enabled: true })),
+    );
     await act(async () => {
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-    const metadataCalls = api.listTaskQueues.mock.calls.length
-    const principalCalls = api.listTaskPrincipals.mock.calls.length
-    const notificationCalls = api.listTaskNotifications.mock.calls.length
-    api.listTasks.mockReturnValueOnce(refreshPage.promise)
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const metadataCalls = api.listTaskQueues.mock.calls.length;
+    const principalCalls = api.listTaskPrincipals.mock.calls.length;
+    const notificationCalls = api.listTaskNotifications.mock.calls.length;
+    api.listTasks.mockReturnValueOnce(refreshPage.promise);
 
-    const onHint = taskSocket.options?.onHint as (hint: { sequence: number; kind: string; task_key: string }) => void
+    const onHint = taskSocket.options?.onHint as (hint: {
+      sequence: number;
+      kind: string;
+      task_key: string;
+    }) => void;
     act(() => {
       for (let sequence = 11; sequence <= 110; sequence += 1) {
-        onHint({ sequence, kind: "task.updated", task_key: root.key })
+        onHint({ sequence, kind: "task.updated", task_key: root.key });
       }
-    })
+    });
 
-    await waitFor(() => expect(api.listTasks).toHaveBeenCalledTimes(2))
-    await act(async () => refreshPage.resolve({ tasks: [root, child], sequence: 110 }))
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await waitFor(() => expect(api.listTasks).toHaveBeenCalledTimes(2));
+    await act(async () => refreshPage.resolve({ tasks: [root, child], sequence: 110 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(api.listTasks).toHaveBeenCalledTimes(2)
-    expect(api.listTaskQueues).toHaveBeenCalledTimes(metadataCalls + 1)
-    expect(api.listTaskPrincipals).toHaveBeenCalledTimes(principalCalls + 1)
-    expect(api.listTaskNotifications).toHaveBeenCalledTimes(notificationCalls + 1)
-  })
+    expect(api.listTasks).toHaveBeenCalledTimes(2);
+    expect(api.listTaskQueues).toHaveBeenCalledTimes(metadataCalls + 1);
+    expect(api.listTaskPrincipals).toHaveBeenCalledTimes(principalCalls + 1);
+    expect(api.listTaskNotifications).toHaveBeenCalledTimes(notificationCalls + 1);
+  });
 
   it("runs one trailing refresh when a hint arrives during an active refresh", async () => {
-    const refresh = deferred<{ tasks: Task[]; sequence: number }>()
-    render(<TasksWorkspace />)
-    await screen.findByText("Ship native tasks")
-    const onHint = taskSocket.options?.onHint as (hint: { sequence: number; kind: string; task_key: string }) => void
-    api.listTasks.mockReturnValueOnce(refresh.promise)
+    const refresh = deferred<{ tasks: Task[]; sequence: number }>();
+    render(<TasksWorkspace />);
+    await screen.findByText("Ship native tasks");
+    const onHint = taskSocket.options?.onHint as (hint: {
+      sequence: number;
+      kind: string;
+      task_key: string;
+    }) => void;
+    api.listTasks.mockReturnValueOnce(refresh.promise);
 
-    act(() => onHint({ sequence: 11, kind: "task.updated", task_key: root.key }))
-    await waitFor(() => expect(api.listTasks).toHaveBeenCalledTimes(2))
-    act(() => onHint({ sequence: 12, kind: "task.updated", task_key: root.key }))
-    await act(async () => refresh.resolve({ tasks: [{ ...root, title: "First refresh" }], sequence: 11 }))
+    act(() => onHint({ sequence: 11, kind: "task.updated", task_key: root.key }));
+    await waitFor(() => expect(api.listTasks).toHaveBeenCalledTimes(2));
+    act(() => onHint({ sequence: 12, kind: "task.updated", task_key: root.key }));
+    await act(async () =>
+      refresh.resolve({ tasks: [{ ...root, title: "First refresh" }], sequence: 11 }),
+    );
 
-    await waitFor(() => expect(api.listTasks).toHaveBeenCalledTimes(3))
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-  })
+    await waitFor(() => expect(api.listTasks).toHaveBeenCalledTimes(3));
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+  });
 
   it("renders priority accessibly and saves edits through the task update", async () => {
-    render(<TasksWorkspace />)
+    render(<TasksWorkspace />);
 
-    expect(await screen.findByLabelText("P0 Critical")).toHaveTextContent("P0")
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    const priority = await screen.findByLabelText("Priority")
-    expect(priority).toHaveValue("P0")
+    expect(await screen.findByLabelText("P0 Critical")).toHaveTextContent("P0");
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    const priority = await screen.findByLabelText("Priority");
+    expect(priority).toHaveValue("P0");
 
-    await userEvent.selectOptions(priority, "P1")
-    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+    await userEvent.selectOptions(priority, "P1");
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }));
 
     expect(api.updateTask).toHaveBeenCalledWith(
       "TEST-1",
       expect.objectContaining({ priority: "P1", revision: 2 }),
       null,
-    )
-  })
+    );
+  });
 
   it("saves wait-customer and set/clear pull request edits with loaded revisions on the explicit host", async () => {
     const target = {
-      id: "remote", label: "Remote", baseURL: "https://remote.test", token: "secret",
-    }
-    api.updateTask.mockImplementation((_key: string, input: Partial<Task>) => Promise.resolve({
-      ...root,
-      ...input,
-      category: input.status ?? root.category,
-      revision: Number(input.revision) + 1,
-    }))
-    render(onHost(target, <TasksWorkspace />))
+      id: "remote",
+      label: "Remote",
+      baseURL: "https://remote.test",
+      token: "secret",
+    };
+    api.updateTask.mockImplementation((_key: string, input: Partial<Task>) =>
+      Promise.resolve({
+        ...root,
+        ...input,
+        category: input.status ?? root.category,
+        revision: Number(input.revision) + 1,
+      }),
+    );
+    render(onHost(target, <TasksWorkspace />));
 
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    await userEvent.selectOptions(await screen.findByLabelText("Status"), "wait_customer")
-    await userEvent.type(screen.getByLabelText("Pull request"), "https://example.test/pull/7")
-    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await userEvent.selectOptions(await screen.findByLabelText("Status"), "wait_customer");
+    await userEvent.type(screen.getByLabelText("Pull request"), "https://example.test/pull/7");
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }));
 
-    expect(api.updateTask).toHaveBeenNthCalledWith(1, "TEST-1", expect.objectContaining({
-      status: "wait_customer",
-      pull_request: "https://example.test/pull/7",
-      revision: 2,
-    }), target)
-    const pullRequest = await screen.findByLabelText("Pull request")
-    expect(pullRequest).toHaveValue("https://example.test/pull/7")
-    await userEvent.clear(pullRequest)
-    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+    expect(api.updateTask).toHaveBeenNthCalledWith(
+      1,
+      "TEST-1",
+      expect.objectContaining({
+        status: "wait_customer",
+        pull_request: "https://example.test/pull/7",
+        revision: 2,
+      }),
+      target,
+    );
+    const pullRequest = await screen.findByLabelText("Pull request");
+    expect(pullRequest).toHaveValue("https://example.test/pull/7");
+    await userEvent.clear(pullRequest);
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }));
 
-    expect(api.updateTask).toHaveBeenNthCalledWith(2, "TEST-1", expect.objectContaining({
-      status: "wait_customer",
-      pull_request: "",
-      revision: 3,
-    }), target)
-  })
+    expect(api.updateTask).toHaveBeenNthCalledWith(
+      2,
+      "TEST-1",
+      expect.objectContaining({
+        status: "wait_customer",
+        pull_request: "",
+        revision: 3,
+      }),
+      target,
+    );
+  });
 
   it("shows the loading placeholder only until the initial task tree arrives", async () => {
-    const firstPage = deferred<{ tasks: Task[]; sequence: number }>()
-    api.listTasks.mockReturnValueOnce(firstPage.promise)
+    const firstPage = deferred<{ tasks: Task[]; sequence: number }>();
+    api.listTasks.mockReturnValueOnce(firstPage.promise);
 
-    render(<TasksWorkspace />)
+    render(<TasksWorkspace />);
 
-    expect(await screen.findByText("Loading tasks…")).toBeInTheDocument()
-    expect(screen.queryByText("Ship native tasks")).toBeNull()
+    expect(await screen.findByText("Loading tasks…")).toBeInTheDocument();
+    expect(screen.queryByText("Ship native tasks")).toBeNull();
 
-    await act(async () => firstPage.resolve({ tasks: [root, child], sequence: 10 }))
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    expect(screen.queryByText("Loading tasks…")).toBeNull()
-  })
+    await act(async () => firstPage.resolve({ tasks: [root, child], sequence: 10 }));
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    expect(screen.queryByText("Loading tasks…")).toBeNull();
+  });
 
   it("keeps the current tree visible and marks a background refresh busy", async () => {
-    const refreshPage = deferred<{ tasks: Task[]; sequence: number }>()
-    render(<TasksWorkspace />)
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    api.listTasks.mockReturnValueOnce(refreshPage.promise)
+    const refreshPage = deferred<{ tasks: Task[]; sequence: number }>();
+    render(<TasksWorkspace />);
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    api.listTasks.mockReturnValueOnce(refreshPage.promise);
 
-    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }))
+    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }));
 
-    expect(screen.getByText("Ship native tasks")).toBeInTheDocument()
-    expect(screen.queryByText("Loading tasks…")).toBeNull()
-    expect(screen.getByRole("button", { name: "Refresh tasks" })).toHaveAttribute("aria-busy", "true")
+    expect(screen.getByText("Ship native tasks")).toBeInTheDocument();
+    expect(screen.queryByText("Loading tasks…")).toBeNull();
+    expect(screen.getByRole("button", { name: "Refresh tasks" })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
 
-    await act(async () => refreshPage.resolve({ tasks: [root], sequence: 11 }))
-    await waitFor(() => expect(screen.getByRole("button", { name: "Refresh tasks" })).toHaveAttribute("aria-busy", "false"))
-  })
+    await act(async () => refreshPage.resolve({ tasks: [root], sequence: 11 }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Refresh tasks" })).toHaveAttribute(
+        "aria-busy",
+        "false",
+      ),
+    );
+  });
 
   it("retains the current tree when a background refresh fails", async () => {
-    const refreshPage = deferred<{ tasks: Task[]; sequence: number }>()
-    render(<TasksWorkspace />)
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    api.listTasks.mockReturnValueOnce(refreshPage.promise)
+    const refreshPage = deferred<{ tasks: Task[]; sequence: number }>();
+    render(<TasksWorkspace />);
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    api.listTasks.mockReturnValueOnce(refreshPage.promise);
 
-    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }))
-    await act(async () => refreshPage.reject(new Error("refresh failed")))
+    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }));
+    await act(async () => refreshPage.reject(new Error("refresh failed")));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Refresh tasks" })).toHaveAttribute("aria-busy", "false"))
-    expect(screen.getByText("Ship native tasks")).toBeInTheDocument()
-    expect(screen.queryByText("Loading tasks…")).toBeNull()
-    expect(toast.error).toHaveBeenCalledWith("refresh failed")
-  })
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Refresh tasks" })).toHaveAttribute(
+        "aria-busy",
+        "false",
+      ),
+    );
+    expect(screen.getByText("Ship native tasks")).toBeInTheDocument();
+    expect(screen.queryByText("Loading tasks…")).toBeNull();
+    expect(toast.error).toHaveBeenCalledWith("refresh failed");
+  });
 
   it("does not reload the initial tree when principal metadata arrives", async () => {
-    const people = deferred<{ customer: string; agents: string[]; groups: string[] }>()
-    api.listTaskPrincipals.mockReturnValueOnce(people.promise)
+    const people = deferred<{ customer: string; agents: string[]; groups: string[] }>();
+    api.listTaskPrincipals.mockReturnValueOnce(people.promise);
 
-    render(<TasksWorkspace />)
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    expect(api.listTasks).toHaveBeenCalledTimes(1)
+    render(<TasksWorkspace />);
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    expect(api.listTasks).toHaveBeenCalledTimes(1);
 
-    await act(async () => people.resolve({
-      customer: "user:owner",
-      agents: ["worker", "triager"],
-      groups: ["platform"],
-    }))
-    await waitFor(() => expect(api.listTaskPrincipals).toHaveBeenCalledTimes(1))
-    expect(api.listTasks).toHaveBeenCalledTimes(1)
-  })
+    await act(async () =>
+      people.resolve({
+        customer: "user:owner",
+        agents: ["worker", "triager"],
+        groups: ["platform"],
+      }),
+    );
+    await waitFor(() => expect(api.listTaskPrincipals).toHaveBeenCalledTimes(1));
+    expect(api.listTasks).toHaveBeenCalledTimes(1);
+  });
 
   it("reloads a principal-filtered view when delayed customer metadata arrives", async () => {
-    const people = deferred<{ customer: string; agents: string[]; groups: string[] }>()
-    api.listTaskPrincipals.mockReturnValueOnce(people.promise)
+    const people = deferred<{ customer: string; agents: string[]; groups: string[] }>();
+    api.listTaskPrincipals.mockReturnValueOnce(people.promise);
 
-    render(<TasksWorkspace />)
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    const callsBeforeFilter = api.listTasks.mock.calls.length
+    render(<TasksWorkspace />);
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    const callsBeforeFilter = api.listTasks.mock.calls.length;
 
-    await userEvent.click(screen.getByRole("button", { name: "My tasks" }))
-    expect(await screen.findByText("Loading tasks…")).toBeInTheDocument()
-    expect(api.listTasks).toHaveBeenCalledTimes(callsBeforeFilter)
+    await userEvent.click(screen.getByRole("button", { name: "My tasks" }));
+    expect(await screen.findByText("Loading tasks…")).toBeInTheDocument();
+    expect(api.listTasks).toHaveBeenCalledTimes(callsBeforeFilter);
 
-    await act(async () => people.resolve({
-      customer: "user:owner",
-      agents: ["worker", "triager"],
-      groups: ["platform"],
-    }))
+    await act(async () =>
+      people.resolve({
+        customer: "user:owner",
+        agents: ["worker", "triager"],
+        groups: ["platform"],
+      }),
+    );
 
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ assignee: "user:owner" }),
-      null, expect.any(AbortSignal)))
-  })
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ assignee: "user:owner" }),
+        null,
+        expect.any(AbortSignal),
+      ),
+    );
+  });
 
   it("does not accept an in-flight unfiltered result while waiting for principals", async () => {
-    const allTasks = deferred<{ tasks: Task[]; sequence: number }>()
-    const people = deferred<{ customer: string; agents: string[]; groups: string[] }>()
-    api.listTasks.mockReturnValueOnce(allTasks.promise)
-    api.listTaskPrincipals.mockReturnValueOnce(people.promise)
+    const allTasks = deferred<{ tasks: Task[]; sequence: number }>();
+    const people = deferred<{ customer: string; agents: string[]; groups: string[] }>();
+    api.listTasks.mockReturnValueOnce(allTasks.promise);
+    api.listTaskPrincipals.mockReturnValueOnce(people.promise);
 
-    render(<TasksWorkspace />)
-    expect(await screen.findByText("Loading tasks…")).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("button", { name: "My tasks" }))
-    await act(async () => allTasks.resolve({ tasks: [root, child], sequence: 10 }))
+    render(<TasksWorkspace />);
+    expect(await screen.findByText("Loading tasks…")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "My tasks" }));
+    await act(async () => allTasks.resolve({ tasks: [root, child], sequence: 10 }));
 
-    expect(screen.getByText("Loading tasks…")).toBeInTheDocument()
-    expect(screen.queryByText("Ship native tasks")).toBeNull()
-    await act(async () => people.resolve({ customer: "user:owner", agents: [], groups: [] }))
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ assignee: "user:owner" }),
-      null, expect.any(AbortSignal)))
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-  })
+    expect(screen.getByText("Loading tasks…")).toBeInTheDocument();
+    expect(screen.queryByText("Ship native tasks")).toBeNull();
+    await act(async () => people.resolve({ customer: "user:owner", agents: [], groups: [] }));
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ assignee: "user:owner" }),
+        null,
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+  });
 
   it("shows principal metadata errors and retries them from Refresh", async () => {
-    const people = deferred<{ customer: string; agents: string[]; groups: string[] }>()
-    api.listTaskPrincipals.mockReturnValueOnce(people.promise)
+    const people = deferred<{ customer: string; agents: string[]; groups: string[] }>();
+    api.listTaskPrincipals.mockReturnValueOnce(people.promise);
 
-    render(<TasksWorkspace />)
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    await act(async () => people.reject(new Error("principals failed")))
-    await userEvent.click(screen.getByRole("button", { name: "My tasks" }))
-    expect(await screen.findByText("principals failed")).toBeInTheDocument()
+    render(<TasksWorkspace />);
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    await act(async () => people.reject(new Error("principals failed")));
+    await userEvent.click(screen.getByRole("button", { name: "My tasks" }));
+    expect(await screen.findByText("principals failed")).toBeInTheDocument();
 
-    api.listTaskPrincipals.mockResolvedValueOnce({ customer: "user:owner", agents: [], groups: [] })
-    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }))
+    api.listTaskPrincipals.mockResolvedValueOnce({
+      customer: "user:owner",
+      agents: [],
+      groups: [],
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }));
 
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ assignee: "user:owner" }),
-      null, expect.any(AbortSignal)))
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-  })
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ assignee: "user:owner" }),
+        null,
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+  });
 
   it("ignores an older metadata failure after a newer metadata load succeeds", async () => {
-    const olderPeople = deferred<{ customer: string; agents: string[]; groups: string[] }>()
-    const newerPeople = deferred<{ customer: string; agents: string[]; groups: string[] }>()
+    const olderPeople = deferred<{ customer: string; agents: string[]; groups: string[] }>();
+    const newerPeople = deferred<{ customer: string; agents: string[]; groups: string[] }>();
     api.listTaskPrincipals
       .mockReturnValueOnce(olderPeople.promise)
-      .mockReturnValueOnce(newerPeople.promise)
+      .mockReturnValueOnce(newerPeople.promise);
 
-    render(<TasksWorkspace />)
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("button", { name: "My tasks" }))
-    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }))
-    await act(async () => newerPeople.resolve({ customer: "user:new", agents: [], groups: [] }))
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ assignee: "user:new" }),
-      null, expect.any(AbortSignal)))
+    render(<TasksWorkspace />);
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "My tasks" }));
+    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }));
+    await act(async () => newerPeople.resolve({ customer: "user:new", agents: [], groups: [] }));
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ assignee: "user:new" }),
+        null,
+        expect.any(AbortSignal),
+      ),
+    );
 
-    await act(async () => olderPeople.reject(new Error("obsolete metadata failure")))
+    await act(async () => olderPeople.reject(new Error("obsolete metadata failure")));
 
-    expect(toast.error).not.toHaveBeenCalledWith("obsolete metadata failure")
-    expect(screen.queryByText("obsolete metadata failure")).toBeNull()
-  })
+    expect(toast.error).not.toHaveBeenCalledWith("obsolete metadata failure");
+    expect(screen.queryByText("obsolete metadata failure")).toBeNull();
+  });
 
   it("ignores older metadata that succeeds after the latest customer", async () => {
-    const olderPeople = deferred<{ customer: string; agents: string[]; groups: string[] }>()
-    const newerPeople = deferred<{ customer: string; agents: string[]; groups: string[] }>()
+    const olderPeople = deferred<{ customer: string; agents: string[]; groups: string[] }>();
+    const newerPeople = deferred<{ customer: string; agents: string[]; groups: string[] }>();
     api.listTaskPrincipals
       .mockReturnValueOnce(olderPeople.promise)
-      .mockReturnValueOnce(newerPeople.promise)
+      .mockReturnValueOnce(newerPeople.promise);
 
-    render(<TasksWorkspace />)
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
-    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }))
-    await act(async () => newerPeople.resolve({ customer: "user:new", agents: [], groups: [] }))
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ waiting_for: "user:new" }),
-      null, expect.any(AbortSignal)))
-    const callsAfterLatest = api.listTasks.mock.calls.length
+    render(<TasksWorkspace />);
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }));
+    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }));
+    await act(async () => newerPeople.resolve({ customer: "user:new", agents: [], groups: [] }));
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ waiting_for: "user:new" }),
+        null,
+        expect.any(AbortSignal),
+      ),
+    );
+    const callsAfterLatest = api.listTasks.mock.calls.length;
 
-    await act(async () => olderPeople.resolve({ customer: "user:old", agents: [], groups: [] }))
+    await act(async () => olderPeople.resolve({ customer: "user:old", agents: [], groups: [] }));
 
-    expect(api.listTasks).toHaveBeenCalledTimes(callsAfterLatest)
-  })
+    expect(api.listTasks).toHaveBeenCalledTimes(callsAfterLatest);
+  });
 
   it("does not reload an unfiltered view when principal metadata fails", async () => {
-    const people = deferred<{ customer: string; agents: string[]; groups: string[] }>()
-    api.listTaskPrincipals.mockReturnValueOnce(people.promise)
-    render(<TasksWorkspace />)
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    const callsBeforeFailure = api.listTasks.mock.calls.length
+    const people = deferred<{ customer: string; agents: string[]; groups: string[] }>();
+    api.listTaskPrincipals.mockReturnValueOnce(people.promise);
+    render(<TasksWorkspace />);
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    const callsBeforeFailure = api.listTasks.mock.calls.length;
 
-    await act(async () => people.reject(new Error("principals failed")))
+    await act(async () => people.reject(new Error("principals failed")));
 
-    expect(api.listTasks).toHaveBeenCalledTimes(callsBeforeFailure)
-    expect(screen.getByText("Ship native tasks")).toBeInTheDocument()
-  })
+    expect(api.listTasks).toHaveBeenCalledTimes(callsBeforeFailure);
+    expect(screen.getByText("Ship native tasks")).toBeInTheDocument();
+  });
 
   it("resets the global workspace when the active daemon changes", async () => {
-    const nextTree = deferred<{ tasks: Task[]; sequence: number }>()
+    const nextTree = deferred<{ tasks: Task[]; sequence: number }>();
     // The active-host boundary hands the workspace a client for the new host.
-    const { rerender } = render(onHost(null, <TasksWorkspace />))
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    api.listTasks.mockReturnValueOnce(nextTree.promise)
+    const { rerender } = render(onHost(null, <TasksWorkspace />));
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    api.listTasks.mockReturnValueOnce(nextTree.promise);
 
-    rerender(onHost({ id: "second-host", label: "Second", baseURL: "https://second.test", token: "" }, <TasksWorkspace />))
+    rerender(
+      onHost(
+        { id: "second-host", label: "Second", baseURL: "https://second.test", token: "" },
+        <TasksWorkspace />,
+      ),
+    );
 
-    expect(await screen.findByText("Loading tasks…")).toBeInTheDocument()
-    expect(screen.queryByText("Ship native tasks")).toBeNull()
-    await act(async () => nextTree.resolve({ tasks: [{ ...root, title: "Second host tree" }], sequence: 1 }))
-    expect(await screen.findByText("Second host tree")).toBeInTheDocument()
-  })
+    expect(await screen.findByText("Loading tasks…")).toBeInTheDocument();
+    expect(screen.queryByText("Ship native tasks")).toBeNull();
+    await act(async () =>
+      nextTree.resolve({ tasks: [{ ...root, title: "Second host tree" }], sequence: 1 }),
+    );
+    expect(await screen.findByText("Second host tree")).toBeInTheDocument();
+  });
 
   it("reloads a principal-filtered view with the new target customer", async () => {
-    const firstTarget = { id: "first", label: "First", baseURL: "http://first.test", token: "first" }
-    const secondTarget = { id: "second", label: "Second", baseURL: "http://second.test", token: "second" }
-    const secondPeople = deferred<{ customer: string; agents: string[]; groups: string[] }>()
+    const firstTarget = {
+      id: "first",
+      label: "First",
+      baseURL: "http://first.test",
+      token: "first",
+    };
+    const secondTarget = {
+      id: "second",
+      label: "Second",
+      baseURL: "http://second.test",
+      token: "second",
+    };
+    const secondPeople = deferred<{ customer: string; agents: string[]; groups: string[] }>();
     api.listTaskPrincipals
       .mockResolvedValueOnce({ customer: "user:first", agents: [], groups: [] })
-      .mockReturnValueOnce(secondPeople.promise)
+      .mockReturnValueOnce(secondPeople.promise);
 
-    const { rerender } = render(onHost(firstTarget, <TasksWorkspace />))
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ waiting_for: "user:first" }),
-      firstTarget, expect.any(AbortSignal)))
+    const { rerender } = render(onHost(firstTarget, <TasksWorkspace />));
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }));
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ waiting_for: "user:first" }),
+        firstTarget,
+        expect.any(AbortSignal),
+      ),
+    );
 
-    rerender(onHost(secondTarget, <TasksWorkspace />))
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
-    const secondTargetCalls = () => api.listTasks.mock.calls.filter(([, callTarget]) => callTarget === secondTarget)
-    expect(secondTargetCalls()).toHaveLength(1)
-    await act(async () => secondPeople.resolve({ customer: "user:second", agents: [], groups: [] }))
+    rerender(onHost(secondTarget, <TasksWorkspace />));
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }));
+    const secondTargetCalls = () =>
+      api.listTasks.mock.calls.filter(([, callTarget]) => callTarget === secondTarget);
+    expect(secondTargetCalls()).toHaveLength(1);
+    await act(async () =>
+      secondPeople.resolve({ customer: "user:second", agents: [], groups: [] }),
+    );
 
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ waiting_for: "user:second" }),
-      secondTarget, expect.any(AbortSignal)))
-  })
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ waiting_for: "user:second" }),
+        secondTarget,
+        expect.any(AbortSignal),
+      ),
+    );
+  });
 
   it("ignores principal metadata that resolves after switching targets", async () => {
-    const firstTarget = { id: "first", label: "First", baseURL: "http://first.test", token: "first" }
-    const secondTarget = { id: "second", label: "Second", baseURL: "http://second.test", token: "second" }
-    const firstPeople = deferred<{ customer: string; agents: string[]; groups: string[] }>()
+    const firstTarget = {
+      id: "first",
+      label: "First",
+      baseURL: "http://first.test",
+      token: "first",
+    };
+    const secondTarget = {
+      id: "second",
+      label: "Second",
+      baseURL: "http://second.test",
+      token: "second",
+    };
+    const firstPeople = deferred<{ customer: string; agents: string[]; groups: string[] }>();
     api.listTaskPrincipals
       .mockReturnValueOnce(firstPeople.promise)
-      .mockResolvedValueOnce({ customer: "user:second", agents: [], groups: [] })
+      .mockResolvedValueOnce({ customer: "user:second", agents: [], groups: [] });
 
-    const { rerender } = render(onHost(firstTarget, <TasksWorkspace />))
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    rerender(onHost(secondTarget, <TasksWorkspace />))
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("button", { name: "My tasks" }))
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ assignee: "user:second" }),
-      secondTarget, expect.any(AbortSignal)))
-    const callsAfterSecondCustomer = api.listTasks.mock.calls.length
+    const { rerender } = render(onHost(firstTarget, <TasksWorkspace />));
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    rerender(onHost(secondTarget, <TasksWorkspace />));
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "My tasks" }));
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ assignee: "user:second" }),
+        secondTarget,
+        expect.any(AbortSignal),
+      ),
+    );
+    const callsAfterSecondCustomer = api.listTasks.mock.calls.length;
 
-    await act(async () => firstPeople.resolve({ customer: "user:first", agents: [], groups: [] }))
+    await act(async () => firstPeople.resolve({ customer: "user:first", agents: [], groups: [] }));
 
-    expect(api.listTasks).toHaveBeenCalledTimes(callsAfterSecondCustomer)
-  })
+    expect(api.listTasks).toHaveBeenCalledTimes(callsAfterSecondCustomer);
+  });
 
   it("does not toast an obsolete refresh failure after a newer refresh succeeds", async () => {
-    const olderRefresh = deferred<{ tasks: Task[]; sequence: number }>()
-    const newerTask = { ...root, title: "Newest tree" }
-    render(<TasksWorkspace />)
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
+    const olderRefresh = deferred<{ tasks: Task[]; sequence: number }>();
+    const newerTask = { ...root, title: "Newest tree" };
+    render(<TasksWorkspace />);
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
     api.listTasks
       .mockReturnValueOnce(olderRefresh.promise)
-      .mockResolvedValueOnce({ tasks: [newerTask], sequence: 12 })
+      .mockResolvedValueOnce({ tasks: [newerTask], sequence: 12 });
 
-    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }))
-    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }))
-    expect(await screen.findByText("Newest tree")).toBeInTheDocument()
-    await act(async () => olderRefresh.reject(new Error("obsolete failure")))
+    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }));
+    await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }));
+    expect(await screen.findByText("Newest tree")).toBeInTheDocument();
+    await act(async () => olderRefresh.reject(new Error("obsolete failure")));
 
-    expect(screen.getByText("Newest tree")).toBeInTheDocument()
-    expect(toast.error).not.toHaveBeenCalledWith("obsolete failure")
-  })
+    expect(screen.getByText("Newest tree")).toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalledWith("obsolete failure");
+  });
 
   it("renders the shared tree and opens task detail", async () => {
-    render(<TasksWorkspace scopeAgent="worker" />)
+    render(<TasksWorkspace scopeAgent="worker" />);
 
-    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Queue: all" })).toBeInTheDocument()
-    expect(screen.queryByText("Desktop tree")).toBeNull()
-    await userEvent.click(screen.getByRole("button", { name: "Expand TEST-1" }))
-    expect(screen.getByText("Desktop tree")).toBeInTheDocument()
+    expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Queue: all" })).toBeInTheDocument();
+    expect(screen.queryByText("Desktop tree")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Expand TEST-1" }));
+    expect(screen.getByText("Desktop tree")).toBeInTheDocument();
 
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    expect(await screen.findByRole("heading", { name: "TEST-1" })).toBeInTheDocument()
-    expect(screen.getByRole("textbox", { name: "Description" })).toHaveTextContent("Central work system")
-    expect(screen.getByText("Starting now")).toBeInTheDocument()
-  })
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    expect(await screen.findByRole("heading", { name: "TEST-1" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveTextContent(
+      "Central work system",
+    );
+    expect(screen.getByText("Starting now")).toBeInTheDocument();
+  });
 
   it("creates tasks and children inline in the selected queue", async () => {
-    render(<TasksWorkspace />)
-    await screen.findByText("Ship native tasks")
+    render(<TasksWorkspace />);
+    await screen.findByText("Ship native tasks");
 
-    await userEvent.click(screen.getByRole("button", { name: "New task" }))
-    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "New root" } })
-    await userEvent.click(screen.getByRole("button", { name: "Create task" }))
+    await userEvent.click(screen.getByRole("button", { name: "New task" }));
+    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "New root" } });
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }));
     expect(api.createTask).toHaveBeenCalledWith(
       expect.objectContaining({ queue: "TEST", title: "New root", parent_key: "" }),
       null,
-    )
+    );
 
-    await userEvent.click(await screen.findByRole("button", { name: "Close task detail" }))
-    await userEvent.click(screen.getByRole("button", { name: "Add child to TEST-1" }))
-    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "Child work" } })
-    await userEvent.click(screen.getByRole("button", { name: "Create task" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Close task detail" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add child to TEST-1" }));
+    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "Child work" } });
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }));
     expect(api.createTask).toHaveBeenLastCalledWith(
       expect.objectContaining({ parent_key: "TEST-1", title: "Child work" }),
       null,
-    )
-  })
+    );
+  });
 
   it("preselects the queue of the last created root task, per server", async () => {
-    const ops = { ...queue, prefix: "OPS", name: "Operations" }
-    api.listTaskQueues.mockResolvedValue({ queues: [queue, ops], count: 2 })
-    localStorage.setItem("tasks:new-task-queue:v1", JSON.stringify({ local: "OPS", remote: "GONE" }))
-    const first = render(<TasksWorkspace />)
-    await screen.findByText("Ship native tasks")
-    await userEvent.click(screen.getByRole("button", { name: "New task" }))
-    expect(screen.getByLabelText("Task queue")).toHaveValue("OPS")
-    fireEvent.change(screen.getByLabelText("Task queue"), { target: { value: "TEST" } })
-    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "New root" } })
-    await userEvent.click(screen.getByRole("button", { name: "Create task" }))
-    expect(api.createTask).toHaveBeenCalledWith(expect.objectContaining({ queue: "TEST" }), null)
-    await waitFor(() => expect(JSON.parse(localStorage.getItem("tasks:new-task-queue:v1") ?? "{}"))
-      .toEqual({ local: "TEST", remote: "GONE" }))
-    first.unmount()
+    const ops = { ...queue, prefix: "OPS", name: "Operations" };
+    api.listTaskQueues.mockResolvedValue({ queues: [queue, ops], count: 2 });
+    localStorage.setItem(
+      "tasks:new-task-queue:v1",
+      JSON.stringify({ local: "OPS", remote: "GONE" }),
+    );
+    const first = render(<TasksWorkspace />);
+    await screen.findByText("Ship native tasks");
+    await userEvent.click(screen.getByRole("button", { name: "New task" }));
+    expect(screen.getByLabelText("Task queue")).toHaveValue("OPS");
+    fireEvent.change(screen.getByLabelText("Task queue"), { target: { value: "TEST" } });
+    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "New root" } });
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }));
+    expect(api.createTask).toHaveBeenCalledWith(expect.objectContaining({ queue: "TEST" }), null);
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("tasks:new-task-queue:v1") ?? "{}")).toEqual({
+        local: "TEST",
+        remote: "GONE",
+      }),
+    );
+    first.unmount();
 
-    const target = { id: "remote", label: "Remote", baseURL: "https://remote.example", token: "test" }
-    render(onHost(target, <TasksWorkspace />))
-    await screen.findByText("Ship native tasks")
-    await userEvent.click(screen.getByRole("button", { name: "New task" }))
+    const target = {
+      id: "remote",
+      label: "Remote",
+      baseURL: "https://remote.example",
+      token: "test",
+    };
+    render(onHost(target, <TasksWorkspace />));
+    await screen.findByText("Ship native tasks");
+    await userEvent.click(screen.getByRole("button", { name: "New task" }));
     // The remembered queue no longer exists on this server.
-    expect(screen.getByLabelText("Task queue")).toHaveValue("TEST")
-  })
+    expect(screen.getByLabelText("Task queue")).toHaveValue("TEST");
+  });
 
   it("keys the remembered queue by the active server and lets the toolbar filter win", async () => {
-    const ops = { ...queue, prefix: "OPS", name: "Operations" }
-    api.listTaskQueues.mockResolvedValue({ queues: [queue, ops], count: 2 })
-    const active = { id: "mac-mini", label: "Mac mini", baseURL: "https://mac-mini.test", token: "" }
-    localStorage.setItem("tasks:new-task-queue:v1", JSON.stringify({ local: "TEST", "mac-mini": "OPS" }))
-    sessionStorage.setItem("tasks:queue-filter:v1", "TEST")
-    const filtered = render(onHost(active, <TasksWorkspace />))
-    await screen.findByText("Ship native tasks")
-    await userEvent.click(screen.getByRole("button", { name: "New task" }))
-    expect(screen.getByLabelText("Task queue")).toHaveValue("TEST")
-    filtered.unmount()
+    const ops = { ...queue, prefix: "OPS", name: "Operations" };
+    api.listTaskQueues.mockResolvedValue({ queues: [queue, ops], count: 2 });
+    const active = {
+      id: "mac-mini",
+      label: "Mac mini",
+      baseURL: "https://mac-mini.test",
+      token: "",
+    };
+    localStorage.setItem(
+      "tasks:new-task-queue:v1",
+      JSON.stringify({ local: "TEST", "mac-mini": "OPS" }),
+    );
+    sessionStorage.setItem("tasks:queue-filter:v1", "TEST");
+    const filtered = render(onHost(active, <TasksWorkspace />));
+    await screen.findByText("Ship native tasks");
+    await userEvent.click(screen.getByRole("button", { name: "New task" }));
+    expect(screen.getByLabelText("Task queue")).toHaveValue("TEST");
+    filtered.unmount();
 
-    sessionStorage.clear()
-    render(onHost(active, <TasksWorkspace />))
-    await screen.findByText("Ship native tasks")
-    await userEvent.click(screen.getByRole("button", { name: "New task" }))
-    expect(screen.getByLabelText("Task queue")).toHaveValue("OPS")
-  })
+    sessionStorage.clear();
+    render(onHost(active, <TasksWorkspace />));
+    await screen.findByText("Ship native tasks");
+    await userEvent.click(screen.getByRole("button", { name: "New task" }));
+    expect(screen.getByLabelText("Task queue")).toHaveValue("OPS");
+  });
 
   it("does not remember the queue of a child task or a failed create", async () => {
-    render(<TasksWorkspace />)
-    await screen.findByText("Ship native tasks")
-    await userEvent.click(screen.getByRole("button", { name: "Add child to TEST-1" }))
-    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "Child work" } })
-    await userEvent.click(screen.getByRole("button", { name: "Create task" }))
-    await waitFor(() => expect(api.createTask).toHaveBeenCalled())
-    await userEvent.click(await screen.findByRole("button", { name: "Close task detail" }))
+    render(<TasksWorkspace />);
+    await screen.findByText("Ship native tasks");
+    await userEvent.click(screen.getByRole("button", { name: "Add child to TEST-1" }));
+    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "Child work" } });
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }));
+    await waitFor(() => expect(api.createTask).toHaveBeenCalled());
+    await userEvent.click(await screen.findByRole("button", { name: "Close task detail" }));
 
-    api.createTask.mockRejectedValueOnce(new Error("nope"))
-    await userEvent.click(screen.getByRole("button", { name: "New task" }))
-    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "New root" } })
-    await userEvent.click(screen.getByRole("button", { name: "Create task" }))
-    await waitFor(() => expect(api.createTask).toHaveBeenCalledTimes(2))
-    expect(localStorage.getItem("tasks:new-task-queue:v1")).toBeNull()
-  })
+    api.createTask.mockRejectedValueOnce(new Error("nope"));
+    await userEvent.click(screen.getByRole("button", { name: "New task" }));
+    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "New root" } });
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }));
+    await waitFor(() => expect(api.createTask).toHaveBeenCalledTimes(2));
+    expect(localStorage.getItem("tasks:new-task-queue:v1")).toBeNull();
+  });
 
   it("accepts a suggested or arbitrary assignee and posts questions as mentions", async () => {
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    await screen.findByRole("heading", { name: "TEST-1" })
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await screen.findByRole("heading", { name: "TEST-1" });
 
-    const assignee = screen.getByLabelText("Assignee")
-    fireEvent.change(assignee, { target: { value: "freelance-reviewer" } })
-    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+    const assignee = screen.getByLabelText("Assignee");
+    fireEvent.change(assignee, { target: { value: "freelance-reviewer" } });
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }));
     expect(api.updateTask).toHaveBeenCalledWith(
       "TEST-1",
       expect.objectContaining({ assignee: "freelance-reviewer", revision: 2 }),
       null,
-    )
+    );
 
-    await userEvent.selectOptions(screen.getByLabelText("Ask"), "user:owner")
-    await userEvent.click(within(screen.getByText("Comments").closest("section")!).getByRole("button", { name: "Markdown" }))
-    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Which release?" } })
-    await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
+    await userEvent.selectOptions(screen.getByLabelText("Ask"), "user:owner");
+    await userEvent.click(
+      within(screen.getByText("Comments").closest("section")!).getByRole("button", {
+        name: "Markdown",
+      }),
+    );
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Which release?" } });
+    await userEvent.click(screen.getByRole("button", { name: "Send comment" }));
     expect(api.addTaskComment).toHaveBeenCalledWith(
       "TEST-1",
       "@user:owner\n\nWhich release?",
       null,
       expect.any(String),
-    )
-  })
+    );
+  });
 
   it("defaults a comment question to the task assignee", async () => {
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    await screen.findByRole("heading", { name: "TEST-1" })
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await screen.findByRole("heading", { name: "TEST-1" });
 
-    await userEvent.click(within(screen.getByText("Comments").closest("section")!).getByRole("button", { name: "Markdown" }))
-    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Can you verify?" } })
-    await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
+    await userEvent.click(
+      within(screen.getByText("Comments").closest("section")!).getByRole("button", {
+        name: "Markdown",
+      }),
+    );
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Can you verify?" } });
+    await userEvent.click(screen.getByRole("button", { name: "Send comment" }));
 
     expect(api.addTaskComment).toHaveBeenCalledWith(
       "TEST-1",
       "@agent:worker\n\nCan you verify?",
       null,
       expect.any(String),
-    )
-  })
+    );
+  });
 
   it("sends Ok with the selected question principal", async () => {
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    await screen.findByRole("heading", { name: "TEST-1" })
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await screen.findByRole("heading", { name: "TEST-1" });
 
-    const comments = screen.getByText("Comments").closest("section")!
-    await userEvent.selectOptions(screen.getByLabelText("Ask"), "user:owner")
+    const comments = screen.getByText("Comments").closest("section")!;
+    await userEvent.selectOptions(screen.getByLabelText("Ask"), "user:owner");
 
-    const sendOk = within(comments).getByRole("button", { name: "Send Ok" })
-    const sendComment = within(comments).getByRole("button", { name: "Send comment" })
-    expect(sendOk).toHaveAttribute("data-variant", "secondary")
-    expect(sendOk.compareDocumentPosition(sendComment) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    await userEvent.click(sendOk)
+    const sendOk = within(comments).getByRole("button", { name: "Send Ok" });
+    const sendComment = within(comments).getByRole("button", { name: "Send comment" });
+    expect(sendOk).toHaveAttribute("data-variant", "secondary");
+    expect(
+      sendOk.compareDocumentPosition(sendComment) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    await userEvent.click(sendOk);
 
-    await waitFor(() => expect(api.addTaskComment).toHaveBeenCalledWith(
-      "TEST-1",
-      "@user:owner\n\nOk",
-      null,
-      expect.any(String),
-    ))
-    expect(screen.getByLabelText("Ask")).toHaveValue("user:owner")
-  })
+    await waitFor(() =>
+      expect(api.addTaskComment).toHaveBeenCalledWith(
+        "TEST-1",
+        "@user:owner\n\nOk",
+        null,
+        expect.any(String),
+      ),
+    );
+    expect(screen.getByLabelText("Ask")).toHaveValue("user:owner");
+  });
 
   it("hides Send Ok when the comment contains text", async () => {
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    await screen.findByRole("heading", { name: "TEST-1" })
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await screen.findByRole("heading", { name: "TEST-1" });
 
-    const comments = screen.getByText("Comments").closest("section")!
-    await userEvent.click(within(comments).getByRole("button", { name: "Markdown" }))
-    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Keep this draft" } })
+    const comments = screen.getByText("Comments").closest("section")!;
+    await userEvent.click(within(comments).getByRole("button", { name: "Markdown" }));
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Keep this draft" } });
 
-    expect(within(comments).queryByRole("button", { name: "Send Ok" })).not.toBeInTheDocument()
-  })
+    expect(within(comments).queryByRole("button", { name: "Send Ok" })).not.toBeInTheDocument();
+  });
 
   it("updates and restores the default question when the assignee changes", async () => {
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    await screen.findByRole("heading", { name: "TEST-1" })
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await screen.findByRole("heading", { name: "TEST-1" });
 
-    const ask = screen.getByLabelText("Ask")
-    expect(ask).toHaveValue("worker")
-    await userEvent.selectOptions(ask, "")
-    await userEvent.click(within(screen.getByText("Comments").closest("section")!).getByRole("button", { name: "Markdown" }))
-    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Can you verify?" } })
-    expect(ask).toHaveValue("")
+    const ask = screen.getByLabelText("Ask");
+    expect(ask).toHaveValue("worker");
+    await userEvent.selectOptions(ask, "");
+    await userEvent.click(
+      within(screen.getByText("Comments").closest("section")!).getByRole("button", {
+        name: "Markdown",
+      }),
+    );
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Can you verify?" } });
+    expect(ask).toHaveValue("");
 
-    const reassigned = { ...root, assignee: "freelance-reviewer", revision: 3 }
-    api.getTask.mockResolvedValue({ ...detail, task: reassigned })
-    fireEvent.change(screen.getByLabelText("Assignee"), { target: { value: reassigned.assignee } })
-    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
-    expect(ask).toHaveValue("freelance-reviewer")
-    expect(within(ask).getByRole("option", { name: "freelance-reviewer" })).toBeInTheDocument()
+    const reassigned = { ...root, assignee: "freelance-reviewer", revision: 3 };
+    api.getTask.mockResolvedValue({ ...detail, task: reassigned });
+    fireEvent.change(screen.getByLabelText("Assignee"), { target: { value: reassigned.assignee } });
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }));
+    expect(ask).toHaveValue("freelance-reviewer");
+    expect(within(ask).getByRole("option", { name: "freelance-reviewer" })).toBeInTheDocument();
 
-    await userEvent.selectOptions(ask, "user:owner")
-    await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
-    await waitFor(() => expect(api.addTaskComment).toHaveBeenCalledWith(
-      "TEST-1",
-      "@user:owner\n\nCan you verify?",
-      null,
-      expect.any(String),
-    ))
-    expect(ask).toHaveValue("freelance-reviewer")
-  })
+    await userEvent.selectOptions(ask, "user:owner");
+    await userEvent.click(screen.getByRole("button", { name: "Send comment" }));
+    await waitFor(() =>
+      expect(api.addTaskComment).toHaveBeenCalledWith(
+        "TEST-1",
+        "@user:owner\n\nCan you verify?",
+        null,
+        expect.any(String),
+      ),
+    );
+    expect(ask).toHaveValue("freelance-reviewer");
+  });
 
   it("shows task metadata, dependencies, and history and edits relations", async () => {
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    await screen.findByRole("heading", { name: "TEST-1" })
+    render(<TasksWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await screen.findByRole("heading", { name: "TEST-1" });
 
-    expect(screen.getAllByText("user:owner", { selector: "dd" })).toHaveLength(2)
-    expect(screen.getByText("TEST", { selector: "dd" })).toBeInTheDocument()
-    const dependencies = screen.getByText("Dependencies").closest("section")!
-    expect(within(dependencies).getByText("blocks")).toBeInTheDocument()
-    expect(within(dependencies).getByText("TEST-2")).toBeInTheDocument()
-    expect(screen.getByText("task.updated")).toBeInTheDocument()
+    expect(screen.getAllByText("user:owner", { selector: "dd" })).toHaveLength(2);
+    expect(screen.getByText("TEST", { selector: "dd" })).toBeInTheDocument();
+    const dependencies = screen.getByText("Dependencies").closest("section")!;
+    expect(within(dependencies).getByText("blocks")).toBeInTheDocument();
+    expect(within(dependencies).getByText("TEST-2")).toBeInTheDocument();
+    expect(screen.getByText("task.updated")).toBeInTheDocument();
 
-    await userEvent.selectOptions(screen.getByLabelText("Relation type"), "related")
-    fireEvent.change(screen.getByLabelText("Related task key"), { target: { value: "TEST-2" } })
-    expect(screen.getByRole("button", { name: "Add relation" })).toBeEnabled()
-    await userEvent.click(screen.getByRole("button", { name: "Add relation" }))
-    await waitFor(() => expect(api.addTaskRelation).toHaveBeenCalledWith(
-      "TEST-1", "TEST-2", "related", 2, null, expect.any(String),
-    ))
+    await userEvent.selectOptions(screen.getByLabelText("Relation type"), "related");
+    fireEvent.change(screen.getByLabelText("Related task key"), { target: { value: "TEST-2" } });
+    expect(screen.getByRole("button", { name: "Add relation" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "Add relation" }));
+    await waitFor(() =>
+      expect(api.addTaskRelation).toHaveBeenCalledWith(
+        "TEST-1",
+        "TEST-2",
+        "related",
+        2,
+        null,
+        expect.any(String),
+      ),
+    );
 
-    await userEvent.click(screen.getByRole("button", { name: "Remove relation to TEST-2" }))
-    expect(api.deleteTaskRelation).toHaveBeenCalledWith(
-      "TEST-1", 9, 2, null, expect.any(String),
-    )
-  })
+    await userEvent.click(screen.getByRole("button", { name: "Remove relation to TEST-2" }));
+    expect(api.deleteTaskRelation).toHaveBeenCalledWith("TEST-1", 9, 2, null, expect.any(String));
+  });
 
   it("filters waiting work by the customer principal", async () => {
-    render(<TasksWorkspace />)
-    await screen.findByText("Ship native tasks")
+    render(<TasksWorkspace />);
+    await screen.findByText("Ship native tasks");
 
-    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ waiting_for: "user:owner" }),
-      null, expect.any(AbortSignal)))
-  })
+    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }));
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ waiting_for: "user:owner" }),
+        null,
+        expect.any(AbortSignal),
+      ),
+    );
+  });
 
   it("creates and updates queues", async () => {
-    render(<TasksWorkspace />)
-    await screen.findByText("Ship native tasks")
+    render(<TasksWorkspace />);
+    await screen.findByText("Ship native tasks");
 
-    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }))
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }))
-    await userEvent.click(await screen.findByRole("button", { name: "New queue" }))
-    fireEvent.change(screen.getByLabelText("Queue prefix"), { target: { value: "OPS" } })
-    fireEvent.change(screen.getByLabelText("New queue name"), { target: { value: "Operations" } })
-    await userEvent.click(screen.getByRole("button", { name: "Add queue" }))
+    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }));
+    await userEvent.click(await screen.findByRole("button", { name: "New queue" }));
+    fireEvent.change(screen.getByLabelText("Queue prefix"), { target: { value: "OPS" } });
+    fireEvent.change(screen.getByLabelText("New queue name"), { target: { value: "Operations" } });
+    await userEvent.click(screen.getByRole("button", { name: "Add queue" }));
     expect(api.createTaskQueue).toHaveBeenCalledWith(
       expect.objectContaining({ prefix: "OPS", name: "Operations" }),
       null,
-    )
+    );
 
-    await userEvent.click(screen.getByRole("button", { name: /^Queue TEST/ }))
-    fireEvent.change(screen.getByLabelText("Queue name TEST"), { target: { value: "Tests updated" } })
-    await userEvent.click(screen.getByRole("button", { name: "Save TEST" }))
+    await userEvent.click(screen.getByRole("button", { name: /^Queue TEST/ }));
+    fireEvent.change(screen.getByLabelText("Queue name TEST"), {
+      target: { value: "Tests updated" },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Save TEST" }));
     expect(api.updateTaskQueue).toHaveBeenCalledWith(
       "TEST",
       expect.objectContaining({ name: "Tests updated", revision: 1 }),
       null,
-    )
-
-  })
+    );
+  });
   it("replaces the navigation rail with toolbar filters", async () => {
-    render(<TasksWorkspace />)
-    await screen.findByText("Ship native tasks")
+    render(<TasksWorkspace />);
+    await screen.findByText("Ship native tasks");
 
-    expect(document.querySelector(".tasks-navigation")).toBeNull()
-    expect(screen.queryByRole("separator", { name: "Resize task navigation" })).toBeNull()
+    expect(document.querySelector(".tasks-navigation")).toBeNull();
+    expect(screen.queryByRole("separator", { name: "Resize task navigation" })).toBeNull();
 
-    expect(screen.getByRole("button", { name: "My tasks" })).toHaveAttribute("aria-pressed", "false")
-    await userEvent.click(screen.getByRole("button", { name: "My tasks" }))
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ assignee: "user:owner" }),
-      null, expect.any(AbortSignal)))
-    expect(screen.getByRole("button", { name: "My tasks" })).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByRole("button", { name: "My tasks" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "My tasks" }));
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ assignee: "user:owner" }),
+        null,
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(screen.getByRole("button", { name: "My tasks" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
-    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
-    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
-      expect.objectContaining({ waiting_for: "user:owner" }),
-      null, expect.any(AbortSignal)))
-    expect(api.listTasks.mock.calls.at(-1)?.[0].assignee).toBeUndefined()
+    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }));
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ waiting_for: "user:owner" }),
+        null,
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(api.listTasks.mock.calls.at(-1)?.[0].assignee).toBeUndefined();
 
-    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
-    await waitFor(() => expect(api.listTasks.mock.calls.at(-1)?.[0].waiting_for).toBeUndefined())
-  })
+    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }));
+    await waitFor(() => expect(api.listTasks.mock.calls.at(-1)?.[0].waiting_for).toBeUndefined());
+  });
 
   it("filters the tree by queue from the toolbar without narrowing the daemon request", async () => {
-    const ops: Task = { ...root, key: "OPS-1", queue: "OPS", title: "Rotate credentials" }
+    const ops: Task = { ...root, key: "OPS-1", queue: "OPS", title: "Rotate credentials" };
     api.listTaskQueues.mockResolvedValue({
       queues: [queue, { ...queue, prefix: "OPS", name: "Operations" }],
       count: 2,
-    })
-    api.listTasks.mockResolvedValue({ tasks: [root, child, ops], sequence: 10 })
-    render(<TasksWorkspace />)
-    await screen.findByText("Ship native tasks")
-    expect(screen.getByText("Rotate credentials")).toBeInTheDocument()
+    });
+    api.listTasks.mockResolvedValue({ tasks: [root, child, ops], sequence: 10 });
+    render(<TasksWorkspace />);
+    await screen.findByText("Ship native tasks");
+    expect(screen.getByText("Rotate credentials")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }))
-    await userEvent.click(await screen.findByRole("menuitem", { name: /^TEST/ }))
+    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^TEST/ }));
 
-    expect(await screen.findByRole("button", { name: "Queue: TEST" })).toBeInTheDocument()
-    expect(screen.queryByText("Rotate credentials")).toBeNull()
-    expect(screen.getByText("Ship native tasks")).toBeInTheDocument()
-    for (const call of api.listTasks.mock.calls) expect(call[0].queue).toBeUndefined()
-  })
+    expect(await screen.findByRole("button", { name: "Queue: TEST" })).toBeInTheDocument();
+    expect(screen.queryByText("Rotate credentials")).toBeNull();
+    expect(screen.getByText("Ship native tasks")).toBeInTheDocument();
+    for (const call of api.listTasks.mock.calls) expect(call[0].queue).toBeUndefined();
+  });
   it("keeps the queue filter across the Agents and All tasks switch", async () => {
-    const ops: Task = { ...root, key: "OPS-1", queue: "OPS", title: "Rotate credentials" }
+    const ops: Task = { ...root, key: "OPS-1", queue: "OPS", title: "Rotate credentials" };
     api.listTaskQueues.mockResolvedValue({
       queues: [queue, { ...queue, prefix: "OPS", name: "Operations" }],
       count: 2,
-    })
-    api.listTasks.mockResolvedValue({ tasks: [root, child, ops], sequence: 10 })
+    });
+    api.listTasks.mockResolvedValue({ tasks: [root, child, ops], sequence: 10 });
 
-    const agent = render(<TasksWorkspace scopeAgent="worker" />)
-    await screen.findByText("Ship native tasks")
-    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }))
-    await userEvent.click(await screen.findByRole("menuitem", { name: /^OPS/ }))
-    expect(await screen.findByRole("button", { name: "Queue: OPS" })).toBeInTheDocument()
-    agent.unmount()
+    const agent = render(<TasksWorkspace scopeAgent="worker" />);
+    await screen.findByText("Ship native tasks");
+    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^OPS/ }));
+    expect(await screen.findByRole("button", { name: "Queue: OPS" })).toBeInTheDocument();
+    agent.unmount();
 
-    render(<TasksWorkspace />)
-    expect(await screen.findByRole("button", { name: "Queue: OPS" })).toBeInTheDocument()
-    expect(await screen.findByText("Rotate credentials")).toBeInTheDocument()
-    expect(screen.queryByText("Ship native tasks")).toBeNull()
-  })
-})
+    render(<TasksWorkspace />);
+    expect(await screen.findByRole("button", { name: "Queue: OPS" })).toBeInTheDocument();
+    expect(await screen.findByText("Rotate credentials")).toBeInTheDocument();
+    expect(screen.queryByText("Ship native tasks")).toBeNull();
+  });
+});
 
 describe("priority in the list", () => {
   it("saves a priority picked on the row with its revision and shows the saved value", async () => {
-    const target = { id: "remote", label: "Remote", baseURL: "https://remote.example", token: "test" }
-    api.updateTask.mockResolvedValue({ ...root, priority: "P2", revision: 3 })
-    render(onHost(target, <TasksWorkspace />))
-    const row = await screen.findByTestId(`task-row-${root.key}`)
+    const target = {
+      id: "remote",
+      label: "Remote",
+      baseURL: "https://remote.example",
+      token: "test",
+    };
+    api.updateTask.mockResolvedValue({ ...root, priority: "P2", revision: 3 });
+    render(onHost(target, <TasksWorkspace />));
+    const row = await screen.findByTestId(`task-row-${root.key}`);
 
-    await userEvent.click(within(row).getByRole("button", { name: "P0 Critical" }))
-    await userEvent.click(await screen.findByRole("menuitem", { name: /P2/ }))
+    await userEvent.click(within(row).getByRole("button", { name: "P0 Critical" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /P2/ }));
 
-    expect(api.updateTask).toHaveBeenCalledWith(root.key, { priority: "P2", revision: 2 }, target)
-    await waitFor(() => expect(within(screen.getByTestId(`task-row-${root.key}`)).getByRole("button", { name: "P2 Normal" })).toBeInTheDocument())
-    expect(api.getTask).not.toHaveBeenCalled()
-  })
+    expect(api.updateTask).toHaveBeenCalledWith(root.key, { priority: "P2", revision: 2 }, target);
+    await waitFor(() =>
+      expect(
+        within(screen.getByTestId(`task-row-${root.key}`)).getByRole("button", {
+          name: "P2 Normal",
+        }),
+      ).toBeInTheDocument(),
+    );
+    expect(api.getTask).not.toHaveBeenCalled();
+  });
 
   it("reloads the tree and reports a revision conflict", async () => {
-    render(<TasksWorkspace />)
-    const row = await screen.findByTestId(`task-row-${root.key}`)
-    const listed = api.listTasks.mock.calls.length
-    api.updateTask.mockRejectedValueOnce(new ApiError(409, "conflict", "revision conflict"))
+    render(<TasksWorkspace />);
+    const row = await screen.findByTestId(`task-row-${root.key}`);
+    const listed = api.listTasks.mock.calls.length;
+    api.updateTask.mockRejectedValueOnce(new ApiError(409, "conflict", "revision conflict"));
 
-    await userEvent.click(within(row).getByRole("button", { name: "P0 Critical" }))
-    await userEvent.click(await screen.findByRole("menuitem", { name: /P3/ }))
+    await userEvent.click(within(row).getByRole("button", { name: "P0 Critical" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /P3/ }));
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("revision conflict"))
-    expect(api.listTasks.mock.calls.length).toBeGreaterThan(listed)
-  })
-})
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("revision conflict"));
+    expect(api.listTasks.mock.calls.length).toBeGreaterThan(listed);
+  });
+});

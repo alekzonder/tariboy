@@ -1,134 +1,160 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { useNavigate } from "react-router-dom"
-import { useDaemons } from "@/components/daemonContext"
-import { useTasksSocket } from "@/hooks/useTasksSocket"
-import { hasLocalDaemon, onTaskNotificationActivated, showTaskNotification } from "@/lib/desktop"
-import { resolveDaemon, type Daemon } from "@/lib/daemons"
-import { createApi, type ApiClient, type TaskNotification } from "@/lib/api"
-import { serverPath } from "@/lib/terminalsHost"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
+import { useDaemons } from "@/components/daemonContext";
+import { useTasksSocket } from "@/hooks/useTasksSocket";
+import { hasLocalDaemon, onTaskNotificationActivated, showTaskNotification } from "@/lib/desktop";
+import { resolveDaemon, type Daemon } from "@/lib/daemons";
+import { createApi, type ApiClient, type TaskNotification } from "@/lib/api";
+import { serverPath } from "@/lib/terminalsHost";
 import {
   CustomerQuestionNotificationsContext,
   type CustomerQuestionNotificationsValue,
-} from "./customerQuestionNotificationsContext"
+} from "./customerQuestionNotificationsContext";
 import {
   CUSTOMER_QUESTION_RETRY_MS,
   customerQuestionAttentionKey,
   requestingAgent,
-} from "./customerQuestionNotificationModel"
+} from "./customerQuestionNotificationModel";
 
 type HostSnapshot = {
-  attention: ReadonlyMap<string, number>
-}
+  attention: ReadonlyMap<string, number>;
+};
 
 type FreshQuestion = {
-  notification: TaskNotification
-  agentName: string
-}
+  notification: TaskNotification;
+  agentName: string;
+};
 
-const CUSTOMER_QUESTION_ACTIVATION_TIMEOUT_MS = 1000
+const CUSTOMER_QUESTION_ACTIVATION_TIMEOUT_MS = 1000;
 
 function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("customer question notification request timed out")), timeoutMs)
+    const timeout = setTimeout(
+      () => reject(new Error("customer question notification request timed out")),
+      timeoutMs,
+    );
     operation.then(
       (value) => {
-        clearTimeout(timeout)
-        resolve(value)
+        clearTimeout(timeout);
+        resolve(value);
       },
       (error: unknown) => {
-        clearTimeout(timeout)
-        reject(error)
+        clearTimeout(timeout);
+        reject(error);
       },
-    )
-  })
+    );
+  });
 }
 
 export function CustomerQuestionNotifications({ children }: { children: ReactNode }) {
-  const { daemons } = useDaemons()
-  const navigate = useNavigate()
-  const refreshers = useRef(new Map<string, () => Promise<void>>())
-  const [snapshots, setSnapshots] = useState(new Map<string, HostSnapshot>())
+  const { daemons } = useDaemons();
+  const navigate = useNavigate();
+  const refreshers = useRef(new Map<string, () => Promise<void>>());
+  const [snapshots, setSnapshots] = useState(new Map<string, HostSnapshot>());
   const hosts = useMemo(
-    () => [...(hasLocalDaemon() ? [{ id: "", label: "This daemon (local)" }] : []), ...daemons.map((host) => ({
-      id: host.id,
-      label: host.label,
-    }))],
+    () => [
+      ...(hasLocalDaemon() ? [{ id: "", label: "This daemon (local)" }] : []),
+      ...daemons.map((host) => ({
+        id: host.id,
+        label: host.label,
+      })),
+    ],
     [daemons],
-  )
+  );
 
-  const receiveSnapshot = useCallback((hostId: string, label: string, attention: ReadonlyMap<string, number>, fresh: FreshQuestion[]) => {
-    setSnapshots((current) => {
-      const next = new Map(current)
-      next.set(hostId, { attention })
-      return next
-    })
-    for (const { notification, agentName } of fresh) {
-      void showTaskNotification({
-        host_id: hostId,
-        notification_id: notification.id,
-        task_key: notification.task_key,
-        server_label: label,
-        agent_name: agentName,
-      }).catch(() => {
-        // A denied/unavailable native notification cannot change the HTTP snapshot.
-      })
-    }
-  }, [])
+  const receiveSnapshot = useCallback(
+    (
+      hostId: string,
+      label: string,
+      attention: ReadonlyMap<string, number>,
+      fresh: FreshQuestion[],
+    ) => {
+      setSnapshots((current) => {
+        const next = new Map(current);
+        next.set(hostId, { attention });
+        return next;
+      });
+      for (const { notification, agentName } of fresh) {
+        void showTaskNotification({
+          host_id: hostId,
+          notification_id: notification.id,
+          task_key: notification.task_key,
+          server_label: label,
+          agent_name: agentName,
+        }).catch(() => {
+          // A denied/unavailable native notification cannot change the HTTP snapshot.
+        });
+      }
+    },
+    [],
+  );
 
   const removeSnapshot = useCallback((hostId: string) => {
     setSnapshots((current) => {
-      if (!current.has(hostId)) return current
-      const next = new Map(current)
-      next.delete(hostId)
-      return next
-    })
-    refreshers.current.delete(hostId)
-  }, [])
+      if (!current.has(hostId)) return current;
+      const next = new Map(current);
+      next.delete(hostId);
+      return next;
+    });
+    refreshers.current.delete(hostId);
+  }, []);
 
   const registerRefresher = useCallback((hostId: string, refresh: (() => Promise<void>) | null) => {
-    if (refresh) refreshers.current.set(hostId, refresh)
-    else refreshers.current.delete(hostId)
-  }, [])
+    if (refresh) refreshers.current.set(hostId, refresh);
+    else refreshers.current.delete(hostId);
+  }, []);
 
   const refreshHost = useCallback(async (hostId: string) => {
-    await refreshers.current.get(hostId)?.()
-  }, [])
+    await refreshers.current.get(hostId)?.();
+  }, []);
 
   const attention = useMemo(() => {
-    const next = new Map<string, number>()
+    const next = new Map<string, number>();
     for (const snapshot of snapshots.values()) {
-      for (const [key, count] of snapshot.attention) next.set(key, count)
+      for (const [key, count] of snapshot.attention) next.set(key, count);
     }
-    return next
-  }, [snapshots])
+    return next;
+  }, [snapshots]);
   const value = useMemo<CustomerQuestionNotificationsValue>(
     () => ({ attention, refreshHost }),
     [attention, refreshHost],
-  )
+  );
 
-  useEffect(() => onTaskNotificationActivated((activation) => {
-    void (async () => {
-      let target: Daemon | null | undefined
-      try {
-        target = activation.host_id === "" ? null : await withTimeout(
-          resolveDaemon(activation.host_id),
-          CUSTOMER_QUESTION_ACTIVATION_TIMEOUT_MS,
-        )
-        if (activation.host_id !== "" && (!target || target.id !== activation.host_id)) return
-        // Each watched host has its own client; the activation names the host.
-        await withTimeout(
-          createApi(target ?? null).tasks.markTaskNotificationRead(activation.notification_id),
-          CUSTOMER_QUESTION_ACTIVATION_TIMEOUT_MS,
-        )
-      } catch {
-        // The route still identifies the original host and task, so the user
-        // can answer even when marking the inbox row read was interrupted.
-      } finally {
-        navigate(`${serverPath(activation.host_id, "tasks")}?task=${encodeURIComponent(activation.task_key)}`)
-        void withTimeout(refreshHost(activation.host_id), CUSTOMER_QUESTION_ACTIVATION_TIMEOUT_MS).catch(() => {})
-      }
-    })()
-  }), [navigate, refreshHost])
+  useEffect(
+    () =>
+      onTaskNotificationActivated((activation) => {
+        void (async () => {
+          let target: Daemon | null | undefined;
+          try {
+            target =
+              activation.host_id === ""
+                ? null
+                : await withTimeout(
+                    resolveDaemon(activation.host_id),
+                    CUSTOMER_QUESTION_ACTIVATION_TIMEOUT_MS,
+                  );
+            if (activation.host_id !== "" && (!target || target.id !== activation.host_id)) return;
+            // Each watched host has its own client; the activation names the host.
+            await withTimeout(
+              createApi(target ?? null).tasks.markTaskNotificationRead(activation.notification_id),
+              CUSTOMER_QUESTION_ACTIVATION_TIMEOUT_MS,
+            );
+          } catch {
+            // The route still identifies the original host and task, so the user
+            // can answer even when marking the inbox row read was interrupted.
+          } finally {
+            navigate(
+              `${serverPath(activation.host_id, "tasks")}?task=${encodeURIComponent(activation.task_key)}`,
+            );
+            void withTimeout(
+              refreshHost(activation.host_id),
+              CUSTOMER_QUESTION_ACTIVATION_TIMEOUT_MS,
+            ).catch(() => {});
+          }
+        })();
+      }),
+    [navigate, refreshHost],
+  );
 
   return (
     <CustomerQuestionNotificationsContext.Provider value={value}>
@@ -144,7 +170,7 @@ export function CustomerQuestionNotifications({ children }: { children: ReactNod
       ))}
       {children}
     </CustomerQuestionNotificationsContext.Provider>
-  )
+  );
 }
 
 function HostQuestionWatcher({
@@ -154,151 +180,163 @@ function HostQuestionWatcher({
   onRemove,
   registerRefresher,
 }: {
-  hostId: string
-  label: string
-  onSnapshot: (hostId: string, label: string, attention: ReadonlyMap<string, number>, fresh: FreshQuestion[]) => void
-  onRemove: (hostId: string) => void
-  registerRefresher: (hostId: string, refresh: (() => Promise<void>) | null) => void
+  hostId: string;
+  label: string;
+  onSnapshot: (
+    hostId: string,
+    label: string,
+    attention: ReadonlyMap<string, number>,
+    fresh: FreshQuestion[],
+  ) => void;
+  onRemove: (hostId: string) => void;
+  registerRefresher: (hostId: string, refresh: (() => Promise<void>) | null) => void;
 }) {
-  const [target, setTarget] = useState<Daemon | null | undefined>(undefined)
-  const [health, setHealth] = useState<"healthy" | "recovering">("recovering")
-  const [sequence, setSequence] = useState(0)
-  const [socketEnabled, setSocketEnabled] = useState(false)
-  const [retryRequest, setRetryRequest] = useState<{ generation: number; revision: number } | null>(null)
-  const observedIds = useRef(new Set<string>())
-  const refreshState = useRef({ running: false, pending: false })
-  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const generationRef = useRef(0)
-  const labelRef = useRef(label)
+  const [target, setTarget] = useState<Daemon | null | undefined>(undefined);
+  const [health, setHealth] = useState<"healthy" | "recovering">("recovering");
+  const [sequence, setSequence] = useState(0);
+  const [socketEnabled, setSocketEnabled] = useState(false);
+  const [retryRequest, setRetryRequest] = useState<{ generation: number; revision: number } | null>(
+    null,
+  );
+  const observedIds = useRef(new Set<string>());
+  const refreshState = useRef({ running: false, pending: false });
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const generationRef = useRef(0);
+  const labelRef = useRef(label);
   // The client of the last successful baseline; undefined while recovering.
-  const refreshClientRef = useRef<ApiClient | undefined>(undefined)
-  const previousSocketStatus = useRef<"connecting" | "open" | "closed">("closed")
+  const refreshClientRef = useRef<ApiClient | undefined>(undefined);
+  const previousSocketStatus = useRef<"connecting" | "open" | "closed">("closed");
 
   useEffect(() => {
-    labelRef.current = label
-  }, [label])
+    labelRef.current = label;
+  }, [label]);
 
-  const publish = useCallback((notifications: TaskNotification[], fresh: FreshQuestion[]) => {
-    const tasks = new Map<string, Set<string>>()
-    for (const notification of notifications) {
-      const agentName = requestingAgent(notification)
-      if (!agentName) continue
-      const key = customerQuestionAttentionKey(hostId, agentName)
-      tasks.set(key, (tasks.get(key) ?? new Set()).add(notification.task_key))
-    }
-    const attention = new Map([...tasks].map(([key, keys]) => [key, keys.size]))
-    onSnapshot(hostId, labelRef.current, attention, fresh)
-  }, [hostId, onSnapshot])
+  const publish = useCallback(
+    (notifications: TaskNotification[], fresh: FreshQuestion[]) => {
+      const tasks = new Map<string, Set<string>>();
+      for (const notification of notifications) {
+        const agentName = requestingAgent(notification);
+        if (!agentName) continue;
+        const key = customerQuestionAttentionKey(hostId, agentName);
+        tasks.set(key, (tasks.get(key) ?? new Set()).add(notification.task_key));
+      }
+      const attention = new Map([...tasks].map(([key, keys]) => [key, keys.size]));
+      onSnapshot(hostId, labelRef.current, attention, fresh);
+    },
+    [hostId, onSnapshot],
+  );
 
-  const readAuthoritativeSnapshot = useCallback(async (
-    client: ApiClient,
-    baseline: boolean,
-    generation: number,
-  ) => {
-    const [inbox, taskPage] = await Promise.all([
-      client.tasks.listTaskNotifications(false),
-      client.tasks.listTasks({ limit: 1, status_view: "all" }),
-    ])
-    if (generationRef.current !== generation) return false
-    if (baseline) refreshClientRef.current = client
-    const notifications = inbox.notifications ?? []
-    const fresh: FreshQuestion[] = []
-    for (const notification of notifications) {
-      const isNew = !observedIds.current.has(notification.id)
-      observedIds.current.add(notification.id)
-      const agentName = requestingAgent(notification)
-      if (!baseline && isNew && agentName) fresh.push({ notification, agentName })
-    }
-    publish(notifications, fresh)
-    const nextSequence = taskPage.sequence ?? 0
-    if (baseline) setSequence(nextSequence)
-    else setSequence((current) => Math.max(current, nextSequence))
-    return true
-  }, [publish])
+  const readAuthoritativeSnapshot = useCallback(
+    async (client: ApiClient, baseline: boolean, generation: number) => {
+      const [inbox, taskPage] = await Promise.all([
+        client.tasks.listTaskNotifications(false),
+        client.tasks.listTasks({ limit: 1, status_view: "all" }),
+      ]);
+      if (generationRef.current !== generation) return false;
+      if (baseline) refreshClientRef.current = client;
+      const notifications = inbox.notifications ?? [];
+      const fresh: FreshQuestion[] = [];
+      for (const notification of notifications) {
+        const isNew = !observedIds.current.has(notification.id);
+        observedIds.current.add(notification.id);
+        const agentName = requestingAgent(notification);
+        if (!baseline && isNew && agentName) fresh.push({ notification, agentName });
+      }
+      publish(notifications, fresh);
+      const nextSequence = taskPage.sequence ?? 0;
+      if (baseline) setSequence(nextSequence);
+      else setSequence((current) => Math.max(current, nextSequence));
+      return true;
+    },
+    [publish],
+  );
 
   const scheduleBaselineRetry = useCallback((generation: number) => {
-    if (generationRef.current !== generation) return
-    if (retryTimer.current) clearTimeout(retryTimer.current)
+    if (generationRef.current !== generation) return;
+    if (retryTimer.current) clearTimeout(retryTimer.current);
     retryTimer.current = setTimeout(() => {
       setRetryRequest((current) => ({
         generation,
         revision: (current?.revision ?? 0) + 1,
-      }))
-    }, CUSTOMER_QUESTION_RETRY_MS)
-  }, [])
+      }));
+    }, CUSTOMER_QUESTION_RETRY_MS);
+  }, []);
 
   const refresh = useCallback(async () => {
-    const refreshClient = refreshClientRef.current
-    if (refreshClient === undefined) return
+    const refreshClient = refreshClientRef.current;
+    if (refreshClient === undefined) return;
     if (refreshState.current.running) {
-      refreshState.current.pending = true
-      return
+      refreshState.current.pending = true;
+      return;
     }
-    refreshState.current.running = true
-    const generation = generationRef.current
+    refreshState.current.running = true;
+    const generation = generationRef.current;
     try {
       do {
-        refreshState.current.pending = false
-        if (!await readAuthoritativeSnapshot(refreshClient, false, generation)) break
-      } while (generationRef.current === generation && refreshState.current.pending)
+        refreshState.current.pending = false;
+        if (!(await readAuthoritativeSnapshot(refreshClient, false, generation))) break;
+      } while (generationRef.current === generation && refreshState.current.pending);
     } catch {
       // Preserve the last successful snapshot, but recover through the same
       // silent baseline used at mount so an outage cannot replay alerts.
       if (generationRef.current === generation) {
-        refreshClientRef.current = undefined
-        setHealth("recovering")
-        setSocketEnabled(false)
-        setTarget(undefined)
-        scheduleBaselineRetry(generation)
+        refreshClientRef.current = undefined;
+        setHealth("recovering");
+        setSocketEnabled(false);
+        setTarget(undefined);
+        scheduleBaselineRetry(generation);
       }
     } finally {
-      refreshState.current.running = false
+      refreshState.current.running = false;
     }
-  }, [readAuthoritativeSnapshot, scheduleBaselineRetry])
+  }, [readAuthoritativeSnapshot, scheduleBaselineRetry]);
 
   useEffect(() => {
-    registerRefresher(hostId, refresh)
-    return () => registerRefresher(hostId, null)
-  }, [hostId, refresh, registerRefresher])
+    registerRefresher(hostId, refresh);
+    return () => registerRefresher(hostId, null);
+  }, [hostId, refresh, registerRefresher]);
 
-  const beginBaseline = useCallback(async (generation: number) => {
-    try {
-      const resolved = hostId ? await resolveDaemon(hostId) : null
-      if (hostId && !resolved) throw new Error(`host ${hostId} is unavailable`)
-      if (generationRef.current !== generation) return
-      setTarget(resolved)
-      const applied = await readAuthoritativeSnapshot(createApi(resolved), true, generation)
-      if (generationRef.current === generation && applied) {
-        setHealth("healthy")
-        setSocketEnabled(true)
+  const beginBaseline = useCallback(
+    async (generation: number) => {
+      try {
+        const resolved = hostId ? await resolveDaemon(hostId) : null;
+        if (hostId && !resolved) throw new Error(`host ${hostId} is unavailable`);
+        if (generationRef.current !== generation) return;
+        setTarget(resolved);
+        const applied = await readAuthoritativeSnapshot(createApi(resolved), true, generation);
+        if (generationRef.current === generation && applied) {
+          setHealth("healthy");
+          setSocketEnabled(true);
+        }
+      } catch {
+        if (generationRef.current === generation) {
+          refreshClientRef.current = undefined;
+          setHealth("recovering");
+          scheduleBaselineRetry(generation);
+        }
       }
-    } catch {
-      if (generationRef.current === generation) {
-        refreshClientRef.current = undefined
-        setHealth("recovering")
-        scheduleBaselineRetry(generation)
-      }
-    }
-  }, [hostId, readAuthoritativeSnapshot, scheduleBaselineRetry])
+    },
+    [hostId, readAuthoritativeSnapshot, scheduleBaselineRetry],
+  );
 
   useEffect(() => {
-    const generation = generationRef.current + 1
-    generationRef.current = generation
-    void beginBaseline(generation)
+    const generation = generationRef.current + 1;
+    generationRef.current = generation;
+    void beginBaseline(generation);
 
     return () => {
-      generationRef.current += 1
-      refreshClientRef.current = undefined
-      if (retryTimer.current) clearTimeout(retryTimer.current)
-      retryTimer.current = null
-      onRemove(hostId)
-    }
-  }, [beginBaseline, hostId, onRemove])
+      generationRef.current += 1;
+      refreshClientRef.current = undefined;
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+      retryTimer.current = null;
+      onRemove(hostId);
+    };
+  }, [beginBaseline, hostId, onRemove]);
 
   useEffect(() => {
-    if (retryRequest?.generation !== generationRef.current) return
-    void beginBaseline(retryRequest.generation)
-  }, [beginBaseline, retryRequest])
+    if (retryRequest?.generation !== generationRef.current) return;
+    void beginBaseline(retryRequest.generation);
+  }, [beginBaseline, retryRequest]);
 
   const socketStatus = useTasksSocket({
     // Unresolved hosts keep the socket disabled until the baseline lands.
@@ -307,18 +345,18 @@ function HostQuestionWatcher({
     enabled: socketEnabled,
     onHint: () => void refresh(),
     onReset: (nextSequence) => {
-      setSequence((current) => Math.max(current, nextSequence))
-      void refresh()
+      setSequence((current) => Math.max(current, nextSequence));
+      void refresh();
     },
-  })
+  });
 
   useEffect(() => {
-    const previous = previousSocketStatus.current
-    previousSocketStatus.current = socketStatus
+    const previous = previousSocketStatus.current;
+    previousSocketStatus.current = socketStatus;
     if (previous === "open" && socketStatus === "closed" && health === "healthy" && socketEnabled) {
-      void refresh()
+      void refresh();
     }
-  }, [health, refresh, socketEnabled, socketStatus])
+  }, [health, refresh, socketEnabled, socketStatus]);
 
-  return null
+  return null;
 }

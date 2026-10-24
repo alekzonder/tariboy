@@ -1,25 +1,36 @@
 import { useCallback, useRef, useState } from "react";
 import {
-  DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
 } from "@dnd-kit/core";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import type { HostAgents } from "@/lib/aggregate";
 import type { DaemonMeta } from "@/lib/daemons";
+import { DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from "../useSidebarWidth";
 import {
-  DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH,
-} from "../useSidebarWidth";
-import { identityFor, rowCollision, sameScope, sidebarAnnouncements, type ReorderKind } from "./sidebarDnd";
+  identityFor,
+  rowCollision,
+  sameScope,
+  sidebarAnnouncements,
+  type ReorderKind,
+} from "./sidebarDnd";
 import { AgentsTab } from "./AgentsTab";
 import { ServersTab } from "./ServersTab";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarSearch } from "./SidebarSearch";
 import { SidebarTabs } from "./SidebarTabs";
 import type { AgentRowActions } from "./SidebarAgentRow";
+import { allAgents, filterHosts, hostAgents, ordered, rankAgents } from "./sidebarModel";
 import {
-  allAgents, filterHosts, hostAgents, ordered, rankAgents,
-} from "./sidebarModel";
-import {
-  readPinnedAgents, readSidebarTab, writePinnedAgents, writeSidebarTab, type SidebarTab,
+  readPinnedAgents,
+  readSidebarTab,
+  writePinnedAgents,
+  writeSidebarTab,
+  type SidebarTab,
 } from "./sidebarPrefs";
 
 function move(ids: string[], active: string, over: string): string[] {
@@ -37,7 +48,28 @@ function move(ids: string[], active: string, over: string): string[] {
  * border and no surface of its own, and only the list between the tabs and the
  * foot scrolls.
  */
-export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, onSelect, onSelectTeam, onReorder, onClone, onCreate, onAddServer, onEditServer, onUpdateAll, onRemoveServer, daemonViews, appVersion, onConnectHost, attention, width, onResize, drawer = false }: {
+export function AgentSidebar({
+  hosts,
+  selectedHostId,
+  selected,
+  onSelectHost,
+  onSelect,
+  onSelectTeam,
+  onReorder,
+  onClone,
+  onCreate,
+  onAddServer,
+  onEditServer,
+  onUpdateAll,
+  onRemoveServer,
+  daemonViews,
+  appVersion,
+  onConnectHost,
+  attention,
+  width,
+  onResize,
+  drawer = false,
+}: {
   hosts: HostAgents[];
   selectedHostId?: string;
   selected?: { hostId: string; agent: string };
@@ -106,9 +138,16 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     const step = e.shiftKey ? 32 : 8;
-    if (e.key === "ArrowLeft") { e.preventDefault(); onResize(width - step); }
-    else if (e.key === "ArrowRight") { e.preventDefault(); onResize(width + step); }
-    else if (e.key === "Home") { e.preventDefault(); onResize(DEFAULT_SIDEBAR_WIDTH); }
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      onResize(width - step);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      onResize(width + step);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      onResize(DEFAULT_SIDEBAR_WIDTH);
+    }
   };
 
   const finishReorder = ({ active, over }: DragEndEvent) => {
@@ -117,16 +156,28 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
     const target = identityFor(over.id);
     if (!sameScope(source, target)) return;
     if (source[0] === "servers") {
-      onReorder("servers", "", move(hosts.map((host) => host.host.id), source[2], target[2]));
+      onReorder(
+        "servers",
+        "",
+        move(
+          hosts.map((host) => host.host.id),
+          source[2],
+          target[2],
+        ),
+      );
       return;
     }
     const host = hosts.find((entry) => entry.host.id === source[1]);
     if (!host) return;
     if (source[0] === "groups") {
-      const names = [...new Set([
-        ...(host.groups ?? []).map((group) => group.name),
-        ...hostAgents(host).map((row) => row.group).filter(Boolean),
-      ])];
+      const names = [
+        ...new Set([
+          ...(host.groups ?? []).map((group) => group.name),
+          ...hostAgents(host)
+            .map((row) => row.group)
+            .filter(Boolean),
+        ]),
+      ];
       const current = ordered(names, host.sidebarOrder?.groups ?? [], (name) => name);
       onReorder("groups", source[1], move(current, source[2], target[2]));
       return;
@@ -159,66 +210,70 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
       accessibility={{ announcements: sidebarAnnouncements }}
       onDragEnd={finishReorder}
     >
-    {/* The sidebar is chrome, not a panel: it sits straight on --background
+      {/* The sidebar is chrome, not a panel: it sits straight on --background
         with no border and no surface of its own — the content island is the
         only raised thing on the screen. */}
-    <aside
-      ref={asideRef}
-      aria-label="Agents"
-      data-testid="agents-sidebar"
-      style={drawer ? undefined : { width }}
-      className={drawer ? "flex min-h-0 min-w-0 flex-1 flex-col" : "flex min-h-0 shrink-0 flex-col px-0.5"}
-    >
-      <div className="shrink-0 px-1.5 pt-0.5 pb-2">
-        <SidebarSearch query={query} onQuery={setQuery} />
-      </div>
-      <Tabs value={tab} onValueChange={pickTab} className="flex min-h-0 flex-1 flex-col gap-0">
-        <SidebarTabs onCreate={() => onCreate(selectedHostId ?? "")} />
-        <div className="min-h-0 flex-1 overflow-y-auto px-1.5">
-          <TabsContent value="agents">
-            <AgentsTab pinned={ranked.pinned} rest={ranked.rest} actions={rowActions} />
-          </TabsContent>
-          <TabsContent value="servers">
-            <ServersTab
-              hosts={visibleHosts}
-              filtering={filtering}
-              daemonViews={daemonViews}
-              appVersion={appVersion}
-              actions={rowActions}
-              servers={{
-                selectedHostId,
-                onSelectHost,
-                onSelectTeam,
-                onCreate,
-                onEditServer,
-                onUpdateAll,
-                onRemoveServer,
-                onConnectHost,
-              }}
-            />
-          </TabsContent>
+      <aside
+        ref={asideRef}
+        aria-label="Agents"
+        data-testid="agents-sidebar"
+        style={drawer ? undefined : { width }}
+        className={
+          drawer ? "flex min-h-0 min-w-0 flex-1 flex-col" : "flex min-h-0 shrink-0 flex-col px-0.5"
+        }
+      >
+        <div className="shrink-0 px-1.5 pt-0.5 pb-2">
+          <SidebarSearch query={query} onQuery={setQuery} />
         </div>
-      </Tabs>
-      <SidebarFooter
-        servers={hosts.length}
-        connected={connectedCount}
-        agents={agentCount}
-        onAddServer={onAddServer}
-      />
-    </aside>
-    {!drawer && <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="resize sidebar"
-      aria-valuenow={width}
-      aria-valuemin={MIN_SIDEBAR_WIDTH}
-      aria-valuemax={MAX_SIDEBAR_WIDTH}
-      tabIndex={0}
-      onPointerDown={startDrag}
-      onKeyDown={onKeyDown}
-      onDoubleClick={() => onResize(DEFAULT_SIDEBAR_WIDTH)}
-      className="w-2 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-primary/30 focus-visible:bg-primary/30 focus-visible:outline-none"
-    />}
+        <Tabs value={tab} onValueChange={pickTab} className="flex min-h-0 flex-1 flex-col gap-0">
+          <SidebarTabs onCreate={() => onCreate(selectedHostId ?? "")} />
+          <div className="min-h-0 flex-1 overflow-y-auto px-1.5">
+            <TabsContent value="agents">
+              <AgentsTab pinned={ranked.pinned} rest={ranked.rest} actions={rowActions} />
+            </TabsContent>
+            <TabsContent value="servers">
+              <ServersTab
+                hosts={visibleHosts}
+                filtering={filtering}
+                daemonViews={daemonViews}
+                appVersion={appVersion}
+                actions={rowActions}
+                servers={{
+                  selectedHostId,
+                  onSelectHost,
+                  onSelectTeam,
+                  onCreate,
+                  onEditServer,
+                  onUpdateAll,
+                  onRemoveServer,
+                  onConnectHost,
+                }}
+              />
+            </TabsContent>
+          </div>
+        </Tabs>
+        <SidebarFooter
+          servers={hosts.length}
+          connected={connectedCount}
+          agents={agentCount}
+          onAddServer={onAddServer}
+        />
+      </aside>
+      {!drawer && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="resize sidebar"
+          aria-valuenow={width}
+          aria-valuemin={MIN_SIDEBAR_WIDTH}
+          aria-valuemax={MAX_SIDEBAR_WIDTH}
+          tabIndex={0}
+          onPointerDown={startDrag}
+          onKeyDown={onKeyDown}
+          onDoubleClick={() => onResize(DEFAULT_SIDEBAR_WIDTH)}
+          className="w-2 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-primary/30 focus-visible:bg-primary/30 focus-visible:outline-none"
+        />
+      )}
     </DndContext>
   );
 }

@@ -1,11 +1,4 @@
-import {
-  Badge,
-  Button,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "tariboy-ui";
+import { Badge, Button, Tabs, TabsContent, TabsList, TabsTrigger } from "tariboy-ui";
 
 const WORKSPACE_TABS = [
   ["console", "Console"],
@@ -57,14 +50,13 @@ export const MessageQueueViews = () => (
         <div>
           <span style={{ fontFamily: "ui-monospace, monospace" }}>reviewer</span>
           <span style={{ color: "var(--muted-foreground)" }}>
-            {" "}· review TB-142 before packaging
+            {" "}
+            · review TB-142 before packaging
           </span>
         </div>
         <div>
           <span style={{ fontFamily: "ui-monospace, monospace" }}>docs-bot</span>
-          <span style={{ color: "var(--muted-foreground)" }}>
-            {" "}· regenerate the CLI reference
-          </span>
+          <span style={{ color: "var(--muted-foreground)" }}> · regenerate the CLI reference</span>
         </div>
       </div>
     </TabsContent>
@@ -82,8 +74,7 @@ export const WithDisabledTab = () => (
     </TabsList>
     <TabsContent value="configuration">
       <p style={{ margin: "0 0 8px", fontSize: 13, color: "var(--muted-foreground)" }}>
-        Host build-01 is unavailable; advanced actions are disabled until it
-        reconnects.
+        Host build-01 is unavailable; advanced actions are disabled until it reconnects.
       </p>
       <Button variant="outline" size="sm" disabled>
         Restart builder

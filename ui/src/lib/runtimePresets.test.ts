@@ -17,9 +17,10 @@ describe("runtime presets", () => {
   it("merges learned values and extras without duplicates", () => {
     rememberRuntimePreset("codex", "models", " private-model ");
 
-    expect(
-      runtimePresetOptions("codex", "models", ["o3", "private-model", " "]),
-    ).toEqual(["private-model", "o3"]);
+    expect(runtimePresetOptions("codex", "models", ["o3", "private-model", " "])).toEqual([
+      "private-model",
+      "o3",
+    ]);
   });
 
   it("isolates learned values by harness and field", () => {
@@ -43,9 +44,7 @@ describe("runtime presets", () => {
     });
 
     expect(runtimePresetOptions("codex", "models")).toEqual([]);
-    expect(() =>
-      rememberRuntimePreset("codex", "models", "private-model"),
-    ).not.toThrow();
+    expect(() => rememberRuntimePreset("codex", "models", "private-model")).not.toThrow();
   });
 
   it("keeps only the twenty most recently learned exact values", () => {
@@ -59,9 +58,9 @@ describe("runtime presets", () => {
     expect(options).toContain("custom-20");
     expect(options.filter((value) => value === "custom-1")).toHaveLength(1);
 
-    const learned = JSON.parse(
-      localStorage.getItem(RUNTIME_PRESETS_STORAGE_KEY) ?? "{}",
-    ) as { codex: { models: string[] } };
+    const learned = JSON.parse(localStorage.getItem(RUNTIME_PRESETS_STORAGE_KEY) ?? "{}") as {
+      codex: { models: string[] };
+    };
     expect(learned.codex.models).toHaveLength(20);
     expect(learned.codex.models.at(-1)).toBe("custom-1");
   });
@@ -121,8 +120,7 @@ describe("runtime preset groups", () => {
 
   it("offers the selected model efforts, else the harness efforts", () => {
     const efforts = (model: string) =>
-      runtimePresetGroups({ harness: "codex", field: "efforts", catalog: ready, model })[0]
-        .options;
+      runtimePresetGroups({ harness: "codex", field: "efforts", catalog: ready, model })[0].options;
 
     expect(efforts("gpt-5.6-luna")).toEqual(["low", "max"]);
     expect(efforts("private-model")).toEqual(["low", "max", "ultra"]);
@@ -137,9 +135,9 @@ describe("runtime preset groups", () => {
       options: [],
       note: "Loading…",
     });
-    expect(
-      group({ loading: false, catalog: null, error: "codex not found on PATH" }).note,
-    ).toBe("codex not found on PATH");
+    expect(group({ loading: false, catalog: null, error: "codex not found on PATH" }).note).toBe(
+      "codex not found on PATH",
+    );
     expect(group({ loading: false, catalog: null, error: "" }, "").note).toBe(
       "Choose a harness to list its values",
     );

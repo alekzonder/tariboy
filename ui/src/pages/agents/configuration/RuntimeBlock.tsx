@@ -19,8 +19,19 @@ export function RuntimeBlock({ draft, matched, sources }: BlockProps) {
   const view = sources.view!;
   const harness = draft.values.harness ?? view.harness;
   const catalog = useHarnessCatalog(api, harness);
-  const modelPresets = runtimePresetGroups({ harness, field: "models", catalog, extras: [view.model] });
-  const effortPresets = runtimePresetGroups({ harness, field: "efforts", catalog, model: draft.values.model, extras: [view.effort] });
+  const modelPresets = runtimePresetGroups({
+    harness,
+    field: "models",
+    catalog,
+    extras: [view.model],
+  });
+  const effortPresets = runtimePresetGroups({
+    harness,
+    field: "efforts",
+    catalog,
+    model: draft.values.model,
+    extras: [view.effort],
+  });
   // The operator subset, plus the agent's current harness if it falls outside
   // that subset, so the select never shows blank for an out-of-list value.
   const harnessOptions = (HARNESS_OPTIONS as readonly string[]).includes(view.harness)
@@ -28,10 +39,25 @@ export function RuntimeBlock({ draft, matched, sources }: BlockProps) {
     : [...HARNESS_OPTIONS, view.harness];
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <DraftField field={field("harness")} draft={draft} matched={matched.has("harness")} options={harnessOptions} />
+      <DraftField
+        field={field("harness")}
+        draft={draft}
+        matched={matched.has("harness")}
+        options={harnessOptions}
+      />
       <DraftField field={field("interactive")} draft={draft} matched={matched.has("interactive")} />
-      <DraftField field={field("model")} draft={draft} matched={matched.has("model")} presets={modelPresets} />
-      <DraftField field={field("effort")} draft={draft} matched={matched.has("effort")} presets={effortPresets} />
+      <DraftField
+        field={field("model")}
+        draft={draft}
+        matched={matched.has("model")}
+        presets={modelPresets}
+      />
+      <DraftField
+        field={field("effort")}
+        draft={draft}
+        matched={matched.has("effort")}
+        presets={effortPresets}
+      />
     </div>
   );
 }

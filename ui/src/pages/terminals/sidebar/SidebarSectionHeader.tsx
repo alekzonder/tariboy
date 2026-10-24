@@ -33,7 +33,15 @@ function StateBadge({ state }: { state: string }) {
  * and the actions that belong to it. `title` is passed in rather than built
  * here because a server name is also a drag handle.
  */
-export function SidebarSectionHeader({ title, state, update, updateLabel, menu, onAdd, addLabel }: {
+export function SidebarSectionHeader({
+  title,
+  state,
+  update,
+  updateLabel,
+  menu,
+  onAdd,
+  addLabel,
+}: {
   title: ReactNode;
   /** Servers only — groups have no state of their own. */
   state?: string;

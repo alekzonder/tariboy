@@ -36,7 +36,8 @@ export function MaintenanceSettingsCard() {
 
   useEffect(() => {
     let current = true;
-    api.daemon.getMaintenance()
+    api.daemon
+      .getMaintenance()
       .then((r) => {
         if (!current) return;
         setForm(r.settings);
@@ -44,43 +45,62 @@ export function MaintenanceSettingsCard() {
         setLastRun(r.last_run);
         setError(r.last_run?.error ?? "");
       })
-      .catch((e) => { if (current) setError(reason(e)); });
-    api.daemon.getIterationRetentionDefault()
+      .catch((e) => {
+        if (current) setError(reason(e));
+      });
+    api.daemon
+      .getIterationRetentionDefault()
       .then((r) => {
         if (!current) return;
-        const p = { keep_iterations: r.keep_iterations, keep_days: r.keep_days, max_bytes: r.max_bytes };
+        const p = {
+          keep_iterations: r.keep_iterations,
+          keep_days: r.keep_days,
+          max_bytes: r.max_bytes,
+        };
         setRet(p);
         setSavedRet(p);
       })
-      .catch((e) => { if (current) setError(reason(e)); });
-    return () => { current = false; };
+      .catch((e) => {
+        if (current) setError(reason(e));
+      });
+    return () => {
+      current = false;
+    };
   }, [api]);
 
   const act = async (fn: () => Promise<void>) => {
     setBusy(true);
     setError("");
-    try { await fn(); } catch (e) { setError(reason(e)); }
+    try {
+      await fn();
+    } catch (e) {
+      setError(reason(e));
+    }
     setBusy(false);
   };
-  const save = () => act(async () => {
-    if (!form) return;
-    const next = await api.daemon.setMaintenance(form);
-    setForm(next);
-    setSaved(next);
-    if (!ret) return;
-    const nextRet = await api.daemon.setIterationRetentionDefault(ret);
-    setRet(nextRet);
-    setSavedRet(nextRet);
-  });
-  const run = () => act(async () => {
-    const r = await api.daemon.runMaintenance();
-    setLastRun(r);
-    if (r.error) setError(r.error);
-  });
+  const save = () =>
+    act(async () => {
+      if (!form) return;
+      const next = await api.daemon.setMaintenance(form);
+      setForm(next);
+      setSaved(next);
+      if (!ret) return;
+      const nextRet = await api.daemon.setIterationRetentionDefault(ret);
+      setRet(nextRet);
+      setSavedRet(nextRet);
+    });
+  const run = () =>
+    act(async () => {
+      const r = await api.daemon.runMaintenance();
+      setLastRun(r);
+      if (r.error) setError(r.error);
+    });
   const patch = (p: Partial<MaintenanceSettings>) => setForm((f) => (f ? { ...f, ...p } : f));
   const patchRet = (p: Partial<IterationRetention>) => setRet((r) => (r ? { ...r, ...p } : r));
   const num = (v: string) => Number.parseInt(v, 10) || 0;
-  const dirty = JSON.stringify(form) !== JSON.stringify(saved) || JSON.stringify(ret) !== JSON.stringify(savedRet);
+  const dirty =
+    JSON.stringify(form) !== JSON.stringify(saved) ||
+    JSON.stringify(ret) !== JSON.stringify(savedRet);
 
   return (
     <Card>
@@ -88,83 +108,160 @@ export function MaintenanceSettingsCard() {
         <CardTitle className="text-base">Backup & data retention</CardTitle>
         <CardDescription>
           Every night the whole database is backed up; after a successful backup, agent iterations
-          beyond the iteration limits are archived with their database rows and deleted, finished tasks,
-          AI proxy usage, and events older than the retention period are deleted, delivered chat
-          messages of all agents older than the chat history period are deleted, and the database
-          is compacted.
+          beyond the iteration limits are archived with their database rows and deleted, finished
+          tasks, AI proxy usage, and events older than the retention period are deleted, delivered
+          chat messages of all agents older than the chat history period are deleted, and the
+          database is compacted.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {form && (
           <>
             <div className="flex items-center gap-2">
-              <Switch id="maint-enabled" checked={form.enabled} onCheckedChange={(v) => patch({ enabled: v })} />
+              <Switch
+                id="maint-enabled"
+                checked={form.enabled}
+                onCheckedChange={(v) => patch({ enabled: v })}
+              />
               <Label htmlFor="maint-enabled">Nightly backup and cleanup</Label>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="maint-time">Nightly run time</Label>
-                <Input id="maint-time" type="time" className="h-9" value={form.time}
-                  onChange={(e) => patch({ time: e.target.value })} />
+                <Input
+                  id="maint-time"
+                  type="time"
+                  className="h-9"
+                  value={form.time}
+                  onChange={(e) => patch({ time: e.target.value })}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="maint-days">Keep data for (days)</Label>
-                <Input id="maint-days" inputMode="numeric" className="h-9" value={String(form.retention_days)}
-                  aria-describedby="maint-days-help" onChange={(e) => patch({ retention_days: num(e.target.value) })} />
-                <p id="maint-days-help" className="text-xs text-muted-foreground">0 keeps everything; otherwise at least 31.</p>
+                <Input
+                  id="maint-days"
+                  inputMode="numeric"
+                  className="h-9"
+                  value={String(form.retention_days)}
+                  aria-describedby="maint-days-help"
+                  onChange={(e) => patch({ retention_days: num(e.target.value) })}
+                />
+                <p id="maint-days-help" className="text-xs text-muted-foreground">
+                  0 keeps everything; otherwise at least 31.
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="maint-chat-days">Keep chat history for (days)</Label>
-                <Input id="maint-chat-days" inputMode="numeric" className="h-9" value={String(form.chat_retention_days)}
-                  aria-describedby="maint-chat-days-help" onChange={(e) => patch({ chat_retention_days: num(e.target.value) })} />
-                <p id="maint-chat-days-help" className="text-xs text-muted-foreground">0 keeps chat history for the data period.</p>
+                <Input
+                  id="maint-chat-days"
+                  inputMode="numeric"
+                  className="h-9"
+                  value={String(form.chat_retention_days)}
+                  aria-describedby="maint-chat-days-help"
+                  onChange={(e) => patch({ chat_retention_days: num(e.target.value) })}
+                />
+                <p id="maint-chat-days-help" className="text-xs text-muted-foreground">
+                  0 keeps chat history for the data period.
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="maint-backups">Backups to keep</Label>
-                <Input id="maint-backups" inputMode="numeric" className="h-9" value={String(form.keep_backups)}
-                  onChange={(e) => patch({ keep_backups: num(e.target.value) })} />
+                <Input
+                  id="maint-backups"
+                  inputMode="numeric"
+                  className="h-9"
+                  value={String(form.keep_backups)}
+                  onChange={(e) => patch({ keep_backups: num(e.target.value) })}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="maint-threshold">Compact when free space reaches (%)</Label>
-                <Input id="maint-threshold" inputMode="numeric" className="h-9" value={String(form.compact_threshold_pct)}
-                  onChange={(e) => patch({ compact_threshold_pct: num(e.target.value) })} />
+                <Input
+                  id="maint-threshold"
+                  inputMode="numeric"
+                  className="h-9"
+                  value={String(form.compact_threshold_pct)}
+                  onChange={(e) => patch({ compact_threshold_pct: num(e.target.value) })}
+                />
               </div>
             </div>
             {ret && (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="ret-keep-it">Keep iterations per agent</Label>
-                  <Input id="ret-keep-it" inputMode="numeric" className="h-9" value={String(ret.keep_iterations)}
-                    aria-describedby="ret-help" onChange={(e) => patchRet({ keep_iterations: num(e.target.value) })} />
+                  <Input
+                    id="ret-keep-it"
+                    inputMode="numeric"
+                    className="h-9"
+                    value={String(ret.keep_iterations)}
+                    aria-describedby="ret-help"
+                    onChange={(e) => patchRet({ keep_iterations: num(e.target.value) })}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="ret-keep-days">Keep iterations for (days)</Label>
-                  <Input id="ret-keep-days" inputMode="numeric" className="h-9" value={String(ret.keep_days)}
-                    aria-describedby="ret-help" onChange={(e) => patchRet({ keep_days: num(e.target.value) })} />
+                  <Input
+                    id="ret-keep-days"
+                    inputMode="numeric"
+                    className="h-9"
+                    value={String(ret.keep_days)}
+                    aria-describedby="ret-help"
+                    onChange={(e) => patchRet({ keep_days: num(e.target.value) })}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="ret-max-bytes">Max iteration bytes per agent</Label>
-                  <Input id="ret-max-bytes" inputMode="numeric" className="h-9" value={String(ret.max_bytes)}
-                    aria-describedby="ret-help" onChange={(e) => patchRet({ max_bytes: num(e.target.value) })} />
+                  <Input
+                    id="ret-max-bytes"
+                    inputMode="numeric"
+                    className="h-9"
+                    value={String(ret.max_bytes)}
+                    aria-describedby="ret-help"
+                    onChange={(e) => patchRet({ max_bytes: num(e.target.value) })}
+                  />
                 </div>
                 <p id="ret-help" className="text-xs text-muted-foreground sm:col-span-3">
-                  0 is unlimited. A non-zero value in an agent&apos;s retention settings overrides these.
+                  0 is unlimited. A non-zero value in an agent&apos;s retention settings overrides
+                  these.
                 </p>
               </div>
             )}
             <div className="flex items-center gap-2">
-              <Switch id="maint-compact" checked={form.compact} onCheckedChange={(v) => patch({ compact: v })} />
+              <Switch
+                id="maint-compact"
+                checked={form.compact}
+                onCheckedChange={(v) => patch({ compact: v })}
+              />
               <Label htmlFor="maint-compact">Compact after cleanup</Label>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" disabled={busy} onClick={() => void save()}>Save</Button>
-              <Button size="sm" variant="secondary" disabled={busy || dirty} onClick={() => void run()}>Run now</Button>
+              <Button size="sm" disabled={busy} onClick={() => void save()}>
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy || dirty}
+                onClick={() => void run()}
+              >
+                Run now
+              </Button>
             </div>
-            {dirty && <p className="text-xs text-muted-foreground">Save before running: Run now uses the saved settings.</p>}
+            {dirty && (
+              <p className="text-xs text-muted-foreground">
+                Save before running: Run now uses the saved settings.
+              </p>
+            )}
           </>
         )}
-        {lastRun && <p className="text-xs text-muted-foreground">Last run: {describeRun(lastRun)}</p>}
-        {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+        {lastRun && (
+          <p className="text-xs text-muted-foreground">Last run: {describeRun(lastRun)}</p>
+        )}
+        {error && (
+          <p role="alert" className="text-xs text-destructive">
+            {error}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

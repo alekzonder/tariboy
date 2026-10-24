@@ -12,9 +12,12 @@ export default function DaemonsPage() {
   const [error, setError] = useState("");
 
   async function remove(host: DaemonMeta) {
-    if (!window.confirm(
-      `Remove host ${host.label} from this app? The remote daemon and data remain on the server.`,
-    )) return;
+    if (
+      !window.confirm(
+        `Remove host ${host.label} from this app? The remote daemon and data remain on the server.`,
+      )
+    )
+      return;
     try {
       await removeDaemon(host.id);
       await refresh();
@@ -45,10 +48,17 @@ export default function DaemonsPage() {
         <Button onClick={() => setDialog("add")}>Add host</Button>
       </div>
 
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
       <div className="space-y-2">
         {daemons.map((host) => (
-          <div key={host.id} className="flex items-start justify-between gap-3 rounded border px-3 py-2">
+          <div
+            key={host.id}
+            className="flex items-start justify-between gap-3 rounded border px-3 py-2"
+          >
             <div className="min-w-0 space-y-1">
               <div className="font-medium">{host.label}</div>
               <div className="truncate text-xs text-muted-foreground">

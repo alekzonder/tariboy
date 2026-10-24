@@ -11,21 +11,36 @@ describe("ServerContextBar", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("navigation", { name: "Server workspace" }))
-      .toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Server workspace" })).toBeInTheDocument();
     expect(screen.getByText("Server:")).toBeInTheDocument();
     expect(screen.getByText("Production")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Tasks" }))
-      .toHaveAttribute("href", "/servers/remote-1/tasks");
-    expect(screen.getByRole("link", { name: "Images" }))
-      .toHaveAttribute("href", "/servers/remote-1/images");
-    expect(screen.getByRole("link", { name: "Workflow images" }))
-      .toHaveAttribute("href", "/servers/remote-1/workflows");
-    expect(screen.getAllByRole("link").map((link) => link.textContent))
-      .toEqual(["Tasks", "Activity", "Images", "Workflow images", "Stores", "Settings"]);
-    expect(screen.getByRole("link", { name: "Activity" }))
-      .toHaveAttribute("href", "/servers/remote-1/activity");
-    expect(screen.getByRole("link", { name: "Settings" }))
-      .toHaveAttribute("href", "/servers/remote-1/settings");
+    expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute(
+      "href",
+      "/servers/remote-1/tasks",
+    );
+    expect(screen.getByRole("link", { name: "Images" })).toHaveAttribute(
+      "href",
+      "/servers/remote-1/images",
+    );
+    expect(screen.getByRole("link", { name: "Workflow images" })).toHaveAttribute(
+      "href",
+      "/servers/remote-1/workflows",
+    );
+    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Tasks",
+      "Activity",
+      "Images",
+      "Workflow images",
+      "Stores",
+      "Settings",
+    ]);
+    expect(screen.getByRole("link", { name: "Activity" })).toHaveAttribute(
+      "href",
+      "/servers/remote-1/activity",
+    );
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute(
+      "href",
+      "/servers/remote-1/settings",
+    );
   });
 });

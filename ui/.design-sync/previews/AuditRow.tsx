@@ -22,13 +22,22 @@ const ev = (seq: number, kind: string, data: unknown, at: string, source = "shim
 const hline = (inner: unknown) => ({ line: JSON.stringify(inner) });
 
 const started = ev(1, "iteration_started", { trigger: "loop" }, "2026-09-11T18:22:41Z");
-const launching = ev(2, "launching_harness", { harness: "claude", interactive: false }, "2026-09-11T18:22:42Z");
+const launching = ev(
+  2,
+  "launching_harness",
+  { harness: "claude", interactive: false },
+  "2026-09-11T18:22:42Z",
+);
 const assistant = ev(
   3,
   "harness_output",
   hline({
     type: "assistant",
-    message: { content: [{ type: "text", text: "Running the desktop updater contract tests before editing." }] },
+    message: {
+      content: [
+        { type: "text", text: "Running the desktop updater contract tests before editing." },
+      ],
+    },
   }),
   "2026-09-11T18:22:48Z",
   "harness",
@@ -40,7 +49,11 @@ const toolUse = ev(
     type: "assistant",
     message: {
       content: [
-        { type: "tool_use", name: "Bash", input: { command: "go test ./internal/commands/... -run Updater" } },
+        {
+          type: "tool_use",
+          name: "Bash",
+          input: { command: "go test ./internal/commands/... -run Updater" },
+        },
       ],
     },
   }),
@@ -52,12 +65,21 @@ const toolResult = ev(
   "harness_output",
   hline({
     type: "user",
-    message: { content: [{ type: "tool_result", content: [{ text: "ok  tariboy/internal/commands  1.284s" }] }] },
+    message: {
+      content: [
+        { type: "tool_result", content: [{ text: "ok  tariboy/internal/commands  1.284s" }] },
+      ],
+    },
   }),
   "2026-09-11T18:23:02Z",
   "harness",
 );
-const status = ev(6, "status", { message: "iteration productive · 3 files changed" }, "2026-09-11T18:23:05Z");
+const status = ev(
+  6,
+  "status",
+  { message: "iteration productive · 3 files changed" },
+  "2026-09-11T18:23:05Z",
+);
 const finished = ev(7, "iteration_finished", { status: "ok" }, "2026-09-11T18:23:07Z");
 
 const thinkingEvents = [
@@ -91,9 +113,16 @@ const call = {
   status: "ok",
   instructions: "You are the builder agent for the tariboy repository.",
   instructions_changed: false,
-  delta: [{ role: "user", blocks: [{ type: "text" as const, text: "Goal TB-142 — ship the desktop updater contract." }] }],
+  delta: [
+    {
+      role: "user",
+      blocks: [{ type: "text" as const, text: "Goal TB-142 — ship the desktop updater contract." }],
+    },
+  ],
   response: {
-    blocks: [{ type: "text" as const, text: "Running the desktop updater contract tests before editing." }],
+    blocks: [
+      { type: "text" as const, text: "Running the desktop updater contract tests before editing." },
+    ],
     stop_reason: "end_turn",
   },
 };
@@ -110,15 +139,67 @@ const noop = () => {};
 
 export const IterationTranscript = () => (
   <div style={sheet}>
-    <AuditRow row={{ kind: "event", key: 1, event: started }} open={false} onToggle={noop} name="builder" iteration={ITER} />
-    <AuditRow row={{ kind: "event", key: 2, event: launching }} open={false} onToggle={noop} name="builder" iteration={ITER} />
-    <AuditRow row={{ kind: "thinking", key: 11, events: thinkingEvents, tokens: 2100 }} open={false} onToggle={noop} />
-    <AuditRow row={{ kind: "proxycall", key: -4, call, mode: "enrich" }} open={false} onToggle={noop} name="builder" iteration={ITER} />
-    <AuditRow row={{ kind: "event", key: 3, event: assistant }} open={false} onToggle={noop} name="builder" iteration={ITER} />
-    <AuditRow row={{ kind: "event", key: 4, event: toolUse }} open={false} onToggle={noop} name="builder" iteration={ITER} />
-    <AuditRow row={{ kind: "event", key: 5, event: toolResult }} open={false} onToggle={noop} name="builder" iteration={ITER} />
-    <AuditRow row={{ kind: "event", key: 6, event: status }} open={false} onToggle={noop} name="builder" iteration={ITER} />
-    <AuditRow row={{ kind: "event", key: 7, event: finished }} open={false} onToggle={noop} name="builder" iteration={ITER} />
+    <AuditRow
+      row={{ kind: "event", key: 1, event: started }}
+      open={false}
+      onToggle={noop}
+      name="builder"
+      iteration={ITER}
+    />
+    <AuditRow
+      row={{ kind: "event", key: 2, event: launching }}
+      open={false}
+      onToggle={noop}
+      name="builder"
+      iteration={ITER}
+    />
+    <AuditRow
+      row={{ kind: "thinking", key: 11, events: thinkingEvents, tokens: 2100 }}
+      open={false}
+      onToggle={noop}
+    />
+    <AuditRow
+      row={{ kind: "proxycall", key: -4, call, mode: "enrich" }}
+      open={false}
+      onToggle={noop}
+      name="builder"
+      iteration={ITER}
+    />
+    <AuditRow
+      row={{ kind: "event", key: 3, event: assistant }}
+      open={false}
+      onToggle={noop}
+      name="builder"
+      iteration={ITER}
+    />
+    <AuditRow
+      row={{ kind: "event", key: 4, event: toolUse }}
+      open={false}
+      onToggle={noop}
+      name="builder"
+      iteration={ITER}
+    />
+    <AuditRow
+      row={{ kind: "event", key: 5, event: toolResult }}
+      open={false}
+      onToggle={noop}
+      name="builder"
+      iteration={ITER}
+    />
+    <AuditRow
+      row={{ kind: "event", key: 6, event: status }}
+      open={false}
+      onToggle={noop}
+      name="builder"
+      iteration={ITER}
+    />
+    <AuditRow
+      row={{ kind: "event", key: 7, event: finished }}
+      open={false}
+      onToggle={noop}
+      name="builder"
+      iteration={ITER}
+    />
   </div>
 );
 
@@ -133,7 +214,13 @@ export const ExpandedToolCall = () => {
   }, []);
   return (
     <div ref={ref} style={sheet}>
-      <AuditRow row={{ kind: "event", key: 4, event: toolUse }} open onToggle={noop} name="builder" iteration={ITER} />
+      <AuditRow
+        row={{ kind: "event", key: 4, event: toolUse }}
+        open
+        onToggle={noop}
+        name="builder"
+        iteration={ITER}
+      />
     </div>
   );
 };
@@ -142,8 +229,16 @@ export const ExpandedToolCall = () => {
 // token count; expanding it shows the raw events folded behind it.
 export const ThinkingRun = () => (
   <div style={sheet}>
-    <AuditRow row={{ kind: "thinking", key: 11, events: thinkingEvents, tokens: 2100 }} open={false} onToggle={noop} />
-    <AuditRow row={{ kind: "thinking", key: 21, events: thinkingEvents, tokens: 2100 }} open onToggle={noop} />
+    <AuditRow
+      row={{ kind: "thinking", key: 11, events: thinkingEvents, tokens: 2100 }}
+      open={false}
+      onToggle={noop}
+    />
+    <AuditRow
+      row={{ kind: "thinking", key: 21, events: thinkingEvents, tokens: 2100 }}
+      open
+      onToggle={noop}
+    />
   </div>
 );
 
@@ -156,7 +251,12 @@ export const ToneAccents = () => (
       row={{
         kind: "event",
         key: 8,
-        event: ev(8, "budget_exceeded", { reason: "iteration budget 20 reached for builder" }, "2026-09-11T18:24:10Z"),
+        event: ev(
+          8,
+          "budget_exceeded",
+          { reason: "iteration budget 20 reached for builder" },
+          "2026-09-11T18:24:10Z",
+        ),
       }}
       open={false}
       onToggle={noop}
@@ -165,7 +265,12 @@ export const ToneAccents = () => (
       row={{
         kind: "event",
         key: 10,
-        event: ev(10, "shim_error", { line: "dial tcp 10.0.4.11:7777: connect: connection refused" }, "2026-09-11T18:24:31Z"),
+        event: ev(
+          10,
+          "shim_error",
+          { line: "dial tcp 10.0.4.11:7777: connect: connection refused" },
+          "2026-09-11T18:24:31Z",
+        ),
       }}
       open={false}
       onToggle={noop}
@@ -191,7 +296,12 @@ export const CodexHarness = () => (
       row={{
         kind: "event",
         key: 31,
-        event: codex(31, "2026-09-11T18:25:01Z", { type: "command_execution", command: "go build ./...", status: "running" }, "item.started"),
+        event: codex(
+          31,
+          "2026-09-11T18:25:01Z",
+          { type: "command_execution", command: "go build ./...", status: "running" },
+          "item.started",
+        ),
       }}
       open={false}
       onToggle={noop}
@@ -214,7 +324,10 @@ export const CodexHarness = () => (
         key: 33,
         event: codex(33, "2026-09-11T18:25:09Z", {
           type: "file_change",
-          changes: [{ path: "desktop/src/updater.rs", kind: "modified" }, { path: "desktop/tests/updater.rs", kind: "added" }],
+          changes: [
+            { path: "desktop/src/updater.rs", kind: "modified" },
+            { path: "desktop/tests/updater.rs", kind: "added" },
+          ],
         }),
       }}
       open={false}
@@ -228,7 +341,8 @@ export const CodexHarness = () => (
           type: "command_execution",
           command: "cargo test -p tariboy-desktop updater",
           exit_code: 0,
-          aggregated_output: "running 9 tests\ntest updater::acknowledged ... ok\n\ntest result: ok. 9 passed; 0 failed",
+          aggregated_output:
+            "running 9 tests\ntest updater::acknowledged ... ok\n\ntest result: ok. 9 passed; 0 failed",
         }),
       }}
       open

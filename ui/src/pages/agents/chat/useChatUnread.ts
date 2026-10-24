@@ -20,8 +20,12 @@ export function useChatUnread(agent: string, enabled = true): number {
       const page = await api.messages.chatList();
       // The agent owns three chats; the dot stands for the agent, so an unread
       // task notification cannot hide behind a quiet conversation.
-      setUnread((page.chats ?? []).reduce(
-        (total, chat) => (chat.agent === agent ? total + chat.unread : total), 0));
+      setUnread(
+        (page.chats ?? []).reduce(
+          (total, chat) => (chat.agent === agent ? total + chat.unread : total),
+          0,
+        ),
+      );
     } catch {
       // A transient failure keeps the last known count rather than clearing it.
     }
@@ -38,8 +42,12 @@ export function useChatUnread(agent: string, enabled = true): number {
   }, [enabled, load]);
   useMessagesSocket({
     enabled: enabled && Boolean(agent) && api.ready,
-    onHint: (hint) => { if (hint.agent === agent) void load(); },
-    onOpen: () => { void load(); },
+    onHint: (hint) => {
+      if (hint.agent === agent) void load();
+    },
+    onOpen: () => {
+      void load();
+    },
   });
   return unread;
 }

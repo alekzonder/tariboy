@@ -6,7 +6,12 @@ import { GoalHelp } from "tariboy-ui";
 export const InAgentHeader = () => (
   <span style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 14 }}>
     <span style={{ color: "var(--muted-foreground)" }}>Goal:</span>
-    <span style={{ font: "14px ui-monospace, SFMono-Regular, Menlo, monospace", color: "var(--primary)" }}>
+    <span
+      style={{
+        font: "14px ui-monospace, SFMono-Regular, Menlo, monospace",
+        color: "var(--primary)",
+      }}
+    >
       TB-142
     </span>
     <GoalHelp />

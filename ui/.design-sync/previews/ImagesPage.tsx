@@ -13,7 +13,10 @@ import { DaemonProvider, ImagesPage, MemoryRouter, Route, Routes } from "tariboy
 // There is no daemon behind the capture server, so listImages fails and
 // BuiltImages returns its error line in place of the table — the header and the
 // build panel above it are the real chrome.
-const Shell = ({ children, frameRef }: {
+const Shell = ({
+  children,
+  frameRef,
+}: {
   children: ReactNode;
   frameRef?: RefObject<HTMLDivElement | null>;
 }) => (
@@ -39,7 +42,10 @@ const Screen = ({ frameRef }: { frameRef?: RefObject<HTMLDivElement | null> }) =
     <DaemonProvider>
       <Shell frameRef={frameRef}>
         <Routes>
-          <Route path="/servers/:hostId/images" element={<ImagesPage hostId="" basePath={BASE} />} />
+          <Route
+            path="/servers/:hostId/images"
+            element={<ImagesPage hostId="" basePath={BASE} />}
+          />
         </Routes>
       </Shell>
     </DaemonProvider>

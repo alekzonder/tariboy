@@ -22,10 +22,7 @@ export const FormLabels = () => (
     </div>
     <div style={{ display: "grid", gap: 6 }}>
       <Label htmlFor="preview-label-notes">notes</Label>
-      <Textarea
-        id="preview-label-notes"
-        placeholder="one-shot exec prompt (optional)"
-      />
+      <Textarea id="preview-label-notes" placeholder="one-shot exec prompt (optional)" />
     </div>
   </div>
 );
@@ -60,11 +57,7 @@ export const SwitchRow = () => (
 );
 
 export const Disabled = () => (
-  <div
-    className="group"
-    data-disabled="true"
-    style={{ display: "grid", gap: 6, width: 320 }}
-  >
+  <div className="group" data-disabled="true" style={{ display: "grid", gap: 6, width: 320 }}>
     <Label htmlFor="preview-label-host">Host</Label>
     <Input id="preview-label-host" defaultValue="This daemon (local)" disabled />
     <span style={help}>The host cannot be changed after creation.</span>

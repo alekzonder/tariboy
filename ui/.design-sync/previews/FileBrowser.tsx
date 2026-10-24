@@ -57,7 +57,15 @@ const MANIFEST_JSON = `{
 `;
 
 const AGENT_TREE: Record<string, ReturnType<typeof file>[]> = {
-  "": [dir("cmd"), dir("internal"), dir("ui"), file("AGENTS.md", 4210), file("Makefile", 812), file("go.mod", 1344), file("main.go", 1096)],
+  "": [
+    dir("cmd"),
+    dir("internal"),
+    dir("ui"),
+    file("AGENTS.md", 4210),
+    file("Makefile", 812),
+    file("go.mod", 1344),
+    file("main.go", 1096),
+  ],
   internal: [dir("audit"), dir("daemon"), file("loop.go", 9820), file("retention.go", 3140)],
   cmd: [dir("tariboy"), dir("tariboy-shim")],
   ui: [dir("src"), file("package.json", 2638), file("vite.config.ts", 984)],
@@ -78,7 +86,12 @@ const listing = (tree: Record<string, ReturnType<typeof file>[]>) => (path: stri
   Promise.resolve({ path, entries: tree[path] ?? [] });
 
 const read = (path: string) =>
-  Promise.resolve({ path, kind: "text" as const, content: CONTENT[path] ?? "", size: (CONTENT[path] ?? "").length });
+  Promise.resolve({
+    path,
+    kind: "text" as const,
+    content: CONTENT[path] ?? "",
+    size: (CONTENT[path] ?? "").length,
+  });
 
 const listAgent = listing(AGENT_TREE);
 const listImage = listing(IMAGE_TREE);
@@ -99,7 +112,10 @@ function useTreeClicks(steps: string[]) {
     let tries = 0;
     const id = window.setInterval(() => {
       const root = ref.current;
-      if (!root || i >= steps.length || ++tries > 60) { window.clearInterval(id); return; }
+      if (!root || i >= steps.length || ++tries > 60) {
+        window.clearInterval(id);
+        return;
+      }
       const want = steps[i];
       const btn = Array.from(root.querySelectorAll("button")).find(
         (b) => (b.textContent ?? "").trim() === want,
@@ -119,8 +135,18 @@ const workdirSteps = ["internal", "main.go"];
 const imageSteps = ["manifest.json"];
 const noSteps: string[] = [];
 
-const Pane = ({ inner, height = 480, children }: { inner: React.RefObject<HTMLDivElement | null>; height?: number; children: React.ReactNode }) => (
-  <div ref={inner} style={{ height }}>{children}</div>
+const Pane = ({
+  inner,
+  height = 480,
+  children,
+}: {
+  inner: React.RefObject<HTMLDivElement | null>;
+  height?: number;
+  children: React.ReactNode;
+}) => (
+  <div ref={inner} style={{ height }}>
+    {children}
+  </div>
 );
 
 // The agent Files tab: tree on the left, the selected file in CodeMirror with
@@ -159,7 +185,13 @@ export const EmptyWorkdir = () => {
   const ref = useTreeClicks(noSteps);
   return (
     <Pane inner={ref} height={220}>
-      <FileBrowser sourceKey="docs-bot" listDir={listEmpty} readFile={read} writeFile={write} createFile={create} />
+      <FileBrowser
+        sourceKey="docs-bot"
+        listDir={listEmpty}
+        readFile={read}
+        writeFile={write}
+        createFile={create}
+      />
     </Pane>
   );
 };

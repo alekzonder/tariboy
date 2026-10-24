@@ -6,11 +6,34 @@ import { idleOperation } from "./hostOperation";
 import type { ServerForm } from "./useServerForm";
 
 export function SshServerForm({
-  sshAlias, setSshAlias, editing, operation, sshSetup, setSshSetup,
-  updateOperation, displayHost, output, prompt, reply, setReply, sendReply,
-}: Pick<ServerForm,
-  "sshAlias" | "setSshAlias" | "editing" | "operation" | "sshSetup" | "setSshSetup" |
-  "updateOperation" | "displayHost" | "output" | "prompt" | "reply" | "setReply" | "sendReply"
+  sshAlias,
+  setSshAlias,
+  editing,
+  operation,
+  sshSetup,
+  setSshSetup,
+  updateOperation,
+  displayHost,
+  output,
+  prompt,
+  reply,
+  setReply,
+  sendReply,
+}: Pick<
+  ServerForm,
+  | "sshAlias"
+  | "setSshAlias"
+  | "editing"
+  | "operation"
+  | "sshSetup"
+  | "setSshSetup"
+  | "updateOperation"
+  | "displayHost"
+  | "output"
+  | "prompt"
+  | "reply"
+  | "setReply"
+  | "sendReply"
 >) {
   return (
     <>
@@ -30,7 +53,10 @@ export function SshServerForm({
       </div>
 
       {!editing && (
-        <fieldset className="space-y-2 rounded-lg border p-3" disabled={operation.status === "running"}>
+        <fieldset
+          className="space-y-2 rounded-lg border p-3"
+          disabled={operation.status === "running"}
+        >
           <legend className="px-1 text-sm font-medium">Setup</legend>
           <label className="flex items-start gap-2 text-sm">
             <input
@@ -46,7 +72,9 @@ export function SshServerForm({
             />
             <span>
               <span className="block font-medium">Install Tariboy</span>
-              <span className="text-xs text-muted-foreground">Install and start the bundled version.</span>
+              <span className="text-xs text-muted-foreground">
+                Install and start the bundled version.
+              </span>
             </span>
           </label>
           <label className="flex items-start gap-2 text-sm">
@@ -63,20 +91,20 @@ export function SshServerForm({
             />
             <span>
               <span className="block font-medium">Connect to existing Tariboy</span>
-              <span className="text-xs text-muted-foreground">Connect without installing or restarting Tariboy.</span>
+              <span className="text-xs text-muted-foreground">
+                Connect without installing or restarting Tariboy.
+              </span>
             </span>
           </label>
         </fieldset>
       )}
 
       <HostOperationProgress
-
         operation={operation}
 
         displayHost={displayHost}
 
         output={output}
-
       />
 
       {prompt && (
@@ -97,7 +125,6 @@ export function SshServerForm({
           </div>
         </div>
       )}
-
     </>
   );
 }

@@ -38,8 +38,8 @@ export function loadChatTypes(): string[] {
 export function saveChatTypes(types: string[]): void {
   try {
     const isDefault =
-      types.length === DEFAULT_CHAT_TYPES.length
-      && DEFAULT_CHAT_TYPES.every((type) => types.includes(type));
+      types.length === DEFAULT_CHAT_TYPES.length &&
+      DEFAULT_CHAT_TYPES.every((type) => types.includes(type));
     if (isDefault) localStorage.removeItem(CHAT_TYPES_KEY);
     else localStorage.setItem(CHAT_TYPES_KEY, JSON.stringify(types));
   } catch {

@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 /**
  * The style layer's segmented control: a 9px-radius `--muted` trough with 24px
@@ -13,12 +13,12 @@ export function Segmented<T extends string>({
   label,
   className,
 }: {
-  options: ReadonlyArray<{ value: T; label: string }>
-  value: T
-  onChange: (value: T) => void
+  options: ReadonlyArray<{ value: T; label: string }>;
+  value: T;
+  onChange: (value: T) => void;
   /** Accessible name of the group, e.g. "Task status". */
-  label: string
-  className?: string
+  label: string;
+  className?: string;
 }) {
   return (
     <div
@@ -28,7 +28,7 @@ export function Segmented<T extends string>({
       className={cn("flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5", className)}
     >
       {options.map((option, index) => {
-        const selected = option.value === value
+        const selected = option.value === value;
         return (
           <button
             key={option.value}
@@ -38,12 +38,14 @@ export function Segmented<T extends string>({
             onClick={() => onChange(option.value)}
             onKeyDown={(event) => {
               // A radio group moves with the arrows, wrapping at either end.
-              const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0
-              if (!step) return
-              event.preventDefault()
-              const next = (index + step + options.length) % options.length
-              ;(event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus()
-              onChange(options[next].value)
+              const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+              if (!step) return;
+              event.preventDefault();
+              const next = (index + step + options.length) % options.length;
+              (
+                event.currentTarget.parentElement?.children[next] as HTMLElement | undefined
+              )?.focus();
+              onChange(options[next].value);
             }}
             className={cn(
               "h-6 rounded-[7px] px-2.5 text-[12px]",
@@ -54,8 +56,8 @@ export function Segmented<T extends string>({
           >
             {option.label}
           </button>
-        )
+        );
       })}
     </div>
-  )
+  );
 }

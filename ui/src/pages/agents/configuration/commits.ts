@@ -58,13 +58,22 @@ export function readBaseline(sources: {
     raw["keep-days"] = text(retention.override?.keep_days ?? 0);
   }
   if (secrets) Object.assign(raw, { "secrets-remove": "", "secret-key": "", "secret-value": "" });
-  return Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, normalizeField(key, value)]));
+  return Object.fromEntries(
+    Object.entries(raw).map(([key, value]) => [key, normalizeField(key, value)]),
+  );
 }
 
 // Keys queued for removal are kept one per line in the "secrets-remove" draft.
-export const removedSecrets = (value: string) => value.split("\n").map((key) => key.trim()).filter(Boolean);
+export const removedSecrets = (value: string) =>
+  value
+    .split("\n")
+    .map((key) => key.trim())
+    .filter(Boolean);
 
-const one = (key: string, submit: (value: string, values: Values) => Promise<unknown>): CommitUnit => ({
+const one = (
+  key: string,
+  submit: (value: string, values: Values) => Promise<unknown>,
+): CommitUnit => ({
   id: key,
   keys: [key],
   submit: (values) => submit(values[key], values),
@@ -76,7 +85,8 @@ const one = (key: string, submit: (value: string, values: Values) => Promise<unk
 // how many of these requests are sent, never which ones exist.
 export function buildUnits(api: ApiClient, name: string): CommitUnit[] {
   const post = (path: string, body: unknown) => api.agentPost(name, path, body);
-  const loopNumber = (field: string) => one(field, (value) => post(`loop/${field}`, { value: Number(value) }));
+  const loopNumber = (field: string) =>
+    one(field, (value) => post(`loop/${field}`, { value: Number(value) }));
   const loopText = (field: string) => one(field, (value) => post(`loop/${field}`, { value }));
   return [
     one("image", (value) => api.agents.agentImageSet(name, value)),
@@ -104,24 +114,32 @@ export function buildUnits(api: ApiClient, name: string): CommitUnit[] {
     loopNumber("max-idle"),
     loopNumber("ai-stall-timeout"),
     one("goal-enabled", (value) => post("goal-enabled", { enabled: value === "true" })),
-    one("goal-wait-customer-timeout", (value) => post("goal-wait-customer-timeout", { seconds: Number(value) })),
-    one("goal-delivery-cooldown", (value) => post("goal-delivery-cooldown", { seconds: Number(value) })),
+    one("goal-wait-customer-timeout", (value) =>
+      post("goal-wait-customer-timeout", { seconds: Number(value) }),
+    ),
+    one("goal-delivery-cooldown", (value) =>
+      post("goal-delivery-cooldown", { seconds: Number(value) }),
+    ),
     one("messages-batch", (value) => post("messages/batch", { value: Number(value) })),
     one("messages-max-queue", (value) => post("messages/max-queue", { value: Number(value) })),
     {
       id: "budget",
       keys: ["budget-hour", "budget-day", "budget-week", "budget-month"],
-      submit: (values) => post("budget", {
-        hour_usd: values["budget-hour"],
-        day_usd: values["budget-day"],
-        week_usd: values["budget-week"],
-        month_usd: values["budget-month"],
-      }),
+      submit: (values) =>
+        post("budget", {
+          hour_usd: values["budget-hour"],
+          day_usd: values["budget-day"],
+          week_usd: values["budget-week"],
+          month_usd: values["budget-month"],
+        }),
     },
     one("shell-script", (value) => api.agents.setAgentShellScript(name, value)),
     one("secrets-remove", async (value) => {
       for (const key of removedSecrets(value)) {
-        await api.request("DELETE", `${agentApiPath(name, "secrets")}?key=${encodeURIComponent(key)}`);
+        await api.request(
+          "DELETE",
+          `${agentApiPath(name, "secrets")}?key=${encodeURIComponent(key)}`,
+        );
       }
     }),
     {
@@ -129,15 +147,17 @@ export function buildUnits(api: ApiClient, name: string): CommitUnit[] {
       // its draft is dropped as soon as the daemon acknowledges it.
       id: "secret",
       keys: ["secret-key", "secret-value"],
-      submit: (values) => post("secrets", { key: values["secret-key"], value: values["secret-value"] }),
+      submit: (values) =>
+        post("secrets", { key: values["secret-key"], value: values["secret-value"] }),
     },
     {
       id: "retention",
       keys: ["keep-iterations", "keep-days"],
-      submit: (values) => post("retention", {
-        "keep-iterations": Number(values["keep-iterations"]),
-        "keep-days": Number(values["keep-days"]),
-      }),
+      submit: (values) =>
+        post("retention", {
+          "keep-iterations": Number(values["keep-iterations"]),
+          "keep-days": Number(values["keep-days"]),
+        }),
     },
   ];
 }

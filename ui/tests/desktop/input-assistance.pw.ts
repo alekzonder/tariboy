@@ -1,7 +1,9 @@
 import { expect, test } from "./fixture";
 
 test("the real Desktop WebView disables automatic input assistance", async ({ desktop }) => {
-  await expect.poll(() => desktop.execute<Record<string, string | number | boolean | null> | null>(`
+  await expect
+    .poll(() =>
+      desktop.execute<Record<string, string | number | boolean | null> | null>(`
     const root = document.getElementById("root");
     if (typeof window.__TAURI_INTERNALS__ !== "object" || !root) return null;
     const input = document.createElement("input");
@@ -17,11 +19,13 @@ test("the real Desktop WebView disables automatic input assistance", async ({ de
     input.remove();
     textarea.remove();
     return attributes;
-  `)).toEqual({
-    spellcheck: "false",
-    autocorrect: "off",
-    autocapitalize: "off",
-    editableCount: 2,
-    editablesDisableSpellcheck: true,
-  });
+  `),
+    )
+    .toEqual({
+      spellcheck: "false",
+      autocorrect: "off",
+      autocapitalize: "off",
+      editableCount: 2,
+      editablesDisableSpellcheck: true,
+    });
 });

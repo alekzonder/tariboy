@@ -13,7 +13,10 @@ import { FileViewerToolbar } from "./FileViewerToolbar";
 import "@/styles/hljs-github.css";
 
 export function FileViewer({
-  path, readFile, writeFile, onSaved,
+  path,
+  readFile,
+  writeFile,
+  onSaved,
 }: {
   path: string | null;
   readFile: (path: string) => Promise<FileContent>;
@@ -37,10 +40,18 @@ export function FileViewer({
     if (!path) return;
     let alive = true;
     void readFile(path)
-      .then((r) => { if (alive) setFile(r); })
-      .catch((e) => { if (alive) toast.error(errMsg(e)); })
-      .finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
+      .then((r) => {
+        if (alive) setFile(r);
+      })
+      .catch((e) => {
+        if (alive) toast.error(errMsg(e));
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
   }, [readFile, path]);
 
   const dirty = editing && file != null && draft !== file.content;
@@ -73,12 +84,20 @@ export function FileViewer({
       .finally(() => setSaving(false));
   }, [path, file, writeFile, draft, onSaved]);
 
-  const cmTheme = (theme === "dark" || (theme === "system" && typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches))
-    ? "dark"
-    : "light";
+  const cmTheme =
+    theme === "dark" ||
+    (theme === "system" &&
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-color-scheme: dark)").matches)
+      ? "dark"
+      : "light";
 
   if (!path) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Select a file to view</div>;
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Select a file to view
+      </div>
+    );
   }
   if (loading) {
     return (
@@ -90,10 +109,18 @@ export function FileViewer({
   if (!file) return null;
 
   if (file.kind === "binary") {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Binary file — not shown ({file.size} bytes)</div>;
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Binary file — not shown ({file.size} bytes)
+      </div>
+    );
   }
   if (file.kind === "too_large") {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">File too large to display ({file.size} bytes)</div>;
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        File too large to display ({file.size} bytes)
+      </div>
+    );
   }
 
   const md = isMarkdown(path);
@@ -106,13 +133,23 @@ export function FileViewer({
     return (
       <div className="flex h-full flex-col">
         <FileViewerToolbar
-          markdown={md} preview={preview} setPreview={setPreview} canEdit={canEdit}
-          editing={editing} dirty={dirty} saving={saving} save={save}
-          startEdit={startEdit} cancelEdit={() => setEditing(false)}
+          markdown={md}
+          preview={preview}
+          setPreview={setPreview}
+          canEdit={canEdit}
+          editing={editing}
+          dirty={dirty}
+          saving={saving}
+          save={save}
+          startEdit={startEdit}
+          cancelEdit={() => setEditing(false)}
         />
         <div className="min-h-0 flex-1 overflow-auto">
           {!showSource ? (
-            <div data-testid="md-preview" className="prose prose-sm dark:prose-invert max-w-none p-4">
+            <div
+              data-testid="md-preview"
+              className="prose prose-sm dark:prose-invert max-w-none p-4"
+            >
               <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
                 {shown}
               </ReactMarkdown>
@@ -125,7 +162,9 @@ export function FileViewer({
               onChange={setDraft}
             />
           ) : (
-            <pre data-testid="md-source" className="whitespace-pre-wrap p-4 font-mono text-xs">{file.content}</pre>
+            <pre data-testid="md-source" className="whitespace-pre-wrap p-4 font-mono text-xs">
+              {file.content}
+            </pre>
           )}
         </div>
       </div>
@@ -135,9 +174,16 @@ export function FileViewer({
   return (
     <div className="flex h-full flex-col">
       <FileViewerToolbar
-        markdown={md} preview={preview} setPreview={setPreview} canEdit={canEdit}
-        editing={editing} dirty={dirty} saving={saving} save={save}
-        startEdit={startEdit} cancelEdit={() => setEditing(false)}
+        markdown={md}
+        preview={preview}
+        setPreview={setPreview}
+        canEdit={canEdit}
+        editing={editing}
+        dirty={dirty}
+        saving={saving}
+        save={save}
+        startEdit={startEdit}
+        cancelEdit={() => setEditing(false)}
       />
       <div className="min-h-0 flex-1 overflow-auto" data-testid="code-view">
         <CodeMirror

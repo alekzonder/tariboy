@@ -25,8 +25,7 @@ function setup(initial: Values, fail: (unit: string) => boolean = () => false) {
   ];
   const onFocus = vi.fn();
   const hook = renderHook(
-    ({ baseline }: { baseline: Values }) =>
-      useConfigDraft({ baseline, units, reload, onFocus }),
+    ({ baseline }: { baseline: Values }) => useConfigDraft({ baseline, units, reload, onFocus }),
     { initialProps: { baseline: { ...server } } },
   );
   async function reload() {
@@ -35,7 +34,13 @@ function setup(initial: Values, fail: (unit: string) => boolean = () => false) {
   return { hook, sent, server, onFocus };
 }
 
-const base = { interval: "30", timeout: "60", "budget-hour": "1", "budget-day": "0", "goal-delivery-cooldown": "60" };
+const base = {
+  interval: "30",
+  timeout: "60",
+  "budget-hour": "1",
+  "budget-day": "0",
+  "goal-delivery-cooldown": "60",
+};
 
 describe("useConfigDraft", () => {
   it("is dirty only while a normalized draft differs from the baseline", () => {
@@ -68,7 +73,9 @@ describe("useConfigDraft", () => {
     act(() => hook.result.current.setField("goal-delivery-cooldown", "0"));
     await act(() => hook.result.current.save());
     expect(sent).toEqual([]);
-    expect(hook.result.current.fieldErrors["goal-delivery-cooldown"]).toMatch(/positive whole number/);
+    expect(hook.result.current.fieldErrors["goal-delivery-cooldown"]).toMatch(
+      /positive whole number/,
+    );
     expect(onFocus).toHaveBeenCalledWith("goal-delivery-cooldown");
     expect(hook.result.current.dirtyKeys).toEqual(["interval", "goal-delivery-cooldown"]);
   });

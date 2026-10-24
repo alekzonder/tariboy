@@ -6,12 +6,7 @@ export function EnvironmentFields({
   draft,
   updateDraft,
   formDisabled,
-}: Pick<
-  CreateAgentForm,
-  | "draft"
-  | "updateDraft"
-  | "formDisabled"
->) {
+}: Pick<CreateAgentForm, "draft" | "updateDraft" | "formDisabled">) {
   return (
     <Field label="environment JSON" id="create-agent-env">
       <Textarea

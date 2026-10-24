@@ -24,7 +24,9 @@ export function ShellScriptEditor({ title, description, load, save }: Props) {
   const savingRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState<(() => Promise<string>) | null>(null);
-  const [errorState, setErrorState] = useState<{ load: Props["load"]; message: string } | null>(null);
+  const [errorState, setErrorState] = useState<{ load: Props["load"]; message: string } | null>(
+    null,
+  );
   const ready = loaded === load;
   const error = errorState?.load === load ? errorState.message : "";
   const id = title
@@ -79,18 +81,16 @@ export function ShellScriptEditor({ title, description, load, save }: Props) {
         <Textarea
           id={id}
           value={draft}
-          onChange={(event) => { if (ready) setDraft(event.target.value); }}
+          onChange={(event) => {
+            if (ready) setDraft(event.target.value);
+          }}
           disabled={!ready}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? `${id}-error` : undefined}
           className="min-h-40 font-mono"
         />
         {error ? (
-          <p
-            id={`${id}-error`}
-            role="alert"
-            className="text-sm text-destructive"
-          >
+          <p id={`${id}-error`} role="alert" className="text-sm text-destructive">
             {error}
           </p>
         ) : null}

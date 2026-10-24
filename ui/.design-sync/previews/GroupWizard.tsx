@@ -20,9 +20,7 @@ function useDrive(steps: Step[]) {
       if (!root) return;
       for (const step of steps) {
         const all = [...root.querySelectorAll<HTMLElement>(step.selector)];
-        const el = step.text
-          ? all.find((node) => node.textContent?.includes(step.text!))
-          : all[0];
+        const el = step.text ? all.find((node) => node.textContent?.includes(step.text!)) : all[0];
         if (!el) continue;
         if (step.click) {
           el.click();

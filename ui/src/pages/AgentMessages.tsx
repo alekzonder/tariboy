@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useAgentName } from "@/lib/agent";
-import {
-  ApiError,
-  type InboxItem,
-  type InboxStatus,
-} from "@/lib/api";
+import { ApiError, type InboxItem, type InboxStatus } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +18,11 @@ import { fmtDateTime } from "@/lib/time";
 
 // The three sub-views map onto the P5 inbox status filter. Queue is the default.
 type View = "queue" | "archive" | "dlq";
-const VIEWS: [View, string][] = [["queue", "Queue"], ["archive", "Archive"], ["dlq", "DLQ"]];
+const VIEWS: [View, string][] = [
+  ["queue", "Queue"],
+  ["archive", "Archive"],
+  ["dlq", "DLQ"],
+];
 const VIEW_STATUS: Record<View, InboxStatus> = {
   queue: "pending",
   archive: "processed",
@@ -64,15 +64,15 @@ function MessageRow({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span className="font-mono" title={item.ts}>{fmtDateTime(item.ts)}</span>
+            <span className="font-mono" title={item.ts}>
+              {fmtDateTime(item.ts)}
+            </span>
             <span>·</span>
             <span className="font-mono">{item.source || "?"}</span>
             <Badge variant="secondary">{item.type || "note"}</Badge>
             {kind && <Badge>{kind}</Badge>}
             {item.attempts > 1 && <span>attempts: {item.attempts}</span>}
-            {item.in_reply_to && (
-              <span className="font-mono">↩ {item.in_reply_to}</span>
-            )}
+            {item.in_reply_to && <span className="font-mono">↩ {item.in_reply_to}</span>}
           </div>
           <div className="mt-1 text-sm break-words whitespace-pre-wrap">{item.text}</div>
           {view === "archive" && item.processed_at && (
@@ -100,12 +100,18 @@ function MessageRow({
         <div className="flex shrink-0 gap-1">
           {view === "queue" && (
             <>
-              <Button size="sm" variant="outline" onClick={onProcess}>Mark processed</Button>
-              <Button size="sm" variant="outline" onClick={onReply}>Reply</Button>
+              <Button size="sm" variant="outline" onClick={onProcess}>
+                Mark processed
+              </Button>
+              <Button size="sm" variant="outline" onClick={onReply}>
+                Reply
+              </Button>
             </>
           )}
           {view === "dlq" && (
-            <Button size="sm" variant="outline" onClick={onRequeue}>Requeue</Button>
+            <Button size="sm" variant="outline" onClick={onRequeue}>
+              Requeue
+            </Button>
           )}
         </div>
       </div>
@@ -123,7 +129,10 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
   const api = useApi();
   const name = useAgentName();
   const [view, setView] = useState<View>("queue");
-  const [page, setPage] = useState<{ view: View; items: InboxItem[] }>({ view: "queue", items: [] });
+  const [page, setPage] = useState<{ view: View; items: InboxItem[] }>({
+    view: "queue",
+    items: [],
+  });
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState<DialogState>(null);
   const [dialogText, setDialogText] = useState("");
@@ -131,9 +140,12 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
 
   const load = useCallback(
     (v: View) =>
-      api.messages.agentInboxList(name, VIEW_STATUS[v])
+      api.messages
+        .agentInboxList(name, VIEW_STATUS[v])
         .then((r) => setPage({ view: v, items: r.messages ?? [] }))
-        .catch(() => { /* keep last rows on a transient failure */ }),
+        .catch(() => {
+          /* keep last rows on a transient failure */
+        }),
     [api, name],
   );
   const items = page.view === view ? page.items : [];
@@ -145,13 +157,17 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
     void load(view);
     const t = window.setInterval(() => void load(view), 3000);
     const off = api.agents.subscribeAgentEvents(name, ["message"], () => void load(view));
-    return () => { window.clearInterval(t); off(); };
+    return () => {
+      window.clearInterval(t);
+      off();
+    };
   }, [api, name, view, load]);
 
   const toggle = (id: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
 
@@ -175,7 +191,9 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
     try {
       if (dialog.mode === "clear") {
         const result = await api.messages.agentInboxClear(name);
-        toast.success(`deleted ${result.deleted_deliveries} deliveries and ${result.deleted_messages} messages`);
+        toast.success(
+          `deleted ${result.deleted_deliveries} deliveries and ${result.deleted_messages} messages`,
+        );
       } else if (dialog.mode === "processed") {
         await api.messages.agentInboxProcessed(name, dialog.item.id, text);
         toast.success("marked processed");
@@ -212,7 +230,11 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">
         {leading}
-        <div role="tablist" aria-label="Queue view" className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5">
+        <div
+          role="tablist"
+          aria-label="Queue view"
+          className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5"
+        >
           {VIEWS.map(([key, label]) => (
             <button
               key={key}
@@ -220,9 +242,11 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
               role="tab"
               aria-selected={view === key}
               onClick={() => setView(key)}
-              className={`h-[22px] rounded-[7px] px-[9px] text-[11.5px] ${view === key
-                ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
-                : "text-muted-foreground hover:text-foreground"}`}
+              className={`h-[22px] rounded-[7px] px-[9px] text-[11.5px] ${
+                view === key
+                  ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               {label}
             </button>
@@ -232,15 +256,19 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
           {items.length} message{items.length === 1 ? "" : "s"}
         </span>
         {view === "queue" && items.length > 0 && (
-          <Button size="sm" variant="outline" className="ml-auto" onClick={openBulkDialog} disabled={busy}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-auto"
+            onClick={openBulkDialog}
+            disabled={busy}
+          >
             Clear queue
           </Button>
         )}
       </div>
       <div role="tabpanel" className="min-h-0 flex-1 overflow-auto border-t">
-        {items.length === 0 && (
-          <p className="px-4 py-3 text-sm text-muted-foreground">{empty}</p>
-        )}
+        {items.length === 0 && <p className="px-4 py-3 text-sm text-muted-foreground">{empty}</p>}
         {items.map((it) => (
           <MessageRow
             key={it.id}
@@ -255,18 +283,27 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
         ))}
       </div>
 
-      <Dialog open={dialog !== null} onOpenChange={(o) => { if (!o && !busy) setDialog(null); }}>
+      <Dialog
+        open={dialog !== null}
+        onOpenChange={(o) => {
+          if (!o && !busy) setDialog(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {dialog?.mode === "reply" ? "Reply" : dialog?.mode === "clear" ? "Clear queue" : "Mark processed"}
+              {dialog?.mode === "reply"
+                ? "Reply"
+                : dialog?.mode === "clear"
+                  ? "Clear queue"
+                  : "Mark processed"}
             </DialogTitle>
             <DialogDescription>
               {dialog?.mode === "clear"
                 ? "Every pending delivery for this agent is physically deleted and cannot be recovered. Archive and DLQ are not changed; shared messages needed by other agents are retained."
                 : dialog?.mode === "reply"
-                ? "Publish a reply — this also marks the message processed."
-                : "A non-empty result is required."}
+                  ? "Publish a reply — this also marks the message processed."
+                  : "A non-empty result is required."}
             </DialogDescription>
           </DialogHeader>
           {dialog?.mode !== "clear" && (
@@ -279,9 +316,19 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
             />
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialog(null)} disabled={busy}>Cancel</Button>
-            <Button variant={dialog?.mode === "clear" ? "destructive" : "default"} onClick={() => void submitDialog()} disabled={busy}>
-              {dialog?.mode === "reply" ? "Reply" : dialog?.mode === "clear" ? "Clear queue" : "Mark processed"}
+            <Button variant="outline" onClick={() => setDialog(null)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button
+              variant={dialog?.mode === "clear" ? "destructive" : "default"}
+              onClick={() => void submitDialog()}
+              disabled={busy}
+            >
+              {dialog?.mode === "reply"
+                ? "Reply"
+                : dialog?.mode === "clear"
+                  ? "Clear queue"
+                  : "Mark processed"}
             </Button>
           </DialogFooter>
         </DialogContent>

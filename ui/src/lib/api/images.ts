@@ -117,7 +117,8 @@ export interface ImageArchiveUpload {
   digest: string;
 }
 
-const imageDigestQuery = (digest?: string) => digest ? `?expected_digest=${encodeURIComponent(digest)}` : "";
+const imageDigestQuery = (digest?: string) =>
+  digest ? `?expected_digest=${encodeURIComponent(digest)}` : "";
 const imagePath = (ref: string) => `/api/images/${encodeURIComponent(ref)}`;
 // Encode each path segment but keep the slashes: the read route is a
 // {path...} wildcard, so nested paths must arrive slash-separated.
@@ -139,11 +140,16 @@ export function imagesApi(t: Transport) {
     imagePromptGet: (ref: string, expectedDigest?: string) =>
       t.get<{ prompt: string }>(`${imagePath(ref)}/prompt${imageDigestQuery(expectedDigest)}`),
     imageFilesList: (ref: string, expectedDigest?: string) =>
-      t.get<{ files: ImageFileEntry[] | null; count: number }>(`${imagePath(ref)}/files${imageDigestQuery(expectedDigest)}`),
+      t.get<{ files: ImageFileEntry[] | null; count: number }>(
+        `${imagePath(ref)}/files${imageDigestQuery(expectedDigest)}`,
+      ),
     imageFileRead: (ref: string, path: string, expectedDigest?: string) =>
-      t.get<{ path: string; content: string }>(`${imagePath(ref)}/files/${encImagePath(path)}${imageDigestQuery(expectedDigest)}`),
+      t.get<{ path: string; content: string }>(
+        `${imagePath(ref)}/files/${encImagePath(path)}${imageDigestQuery(expectedDigest)}`,
+      ),
     removeImage: (ref: string) => t.delete<{ removed: string }>(imagePath(ref)),
-    downloadImageArchive: async (ref: string) => (await t.raw("GET", `${imagePath(ref)}/export`)).blob(),
+    downloadImageArchive: async (ref: string) =>
+      (await t.raw("GET", `${imagePath(ref)}/export`)).blob(),
     uploadImageArchive: async (archive: Blob) => {
       const response = await t.raw("POST", "/api/image-imports", archive);
       return ((await response.json()) as { result: ImageArchiveUpload }).result;

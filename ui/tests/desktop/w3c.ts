@@ -80,20 +80,15 @@ export class W3CClient {
 
   async elementClick(element: W3CElement): Promise<void> {
     const id = element["element-6066-11e4-a52e-4f735466cecf"];
-    await this.sessionRequest(
-      "POST",
-      `/element/${encodeURIComponent(id)}/click`,
-      {},
-    );
+    await this.sessionRequest("POST", `/element/${encodeURIComponent(id)}/click`, {});
   }
 
   async elementSendKeys(element: W3CElement, value: string): Promise<void> {
     const id = element["element-6066-11e4-a52e-4f735466cecf"];
-    await this.sessionRequest(
-      "POST",
-      `/element/${encodeURIComponent(id)}/value`,
-      { text: value, value: [...value] },
-    );
+    await this.sessionRequest("POST", `/element/${encodeURIComponent(id)}/value`, {
+      text: value,
+      value: [...value],
+    });
   }
 
   async elementProperty(element: W3CElement, name: string): Promise<unknown> {
@@ -124,11 +119,7 @@ export class W3CClient {
     body?: unknown,
   ): Promise<W3CResponse<T>> {
     if (!this.sessionId) throw new Error("WebDriver session has not been created");
-    return this.request<T>(
-      method,
-      `/session/${encodeURIComponent(this.sessionId)}${path}`,
-      body,
-    );
+    return this.request<T>(method, `/session/${encodeURIComponent(this.sessionId)}${path}`, body);
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<W3CResponse<T>> {

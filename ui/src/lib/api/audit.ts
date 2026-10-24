@@ -2,7 +2,14 @@ import type { Transport } from "./client";
 
 // One audit record as GET /api/agents/<name>/logs returns it. `data` is a JSON
 // string; lib/audit.ts parses and presents it.
-export interface AuditEvent { seq: number; kind: string; source: string; data: string; at: string; iteration_id: string }
+export interface AuditEvent {
+  seq: number;
+  kind: string;
+  source: string;
+  data: string;
+  at: string;
+  iteration_id: string;
+}
 
 // ---- Iteration transcript (AI proxy calls) ----
 export interface Block {
@@ -13,9 +20,20 @@ export interface Block {
   tool_use_id?: string;
   is_error?: boolean;
 }
-export interface Message { role: string; blocks: Block[] }
-export interface CallResponse { blocks: Block[]; stop_reason?: string }
-export interface Usage { input: number; output: number; cache_read: number; cache_write: number }
+export interface Message {
+  role: string;
+  blocks: Block[];
+}
+export interface CallResponse {
+  blocks: Block[];
+  stop_reason?: string;
+}
+export interface Usage {
+  input: number;
+  output: number;
+  cache_read: number;
+  cache_write: number;
+}
 export interface Call {
   seq: number;
   ts: string;
@@ -32,7 +50,12 @@ export interface Call {
   truncated?: boolean;
   parse_error?: string;
 }
-export interface RawCall { seq: number; ts: string; request: string; response: string }
+export interface RawCall {
+  seq: number;
+  ts: string;
+  request: string;
+  response: string;
+}
 
 function exportPath(name: string, iteration?: string, format?: "markdown"): string {
   const query = new URLSearchParams();
@@ -47,18 +70,34 @@ export function auditApi(t: Transport) {
     // `query` is the logs route's own query string (iteration, since, before,
     // limit, kind filters) without the leading "?".
     listAuditEvents: (name: string, query = "", signal?: AbortSignal) =>
-      t.agentGet<{ events: AuditEvent[]; capped?: boolean }>(name, `logs${query ? `?${query}` : ""}`, signal),
-    listAuditEventTypes: (name: string) => t.agentGet<{ types: string[] }>(name, "logs?distinct=types"),
+      t.agentGet<{ events: AuditEvent[]; capped?: boolean }>(
+        name,
+        `logs${query ? `?${query}` : ""}`,
+        signal,
+      ),
+    listAuditEventTypes: (name: string) =>
+      t.agentGet<{ types: string[] }>(name, "logs?distinct=types"),
     fetchAuditMarkdown: async (name: string, iteration?: string): Promise<string> =>
       (await t.raw("GET", exportPath(name, iteration, "markdown"))).text(),
     fetchAuditArchive: async (name: string, iteration?: string): Promise<Blob> =>
       (await t.raw("GET", exportPath(name, iteration))).blob(),
-    fetchTranscript: async (name: string, iteration: string, signal?: AbortSignal): Promise<Call[]> => {
-      const r = await t.agentGet<{ calls: Call[] }>(name, `iterations/${encodeURIComponent(iteration)}/transcript`, signal);
+    fetchTranscript: async (
+      name: string,
+      iteration: string,
+      signal?: AbortSignal,
+    ): Promise<Call[]> => {
+      const r = await t.agentGet<{ calls: Call[] }>(
+        name,
+        `iterations/${encodeURIComponent(iteration)}/transcript`,
+        signal,
+      );
       return r.calls ?? [];
     },
     fetchTranscriptRaw: async (name: string, iteration: string): Promise<RawCall[]> => {
-      const r = await t.agentGet<{ calls: RawCall[] }>(name, `iterations/${encodeURIComponent(iteration)}/transcript?raw=1`);
+      const r = await t.agentGet<{ calls: RawCall[] }>(
+        name,
+        `iterations/${encodeURIComponent(iteration)}/transcript?raw=1`,
+      );
       return r.calls ?? [];
     },
   };

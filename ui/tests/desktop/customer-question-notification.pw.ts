@@ -4,7 +4,10 @@ import { join } from "node:path";
 
 import { expect, test, waitForMainWindow } from "./fixture";
 
-test("opens an agent customer question from the production Desktop notification flow", async ({ desktop, desktopWorker }) => {
+test("opens an agent customer question from the production Desktop notification flow", async ({
+  desktop,
+  desktopWorker,
+}) => {
   desktopWorker.registerAgentForCleanup("question-requester");
   await waitForMainWindow(desktop);
 
@@ -42,9 +45,11 @@ test("opens an agent customer question from the production Desktop notification 
       .catch((error) => { window.__customerQuestionSetup = "error: " + String(error); });
     return true;
   `);
-  await expect.poll(() => desktop.execute<string>("return window.__customerQuestionSetup || '';"), {
-    timeout: 60_000,
-  }).toBe("ready");
+  await expect
+    .poll(() => desktop.execute<string>("return window.__customerQuestionSetup || '';"), {
+      timeout: 60_000,
+    })
+    .toBe("ready");
 
   const setup = await desktop.execute<{ customer: string; taskKey: string }>(`
     return {
@@ -53,21 +58,34 @@ test("opens an agent customer question from the production Desktop notification 
     };
   `);
   const socket = join(desktopWorker.runtimeDir, "question-requester.sock");
-  await expect.poll(async () => {
-    try { await access(socket); return true; } catch { return false; }
-  }, { timeout: 30_000 }).toBe(true);
+  await expect
+    .poll(
+      async () => {
+        try {
+          await access(socket);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   const tasks = join(desktopWorker.baseDir, "agents", "question-requester", "bin", "tasks");
-  const commented = spawnSync(tasks, [
-    "--json", "comment", setup.taskKey,
-    `Need a decision from @${setup.customer}`,
-  ], {
-    env: { ...process.env, TARIBOY_TOOLS_SOCKET: socket },
-    encoding: "utf8",
-    timeout: 30_000,
-  });
+  const commented = spawnSync(
+    tasks,
+    ["--json", "comment", setup.taskKey, `Need a decision from @${setup.customer}`],
+    {
+      env: { ...process.env, TARIBOY_TOOLS_SOCKET: socket },
+      encoding: "utf8",
+      timeout: 30_000,
+    },
+  );
   expect(commented.status, commented.stderr || commented.stdout).toBe(0);
 
-  await expect.poll(() => desktop.execute<Record<string, string> | null>(`
+  await expect
+    .poll(() =>
+      desktop.execute<Record<string, string> | null>(`
     if (window.__customerQuestionNotification) return window.__customerQuestionNotification;
     if (window.__customerQuestionNotificationPending) return null;
     window.__customerQuestionNotificationPending = true;
@@ -79,7 +97,9 @@ test("opens an agent customer question from the production Desktop notification 
       })
       .finally(() => { window.__customerQuestionNotificationPending = false; });
     return null;
-  `)).not.toBeNull();
+  `),
+    )
+    .not.toBeNull();
   const notification = await desktop.execute<{ id: string; task_key: string }>(
     "return window.__customerQuestionNotification;",
   );
@@ -96,19 +116,27 @@ test("opens an agent customer question from the production Desktop notification 
       .catch((error) => { window.__customerQuestionActivation = "error: " + String(error); });
     return true;
   `);
-  await expect.poll(() => desktop.execute<string>(
-    "return window.__customerQuestionActivation || '';",
-  )).toBe("activated");
+  await expect
+    .poll(() => desktop.execute<string>("return window.__customerQuestionActivation || '';"))
+    .toBe("activated");
 
-  await expect.poll(() => desktop.execute<string>("return window.location.hash;"), {
-    timeout: 30_000,
-  }).toBe(`#/servers/local/tasks?task=${encodeURIComponent(setup.taskKey)}`);
-  await expect.poll(() => desktop.execute<string>(`
+  await expect
+    .poll(() => desktop.execute<string>("return window.location.hash;"), {
+      timeout: 30_000,
+    })
+    .toBe(`#/servers/local/tasks?task=${encodeURIComponent(setup.taskKey)}`);
+  await expect
+    .poll(() =>
+      desktop.execute<string>(`
     const label = [...document.querySelectorAll('.task-detail-panel label')]
       .find((candidate) => candidate.textContent.trim().startsWith("Title"));
     return label?.querySelector("input")?.value || "";
-  `)).toBe("Choose the production behavior");
-  expect(await desktop.execute<string>(
-    "return document.querySelector('.task-detail-panel')?.innerText || '';",
-  )).toContain(setup.taskKey);
+  `),
+    )
+    .toBe("Choose the production behavior");
+  expect(
+    await desktop.execute<string>(
+      "return document.querySelector('.task-detail-panel')?.innerText || '';",
+    ),
+  ).toContain(setup.taskKey);
 });

@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  listDaemons, getActiveId, peekActiveId, setActiveId, resolveDaemon,
-  unresolvedDaemon, type Daemon, type DaemonMeta,
+  listDaemons,
+  getActiveId,
+  peekActiveId,
+  setActiveId,
+  resolveDaemon,
+  unresolvedDaemon,
+  type Daemon,
+  type DaemonMeta,
 } from "@/lib/daemons";
 import { getActiveDaemon, setActiveDaemon } from "@/lib/api";
 import { ApiProvider } from "./ApiProvider";
@@ -68,28 +74,34 @@ export function DaemonProvider({ children }: { children: ReactNode }) {
     }
   }, [applyActive]);
 
-  const select = useCallback(async (id: string) => {
-    const revision = ++selectionRevision.current;
-    const operation = selectionQueue.current.then(async (): Promise<boolean> => {
-      try {
-        if (revision !== selectionRevision.current) return false;
-        const active = id ? await resolveDaemon(id) : null;
-        if (revision !== selectionRevision.current) return false;
-        if (id && !active) throw new Error(`host ${id} was not found`);
-        await setActiveId(id);
-        if (revision !== selectionRevision.current) return false;
-        setActiveIdState(id);
-        applyActive(active);
-        setRegistryError("");
-        return true;
-      } catch (error) {
-        if (revision === selectionRevision.current) setRegistryError(String(error));
-        return false;
-      }
-    });
-    selectionQueue.current = operation.then(() => undefined, () => undefined);
-    return operation;
-  }, [applyActive]);
+  const select = useCallback(
+    async (id: string) => {
+      const revision = ++selectionRevision.current;
+      const operation = selectionQueue.current.then(async (): Promise<boolean> => {
+        try {
+          if (revision !== selectionRevision.current) return false;
+          const active = id ? await resolveDaemon(id) : null;
+          if (revision !== selectionRevision.current) return false;
+          if (id && !active) throw new Error(`host ${id} was not found`);
+          await setActiveId(id);
+          if (revision !== selectionRevision.current) return false;
+          setActiveIdState(id);
+          applyActive(active);
+          setRegistryError("");
+          return true;
+        } catch (error) {
+          if (revision === selectionRevision.current) setRegistryError(String(error));
+          return false;
+        }
+      });
+      selectionQueue.current = operation.then(
+        () => undefined,
+        () => undefined,
+      );
+      return operation;
+    },
+    [applyActive],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -107,10 +119,7 @@ export function DaemonProvider({ children }: { children: ReactNode }) {
           // See refresh(): known hosts without a current endpoint are a
           // route-local unavailable state, not a registry failure.
         } catch (cause) {
-          active = unresolvedDaemon(
-            selected,
-            next.find((host) => host.id === selected)?.label,
-          );
+          active = unresolvedDaemon(selected, next.find((host) => host.id === selected)?.label);
           if (!next.some((host) => host.id === selected)) error = String(cause);
         }
         if (cancelled || revision !== selectionRevision.current) return;
@@ -146,7 +155,10 @@ export function DaemonProvider({ children }: { children: ReactNode }) {
   return (
     <DaemonContext.Provider value={{ daemons, appVersion, activeId, select, refresh }}>
       {registryError && (
-        <div role="alert" className="border-b border-destructive/40 bg-destructive/10 px-3 py-2 text-sm">
+        <div
+          role="alert"
+          className="border-b border-destructive/40 bg-destructive/10 px-3 py-2 text-sm"
+        >
           Host registry: {registryError}
         </div>
       )}

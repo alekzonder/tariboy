@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  addDaemon, listDaemons, removeDaemon, setDaemonToken, getDaemonToken,
-  getActiveId, setActiveId, resolveDaemon, resolveActive, updateDaemon,
+  addDaemon,
+  listDaemons,
+  removeDaemon,
+  setDaemonToken,
+  getDaemonToken,
+  getActiveId,
+  setActiveId,
+  resolveDaemon,
+  resolveActive,
+  updateDaemon,
 } from "./daemons";
 
 beforeEach(() => {

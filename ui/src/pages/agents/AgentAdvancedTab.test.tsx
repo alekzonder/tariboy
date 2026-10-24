@@ -8,9 +8,14 @@ import { AgentNameContext } from "@/lib/agent";
 vi.mock("@/pages/AgentPrompt", () => ({ default: () => <div data-testid="prompt-view" /> }));
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: {} }),
-  } as unknown as Response));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true, result: {} }),
+    } as unknown as Response),
+  );
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -38,17 +43,23 @@ it("opens on Prompt and no longer lists Channels or Messages", async () => {
   expect(await screen.findByTestId("prompt-view")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Channels" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Messages" })).not.toBeInTheDocument();
-  expect(screen.getByTestId("tab-page")).toContainElement(screen.getByRole("button", { name: "Prompt" }));
+  expect(screen.getByTestId("tab-page")).toContainElement(
+    screen.getByRole("button", { name: "Prompt" }),
+  );
 });
 
 it("sends an old Channels link to Chat → Channels", async () => {
   renderAdvanced("/agents/local/worker/advanced?view=channels");
 
-  expect(await screen.findByTestId("location")).toHaveTextContent("/agents/local/worker/chat?view=channels");
+  expect(await screen.findByTestId("location")).toHaveTextContent(
+    "/agents/local/worker/chat?view=channels",
+  );
 });
 
 it("sends an old Messages link to Chat → Queue", async () => {
   renderAdvanced("/agents/local/worker/advanced?view=messages");
 
-  expect(await screen.findByTestId("location")).toHaveTextContent("/agents/local/worker/chat?view=queue");
+  expect(await screen.findByTestId("location")).toHaveTextContent(
+    "/agents/local/worker/chat?view=queue",
+  );
 });

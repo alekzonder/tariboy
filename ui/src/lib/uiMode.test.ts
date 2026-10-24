@@ -21,8 +21,12 @@ describe("uiMode", () => {
   });
 
   it("falls back to simple when storage is unavailable", () => {
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("denied"); });
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("denied"); });
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("denied");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("denied");
+    });
     expect(() => writeUiMode("expert")).not.toThrow();
     expect(readUiMode()).toBe("simple");
   });

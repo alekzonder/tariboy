@@ -13,7 +13,11 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 
 // One draft agent row in the wizard. `id` is a stable key so per-row result
@@ -43,8 +47,19 @@ type RowStatus =
 
 function emptyDraft(id: number): AgentDraft {
   return {
-    id, image: "", name: "", override: false, cwd: "",
-    model: "", effort: "", harness: "", timeout: "", interactive: false, envRows: [], plugins: [], pluginDraft: "",
+    id,
+    image: "",
+    name: "",
+    override: false,
+    cwd: "",
+    model: "",
+    effort: "",
+    harness: "",
+    timeout: "",
+    interactive: false,
+    envRows: [],
+    plugins: [],
+    pluginDraft: "",
   };
 }
 
@@ -74,7 +89,10 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
   const [rowStatus, setRowStatus] = useState<Record<number, RowStatus>>({});
 
   useEffect(() => {
-    void api.images.listImages().then((r) => setImages(r.images ?? [])).catch(() => setImages([]));
+    void api.images
+      .listImages()
+      .then((r) => setImages(r.images ?? []))
+      .catch(() => setImages([]));
   }, [api]);
 
   const patch = (id: number, up: Partial<AgentDraft>) =>
@@ -126,7 +144,10 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
     setBusy(true);
     if (createGroup) {
       try {
-        await api.request("POST", "/api/groups", { name: name.trim(), lead: leaderName || undefined });
+        await api.request("POST", "/api/groups", {
+          name: name.trim(),
+          lead: leaderName || undefined,
+        });
         setGroupCreated(true);
         setGroupErr(null);
       } catch (e) {
@@ -169,14 +190,21 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
 
   return (
     <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-base">New group (wizard)</CardTitle></CardHeader>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">New group (wizard)</CardTitle>
+      </CardHeader>
       <CardContent className="space-y-4">
         {/* Section 1 — group */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1">
             <Label htmlFor="grp-name">group name *</Label>
-            <Input id="grp-name" value={name} onChange={(e) => setName(e.target.value)}
-              placeholder="group name" className="h-8" />
+            <Input
+              id="grp-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="group name"
+              className="h-8"
+            />
           </div>
           <div className="space-y-1">
             <Label htmlFor="grp-cwd">base cwd</Label>
@@ -190,7 +218,8 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          lead: <span className="font-mono">{leaderName || "—"}</span> (the agent marked leader below)
+          lead: <span className="font-mono">{leaderName || "—"}</span> (the agent marked leader
+          below)
         </p>
         {leaderName === "" && (
           <p className="text-xs text-destructive">
@@ -214,17 +243,27 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
                         checked={leaderIdx === i}
                         onChange={() => setLeaderIdx(i)}
                       />
-                      <span className="text-muted-foreground">{leaderIdx === i ? "lead" : "worker"}</span>
+                      <span className="text-muted-foreground">
+                        {leaderIdx === i ? "lead" : "worker"}
+                      </span>
                     </label>
                     {st?.kind === "creating" && <Badge variant="secondary">creating…</Badge>}
                     {st?.kind === "created" && <Badge>created {st.name}</Badge>}
                     {st?.kind === "failed" && (
-                      <Badge variant="destructive" title={st.reason}>failed: {st.reason}</Badge>
+                      <Badge variant="destructive" title={st.reason}>
+                        failed: {st.reason}
+                      </Badge>
                     )}
                   </div>
                   {agents.length > 1 && (
-                    <Button variant="ghost" size="sm" type="button"
-                      onClick={() => removeAgent(a.id, i)}>Remove agent</Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      type="button"
+                      onClick={() => removeAgent(a.id, i)}
+                    >
+                      Remove agent
+                    </Button>
                   )}
                 </div>
 
@@ -241,15 +280,22 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor={`name-${a.id}`}>name</Label>
-                    <Input id={`name-${a.id}`} value={a.name}
+                    <Input
+                      id={`name-${a.id}`}
+                      value={a.name}
                       onChange={(e) => patch(a.id, { name: e.target.value })}
-                      placeholder="empty = generated" className="h-8" />
+                      placeholder="empty = generated"
+                      className="h-8"
+                    />
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Switch id={`override-${a.id}`} checked={a.override}
-                    onCheckedChange={(v) => patch(a.id, { override: v })} />
+                  <Switch
+                    id={`override-${a.id}`}
+                    checked={a.override}
+                    onCheckedChange={(v) => patch(a.id, { override: v })}
+                  />
                   <Label htmlFor={`override-${a.id}`}>override cwd</Label>
                 </div>
                 {a.override && (
@@ -263,42 +309,66 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
 
                 <Collapsible>
                   <CollapsibleTrigger asChild>
-                    <Button variant="outline" size="sm" type="button">Advanced ▾</Button>
+                    <Button variant="outline" size="sm" type="button">
+                      Advanced ▾
+                    </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="mt-3 space-y-4">
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-1">
                         <Label htmlFor={`harness-${a.id}`}>harness</Label>
-                        <Input id={`harness-${a.id}`} value={a.harness}
+                        <Input
+                          id={`harness-${a.id}`}
+                          value={a.harness}
                           onChange={(e) => patch(a.id, { harness: e.target.value })}
-                          placeholder="image default" className="h-8" />
+                          placeholder="image default"
+                          className="h-8"
+                        />
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor={`model-${a.id}`}>model</Label>
-                        <Input id={`model-${a.id}`} value={a.model}
+                        <Input
+                          id={`model-${a.id}`}
+                          value={a.model}
                           onChange={(e) => patch(a.id, { model: e.target.value })}
-                          placeholder="harness default" className="h-8" />
+                          placeholder="harness default"
+                          className="h-8"
+                        />
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor={`timeout-${a.id}`}>timeout</Label>
-                        <Input id={`timeout-${a.id}`} aria-label={`timeout ${i}`} value={a.timeout}
+                        <Input
+                          id={`timeout-${a.id}`}
+                          aria-label={`timeout ${i}`}
+                          value={a.timeout}
                           onChange={(e) => patch(a.id, { timeout: e.target.value })}
-                          placeholder="for example 60m or 2h" className="h-8" />
+                          placeholder="for example 60m or 2h"
+                          className="h-8"
+                        />
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor={`effort-${a.id}`}>effort</Label>
                         <Select value={a.effort} onValueChange={(v) => patch(a.id, { effort: v })}>
-                          <SelectTrigger id={`effort-${a.id}`} className="h-8"><SelectValue placeholder="default" /></SelectTrigger>
+                          <SelectTrigger id={`effort-${a.id}`} className="h-8">
+                            <SelectValue placeholder="default" />
+                          </SelectTrigger>
                           <SelectContent>
-                            {EFFORT_PRESETS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                            {EFFORT_PRESETS.map((p) => (
+                              <SelectItem key={p} value={p}>
+                                {p}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <Switch id={`interactive-${a.id}`} checked={a.interactive}
-                        onCheckedChange={(v) => patch(a.id, { interactive: v })} />
+                      <Switch
+                        id={`interactive-${a.id}`}
+                        checked={a.interactive}
+                        onCheckedChange={(v) => patch(a.id, { interactive: v })}
+                      />
                       <Label htmlFor={`interactive-${a.id}`}>interactive (tmux TUI)</Label>
                     </div>
 
@@ -309,64 +379,118 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
                           <Input
                             aria-label={`env key ${i}.${j}`}
                             value={row.key}
-                            onChange={(e) => patch(a.id, { envRows: a.envRows.map((r, k) => k === j ? { ...r, key: e.target.value } : r) })}
-                            placeholder="KEY" className="h-8 w-40" />
+                            onChange={(e) =>
+                              patch(a.id, {
+                                envRows: a.envRows.map((r, k) =>
+                                  k === j ? { ...r, key: e.target.value } : r,
+                                ),
+                              })
+                            }
+                            placeholder="KEY"
+                            className="h-8 w-40"
+                          />
                           <span className="text-muted-foreground">=</span>
                           <Input
                             aria-label={`env value ${i}.${j}`}
                             value={row.value}
-                            onChange={(e) => patch(a.id, { envRows: a.envRows.map((r, k) => k === j ? { ...r, value: e.target.value } : r) })}
-                            placeholder="value" className="h-8 w-48" />
-                          <Button variant="ghost" size="sm" type="button"
-                            onClick={() => patch(a.id, { envRows: a.envRows.filter((_, k) => k !== j) })}>Remove</Button>
+                            onChange={(e) =>
+                              patch(a.id, {
+                                envRows: a.envRows.map((r, k) =>
+                                  k === j ? { ...r, value: e.target.value } : r,
+                                ),
+                              })
+                            }
+                            placeholder="value"
+                            className="h-8 w-48"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            type="button"
+                            onClick={() =>
+                              patch(a.id, { envRows: a.envRows.filter((_, k) => k !== j) })
+                            }
+                          >
+                            Remove
+                          </Button>
                         </div>
                       ))}
-                      <Button variant="outline" size="sm" type="button"
-                        onClick={() => patch(a.id, { envRows: [...a.envRows, { key: "", value: "" }] })}>+ Add env</Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        onClick={() =>
+                          patch(a.id, { envRows: [...a.envRows, { key: "", value: "" }] })
+                        }
+                      >
+                        + Add env
+                      </Button>
                     </div>
 
-                    {allowsPluginOverrides(a) && <div className="space-y-2">
-                      <Label htmlFor={`plugin-${a.id}`}>plugins</Label>
-                      <div className="flex flex-wrap items-center gap-1">
-                        {a.plugins.map((p) => (
-                          <Badge key={p} variant="secondary" className="gap-1">
-                            {p}
-                            <button type="button" aria-label={`remove ${p}`}
-                              onClick={() => patch(a.id, { plugins: a.plugins.filter((x) => x !== p) })}>×</button>
-                          </Badge>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          id={`plugin-${a.id}`}
-                          value={a.pluginDraft}
-                          onChange={(e) => patch(a.id, { pluginDraft: e.target.value })}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
+                    {allowsPluginOverrides(a) && (
+                      <div className="space-y-2">
+                        <Label htmlFor={`plugin-${a.id}`}>plugins</Label>
+                        <div className="flex flex-wrap items-center gap-1">
+                          {a.plugins.map((p) => (
+                            <Badge key={p} variant="secondary" className="gap-1">
+                              {p}
+                              <button
+                                type="button"
+                                aria-label={`remove ${p}`}
+                                onClick={() =>
+                                  patch(a.id, { plugins: a.plugins.filter((x) => x !== p) })
+                                }
+                              >
+                                ×
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            id={`plugin-${a.id}`}
+                            value={a.pluginDraft}
+                            onChange={(e) => patch(a.id, { pluginDraft: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const p = a.pluginDraft.trim();
+                                patch(a.id, {
+                                  plugins:
+                                    p && !a.plugins.includes(p) ? [...a.plugins, p] : a.plugins,
+                                  pluginDraft: "",
+                                });
+                              }
+                            }}
+                            placeholder="plugin name"
+                            className="h-8 w-48"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={() => {
                               const p = a.pluginDraft.trim();
                               patch(a.id, {
-                                plugins: p && !a.plugins.includes(p) ? [...a.plugins, p] : a.plugins,
+                                plugins:
+                                  p && !a.plugins.includes(p) ? [...a.plugins, p] : a.plugins,
                                 pluginDraft: "",
                               });
-                            }
-                          }}
-                          placeholder="plugin name" className="h-8 w-48" />
-                        <Button variant="outline" size="sm" type="button" onClick={() => {
-                          const p = a.pluginDraft.trim();
-                          patch(a.id, {
-                            plugins: p && !a.plugins.includes(p) ? [...a.plugins, p] : a.plugins,
-                            pluginDraft: "",
-                          });
-                        }}>Add plugin</Button>
+                            }}
+                          >
+                            Add plugin
+                          </Button>
+                        </div>
                       </div>
-                    </div>}
+                    )}
                   </CollapsibleContent>
                 </Collapsible>
               </div>
             );
           })}
-          <Button variant="outline" size="sm" type="button" onClick={addAgent}>+ Add agent</Button>
+          <Button variant="outline" size="sm" type="button" onClick={addAgent}>
+            + Add agent
+          </Button>
         </div>
 
         {formErr && <p className="text-sm text-destructive">{formErr}</p>}
@@ -377,12 +501,15 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
             {busy ? "Creating…" : "Create group"}
           </Button>
           {anyFailed && !busy && (
-            <Button variant="outline" onClick={retryFailed}>Retry failed</Button>
+            <Button variant="outline" onClick={retryFailed}>
+              Retry failed
+            </Button>
           )}
         </div>
         {groupCreated && (
           <p className="text-xs text-muted-foreground">
-            group <span className="font-mono">{name.trim()}</span> created; agents joined via their group field.
+            group <span className="font-mono">{name.trim()}</span> created; agents joined via their
+            group field.
           </p>
         )}
       </CardContent>

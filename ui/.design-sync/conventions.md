@@ -19,7 +19,7 @@ exceptions, all exported from the bundle:
   same context instances the bundled pages read.
   Router-linked components need a router in scope — `MemoryRouter`, `Routes` and
   `Route` are exported for isolated use, and `AgentWorkspace` / `ImageLayout` derive
-  their identity from `useParams()`, so they need a *matched* route, not just a
+  their identity from `useParams()`, so they need a _matched_ route, not just a
   router. `toast` is exported for driving `Toaster`.
 
 ### Styling idiom: Tailwind v4 utilities over shadcn tokens
@@ -28,14 +28,14 @@ Style with utility classes, exactly as the component sources do. Colors are
 **always** semantic tokens, never raw hex or Tailwind color scales — this is what
 makes light and dark both work:
 
-| role | utilities |
-|---|---|
-| surfaces | `bg-background` `bg-card` `bg-popover` `bg-muted` `bg-accent` `bg-secondary` |
-| text | `text-foreground` `text-muted-foreground` `text-card-foreground` `text-primary-foreground` |
-| emphasis | `bg-primary` + `text-primary-foreground` |
-| danger | `text-destructive`, `bg-destructive/10` |
-| lines | `border` `border-border` `border-t` `border-b` `border-input` |
-| focus | `ring-ring/50` `focus-visible:border-ring` |
+| role     | utilities                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------ |
+| surfaces | `bg-background` `bg-card` `bg-popover` `bg-muted` `bg-accent` `bg-secondary`               |
+| text     | `text-foreground` `text-muted-foreground` `text-card-foreground` `text-primary-foreground` |
+| emphasis | `bg-primary` + `text-primary-foreground`                                                   |
+| danger   | `text-destructive`, `bg-destructive/10`                                                    |
+| lines    | `border` `border-border` `border-t` `border-b` `border-input`                              |
+| focus    | `ring-ring/50` `focus-visible:border-ring`                                                 |
 
 The same names exist as CSS custom properties for inline styles and for anything
 the utilities don't cover: `--background --foreground --card --popover --primary
@@ -74,7 +74,7 @@ The console surfaces are denser than the defaults: rows 30px, buttons 24/26/28px
 pills 17/19/20px, radii 5/6/7/8/9/12/14px. Identifiers, durations and timestamps
 are `font-mono` + `tabular-nums` so they line up down a column.
 
-**One caveat that matters.** This bundle ships Tailwind's *compiled* output, so
+**One caveat that matters.** This bundle ships Tailwind's _compiled_ output, so
 only utilities the app itself already uses are present (about 960 classes).
 Common layout, spacing, color, type and border utilities are all there; anything
 the app itself never used is not. If a utility appears to do nothing, express it
@@ -95,14 +95,20 @@ and `<Name>.prompt.md` the usage reference with examples.
   <CardHeader>
     <CardTitle>worker:v2</CardTitle>
     <CardDescription>Built 2026-09-11 · sha256:9ac71e3f52</CardDescription>
-    <CardAction><Badge variant="secondary">Pending</Badge></CardAction>
+    <CardAction>
+      <Badge variant="secondary">Pending</Badge>
+    </CardAction>
   </CardHeader>
   <CardContent>
     <div className="flex items-center justify-between gap-2 text-sm">
       <span className="font-mono text-muted-foreground">builder</span>
       <div className="flex gap-2">
-        <Button size="sm" variant="outline">Export</Button>
-        <Button size="sm" variant="destructive">Remove</Button>
+        <Button size="sm" variant="outline">
+          Export
+        </Button>
+        <Button size="sm" variant="destructive">
+          Remove
+        </Button>
       </div>
     </div>
   </CardContent>

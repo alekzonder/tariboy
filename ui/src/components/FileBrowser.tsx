@@ -8,7 +8,9 @@ import { FileBrowserDialogs } from "./file-browser/FileBrowserDialogs";
 import { LazyBoundary } from "./LazyBoundary";
 
 // CodeMirror, its languages and the highlighted preview load with the viewer.
-const FileViewer = lazy(() => import("./file-browser/FileViewer").then((m) => ({ default: m.FileViewer })));
+const FileViewer = lazy(() =>
+  import("./file-browser/FileViewer").then((m) => ({ default: m.FileViewer })),
+);
 
 // ---- Injected data source ---------------------------------------------------
 // FileBrowser is source-agnostic: the caller supplies the read (and optionally
@@ -52,7 +54,9 @@ function FileBrowserInner(props: FileBrowserProps) {
       <aside className="flex w-64 shrink-0 flex-col overflow-hidden border-r">
         <FileToolbar canCreate={canCreate} onNew={actions.openNew} />
         <FileTree
-          tree={tree} selected={selected} onSelect={setSelected}
+          tree={tree}
+          selected={selected}
+          onSelect={setSelected}
           onRename={canRename ? actions.onRename : undefined}
           onDelete={canDelete ? actions.onDelete : undefined}
         />

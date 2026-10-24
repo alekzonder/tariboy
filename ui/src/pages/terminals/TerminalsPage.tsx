@@ -1,4 +1,12 @@
-import { lazy, useCallback, useContext, useMemo, useRef, useState, type ComponentProps } from "react";
+import {
+  lazy,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+} from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { usePolling } from "@/hooks/usePolling";
@@ -35,7 +43,9 @@ const ImageTags = lazy(() => import("@/pages/images/ImageTags"));
 const StoresPage = lazy(() => import("@/pages/StoresPage"));
 const WorkflowImagesPage = lazy(() => import("@/pages/workflows/WorkflowImagesPage"));
 const WorkflowImageDetail = lazy(() => import("@/pages/workflows/WorkflowImageDetail"));
-const ImageLayout = lazy(() => import("@/components/ImageLayout").then((m) => ({ default: m.ImageLayout })));
+const ImageLayout = lazy(() =>
+  import("@/components/ImageLayout").then((m) => ({ default: m.ImageLayout })),
+);
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
 
 type ServerDialogState = { mode: "add" } | { mode: "edit"; server: DaemonMeta };
@@ -44,10 +54,27 @@ type CreateDialogState = {
   imageRef?: string;
   cloneSource?: CloneAgentSource;
 };
-export type ServerView = "tasks" | "activity" | "images" | "image-tags" | "image-detail" | "workflows" | "workflow-detail" | "stores" | "store-detail" | "settings";
+export type ServerView =
+  | "tasks"
+  | "activity"
+  | "images"
+  | "image-tags"
+  | "image-detail"
+  | "workflows"
+  | "workflow-detail"
+  | "stores"
+  | "store-detail"
+  | "settings";
 
 export default function TerminalsPage({ serverView }: { serverView?: ServerView }) {
-  const { hostId: hostParam, agent: agentName, tab: agentTab, team: teamName, name: storeName, tag: routeTag } = useParams();
+  const {
+    hostId: hostParam,
+    agent: agentName,
+    tab: agentTab,
+    team: teamName,
+    name: storeName,
+    tag: routeTag,
+  } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -90,7 +117,10 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   const sidebar = useSharedSidebarState();
   const workspaces = useWorkspaces();
   const titlebarSlot = useContext(TitlebarSlotContext);
-  const [workspaceManager, setWorkspaceManager] = useState<{ id: string; focusNew: boolean } | null>(null);
+  const [workspaceManager, setWorkspaceManager] = useState<{
+    id: string;
+    focusNew: boolean;
+  } | null>(null);
   const [hostError, setHostError] = useState("");
   const [serverOrder, setServerOrder] = useState<string[]>(() => {
     try {
@@ -126,12 +156,9 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
       const metadata = metadataById.get(id);
       return {
         id,
-        label:
-          aggregate?.host.label
-          ?? metadata?.label
-          ?? (id === "" ? "This daemon (local)" : id),
+        label: aggregate?.host.label ?? metadata?.label ?? (id === "" ? "This daemon (local)" : id),
         revision: [
-          aggregate ? aggregate.error ?? "reachable" : "pending",
+          aggregate ? (aggregate.error ?? "reachable") : "pending",
           metadata?.state ?? "",
           metadata?.baseURL ?? "",
         ].join("\u0000"),
@@ -139,11 +166,19 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     });
   }, [daemons, hosts]);
 
-  const workspaceHosts = useMemo<WorkspaceHost[]>(() => createHosts.map((host) => {
-    const aggregate = hosts.find((entry) => entry.host.id === host.id);
-    const state = daemons.find((entry) => entry.id === host.id)?.state ?? "ready";
-    return { id: host.id, label: host.label, ready: Boolean(aggregate && !aggregate.error) && hostConnected(state) };
-  }), [createHosts, daemons, hosts]);
+  const workspaceHosts = useMemo<WorkspaceHost[]>(
+    () =>
+      createHosts.map((host) => {
+        const aggregate = hosts.find((entry) => entry.host.id === host.id);
+        const state = daemons.find((entry) => entry.id === host.id)?.state ?? "ready";
+        return {
+          id: host.id,
+          label: host.label,
+          ready: Boolean(aggregate && !aggregate.error) && hostConnected(state),
+        };
+      }),
+    [createHosts, daemons, hosts],
+  );
 
   // Re-read after any registry mutation: refresh() runs one immediate
   // fetchAllAgents() tick, which resolves every daemon straight from storage,
@@ -174,9 +209,12 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   // and the remaining hosts still go.
   const updateAllServers = async (ids: string[]) => {
     const labelOf = (id: string) => daemons.find((host) => host.id === id)?.label ?? id;
-    if (!window.confirm(
-      `Update ${ids.length} server(s) to ${appVersion}? ${ids.map(labelOf).join(", ")}`,
-    )) return;
+    if (
+      !window.confirm(
+        `Update ${ids.length} server(s) to ${appVersion}? ${ids.map(labelOf).join(", ")}`,
+      )
+    )
+      return;
     setHostError("");
     const failures: string[] = [];
     for (const id of ids) {
@@ -192,9 +230,12 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
 
   const removeServer = async (id: string) => {
     const server = (await listDaemons()).find((m) => m.id === id);
-    if (!window.confirm(
-      `Remove host ${server?.label ?? id} from this app? The remote daemon and data remain on the server.`,
-    )) return;
+    if (
+      !window.confirm(
+        `Remove host ${server?.label ?? id} from this app? The remote daemon and data remain on the server.`,
+      )
+    )
+      return;
     await removeDaemon(id);
     // Leave a route whose host no longer exists. targetFor() also fails closed,
     // but navigating away gives the user a useful screen instead of a dead pane.
@@ -211,60 +252,78 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     if (liveSelectedHost && !liveSelectedHost.error) return liveSelectedHost;
     return lastSuccessfulHostsById.get(hostId) ?? liveSelectedHost;
   }, [hostId, lastSuccessfulHostsById, liveSelectedHost]);
-  const sidebarHosts = useMemo(() => hosts.map((entry) => {
-    if (!entry.error) return entry;
-    const snapshot = lastSuccessfulHostsById.get(entry.host.id);
-    return snapshot ? { ...snapshot, error: entry.error } : entry;
-  }), [hosts, lastSuccessfulHostsById]);
+  const sidebarHosts = useMemo(
+    () =>
+      hosts.map((entry) => {
+        if (!entry.error) return entry;
+        const snapshot = lastSuccessfulHostsById.get(entry.host.id);
+        return snapshot ? { ...snapshot, error: entry.error } : entry;
+      }),
+    [hosts, lastSuccessfulHostsById],
+  );
   // Every host in server order; the sidebar shows the current workspace's.
   const rankedHosts = useMemo(() => {
     const rank = new Map(serverOrder.map((id, index) => [id, index]));
     return sidebarHosts
       .map((entry, index) => ({ entry, index, rank: rank.get(entry.host.id) }))
-      .sort((left, right) => (left.rank ?? serverOrder.length + left.index) - (right.rank ?? serverOrder.length + right.index))
+      .sort(
+        (left, right) =>
+          (left.rank ?? serverOrder.length + left.index) -
+          (right.rank ?? serverOrder.length + right.index),
+      )
       .map(({ entry }) => ({
         ...entry,
         sidebarOrder: sidebarOrderOverrides.get(entry.host.id) ?? entry.sidebarOrder,
       }));
   }, [serverOrder, sidebarHosts, sidebarOrderOverrides]);
   const orderedSidebarHosts = useMemo(
-    () => rankedHosts.filter((entry) => workspaceOf(workspaces, entry.host.id) === workspaces.active),
+    () =>
+      rankedHosts.filter((entry) => workspaceOf(workspaces, entry.host.id) === workspaces.active),
     [rankedHosts, workspaces],
   );
-  const activeWorkspaceName = workspaces.workspaces.find((w) => w.id === workspaces.active)?.name ?? "";
+  const activeWorkspaceName =
+    workspaces.workspaces.find((w) => w.id === workspaces.active)?.name ?? "";
   const workspaceEmpty = orderedSidebarHosts.every((entry) => entry.agents.length === 0);
 
   // A route on a host outside the chosen workspace moves to that workspace's
   // first agent, in the same tab, or to the empty console when it has none.
   const followWorkspace = (id: string) => {
     if (hostId === undefined || workspaceOf(workspaces, hostId) === id) return;
-    const first = rankedHosts.find((entry) =>
-      workspaceOf(workspaces, entry.host.id) === id && entry.agents.length > 0);
-    navigate(first
-      ? `/agents/${hostToParam(first.host.id)}/${encodeURIComponent(first.agents[0].name)}/${agentName && agentTab ? agentTab : defaultAgentTab()}${allTasks ? "?view=all" : ""}`
-      : `/${allTasks ? "?view=all" : ""}`);
+    const first = rankedHosts.find(
+      (entry) => workspaceOf(workspaces, entry.host.id) === id && entry.agents.length > 0,
+    );
+    navigate(
+      first
+        ? `/agents/${hostToParam(first.host.id)}/${encodeURIComponent(first.agents[0].name)}/${agentName && agentTab ? agentTab : defaultAgentTab()}${allTasks ? "?view=all" : ""}`
+        : `/${allTasks ? "?view=all" : ""}`,
+    );
   };
   const selectedAgent = useMemo(() => {
     if (!agentName) return undefined;
     return selectedHost?.agents.find((a) => a.name === agentName);
   }, [selectedHost, agentName]);
-  const serverBasePath = hostId === undefined
-    ? ""
-    : `/servers/${encodeURIComponent(hostToParam(hostId))}`;
-  const selectedHostLabel = selectedHost?.host.label
-    ?? daemons.find((daemon) => daemon.id === hostId)?.label
-    ?? (hostId === "" ? "This daemon (local)" : hostId);
+  const serverBasePath =
+    hostId === undefined ? "" : `/servers/${encodeURIComponent(hostToParam(hostId))}`;
+  const selectedHostLabel =
+    selectedHost?.host.label ??
+    daemons.find((daemon) => daemon.id === hostId)?.label ??
+    (hostId === "" ? "This daemon (local)" : hostId);
   const routeUnavailable = Boolean(liveSelectedHost?.error);
 
-  const reorderSidebar = async (kind: "servers" | "groups" | "agents", id: string, ids: string[]) => {
+  const reorderSidebar = async (
+    kind: "servers" | "groups" | "agents",
+    id: string,
+    ids: string[],
+  ) => {
     setHostError("");
     if (kind === "servers") {
       // The sidebar reorders only the visible workspace's hosts: they take
       // back the slots they held, so hidden hosts keep their places.
       const visible = new Set(ids);
       let next = 0;
-      ids = rankedHosts.map((entry) => entry.host.id)
-        .map((id) => visible.has(id) ? ids[next++] : id);
+      ids = rankedHosts
+        .map((entry) => entry.host.id)
+        .map((id) => (visible.has(id) ? ids[next++] : id));
       const previous = serverOrder;
       setServerOrder(ids);
       try {
@@ -285,10 +344,12 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     setSidebarOrderOverrides((current) => new Map(current).set(id, next));
     const save = (sidebarSaveQueues.current.get(id) ?? Promise.resolve())
       .catch(() => undefined)
-      .then(async () => createApi(await resolveDaemon(id)).post("/api/daemon/config", {
-        key: "sidebar_order_v1",
-        value: JSON.stringify(next),
-      }));
+      .then(async () =>
+        createApi(await resolveDaemon(id)).post("/api/daemon/config", {
+          key: "sidebar_order_v1",
+          value: JSON.stringify(next),
+        }),
+      );
     sidebarSaveQueues.current.set(id, save);
     try {
       await save;
@@ -316,10 +377,12 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   };
 
   // A pick in the drawer leaves it: navigation or a dialog takes over the screen.
-  const closing = <A extends unknown[]>(act: (...args: A) => void) => (...args: A) => {
-    sidebar.setDrawerOpen(false);
-    act(...args);
-  };
+  const closing =
+    <A extends unknown[]>(act: (...args: A) => void) =>
+    (...args: A) => {
+      sidebar.setDrawerOpen(false);
+      act(...args);
+    };
   const sidebarProps: ComponentProps<typeof AgentSidebar> = {
     hosts: orderedSidebarHosts,
     selectedHostId: hostId,
@@ -329,15 +392,18 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
       // Switching agents keeps the tab the operator is reading, so the same
       // view answers the same question about the next agent. Any query
       // (a selected task) belongs to the agent being left, so it is dropped.
-      navigate(`/agents/${hostToParam(h)}/${encodeURIComponent(a)}/${agentName && agentTab ? agentTab : defaultAgentTab()}`);
+      navigate(
+        `/agents/${hostToParam(h)}/${encodeURIComponent(a)}/${agentName && agentTab ? agentTab : defaultAgentTab()}`,
+      );
     }),
     onSelectTeam: closing((h: string, team: string) => {
       navigate(`/agents/${hostToParam(h)}/teams/${encodeURIComponent(team)}`);
     }),
     onReorder: (kind, id, ids) => void reorderSidebar(kind, id, ids),
     onClone: closing((cloneHostId: string, cloneAgentName: string) => {
-      const hostLabel = sidebarHosts.find((entry) => entry.host.id === cloneHostId)?.host.label
-        ?? (cloneHostId === "" ? "This daemon (local)" : cloneHostId);
+      const hostLabel =
+        sidebarHosts.find((entry) => entry.host.id === cloneHostId)?.host.label ??
+        (cloneHostId === "" ? "This daemon (local)" : cloneHostId);
       setCreateFor({
         hostId: cloneHostId,
         cloneSource: { hostId: cloneHostId, agentName: cloneAgentName, hostLabel },
@@ -363,24 +429,31 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
       {/* Chat order and agent state are live: a published message or a state
           change refreshes the authoritative snapshot at once rather than
           waiting for the next poll. */}
-      <MessagesLiveRefresh hostIds={hosts.map((entry) => entry.host.id)} onChange={refresh} onLive={setAgentStatesLive} />
+      <MessagesLiveRefresh
+        hostIds={hosts.map((entry) => entry.host.id)}
+        onChange={refresh}
+        onLive={setAgentStatesLive}
+      />
       {/* All tasks spans every server, so no agent is the subject there. On a
           compact screen the list is a drawer that any pick closes. */}
-      {!allTasks && (sidebar.compact ? (
-        <Sheet open={sidebar.drawerOpen} onOpenChange={sidebar.setDrawerOpen}>
-          <SheetContent
-            side="left"
-            showCloseButton={false}
-            aria-describedby={undefined}
-            // Focus in the search field would raise the on-screen keyboard.
-            onOpenAutoFocus={(e) => e.preventDefault()}
-            className="w-[85vw] max-w-[340px] gap-0 bg-background px-1.5 pt-3 pb-2"
-          >
-            <SheetTitle className="sr-only">Agents</SheetTitle>
-            <AgentSidebar {...sidebarProps} drawer />
-          </SheetContent>
-        </Sheet>
-      ) : !sidebar.hidden && <AgentSidebar {...sidebarProps} />)}
+      {!allTasks &&
+        (sidebar.compact ? (
+          <Sheet open={sidebar.drawerOpen} onOpenChange={sidebar.setDrawerOpen}>
+            <SheetContent
+              side="left"
+              showCloseButton={false}
+              aria-describedby={undefined}
+              // Focus in the search field would raise the on-screen keyboard.
+              onOpenAutoFocus={(e) => e.preventDefault()}
+              className="w-[85vw] max-w-[340px] gap-0 bg-background px-1.5 pt-3 pb-2"
+            >
+              <SheetTitle className="sr-only">Agents</SheetTitle>
+              <AgentSidebar {...sidebarProps} drawer />
+            </SheetContent>
+          </Sheet>
+        ) : (
+          !sidebar.hidden && <AgentSidebar {...sidebarProps} />
+        ))}
       {/* The content island: --card on the --background chrome, one radius and
           one of the two allowed shadows. Everything the operator works with
           lives inside it. */}
@@ -389,108 +462,128 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
           <ServerContextBar hostId={hostId} label={selectedHostLabel ?? "Unknown server"} />
         )}
         <div className={`flex min-h-0 flex-1 flex-col${serverView || allTasks ? "" : " p-3"}`}>
-        {hostError && (
-          <p role="alert" className="mb-2 text-sm text-destructive">{hostError}</p>
-        )}
-        <section className="min-h-0 flex-1">
-        <LazyBoundary resetKey={location.pathname}>
-        {allTasks ? (
-          <AllTasksWorkspace hosts={hosts} />
-        ) : serverView === "tasks" && hostId !== undefined ? (
-          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            <TasksWorkspace
-              initialTaskKey={searchParams.get("task") ?? undefined}
-              onNotificationsChanged={() => void refreshHost(hostId)}
-            />
-          </RouteHostBoundary>
-        ) : serverView === "activity" && hostId !== undefined ? (
-          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            <ServerActivityPage key={hostId} hostId={hostId} />
-          </RouteHostBoundary>
-        ) : serverView === "images" && hostId !== undefined ? (
-          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            <ImagesPage hostId={hostId} basePath={`${serverBasePath}/images`} />
-          </RouteHostBoundary>
-        ) : serverView === "image-tags" && hostId !== undefined ? (
-          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            <ImageTags hostId={hostId} basePath={`${serverBasePath}/images`} />
-          </RouteHostBoundary>
-        ) : serverView === "image-detail" && hostId !== undefined ? (
-          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            <ImageLayout hostId={hostId} basePath={`${serverBasePath}/images`} />
-          </RouteHostBoundary>
-        ) : serverView === "workflows" && hostId !== undefined ? (
-          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            <WorkflowImagesPage
-              key={hostId}
-              basePath={`${serverBasePath}/workflows`}
-            />
-          </RouteHostBoundary>
-        ) : serverView === "workflow-detail" && hostId !== undefined && storeName && routeTag ? (
-          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            <WorkflowImageDetail
-              key={`${hostId}\u0000${storeName}\u0000${routeTag}`}
-              name={storeName}
-              tag={routeTag}
-              basePath={`${serverBasePath}/workflows`}
-            />
-          </RouteHostBoundary>
-        ) : (serverView === "stores" || serverView === "store-detail") && hostId !== undefined ? (
-          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            <StoresPage
-              key={`${hostId}\u0000${storeName ?? ""}`}
-              name={storeName}
-              basePath={`${serverBasePath}/stores`}
-            />
-          </RouteHostBoundary>
-        ) : serverView === "settings" && hostId !== undefined ? (
-          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            <SettingsPage basePath={`${serverBasePath}/settings`} />
-          </RouteHostBoundary>
-        ) : teamName && selectedHost && hostId !== undefined ? (
-          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            <TeamWorkspace
-              name={teamName}
-              hostLabel={selectedHost.host.label}
-              members={selectedHost.agents.filter((agent) => agent.group === teamName)}
-              onOpen={(agent) => navigate(`/agents/${hostToParam(hostId)}/${encodeURIComponent(agent)}/${defaultAgentTab()}`)}
-              onManage={() => void selectDaemon(hostId).then((selected) => { if (selected) navigate(`/settings/advanced/groups?team=${encodeURIComponent(teamName)}`); })}
-            />
-          </RouteHostBoundary>
-        ) : selectedAgent && hostId !== undefined ? (
-          <AgentWorkspace
-            key={`${hostId}\u0000${selectedAgent.name}`}
-            hostId={hostId}
-            hostLabel={selectedHost?.host.label}
-            agent={selectedAgent}
-            refresh={refresh}
-            unavailable={routeUnavailable}
-          />
-        ) : hostId !== undefined && agentName ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
-            <p>Host or agent unavailable.</p>
-            <p className="text-xs">The route was kept unchanged so it cannot silently target the local daemon.</p>
-          </div>
-        ) : workspaceEmpty && workspaces.workspaces.length > 1 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-            <p>{activeWorkspaceName} has no agents yet</p>
-            <Button onClick={() => setWorkspaceManager({ id: workspaces.active, focusNew: false })}>
-              Manage workspaces
-            </Button>
-          </div>
-        ) : createHosts.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-            <p>Add a server to start.</p>
-            <Button onClick={() => setServerDialog({ mode: "add" })}>Add server</Button>
-          </div>
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-            <p>Pick an agent on the left, or create one.</p>
-            <Button onClick={() => setCreateFor({ hostId: createHosts[0].id })}>New agent</Button>
-          </div>
-        )}
-        </LazyBoundary>
-        </section>
+          {hostError && (
+            <p role="alert" className="mb-2 text-sm text-destructive">
+              {hostError}
+            </p>
+          )}
+          <section className="min-h-0 flex-1">
+            <LazyBoundary resetKey={location.pathname}>
+              {allTasks ? (
+                <AllTasksWorkspace hosts={hosts} />
+              ) : serverView === "tasks" && hostId !== undefined ? (
+                <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+                  <TasksWorkspace
+                    initialTaskKey={searchParams.get("task") ?? undefined}
+                    onNotificationsChanged={() => void refreshHost(hostId)}
+                  />
+                </RouteHostBoundary>
+              ) : serverView === "activity" && hostId !== undefined ? (
+                <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+                  <ServerActivityPage key={hostId} hostId={hostId} />
+                </RouteHostBoundary>
+              ) : serverView === "images" && hostId !== undefined ? (
+                <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+                  <ImagesPage hostId={hostId} basePath={`${serverBasePath}/images`} />
+                </RouteHostBoundary>
+              ) : serverView === "image-tags" && hostId !== undefined ? (
+                <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+                  <ImageTags hostId={hostId} basePath={`${serverBasePath}/images`} />
+                </RouteHostBoundary>
+              ) : serverView === "image-detail" && hostId !== undefined ? (
+                <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+                  <ImageLayout hostId={hostId} basePath={`${serverBasePath}/images`} />
+                </RouteHostBoundary>
+              ) : serverView === "workflows" && hostId !== undefined ? (
+                <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+                  <WorkflowImagesPage key={hostId} basePath={`${serverBasePath}/workflows`} />
+                </RouteHostBoundary>
+              ) : serverView === "workflow-detail" &&
+                hostId !== undefined &&
+                storeName &&
+                routeTag ? (
+                <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+                  <WorkflowImageDetail
+                    key={`${hostId}\u0000${storeName}\u0000${routeTag}`}
+                    name={storeName}
+                    tag={routeTag}
+                    basePath={`${serverBasePath}/workflows`}
+                  />
+                </RouteHostBoundary>
+              ) : (serverView === "stores" || serverView === "store-detail") &&
+                hostId !== undefined ? (
+                <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+                  <StoresPage
+                    key={`${hostId}\u0000${storeName ?? ""}`}
+                    name={storeName}
+                    basePath={`${serverBasePath}/stores`}
+                  />
+                </RouteHostBoundary>
+              ) : serverView === "settings" && hostId !== undefined ? (
+                <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+                  <SettingsPage basePath={`${serverBasePath}/settings`} />
+                </RouteHostBoundary>
+              ) : teamName && selectedHost && hostId !== undefined ? (
+                <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+                  <TeamWorkspace
+                    name={teamName}
+                    hostLabel={selectedHost.host.label}
+                    members={selectedHost.agents.filter((agent) => agent.group === teamName)}
+                    onOpen={(agent) =>
+                      navigate(
+                        `/agents/${hostToParam(hostId)}/${encodeURIComponent(agent)}/${defaultAgentTab()}`,
+                      )
+                    }
+                    onManage={() =>
+                      void selectDaemon(hostId).then((selected) => {
+                        if (selected)
+                          navigate(
+                            `/settings/advanced/groups?team=${encodeURIComponent(teamName)}`,
+                          );
+                      })
+                    }
+                  />
+                </RouteHostBoundary>
+              ) : selectedAgent && hostId !== undefined ? (
+                <AgentWorkspace
+                  key={`${hostId}\u0000${selectedAgent.name}`}
+                  hostId={hostId}
+                  hostLabel={selectedHost?.host.label}
+                  agent={selectedAgent}
+                  refresh={refresh}
+                  unavailable={routeUnavailable}
+                />
+              ) : hostId !== undefined && agentName ? (
+                <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                  <p>Host or agent unavailable.</p>
+                  <p className="text-xs">
+                    The route was kept unchanged so it cannot silently target the local daemon.
+                  </p>
+                </div>
+              ) : workspaceEmpty && workspaces.workspaces.length > 1 ? (
+                <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+                  <p>{activeWorkspaceName} has no agents yet</p>
+                  <Button
+                    onClick={() => setWorkspaceManager({ id: workspaces.active, focusNew: false })}
+                  >
+                    Manage workspaces
+                  </Button>
+                </div>
+              ) : createHosts.length === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+                  <p>Add a server to start.</p>
+                  <Button onClick={() => setServerDialog({ mode: "add" })}>Add server</Button>
+                </div>
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+                  <p>Pick an agent on the left, or create one.</p>
+                  <Button onClick={() => setCreateFor({ hostId: createHosts[0].id })}>
+                    New agent
+                  </Button>
+                </div>
+              )}
+            </LazyBoundary>
+          </section>
         </div>
       </main>
       <CreateAgentDialog
@@ -499,7 +592,9 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         imageRef={createFor?.imageRef}
         cloneSource={createFor?.cloneSource}
         hosts={createHosts}
-        onOpenChange={(o) => { if (!o) setCreateFor(null); }}
+        onOpenChange={(o) => {
+          if (!o) setCreateFor(null);
+        }}
         onCreated={(h, name) => {
           // usePolling exposes `refresh` (its tick fn) — call it so the new
           // agent shows up immediately instead of waiting up to 3s for the
@@ -508,50 +603,80 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
           navigate(`/agents/${hostToParam(h)}/${encodeURIComponent(name)}/${defaultAgentTab()}`);
         }}
       />
-      {titlebarSlot && createPortal(
-        <WorkspaceSwitcher
-          hosts={workspaceHosts}
-          onSelect={followWorkspace}
-          onManage={(focusNew) => setWorkspaceManager({ id: workspaces.active, focusNew })}
-        />,
-        titlebarSlot,
-      )}
+      {titlebarSlot &&
+        createPortal(
+          <WorkspaceSwitcher
+            hosts={workspaceHosts}
+            onSelect={followWorkspace}
+            onManage={(focusNew) => setWorkspaceManager({ id: workspaces.active, focusNew })}
+          />,
+          titlebarSlot,
+        )}
       <WorkspaceManager
         hosts={workspaceHosts}
         open={workspaceManager !== null}
         initialId={workspaceManager?.id ?? workspaces.active}
         focusNew={workspaceManager?.focusNew ?? false}
-        onOpenChange={(open) => { if (!open) setWorkspaceManager(null); }}
+        onOpenChange={(open) => {
+          if (!open) setWorkspaceManager(null);
+        }}
       />
       <ServerDialog
         open={serverDialog !== null}
         server={serverDialog?.mode === "edit" ? serverDialog.server : undefined}
-        onOpenChange={(o) => { if (!o) setServerDialog(null); }}
+        onOpenChange={(o) => {
+          if (!o) setServerDialog(null);
+        }}
         onSaved={registryChanged}
       />
     </div>
   );
 }
 
-function TeamWorkspace({ name, hostLabel, members, onOpen, onManage }: {
+function TeamWorkspace({
+  name,
+  hostLabel,
+  members,
+  onOpen,
+  onManage,
+}: {
   name: string;
   hostLabel: string;
   members: Array<{ name: string; image: string; state: string; interactive?: boolean }>;
   onOpen: (agent: string) => void;
   onManage: () => void;
 }) {
-  return <div className="space-y-4 p-3">
-    <div className="flex items-center justify-between">
-      <div><h1 className="text-xl font-semibold">{name}</h1><p className="text-sm text-muted-foreground">Team on {hostLabel}</p></div>
-      <Button variant="outline" onClick={onManage}>Manage team</Button>
+  return (
+    <div className="space-y-4 p-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">{name}</h1>
+          <p className="text-sm text-muted-foreground">Team on {hostLabel}</p>
+        </div>
+        <Button variant="outline" onClick={onManage}>
+          Manage team
+        </Button>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {members.map((member) => (
+          <button
+            key={member.name}
+            type="button"
+            aria-label={`Open team member ${member.name}`}
+            onClick={() => onOpen(member.name)}
+            className="rounded-lg border p-3 text-left hover:bg-accent"
+          >
+            <div className="font-medium">{member.name}</div>
+            <div className="text-xs text-muted-foreground">
+              {member.image} · {member.state}
+              {member.interactive === false ? " · non-tty" : ""}
+            </div>
+          </button>
+        ))}
+      </div>
+      {members.length === 0 && (
+        <p className="text-sm text-muted-foreground">No members are currently assigned.</p>
+      )}
     </div>
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {members.map((member) => <button key={member.name} type="button" aria-label={`Open team member ${member.name}`}
-        onClick={() => onOpen(member.name)} className="rounded-lg border p-3 text-left hover:bg-accent">
-        <div className="font-medium">{member.name}</div>
-        <div className="text-xs text-muted-foreground">{member.image} · {member.state}{member.interactive === false ? " · non-tty" : ""}</div>
-      </button>)}
-    </div>
-    {members.length === 0 && <p className="text-sm text-muted-foreground">No members are currently assigned.</p>}
-  </div>;
+  );
 }

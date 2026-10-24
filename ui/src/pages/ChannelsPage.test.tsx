@@ -28,11 +28,19 @@ function renderForAgent(name: string) {
 }
 
 it("renders the global left column at 40% width (w-2/5)", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string) => {
-    let result: unknown = {};
-    if (path === "/api/channels") result = { channels: [{ name: "chat:room", kind: "chat" }], count: 1 };
-    return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }) } as Response);
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((path: string) => {
+      let result: unknown = {};
+      if (path === "/api/channels")
+        result = { channels: [{ name: "chat:room", kind: "chat" }], count: 1 };
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result }),
+      } as Response);
+    }),
+  );
   renderGlobal();
   // The CHANNELS label sits directly inside the column root, which carries the
   // 40%-width class plus the min-width floor.
@@ -42,14 +50,29 @@ it("renders the global left column at 40% width (w-2/5)", async () => {
 });
 
 it("per-agent mount: clicking a subscription row selects it and populates the right pane", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string) => {
-    let result: unknown = {};
-    if (path === "/api/agents/worker/subscriptions") result = { channels: [{ name: "group:dev:broadcast", kind: "group_broadcast", protected: true }], count: 1 };
-    else if (path === "/api/channels") result = { channels: [], count: 0 };
-    else if (path.includes("/messages")) result = { messages: [{ id: "m1", ts: "", type: "note", source: "op", text: "pane-hello" }], count: 1 };
-    else if (path.includes("/watches")) result = { watches: [], count: 0 };
-    return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }) } as Response);
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((path: string) => {
+      let result: unknown = {};
+      if (path === "/api/agents/worker/subscriptions")
+        result = {
+          channels: [{ name: "group:dev:broadcast", kind: "group_broadcast", protected: true }],
+          count: 1,
+        };
+      else if (path === "/api/channels") result = { channels: [], count: 0 };
+      else if (path.includes("/messages"))
+        result = {
+          messages: [{ id: "m1", ts: "", type: "note", source: "op", text: "pane-hello" }],
+          count: 1,
+        };
+      else if (path.includes("/watches")) result = { watches: [], count: 0 };
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result }),
+      } as Response);
+    }),
+  );
   renderForAgent("worker");
 
   // The row is present and the right pane starts on its empty state.
@@ -65,13 +88,29 @@ it("per-agent mount: clicking a subscription row selects it and populates the ri
 
 it("lists channels, tails a selected channel, and sends a message", async () => {
   const posts: Array<{ path: string; body: unknown }> = [];
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-    let body: unknown = { ok: true, result: {} };
-    if (init?.method === "POST") posts.push({ path, body: init?.body ? JSON.parse(init.body as string) : undefined });
-    if (path === "/api/channels") body = { ok: true, result: { channels: [{ name: "chat:room", kind: "chat" }], count: 1 } };
-    else if (path.includes("/messages")) body = { ok: true, result: { messages: [{ id: "m1", ts: "", type: "note", source: "op", text: "hello" }], count: 1 } };
-    return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify(body) } as Response);
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      let body: unknown = { ok: true, result: {} };
+      if (init?.method === "POST")
+        posts.push({ path, body: init?.body ? JSON.parse(init.body as string) : undefined });
+      if (path === "/api/channels")
+        body = { ok: true, result: { channels: [{ name: "chat:room", kind: "chat" }], count: 1 } };
+      else if (path.includes("/messages"))
+        body = {
+          ok: true,
+          result: {
+            messages: [{ id: "m1", ts: "", type: "note", source: "op", text: "hello" }],
+            count: 1,
+          },
+        };
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(body),
+      } as Response);
+    }),
+  );
   renderGlobal();
 
   await waitFor(() => expect(screen.getByText("chat:room")).toBeInTheDocument());
@@ -81,22 +120,40 @@ it("lists channels, tails a selected channel, and sends a message", async () => 
   fireEvent.change(screen.getByPlaceholderText("message text"), { target: { value: "hi there" } });
   fireEvent.click(screen.getByText("Send"));
   await waitFor(() =>
-    expect(posts.some((p) => p.path === "/api/messages" && (p.body as { text?: string })?.text === "hi there")).toBe(true),
+    expect(
+      posts.some(
+        (p) => p.path === "/api/messages" && (p.body as { text?: string })?.text === "hi there",
+      ),
+    ).toBe(true),
   );
 });
 
 it("shows a selected channel's watches (watch, params, subscribers), read-only", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string) => {
-    let result: unknown = {};
-    if (path === "/api/channels") result = { channels: [{ name: "issue-provider:issues", kind: "provider" }], count: 1 };
-    else if (path.includes("/watches")) result = {
-      watches: [
-        { watch: "project=alpha", params: { project: "alpha", label: "bug" }, subscribers: ["worker", "lead"] },
-      ], count: 1,
-    };
-    else if (path.includes("/messages")) result = { messages: [], count: 0 };
-    return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }) } as Response);
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((path: string) => {
+      let result: unknown = {};
+      if (path === "/api/channels")
+        result = { channels: [{ name: "issue-provider:issues", kind: "provider" }], count: 1 };
+      else if (path.includes("/watches"))
+        result = {
+          watches: [
+            {
+              watch: "project=alpha",
+              params: { project: "alpha", label: "bug" },
+              subscribers: ["worker", "lead"],
+            },
+          ],
+          count: 1,
+        };
+      else if (path.includes("/messages")) result = { messages: [], count: 0 };
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result }),
+      } as Response);
+    }),
+  );
   renderGlobal();
 
   await waitFor(() => expect(screen.getByText("issue-provider:issues")).toBeInTheDocument());
@@ -111,15 +168,26 @@ it("shows a selected channel's watches (watch, params, subscribers), read-only",
 
 it("scopes to one agent's subscriptions and no longer shows the messenger card", async () => {
   const seen: string[] = [];
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string) => {
-    seen.push(path);
-    let result: unknown = {};
-    // Under an agent the left column is AgentSubscriptions (its own fetches); the
-    // messenger chat-routes card moved to the Plugins tab, so it must NOT appear here.
-    if (path === "/api/agents/worker/subscriptions") result = { channels: [{ name: "group:dev:broadcast", kind: "group_broadcast", protected: true }], count: 1 };
-    else if (path === "/api/channels") result = { channels: [], count: 0 };
-    return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }) } as Response);
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((path: string) => {
+      seen.push(path);
+      let result: unknown = {};
+      // Under an agent the left column is AgentSubscriptions (its own fetches); the
+      // messenger chat-routes card moved to the Plugins tab, so it must NOT appear here.
+      if (path === "/api/agents/worker/subscriptions")
+        result = {
+          channels: [{ name: "group:dev:broadcast", kind: "group_broadcast", protected: true }],
+          count: 1,
+        };
+      else if (path === "/api/channels") result = { channels: [], count: 0 };
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result }),
+      } as Response);
+    }),
+  );
   renderForAgent("worker");
 
   await waitFor(() => expect(screen.getByText("group:dev:broadcast")).toBeInTheDocument());
@@ -132,18 +200,39 @@ it("scopes to one agent's subscriptions and no longer shows the messenger card",
 it("never shows one channel's tail or watches under another, even when the first answers late", async () => {
   let resolveLate!: (r: Response) => void;
   const respond = (result: unknown) =>
-    Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }) } as Response);
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true, result }),
+    } as Response);
   let firstMessages = true;
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string) => {
-    if (path === "/api/channels") return respond({ channels: [{ name: "chat:a", kind: "chat" }, { name: "chat:b", kind: "chat" }], count: 2 });
-    if (path.includes("chat%3Aa/messages")) {
-      if (firstMessages) { firstMessages = false; return respond({ messages: [{ id: "a1", ts: "", type: "note", source: "op", text: "from-a" }] }); }
-      return new Promise<Response>((resolve) => { resolveLate = resolve; });
-    }
-    if (path.includes("chat%3Aa/watches")) return respond({ watches: [{ watch: "watch-a" }] });
-    if (path.includes("chat%3Ab/")) return new Promise<Response>(() => {});
-    return respond({});
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/channels")
+        return respond({
+          channels: [
+            { name: "chat:a", kind: "chat" },
+            { name: "chat:b", kind: "chat" },
+          ],
+          count: 2,
+        });
+      if (path.includes("chat%3Aa/messages")) {
+        if (firstMessages) {
+          firstMessages = false;
+          return respond({
+            messages: [{ id: "a1", ts: "", type: "note", source: "op", text: "from-a" }],
+          });
+        }
+        return new Promise<Response>((resolve) => {
+          resolveLate = resolve;
+        });
+      }
+      if (path.includes("chat%3Aa/watches")) return respond({ watches: [{ watch: "watch-a" }] });
+      if (path.includes("chat%3Ab/")) return new Promise<Response>(() => {});
+      return respond({});
+    }),
+  );
   renderGlobal();
   fireEvent.click(await screen.findByText("chat:a"));
   await waitFor(() => expect(screen.getByText("from-a")).toBeInTheDocument());
@@ -155,7 +244,9 @@ it("never shows one channel's tail or watches under another, even when the first
   // Re-select A to start a second, slow tail request, then switch back to B.
   fireEvent.click(screen.getByText("chat:a"));
   fireEvent.click(screen.getByText("chat:b"));
-  resolveLate(await respond({ messages: [{ id: "a2", ts: "", type: "note", source: "op", text: "late-a" }] }));
+  resolveLate(
+    await respond({ messages: [{ id: "a2", ts: "", type: "note", source: "op", text: "late-a" }] }),
+  );
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(screen.queryByText("late-a")).not.toBeInTheDocument();
 });

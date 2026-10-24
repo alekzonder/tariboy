@@ -23,9 +23,7 @@ import {
 const Workspace = () => (
   <div style={{ display: "flex", gap: 16, width: 720 }}>
     <div style={{ width: 180, display: "grid", gap: 6, alignContent: "start" }}>
-      <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
-        This daemon (local)
-      </div>
+      <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>This daemon (local)</div>
       {["builder", "reviewer", "packager", "docs-bot"].map((name) => (
         <div key={name} style={{ fontSize: 13, padding: "4px 8px", borderRadius: 6 }}>
           {name}
@@ -54,8 +52,8 @@ export const NewAgent = () => (
         <DialogHeader>
           <DialogTitle>New agent</DialogTitle>
           <DialogDescription>
-            Choose a target and image, then configure identity, runtime, Autopilot,
-            and lifecycle settings.
+            Choose a target and image, then configure identity, runtime, Autopilot, and lifecycle
+            settings.
           </DialogDescription>
         </DialogHeader>
         <div style={{ display: "grid", gap: 16 }}>
@@ -120,8 +118,7 @@ export const Confirm = () => (
         <DialogHeader>
           <DialogTitle>Transfer worker:v2</DialogTitle>
           <DialogDescription>
-            Export the image from This daemon (local) and apply it on the selected
-            hosts.
+            Export the image from This daemon (local) and apply it on the selected hosts.
           </DialogDescription>
         </DialogHeader>
         <div style={{ display: "grid", gap: 8 }}>
@@ -165,8 +162,7 @@ export const FooterCloseAction = () => (
         <DialogHeader>
           <DialogTitle>Host build-01 updated</DialogTitle>
           <DialogDescription>
-            The daemon on build-01 is now on 0.58.1 and reconnected. No agents were
-            restarted.
+            The daemon on build-01 is now on 0.58.1 and reconnected. No agents were restarted.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter showCloseButton />

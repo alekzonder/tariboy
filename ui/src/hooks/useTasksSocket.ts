@@ -1,40 +1,46 @@
-import { useEffect, useRef, useState } from "react"
-import { getLocalBaseURL, type TaskEventHint } from "@/lib/api"
-import type { Daemon } from "@/lib/daemons"
+import { useEffect, useRef, useState } from "react";
+import { getLocalBaseURL, type TaskEventHint } from "@/lib/api";
+import type { Daemon } from "@/lib/daemons";
 
-const RECONNECT_MIN_MS = 250
-const RECONNECT_MAX_MS = 5000
+const RECONNECT_MIN_MS = 250;
+const RECONNECT_MAX_MS = 5000;
 
-export type TasksSocketStatus = "connecting" | "open" | "closed"
+export type TasksSocketStatus = "connecting" | "open" | "closed";
 
 export interface UseTasksSocketOptions {
   /** The resolved host to subscribe to (null = local); callers pass their client's target. */
-  target: Daemon | null
-  after?: number
-  enabled?: boolean
-  onHint: (hint: TaskEventHint) => void
-  onReset?: (sequence: number) => void
+  target: Daemon | null;
+  after?: number;
+  enabled?: boolean;
+  onHint: (hint: TaskEventHint) => void;
+  onReset?: (sequence: number) => void;
 }
 
 export function tasksWsUrl(target: Daemon | null, after: number): string {
   if (target && !target.baseURL) {
-    throw new Error(`host ${target.label || target.id} is not ready`)
+    throw new Error(`host ${target.label || target.id} is not ready`);
   }
-  let base: string
+  let base: string;
   if (target) {
-    base = target.baseURL.replace(/\/+$/, "").replace(/^http:/, "ws:").replace(/^https:/, "wss:")
+    base = target.baseURL
+      .replace(/\/+$/, "")
+      .replace(/^http:/, "ws:")
+      .replace(/^https:/, "wss:");
   } else {
-    const local = getLocalBaseURL()
+    const local = getLocalBaseURL();
     if (local) {
-      base = local.replace(/\/+$/, "").replace(/^http:/, "ws:").replace(/^https:/, "wss:")
+      base = local
+        .replace(/\/+$/, "")
+        .replace(/^http:/, "ws:")
+        .replace(/^https:/, "wss:");
     } else {
-      const scheme = location.protocol === "https:" ? "wss:" : "ws:"
-      base = `${scheme}//${location.host}`
+      const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+      base = `${scheme}//${location.host}`;
     }
   }
-  const query = new URLSearchParams({ after: String(after) })
-  if (target?.token) query.set("token", target.token)
-  return `${base}/api/tasks/ws?${query.toString()}`
+  const query = new URLSearchParams({ after: String(after) });
+  if (target?.token) query.set("token", target.token);
+  return `${base}/api/tasks/ws?${query.toString()}`;
 }
 
 export function useTasksSocket({
@@ -44,91 +50,92 @@ export function useTasksSocket({
   onHint,
   onReset,
 }: UseTasksSocketOptions): TasksSocketStatus {
-  const [status, setStatus] = useState<TasksSocketStatus>(enabled ? "connecting" : "closed")
-  const sequenceRef = useRef(after)
-  const onHintRef = useRef(onHint)
-  const onResetRef = useRef(onReset)
+  const [status, setStatus] = useState<TasksSocketStatus>(enabled ? "connecting" : "closed");
+  const sequenceRef = useRef(after);
+  const onHintRef = useRef(onHint);
+  const onResetRef = useRef(onReset);
   useEffect(() => {
-    onHintRef.current = onHint
-    onResetRef.current = onReset
-  }, [onHint, onReset])
+    onHintRef.current = onHint;
+    onResetRef.current = onReset;
+  }, [onHint, onReset]);
 
-  const targetKey = JSON.stringify(target)
+  const targetKey = JSON.stringify(target);
 
   useEffect(() => {
-    sequenceRef.current = after
-  }, [after, targetKey])
+    sequenceRef.current = after;
+  }, [after, targetKey]);
 
   useEffect(() => {
     if (!enabled) {
-      queueMicrotask(() => setStatus("closed"))
-      return
+      queueMicrotask(() => setStatus("closed"));
+      return;
     }
-    let alive = true
-    let socket: WebSocket | null = null
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let reconnectDelay = RECONNECT_MIN_MS
-    const socketTarget = JSON.parse(targetKey) as Daemon | null
+    let alive = true;
+    let socket: WebSocket | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let reconnectDelay = RECONNECT_MIN_MS;
+    const socketTarget = JSON.parse(targetKey) as Daemon | null;
 
     const connect = () => {
-      if (!alive) return
-      let url: string
+      if (!alive) return;
+      let url: string;
       try {
-        url = tasksWsUrl(socketTarget, sequenceRef.current)
+        url = tasksWsUrl(socketTarget, sequenceRef.current);
       } catch {
-        setStatus("closed")
-        return
+        setStatus("closed");
+        return;
       }
-      setStatus("connecting")
-      const current = new WebSocket(url)
-      socket = current
+      setStatus("connecting");
+      const current = new WebSocket(url);
+      socket = current;
       current.onopen = () => {
-        if (!alive || socket !== current) return
-        reconnectDelay = RECONNECT_MIN_MS
-        setStatus("open")
-      }
+        if (!alive || socket !== current) return;
+        reconnectDelay = RECONNECT_MIN_MS;
+        setStatus("open");
+      };
       current.onmessage = (event) => {
-        if (!alive || typeof event.data !== "string") return
-        let message: unknown
+        if (!alive || typeof event.data !== "string") return;
+        let message: unknown;
         try {
-          message = JSON.parse(event.data)
+          message = JSON.parse(event.data);
         } catch {
-          return
+          return;
         }
-        if (!message || typeof message !== "object") return
-        const value = message as Record<string, unknown>
-        const sequence = typeof value.sequence === "number" ? value.sequence : -1
+        if (!message || typeof message !== "object") return;
+        const value = message as Record<string, unknown>;
+        const sequence = typeof value.sequence === "number" ? value.sequence : -1;
         if (value.type === "reset") {
-          onResetRef.current?.(sequence)
-          return
+          onResetRef.current?.(sequence);
+          return;
         }
         if (
-          value.type !== undefined && value.type !== "event"
-          || sequence <= sequenceRef.current
-          || typeof value.kind !== "string"
-        ) return
-        const hint = value as unknown as TaskEventHint
-        sequenceRef.current = hint.sequence
-        onHintRef.current(hint)
-      }
+          (value.type !== undefined && value.type !== "event") ||
+          sequence <= sequenceRef.current ||
+          typeof value.kind !== "string"
+        )
+          return;
+        const hint = value as unknown as TaskEventHint;
+        sequenceRef.current = hint.sequence;
+        onHintRef.current(hint);
+      };
       current.onclose = () => {
-        if (socket === current) socket = null
-        if (!alive) return
-        setStatus("closed")
-        const wait = reconnectDelay
-        reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS)
-        timer = setTimeout(connect, wait)
-      }
-    }
+        if (socket === current) socket = null;
+        if (!alive) return;
+        setStatus("closed");
+        const wait = reconnectDelay;
+        reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
+        timer = setTimeout(connect, wait);
+      };
+    };
 
-    connect()
+    connect();
     return () => {
-      alive = false
-      if (timer !== undefined) clearTimeout(timer)
-      socket?.close()
-      socket = null
-    }
-  }, [enabled, targetKey])
+      alive = false;
+      if (timer !== undefined) clearTimeout(timer);
+      socket?.close();
+      socket = null;
+    };
+  }, [enabled, targetKey]);
 
-  return status
+  return status;
 }

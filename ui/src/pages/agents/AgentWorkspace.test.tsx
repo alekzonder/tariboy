@@ -13,12 +13,15 @@ import { UI_MODE_KEY } from "@/lib/uiMode";
 
 // Every agent-scoped GET the workspace sends, recorded with the host of the
 // client that sent it: (host, agent, action).
-const agentGetOn = vi.hoisted(() => vi.fn<(target: Daemon | null, name: string, action: string) => Promise<unknown>>());
+const agentGetOn = vi.hoisted(() =>
+  vi.fn<(target: Daemon | null, name: string, action: string) => Promise<unknown>>(),
+);
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   const createApi: typeof actual.createApi = (target) => {
     const client = actual.createApi(target);
-    const get = <T,>(name: string, action: string) => agentGetOn(client.target, name, action) as Promise<T>;
+    const get = <T,>(name: string, action: string) =>
+      agentGetOn(client.target, name, action) as Promise<T>;
     return {
       ...client,
       agentGet: get,
@@ -33,8 +36,13 @@ vi.mock("@/lib/api", async (importOriginal) => {
 });
 vi.mock("@/hooks/useTerminalSocket", () => ({
   useTerminalSocket: vi.fn(() => ({
-    status: "closed", absent: false, send: vi.fn(), sendResize: vi.fn(),
-    attachTerm: vi.fn(), name: "worker", reconnect: vi.fn(),
+    status: "closed",
+    absent: false,
+    send: vi.fn(),
+    sendResize: vi.fn(),
+    attachTerm: vi.fn(),
+    name: "worker",
+    reconnect: vi.fn(),
   })),
 }));
 vi.mock("@/components/TuiScreen", () => ({ TuiScreen: () => <div>terminal</div> }));
@@ -84,7 +92,12 @@ describe("AgentWorkspace", () => {
         <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
           <Location />
           <Routes>
-            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
+            <Route
+              path="/agents/:hostId/:agent/:tab"
+              element={
+                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
+              }
+            />
           </Routes>
         </MemoryRouter>
       </DaemonProvider>,
@@ -104,7 +117,17 @@ describe("AgentWorkspace", () => {
       <DaemonProvider>
         <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
           <Routes>
-            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={{ ...agent, current_goal_task_key: "" }} refresh={vi.fn()} />} />
+            <Route
+              path="/agents/:hostId/:agent/:tab"
+              element={
+                <AgentWorkspace
+                  hostId=""
+                  hostLabel="Local"
+                  agent={{ ...agent, current_goal_task_key: "" }}
+                  refresh={vi.fn()}
+                />
+              }
+            />
           </Routes>
         </MemoryRouter>
       </DaemonProvider>,
@@ -116,10 +139,16 @@ describe("AgentWorkspace", () => {
 
   it("shows the configured harness, model, and effort before Goal", async () => {
     agentGetOn.mockImplementation(async (_target, _name, action) => {
-      if (action === "") return { ...agent, harness: "codex", model: "gpt-5-codex", effort: "high" };
+      if (action === "")
+        return { ...agent, harness: "codex", model: "gpt-5-codex", effort: "high" };
       return {
-        name: "worker", state: "running", iterations: 0,
-        last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
+        name: "worker",
+        state: "running",
+        iterations: 0,
+        last_iteration: null,
+        last_iteration_id: null,
+        status_message: "",
+        status_updated: "",
       };
     });
 
@@ -127,13 +156,20 @@ describe("AgentWorkspace", () => {
       <DaemonProvider>
         <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
           <Routes>
-            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
+            <Route
+              path="/agents/:hostId/:agent/:tab"
+              element={
+                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
+              }
+            />
           </Routes>
         </MemoryRouter>
       </DaemonProvider>,
     );
 
-    await waitFor(() => expect(screen.getByTestId("agent-runtime")).toHaveTextContent("codex · gpt-5-codex · high"));
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-runtime")).toHaveTextContent("codex · gpt-5-codex · high"),
+    );
     const runtime = screen.getByTestId("agent-runtime");
     const goal = screen.getByText("Goal:");
     expect(runtime.compareDocumentPosition(goal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -143,8 +179,13 @@ describe("AgentWorkspace", () => {
     agentGetOn.mockImplementation(async (_target, _name, action) => {
       if (action === "") return { ...agent, harness: "opencode", model: "", effort: "" };
       return {
-        name: "worker", state: "running", iterations: 0,
-        last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
+        name: "worker",
+        state: "running",
+        iterations: 0,
+        last_iteration: null,
+        last_iteration_id: null,
+        status_message: "",
+        status_updated: "",
       };
     });
 
@@ -152,7 +193,12 @@ describe("AgentWorkspace", () => {
       <DaemonProvider>
         <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
           <Routes>
-            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
+            <Route
+              path="/agents/:hostId/:agent/:tab"
+              element={
+                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
+              }
+            />
           </Routes>
         </MemoryRouter>
       </DaemonProvider>,
@@ -164,38 +210,64 @@ describe("AgentWorkspace", () => {
 
   it("shows daemon-authoritative message queue saturation", async () => {
     agentGetOn.mockResolvedValue({
-      name: "worker", state: "running", iterations: 0,
-      last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
-      messages_pending: 100, messages_max_queue: 100, messages_queue_full: true,
+      name: "worker",
+      state: "running",
+      iterations: 0,
+      last_iteration: null,
+      last_iteration_id: null,
+      status_message: "",
+      status_updated: "",
+      messages_pending: 100,
+      messages_max_queue: 100,
+      messages_queue_full: true,
     });
 
     render(
       <DaemonProvider>
         <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
           <Routes>
-            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
+            <Route
+              path="/agents/:hostId/:agent/:tab"
+              element={
+                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
+              }
+            />
           </Routes>
         </MemoryRouter>
       </DaemonProvider>,
     );
 
-    expect(await screen.findByText("Message queue full: 100 / 100")).toHaveClass("text-destructive");
+    expect(await screen.findByText("Message queue full: 100 / 100")).toHaveClass(
+      "text-destructive",
+    );
   });
 
   it("shows why the loop halted, so a failed iteration launch is visible on every tab", async () => {
     agentGetOn.mockResolvedValue({
-      name: "worker", state: "error", iterations: 0,
-      last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
+      name: "worker",
+      state: "error",
+      iterations: 0,
+      last_iteration: null,
+      last_iteration_id: null,
+      status_message: "",
+      status_updated: "",
       halt_kind: "error",
-      halt_reason: "halted: image activation failed: prepare claude image skill bridge: skills missing",
-      error_reason: "halted: image activation failed: prepare claude image skill bridge: skills missing",
+      halt_reason:
+        "halted: image activation failed: prepare claude image skill bridge: skills missing",
+      error_reason:
+        "halted: image activation failed: prepare claude image skill bridge: skills missing",
     });
 
     render(
       <DaemonProvider>
         <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
           <Routes>
-            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
+            <Route
+              path="/agents/:hostId/:agent/:tab"
+              element={
+                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
+              }
+            />
           </Routes>
         </MemoryRouter>
       </DaemonProvider>,
@@ -213,8 +285,17 @@ describe("AgentWorkspace", () => {
     agentGetOn.mockImplementation(async (_target, _name, action) => {
       if (!reachable) throw new ApiError(0, "network_error", "network error: Failed to fetch");
       return action === "status"
-        ? { name: "worker", state: "error", iterations: 0, last_iteration: null,
-          last_iteration_id: null, status_message: "", status_updated: "", halt_kind: "error", halt_reason: "halted: boom" }
+        ? {
+            name: "worker",
+            state: "error",
+            iterations: 0,
+            last_iteration: null,
+            last_iteration_id: null,
+            status_message: "",
+            status_updated: "",
+            halt_kind: "error",
+            halt_reason: "halted: boom",
+          }
         : agent;
     });
 
@@ -222,26 +303,46 @@ describe("AgentWorkspace", () => {
       <DaemonProvider>
         <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
           <Routes>
-            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
+            <Route
+              path="/agents/:hostId/:agent/:tab"
+              element={
+                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
+              }
+            />
           </Routes>
         </MemoryRouter>
       </DaemonProvider>,
     );
-    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
     expect(screen.getByTestId("agent-halt-reason")).toHaveTextContent("halted: boom");
 
     reachable = false;
-    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
     expect(screen.getByTestId("agent-halt-reason")).toHaveTextContent("halted: boom");
   });
 
   it("renders configured budget rows when an older daemon omits exhausted periods", async () => {
     agentGetOn.mockResolvedValue({
-      name: "worker", state: "running", iterations: 0,
-      last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
+      name: "worker",
+      state: "running",
+      iterations: 0,
+      last_iteration: null,
+      last_iteration_id: null,
+      status_message: "",
+      status_updated: "",
       budget: {
-        hour_usd: 1, day_usd: 0, week_usd: 0, month_usd: 0,
-        hour_spent_usd: 0.25, day_spent_usd: 0.25, week_spent_usd: 0.25, month_spent_usd: 0.25,
+        hour_usd: 1,
+        day_usd: 0,
+        week_usd: 0,
+        month_usd: 0,
+        hour_spent_usd: 0.25,
+        day_spent_usd: 0.25,
+        week_spent_usd: 0.25,
+        month_spent_usd: 0.25,
       },
     });
 
@@ -249,7 +350,12 @@ describe("AgentWorkspace", () => {
       <DaemonProvider>
         <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
           <Routes>
-            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
+            <Route
+              path="/agents/:hostId/:agent/:tab"
+              element={
+                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
+              }
+            />
           </Routes>
         </MemoryRouter>
       </DaemonProvider>,
@@ -272,14 +378,16 @@ describe("AgentWorkspace", () => {
   });
 
   it("shows the complete effective cwd and opens the local directory in VS Code", async () => {
-	const open = vi.spyOn(desktop, "openHostPathInVSCode").mockResolvedValue(null);
+    const open = vi.spyOn(desktop, "openHostPathInVSCode").mockResolvedValue(null);
     render(
       <DaemonProvider>
         <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
           <Routes>
             <Route
               path="/agents/:hostId/:agent/:tab"
-              element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />}
+              element={
+                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
+              }
             />
           </Routes>
         </MemoryRouter>
@@ -298,7 +406,18 @@ describe("AgentWorkspace", () => {
       <DaemonProvider>
         <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
           <Routes>
-            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} unavailable />} />
+            <Route
+              path="/agents/:hostId/:agent/:tab"
+              element={
+                <AgentWorkspace
+                  hostId=""
+                  hostLabel="Local"
+                  agent={agent}
+                  refresh={vi.fn()}
+                  unavailable
+                />
+              }
+            />
           </Routes>
         </MemoryRouter>
       </DaemonProvider>,
@@ -313,8 +432,13 @@ describe("AgentWorkspace", () => {
     agentGetOn.mockImplementation(async (_target, _name, action) => {
       if (action !== "") {
         return {
-          name: "worker", state: "running", iterations: 0,
-          last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
+          name: "worker",
+          state: "running",
+          iterations: 0,
+          last_iteration: null,
+          last_iteration_id: null,
+          status_message: "",
+          status_updated: "",
         };
       }
       inspections += 1;
@@ -328,17 +452,28 @@ describe("AgentWorkspace", () => {
           <Routes>
             <Route
               path="/agents/:hostId/:agent/:tab"
-              element={<AgentWorkspace hostId="" hostLabel="Local" agent={{ ...agent, cwd: "" }} refresh={vi.fn()} />}
+              element={
+                <AgentWorkspace
+                  hostId=""
+                  hostLabel="Local"
+                  agent={{ ...agent, cwd: "" }}
+                  refresh={vi.fn()}
+                />
+              }
             />
           </Routes>
         </MemoryRouter>
       </DaemonProvider>,
     );
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
     expect(inspections).toBe(1);
     expect(screen.getByTestId("agent-cwd")).toHaveTextContent("…");
-    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
     expect(screen.getByTestId("agent-cwd")).toHaveTextContent("/managed/worker");
     expect(inspections).toBeGreaterThanOrEqual(2);
   });
@@ -350,7 +485,9 @@ describe("AgentWorkspace", () => {
           <Routes>
             <Route
               path="/agents/:hostId/:agent/:tab"
-              element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />}
+              element={
+                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
+              }
             />
           </Routes>
         </MemoryRouter>
@@ -358,14 +495,11 @@ describe("AgentWorkspace", () => {
     );
 
     const nav = await screen.findByRole("navigation", { name: "Agent workspace" });
-    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "Chat",
-      "Tasks",
-      "Terminal",
-      "Activity",
-      "Configuration",
-      "Advanced",
-    ]);
+    expect(
+      within(nav)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Chat", "Tasks", "Terminal", "Activity", "Configuration", "Advanced"]);
   });
 
   it("keeps host and agent identity in every tab link", async () => {
@@ -375,20 +509,39 @@ describe("AgentWorkspace", () => {
           <Routes>
             <Route
               path="/agents/:hostId/:agent/:tab"
-              element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />}
+              element={
+                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
+              }
             />
           </Routes>
         </MemoryRouter>
       </DaemonProvider>,
     );
 
-    await waitFor(() => expect(screen.getByRole("navigation", { name: "Agent workspace" })).toBeInTheDocument());
-    expect(screen.getByRole("link", { name: "Terminal" })).toHaveAttribute("href", "/agents/local/worker/console");
+    await waitFor(() =>
+      expect(screen.getByRole("navigation", { name: "Agent workspace" })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("link", { name: "Terminal" })).toHaveAttribute(
+      "href",
+      "/agents/local/worker/console",
+    );
     expect(screen.queryByRole("link", { name: "Autopilot" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Activity" })).toHaveAttribute("href", "/agents/local/worker/activity");
-    expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute("href", "/agents/local/worker/tasks");
-    expect(screen.getByRole("link", { name: "Configuration" })).toHaveAttribute("href", "/agents/local/worker/configuration");
-    expect(screen.getByRole("link", { name: "Advanced" })).toHaveAttribute("href", "/agents/local/worker/advanced");
+    expect(screen.getByRole("link", { name: "Activity" })).toHaveAttribute(
+      "href",
+      "/agents/local/worker/activity",
+    );
+    expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute(
+      "href",
+      "/agents/local/worker/tasks",
+    );
+    expect(screen.getByRole("link", { name: "Configuration" })).toHaveAttribute(
+      "href",
+      "/agents/local/worker/configuration",
+    );
+    expect(screen.getByRole("link", { name: "Advanced" })).toHaveAttribute(
+      "href",
+      "/agents/local/worker/advanced",
+    );
     expect(screen.getByText("This agent has no interactive terminal.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Configuration" })).toHaveAttribute(
       "href",
@@ -403,7 +556,9 @@ describe("AgentWorkspace", () => {
           <Routes>
             <Route
               path="/agents/:hostId/:agent/:tab"
-              element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />}
+              element={
+                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
+              }
             />
           </Routes>
         </MemoryRouter>
@@ -427,7 +582,14 @@ describe("AgentWorkspace", () => {
           <Routes>
             <Route
               path="/agents/:hostId/:agent/:tab"
-              element={<AgentWorkspace hostId={host.id} hostLabel="Remote" agent={agent} refresh={vi.fn()} />}
+              element={
+                <AgentWorkspace
+                  hostId={host.id}
+                  hostLabel="Remote"
+                  agent={agent}
+                  refresh={vi.fn()}
+                />
+              }
             />
           </Routes>
         </MemoryRouter>
@@ -453,14 +615,21 @@ describe("AgentWorkspace", () => {
           <Routes>
             <Route
               path="/agents/:hostId/:agent/:tab"
-              element={<><AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} /><Location /></>}
+              element={
+                <>
+                  <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
+                  <Location />
+                </>
+              }
             />
           </Routes>
         </MemoryRouter>
       </DaemonProvider>,
     );
 
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console"));
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console"),
+    );
   });
 });
 
@@ -475,7 +644,12 @@ describe("AgentWorkspace in Simple mode", () => {
           <Routes>
             <Route
               path="/agents/:hostId/:agent/:tab"
-              element={<><AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} /><Location /></>}
+              element={
+                <>
+                  <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
+                  <Location />
+                </>
+              }
             />
           </Routes>
         </MemoryRouter>
@@ -489,12 +663,11 @@ describe("AgentWorkspace in Simple mode", () => {
     renderAt("/agents/local/worker/tasks");
 
     const nav = await screen.findByRole("navigation", { name: "Agent workspace" });
-    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "Chat",
-      "Tasks",
-      "Terminal",
-      "Configuration",
-    ]);
+    expect(
+      within(nav)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Chat", "Tasks", "Terminal", "Configuration"]);
     expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "IMPROVE-37" })).toBeInTheDocument();
   });
@@ -503,13 +676,18 @@ describe("AgentWorkspace in Simple mode", () => {
     renderAt("/agents/local/worker/console");
 
     const nav = await screen.findByRole("navigation", { name: "Agent workspace" });
-    expect(within(nav).getByRole("link", { name: "Terminal" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "Terminal" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
     expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console");
   });
 
   it.each(["activity", "advanced"])("sends a hidden %s tab to Chat", async (tab) => {
     renderAt(`/agents/local/worker/${tab}`);
 
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/chat"));
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/chat"),
+    );
   });
 });

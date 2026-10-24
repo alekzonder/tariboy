@@ -21,11 +21,34 @@ const OLD_ID = "dev-worker-20200102030400-1";
 // SetIterationDone; failure states leave productive at its DEFAULT 1). OLD_ID is
 // thus a done+idle iteration; TODAY_ID a done+productive one.
 const ITERS = [
-  { id: OLD_ID, trigger: "manual", status: "done", started_at: OLD_ISO, done: true, productive: false, tags: [] },
-  { id: TODAY_ID, trigger: "manual", status: "done", started_at: TODAY_ISO, done: true, productive: true, tags: ["processed"] },
+  {
+    id: OLD_ID,
+    trigger: "manual",
+    status: "done",
+    started_at: OLD_ISO,
+    done: true,
+    productive: false,
+    tags: [],
+  },
+  {
+    id: TODAY_ID,
+    trigger: "manual",
+    status: "done",
+    started_at: TODAY_ISO,
+    done: true,
+    productive: true,
+    tags: ["processed"],
+  },
 ];
 const mkEvent = (trigger: string, iter: string) => [
-  { seq: 1, kind: "iteration_started", source: "system", at: "t1", data: JSON.stringify({ trigger }), iteration_id: iter },
+  {
+    seq: 1,
+    kind: "iteration_started",
+    source: "system",
+    at: "t1",
+    data: JSON.stringify({ trigger }),
+    iteration_id: iter,
+  },
 ];
 const FULL_EVENTS = mkEvent("fulldefault", "x");
 const ITER_EVENTS = mkEvent("iterpane", TODAY_ID);
@@ -33,16 +56,30 @@ const ITER_EVENTS = mkEvent("iterpane", TODAY_ID);
 let urls: string[] = [];
 beforeEach(() => {
   urls = [];
-  vi.stubGlobal("EventSource", class { addEventListener() {} removeEventListener() {} close() {} } as unknown as typeof EventSource);
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) => {
-    urls.push(url);
-    let result: unknown = { events: [] };
-    if (url.includes("transcript")) result = { calls: [] };
-    else if (url.includes("logs?iteration=")) result = { events: ITER_EVENTS };
-    else if (url.includes("/iterations")) result = { iterations: ITERS, count: ITERS.length };
-    else if (url.includes("logs")) result = { events: FULL_EVENTS };
-    return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }) } as Response);
-  }));
+  vi.stubGlobal(
+    "EventSource",
+    class {
+      addEventListener() {}
+      removeEventListener() {}
+      close() {}
+    } as unknown as typeof EventSource,
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      urls.push(url);
+      let result: unknown = { events: [] };
+      if (url.includes("transcript")) result = { calls: [] };
+      else if (url.includes("logs?iteration=")) result = { events: ITER_EVENTS };
+      else if (url.includes("/iterations")) result = { iterations: ITERS, count: ITERS.length };
+      else if (url.includes("logs")) result = { events: FULL_EVENTS };
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result }),
+      } as Response);
+    }),
+  );
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -59,16 +96,33 @@ const renderPage = (route = "/") =>
 function NavigationProbe() {
   const location = useLocation();
   const navigate = useNavigate();
-  return <><output data-testid="location">{location.search}</output><button onClick={() => navigate("?keep=yes&iteration=does-not-exist")}>external</button><button onClick={() => navigate(-1)}>back</button></>;
+  return (
+    <>
+      <output data-testid="location">{location.search}</output>
+      <button onClick={() => navigate("?keep=yes&iteration=does-not-exist")}>external</button>
+      <button onClick={() => navigate(-1)}>back</button>
+    </>
+  );
 }
 
-const renderRoutedPage = (route: string) => render(
-  <MemoryRouter initialEntries={[route]}>
-    <AgentNameContext.Provider value="dev-worker">
-      <Routes><Route path="/agents/:hostId/:agent/activity" element={<><NavigationProbe /><AuditLogPage /></>} /></Routes>
-    </AgentNameContext.Provider>
-  </MemoryRouter>,
-);
+const renderRoutedPage = (route: string) =>
+  render(
+    <MemoryRouter initialEntries={[route]}>
+      <AgentNameContext.Provider value="dev-worker">
+        <Routes>
+          <Route
+            path="/agents/:hostId/:agent/activity"
+            element={
+              <>
+                <NavigationProbe />
+                <AuditLogPage />
+              </>
+            }
+          />
+        </Routes>
+      </AgentNameContext.Provider>
+    </MemoryRouter>,
+  );
 
 describe("AuditLogPage (merged iterations + audit log)", () => {
   it("renders the Full log in the right pane by default", async () => {
@@ -110,7 +164,9 @@ describe("AuditLogPage (merged iterations + audit log)", () => {
     fireEvent.click(screen.getByText("09:05").closest("button")!);
     // Right pane is now IterationAuditLog: it fetches logs?iteration=<id> and
     // shows the iteration header chip (condensed id · status from the row).
-    await waitFor(() => expect(urls.some((u) => u.includes(`logs?iteration=${TODAY_ID}`))).toBe(true));
+    await waitFor(() =>
+      expect(urls.some((u) => u.includes(`logs?iteration=${TODAY_ID}`))).toBe(true),
+    );
     await waitFor(() => expect(screen.getByText(/065606-3 · done/)).toBeInTheDocument());
     expect(screen.getByText("iterpane")).toBeInTheDocument();
   });
@@ -120,7 +176,9 @@ describe("AuditLogPage (merged iterations + audit log)", () => {
     // Right pane opens directly on that iteration (not Full log): its log fetch
     // and header chip appear without any click, and once items load the
     // preselection survives the pruning-fallback effect.
-    await waitFor(() => expect(urls.some((u) => u.includes(`logs?iteration=${TODAY_ID}`))).toBe(true));
+    await waitFor(() =>
+      expect(urls.some((u) => u.includes(`logs?iteration=${TODAY_ID}`))).toBe(true),
+    );
     await waitFor(() => expect(screen.getByText(/065606-3 · done/)).toBeInTheDocument());
     expect(screen.getByText("iterpane")).toBeInTheDocument();
     // Full log is NOT the selected row. Match the standalone selected token, not
@@ -131,7 +189,9 @@ describe("AuditLogPage (merged iterations + audit log)", () => {
 
   it("shows an explicit missing state when ?iteration= names an unknown iteration", async () => {
     renderPage("/agent/dev-worker/logs?iteration=does-not-exist");
-    await waitFor(() => expect(screen.getByText("Iteration does-not-exist was not found.")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("Iteration does-not-exist was not found.")).toBeInTheDocument(),
+    );
     const full = screen.getByText("Full log").closest("button")!;
     expect(full.className).not.toMatch(/(^|\s)bg-accent($|\s)/);
   });
@@ -139,7 +199,9 @@ describe("AuditLogPage (merged iterations + audit log)", () => {
   it("keeps selection in the URL, preserves other params, and follows external and back navigation", async () => {
     renderRoutedPage("/agents/local/dev-worker/activity?keep=yes");
     fireEvent.click(await screen.findByText("09:05"));
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(`keep=yes&iteration=${TODAY_ID}`));
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent(`keep=yes&iteration=${TODAY_ID}`),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "external" }));
     expect(await screen.findByText("Iteration does-not-exist was not found.")).toBeInTheDocument();
@@ -166,14 +228,18 @@ describe("AuditLogPage iteration tags", () => {
 
     fireEvent.change(screen.getByLabelText("Filter by tag"), { target: { value: "processed" } });
     await waitFor(() =>
-      expect(urls.some((u) => u.includes("/iterations?") && u.includes("tag=processed"))).toBe(true),
+      expect(urls.some((u) => u.includes("/iterations?") && u.includes("tag=processed"))).toBe(
+        true,
+      ),
     );
 
     fireEvent.change(screen.getByLabelText("Started after"), { target: { value: "2026-09-01" } });
     fireEvent.change(screen.getByLabelText("Started before"), { target: { value: "2026-09-30" } });
     await waitFor(() =>
       expect(
-        urls.some((u) => u.includes("started_after=2026-09-01") && u.includes("started_before=2026-09-30")),
+        urls.some(
+          (u) => u.includes("started_after=2026-09-01") && u.includes("started_before=2026-09-30"),
+        ),
       ).toBe(true),
     );
     // Filters live in the URL next to the pre-existing params.
@@ -190,6 +256,8 @@ describe("AuditLogPage iteration tags", () => {
     await waitFor(() => expect(urls.some((u) => u.includes("/iterations/tags/set"))).toBe(true));
 
     fireEvent.click(screen.getByRole("button", { name: "Remove tag processed" }));
-    await waitFor(() => expect(urls.filter((u) => u.includes("/iterations/tags/set")).length).toBe(2));
+    await waitFor(() =>
+      expect(urls.filter((u) => u.includes("/iterations/tags/set")).length).toBe(2),
+    );
   });
 });

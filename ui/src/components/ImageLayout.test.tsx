@@ -22,12 +22,19 @@ function stubFetch() {
         result = {
           images: [
             {
-              name: "foo", tag: "v1", digest: "sha256:deadbeefcafef00d",
-              built_at: "2026-07-12T00:00:00Z", bare: false, source: "foo-source",
+              name: "foo",
+              tag: "v1",
+              digest: "sha256:deadbeefcafef00d",
+              built_at: "2026-07-12T00:00:00Z",
+              bare: false,
+              source: "foo-source",
             },
             {
-              name: "bare", tag: "latest", digest: "sha256:bare",
-              built_at: "2026-07-12T00:00:00Z", bare: true,
+              name: "bare",
+              tag: "latest",
+              digest: "sha256:bare",
+              built_at: "2026-07-12T00:00:00Z",
+              bare: true,
             },
           ],
           count: 2,
@@ -35,11 +42,19 @@ function stubFetch() {
       } else if (!path.endsWith("/provenance") && /\/api\/images\/[^/]+$/.test(path)) {
         const bare = path.includes("bare%3Alatest");
         result = {
-          schema_version: 1, name: bare ? "bare" : "foo", tag: bare ? "latest" : "v1",
+          schema_version: 1,
+          name: bare ? "bare" : "foo",
+          tag: bare ? "latest" : "v1",
           digest: bare ? "sha256:bare" : "sha256:deadbeefcafef00d",
-          built_at: "2026-07-12T00:00:00Z", parents: [], plugins: [], requires_secrets: [],
-          harness: { type: "claude", interactive: false }, env: {},
-          policy: {}, layers: [], bare,
+          built_at: "2026-07-12T00:00:00Z",
+          parents: [],
+          plugins: [],
+          requires_secrets: [],
+          harness: { type: "claude", interactive: false },
+          env: {},
+          policy: {},
+          layers: [],
+          bare,
         };
       } else if (path.endsWith("/provenance")) {
         result = path.includes("bare%3Alatest")
@@ -47,7 +62,9 @@ function stubFetch() {
           : { ref: "foo:v1", source_cwd: "/srv/images/foo", source_available: true };
       }
       return Promise.resolve({
-        ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }),
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result }),
       } as Response);
     }),
   );
@@ -55,7 +72,9 @@ function stubFetch() {
 
 beforeEach(() => {
   stubFetch();
-  vi.spyOn(daemons, "resolveDaemon").mockImplementation(async (id) => id ? { id, label: id, baseURL: "https://route", token: "" } : null);
+  vi.spyOn(daemons, "resolveDaemon").mockImplementation(async (id) =>
+    id ? { id, label: id, baseURL: "https://route", token: "" } : null,
+  );
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -66,7 +85,7 @@ function renderAt(path: string) {
         <Route path="/images/:name/:tag" element={<ImageLayout />}>
           <Route index element={<div>overview body</div>} />
           <Route path="template" element={<div>template body</div>} />
-		  <Route path="skills" element={<div>skills body</div>} />
+          <Route path="skills" element={<div>skills body</div>} />
           <Route path="files" element={<div>files body</div>} />
         </Route>
       </Routes>
@@ -89,7 +108,7 @@ function renderServerAt(path: string) {
         >
           <Route index element={<div>overview body</div>} />
           <Route path="template" element={<div>template body</div>} />
-		  <Route path="skills" element={<div>skills body</div>} />
+          <Route path="skills" element={<div>skills body</div>} />
           <Route path="files" element={<div>files body</div>} />
         </Route>
       </Routes>
@@ -105,7 +124,7 @@ describe("ImageLayout", () => {
     // All three tabs are present.
     expect(screen.getByText("Overview")).toBeInTheDocument();
     expect(screen.getByText("Template")).toBeInTheDocument();
-	expect(screen.getByText("Skills")).toBeInTheDocument();
+    expect(screen.getByText("Skills")).toBeInTheDocument();
     expect(screen.getByText("Files")).toBeInTheDocument();
     // The header shows the short digest once the manifest loads.
     await waitFor(() => expect(screen.getByText("sha256:deadbeefc")).toBeInTheDocument());
@@ -124,15 +143,20 @@ describe("ImageLayout", () => {
   });
 
   it("routes to the Skills tab", async () => {
-	renderAt("/images/foo/v1/skills");
-	expect(await screen.findByText("skills body")).toBeInTheDocument();
-	expect(screen.getByRole("link", { name: "Skills" })).toHaveAttribute("href", "/images/foo/v1/skills");
+    renderAt("/images/foo/v1/skills");
+    expect(await screen.findByText("skills body")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Skills" })).toHaveAttribute(
+      "href",
+      "/images/foo/v1/skills",
+    );
   });
 
   it("offers run, source CWD, and remove for an image built from a directory", async () => {
     renderAt("/images/foo/v1");
-    expect(await screen.findByRole("link", { name: "Run Agent" }))
-      .toHaveAttribute("href", "/?new=1&host=&image=foo%3Av1");
+    expect(await screen.findByRole("link", { name: "Run Agent" })).toHaveAttribute(
+      "href",
+      "/?new=1&host=&image=foo%3Av1",
+    );
     expect(await screen.findByText("/srv/images/foo")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open in VS Code" }));
     expect(openHostPathInVSCode).toHaveBeenCalledWith("", "/srv/images/foo");
@@ -150,13 +174,17 @@ describe("ImageLayout", () => {
   it("keeps image actions scoped to an explicit server route", async () => {
     renderServerAt("/servers/remote-1/images/foo/v1");
 
-    expect(await screen.findByRole("link", { name: "Run Agent" }))
-      .toHaveAttribute("href", "/?new=1&host=remote-1&image=foo%3Av1");
+    expect(await screen.findByRole("link", { name: "Run Agent" })).toHaveAttribute(
+      "href",
+      "/?new=1&host=remote-1&image=foo%3Av1",
+    );
     fireEvent.click(screen.getByRole("link", { name: "Template" }));
-    expect(screen.getByTestId("location"))
-      .toHaveTextContent("/servers/remote-1/images/foo/v1/template");
-	fireEvent.click(screen.getByRole("link", { name: "Skills" }));
-	expect(screen.getByTestId("location"))
-	  .toHaveTextContent("/servers/remote-1/images/foo/v1/skills");
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/servers/remote-1/images/foo/v1/template",
+    );
+    fireEvent.click(screen.getByRole("link", { name: "Skills" }));
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/servers/remote-1/images/foo/v1/skills",
+    );
   });
 });

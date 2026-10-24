@@ -15,14 +15,7 @@ export interface HarnessCatalogState {
 }
 
 export const RUNTIME_PRESETS_STORAGE_KEY = "tariboy:runtime-presets:v1";
-export const EFFORT_PRESETS = [
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "ultracode",
-] as const;
+export const EFFORT_PRESETS = ["low", "medium", "high", "xhigh", "max", "ultracode"] as const;
 
 const LEARNED_PRESET_LIMIT = 20;
 
@@ -67,9 +60,7 @@ function loadLearnedPresets(): LearnedRuntimePresets {
   }
 }
 
-function uniqueTrimmed(
-  groups: readonly (readonly (string | undefined)[])[],
-): string[] {
+function uniqueTrimmed(groups: readonly (readonly (string | undefined)[])[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const group of groups) {
@@ -102,9 +93,7 @@ export function rememberRuntimePreset(
 
   const learned = loadLearnedPresets();
   const current = learned[harness]?.[field] ?? [];
-  const next = [...current.filter((entry) => entry !== value), value].slice(
-    -LEARNED_PRESET_LIMIT,
-  );
+  const next = [...current.filter((entry) => entry !== value), value].slice(-LEARNED_PRESET_LIMIT);
   learned[harness] = {
     ...learned[harness],
     [field]: next,

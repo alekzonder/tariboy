@@ -7,7 +7,9 @@ export function useActiveLinkIntoView<T extends HTMLElement>() {
   const { pathname } = useLocation();
   useEffect(() => {
     // jsdom has no scrollIntoView.
-    ref.current?.querySelector('[aria-current="page"]')?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    ref.current
+      ?.querySelector('[aria-current="page"]')
+      ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [pathname]);
   return ref;
 }

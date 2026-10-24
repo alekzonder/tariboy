@@ -15,9 +15,7 @@ import { useApi } from "@/components/apiContext";
 // agent.go): a completed-clean run reads as 'default', the failure states stand
 // out as 'destructive', and in-flight/incomplete ('running', 'no_i_am_done')
 // stay neutral 'secondary'.
-function statusVariant(
-  status: string,
-): "default" | "secondary" | "destructive" {
+function statusVariant(status: string): "default" | "secondary" | "destructive" {
   if (status === "done") return "default";
   if (status === "harness_error" || status === "timeout" || status === "killed")
     return "destructive";
@@ -29,7 +27,9 @@ function statusVariant(
 // shows the full cross-iteration stream (default) or a single iteration's log.
 // period, when given, is the Activity tab's shared window: it replaces the
 // page's own started-at date filters.
-export default function AuditLogPage({ period }: { period?: { since: string; until: string } } = {}) {
+export default function AuditLogPage({
+  period,
+}: { period?: { since: string; until: string } } = {}) {
   const name = useAgentName();
   const api = useApi();
   const descriptor = api.target;
@@ -50,7 +50,9 @@ export default function AuditLogPage({ period }: { period?: { since: string; unt
   // A rolling period moves every minute; the list keeps its rows while the
   // moved window reloads instead of blanking, so the period is not in the key.
   const listKey = `${descriptor?.id ?? ""}\0${descriptor?.baseURL ?? ""}\0${descriptor?.token ?? ""}\0${name}\0${period ? tagFilter : queryString}`;
-  const [listState, setListState] = useState<{ key: string; items: IterationSummary[] } | null>(null);
+  const [listState, setListState] = useState<{ key: string; items: IterationSummary[] } | null>(
+    null,
+  );
   const items = listState?.key === listKey ? listState.items : [];
   const loaded = listState?.key === listKey;
   // selected iteration id; null = the Full log (default). Preselect from the
@@ -81,24 +83,30 @@ export default function AuditLogPage({ period }: { period?: { since: string; unt
     let generation = 0;
     const load = () => {
       const requestGeneration = ++generation;
-      void api.agentGet<{ iterations: IterationSummary[]; count: number }>(
-        name,
-        queryString ? `iterations?${queryString}` : "iterations",
-      )
+      void api
+        .agentGet<{ iterations: IterationSummary[]; count: number }>(
+          name,
+          queryString ? `iterations?${queryString}` : "iterations",
+        )
         .then((r) => {
-          if (current && requestGeneration === generation) setListState({
-            key: listKey,
-            items: r.iterations
-              .slice()
-              .sort((a, b) => b.started_at.localeCompare(a.started_at)),
-          });
+          if (current && requestGeneration === generation)
+            setListState({
+              key: listKey,
+              items: r.iterations.slice().sort((a, b) => b.started_at.localeCompare(a.started_at)),
+            });
         })
-        .catch(() => { /* keep last on a transient failure */ });
+        .catch(() => {
+          /* keep last on a transient failure */
+        });
     };
     load();
     const t = window.setInterval(load, 5000);
     const off = api.agents.subscribeAgentEvents(name, ["iteration"], () => load());
-    return () => { current = false; window.clearInterval(t); off(); };
+    return () => {
+      current = false;
+      window.clearInterval(t);
+      off();
+    };
   }, [api, listKey, name, queryString]);
 
   const selectedItem = selected ? items.find((it) => it.id === selected) : null;
@@ -109,13 +117,17 @@ export default function AuditLogPage({ period }: { period?: { since: string; unt
   const [tagError, setTagError] = useState("");
   const saveTags = (id: string, tags: string[]) => {
     setTagError("");
-    void api.iterations.setIterationTags(name, id, tags)
+    void api.iterations
+      .setIterationTags(name, id, tags)
       .then((r) => {
         const applied = r.tags?.[id] ?? tags;
-        setListState((prev) => prev && ({
-          ...prev,
-          items: prev.items.map((it) => (it.id === id ? { ...it, tags: applied } : it)),
-        }));
+        setListState(
+          (prev) =>
+            prev && {
+              ...prev,
+              items: prev.items.map((it) => (it.id === id ? { ...it, tags: applied } : it)),
+            },
+        );
       })
       .catch((e: unknown) => setTagError(e instanceof Error ? e.message : "could not save tags"));
   };
@@ -130,20 +142,22 @@ export default function AuditLogPage({ period }: { period?: { since: string; unt
             value={tagFilter}
             onChange={(e) => setFilter("tag", e.target.value)}
           />
-          {!period && <div className="flex gap-1">
-            <Input
-              aria-label="Started after"
-              type="date"
-              value={afterFilter}
-              onChange={(e) => setFilter("started_after", e.target.value)}
-            />
-            <Input
-              aria-label="Started before"
-              type="date"
-              value={beforeFilter}
-              onChange={(e) => setFilter("started_before", e.target.value)}
-            />
-          </div>}
+          {!period && (
+            <div className="flex gap-1">
+              <Input
+                aria-label="Started after"
+                type="date"
+                value={afterFilter}
+                onChange={(e) => setFilter("started_after", e.target.value)}
+              />
+              <Input
+                aria-label="Started before"
+                type="date"
+                value={beforeFilter}
+                onChange={(e) => setFilter("started_before", e.target.value)}
+              />
+            </div>
+          )}
         </div>
         <button
           onClick={() => select(null)}
@@ -166,10 +180,15 @@ export default function AuditLogPage({ period }: { period?: { since: string; unt
             <span className="font-mono text-xs">{fmtDateTime(it.started_at)}</span>
             <span className="flex flex-wrap items-center justify-end gap-1">
               {(it.tags ?? []).map((tag) => (
-                <Badge key={tag} variant="outline">{tag}</Badge>
+                <Badge key={tag} variant="outline">
+                  {tag}
+                </Badge>
               ))}
               {it.productive === false && (
-                <Badge variant="outline" title="finished with i-am-done --idle (no productive work)">
+                <Badge
+                  variant="outline"
+                  title="finished with i-am-done --idle (no productive work)"
+                >
                   idle
                 </Badge>
               )}
@@ -190,7 +209,10 @@ export default function AuditLogPage({ period }: { period?: { since: string; unt
                   <button
                     aria-label={`Remove tag ${tag}`}
                     onClick={() =>
-                      saveTags(selectedItem.id, (selectedItem.tags ?? []).filter((t) => t !== tag))
+                      saveTags(
+                        selectedItem.id,
+                        (selectedItem.tags ?? []).filter((t) => t !== tag),
+                      )
                     }
                   >
                     ×
@@ -212,7 +234,11 @@ export default function AuditLogPage({ period }: { period?: { since: string; unt
                   setDraftTag("");
                 }}
               />
-              {tagError && <span role="alert" className="text-xs text-destructive">{tagError}</span>}
+              {tagError && (
+                <span role="alert" className="text-xs text-destructive">
+                  {tagError}
+                </span>
+              )}
             </div>
             <div className="min-h-0 flex-1">
               <IterationAuditLog
@@ -224,7 +250,9 @@ export default function AuditLogPage({ period }: { period?: { since: string; unt
             </div>
           </div>
         ) : loaded ? (
-          <p role="status" className="text-sm text-muted-foreground">Iteration {selected} was not found.</p>
+          <p role="status" className="text-sm text-muted-foreground">
+            Iteration {selected} was not found.
+          </p>
         ) : (
           <p className="text-sm text-muted-foreground">Loading iteration…</p>
         )}

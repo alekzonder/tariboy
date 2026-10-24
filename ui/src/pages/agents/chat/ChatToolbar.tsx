@@ -1,8 +1,13 @@
 import type { ReactNode } from "react";
 import { Check, Download, Mail, MoreHorizontal, Plus, Search } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuCheckItem, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuCheckItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { ChatMessage } from "@/lib/api";
 import { DEFAULT_CHAT_TYPES, EXTRA_CHAT_TYPES } from "./chatTypes";
@@ -12,29 +17,63 @@ import type { AgentChatState } from "./useAgentChat";
 const ALL_TYPES = [...DEFAULT_CHAT_TYPES, ...EXTRA_CHAT_TYPES];
 
 function transcript(messages: ChatMessage[], agent: string): string {
-  return [`# Chat with ${agent}`, "", ...messages.map((message) =>
-    `## ${message.from} · ${message.ts}\n\n${message.text}\n`)].join("\n");
+  return [
+    `# Chat with ${agent}`,
+    "",
+    ...messages.map((message) => `## ${message.from} · ${message.ts}\n\n${message.text}\n`),
+  ].join("\n");
 }
 
-type ToolbarChat = Pick<AgentChatState,
-  "name" | "messages" | "shared" | "current" | "selected" | "setSelected" |
-  "query" | "setQuery" | "newCount" | "markRead" | "markUnread" |
-  "types" | "toggleType" | "resetTypes"
+type ToolbarChat = Pick<
+  AgentChatState,
+  | "name"
+  | "messages"
+  | "shared"
+  | "current"
+  | "selected"
+  | "setSelected"
+  | "query"
+  | "setQuery"
+  | "newCount"
+  | "markRead"
+  | "markUnread"
+  | "types"
+  | "toggleType"
+  | "resetTypes"
 >;
 
-export function ChatToolbar({ chat, leading, personalOnly, onCreate }: {
+export function ChatToolbar({
+  chat,
+  leading,
+  personalOnly,
+  onCreate,
+}: {
   chat: ToolbarChat;
   leading?: ReactNode;
   personalOnly: boolean;
   onCreate: () => void;
 }) {
   const {
-    name, messages, shared, current, selected, setSelected, query, setQuery,
-    newCount, markRead, markUnread, types, toggleType, resetTypes,
+    name,
+    messages,
+    shared,
+    current,
+    selected,
+    setSelected,
+    query,
+    setQuery,
+    newCount,
+    markRead,
+    markUnread,
+    types,
+    toggleType,
+    resetTypes,
   } = chat;
 
   function exportTranscript() {
-    const url = URL.createObjectURL(new Blob([transcript(messages, name)], { type: "text/markdown" }));
+    const url = URL.createObjectURL(
+      new Blob([transcript(messages, name)], { type: "text/markdown" }),
+    );
     const link = document.createElement("a");
     link.href = url;
     link.download = `chat-${name}.md`;
@@ -45,33 +84,42 @@ export function ChatToolbar({ chat, leading, personalOnly, onCreate }: {
   return (
     <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">
       {leading}
-      {!personalOnly && <div role="tablist" aria-label="Agent chats" className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5">
-        {[...KINDS.map(([key, label]) => [key, label] as [string, string]),
-          ...shared.map((chat) => [chat.id, chat.title || chat.id] as [string, string]),
-        ].map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={selected === key}
-            onClick={() => setSelected(key)}
-            className={`h-[22px] max-w-[140px] truncate rounded-[7px] px-[9px] text-[11.5px] ${selected === key
-              ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
-              : "text-muted-foreground hover:text-foreground"}`}
-          >
-            {label}
-          </button>
-        ))}
-        <button
-          type="button"
-          aria-label="New chat"
-          title="Start a chat with this agent and others"
-          onClick={onCreate}
-          className="grid size-[22px] place-items-center rounded-[7px] text-muted-foreground hover:bg-card hover:text-foreground"
+      {!personalOnly && (
+        <div
+          role="tablist"
+          aria-label="Agent chats"
+          className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5"
         >
-          <Plus className="size-3.5" aria-hidden />
-        </button>
-      </div>}
+          {[
+            ...KINDS.map(([key, label]) => [key, label] as [string, string]),
+            ...shared.map((chat) => [chat.id, chat.title || chat.id] as [string, string]),
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={selected === key}
+              onClick={() => setSelected(key)}
+              className={`h-[22px] max-w-[140px] truncate rounded-[7px] px-[9px] text-[11.5px] ${
+                selected === key
+                  ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-label="New chat"
+            title="Start a chat with this agent and others"
+            onClick={onCreate}
+            className="grid size-[22px] place-items-center rounded-[7px] text-muted-foreground hover:bg-card hover:text-foreground"
+          >
+            <Plus className="size-3.5" aria-hidden />
+          </button>
+        </div>
+      )}
       <label className="flex h-7 w-[232px] items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-muted-foreground">
         <Search className="size-3 shrink-0" aria-hidden />
         <input
@@ -137,16 +185,17 @@ export function ChatToolbar({ chat, leading, personalOnly, onCreate }: {
               <DropdownMenuCheckItem
                 key={type}
                 checked={types.includes(type)}
-                onSelect={(event: Event) => { event.preventDefault(); toggleType(type); }}
+                onSelect={(event: Event) => {
+                  event.preventDefault();
+                  toggleType(type);
+                }}
                 className="font-mono text-xs"
               >
                 {type}
               </DropdownMenuCheckItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={resetTypes}>
-              Reset to the default types
-            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={resetTypes}>Reset to the default types</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

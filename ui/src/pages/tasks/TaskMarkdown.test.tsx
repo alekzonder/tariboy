@@ -1,168 +1,233 @@
-import { useState } from "react"
-import { act, fireEvent, render, screen } from "@testing-library/react"
-import type { Editor } from "@tiptap/react"
-import { describe, expect, it, vi } from "vitest"
-import { MarkdownContent } from "./TaskMarkdown"
-import MarkdownEditor from "./TaskMarkdownEditor"
+import { useState } from "react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import type { Editor } from "@tiptap/react";
+import { describe, expect, it, vi } from "vitest";
+import { MarkdownContent } from "./TaskMarkdown";
+import MarkdownEditor from "./TaskMarkdownEditor";
 
-const { openExternalUrl } = vi.hoisted(() => ({ openExternalUrl: vi.fn().mockResolvedValue(null) }))
+const { openExternalUrl } = vi.hoisted(() => ({
+  openExternalUrl: vi.fn().mockResolvedValue(null),
+}));
 
 vi.mock("@/lib/desktop", () => ({
   isDesktop: () => true,
   opensWebLinks: () => true,
   openExternalUrl,
-}))
+}));
 
 describe("task Markdown", () => {
   it("opens absolute web links outside the Desktop WebView", () => {
-    openExternalUrl.mockClear()
-    render(<MarkdownContent>{"[Tariboy](https://example.com/path)"}</MarkdownContent>)
-    const link = screen.getByRole("link", { name: "Tariboy" })
-    const click = new MouseEvent("click", { bubbles: true, cancelable: true })
+    openExternalUrl.mockClear();
+    render(<MarkdownContent>{"[Tariboy](https://example.com/path)"}</MarkdownContent>);
+    const link = screen.getByRole("link", { name: "Tariboy" });
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
 
-    link.dispatchEvent(click)
+    link.dispatchEvent(click);
 
-    expect(click.defaultPrevented).toBe(true)
-    expect(openExternalUrl).toHaveBeenCalledWith("https://example.com/path")
-  })
+    expect(click.defaultPrevented).toBe(true);
+    expect(openExternalUrl).toHaveBeenCalledWith("https://example.com/path");
+  });
 
   it("opens links from an editable description outside the Desktop WebView", () => {
-    openExternalUrl.mockClear()
-    render(<MarkdownEditor value="[Tariboy](https://example.com/edit)" onChange={() => {}} />)
-    const link = screen.getByRole("link", { name: "Tariboy" })
-    const click = new MouseEvent("click", { bubbles: true, cancelable: true })
+    openExternalUrl.mockClear();
+    render(<MarkdownEditor value="[Tariboy](https://example.com/edit)" onChange={() => {}} />);
+    const link = screen.getByRole("link", { name: "Tariboy" });
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
 
-    link.dispatchEvent(click)
+    link.dispatchEvent(click);
 
-    expect(click.defaultPrevented).toBe(true)
-    expect(openExternalUrl).toHaveBeenCalledWith("https://example.com/edit")
-  })
+    expect(click.defaultPrevented).toBe(true);
+    expect(openExternalUrl).toHaveBeenCalledWith("https://example.com/edit");
+  });
 
   it("renders task formatting and neutralizes executable markup", () => {
-    const { container } = render(<MarkdownContent>{"# Plan\n\n**Bold** and ~~removed~~\n\n- [x] Done\n\n| Name | State |\n| --- | --- |\n| Work | Ready |\n\n[Unsafe](javascript:alert%281%29)\n\n<script>alert(1)</script>"}</MarkdownContent>)
-    expect(screen.getByRole("heading", { name: "Plan" })).toBeInTheDocument()
-    expect(container.querySelector("strong")).toHaveTextContent("Bold")
-    expect(container.querySelector("del")).toHaveTextContent("removed")
-    expect(screen.getByRole("checkbox")).toBeChecked()
-    expect(screen.getByRole("table")).toHaveTextContent("Ready")
-    expect(container.querySelector("script")).toBeNull()
-    expect(container.querySelector('a[href^="javascript:"]')).toBeNull()
-  })
+    const { container } = render(
+      <MarkdownContent>
+        {
+          "# Plan\n\n**Bold** and ~~removed~~\n\n- [x] Done\n\n| Name | State |\n| --- | --- |\n| Work | Ready |\n\n[Unsafe](javascript:alert%281%29)\n\n<script>alert(1)</script>"
+        }
+      </MarkdownContent>,
+    );
+    expect(screen.getByRole("heading", { name: "Plan" })).toBeInTheDocument();
+    expect(container.querySelector("strong")).toHaveTextContent("Bold");
+    expect(container.querySelector("del")).toHaveTextContent("removed");
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    expect(screen.getByRole("table")).toHaveTextContent("Ready");
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.querySelector('a[href^="javascript:"]')).toBeNull();
+  });
 
   it("keeps unsupported Markdown visible and editable in rich mode", () => {
-    const value = "# Plan\n\n<!-- keep this -->\n\nReference [Tariboy][site].\n\n[site]: https://example.com\n"
-    const onChange = vi.fn()
-    render(<MarkdownEditor id="description" value={value} onChange={onChange} />)
-    const textbox = screen.getByRole("textbox")
-    expect(textbox).toHaveAttribute("contenteditable", "true")
-    expect(textbox).toHaveTextContent("<!-- keep this -->")
-    expect(textbox).toHaveTextContent("[site]: https://example.com")
-    expect(screen.getByRole("button", { name: "Rich text" })).toHaveAttribute("aria-pressed", "true")
-    expect(onChange).not.toHaveBeenCalled()
-    const editor = (textbox as HTMLElement & { editor: Editor }).editor
-    act(() => { editor.commands.insertContentAt(editor.state.doc.content.size, "More") })
-    expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining("<!-- keep this -->"))
-    expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining("[site]: https://example.com"))
-    expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining("More"))
-  })
+    const value =
+      "# Plan\n\n<!-- keep this -->\n\nReference [Tariboy][site].\n\n[site]: https://example.com\n";
+    const onChange = vi.fn();
+    render(<MarkdownEditor id="description" value={value} onChange={onChange} />);
+    const textbox = screen.getByRole("textbox");
+    expect(textbox).toHaveAttribute("contenteditable", "true");
+    expect(textbox).toHaveTextContent("<!-- keep this -->");
+    expect(textbox).toHaveTextContent("[site]: https://example.com");
+    expect(screen.getByRole("button", { name: "Rich text" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    const editor = (textbox as HTMLElement & { editor: Editor }).editor;
+    act(() => {
+      editor.commands.insertContentAt(editor.state.doc.content.size, "More");
+    });
+    expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining("<!-- keep this -->"));
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.stringContaining("[site]: https://example.com"),
+    );
+    expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining("More"));
+  });
 
   it("preserves Markdown fences inside unsupported blocks", () => {
-    const value = "<!-- example\n```sh\necho hi\n```\n-->\n"
-    const onChange = vi.fn()
-    const { unmount } = render(<MarkdownEditor value={value} onChange={onChange} />)
-    const textbox = screen.getByRole("textbox")
-    const editor = (textbox as HTMLElement & { editor: Editor }).editor
-    act(() => { editor.commands.insertContentAt(editor.state.doc.content.size, "More") })
+    const value = "<!-- example\n```sh\necho hi\n```\n-->\n";
+    const onChange = vi.fn();
+    const { unmount } = render(<MarkdownEditor value={value} onChange={onChange} />);
+    const textbox = screen.getByRole("textbox");
+    const editor = (textbox as HTMLElement & { editor: Editor }).editor;
+    act(() => {
+      editor.commands.insertContentAt(editor.state.doc.content.size, "More");
+    });
 
-    const emitted = onChange.mock.lastCall?.[0]
-    unmount()
-    render(<MarkdownEditor value={emitted} onChange={() => {}} />)
-    expect(screen.getByRole("textbox").textContent).toContain("<!-- example\n```sh\necho hi\n```\n-->")
-  })
+    const emitted = onChange.mock.lastCall?.[0];
+    unmount();
+    render(<MarkdownEditor value={emitted} onChange={() => {}} />);
+    expect(screen.getByRole("textbox").textContent).toContain(
+      "<!-- example\n```sh\necho hi\n```\n-->",
+    );
+  });
 
   it("switches modes without changing source and emits Markdown for rich edits", () => {
     function Draft() {
-      const [value, setValue] = useState("Hello")
-      return <><MarkdownEditor value={value} onChange={setValue} /><output>{value}</output></>
+      const [value, setValue] = useState("Hello");
+      return (
+        <>
+          <MarkdownEditor value={value} onChange={setValue} />
+          <output>{value}</output>
+        </>
+      );
     }
-    render(<Draft />)
-    expect(screen.getByRole("textbox")).toHaveAttribute("contenteditable", "true")
-    fireEvent.click(screen.getByRole("button", { name: "Markdown" }))
-    expect(screen.getByRole("textbox")).toHaveValue("Hello")
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "World" } })
-    fireEvent.click(screen.getByRole("button", { name: "Rich text" }))
-    expect(screen.getByRole("textbox")).toHaveTextContent("World")
-    fireEvent.click(screen.getByRole("button", { name: "Heading 2" }))
-    expect(screen.getByRole("status")).toHaveTextContent("## World")
-  })
+    render(<Draft />);
+    expect(screen.getByRole("textbox")).toHaveAttribute("contenteditable", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Markdown" }));
+    expect(screen.getByRole("textbox")).toHaveValue("Hello");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "World" } });
+    fireEvent.click(screen.getByRole("button", { name: "Rich text" }));
+    expect(screen.getByRole("textbox")).toHaveTextContent("World");
+    fireEvent.click(screen.getByRole("button", { name: "Heading 2" }));
+    expect(screen.getByRole("status")).toHaveTextContent("## World");
+  });
 
-  it.each(["1. First", "- First", "- [ ] First"])("keeps rich editing after Enter in %j", (initial) => {
-    function Draft() {
-      const [value, setValue] = useState(initial)
-      return <MarkdownEditor value={value} onChange={setValue} />
-    }
-    render(<Draft />)
-    const textbox = screen.getByRole("textbox")
-    const editor = (textbox as HTMLElement & { editor: Editor }).editor
-    act(() => { editor.commands.focus("end", { scrollIntoView: false }) })
-    fireEvent.keyDown(textbox, { key: "Enter", code: "Enter", keyCode: 13 })
-    expect(screen.getByRole("textbox")).toBe(textbox)
-    expect(textbox).toHaveAttribute("contenteditable", "true")
-    expect(textbox.querySelectorAll("li")).toHaveLength(2)
-    expect(textbox.querySelectorAll("li")[1].querySelector("p")?.textContent).toBe("")
-    expect(screen.getByRole("button", { name: "Rich text" })).toHaveAttribute("aria-pressed", "true")
-    act(() => { editor.commands.insertContent("Second") })
-    expect(textbox.querySelectorAll("li")[1]).toHaveTextContent("Second")
-    fireEvent.click(screen.getByRole("button", { name: "Markdown" }))
-    expect(screen.getByRole("textbox")).toHaveValue(initial + "\n" + (initial.startsWith("1.") ? "2. Second" : initial.replace("First", "Second")))
-  })
+  it.each(["1. First", "- First", "- [ ] First"])(
+    "keeps rich editing after Enter in %j",
+    (initial) => {
+      function Draft() {
+        const [value, setValue] = useState(initial);
+        return <MarkdownEditor value={value} onChange={setValue} />;
+      }
+      render(<Draft />);
+      const textbox = screen.getByRole("textbox");
+      const editor = (textbox as HTMLElement & { editor: Editor }).editor;
+      act(() => {
+        editor.commands.focus("end", { scrollIntoView: false });
+      });
+      fireEvent.keyDown(textbox, { key: "Enter", code: "Enter", keyCode: 13 });
+      expect(screen.getByRole("textbox")).toBe(textbox);
+      expect(textbox).toHaveAttribute("contenteditable", "true");
+      expect(textbox.querySelectorAll("li")).toHaveLength(2);
+      expect(textbox.querySelectorAll("li")[1].querySelector("p")?.textContent).toBe("");
+      expect(screen.getByRole("button", { name: "Rich text" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      act(() => {
+        editor.commands.insertContent("Second");
+      });
+      expect(textbox.querySelectorAll("li")[1]).toHaveTextContent("Second");
+      fireEvent.click(screen.getByRole("button", { name: "Markdown" }));
+      expect(screen.getByRole("textbox")).toHaveValue(
+        initial +
+          "\n" +
+          (initial.startsWith("1.") ? "2. Second" : initial.replace("First", "Second")),
+      );
+    },
+  );
 
   it("keeps trailing blank lines out of the emitted Markdown", () => {
     function Draft() {
-      const [value, setValue] = useState("Hello")
-      return <><MarkdownEditor value={value} onChange={setValue} /><output>{value}</output></>
+      const [value, setValue] = useState("Hello");
+      return (
+        <>
+          <MarkdownEditor value={value} onChange={setValue} />
+          <output>{value}</output>
+        </>
+      );
     }
-    render(<Draft />)
-    const textbox = screen.getByRole("textbox")
-    const editor = (textbox as HTMLElement & { editor: Editor }).editor
-    act(() => { editor.commands.focus("end", { scrollIntoView: false }) })
-    act(() => { editor.commands.splitBlock() })
-    act(() => { editor.commands.splitBlock() })
+    render(<Draft />);
+    const textbox = screen.getByRole("textbox");
+    const editor = (textbox as HTMLElement & { editor: Editor }).editor;
+    act(() => {
+      editor.commands.focus("end", { scrollIntoView: false });
+    });
+    act(() => {
+      editor.commands.splitBlock();
+    });
+    act(() => {
+      editor.commands.splitBlock();
+    });
 
-    expect(screen.getByRole("status").textContent).toBe("Hello")
-    expect(textbox.querySelector("pre")).toBeNull()
-    expect(textbox.querySelectorAll("p")).toHaveLength(3)
-    act(() => { editor.commands.insertContent("World") })
-    expect(screen.getByRole("status").textContent).toBe("Hello\n\n\n\nWorld")
-  })
+    expect(screen.getByRole("status").textContent).toBe("Hello");
+    expect(textbox.querySelector("pre")).toBeNull();
+    expect(textbox.querySelectorAll("p")).toHaveLength(3);
+    act(() => {
+      editor.commands.insertContent("World");
+    });
+    expect(screen.getByRole("status").textContent).toBe("Hello\n\n\n\nWorld");
+  });
 
   it("disables both source and rich editing when saving", () => {
-    const { rerender } = render(<MarkdownEditor value="Hello" onChange={() => {}} disabled />)
-    expect(screen.getByRole("textbox")).toHaveAttribute("contenteditable", "false")
-    expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled()
-    rerender(<MarkdownEditor value="<!-- source -->" onChange={() => {}} disabled />)
-    expect(screen.getByRole("textbox")).toHaveAttribute("contenteditable", "false")
-  })
+    const { rerender } = render(<MarkdownEditor value="Hello" onChange={() => {}} disabled />);
+    expect(screen.getByRole("textbox")).toHaveAttribute("contenteditable", "false");
+    expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
+    rerender(<MarkdownEditor value="<!-- source -->" onChange={() => {}} disabled />);
+    expect(screen.getByRole("textbox")).toHaveAttribute("contenteditable", "false");
+  });
 
-  it.each(["", " \n", "Hello\n", "* First\n* Second\n", "1. First\n2. ", "1. ", "1. First\n   1. Nested\n   2. ", "# Heading\n\nParagraph\n"])("allows harmless formatting normalization without changing %j", (value) => {
-    const onChange = vi.fn()
-    render(<MarkdownEditor value={value} onChange={onChange} />)
-    expect(screen.getByRole("textbox")).toHaveAttribute("contenteditable", "true")
-    fireEvent.click(screen.getByRole("button", { name: "Markdown" }))
-    expect(screen.getByRole("textbox")).toHaveValue(value)
-    expect(onChange).not.toHaveBeenCalled()
-  })
+  it.each([
+    "",
+    " \n",
+    "Hello\n",
+    "* First\n* Second\n",
+    "1. First\n2. ",
+    "1. ",
+    "1. First\n   1. Nested\n   2. ",
+    "# Heading\n\nParagraph\n",
+  ])("allows harmless formatting normalization without changing %j", (value) => {
+    const onChange = vi.fn();
+    render(<MarkdownEditor value={value} onChange={onChange} />);
+    expect(screen.getByRole("textbox")).toHaveAttribute("contenteditable", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Markdown" }));
+    expect(screen.getByRole("textbox")).toHaveValue(value);
+    expect(onChange).not.toHaveBeenCalled();
+  });
 
   it("rejects executable link targets before inserting a link", () => {
-    const onChange = vi.fn()
-    render(<MarkdownEditor value="" onChange={onChange} />)
-    fireEvent.click(screen.getByRole("button", { name: "Link" }))
-    fireEvent.change(screen.getByRole("textbox", { name: "Link URL" }), { target: { value: "javascript:alert(1)" } })
-    fireEvent.click(screen.getByRole("button", { name: "Apply link" }))
-    expect(screen.getByRole("alert")).toBeInTheDocument()
-    expect(onChange).not.toHaveBeenCalled()
-    fireEvent.change(screen.getByRole("textbox", { name: "Link URL" }), { target: { value: "https://example.com" } })
-    fireEvent.click(screen.getByRole("button", { name: "Apply link" }))
-    expect(onChange).toHaveBeenLastCalledWith("[https://example.com](https://example.com)")
-  })
-})
+    const onChange = vi.fn();
+    render(<MarkdownEditor value="" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Link URL" }), {
+      target: { value: "javascript:alert(1)" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply link" }));
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox", { name: "Link URL" }), {
+      target: { value: "https://example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply link" }));
+    expect(onChange).toHaveBeenLastCalledWith("[https://example.com](https://example.com)");
+  });
+});

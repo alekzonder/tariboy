@@ -85,11 +85,7 @@ export function ServerDialog(props: ServerDialogProps) {
             />
           </div>
 
-          {transport === "ssh" ? (
-            <SshServerForm {...form} />
-          ) : (
-            <HttpsServerForm {...form} />
-          )}
+          {transport === "ssh" ? <SshServerForm {...form} /> : <HttpsServerForm {...form} />}
           {formError && <p className="text-sm text-destructive">{formError}</p>}
         </div>
 

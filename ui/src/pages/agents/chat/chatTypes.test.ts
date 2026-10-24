@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  CHAT_TYPES_KEY, DEFAULT_CHAT_TYPES, loadChatTypes, saveChatTypes,
-} from "./chatTypes";
+import { CHAT_TYPES_KEY, DEFAULT_CHAT_TYPES, loadChatTypes, saveChatTypes } from "./chatTypes";
 
 afterEach(() => localStorage.clear());
 

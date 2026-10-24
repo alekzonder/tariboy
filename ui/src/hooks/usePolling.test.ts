@@ -18,7 +18,9 @@ it("calls the latest fetcher on the next tick without restarting the timer", asy
   rerender({ fn: second });
   expect(second).not.toHaveBeenCalled();
 
-  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1000);
+  });
   expect(first).toHaveBeenCalledTimes(1);
   expect(second).toHaveBeenCalledTimes(1);
   expect(result.current.data).toBe("second");

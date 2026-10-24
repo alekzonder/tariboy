@@ -9,22 +9,21 @@ export function useCloneAgentSource(
   cloneSource: CloneAgentSource | undefined,
   setDraft: Dispatch<SetStateAction<AgentCreateDraft>>,
 ) {
-  const [sourceState, setSourceState] = useState<"idle" | "loading" | "ready" | "error">(cloneSource ? "loading" : "idle");
+  const [sourceState, setSourceState] = useState<"idle" | "loading" | "ready" | "error">(
+    cloneSource ? "loading" : "idle",
+  );
   const [sourceError, setSourceError] = useState("");
-  const fetchSource =
-    useCallback(async (): Promise<AgentCreateDraft | null> => {
-      if (!cloneSource) return null;
-      const sourceTarget = cloneSource.hostId
-        ? await resolveDaemon(cloneSource.hostId)
-        : null;
-      if (cloneSource.hostId && !sourceTarget) {
-        throw new Error(`host ${cloneSource.hostId} was not found`);
-      }
-      // The source agent is read from its own host, whichever host the
-      // dialog creates on.
-      const source = await createApi(sourceTarget).agents.getAgent(cloneSource.agentName);
-      return cloneAgentDraft(source);
-    }, [cloneSource]);
+  const fetchSource = useCallback(async (): Promise<AgentCreateDraft | null> => {
+    if (!cloneSource) return null;
+    const sourceTarget = cloneSource.hostId ? await resolveDaemon(cloneSource.hostId) : null;
+    if (cloneSource.hostId && !sourceTarget) {
+      throw new Error(`host ${cloneSource.hostId} was not found`);
+    }
+    // The source agent is read from its own host, whichever host the
+    // dialog creates on.
+    const source = await createApi(sourceTarget).agents.getAgent(cloneSource.agentName);
+    return cloneAgentDraft(source);
+  }, [cloneSource]);
 
   useEffect(() => {
     let alive = true;

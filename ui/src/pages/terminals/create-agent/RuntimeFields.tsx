@@ -37,9 +37,7 @@ export function RuntimeFields({
           id="create-agent-harness"
           aria-label="harness"
           value={draft.harness}
-          onChange={(event) =>
-            updateDraft("harness", event.target.value)
-          }
+          onChange={(event) => updateDraft("harness", event.target.value)}
           disabled={formDisabled || loadingManifest}
           className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
         >
@@ -84,10 +82,7 @@ export function RuntimeFields({
                 ? null
                 : targetIsCurrent && target
                   ? target
-                  : unresolvedDaemon(
-                      host,
-                      hosts.find((entry) => entry.id === host)?.label,
-                    )
+                  : unresolvedDaemon(host, hosts.find((entry) => entry.id === host)?.label)
             }
           >
             <PathAutocomplete

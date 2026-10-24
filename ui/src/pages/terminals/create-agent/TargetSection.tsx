@@ -35,10 +35,7 @@ export function TargetSection({
   | "loadingImages"
 >) {
   return (
-    <section
-      aria-labelledby="create-agent-target"
-      className="space-y-3 rounded border p-3"
-    >
+    <section aria-labelledby="create-agent-target" className="space-y-3 rounded border p-3">
       <h3 id="create-agent-target" className="font-medium">
         Target
       </h3>
@@ -55,10 +52,7 @@ export function TargetSection({
             </SelectTrigger>
             <SelectContent>
               {hosts.map((entry) => (
-                <SelectItem
-                  key={entry.id || LOCAL_HOST_VALUE}
-                  value={entry.id || LOCAL_HOST_VALUE}
-                >
+                <SelectItem key={entry.id || LOCAL_HOST_VALUE} value={entry.id || LOCAL_HOST_VALUE}>
                   {entry.label}
                 </SelectItem>
               ))}
@@ -77,11 +71,7 @@ export function TargetSection({
             onChange={changeImage}
             ariaLabel="image"
           />
-          {loadingImages && (
-            <p className="text-xs text-muted-foreground">
-              Loading built images…
-            </p>
-          )}
+          {loadingImages && <p className="text-xs text-muted-foreground">Loading built images…</p>}
         </div>
       </div>
     </section>

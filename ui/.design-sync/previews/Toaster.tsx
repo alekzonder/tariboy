@@ -8,8 +8,7 @@ import { Toaster } from "tariboy-ui";
 // second copy in node_modules — two module singletons, so toasts queued on
 // the second one never reach the shipped Toaster. Prefer a `toast` re-exported
 // from the bundle when one is available (see .design-sync/learnings/structure.md).
-const toast = ((DS as unknown as { toast?: typeof packagedToast }).toast ??
-  packagedToast);
+const toast = (DS as unknown as { toast?: typeof packagedToast }).toast ?? packagedToast;
 
 const KEEP = { duration: Number.POSITIVE_INFINITY } as const;
 

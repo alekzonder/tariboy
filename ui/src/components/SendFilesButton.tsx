@@ -1,7 +1,7 @@
-import { useEffect, useRef, type ChangeEvent } from "react"
-import { FileUp } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { useSendFiles } from "@/hooks/useSendFiles"
+import { useEffect, useRef, type ChangeEvent } from "react";
+import { FileUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useSendFiles } from "@/hooks/useSendFiles";
 
 /** Pick files and hand their saved absolute host paths to the caller.
  * Uploads go to the server's shared files directory.
@@ -14,21 +14,23 @@ export function SendFilesButton({
   disabled,
   onUploadingChange,
 }: {
-  onUploaded: (paths: string[]) => void
-  className?: string
-  disabled?: boolean
-  onUploadingChange?: (uploading: boolean) => void
+  onUploaded: (paths: string[]) => void;
+  className?: string;
+  disabled?: boolean;
+  onUploadingChange?: (uploading: boolean) => void;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const { uploading, sendFiles } = useSendFiles({ onUploaded })
-  useEffect(() => { onUploadingChange?.(uploading) }, [uploading, onUploadingChange])
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { uploading, sendFiles } = useSendFiles({ onUploaded });
+  useEffect(() => {
+    onUploadingChange?.(uploading);
+  }, [uploading, onUploadingChange]);
 
   const onPick = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? [])
-    e.target.value = "" // let the same file be picked again later
-    if (files.length === 0) return
-    await sendFiles(files)
-  }
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ""; // let the same file be picked again later
+    if (files.length === 0) return;
+    await sendFiles(files);
+  };
 
   return (
     <>
@@ -52,5 +54,5 @@ export function SendFilesButton({
         {uploading ? "Uploading…" : "Send files"}
       </Button>
     </>
-  )
+  );
 }

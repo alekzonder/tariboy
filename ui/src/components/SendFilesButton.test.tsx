@@ -5,17 +5,23 @@ import { SendFilesButton } from "./SendFilesButton";
 import { createApi } from "@/lib/api";
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) => {
-    // Return a shared absolute path for each uploaded file name.
-    const rel = new URL(url, "http://local").searchParams.get("name") ?? "x";
-    const envelope = { ok: true, result: { path: rel, abs: `/server/files/one/${rel}`, bytes: 2 } };
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(envelope),
-      json: async () => envelope,
-    } as Response);
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      // Return a shared absolute path for each uploaded file name.
+      const rel = new URL(url, "http://local").searchParams.get("name") ?? "x";
+      const envelope = {
+        ok: true,
+        result: { path: rel, abs: `/server/files/one/${rel}`, bytes: 2 },
+      };
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(envelope),
+        json: async () => envelope,
+      } as Response);
+    }),
+  );
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -23,14 +29,25 @@ describe("SendFilesButton", () => {
   it("keeps completed upload paths when a later file fails", async () => {
     const onUploaded = vi.fn();
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
-    const envelope = { ok: true, result: { abs: "/server/files/one/a.txt", path: "files/one/a.txt", bytes: 1 } };
-    fetchMock.mockImplementationOnce(() => Promise.resolve({
-      ok: true, status: 200,
-      text: async () => JSON.stringify(envelope),
-      json: async () => envelope,
-    } as Response)).mockRejectedValueOnce(new Error("Upload failed"));
+    const envelope = {
+      ok: true,
+      result: { abs: "/server/files/one/a.txt", path: "files/one/a.txt", bytes: 1 },
+    };
+    fetchMock
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(envelope),
+          json: async () => envelope,
+        } as Response),
+      )
+      .mockRejectedValueOnce(new Error("Upload failed"));
     render(<SendFilesButton onUploaded={onUploaded} />, { api: createApi(null) });
-    await userEvent.upload(document.querySelector('input[type="file"]') as HTMLInputElement, [new File(["a"], "a.txt"), new File(["b"], "b.txt")]);
+    await userEvent.upload(document.querySelector('input[type="file"]') as HTMLInputElement, [
+      new File(["a"], "a.txt"),
+      new File(["b"], "b.txt"),
+    ]);
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(["/server/files/one/a.txt"]));
     expect(screen.getByRole("button", { name: "Send files" })).toBeEnabled();
   });

@@ -9,19 +9,23 @@ type Call = { url: string; init: RequestInit };
 
 function stubFetch(status = 200, body: unknown = { ok: true, result: {} }) {
   const calls: Call[] = [];
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string, init: RequestInit) => {
-    calls.push({ url, init });
-    return Promise.resolve({
-      ok: status >= 200 && status < 300,
-      status,
-      text: async () => (typeof body === "string" ? body : JSON.stringify(body)),
-      json: async () => body,
-    } as unknown as Response);
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return Promise.resolve({
+        ok: status >= 200 && status < 300,
+        status,
+        text: async () => (typeof body === "string" ? body : JSON.stringify(body)),
+        json: async () => body,
+      } as unknown as Response);
+    }),
+  );
   return calls;
 }
 
-const auth = (call: Call) => (call.init.headers as Record<string, string> | undefined)?.Authorization;
+const auth = (call: Call) =>
+  (call.init.headers as Record<string, string> | undefined)?.Authorization;
 
 beforeEach(() => setActiveDaemon(null));
 afterEach(() => {
@@ -77,25 +81,48 @@ describe("createApi", () => {
   });
 
   it("keeps method, body, cache, signal and error fields of the transport", async () => {
-    const calls = stubFetch(409, { ok: false, error: { code: "conflict", message: "stale", details: { revision: 3 } } });
+    const calls = stubFetch(409, {
+      ok: false,
+      error: { code: "conflict", message: "stale", details: { revision: 3 } },
+    });
     const controller = new AbortController();
     const api = createApi(hostA);
-    const err = await api.request("PATCH", "/api/tasks/T-1", { revision: 2 }, controller.signal).catch((e: unknown) => e);
+    const err = await api
+      .request("PATCH", "/api/tasks/T-1", { revision: 2 }, controller.signal)
+      .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
-    expect(err).toMatchObject({ status: 409, code: "conflict", message: "stale", details: { revision: 3 } });
-    expect(calls[0].init).toMatchObject({ method: "PATCH", cache: "no-store", body: JSON.stringify({ revision: 2 }), signal: controller.signal });
-    expect((calls[0].init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+    expect(err).toMatchObject({
+      status: 409,
+      code: "conflict",
+      message: "stale",
+      details: { revision: 3 },
+    });
+    expect(calls[0].init).toMatchObject({
+      method: "PATCH",
+      cache: "no-store",
+      body: JSON.stringify({ revision: 2 }),
+      signal: controller.signal,
+    });
+    expect((calls[0].init.headers as Record<string, string>)["Content-Type"]).toBe(
+      "application/json",
+    );
   });
 
   it("reports empty and malformed responses", async () => {
     stubFetch(500, "");
-    await expect(createApi(null).get("/api/x")).rejects.toMatchObject({ status: 500, code: "http_500" });
+    await expect(createApi(null).get("/api/x")).rejects.toMatchObject({
+      status: 500,
+      code: "http_500",
+    });
     stubFetch(200, "<html>");
     await expect(createApi(null).get("/api/x")).rejects.toMatchObject({ code: "bad_response" });
   });
 
   it("uploads the original File through the raw transport", async () => {
-    const calls = stubFetch(200, { ok: true, result: { path: "a.txt", abs: "/h/a.txt", bytes: 3 } });
+    const calls = stubFetch(200, {
+      ok: true,
+      result: { path: "a.txt", abs: "/h/a.txt", bytes: 3 },
+    });
     const file = new File(["abc"], "a.txt");
     const result = await createApi(hostA).files.serverUploadFile(file);
     expect(result.bytes).toBe(3);

@@ -47,7 +47,10 @@ export default function AgentActivityTab() {
   const [history, setHistory] = useState<StatusHistoryEvent[]>([]);
   useEffect(() => {
     if (view !== "status") return;
-    void api.agents.getStatusHistory(name).then((result) => setHistory(result.events)).catch(() => setHistory([]));
+    void api.agents
+      .getStatusHistory(name)
+      .then((result) => setHistory(result.events))
+      .catch(() => setHistory([]));
   }, [api, name, view]);
   const inPeriod = history.filter((event) => {
     const at = Date.parse(event.ts);
@@ -64,15 +67,16 @@ export default function AgentActivityTab() {
     <TabPage className="overflow-auto">
       <ActivityPeriodBar window={window} onPeriod={setPeriod} onCustom={setCustom} />
       <ActivityTotals totals={report?.totals ?? null} />
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
       <ActivityTabs views={VIEWS} active={view} onSelect={selectView} />
       <div className="min-h-0 flex-1">
         {view === "tasks" ? (
           <div className="flex flex-col gap-2">
-            <TaskActivityTable
-              rows={report?.tasks ?? []}
-              onOpenTask={setTaskKey}
-            />
+            <TaskActivityTable rows={report?.tasks ?? []} onOpenTask={setTaskKey} />
             {report?.truncated && <TruncatedNote shown={report.tasks.length} />}
           </div>
         ) : view === "iterations" ? (
@@ -87,7 +91,9 @@ export default function AgentActivityTab() {
                 <div>{event.message}</div>
               </div>
             ))}
-            {inPeriod.length === 0 && <p className="text-sm text-muted-foreground">No status changes in this period.</p>}
+            {inPeriod.length === 0 && (
+              <p className="text-sm text-muted-foreground">No status changes in this period.</p>
+            )}
           </div>
         )}
       </div>

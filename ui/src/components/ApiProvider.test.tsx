@@ -9,7 +9,9 @@ import type { Daemon } from "@/lib/daemons";
 const host: Daemon = { id: "a", label: "A", baseURL: "https://a.example", token: "t1" };
 
 function wrap(target: Daemon | null) {
-  return ({ children }: { children: ReactNode }) => <ApiProvider target={target}>{children}</ApiProvider>;
+  return ({ children }: { children: ReactNode }) => (
+    <ApiProvider target={target}>{children}</ApiProvider>
+  );
 }
 
 describe("ApiProvider", () => {
@@ -26,19 +28,45 @@ describe("ApiProvider", () => {
 
   it("keeps the same client across renders of an equal target", () => {
     const seen: unknown[] = [];
-    function Probe() { seen.push(useApi()); return null; }
-    const { rerender } = render(<ApiProvider target={{ ...host }}><Probe /></ApiProvider>);
-    rerender(<ApiProvider target={{ ...host }}><Probe /></ApiProvider>);
+    function Probe() {
+      seen.push(useApi());
+      return null;
+    }
+    const { rerender } = render(
+      <ApiProvider target={{ ...host }}>
+        <Probe />
+      </ApiProvider>,
+    );
+    rerender(
+      <ApiProvider target={{ ...host }}>
+        <Probe />
+      </ApiProvider>,
+    );
     expect(seen).toHaveLength(2);
     expect(seen[0]).toBe(seen[1]);
   });
 
   it("replaces the client when the endpoint or token of the same host changes", () => {
     const seen: ReturnType<typeof useApi>[] = [];
-    function Probe() { seen.push(useApi()); return null; }
-    const { rerender } = render(<ApiProvider target={host}><Probe /></ApiProvider>);
-    rerender(<ApiProvider target={{ ...host, token: "t2" }}><Probe /></ApiProvider>);
-    rerender(<ApiProvider target={{ ...host, token: "t2", baseURL: "https://b.example" }}><Probe /></ApiProvider>);
+    function Probe() {
+      seen.push(useApi());
+      return null;
+    }
+    const { rerender } = render(
+      <ApiProvider target={host}>
+        <Probe />
+      </ApiProvider>,
+    );
+    rerender(
+      <ApiProvider target={{ ...host, token: "t2" }}>
+        <Probe />
+      </ApiProvider>,
+    );
+    rerender(
+      <ApiProvider target={{ ...host, token: "t2", baseURL: "https://b.example" }}>
+        <Probe />
+      </ApiProvider>,
+    );
     expect(seen[1]).not.toBe(seen[0]);
     expect(seen[1].target?.token).toBe("t2");
     expect(seen[2].target?.baseURL).toBe("https://b.example");

@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, type FileEntry, type FileListing } from "@/lib/api";
 import { baseName, dirName, errMsg } from "./paths";
 
-interface DirState { entries: FileEntry[] | null; loading: boolean; error: string | null }
+interface DirState {
+  entries: FileEntry[] | null;
+  loading: boolean;
+  error: string | null;
+}
 
 export interface FileTreeApi {
   dirs: Record<string, DirState>;
@@ -26,14 +30,28 @@ export function useFileTree(listDir: (path: string) => Promise<FileListing>): Fi
   // Fetch a directory. Safe to set `loading` synchronously here because this is
   // only ever called from event handlers (toggle/refresh), never an effect —
   // the mount fetch below sets state only from its async callbacks.
-  const fetchDir = useCallback((path: string) => {
-    setDirs((prev) => ({ ...prev, [path]: { entries: prev[path]?.entries ?? null, loading: true, error: null } }));
-    void listDir(path)
-      .then((r) => setDirs((prev) => ({ ...prev, [path]: { entries: r.entries, loading: false, error: null } })))
-      .catch((e) => setDirs((prev) => ({
-        ...prev, [path]: { entries: prev[path]?.entries ?? null, loading: false, error: errMsg(e) },
-      })));
-  }, [listDir]);
+  const fetchDir = useCallback(
+    (path: string) => {
+      setDirs((prev) => ({
+        ...prev,
+        [path]: { entries: prev[path]?.entries ?? null, loading: true, error: null },
+      }));
+      void listDir(path)
+        .then((r) =>
+          setDirs((prev) => ({
+            ...prev,
+            [path]: { entries: r.entries, loading: false, error: null },
+          })),
+        )
+        .catch((e) =>
+          setDirs((prev) => ({
+            ...prev,
+            [path]: { entries: prev[path]?.entries ?? null, loading: false, error: errMsg(e) },
+          })),
+        );
+    },
+    [listDir],
+  );
 
   // Load the root on mount. The hook is remounted per source (the tree is keyed
   // by sourceKey in the parent), so the initial null state already reflects a
@@ -41,29 +59,43 @@ export function useFileTree(listDir: (path: string) => Promise<FileListing>): Fi
   useEffect(() => {
     let alive = true;
     void listDir("")
-      .then((r) => { if (alive) setDirs((prev) => ({ ...prev, "": { entries: r.entries, loading: false, error: null } })); })
-      .catch((e) => { if (alive) setDirs((prev) => ({ ...prev, "": { entries: null, loading: false, error: errMsg(e) } })); });
-    return () => { alive = false; };
+      .then((r) => {
+        if (alive)
+          setDirs((prev) => ({ ...prev, "": { entries: r.entries, loading: false, error: null } }));
+      })
+      .catch((e) => {
+        if (alive)
+          setDirs((prev) => ({ ...prev, "": { entries: null, loading: false, error: errMsg(e) } }));
+      });
+    return () => {
+      alive = false;
+    };
   }, [listDir]);
 
-  const toggle = useCallback((path: string) => {
-    const isOpen = expanded.has(path);
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (isOpen) next.delete(path);
-      else next.add(path);
-      return next;
-    });
-    // First expansion of a not-yet-loaded directory triggers a fetch.
-    if (!isOpen) {
-      const st = dirs[path];
-      if (st?.entries == null && !st?.loading) fetchDir(path);
-    }
-  }, [expanded, dirs, fetchDir]);
+  const toggle = useCallback(
+    (path: string) => {
+      const isOpen = expanded.has(path);
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        if (isOpen) next.delete(path);
+        else next.add(path);
+        return next;
+      });
+      // First expansion of a not-yet-loaded directory triggers a fetch.
+      if (!isOpen) {
+        const st = dirs[path];
+        if (st?.entries == null && !st?.loading) fetchDir(path);
+      }
+    },
+    [expanded, dirs, fetchDir],
+  );
 
-  const refresh = useCallback((path: string) => {
-    fetchDir(path);
-  }, [fetchDir]);
+  const refresh = useCallback(
+    (path: string) => {
+      fetchDir(path);
+    },
+    [fetchDir],
+  );
 
   const expand = useCallback((path: string) => {
     setExpanded((prev) => (prev.has(path) ? prev : new Set(prev).add(path)));
@@ -83,7 +115,10 @@ export function useFileTree(listDir: (path: string) => Promise<FileListing>): Fi
         try {
           const r = await listDir(parent);
           entries = r.entries;
-          setDirs((prev) => ({ ...prev, [parent]: { entries: r.entries, loading: false, error: null } }));
+          setDirs((prev) => ({
+            ...prev,
+            [parent]: { entries: r.entries, loading: false, error: null },
+          }));
         } catch (e) {
           if (e instanceof ApiError && e.code === "not_found") return "absent";
           return "unknown";

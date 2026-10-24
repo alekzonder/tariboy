@@ -16,7 +16,9 @@ export const RunStatePanel = () => (
         <span style={{ fontWeight: 500 }}>Enabled</span>
       </p>
       <RunStateActions name="builder" refresh={() => {}} />
-      <p style={{ margin: 0, fontSize: 12, color: "var(--muted-foreground)" }}>Takes effect immediately.</p>
+      <p style={{ margin: 0, fontSize: 12, color: "var(--muted-foreground)" }}>
+        Takes effect immediately.
+      </p>
     </div>
   </section>
 );
@@ -49,7 +51,12 @@ export const InlineOnAgentRow = () => (
     }}
   >
     <span style={{ fontSize: 14, fontWeight: 500 }}>reviewer</span>
-    <span style={{ font: "12px ui-monospace, SFMono-Regular, Menlo, monospace", color: "var(--muted-foreground)" }}>
+    <span
+      style={{
+        font: "12px ui-monospace, SFMono-Regular, Menlo, monospace",
+        color: "var(--muted-foreground)",
+      }}
+    >
       build-01
     </span>
     <span style={{ marginLeft: "auto" }}>

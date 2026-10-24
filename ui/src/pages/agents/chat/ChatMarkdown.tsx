@@ -43,15 +43,18 @@ function remarkTaskKeys() {
         let last = 0;
         TASK_KEY.lastIndex = 0;
         for (let hit = TASK_KEY.exec(child.value); hit; hit = TASK_KEY.exec(child.value)) {
-          if (hit.index > last) rebuilt.push({ type: "text", value: child.value.slice(last, hit.index) });
+          if (hit.index > last)
+            rebuilt.push({ type: "text", value: child.value.slice(last, hit.index) });
           rebuilt.push({
-            type: "link", url: `${TASK_HREF}${hit[0]}`,
+            type: "link",
+            url: `${TASK_HREF}${hit[0]}`,
             children: [{ type: "text", value: hit[0] }],
           });
           last = hit.index + hit[0].length;
         }
         if (last === 0) rebuilt.push(child);
-        else if (last < child.value.length) rebuilt.push({ type: "text", value: child.value.slice(last) });
+        else if (last < child.value.length)
+          rebuilt.push({ type: "text", value: child.value.slice(last) });
       }
       node.children = rebuilt;
     };
@@ -63,20 +66,28 @@ function CodeBlock({ children }: { children: ReactNode }) {
   const [copied, setCopied] = useState(false);
   // react-markdown hands `pre` its `code` element; the language rides on it as
   // the `language-*` class remark put there.
-  const code = (children ?? null) as { props?: { className?: string; children?: ReactNode } } | null;
+  const code = (children ?? null) as {
+    props?: { className?: string; children?: ReactNode };
+  } | null;
   const language = /language-(\w+)/.exec(code?.props?.className ?? "")?.[1] ?? "text";
   const text = String(code?.props?.children ?? "");
   return (
     <div className="my-1 overflow-hidden rounded-[8px] bg-muted">
       <div className="flex h-[22px] items-center gap-1.5 pr-2 pl-2.5">
-        <span className="font-mono text-[10px] tracking-wide text-muted-foreground">{language}</span>
+        <span className="font-mono text-[10px] tracking-wide text-muted-foreground">
+          {language}
+        </span>
         <button
           type="button"
           aria-label="Copy code"
           className="ml-auto flex h-[18px] items-center gap-1 rounded-[5px] px-1.5 text-[10.5px] text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={() => {
-            void navigator.clipboard?.writeText(text.replace(/\n$/, ""))
-              .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); })
+            void navigator.clipboard
+              ?.writeText(text.replace(/\n$/, ""))
+              .then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1200);
+              })
               .catch(() => toast.error("Could not copy the code block"));
           }}
         >
@@ -94,7 +105,10 @@ function CodeBlock({ children }: { children: ReactNode }) {
 /** Chat-density Markdown. The pipeline is the same safe one task comments use —
  *  `react-markdown` with `remark-gfm` and no raw HTML — so a message can no
  *  more execute script than a task comment can. */
-export default function ChatMarkdown({ children, onOpenTask }: {
+export default function ChatMarkdown({
+  children,
+  onOpenTask,
+}: {
   children: string;
   onOpenTask: (key: string) => void;
 }) {
@@ -115,13 +129,23 @@ export default function ChatMarkdown({ children, onOpenTask }: {
                 href={href}
                 className="text-primary underline decoration-primary/35 underline-offset-2"
                 onClick={(event) => {
-                  if (key) { event.preventDefault(); onOpenTask(key); return; }
+                  if (key) {
+                    event.preventDefault();
+                    onOpenTask(key);
+                    return;
+                  }
                   if (!opensWebLinks() || !href) return;
                   let url: URL;
-                  try { url = new URL(href); } catch { return; }
+                  try {
+                    url = new URL(href);
+                  } catch {
+                    return;
+                  }
                   if (url.protocol !== "http:" && url.protocol !== "https:") return;
                   event.preventDefault();
-                  void openExternalUrl(url.toString()).catch(() => toast.error("Could not open web link"));
+                  void openExternalUrl(url.toString()).catch(() =>
+                    toast.error("Could not open web link"),
+                  );
                 }}
               >
                 {content}

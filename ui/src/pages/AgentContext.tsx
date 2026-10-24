@@ -10,14 +10,29 @@ function ContextEditor({ name }: { name: string }) {
   const api = useApi();
   const [text, setText] = useState("");
   useEffect(() => {
-    void api.agents.agentContextGet(name).then((r) => setText(r.context)).catch(() => setText(""));
+    void api.agents
+      .agentContextGet(name)
+      .then((r) => setText(r.context))
+      .catch(() => setText(""));
   }, [api, name]);
   return (
     <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-base">Context</CardTitle></CardHeader>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Context</CardTitle>
+      </CardHeader>
       <CardContent className="space-y-2">
-        <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} className="font-mono text-xs" />
-        <Button size="sm" onClick={() => guard("context", () => api.agents.agentContextSet(name, text))}>Save context</Button>
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={8}
+          className="font-mono text-xs"
+        />
+        <Button
+          size="sm"
+          onClick={() => guard("context", () => api.agents.agentContextSet(name, text))}
+        >
+          Save context
+        </Button>
       </CardContent>
     </Card>
   );

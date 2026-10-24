@@ -5,9 +5,7 @@ import { ApiError, createApi, type ApiClient, type ImageArchiveUpload } from "@/
 import type { Daemon } from "@/lib/daemons";
 import { apiWrapper } from "@/test/api";
 import { StrictMode, useState, type ReactElement } from "react";
-import {
-  ImageTransferDialog,
-} from "./ImageTransferDialog";
+import { ImageTransferDialog } from "./ImageTransferDialog";
 import { eligibleImageTransferTargets } from "./imageTransferTargets";
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -20,8 +18,10 @@ const actualApi = await vi.importActual<typeof import("@/lib/api")>("@/lib/api")
 // Each archive call records the host of the client that made it, so the
 // assertions name the source and every destination explicitly.
 const downloadImageArchiveOn = vi.fn<(target: Daemon | null, ref: string) => Promise<Blob>>();
-const uploadImageArchiveOn = vi.fn<(target: Daemon | null, archive: Blob) => Promise<ImageArchiveUpload>>();
-const applyImageArchiveOn = vi.fn<(target: Daemon | null, importID: string, ref?: string) => Promise<unknown>>();
+const uploadImageArchiveOn =
+  vi.fn<(target: Daemon | null, archive: Blob) => Promise<ImageArchiveUpload>>();
+const applyImageArchiveOn =
+  vi.fn<(target: Daemon | null, importID: string, ref?: string) => Promise<unknown>>();
 
 function archiveClient(target: Daemon | null): ApiClient {
   const client = actualApi.createApi(target);
@@ -31,7 +31,8 @@ function archiveClient(target: Daemon | null): ApiClient {
       ...client.images,
       downloadImageArchive: (ref: string) => downloadImageArchiveOn(target, ref),
       uploadImageArchive: (archive: Blob) => uploadImageArchiveOn(target, archive),
-      applyImageArchive: (importID: string, ref?: string) => applyImageArchiveOn(target, importID, ref),
+      applyImageArchive: (importID: string, ref?: string) =>
+        applyImageArchiveOn(target, importID, ref),
     },
   };
 }
@@ -42,14 +43,34 @@ function render(element: ReactElement, source: Daemon | null = null) {
 }
 
 beforeEach(() => {
-  vi.mocked(createApi).mockImplementation((target) => archiveClient(actualApi.resolveTarget(target)));
+  vi.mocked(createApi).mockImplementation((target) =>
+    archiveClient(actualApi.resolveTarget(target)),
+  );
 });
 
 afterEach(() => vi.resetAllMocks());
 
-const ready = { id: "ready", label: "Ready", baseURL: "https://ready", state: "ready", token: "ready-token" } as const;
-const offline = { id: "offline", label: "Offline", baseURL: "https://offline", state: "failed", token: "offline-token" } as const;
-const source = { id: "source", label: "Source", baseURL: "https://source", state: "ready", token: "source-token" } as const;
+const ready = {
+  id: "ready",
+  label: "Ready",
+  baseURL: "https://ready",
+  state: "ready",
+  token: "ready-token",
+} as const;
+const offline = {
+  id: "offline",
+  label: "Offline",
+  baseURL: "https://offline",
+  state: "failed",
+  token: "offline-token",
+} as const;
+const source = {
+  id: "source",
+  label: "Source",
+  baseURL: "https://source",
+  state: "ready",
+  token: "source-token",
+} as const;
 
 it("keeps ready configured hosts eligible when the source is local", () => {
   expect(eligibleImageTransferTargets(null, [ready, offline])).toEqual([
@@ -108,8 +129,20 @@ it("disables transfer when no target is eligible", () => {
 });
 
 it("exports once, continues after a failed target, and reports an idempotent target", async () => {
-  const targetA = { id: "target-a", label: "Target A", baseURL: "https://a", state: "ready", token: "a-token" } as const;
-  const targetB = { id: "target-b", label: "Target B", baseURL: "https://b", state: "ready", token: "b-token" } as const;
+  const targetA = {
+    id: "target-a",
+    label: "Target A",
+    baseURL: "https://a",
+    state: "ready",
+    token: "a-token",
+  } as const;
+  const targetB = {
+    id: "target-b",
+    label: "Target B",
+    baseURL: "https://b",
+    state: "ready",
+    token: "b-token",
+  } as const;
   const archive = new Blob(["archive"]);
   downloadImageArchiveOn.mockResolvedValue(archive);
   uploadImageArchiveOn
@@ -144,16 +177,45 @@ it("exports once, continues after a failed target, and reports an idempotent tar
 });
 
 it("cancels before starting the next selected target", async () => {
-  const targetA = { id: "target-a", label: "Target A", baseURL: "https://a", state: "ready", token: "a-token" } as const;
-  const targetB = { id: "target-b", label: "Target B", baseURL: "https://b", state: "ready", token: "b-token" } as const;
+  const targetA = {
+    id: "target-a",
+    label: "Target A",
+    baseURL: "https://a",
+    state: "ready",
+    token: "a-token",
+  } as const;
+  const targetB = {
+    id: "target-b",
+    label: "Target B",
+    baseURL: "https://b",
+    state: "ready",
+    token: "b-token",
+  } as const;
   const archive = new Blob(["archive"]);
   let finishFirstApply: () => void = () => undefined;
   downloadImageArchiveOn.mockResolvedValue(archive);
-  uploadImageArchiveOn.mockResolvedValueOnce({ import_id: "import-a", ref: "reviewer:v3", digest: "a" });
-  applyImageArchiveOn.mockImplementationOnce(() => new Promise<void>((resolve) => { finishFirstApply = resolve; }));
+  uploadImageArchiveOn.mockResolvedValueOnce({
+    import_id: "import-a",
+    ref: "reviewer:v3",
+    digest: "a",
+  });
+  applyImageArchiveOn.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finishFirstApply = resolve;
+      }),
+  );
   const user = userEvent.setup();
 
-  render(<ImageTransferDialog open onOpenChange={() => undefined} imageRef="reviewer:v3" daemons={[targetA, targetB]} onComplete={() => undefined} />);
+  render(
+    <ImageTransferDialog
+      open
+      onOpenChange={() => undefined}
+      imageRef="reviewer:v3"
+      daemons={[targetA, targetB]}
+      onComplete={() => undefined}
+    />,
+  );
   await user.click(screen.getByRole("button", { name: "All servers" }));
   await user.click(screen.getByRole("button", { name: "Start transfer" }));
   await waitFor(() => expect(applyImageArchiveOn).toHaveBeenCalledTimes(1));
@@ -167,7 +229,13 @@ it("cancels before starting the next selected target", async () => {
 });
 
 it("retags and retries only the conflicted target without another export", async () => {
-  const target = { id: "target-a", label: "Target A", baseURL: "https://a", state: "ready", token: "a-token" } as const;
+  const target = {
+    id: "target-a",
+    label: "Target A",
+    baseURL: "https://a",
+    state: "ready",
+    token: "a-token",
+  } as const;
   const archive = new Blob(["archive"]);
   downloadImageArchiveOn.mockResolvedValue(archive);
   uploadImageArchiveOn
@@ -178,7 +246,15 @@ it("retags and retries only the conflicted target without another export", async
     .mockResolvedValueOnce({ reused: false });
   const user = userEvent.setup();
 
-  render(<ImageTransferDialog open onOpenChange={() => undefined} imageRef="reviewer:v3" daemons={[target]} onComplete={() => undefined} />);
+  render(
+    <ImageTransferDialog
+      open
+      onOpenChange={() => undefined}
+      imageRef="reviewer:v3"
+      daemons={[target]}
+      onComplete={() => undefined}
+    />,
+  );
   await user.click(screen.getByRole("button", { name: "All servers" }));
   await user.click(screen.getByRole("button", { name: "Start transfer" }));
   const retryRef = await screen.findByRole("textbox", { name: "Retag and retry for Target A" });
@@ -197,44 +273,100 @@ it("retags and retries only the conflicted target without another export", async
 });
 
 it("clears staged retry state when the dialog closes", async () => {
-  const target = { id: "target-a", label: "Target A", baseURL: "https://a", state: "ready", token: "a-token" } as const;
+  const target = {
+    id: "target-a",
+    label: "Target A",
+    baseURL: "https://a",
+    state: "ready",
+    token: "a-token",
+  } as const;
   downloadImageArchiveOn.mockResolvedValue(new Blob(["archive"]));
-  uploadImageArchiveOn.mockResolvedValue({ import_id: "import-a", ref: "reviewer:v3", digest: "a" });
-  applyImageArchiveOn.mockRejectedValue(new ApiError(409, "image_import_failed", "original ref conflicts"));
+  uploadImageArchiveOn.mockResolvedValue({
+    import_id: "import-a",
+    ref: "reviewer:v3",
+    digest: "a",
+  });
+  applyImageArchiveOn.mockRejectedValue(
+    new ApiError(409, "image_import_failed", "original ref conflicts"),
+  );
   const user = userEvent.setup();
   const Harness = () => {
     const [open, setOpen] = useState(true);
-    return <><button onClick={() => setOpen(true)}>Reopen</button><ImageTransferDialog open={open} onOpenChange={setOpen} imageRef="reviewer:v3" daemons={[target]} onComplete={() => undefined} /></>;
+    return (
+      <>
+        <button onClick={() => setOpen(true)}>Reopen</button>
+        <ImageTransferDialog
+          open={open}
+          onOpenChange={setOpen}
+          imageRef="reviewer:v3"
+          daemons={[target]}
+          onComplete={() => undefined}
+        />
+      </>
+    );
   };
 
   render(<Harness />);
   await user.click(screen.getByRole("button", { name: "All servers" }));
   await user.click(screen.getByRole("button", { name: "Start transfer" }));
-  expect(await screen.findByRole("textbox", { name: "Retag and retry for Target A" })).toBeInTheDocument();
+  expect(
+    await screen.findByRole("textbox", { name: "Retag and retry for Target A" }),
+  ).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Close" }));
   await user.click(screen.getByRole("button", { name: "Reopen" }));
 
-  expect(screen.queryByRole("textbox", { name: "Retag and retry for Target A" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("textbox", { name: "Retag and retry for Target A" }),
+  ).not.toBeInTheDocument();
 });
 
 it("cancels an in-flight transfer when its parent closes the dialog", async () => {
-  const targetA = { id: "target-a", label: "Target A", baseURL: "https://a", state: "ready", token: "a-token" } as const;
-  const targetB = { id: "target-b", label: "Target B", baseURL: "https://b", state: "ready", token: "b-token" } as const;
+  const targetA = {
+    id: "target-a",
+    label: "Target A",
+    baseURL: "https://a",
+    state: "ready",
+    token: "a-token",
+  } as const;
+  const targetB = {
+    id: "target-b",
+    label: "Target B",
+    baseURL: "https://b",
+    state: "ready",
+    token: "b-token",
+  } as const;
   let finishFirstApply: () => void = () => undefined;
   downloadImageArchiveOn.mockResolvedValue(new Blob(["archive"]));
   uploadImageArchiveOn
     .mockResolvedValueOnce({ import_id: "import-a", ref: "reviewer:v3", digest: "a" })
     .mockResolvedValueOnce({ import_id: "import-b", ref: "reviewer:v3", digest: "b" });
-  applyImageArchiveOn.mockImplementationOnce(() => new Promise<void>((resolve) => { finishFirstApply = resolve; }));
+  applyImageArchiveOn.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finishFirstApply = resolve;
+      }),
+  );
   const user = userEvent.setup();
   const Harness = () => {
     const [open, setOpen] = useState(true);
-    return <>
-      <button data-testid="parent-close" onClick={() => setOpen(false)}>Parent close</button>
-      <button data-testid="parent-reopen" onClick={() => setOpen(true)}>Parent reopen</button>
-      <ImageTransferDialog open={open} onOpenChange={setOpen} imageRef="reviewer:v3" daemons={[targetA, targetB]} onComplete={() => undefined} />
-    </>;
+    return (
+      <>
+        <button data-testid="parent-close" onClick={() => setOpen(false)}>
+          Parent close
+        </button>
+        <button data-testid="parent-reopen" onClick={() => setOpen(true)}>
+          Parent reopen
+        </button>
+        <ImageTransferDialog
+          open={open}
+          onOpenChange={setOpen}
+          imageRef="reviewer:v3"
+          daemons={[targetA, targetB]}
+          onComplete={() => undefined}
+        />
+      </>
+    );
   };
 
   render(<Harness />);
@@ -253,14 +385,34 @@ it("cancels an in-flight transfer when its parent closes the dialog", async () =
 });
 
 it("completes a transfer when React StrictMode replays its mount effect", async () => {
-  const target = { id: "target-a", label: "Target A", baseURL: "https://a", state: "ready", token: "a-token" } as const;
+  const target = {
+    id: "target-a",
+    label: "Target A",
+    baseURL: "https://a",
+    state: "ready",
+    token: "a-token",
+  } as const;
   const onComplete = vi.fn();
   downloadImageArchiveOn.mockResolvedValue(new Blob(["archive"]));
-  uploadImageArchiveOn.mockResolvedValue({ import_id: "import-a", ref: "reviewer:v3", digest: "a" });
+  uploadImageArchiveOn.mockResolvedValue({
+    import_id: "import-a",
+    ref: "reviewer:v3",
+    digest: "a",
+  });
   applyImageArchiveOn.mockResolvedValue({ reused: false });
   const user = userEvent.setup();
 
-  render(<StrictMode><ImageTransferDialog open onOpenChange={() => undefined} imageRef="reviewer:v3" daemons={[target]} onComplete={onComplete} /></StrictMode>);
+  render(
+    <StrictMode>
+      <ImageTransferDialog
+        open
+        onOpenChange={() => undefined}
+        imageRef="reviewer:v3"
+        daemons={[target]}
+        onComplete={onComplete}
+      />
+    </StrictMode>,
+  );
   await user.click(screen.getByRole("button", { name: "All servers" }));
   await user.click(screen.getByRole("button", { name: "Start transfer" }));
 
@@ -269,18 +421,41 @@ it("completes a transfer when React StrictMode replays its mount effect", async 
 });
 
 it("keeps the selected target snapshot when the registry changes during export", async () => {
-  const target = { id: "target-a", label: "Target A", baseURL: "https://a", state: "ready", token: "a-token" } as const;
+  const target = {
+    id: "target-a",
+    label: "Target A",
+    baseURL: "https://a",
+    state: "ready",
+    token: "a-token",
+  } as const;
   let finishExport: (archive: Blob) => void = () => undefined;
-  downloadImageArchiveOn.mockImplementationOnce(() => new Promise<Blob>((resolve) => { finishExport = resolve; }));
-  uploadImageArchiveOn.mockResolvedValue({ import_id: "import-a", ref: "reviewer:v3", digest: "a" });
+  downloadImageArchiveOn.mockImplementationOnce(
+    () =>
+      new Promise<Blob>((resolve) => {
+        finishExport = resolve;
+      }),
+  );
+  uploadImageArchiveOn.mockResolvedValue({
+    import_id: "import-a",
+    ref: "reviewer:v3",
+    digest: "a",
+  });
   applyImageArchiveOn.mockRejectedValue(new Error("target disappeared after selection"));
   const user = userEvent.setup();
   const Harness = () => {
     const [daemons, setDaemons] = useState([target]);
-    return <>
-      <button onClick={() => setDaemons([])}>Remove target</button>
-      <ImageTransferDialog open onOpenChange={() => undefined} imageRef="reviewer:v3" daemons={daemons} onComplete={() => undefined} />
-    </>;
+    return (
+      <>
+        <button onClick={() => setDaemons([])}>Remove target</button>
+        <ImageTransferDialog
+          open
+          onOpenChange={() => undefined}
+          imageRef="reviewer:v3"
+          daemons={daemons}
+          onComplete={() => undefined}
+        />
+      </>
+    );
   };
 
   render(<Harness />);
@@ -291,18 +466,43 @@ it("keeps the selected target snapshot when the registry changes during export",
   finishExport(new Blob(["archive"]));
 
   await waitFor(() => expect(uploadImageArchiveOn).toHaveBeenCalledWith(target, expect.any(Blob)));
-  expect(await screen.findByText("Target A: Failed — target disappeared after selection")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Target A: Failed — target disappeared after selection"),
+  ).toBeInTheDocument();
 });
 
 it("reports exporting and blocks cancellation until the source archive is ready", async () => {
-  const target = { id: "target-a", label: "Target A", baseURL: "https://a", state: "ready", token: "a-token" } as const;
+  const target = {
+    id: "target-a",
+    label: "Target A",
+    baseURL: "https://a",
+    state: "ready",
+    token: "a-token",
+  } as const;
   let finishExport: (archive: Blob) => void = () => undefined;
-  downloadImageArchiveOn.mockImplementationOnce(() => new Promise<Blob>((resolve) => { finishExport = resolve; }));
-  uploadImageArchiveOn.mockResolvedValue({ import_id: "import-a", ref: "reviewer:v3", digest: "a" });
+  downloadImageArchiveOn.mockImplementationOnce(
+    () =>
+      new Promise<Blob>((resolve) => {
+        finishExport = resolve;
+      }),
+  );
+  uploadImageArchiveOn.mockResolvedValue({
+    import_id: "import-a",
+    ref: "reviewer:v3",
+    digest: "a",
+  });
   applyImageArchiveOn.mockImplementationOnce(() => new Promise<void>(() => undefined));
   const user = userEvent.setup();
 
-  render(<ImageTransferDialog open onOpenChange={() => undefined} imageRef="reviewer:v3" daemons={[target]} onComplete={() => undefined} />);
+  render(
+    <ImageTransferDialog
+      open
+      onOpenChange={() => undefined}
+      imageRef="reviewer:v3"
+      daemons={[target]}
+      onComplete={() => undefined}
+    />,
+  );
   await user.click(screen.getByRole("button", { name: "All servers" }));
   await user.click(screen.getByRole("button", { name: "Start transfer" }));
 

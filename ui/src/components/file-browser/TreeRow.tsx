@@ -1,6 +1,12 @@
 import {
-  ChevronDown, ChevronRight, File as FileIcon, Folder, FolderOpen,
-  Loader2, Pencil, Trash2,
+  ChevronDown,
+  ChevronRight,
+  File as FileIcon,
+  Folder,
+  FolderOpen,
+  Loader2,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import type { FileEntry } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -8,7 +14,14 @@ import type { FileTreeApi } from "./useFileTree";
 import { joinPath } from "./paths";
 
 export function TreeRow({
-  tree, path, entry, depth, selected, onSelect, onRename, onDelete,
+  tree,
+  path,
+  entry,
+  depth,
+  selected,
+  onSelect,
+  onRename,
+  onDelete,
 }: {
   tree: FileTreeApi;
   path: string;
@@ -40,8 +53,16 @@ export function TreeRow({
         >
           {entry.isDir ? (
             <>
-              {open ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
-              {open ? <FolderOpen className="size-3.5 shrink-0" /> : <Folder className="size-3.5 shrink-0" />}
+              {open ? (
+                <ChevronDown className="size-3.5 shrink-0" />
+              ) : (
+                <ChevronRight className="size-3.5 shrink-0" />
+              )}
+              {open ? (
+                <FolderOpen className="size-3.5 shrink-0" />
+              ) : (
+                <Folder className="size-3.5 shrink-0" />
+              )}
             </>
           ) : (
             <>
@@ -76,7 +97,10 @@ export function TreeRow({
       {entry.isDir && open && dir?.entries && (
         <div>
           {dir.entries.length === 0 ? (
-            <div style={{ paddingLeft: `${(depth + 1) * 0.75 + 0.5}rem` }} className="py-0.5 text-xs text-muted-foreground">
+            <div
+              style={{ paddingLeft: `${(depth + 1) * 0.75 + 0.5}rem` }}
+              className="py-0.5 text-xs text-muted-foreground"
+            >
               empty
             </div>
           ) : (

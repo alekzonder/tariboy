@@ -1,17 +1,23 @@
-import { useState } from "react"
+import { useState } from "react";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 /** What a workflow action asks before it runs. */
 export interface ConfirmRequest {
-  title: string
-  description: string
-  action: string
-  run: () => void
+  title: string;
+  description: string;
+  action: string;
+  run: () => void;
   /** Declined (Go back, Escape, or outside click): settle whatever waits on it. */
-  onCancel?: () => void
+  onCancel?: () => void;
 }
 
 /**
@@ -20,13 +26,16 @@ export interface ConfirmRequest {
  * nothing; "Go back" avoids a second "Cancel" next to "Cancel task".
  */
 export function useWorkflowConfirm() {
-  const [request, setRequest] = useState<ConfirmRequest | null>(null)
+  const [request, setRequest] = useState<ConfirmRequest | null>(null);
   const dialog = (
-    <AlertDialog open={request !== null} onOpenChange={(open) => {
-      if (open) return
-      request?.onCancel?.()
-      setRequest(null)
-    }}>
+    <AlertDialog
+      open={request !== null}
+      onOpenChange={(open) => {
+        if (open) return;
+        request?.onCancel?.();
+        setRequest(null);
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{request?.title}</AlertDialogTitle>
@@ -34,17 +43,22 @@ export function useWorkflowConfirm() {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Go back</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={(event) => {
-            // Close here, not through onOpenChange, so a confirmed action never
-            // also reads as declined.
-            event.preventDefault()
-            const run = request?.run
-            setRequest(null)
-            run?.()
-          }}>{request?.action}</AlertDialogAction>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={(event) => {
+              // Close here, not through onOpenChange, so a confirmed action never
+              // also reads as declined.
+              event.preventDefault();
+              const run = request?.run;
+              setRequest(null);
+              run?.();
+            }}
+          >
+            {request?.action}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  )
-  return { confirm: setRequest, dialog }
+  );
+  return { confirm: setRequest, dialog };
 }

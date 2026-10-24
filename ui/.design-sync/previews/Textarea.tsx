@@ -12,9 +12,7 @@ export const NotesField = () => (
     <Label htmlFor="preview-notes">notes</Label>
     <Textarea
       id="preview-notes"
-      defaultValue={
-        "Owns the release train for TB-142. Restart after every worker:v2 rebuild."
-      }
+      defaultValue={"Owns the release train for TB-142. Restart after every worker:v2 rebuild."}
     />
     <span style={help}>Shown on the agent card and in the sidebar tooltip.</span>
   </div>
@@ -36,10 +34,7 @@ export const EnvironmentJson = () => (
 export const Placeholder = () => (
   <div style={field}>
     <Label htmlFor="preview-oneshot">one-shot prompt</Label>
-    <Textarea
-      id="preview-oneshot"
-      placeholder="one-shot exec prompt (optional)"
-    />
+    <Textarea id="preview-oneshot" placeholder="one-shot exec prompt (optional)" />
   </div>
 );
 

@@ -13,11 +13,17 @@ const localTarget: ImageTransferTarget = {
   target: null,
 };
 
-export function eligibleImageTransferTargets(source: Daemon | null, daemons: Daemon[]): ImageTransferTarget[] {
+export function eligibleImageTransferTargets(
+  source: Daemon | null,
+  daemons: Daemon[],
+): ImageTransferTarget[] {
   return [
     ...(source === null || !hasLocalDaemon() ? [] : [localTarget]),
     ...daemons
-      .filter((host) => host.id !== "" && hostConnected(host.state) && (source === null || host.id !== source.id))
+      .filter(
+        (host) =>
+          host.id !== "" && hostConnected(host.state) && (source === null || host.id !== source.id),
+      )
       .map((host) => ({ id: host.id, label: host.label, target: host })),
   ];
 }

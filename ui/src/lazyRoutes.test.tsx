@@ -47,13 +47,19 @@ function renderAt(path: string) {
 beforeEach(() => {
   localStorage.clear();
   vi.mocked(fetchAllAgents).mockResolvedValue([
-    { host: { id: "", label: "This daemon (local)" }, agents: [{ name: "builder", state: "idle" } as never] },
+    {
+      host: { id: "", label: "This daemon (local)" },
+      agents: [{ name: "builder", state: "idle" } as never],
+    },
   ]);
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    text: async () => JSON.stringify({ ok: true, result: { agents: [], count: 0 } }),
-  } as Response));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true, result: { agents: [], count: 0 } }),
+    } as Response),
+  );
 });
 
 describe("lazily loaded screens", () => {

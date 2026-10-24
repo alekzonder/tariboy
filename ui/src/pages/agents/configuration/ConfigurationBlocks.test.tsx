@@ -9,19 +9,23 @@ it("edits message settings in the shared page draft without its own Save", () =>
   function Section() {
     const draft = useConfigDraft({
       baseline: { "messages-batch": "10", "messages-max-queue": "100" },
-      units: [{ id: "messages", keys: ["messages-batch", "messages-max-queue"], submit: async () => {} }],
+      units: [
+        { id: "messages", keys: ["messages-batch", "messages-max-queue"], submit: async () => {} },
+      ],
       reload: async () => {},
     });
-    return <ConfigurationBlocks
-      block={BLOCKS.find((block) => block.id === "messages")!}
-      draft={draft}
-      matched={new Set(["messages-batch"])}
-      dirty={draft.dirtyKeys.length}
-      sources={{} as ConfigSources}
-      name="worker"
-      stopped
-      refresh={vi.fn()}
-    />;
+    return (
+      <ConfigurationBlocks
+        block={BLOCKS.find((block) => block.id === "messages")!}
+        draft={draft}
+        matched={new Set(["messages-batch"])}
+        dirty={draft.dirtyKeys.length}
+        sources={{} as ConfigSources}
+        name="worker"
+        stopped
+        refresh={vi.fn()}
+      />
+    );
   }
   render(<Section />);
   const batch = screen.getByLabelText("Messages per iteration");

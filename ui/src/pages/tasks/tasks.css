@@ -15,9 +15,10 @@
   min-width: 4px;
   cursor: col-resize;
   background: transparent;
-  transition: background .12s ease;
+  transition: background 0.12s ease;
 }
-.task-panel-resize-handle:hover, .task-panel-resize-handle:focus-visible {
+.task-panel-resize-handle:hover,
+.task-panel-resize-handle:focus-visible {
   background: color-mix(in oklab, var(--primary) 30%, transparent);
   outline: none;
 }
@@ -26,110 +27,268 @@
    every touch on it, so a finger drags the edge instead of scrolling; a coarse
    pointer gets a wider target. */
 .task-column-resize-handle {
-  position: absolute; z-index: 3; top: 4px; bottom: 4px; right: -10px; width: 10px;
-  cursor: col-resize; touch-action: none; border-radius: 3px;
+  position: absolute;
+  z-index: 3;
+  top: 4px;
+  bottom: 4px;
+  right: -10px;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: 3px;
 }
 .task-column-resize-handle::before {
-  content: ""; position: absolute; top: 3px; bottom: 3px; left: 4.5px; width: 1px; background: var(--border);
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 4.5px;
+  width: 1px;
+  background: var(--border);
 }
-.task-column-resize-handle:hover::before, .task-column-resize-handle:focus-visible::before {
-  left: 3.5px; width: 3px; border-radius: 999px; background: color-mix(in oklab, var(--primary) 55%, transparent);
+.task-column-resize-handle:hover::before,
+.task-column-resize-handle:focus-visible::before {
+  left: 3.5px;
+  width: 3px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--primary) 55%, transparent);
 }
-.task-column-resize-handle:focus-visible { outline: none; }
+.task-column-resize-handle:focus-visible {
+  outline: none;
+}
 /* The header label is the column's drag grip: a held finger moves it, a swipe
    still scrolls the table. */
-.task-column-grip { touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.task-column-grip {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
 @media (pointer: coarse) {
-  .task-column-resize-handle { right: -13px; width: 16px; }
-  .task-column-resize-handle::before { left: 7.5px; }
-  .task-column-resize-handle:hover::before, .task-column-resize-handle:focus-visible::before { left: 6.5px; }
+  .task-column-resize-handle {
+    right: -13px;
+    width: 16px;
+  }
+  .task-column-resize-handle::before {
+    left: 7.5px;
+  }
+  .task-column-resize-handle:hover::before,
+  .task-column-resize-handle:focus-visible::before {
+    left: 6.5px;
+  }
 }
 
-.task-inline-form input, .task-inline-form select {
-  min-width: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--background-base);
-  padding: 7px 9px; color: var(--foreground); font-size: 13px;
+.task-inline-form input,
+.task-inline-form select {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--background-base);
+  padding: 7px 9px;
+  color: var(--foreground);
+  font-size: 13px;
 }
 
-.tasks-center { min-width: 0; min-height: 0; overflow: auto; }
-.task-primary-action, .task-inline-form button {
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--border);
-  border-radius: 7px; padding: 7px 10px; background: var(--background-base); font-size: 12px; font-weight: 560;
+.tasks-center {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.task-primary-action,
+.task-inline-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: var(--background-base);
+  font-size: 12px;
+  font-weight: 560;
 }
 .task-primary-action {
-  border-color: var(--primary); background: var(--primary); color: var(--primary-foreground);
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
-.is-refreshing { animation: tasks-refresh-spin .8s linear infinite; }
-@keyframes tasks-refresh-spin { to { transform: rotate(360deg); } }
+.is-refreshing {
+  animation: tasks-refresh-spin 0.8s linear infinite;
+}
+@keyframes tasks-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .is-refreshing { animation: none; }
+  .is-refreshing {
+    animation: none;
+  }
 }
 
-.task-tree-list { min-height: calc(100% - 60px); padding-bottom: 80px; }
-.task-tree-list.is-drop-target { box-shadow: inset 0 0 0 2px color-mix(in oklch, var(--primary) 30%, transparent); }
+.task-tree-list {
+  min-height: calc(100% - 60px);
+  padding-bottom: 80px;
+}
+.task-tree-list.is-drop-target {
+  box-shadow: inset 0 0 0 2px color-mix(in oklch, var(--primary) 30%, transparent);
+}
 
 /* The three drop zones of a task row. They overlay the row (which is
    `relative`), so they stay here rather than moving to utilities: `before`
    and `after` draw the 3px insertion rule, `inside` is the hit area for
    re-parenting. Everything else about a row is now Tailwind on the element. */
-.task-drop-zone { position: absolute; z-index: 1; left: 0; right: 0; }
-.task-drop-zone.before { top: 0; height: 8px; }
-.task-drop-zone.inside { top: 8px; bottom: 8px; }
-.task-drop-zone.after { bottom: 0; height: 8px; }
-.task-drop-zone.before.is-over, .task-drop-zone.after.is-over { background: linear-gradient(to bottom, var(--primary) 3px, transparent 3px); }
-.tasks-empty { padding: 40px 20px; text-align: center; font-size: 13px; color: var(--muted-foreground); }
+.task-drop-zone {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+}
+.task-drop-zone.before {
+  top: 0;
+  height: 8px;
+}
+.task-drop-zone.inside {
+  top: 8px;
+  bottom: 8px;
+}
+.task-drop-zone.after {
+  bottom: 0;
+  height: 8px;
+}
+.task-drop-zone.before.is-over,
+.task-drop-zone.after.is-over {
+  background: linear-gradient(to bottom, var(--primary) 3px, transparent 3px);
+}
+.tasks-empty {
+  padding: 40px 20px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
 
-.task-inline-form { display: flex; gap: 6px; margin: 10px 14px; padding: 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); box-shadow: 0 8px 30px oklch(0 0 0 / .07); }
-.task-inline-form input { flex: 1; }
-.tasks-empty { padding: 40px 20px; text-align: center; font-size: 13px; color: var(--muted-foreground); }
+.task-inline-form {
+  display: flex;
+  gap: 6px;
+  margin: 10px 14px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: 0 8px 30px oklch(0 0 0 / 0.07);
+}
+.task-inline-form input {
+  flex: 1;
+}
+.tasks-empty {
+  padding: 40px 20px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
 
 /* The detail panel is the same island as the console content: a --card sheet
    inset from the window edges, on --panel-radius under --lift, with its own
    scroll. The topbar is 42px, so 50px leaves the island's 8px gutter above it. */
 .task-detail-dialog[data-slot="dialog-content"] {
-  top: 50px; bottom: 8px; inset-inline-start: auto; inset-inline-end: 8px;
-  width: var(--tasks-detail-width, 50vw); height: auto;
-  max-width: calc(100vw - 80px); grid-template-columns: 9px minmax(0, 1fr);
-  translate: none; padding: 0; border-radius: var(--panel-radius); gap: 0;
-  overflow: hidden; box-shadow: var(--lift);
+  top: 50px;
+  bottom: 8px;
+  inset-inline-start: auto;
+  inset-inline-end: 8px;
+  width: var(--tasks-detail-width, 50vw);
+  height: auto;
+  max-width: calc(100vw - 80px);
+  grid-template-columns: 9px minmax(0, 1fr);
+  translate: none;
+  padding: 0;
+  border-radius: var(--panel-radius);
+  gap: 0;
+  overflow: hidden;
+  box-shadow: var(--lift);
 }
 /* The seam is a grip, not a line: a 9px column with a 3px bar in it, so the
    resize target stays comfortable without drawing a border into the island. */
 .task-detail-dialog .task-panel-resize-handle {
-  display: grid; place-items: center; min-width: 9px;
+  display: grid;
+  place-items: center;
+  min-width: 9px;
 }
 .task-detail-dialog .task-panel-resize-handle::before {
-  content: ""; width: 3px; height: 26px; border-radius: 999px; background: var(--border);
+  content: "";
+  width: 3px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--border);
 }
 .task-detail-dialog .task-panel-resize-handle:hover,
-.task-detail-dialog .task-panel-resize-handle:focus-visible { background: transparent; }
+.task-detail-dialog .task-panel-resize-handle:focus-visible {
+  background: transparent;
+}
 .task-detail-dialog .task-panel-resize-handle:hover::before,
-.task-detail-dialog .task-panel-resize-handle:focus-visible::before { background: var(--muted-foreground); }
+.task-detail-dialog .task-panel-resize-handle:focus-visible::before {
+  background: var(--muted-foreground);
+}
 
 /* The scroll lives in the panel, not on the page, so the header can stick.
    Relative: an absolutely positioned descendant (an sr-only label) must be
    clipped by this scroll, or it overflows the overflow:hidden dialog, which
    focus then scrolls past the header where the wheel cannot bring it back. */
-.task-detail-panel { position: relative; min-width: 0; min-height: 0; overflow: auto; background: var(--card); }
-.task-detail-body { min-width: 0; }
+.task-detail-panel {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--card);
+}
+.task-detail-body {
+  min-width: 0;
+}
 
 /* Containment, not decoration: the single minmax column is what keeps a long
    URL, a wide table or a code block inside the panel instead of widening it.
    Everything else about these sections is Tailwind on the element. */
-.task-description { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; min-width: 0; }
-.task-comment-list, .task-comments form { display: grid; grid-template-columns: minmax(0, 1fr); }
-.task-comments form { gap: 8px; }
-.task-markdown { min-width: 0; overflow-wrap: anywhere; }
+.task-description {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+  min-width: 0;
+}
+.task-comment-list,
+.task-comments form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.task-comments form {
+  gap: 8px;
+}
+.task-markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 /* The copy action is revealed by the comment it belongs to. */
-.task-comment-copy { opacity: 0; transition: opacity 120ms ease; }
-.task-comment-list article:hover .task-comment-copy, .task-comment-list article:focus-within .task-comment-copy { opacity: 1; }
+.task-comment-copy {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.task-comment-list article:hover .task-comment-copy,
+.task-comment-list article:focus-within .task-comment-copy {
+  opacity: 1;
+}
 
 @media (max-width: 1000px) {
   /* Too narrow for an island: the panel takes the window and drops the inset,
      the radius and the grip column with it. The grip needs the same specificity
      as the rule that gave it one, or it survives as a stray row. */
-  .task-detail-dialog .task-panel-resize-handle { display: none; }
+  .task-detail-dialog .task-panel-resize-handle {
+    display: none;
+  }
   .task-detail-dialog[data-slot="dialog-content"] {
-    top: 0; bottom: 0; inset-inline-end: 0; width: 100vw; max-width: none;
-    grid-template-columns: minmax(0, 1fr); border-radius: 0;
+    top: 0;
+    bottom: 0;
+    inset-inline-end: 0;
+    width: 100vw;
+    max-width: none;
+    grid-template-columns: minmax(0, 1fr);
+    border-radius: 0;
   }
 }

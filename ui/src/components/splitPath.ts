@@ -4,7 +4,7 @@
 // is what we filter that listing by. Splitting on the last "/" preserves any
 // leading slash so completing a segment keeps the path shape intact.
 export function splitPath(full: string): { prefix: string; tail: string } {
-  const idx = full.lastIndexOf("/")
-  if (idx < 0) return { prefix: "", tail: full }
-  return { prefix: full.slice(0, idx + 1), tail: full.slice(idx + 1) }
+  const idx = full.lastIndexOf("/");
+  if (idx < 0) return { prefix: "", tail: full };
+  return { prefix: full.slice(0, idx + 1), tail: full.slice(idx + 1) };
 }

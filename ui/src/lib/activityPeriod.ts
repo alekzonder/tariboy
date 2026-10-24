@@ -34,13 +34,16 @@ export interface ActivityWindow {
 
 export function activityWindow(search: URLSearchParams, now: Date): ActivityWindow {
   const raw = search.get("period");
-  const period: ActivityPeriod =
-    raw === "hour" || raw === "week" || raw === "custom" ? raw : "day";
+  const period: ActivityPeriod = raw === "hour" || raw === "week" || raw === "custom" ? raw : "day";
   const customSince = search.get("since") ?? "";
   const customUntil = search.get("until") ?? "";
   const base = { period, customSince, customUntil, error: "" };
   if (period !== "custom") {
-    return { ...base, since: new Date(now.getTime() - SPAN_MS[period]).toISOString(), until: now.toISOString() };
+    return {
+      ...base,
+      since: new Date(now.getTime() - SPAN_MS[period]).toISOString(),
+      until: now.toISOString(),
+    };
   }
   const start = customSince ? new Date(customSince) : null;
   const end = customUntil ? new Date(customUntil) : now;

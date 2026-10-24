@@ -28,7 +28,9 @@ describe("DaemonsPage", () => {
     renderPage();
     await userEvent.click(screen.getByRole("button", { name: /add host/i }));
     fireEvent.change(screen.getByLabelText(/label/i), { target: { value: "prod" } });
-    fireEvent.change(screen.getByLabelText(/base url/i), { target: { value: "https://prod:8765" } });
+    fireEvent.change(screen.getByLabelText(/base url/i), {
+      target: { value: "https://prod:8765" },
+    });
     const tokenInput = screen.getByLabelText(/token/i) as HTMLInputElement;
     expect(tokenInput.type).toBe("password");
     fireEvent.change(tokenInput, { target: { value: "sup3rsecret" } });
@@ -58,24 +60,26 @@ describe("DaemonsPage", () => {
 
   it("shows native SSH connection failures instead of leaking a rejection", async () => {
     vi.stubGlobal("__TAURI_INTERNALS__", {});
-    vi.spyOn(desktop, "hostsList").mockResolvedValue([{
-      id: "ssh-1",
-      label: "gpu",
-      kind: "ssh",
-      ssh_alias: "gpu-box",
-      remote_install_dir: "~/.local/lib/tariboy",
-      remote_port: 9990,
-      https_base_url: "",
-      last_daemon_version: "",
-      state: "disconnected",
-      base_url: "",
-      local_port: 0,
-      phase: "",
-      platform: "",
-      arch: "",
-      prerequisites: [],
-      message: "",
-    }]);
+    vi.spyOn(desktop, "hostsList").mockResolvedValue([
+      {
+        id: "ssh-1",
+        label: "gpu",
+        kind: "ssh",
+        ssh_alias: "gpu-box",
+        remote_install_dir: "~/.local/lib/tariboy",
+        remote_port: 9990,
+        https_base_url: "",
+        last_daemon_version: "",
+        state: "disconnected",
+        base_url: "",
+        local_port: 0,
+        phase: "",
+        platform: "",
+        arch: "",
+        prerequisites: [],
+        message: "",
+      },
+    ]);
     vi.spyOn(desktop, "hostConnect").mockRejectedValue(new Error("SSH timed out"));
 
     renderPage();
@@ -98,24 +102,26 @@ describe("DaemonsPage", () => {
       adopted: false,
       message: "",
     });
-    vi.spyOn(desktop, "hostsList").mockResolvedValue([{
-      id: "ssh-1",
-      label: "gpu",
-      kind: "ssh",
-      ssh_alias: "gpu-box",
-      remote_install_dir: "~/.local/lib/tariboy",
-      remote_port: 9990,
-      https_base_url: "",
-      last_daemon_version: "0.11.5",
-      state: "ready",
-      base_url: "http://127.0.0.1:18444",
-      local_port: 18444,
-      phase: "connect",
-      platform: "Linux",
-      arch: "x86_64",
-      prerequisites: [],
-      message: "",
-    }]);
+    vi.spyOn(desktop, "hostsList").mockResolvedValue([
+      {
+        id: "ssh-1",
+        label: "gpu",
+        kind: "ssh",
+        ssh_alias: "gpu-box",
+        remote_install_dir: "~/.local/lib/tariboy",
+        remote_port: 9990,
+        https_base_url: "",
+        last_daemon_version: "0.11.5",
+        state: "ready",
+        base_url: "http://127.0.0.1:18444",
+        local_port: 18444,
+        phase: "connect",
+        platform: "Linux",
+        arch: "x86_64",
+        prerequisites: [],
+        message: "",
+      },
+    ]);
 
     renderPage();
 

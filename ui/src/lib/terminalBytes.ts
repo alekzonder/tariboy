@@ -7,4 +7,4 @@ export const HOTKEY_BYTES: Record<"esc" | "enter" | "ctrlc" | "up" | "down", str
   ctrlc: "\x03",
   up: "\x1b[A",
   down: "\x1b[B",
-} as const
+} as const;

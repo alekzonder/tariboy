@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  isConnectionError,
-  type AgentImageStatus,
-  type ImageRow,
-} from "@/lib/api";
+import { isConnectionError, type AgentImageStatus, type ImageRow } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import type { AgentStatus, AgentView } from "@/lib/types";
 
-interface RetentionLimits { keep_iterations: number; keep_days: number; max_bytes: number }
+interface RetentionLimits {
+  keep_iterations: number;
+  keep_days: number;
+  max_bytes: number;
+}
 // The effective limits, the agent's own override (0 inherits) and the server default.
-export interface RetentionPolicy extends RetentionLimits { override: RetentionLimits; default: RetentionLimits }
+export interface RetentionPolicy extends RetentionLimits {
+  override: RetentionLimits;
+  default: RetentionLimits;
+}
 
 // A loaded value, or the reason it is missing. A failed reload keeps the last
 // value: a failed read is not an empty one.
-export interface Loaded<T> { value: T | null; error: string }
+export interface Loaded<T> {
+  value: T | null;
+  error: string;
+}
 
 export interface ConfigSources {
   view: AgentView | null;
@@ -30,7 +36,7 @@ export interface ConfigSources {
 }
 
 const message = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
-const empty = <T,>(): Loaded<T> => ({ value: null, error: "" });
+const empty = <T>(): Loaded<T> => ({ value: null, error: "" });
 
 // useConfigSources is the page's one load point. A scope is one agent on one
 // host: a reconnect moves the endpoint but keeps the scope, so loaded values
@@ -66,7 +72,9 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
       setRetention(empty());
       setSecrets(empty());
     });
-    return () => { scope.active = false; };
+    return () => {
+      scope.active = false;
+    };
   }, [name, targetId]);
 
   const loadAgent = useCallback(async () => {
@@ -75,17 +83,24 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
     if (!api.ready) return;
     const request = ++scope.agent;
     const current = () => scope.active && request === scope.agent;
-    const keep = <T,>(set: (update: (prev: Loaded<T>) => Loaded<T>) => void) => (cause: unknown) => {
-      if (current()) set((prev) => ({ value: prev.value, error: prev.value === null ? message(cause) : "" }));
-    };
+    const keep =
+      <T>(set: (update: (prev: Loaded<T>) => Loaded<T>) => void) =>
+      (cause: unknown) => {
+        if (current())
+          set((prev) => ({ value: prev.value, error: prev.value === null ? message(cause) : "" }));
+      };
     await Promise.all([
-      api.agents.getAgent(name).then((next) => {
-        if (current()) setView(next);
-      }, () => {
-        // Keep the last loaded agent: a failed read is not an empty agent.
-      }),
+      api.agents.getAgent(name).then(
+        (next) => {
+          if (current()) setView(next);
+        },
+        () => {
+          // Keep the last loaded agent: a failed read is not an empty agent.
+        },
+      ),
       api.agents.getAgentShellScript(name).then((next) => {
-        if (current()) setScript({ value: typeof next?.script === "string" ? next.script : "", error: "" });
+        if (current())
+          setScript({ value: typeof next?.script === "string" ? next.script : "", error: "" });
       }, keep(setScript)),
       api.agentGet<RetentionPolicy>(name, "retention").then((next) => {
         if (current()) setRetention({ value: next, error: "" });
@@ -106,18 +121,22 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
     if (!api.ready) return;
     const request = ++scope.image;
     setInventoryLoading(true);
-    void api.images.listImages().then((listing) => {
-      if (!scope.active || request !== scope.image) return;
-      setImages(listing.images ?? []);
-      setInventoryError("");
-    }).catch((cause) => {
-      if (!scope.active || request !== scope.image) return;
-      // An unreachable host keeps the last inventory; the error still shows.
-      if (!isConnectionError(cause)) setImages([]);
-      setInventoryError(message(cause));
-    }).finally(() => {
-      if (scope.active && request === scope.image) setInventoryLoading(false);
-    });
+    void api.images
+      .listImages()
+      .then((listing) => {
+        if (!scope.active || request !== scope.image) return;
+        setImages(listing.images ?? []);
+        setInventoryError("");
+      })
+      .catch((cause) => {
+        if (!scope.active || request !== scope.image) return;
+        // An unreachable host keeps the last inventory; the error still shows.
+        if (!isConnectionError(cause)) setImages([]);
+        setInventoryError(message(cause));
+      })
+      .finally(() => {
+        if (scope.active && request === scope.image) setInventoryLoading(false);
+      });
     try {
       const state = await api.agents.agentImageStatusGet(name);
       if (!scope.active || request !== scope.image) return;
@@ -133,10 +152,14 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
   useEffect(() => {
     const scope = requests.current;
     void Promise.resolve().then(loadImages);
-    return () => { scope.image++; };
+    return () => {
+      scope.image++;
+    };
   }, [loadImages, status]);
   useEffect(() => {
-    const reload = () => { void loadImages(); };
+    const reload = () => {
+      void loadImages();
+    };
     window.addEventListener("tariboy:image-built", reload);
     return () => window.removeEventListener("tariboy:image-built", reload);
   }, [loadImages]);
@@ -146,7 +169,16 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
   }, [loadAgent, loadImages]);
 
   return {
-    view, imageStatus, imageError, images, inventoryLoading, inventoryError,
-    script, retention, secrets, loadImages, reloadAll,
+    view,
+    imageStatus,
+    imageError,
+    images,
+    inventoryLoading,
+    inventoryError,
+    script,
+    retention,
+    secrets,
+    loadImages,
+    reloadAll,
   };
 }

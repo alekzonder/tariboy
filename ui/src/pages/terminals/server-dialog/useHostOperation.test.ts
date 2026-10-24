@@ -16,13 +16,26 @@ describe("useHostOperation", () => {
       output = listener;
       return offOutput;
     });
-    const server: DaemonMeta = { id: "host-1", label: "Host", baseURL: "", kind: "ssh", state: "ready" };
+    const server: DaemonMeta = {
+      id: "host-1",
+      label: "Host",
+      baseURL: "",
+      kind: "ssh",
+      state: "ready",
+    };
     const { result, unmount } = renderHook(() => useHostOperation(true, "ssh", server, () => {}));
     act(() => {
       result.current.beginOperation("update");
       result.current.rememberOperationId("current");
     });
-    act(() => output({ host_id: "host-1", operation_id: "other", stream: "stderr", text: "unrelated failure" } as desktop.HostOutputEvent));
+    act(() =>
+      output({
+        host_id: "host-1",
+        operation_id: "other",
+        stream: "stderr",
+        text: "unrelated failure",
+      } as desktop.HostOutputEvent),
+    );
     expect(result.current.output).toEqual([]);
     expect(result.current.operation.status).toBe("running");
     unmount();

@@ -6,15 +6,29 @@ import { ApiError } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -41,9 +55,23 @@ export function RunStateActions({ name, refresh }: { name: string; refresh?: () 
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" onClick={() => run("start", () => api.agentPost(name, "start"))}>Start</Button>
-      <Button size="sm" variant="secondary" onClick={() => run("stop", () => api.agentPost(name, "stop"))}>Stop</Button>
-      <Button size="sm" variant="secondary" onClick={() => run("restart", () => api.agentPost(name, "restart"))}>Restart</Button>
+      <Button size="sm" onClick={() => run("start", () => api.agentPost(name, "start"))}>
+        Start
+      </Button>
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() => run("stop", () => api.agentPost(name, "stop"))}
+      >
+        Stop
+      </Button>
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() => run("restart", () => api.agentPost(name, "restart"))}
+      >
+        Restart
+      </Button>
     </div>
   );
 }
@@ -62,7 +90,14 @@ export function RunStateActions({ name, refresh }: { name: string; refresh?: () 
  * is addressed by route, and must never fall back to the active daemon.
  */
 export function AgentControls({
-  name, alive, image, disabled = false, configurationPath, refresh, onExec, onDeleted,
+  name,
+  alive,
+  image,
+  disabled = false,
+  configurationPath,
+  refresh,
+  onExec,
+  onDeleted,
 }: {
   name: string;
   /** The agent is up — the toggle offers Stop; otherwise it offers Start. */
@@ -120,14 +155,27 @@ export function AgentControls({
   return (
     <div data-testid="agent-controls" className="flex shrink-0 items-center gap-1.5">
       {alive && image !== "bare:latest" && (
-        <Button size="sm" variant="secondary" disabled={disabled} onClick={() => setExecOpen(true)}>Exec</Button>
+        <Button size="sm" variant="secondary" disabled={disabled} onClick={() => setExecOpen(true)}>
+          Exec
+        </Button>
       )}
       {alive ? (
-        <Button size="sm" variant="secondary" disabled={disabled}
-          onClick={() => run("stop", () => api.agentPost(name, "stop"))}>Stop</Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={disabled}
+          onClick={() => run("stop", () => api.agentPost(name, "stop"))}
+        >
+          Stop
+        </Button>
       ) : (
-        <Button size="sm" disabled={disabled}
-          onClick={() => run("start", () => api.agentPost(name, "start"))}>Start</Button>
+        <Button
+          size="sm"
+          disabled={disabled}
+          onClick={() => run("start", () => api.agentPost(name, "start"))}
+        >
+          Start
+        </Button>
       )}
       <Button
         size="sm"
@@ -176,11 +224,18 @@ export function AgentControls({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={execOpen} onOpenChange={(open) => { if (!execPending) setExecOpen(open); }}>
+      <Dialog
+        open={execOpen}
+        onOpenChange={(open) => {
+          if (!execPending) setExecOpen(open);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Exec one-shot iteration</DialogTitle>
-            <DialogDescription>Runs one iteration now; the optional text applies only to it.</DialogDescription>
+            <DialogDescription>
+              Runs one iteration now; the optional text applies only to it.
+            </DialogDescription>
           </DialogHeader>
           <Textarea
             value={prompt}
@@ -189,21 +244,28 @@ export function AgentControls({
             disabled={execPending}
           />
           <DialogFooter>
-            <Button variant="outline" disabled={execPending} onClick={() => setExecOpen(false)}>Cancel</Button>
-            <Button disabled={execPending || disabled} onClick={() => void exec()}>Exec</Button>
+            <Button variant="outline" disabled={execPending} onClick={() => setExecOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={execPending || disabled} onClick={() => void exec()}>
+              Exec
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <AlertDialog
         open={deleteOpen}
-        onOpenChange={(open) => { if (!deletePending) setDeleteOpen(open); }}
+        onOpenChange={(open) => {
+          if (!deletePending) setDeleteOpen(open);
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete agent {name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently deletes the agent and all of its durable data. This action cannot be undone.
+              This permanently deletes the agent and all of its durable data. This action cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -211,7 +273,10 @@ export function AgentControls({
             <AlertDialogAction
               variant="destructive"
               disabled={deletePending}
-              onClick={(event) => { event.preventDefault(); void remove(); }}
+              onClick={(event) => {
+                event.preventDefault();
+                void remove();
+              }}
             >
               {deletePending ? "Deleting…" : "Delete agent"}
             </AlertDialogAction>

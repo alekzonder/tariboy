@@ -4,9 +4,16 @@ import { useCallback, useEffect, useRef } from "react";
  *  however many calls land in it. Hints come in bursts; one refetch is enough. */
 export function useCoalesced(fn: () => void, windowMs: number) {
   const latest = useRef(fn);
-  useEffect(() => { latest.current = fn; }, [fn]);
+  useEffect(() => {
+    latest.current = fn;
+  }, [fn]);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => { if (timer.current !== undefined) clearTimeout(timer.current); }, []);
+  useEffect(
+    () => () => {
+      if (timer.current !== undefined) clearTimeout(timer.current);
+    },
+    [],
+  );
   return useCallback(() => {
     if (timer.current !== undefined) return;
     timer.current = setTimeout(() => {

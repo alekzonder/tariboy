@@ -9,9 +9,9 @@ const servers: ReturnType<typeof createServer>[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    servers.splice(0).map(
-      (server) => new Promise<void>((resolve) => server.close(() => resolve())),
-    ),
+    servers
+      .splice(0)
+      .map((server) => new Promise<void>((resolve) => server.close(() => resolve()))),
   );
 });
 
@@ -26,7 +26,9 @@ describe("W3CClient", () => {
         requests.push({ method: request.method ?? "", url: request.url ?? "", body });
         response.setHeader("content-type", "application/json");
         if (request.method === "POST" && request.url === "/session") {
-          response.end(JSON.stringify({ value: { sessionId: "desktop-session", capabilities: {} } }));
+          response.end(
+            JSON.stringify({ value: { sessionId: "desktop-session", capabilities: {} } }),
+          );
           return;
         }
         if (request.method === "POST" && request.url === "/session/desktop-session/execute/sync") {
@@ -38,7 +40,9 @@ describe("W3CClient", () => {
           return;
         }
         response.statusCode = 404;
-        response.end(JSON.stringify({ value: { error: "unknown command", message: "unexpected" } }));
+        response.end(
+          JSON.stringify({ value: { error: "unknown command", message: "unexpected" } }),
+        );
       });
     });
     servers.push(server);
@@ -47,7 +51,9 @@ describe("W3CClient", () => {
     const client = new W3CClient(`http://127.0.0.1:${address.port}`);
 
     await client.createSession({ "tauri:options": { application: "/tmp/Tariboy" } });
-    await expect(client.execute<boolean>("return window.__TAURI_INTERNALS__ !== undefined")).resolves.toBe(true);
+    await expect(
+      client.execute<boolean>("return window.__TAURI_INTERNALS__ !== undefined"),
+    ).resolves.toBe(true);
     await client.deleteSession();
 
     expect(requests).toEqual([
@@ -74,7 +80,15 @@ describe("W3CClient", () => {
     const server = createServer((_request, response) => {
       response.statusCode = 500;
       response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify({ value: { error: "session not created", message: "bad application", driverTrace: "webkit detail" } }));
+      response.end(
+        JSON.stringify({
+          value: {
+            error: "session not created",
+            message: "bad application",
+            driverTrace: "webkit detail",
+          },
+        }),
+      );
     });
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -131,22 +145,44 @@ describe("W3CClient", () => {
     await client.elementSendKeys(element, "claude");
     await expect(client.elementText(element)).resolves.toBe("Agents");
     await expect(client.elementProperty(element, "value")).resolves.toBe("codex");
-    await client.performActions([{ type: "pointer", id: "mouse", actions: [{ type: "pointerDown", button: 0 }] }]);
+    await client.performActions([
+      { type: "pointer", id: "mouse", actions: [{ type: "pointerDown", button: 0 }] },
+    ]);
     await client.deleteSession();
 
     expect(requests).toEqual([
-      { method: "POST", url: "/session", body: { capabilities: { alwaysMatch: {}, firstMatch: [{}] } } },
+      {
+        method: "POST",
+        url: "/session",
+        body: { capabilities: { alwaysMatch: {}, firstMatch: [{}] } },
+      },
       { method: "GET", url: "/session/desktop-session/window/handles", body: null },
       { method: "POST", url: "/session/desktop-session/window", body: { handle: "main" } },
-      { method: "POST", url: "/session/desktop-session/element", body: { using: "css selector", value: "nav" } },
+      {
+        method: "POST",
+        url: "/session/desktop-session/element",
+        body: { using: "css selector", value: "nav" },
+      },
       { method: "POST", url: "/session/desktop-session/element/navigation/click", body: {} },
-      { method: "POST", url: "/session/desktop-session/element/navigation/value", body: { text: "claude", value: ["c", "l", "a", "u", "d", "e"] } },
+      {
+        method: "POST",
+        url: "/session/desktop-session/element/navigation/value",
+        body: { text: "claude", value: ["c", "l", "a", "u", "d", "e"] },
+      },
       { method: "GET", url: "/session/desktop-session/element/navigation/text", body: null },
-      { method: "GET", url: "/session/desktop-session/element/navigation/property/value", body: null },
+      {
+        method: "GET",
+        url: "/session/desktop-session/element/navigation/property/value",
+        body: null,
+      },
       {
         method: "POST",
         url: "/session/desktop-session/actions",
-        body: { actions: [{ type: "pointer", id: "mouse", actions: [{ type: "pointerDown", button: 0 }] }] },
+        body: {
+          actions: [
+            { type: "pointer", id: "mouse", actions: [{ type: "pointerDown", button: 0 }] },
+          ],
+        },
       },
       { method: "DELETE", url: "/session/desktop-session", body: null },
     ]);
@@ -160,7 +196,9 @@ describe("W3CClient", () => {
         requests.push({ method: request.method ?? "", url: request.url ?? "" });
         response.setHeader("content-type", "application/json");
         if (request.method === "POST" && request.url === "/session") {
-          response.end(JSON.stringify({ value: { sessionId: "desktop-session", capabilities: {} } }));
+          response.end(
+            JSON.stringify({ value: { sessionId: "desktop-session", capabilities: {} } }),
+          );
           return;
         }
         if (request.method === "DELETE" && request.url === "/session/desktop-session/actions") {
@@ -168,7 +206,11 @@ describe("W3CClient", () => {
           return;
         }
         response.statusCode = 404;
-        response.end(JSON.stringify({ value: { error: "unknown command", message: `${request.method} ${request.url}` } }));
+        response.end(
+          JSON.stringify({
+            value: { error: "unknown command", message: `${request.method} ${request.url}` },
+          }),
+        );
       });
     });
     servers.push(server);

@@ -22,9 +22,7 @@ function parseEnvironment(text: string): Record<string, string> {
     typeof value !== "object" ||
     Object.values(value).some((entry) => typeof entry !== "string")
   ) {
-    throw new Error(
-      "Environment must be a JSON object whose values are strings",
-    );
+    throw new Error("Environment must be a JSON object whose values are strings");
   }
   return value as Record<string, string>;
 }
@@ -37,31 +35,11 @@ export function buildCreateAgentSpec(
   const env = parseEnvironment(draft.envText);
   const intervalS = integerField(draft.intervalS, "Interval seconds", 0);
   const timeoutS = integerField(draft.timeoutS, "Soft timeout seconds", 0);
-  const hardTimeoutS = integerField(
-    draft.hardTimeoutS,
-    "Hard timeout seconds",
-    0,
-  );
-  const maxIdleIterations = integerField(
-    draft.maxIdleIterations,
-    "Maximum idle iterations",
-    0,
-  );
-  const aiStallTimeoutS = integerField(
-    draft.aiStallTimeoutS,
-    "AI inactivity timeout seconds",
-    1,
-  );
-  const messagesBatch = integerField(
-    draft.messagesBatch,
-    "Message batch size",
-    1,
-  );
-  const messagesMaxQueue = integerField(
-    draft.messagesMaxQueue,
-    "Maximum queued messages",
-    1,
-  );
+  const hardTimeoutS = integerField(draft.hardTimeoutS, "Hard timeout seconds", 0);
+  const maxIdleIterations = integerField(draft.maxIdleIterations, "Maximum idle iterations", 0);
+  const aiStallTimeoutS = integerField(draft.aiStallTimeoutS, "AI inactivity timeout seconds", 1);
+  const messagesBatch = integerField(draft.messagesBatch, "Message batch size", 1);
+  const messagesMaxQueue = integerField(draft.messagesMaxQueue, "Maximum queued messages", 1);
   const goalWaitCustomerTimeoutS = integerField(
     draft.goalWaitCustomerTimeoutS,
     "Wait customer timeout seconds",

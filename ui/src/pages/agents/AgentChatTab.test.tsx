@@ -7,11 +7,21 @@ import { UI_MODE_KEY } from "@/lib/uiMode";
 
 beforeEach(() => {
   localStorage.clear();
-  vi.stubGlobal("WebSocket", class { close = vi.fn(); });
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok: true, status: 200,
-    text: async () => JSON.stringify({ ok: true, result: { messages: [], count: 0, read_ts: "", channels: [] } }),
-  } as unknown as Response));
+  vi.stubGlobal(
+    "WebSocket",
+    class {
+      close = vi.fn();
+    },
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({ ok: true, result: { messages: [], count: 0, read_ts: "", channels: [] } }),
+    } as unknown as Response),
+  );
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -51,8 +61,11 @@ it("in Expert offers Chat, Channels and Queue in one switch", async () => {
   renderTab();
 
   const group = await screen.findByRole("group", { name: "Messaging view" });
-  expect(within(group).getAllByRole("button").map((button) => button.textContent))
-    .toEqual(["Chat", "Channels", "Queue"]);
+  expect(
+    within(group)
+      .getAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(["Chat", "Channels", "Queue"]);
 });
 
 it("opens the delivery queue with its Queue, Archive and DLQ views under ?view=queue", async () => {
@@ -60,8 +73,11 @@ it("opens the delivery queue with its Queue, Archive and DLQ views under ?view=q
   renderTab("/?view=queue");
 
   const views = await screen.findByRole("tablist", { name: "Queue view" });
-  expect(within(views).getAllByRole("tab").map((tab) => tab.textContent))
-    .toEqual(["Queue", "Archive", "DLQ"]);
+  expect(
+    within(views)
+      .getAllByRole("tab")
+      .map((tab) => tab.textContent),
+  ).toEqual(["Queue", "Archive", "DLQ"]);
   expect(screen.getByRole("button", { name: "Queue", pressed: true })).toBeInTheDocument();
 });
 

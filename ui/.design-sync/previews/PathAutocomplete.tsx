@@ -60,7 +60,10 @@ export const OpenListing = () => {
     let tries = 0;
     const id = window.setInterval(() => {
       const input = ref.current?.querySelector("input") as HTMLInputElement | null;
-      if (!input) { if (++tries > 40) window.clearInterval(id); return; }
+      if (!input) {
+        if (++tries > 40) window.clearInterval(id);
+        return;
+      }
       window.clearInterval(id);
       input.focus();
     }, 25);

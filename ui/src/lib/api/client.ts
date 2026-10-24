@@ -5,12 +5,7 @@ export class ApiError extends Error {
   status: number;
   code: string;
   details?: Record<string, unknown>;
-  constructor(
-    status: number,
-    code: string,
-    message: string,
-    details?: Record<string, unknown>,
-  ) {
+  constructor(status: number, code: string, message: string, details?: Record<string, unknown>) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -29,8 +24,9 @@ export interface Envelope<T> {
 // already reports an unreachable host, so background loads keep their last
 // data quietly instead of toasting it every refresh.
 export function isConnectionError(error: unknown): boolean {
-  return error instanceof ApiError
-    && (error.code === "host_not_ready" || error.code === "network_error");
+  return (
+    error instanceof ApiError && (error.code === "host_not_ready" || error.code === "network_error")
+  );
 }
 
 // resolveUrl prepends a daemon's baseURL (absolute cross-origin) or, for the
@@ -39,18 +35,12 @@ export function isConnectionError(error: unknown): boolean {
 function resolveUrl(daemon: Daemon | null, path: string): string {
   if (!daemon) return getLocalBaseURL() + path;
   if (!daemon.baseURL) {
-    throw new ApiError(
-      0,
-      "host_not_ready",
-      `host ${daemon.label || daemon.id} is not ready`,
-    );
+    throw new ApiError(0, "host_not_ready", `host ${daemon.label || daemon.id} is not ready`);
   }
   return daemon.baseURL.replace(/\/+$/, "") + path;
 }
 function authHeaders(daemon: Daemon | null): Record<string, string> {
-  return daemon && daemon.token
-    ? { Authorization: `Bearer ${daemon.token}` }
-    : {};
+  return daemon && daemon.token ? { Authorization: `Bearer ${daemon.token}` } : {};
 }
 
 // request is the JSON transport against an EXPLICIT daemon descriptor (null =
@@ -75,22 +65,14 @@ async function request<T>(
     });
   } catch (e) {
     if (e instanceof ApiError) throw e;
-    throw new ApiError(
-      0,
-      "network_error",
-      `network error: ${(e as Error).message}`,
-    );
+    throw new ApiError(0, "network_error", `network error: ${(e as Error).message}`);
   }
   const text = await res.text();
   let env: Envelope<T>;
   try {
     env = text ? (JSON.parse(text) as Envelope<T>) : { ok: res.ok };
   } catch {
-    throw new ApiError(
-      res.status,
-      "bad_response",
-      `non-JSON response (HTTP ${res.status})`,
-    );
+    throw new ApiError(res.status, "bad_response", `non-JSON response (HTTP ${res.status})`);
   }
   if (!env.ok) {
     const err = env.error ?? {
@@ -120,11 +102,7 @@ async function requestRaw(
     });
   } catch (cause) {
     if (cause instanceof ApiError) throw cause;
-    throw new ApiError(
-      0,
-      "network_error",
-      `network error: ${(cause as Error).message}`,
-    );
+    throw new ApiError(0, "network_error", `network error: ${(cause as Error).message}`);
   }
   if (response.ok) return response;
   let code = `http_${response.status}`;
@@ -166,7 +144,9 @@ export interface Transport {
 
 export function bindTransport(target: Daemon | null): Transport {
   const call = <T>(method: string, path: string, body?: unknown, signal?: AbortSignal) =>
-    signal ? request<T>(target, method, path, body, signal) : request<T>(target, method, path, body);
+    signal
+      ? request<T>(target, method, path, body, signal)
+      : request<T>(target, method, path, body);
   return {
     target,
     request: call,
@@ -186,12 +166,20 @@ export function bindTransport(target: Daemon | null): Transport {
 export async function readResult<T>(response: Response): Promise<T> {
   let env: Envelope<T>;
   try {
-    env = await response.json() as Envelope<T>;
+    env = (await response.json()) as Envelope<T>;
   } catch {
-    throw new ApiError(response.status, "bad_response", `non-JSON response (HTTP ${response.status})`);
+    throw new ApiError(
+      response.status,
+      "bad_response",
+      `non-JSON response (HTTP ${response.status})`,
+    );
   }
   if (!env.ok || !env.result) {
-    throw new ApiError(response.status, "bad_response", `invalid response (HTTP ${response.status})`);
+    throw new ApiError(
+      response.status,
+      "bad_response",
+      `invalid response (HTTP ${response.status})`,
+    );
   }
   return env.result;
 }

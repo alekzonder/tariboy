@@ -43,8 +43,6 @@ export const UnderAppChrome = () => (
       Tariboy
     </div>
     <DaemonBanner />
-    <div style={{ padding: 24, fontSize: 14, color: "var(--muted-foreground)" }}>
-      workspace
-    </div>
+    <div style={{ padding: 24, fontSize: 14, color: "var(--muted-foreground)" }}>workspace</div>
   </div>
 );

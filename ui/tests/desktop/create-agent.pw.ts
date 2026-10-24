@@ -6,13 +6,15 @@ async function findEventually(
   using: "css selector" | "xpath",
   selector: string,
 ): Promise<W3CElement> {
-  await expect.poll(async () => {
-    try {
-      return await desktop.findElement(using, selector);
-    } catch {
-      return null;
-    }
-  }).not.toBeNull();
+  await expect
+    .poll(async () => {
+      try {
+        return await desktop.findElement(using, selector);
+      } catch {
+        return null;
+      }
+    })
+    .not.toBeNull();
   return desktop.findElement(using, selector);
 }
 
@@ -26,16 +28,16 @@ test("selects a harness in the New agent dialog", async ({ desktop }) => {
   await expect(desktop.elementText(openDialog)).resolves.toBe("New agent");
   await desktop.elementClick(openDialog);
 
-  const harness = await expect.poll(async () => {
-    try {
-      return await desktop.findElement(
-        "css selector",
-        "#create-agent-harness",
-      );
-    } catch {
-      return null;
-    }
-  }).not.toBeNull().then(async () => desktop.findElement("css selector", "#create-agent-harness"));
+  const harness = await expect
+    .poll(async () => {
+      try {
+        return await desktop.findElement("css selector", "#create-agent-harness");
+      } catch {
+        return null;
+      }
+    })
+    .not.toBeNull()
+    .then(async () => desktop.findElement("css selector", "#create-agent-harness"));
 
   await expect(desktop.elementProperty(harness, "value")).resolves.not.toBe("codex");
   await desktop.elementSendKeys(harness, "codex");
@@ -73,41 +75,50 @@ test("clones complete agent configuration through the production Desktop", async
     }).catch((error) => { window.__desktopCloneSetup = "error: " + String(error); });
     return true;
   `);
-  await expect.poll(
-    () => desktop.execute<string>("return window.__desktopCloneSetup || '';"),
-    { timeout: 60_000 },
-  ).toBe("ready");
+  await expect
+    .poll(() => desktop.execute<string>("return window.__desktopCloneSetup || '';"), {
+      timeout: 60_000,
+    })
+    .toBe("ready");
 
   const sourceRow = await findEventually(
     desktop,
     "xpath",
     "//button[@aria-label='Open clone-source']",
   );
-  await desktop.performActions([{
-    type: "pointer",
-    id: "clone-context-mouse",
-    parameters: { pointerType: "mouse" },
-    actions: [
-      { type: "pointerMove", duration: 0, origin: sourceRow, x: 0, y: 0 },
-      { type: "pointerDown", button: 2 },
-      { type: "pointerUp", button: 2 },
-    ],
-  }]);
-  await desktop.elementClick(await findEventually(
-    desktop,
-    "xpath",
-    "//*[@role='menuitem' and normalize-space(.)='Clone']",
-  ));
+  await desktop.performActions([
+    {
+      type: "pointer",
+      id: "clone-context-mouse",
+      parameters: { pointerType: "mouse" },
+      actions: [
+        { type: "pointerMove", duration: 0, origin: sourceRow, x: 0, y: 0 },
+        { type: "pointerDown", button: 2 },
+        { type: "pointerUp", button: 2 },
+      ],
+    },
+  ]);
+  await desktop.elementClick(
+    await findEventually(desktop, "xpath", "//*[@role='menuitem' and normalize-space(.)='Clone']"),
+  );
   await desktop.releaseActions();
 
-  await expect.poll(() => desktop.execute<string>(`
+  await expect
+    .poll(() =>
+      desktop.execute<string>(`
     return document.querySelector('[role="dialog"] h2')?.textContent || "";
-  `)).toBe("Clone agent");
-  await expect.poll(() => desktop.execute<boolean>(`
+  `),
+    )
+    .toBe("Clone agent");
+  await expect
+    .poll(() =>
+      desktop.execute<boolean>(`
     return document.querySelector('#create-agent-alias')?.value === "Source alias"
       && document.querySelector('#create-agent-interval')?.value === "12"
       && document.querySelector('#create-agent-message-queue')?.value === "900";
-  `)).toBe(true);
+  `),
+    )
+    .toBe(true);
 
   const expectedValues: Array<[string, string]> = [
     ["#create-agent-name", ""],
@@ -129,33 +140,45 @@ test("clones complete agent configuration through the production Desktop", async
     const field = await desktop.findElement("css selector", selector);
     await expect(desktop.elementProperty(field, "value"), selector).resolves.toBe(expected);
   }
-  await expect(desktop.elementProperty(
-    await desktop.findElement("css selector", "#create-agent-env"),
-    "value",
-  )).resolves.toBe('{\n  "CSV": "a,b",\n  "EQ": "a=b",\n  "LINES": "one\\ntwo"\n}');
-  await expect(desktop.execute<string>(`
+  await expect(
+    desktop.elementProperty(
+      await desktop.findElement("css selector", "#create-agent-env"),
+      "value",
+    ),
+  ).resolves.toBe('{\n  "CSV": "a,b",\n  "EQ": "a=b",\n  "LINES": "one\\ntwo"\n}');
+  await expect(
+    desktop.execute<string>(`
     return document.querySelector('#create-agent-on-timeout')?.value || "";
-  `)).resolves.toBe("stop");
-  await expect(desktop.execute<string>(`
+  `),
+  ).resolves.toBe("stop");
+  await expect(
+    desktop.execute<string>(`
     return document.querySelector('#create-agent-on-error')?.value || "";
-  `)).resolves.toBe("restart");
-  await expect(desktop.execute<string>(`
+  `),
+  ).resolves.toBe("restart");
+  await expect(
+    desktop.execute<string>(`
     return document.querySelector('#create-agent-interactive')?.getAttribute('aria-checked') || "";
-  `)).resolves.toBe("false");
-  await expect(desktop.execute<string>(`
+  `),
+  ).resolves.toBe("false");
+  await expect(
+    desktop.execute<string>(`
     return document.querySelector('#create-agent-start')?.getAttribute('aria-checked') || "";
-  `)).resolves.toBe("false");
+  `),
+  ).resolves.toBe("false");
 
   await desktop.elementSendKeys(
     await desktop.findElement("css selector", "#create-agent-name"),
     "clone-copy",
   );
-  await desktop.elementClick(await desktop.findElement(
-    "xpath",
-    "//button[normalize-space(.)='Create agent']",
-  ));
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Create agent']"),
+  );
 
-  await expect.poll(() => desktop.execute<string>(`
+  await expect
+    .poll(
+      () =>
+        desktop.execute<string>(`
     if (window.__desktopCloneInspectPending) return "pending";
     window.__desktopCloneInspectPending = true;
     fetch(window.__desktopCloneBaseURL + "/api/agents/clone-copy")
@@ -165,7 +188,10 @@ test("clones complete agent configuration through the production Desktop", async
       })
       .finally(() => { window.__desktopCloneInspectPending = false; });
     return window.__desktopCloneInspect ? "ready" : "pending";
-  `), { timeout: 30_000 }).toBe("ready");
+  `),
+      { timeout: 30_000 },
+    )
+    .toBe("ready");
   const result = await desktop.execute<Record<string, unknown>>(
     "return window.__desktopCloneInspect;",
   );

@@ -69,7 +69,15 @@ export const InTaskTable = () => (
         >
           {row.key}
         </span>
-        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
           {row.title}
         </span>
         <span style={{ width: 30, flexShrink: 0 }}>

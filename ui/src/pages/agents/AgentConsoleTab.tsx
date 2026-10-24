@@ -11,7 +11,12 @@ import { useApi } from "@/components/apiContext";
 import { hostToParam } from "@/lib/terminalsHost";
 import type { AgentSummary } from "@/lib/types";
 
-export default function AgentConsoleTab({ hostId, agent, refresh, execCount = 0 }: {
+export default function AgentConsoleTab({
+  hostId,
+  agent,
+  refresh,
+  execCount = 0,
+}: {
   hostId: string;
   agent: AgentSummary;
   refresh: () => void;
@@ -36,10 +41,11 @@ export default function AgentConsoleTab({ hostId, agent, refresh, execCount = 0 
     }
   };
 
-  const start = () => act(async () => {
-    await api.agents.startAgent(agent.name);
-    controller.reconnect();
-  });
+  const start = () =>
+    act(async () => {
+      await api.agents.startAgent(agent.name);
+      controller.reconnect();
+    });
   // Exec lives in the header; an interactive terminal reconnects after it.
   // Only a change counts: remounting the tab must not redial.
   const { reconnect } = controller;
@@ -63,10 +69,10 @@ export default function AgentConsoleTab({ hostId, agent, refresh, execCount = 0 
           className={`flex flex-1 flex-col items-center justify-center gap-2 rounded-md border text-sm text-muted-foreground${absentDrop.dragActive ? " ring-2 ring-primary" : ""}`}
         >
           <p>This agent has no interactive terminal.</p>
-          <Link className="text-primary underline" to={configuration}>Open Configuration</Link>
-          <SendFilesButton
-            onUploaded={(paths) => toast.success(`uploaded: ${paths.join(", ")}`)}
-          />
+          <Link className="text-primary underline" to={configuration}>
+            Open Configuration
+          </Link>
+          <SendFilesButton onUploaded={(paths) => toast.success(`uploaded: ${paths.join(", ")}`)} />
         </div>
       ) : !alive ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-md border text-sm text-muted-foreground">

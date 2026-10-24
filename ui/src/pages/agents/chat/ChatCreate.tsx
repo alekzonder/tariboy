@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +22,11 @@ import { chatIdFromTitle } from "./chatModel";
  * every agent named here is subscribed to the new chat's channel and is woken
  * by a message in it exactly as it is by one in its own conversation.
  */
-export default function ChatCreate({ agent, onClose, onCreated }: {
+export default function ChatCreate({
+  agent,
+  onClose,
+  onCreated,
+}: {
   agent: string;
   onClose: () => void;
   onCreated: (chatId: string) => void;
@@ -31,7 +39,8 @@ export default function ChatCreate({ agent, onClose, onCreated }: {
   const id = chatIdFromTitle(title);
 
   useEffect(() => {
-    void api.get<{ agents: AgentSummary[] }>("/api/agents")
+    void api
+      .get<{ agents: AgentSummary[] }>("/api/agents")
       .then((page) => setOthers((page.agents ?? []).filter((row) => row.name !== agent)))
       .catch(() => setOthers([]));
   }, [agent, api]);
@@ -47,16 +56,25 @@ export default function ChatCreate({ agent, onClose, onCreated }: {
       });
       onCreated(chat.chat);
     } catch (error) {
-      toast.error(`Could not create the chat: ${error instanceof ApiError ? error.message : String(error)}`);
+      toast.error(
+        `Could not create the chat: ${error instanceof ApiError ? error.message : String(error)}`,
+      );
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>New chat</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>New chat</DialogTitle>
+        </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="chat-create-title">Title</Label>
@@ -67,7 +85,13 @@ export default function ChatCreate({ agent, onClose, onCreated }: {
               placeholder="Team alpha"
             />
             <p className="text-[11.5px] text-muted-foreground">
-              {id ? <>Chat id <span className="font-mono">{id}</span></> : "The title becomes the chat id."}
+              {id ? (
+                <>
+                  Chat id <span className="font-mono">{id}</span>
+                </>
+              ) : (
+                "The title becomes the chat id."
+              )}
             </p>
           </div>
           <fieldset className="space-y-1.5">
@@ -81,9 +105,13 @@ export default function ChatCreate({ agent, onClose, onCreated }: {
                   <input
                     type="checkbox"
                     checked={picked.includes(row.name)}
-                    onChange={(event) => setPicked((current) => event.target.checked
-                      ? [...current, row.name]
-                      : current.filter((name) => name !== row.name))}
+                    onChange={(event) =>
+                      setPicked((current) =>
+                        event.target.checked
+                          ? [...current, row.name]
+                          : current.filter((name) => name !== row.name),
+                      )
+                    }
                   />
                   {row.name}
                 </label>
@@ -95,8 +123,12 @@ export default function ChatCreate({ agent, onClose, onCreated }: {
           </fieldset>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => void create()} disabled={!id || saving}>Create</Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={() => void create()} disabled={!id || saving}>
+            Create
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

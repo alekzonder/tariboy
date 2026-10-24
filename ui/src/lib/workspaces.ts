@@ -23,13 +23,22 @@ const DEFAULT_WORKSPACE: Workspace = { id: DEFAULT_WORKSPACE_ID, name: "Default"
 
 function sanitize(value: unknown): WorkspacesState {
   const raw = (typeof value === "object" && value !== null ? value : {}) as {
-    version?: unknown; workspaces?: unknown; hostWorkspace?: unknown; active?: unknown;
+    version?: unknown;
+    workspaces?: unknown;
+    hostWorkspace?: unknown;
+    active?: unknown;
   };
-  const custom = raw.version === 1 && Array.isArray(raw.workspaces)
-    ? raw.workspaces.filter((w): w is Workspace =>
-      typeof w?.id === "string" && w.id !== DEFAULT_WORKSPACE_ID && w.id !== ""
-      && typeof w.name === "string" && w.name.trim() !== "")
-    : [];
+  const custom =
+    raw.version === 1 && Array.isArray(raw.workspaces)
+      ? raw.workspaces.filter(
+          (w): w is Workspace =>
+            typeof w?.id === "string" &&
+            w.id !== DEFAULT_WORKSPACE_ID &&
+            w.id !== "" &&
+            typeof w.name === "string" &&
+            w.name.trim() !== "",
+        )
+      : [];
   const ids = new Set(custom.map((w) => w.id));
   const hostWorkspace: Record<string, string> = {};
   if (raw.version === 1 && typeof raw.hostWorkspace === "object" && raw.hostWorkspace !== null) {
@@ -37,9 +46,8 @@ function sanitize(value: unknown): WorkspacesState {
       if (typeof id === "string" && ids.has(id)) hostWorkspace[host] = id;
     }
   }
-  const active = typeof raw.active === "string" && ids.has(raw.active)
-    ? raw.active
-    : DEFAULT_WORKSPACE_ID;
+  const active =
+    typeof raw.active === "string" && ids.has(raw.active) ? raw.active : DEFAULT_WORKSPACE_ID;
   return { workspaces: [DEFAULT_WORKSPACE, ...custom], hostWorkspace, active };
 }
 
@@ -62,12 +70,15 @@ function current(): WorkspacesState {
 function update(next: WorkspacesState) {
   state = sanitize({ version: 1, ...next, workspaces: next.workspaces.slice(1) });
   try {
-    localStorage.setItem(WORKSPACES_KEY, JSON.stringify({
-      version: 1,
-      workspaces: state.workspaces.slice(1),
-      hostWorkspace: state.hostWorkspace,
-      active: state.active,
-    }));
+    localStorage.setItem(
+      WORKSPACES_KEY,
+      JSON.stringify({
+        version: 1,
+        workspaces: state.workspaces.slice(1),
+        hostWorkspace: state.hostWorkspace,
+        active: state.active,
+      }),
+    );
   } catch {
     // Unavailable storage keeps the change for this session only.
   }
@@ -76,7 +87,9 @@ function update(next: WorkspacesState) {
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  return () => { listeners.delete(listener); };
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 export function useWorkspaces(): WorkspacesState {
@@ -101,7 +114,7 @@ export function renameWorkspace(id: string, name: string) {
   const trimmed = name.trim();
   if (id === DEFAULT_WORKSPACE_ID || !trimmed) return;
   const s = current();
-  update({ ...s, workspaces: s.workspaces.map((w) => w.id === id ? { id, name: trimmed } : w) });
+  update({ ...s, workspaces: s.workspaces.map((w) => (w.id === id ? { id, name: trimmed } : w)) });
 }
 
 /** Its hosts fall back to Default because their map entries now dangle. */

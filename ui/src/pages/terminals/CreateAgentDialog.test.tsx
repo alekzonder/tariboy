@@ -2,12 +2,7 @@ import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@/test/queryRender";
 import { CreateAgentDialog } from "./CreateAgentDialog";
-import type {
-  CreateAgentResult,
-  CreateAgentSpec,
-  ImageManifest,
-  ImageRow,
-} from "@/lib/api";
+import type { CreateAgentResult, CreateAgentSpec, ImageManifest, ImageRow } from "@/lib/api";
 import type { AgentLifecycleResult, AgentView } from "@/lib/types";
 import { targetFor } from "@/lib/terminalsHost";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
@@ -20,13 +15,15 @@ import type { HarnessCatalog } from "@/lib/types";
 // it, so a test can assert which host a request was pinned to.
 const calls = vi.hoisted(() => ({
   agentGetOn: vi.fn<(target: Daemon | null, name: string, action: string) => Promise<AgentView>>(),
-  createAgent: vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<CreateAgentResult>>(),
+  createAgent:
+    vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<CreateAgentResult>>(),
   getHarnessModelsOn: vi.fn<(target: Daemon | null, harness: string) => Promise<HarnessCatalog>>(),
   imageManifestGet: vi.fn<(ref: string, target: Daemon | null) => Promise<ImageManifest>>(),
   listImages: vi.fn<(target: Daemon | null) => Promise<{ images: ImageRow[]; count: number }>>(),
   startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentLifecycleResult>>(),
 }));
-const { agentGetOn, createAgent, getHarnessModelsOn, imageManifestGet, listImages, startAgent } = calls;
+const { agentGetOn, createAgent, getHarnessModelsOn, imageManifestGet, listImages, startAgent } =
+  calls;
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -175,9 +172,7 @@ const completeOrdinarySpec = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-function renderDialog(
-  props: Partial<ComponentProps<typeof CreateAgentDialog>> = {},
-) {
+function renderDialog(props: Partial<ComponentProps<typeof CreateAgentDialog>> = {}) {
   const onCreated = vi.fn();
   const onOpenChange = vi.fn();
   const view = render(
@@ -196,8 +191,7 @@ function renderDialog(
 
 async function setSwitch(name: string, value: boolean) {
   const control = await screen.findByRole("switch", { name });
-  if (control.getAttribute("aria-checked") === String(!value))
-    fireEvent.click(control);
+  if (control.getAttribute("aria-checked") === String(!value)) fireEvent.click(control);
 }
 
 async function selectHarness(value: string) {
@@ -263,16 +257,12 @@ it("loads a complete clone draft from the explicit source host and submits every
     cloneSource: { hostId: "d1", agentName: "source", hostLabel: "prod" },
   });
 
-  expect(
-    await screen.findByRole("heading", { name: "Clone agent" }),
-  ).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Clone agent" })).toBeInTheDocument();
   expect(screen.getByText(/source.*prod/i)).toBeInTheDocument();
   expect(agentGetOn).toHaveBeenCalledWith(targetFor("d1"), "source", "");
   expect(screen.getByLabelText("name")).toHaveValue("");
   expect(screen.getByLabelText("cwd")).toHaveValue("");
-  await waitFor(() =>
-    expect(screen.getByLabelText("alias")).toHaveValue("Source alias"),
-  );
+  await waitFor(() => expect(screen.getByLabelText("alias")).toHaveValue("Source alias"));
   expect(screen.getByLabelText("group")).toHaveValue("reviewers");
   expect(screen.getByLabelText("color")).toHaveValue("#123abc");
   expect(screen.getByLabelText("notes")).toHaveValue("source notes");
@@ -287,15 +277,11 @@ it("loads a complete clone draft from the explicit source host and submits every
   expect(screen.getByLabelText("timeout policy")).toHaveValue("stop");
   expect(screen.getByLabelText("error policy")).toHaveValue("restart");
   expect(screen.getByLabelText("maximum idle iterations")).toHaveValue(7);
-  expect(screen.getByLabelText("standing user prompt")).toHaveValue(
-    "standing prompt",
-  );
+  expect(screen.getByLabelText("standing user prompt")).toHaveValue("standing prompt");
   expect(screen.getByLabelText("message batch size")).toHaveValue(8);
   expect(screen.getByLabelText("maximum queued messages")).toHaveValue(900);
   expect(screen.getByRole("switch", { name: "Goal" })).not.toBeChecked();
-  expect(screen.getByLabelText("wait customer timeout seconds")).toHaveValue(
-    120,
-  );
+  expect(screen.getByLabelText("wait customer timeout seconds")).toHaveValue(120);
   expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
   expect(screen.getByRole("switch", { name: "Start now" })).not.toBeChecked();
 
@@ -351,9 +337,7 @@ it("retries a failed source load without allowing a partial clone", async () => 
     cloneSource: { hostId: "d1", agentName: "source", hostLabel: "prod" },
   });
 
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    "source unavailable",
-  );
+  expect(await screen.findByRole("alert")).toHaveTextContent("source unavailable");
   expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
   expect(createAgent).not.toHaveBeenCalled();
 
@@ -361,9 +345,7 @@ it("retries a failed source load without allowing a partial clone", async () => 
 
   await waitFor(() => expect(agentGetOn).toHaveBeenCalledTimes(2));
   expect(await screen.findByLabelText("alias")).toHaveValue("Source alias");
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Create agent" })).toBeEnabled(),
-  );
+  await waitFor(() => expect(screen.getByRole("button", { name: "Create agent" })).toBeEnabled());
 });
 
 it("requires a daemon with the complete clone projection", async () => {
@@ -375,9 +357,7 @@ it("requires a daemon with the complete clone projection", async () => {
     cloneSource: { hostId: "d1", agentName: "source", hostLabel: "prod" },
   });
 
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    /update.*host.*complete clone/i,
-  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(/update.*host.*complete clone/i);
   expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
   expect(createAgent).not.toHaveBeenCalled();
 });
@@ -400,10 +380,7 @@ it("retains clone drafts while target host and image readiness change", async ()
   fireEvent.click(await screen.findByRole("option", { name: "staging" }));
   expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
   await waitFor(() =>
-    expect(imageManifestGet).toHaveBeenLastCalledWith(
-      "worker:v1",
-      targetFor("d2"),
-    ),
+    expect(imageManifestGet).toHaveBeenLastCalledWith("worker:v1", targetFor("d2")),
   );
   expect(screen.getByLabelText("alias")).toHaveValue("Source alias");
   expect(screen.getByLabelText("model")).toHaveValue("clone-model");
@@ -427,9 +404,7 @@ it("retains clone drafts while target host and image readiness change", async ()
   imageManifestGet.mockResolvedValueOnce(manifest());
   fireEvent.focus(screen.getByLabelText("image"));
   fireEvent.click(await screen.findByRole("option", { name: "worker:v1" }));
-  await waitFor(() =>
-    expect(screen.queryByText("Terminal only")).not.toBeInTheDocument(),
-  );
+  await waitFor(() => expect(screen.queryByText("Terminal only")).not.toBeInTheDocument());
   expect(screen.getByRole("switch", { name: "Interactive" })).not.toBeChecked();
 });
 
@@ -465,20 +440,14 @@ it("keeps schema-v1 plugins editable and makes schema-v2 plugins image-owned", a
   fireEvent.focus(screen.getByLabelText("image"));
   fireEvent.click(await screen.findByRole("option", { name: "worker:v2" }));
   expect(await screen.findByText("image-plugin")).toBeInTheDocument();
-  expect(
-    screen.getByText(/plugins are owned by this schema-v2 image/i),
-  ).toBeInTheDocument();
-  expect(
-    screen.queryByRole("textbox", { name: "plugin name" }),
-  ).not.toBeInTheDocument();
+  expect(screen.getByText(/plugins are owned by this schema-v2 image/i)).toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "plugin name" })).not.toBeInTheDocument();
   expect(screen.queryByText("draft-plugin")).not.toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText("name"), {
     target: { value: "copy" },
   });
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Create agent" })).toBeEnabled(),
-  );
+  await waitFor(() => expect(screen.getByRole("button", { name: "Create agent" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
   await waitFor(() => expect(createAgent).toHaveBeenCalledOnce());
   expect(createAgent).toHaveBeenCalledWith(
@@ -511,9 +480,7 @@ it("keeps Interactive on for a schema-v2 image after a bare image was selected",
 
   fireEvent.focus(screen.getByLabelText("image"));
   fireEvent.click(await screen.findByRole("option", { name: "worker:v2" }));
-  await waitFor(() =>
-    expect(screen.queryByText("Terminal only")).not.toBeInTheDocument(),
-  );
+  await waitFor(() => expect(screen.queryByText("Terminal only")).not.toBeInTheDocument());
   expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
 });
 
@@ -550,47 +517,35 @@ describe.each([
   { startNow: false, interactive: true },
   { startNow: true, interactive: false },
   { startNow: true, interactive: true },
-])(
-  "creation matrix $startNow/$interactive",
-  ({ startNow, interactive }) => {
-    it("creates stopped without a loop flag and starts only on request", async () => {
-      const { onCreated } = renderDialog();
-      await screen.findByDisplayValue("worker:v1");
-      await waitFor(() =>
-        expect(
-          screen.getByRole("button", { name: "Create agent" }),
-        ).toBeEnabled(),
-      );
-      await setSwitch("Start now", startNow);
-      await setSwitch("Interactive", interactive);
+])("creation matrix $startNow/$interactive", ({ startNow, interactive }) => {
+  it("creates stopped without a loop flag and starts only on request", async () => {
+    const { onCreated } = renderDialog();
+    await screen.findByDisplayValue("worker:v1");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create agent" })).toBeEnabled());
+    await setSwitch("Start now", startNow);
+    await setSwitch("Interactive", interactive);
 
-      fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
 
-      await waitFor(() => expect(createAgent).toHaveBeenCalledOnce());
-      expect(createAgent).toHaveBeenCalledWith(
-        completeOrdinarySpec({ interactive }),
-        targetFor("d1"),
-      );
-      expect(createAgent.mock.calls[0][0]).not.toHaveProperty("loop");
-      if (startNow) {
-        await waitFor(() =>
-          expect(startAgent).toHaveBeenCalledWith("created", targetFor("d1")),
-        );
-      } else {
-        expect(startAgent).not.toHaveBeenCalled();
-      }
-      expect(onCreated).toHaveBeenCalledWith("d1", "created");
-    });
-  },
-);
+    await waitFor(() => expect(createAgent).toHaveBeenCalledOnce());
+    expect(createAgent).toHaveBeenCalledWith(
+      completeOrdinarySpec({ interactive }),
+      targetFor("d1"),
+    );
+    expect(createAgent.mock.calls[0][0]).not.toHaveProperty("loop");
+    if (startNow) {
+      await waitFor(() => expect(startAgent).toHaveBeenCalledWith("created", targetFor("d1")));
+    } else {
+      expect(startAgent).not.toHaveBeenCalled();
+    }
+    expect(onCreated).toHaveBeenCalledWith("d1", "created");
+  });
+});
 
 it("uses a newly selected host for image/default loading, cwd, creation, and start", async () => {
   renderDialog();
 
-  expect(await screen.findByLabelText("cwd")).toHaveAttribute(
-    "data-host",
-    "d1",
-  );
+  expect(await screen.findByLabelText("cwd")).toHaveAttribute("data-host", "d1");
   expect(listImages).toHaveBeenCalledWith(targetFor("d1"));
   expect(imageManifestGet).toHaveBeenCalledWith("worker:v1", targetFor("d1"));
 
@@ -602,12 +557,8 @@ it("uses a newly selected host for image/default loading, cwd, creation, and sta
 
   fireEvent.focus(screen.getByLabelText("image"));
   fireEvent.click(await screen.findByRole("option", { name: "worker:v1" }));
-  await waitFor(() =>
-    expect(imageManifestGet).toHaveBeenLastCalledWith("worker:v1", null),
-  );
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Create agent" })).toBeEnabled(),
-  );
+  await waitFor(() => expect(imageManifestGet).toHaveBeenLastCalledWith("worker:v1", null));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Create agent" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
   await waitFor(() => expect(createAgent).toHaveBeenCalled());
   expect(createAgent).toHaveBeenCalledWith(expect.any(Object), null);
@@ -628,29 +579,20 @@ it("retries a cold remote Run Agent selection when the host becomes ready", asyn
   };
   const view = render(<CreateAgentDialog {...props} />);
 
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    /host d1 is not ready/i,
-  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(/host d1 is not ready/i);
   expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
 
   view.rerender(
     <CreateAgentDialog
       {...props}
-      hosts={[
-        { id: "d1", label: "prod", revision: "ready:http://127.0.0.1:19000" },
-      ]}
+      hosts={[{ id: "d1", label: "prod", revision: "ready:http://127.0.0.1:19000" }]}
     />,
   );
 
   await waitFor(() => expect(resolveDaemon).toHaveBeenCalledTimes(2));
   expect(listImages).toHaveBeenLastCalledWith(targetFor("d1"));
-  expect(imageManifestGet).toHaveBeenLastCalledWith(
-    "worker:v1",
-    targetFor("d1"),
-  );
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Create agent" })).toBeEnabled(),
-  );
+  expect(imageManifestGet).toHaveBeenLastCalledWith("worker:v1", targetFor("d1"));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Create agent" })).toBeEnabled());
 });
 
 it("shows image defaults as editable values and submits the complete defaults", async () => {
@@ -661,9 +603,7 @@ it("shows image defaults as editable values and submits the complete defaults", 
   expect(screen.getByLabelText("model")).toHaveValue("o3");
   expect(screen.getByLabelText("effort")).toHaveValue("high");
   fireEvent.focus(screen.getByLabelText("model"));
-  expect(
-    await screen.findByRole("option", { name: "gpt-6-astra" }),
-  ).toBeVisible();
+  expect(await screen.findByRole("option", { name: "gpt-6-astra" })).toBeVisible();
   expect(screen.getByRole("group", { name: "From harness" })).toContainElement(
     screen.getByRole("option", { name: "gpt-5.6-luna" }),
   );
@@ -679,10 +619,7 @@ it("shows image defaults as editable values and submits the complete defaults", 
 
   fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
   await waitFor(() => expect(createAgent).toHaveBeenCalled());
-  expect(createAgent).toHaveBeenCalledWith(
-    completeOrdinarySpec(),
-    targetFor("d1"),
-  );
+  expect(createAgent).toHaveBeenCalledWith(completeOrdinarySpec(), targetFor("d1"));
 });
 
 it("submits edited runtime values with the complete configuration", async () => {
@@ -723,9 +660,7 @@ it("changes suggestions with harness without clearing a custom model", async () 
   expect(screen.getByRole("group", { name: "Saved" })).toContainElement(
     screen.getByRole("option", { name: "private-model" }),
   );
-  expect(
-    screen.queryByRole("option", { name: "gpt-6-astra" }),
-  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "gpt-6-astra" })).not.toBeInTheDocument();
 });
 
 it("offers the efforts of the selected harness model", async () => {
@@ -740,9 +675,7 @@ it("offers the efforts of the selected harness model", async () => {
 
   const harness = await screen.findByRole("group", { name: "From harness" });
   expect(harness).toContainElement(screen.getByRole("option", { name: "max" }));
-  expect(
-    screen.queryByRole("option", { name: "ultra" }),
-  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "ultra" })).not.toBeInTheDocument();
 });
 
 it("keeps runtime drafts when the same selected image is reloaded", async () => {
@@ -780,18 +713,16 @@ it("keeps runtime drafts when the same selected image is reloaded", async () => 
 });
 
 it("initializes defaults again when the same image is selected on another host", async () => {
-  imageManifestGet
-    .mockResolvedValueOnce(manifest())
-    .mockResolvedValueOnce(
-      manifest({
-        harness: {
-          type: "claude",
-          model: "claude-opus-4-8",
-          effort: "max",
-          interactive: true,
-        },
-      }),
-    );
+  imageManifestGet.mockResolvedValueOnce(manifest()).mockResolvedValueOnce(
+    manifest({
+      harness: {
+        type: "claude",
+        model: "claude-opus-4-8",
+        effort: "max",
+        interactive: true,
+      },
+    }),
+  );
   renderDialog({
     hosts: [
       { id: "", label: "local" },
@@ -828,9 +759,7 @@ it("remembers unknown model and effort after successful creation", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
   await waitFor(() => expect(createAgent).toHaveBeenCalledOnce());
 
-  expect(
-    JSON.parse(localStorage.getItem(RUNTIME_PRESETS_STORAGE_KEY) ?? "{}"),
-  ).toEqual({
+  expect(JSON.parse(localStorage.getItem(RUNTIME_PRESETS_STORAGE_KEY) ?? "{}")).toEqual({
     codex: {
       models: ["private-model"],
       efforts: ["ultra-custom"],
@@ -872,13 +801,9 @@ describe.each([{ startNow: false }, { startNow: true }])(
       expect(await screen.findByText("Terminal only")).toBeInTheDocument();
       expect(screen.getByLabelText("image")).toHaveValue("bare:latest");
       expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
-      expect(
-        screen.getByRole("switch", { name: "Interactive" }),
-      ).toBeDisabled();
+      expect(screen.getByRole("switch", { name: "Interactive" })).toBeDisabled();
       expect(screen.queryByRole("switch", { name: "Autopilot" })).not.toBeInTheDocument();
-      expect(
-        screen.getByText(/does not contain agent instructions or tools/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/does not contain agent instructions or tools/i)).toBeInTheDocument();
       await setSwitch("Start now", startNow);
 
       fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
@@ -921,9 +846,9 @@ it("keeps the created stopped agent and retries only start after a start failure
   );
   expect(onCreated).toHaveBeenCalledWith("d1", "created");
   expect(onOpenChange).not.toHaveBeenCalledWith(false);
-  expect(
-    JSON.parse(localStorage.getItem(RUNTIME_PRESETS_STORAGE_KEY) ?? "{}"),
-  ).toMatchObject({ codex: { models: ["private-model"] } });
+  expect(JSON.parse(localStorage.getItem(RUNTIME_PRESETS_STORAGE_KEY) ?? "{}")).toMatchObject({
+    codex: { models: ["private-model"] },
+  });
 
   fireEvent.click(screen.getByRole("button", { name: "Retry start" }));
   await waitFor(() => expect(startAgent).toHaveBeenCalledTimes(2));
@@ -941,9 +866,7 @@ describe("Create agent blocker", () => {
     imageManifestGet.mockReturnValue(new Promise(() => {}));
     renderDialog(clone);
 
-    expect(
-      await screen.findByText("Loading image worker:v1 on prod…"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Loading image worker:v1 on prod…")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
   });
 
@@ -963,10 +886,7 @@ describe("Create agent blocker", () => {
       /Could not load image worker:v1: .*tunnel closed/,
     );
     view.rerender(
-      <CreateAgentDialog
-        {...props}
-        hosts={[{ id: "d1", label: "prod", revision: "r2" }]}
-      />,
+      <CreateAgentDialog {...props} hosts={[{ id: "d1", label: "prod", revision: "r2" }]} />,
     );
     await waitFor(() => expect(imageManifestGet).toHaveBeenCalledTimes(2));
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -976,11 +896,7 @@ describe("Create agent blocker", () => {
 
     imageManifestGet.mockResolvedValue(manifest());
     fireEvent.click(screen.getByRole("button", { name: "Retry image" }));
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Create agent" }),
-      ).toBeEnabled(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create agent" })).toBeEnabled());
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   Command,
@@ -6,22 +6,22 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command"
-import type { FsEntry } from "@/lib/api"
-import { useApi } from "@/components/apiContext"
-import { cn } from "@/lib/utils"
-import { splitPath } from "./splitPath"
+} from "@/components/ui/command";
+import type { FsEntry } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
+import { cn } from "@/lib/utils";
+import { splitPath } from "./splitPath";
 
 export interface PathAutocompleteProps {
   /** Full path currently in the input (controlled). Empty = managed workdir. */
-  value: string
-  onChange: (value: string) => void
-  placeholder?: string
-  id?: string
-  className?: string
-  "aria-label"?: string
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  id?: string;
+  className?: string;
+  "aria-label"?: string;
   /** Debounce before a listing request; 0 in tests for determinism. */
-  debounceMs?: number
+  debounceMs?: number;
 }
 
 // PathAutocomplete is a shell-like directory typeahead over the daemon
@@ -41,17 +41,17 @@ export function PathAutocomplete({
   "aria-label": ariaLabel,
 }: PathAutocompleteProps) {
   // The listing addresses the surrounding ApiProvider's host.
-  const api = useApi()
-  const { prefix, tail } = useMemo(() => splitPath(value), [value])
-  const [entries, setEntries] = useState<FsEntry[]>([])
-  const [open, setOpen] = useState(false)
+  const api = useApi();
+  const { prefix, tail } = useMemo(() => splitPath(value), [value]);
+  const [entries, setEntries] = useState<FsEntry[]>([]);
+  const [open, setOpen] = useState(false);
   // cmdk's selected item value (we set each item's value to its index string).
-  const [highlight, setHighlight] = useState("")
-  const cache = useRef<Map<string, FsEntry[]>>(new Map())
-  const reqSeq = useRef(0)
+  const [highlight, setHighlight] = useState("");
+  const cache = useRef<Map<string, FsEntry[]>>(new Map());
+  const reqSeq = useRef(0);
   // Cache keys are prefixed by daemon id so switching targets never serves a
   // stale listing from a different host under the same path.
-  const daemonKey = api.target?.id ?? ""
+  const daemonKey = api.target?.id ?? "";
 
   // Fetch the listing for the current prefix, debounced, with a per-prefix cache
   // so moving within one segment never refetches. A monotonically increasing
@@ -60,76 +60,75 @@ export function PathAutocomplete({
     // Bump the request id on EVERY prefix change, before the cache short-circuit,
     // so an in-flight fsList for a superseded prefix is always discarded — even
     // when the new prefix resolves from cache and never issues its own request.
-    const seq = ++reqSeq.current
-    const cacheKey = `${daemonKey}\0${prefix}`
-    const cached = cache.current.get(cacheKey)
+    const seq = ++reqSeq.current;
+    const cacheKey = `${daemonKey}\0${prefix}`;
+    const cached = cache.current.get(cacheKey);
     if (cached) {
-      setEntries(cached)
-      return
+      setEntries(cached);
+      return;
     }
     const timer = setTimeout(() => {
-      api.files.fsList(prefix)
+      api.files
+        .fsList(prefix)
         .then((r) => {
-          if (seq !== reqSeq.current) return
-          cache.current.set(cacheKey, r.entries)
-          setEntries(r.entries)
+          if (seq !== reqSeq.current) return;
+          cache.current.set(cacheKey, r.entries);
+          setEntries(r.entries);
         })
         .catch(() => {
           // Outside root / not a directory → nothing to offer for this prefix.
-          if (seq !== reqSeq.current) return
-          setEntries([])
-        })
-    }, debounceMs)
-    return () => clearTimeout(timer)
-  }, [api, prefix, debounceMs, daemonKey])
+          if (seq !== reqSeq.current) return;
+          setEntries([]);
+        });
+    }, debounceMs);
+    return () => clearTimeout(timer);
+  }, [api, prefix, debounceMs, daemonKey]);
 
   const filtered = useMemo(
-    () =>
-      entries.filter(
-        (e) => e.dir && e.name.toLowerCase().includes(tail.toLowerCase()),
-      ),
+    () => entries.filter((e) => e.dir && e.name.toLowerCase().includes(tail.toLowerCase())),
     [entries, tail],
-  )
+  );
 
   // Drill into a folder: replace the tail with the folder name and a trailing
   // "/", which re-splits into a fresh prefix and lists that folder's children.
   const complete = useCallback(
     (entry: FsEntry) => {
-      onChange(prefix + entry.name + "/")
-      setOpen(true)
+      onChange(prefix + entry.name + "/");
+      setOpen(true);
     },
     [onChange, prefix],
-  )
+  );
 
   // cmdk tracks the selected item by its value (each item's value is its index
   // string). Fall back to the first match so Tab completes even before cmdk has
   // emitted an initial selection.
-  const idx = Number(highlight)
-  const highlighted = (filtered[Number.isInteger(idx) ? idx : 0] ??
-    filtered[0]) as FsEntry | undefined
+  const idx = Number(highlight);
+  const highlighted = (filtered[Number.isInteger(idx) ? idx : 0] ?? filtered[0]) as
+    | FsEntry
+    | undefined;
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     // Let ↑/↓ bubble to cmdk (which owns navigation); intercept the rest so
     // cmdk's own Enter=select / Tab=focus-move handlers never fire.
     if (e.key === "Tab") {
       if (open && highlighted) {
-        e.preventDefault()
-        e.stopPropagation()
-        complete(highlighted)
+        e.preventDefault();
+        e.stopPropagation();
+        complete(highlighted);
       }
-      return
+      return;
     }
     if (e.key === "Enter") {
-      e.preventDefault()
-      e.stopPropagation()
-      setOpen(false)
-      return
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+      return;
     }
     if (e.key === "Escape") {
-      e.stopPropagation()
-      setOpen(false)
+      e.stopPropagation();
+      setOpen(false);
     }
-  }
+  };
 
   return (
     <Command
@@ -142,8 +141,8 @@ export function PathAutocomplete({
         id={id}
         value={value}
         onValueChange={(v) => {
-          onChange(v)
-          setOpen(true)
+          onChange(v);
+          setOpen(true);
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
@@ -172,5 +171,5 @@ export function PathAutocomplete({
         </CommandList>
       )}
     </Command>
-  )
+  );
 }

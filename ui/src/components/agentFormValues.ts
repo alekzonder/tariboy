@@ -2,7 +2,10 @@
 
 export const HARNESSES = ["claude", "codex", "opencode", "cursor", "stub"];
 
-export interface EnvRow { key: string; value: string }
+export interface EnvRow {
+  key: string;
+  value: string;
+}
 
 // serializeEnv turns the key/value repeater into the daemon's `K=V,K=V` string,
 // dropping rows with a blank key. Values keep their content verbatim.

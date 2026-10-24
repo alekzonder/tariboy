@@ -14,8 +14,16 @@ afterEach(() => {
 
 function summary(over: Partial<ChatSummary>): ChatSummary {
   return {
-    id: "x", kind: "direct", title: "x", agent: "worker",
-    last_ts: "", last_from: "", last_type: "", last_text: "", unread: 0, ...over,
+    id: "x",
+    kind: "direct",
+    title: "x",
+    agent: "worker",
+    last_ts: "",
+    last_from: "",
+    last_type: "",
+    last_text: "",
+    unread: 0,
+    ...over,
   };
 }
 
@@ -24,8 +32,18 @@ function summary(over: Partial<ChatSummary>): ChatSummary {
 it("keeps only the chats this agent takes part in that no agent owns", () => {
   const chats = [
     summary({ id: "dm:worker", agent: "worker" }),
-    summary({ id: "team-alpha", kind: "group", agent: "", participants: ["user:customer", "agent:worker"] }),
-    summary({ id: "team-beta", kind: "group", agent: "", participants: ["user:customer", "agent:other"] }),
+    summary({
+      id: "team-alpha",
+      kind: "group",
+      agent: "",
+      participants: ["user:customer", "agent:worker"],
+    }),
+    summary({
+      id: "team-beta",
+      kind: "group",
+      agent: "",
+      participants: ["user:customer", "agent:other"],
+    }),
     summary({ id: "team-none", kind: "group", agent: "" }),
   ];
   expect(sharedChats(chats, "worker").map((chat) => chat.id)).toEqual(["team-alpha"]);
@@ -39,37 +57,63 @@ it("derives a channel-safe chat id from the title", () => {
   expect(chatIdFromTitle("!!!")).toBe("");
 });
 
-interface Call { path: string; method: string; body: unknown }
+interface Call {
+  path: string;
+  method: string;
+  body: unknown;
+}
 
 function stub(): Call[] {
   const calls: Call[] = [];
-  vi.stubGlobal("WebSocket", class { close = vi.fn(); });
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-    calls.push({
-      path, method: init?.method ?? "GET",
-      body: init?.body ? JSON.parse(init.body as string) : undefined,
-    });
-    let result: unknown = { ok: true };
-    if (path === "/api/chats") {
-      result = {
-        customer: "user:customer", count: 1,
-        chats: [summary({
-          id: "team-alpha", kind: "group", title: "Team Alpha", agent: "",
-          participants: ["user:customer", "agent:worker", "agent:reviewer"],
-        })],
-      };
-    } else if (path === "/api/agents") {
-      result = { agents: [{ name: "worker" }, { name: "reviewer" }], count: 2 };
-    } else if (path.startsWith("/api/chats/")) {
-      result = {
-        customer: "user:customer", agent: "", chat: "team-alpha", kind: "group",
-        messages: [], count: 0, read_ts: "",
-      };
-    }
-    return Promise.resolve({
-      ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }),
-    } as Response);
-  }));
+  vi.stubGlobal(
+    "WebSocket",
+    class {
+      close = vi.fn();
+    },
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      calls.push({
+        path,
+        method: init?.method ?? "GET",
+        body: init?.body ? JSON.parse(init.body as string) : undefined,
+      });
+      let result: unknown = { ok: true };
+      if (path === "/api/chats") {
+        result = {
+          customer: "user:customer",
+          count: 1,
+          chats: [
+            summary({
+              id: "team-alpha",
+              kind: "group",
+              title: "Team Alpha",
+              agent: "",
+              participants: ["user:customer", "agent:worker", "agent:reviewer"],
+            }),
+          ],
+        };
+      } else if (path === "/api/agents") {
+        result = { agents: [{ name: "worker" }, { name: "reviewer" }], count: 2 };
+      } else if (path.startsWith("/api/chats/")) {
+        result = {
+          customer: "user:customer",
+          agent: "",
+          chat: "team-alpha",
+          kind: "group",
+          messages: [],
+          count: 0,
+          read_ts: "",
+        };
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result }),
+      } as Response);
+    }),
+  );
   return calls;
 }
 
@@ -90,8 +134,11 @@ it("opens a shared chat from its own tab and sends into its channel", async () =
   const tab = await screen.findByRole("tab", { name: "Team Alpha" });
 
   await userEvent.click(tab);
-  await waitFor(() => expect(calls.some((call) =>
-    call.path.startsWith(`/api/chats/${encodeURIComponent("team-alpha")}`))).toBe(true));
+  await waitFor(() =>
+    expect(
+      calls.some((call) => call.path.startsWith(`/api/chats/${encodeURIComponent("team-alpha")}`)),
+    ).toBe(true),
+  );
   expect(await screen.findByText("customer, worker, reviewer")).toBeTruthy();
 
   const box = screen.getByRole("textbox", { name: /message/i });
@@ -116,7 +163,9 @@ it("creates a chat with this agent and the ones picked", async () => {
   await waitFor(() => {
     const created = calls.find((call) => call.path === "/api/chats" && call.method === "POST");
     expect(created?.body).toEqual({
-      id: "team-alpha", title: "Team Alpha", participants: "agent:worker,agent:reviewer",
+      id: "team-alpha",
+      title: "Team Alpha",
+      participants: "agent:worker,agent:reviewer",
     });
   });
 });

@@ -1,4 +1,10 @@
-import { fireEvent, render as rtlRender, screen, waitFor, type RenderOptions } from "@testing-library/react";
+import {
+  fireEvent,
+  render as rtlRender,
+  screen,
+  waitFor,
+  type RenderOptions,
+} from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,19 +18,32 @@ const setGlobalAgentShellScript = vi.fn();
 const getPluginContributions = vi.fn();
 
 function client(target: Daemon | null = null): ApiClient {
-  return fakeApi({
-    harnesses: { getCodexApproval: vi.fn().mockResolvedValue({ mode: "yolo" }) },
-    daemon: {
-      getGlobalAgentShellScript,
-      setGlobalAgentShellScript,
-      getIterationRetentionDefault: vi.fn().mockResolvedValue({ keep_iterations: 0, keep_days: 0, max_bytes: 0 }),
-      getMaintenance: vi.fn().mockResolvedValue({
-        settings: { enabled: true, time: "03:00", keep_backups: 7, retention_days: 90, chat_retention_days: 7, compact: true, compact_threshold_pct: 10 },
-        last_run: null,
-      }),
+  return fakeApi(
+    {
+      harnesses: { getCodexApproval: vi.fn().mockResolvedValue({ mode: "yolo" }) },
+      daemon: {
+        getGlobalAgentShellScript,
+        setGlobalAgentShellScript,
+        getIterationRetentionDefault: vi
+          .fn()
+          .mockResolvedValue({ keep_iterations: 0, keep_days: 0, max_bytes: 0 }),
+        getMaintenance: vi.fn().mockResolvedValue({
+          settings: {
+            enabled: true,
+            time: "03:00",
+            keep_backups: 7,
+            retention_days: 90,
+            chat_retention_days: 7,
+            compact: true,
+            compact_threshold_pct: 10,
+          },
+          last_run: null,
+        }),
+      },
+      plugins: { getPluginContributions },
     },
-    plugins: { getPluginContributions },
-  }, target);
+    target,
+  );
 }
 
 function render(element: ReactElement, options: RenderOptions & { api?: ApiClient } = {}) {
@@ -52,20 +71,27 @@ describe("SettingsPage", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("link", { name: "General" }))
-      .toHaveAttribute("href", "/servers/remote-1/settings");
+    expect(screen.getByRole("link", { name: "General" })).toHaveAttribute(
+      "href",
+      "/servers/remote-1/settings",
+    );
     expect(screen.queryByRole("link", { name: "Task reminders" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Rules" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Advanced" }))
-      .toHaveAttribute("href", "/servers/remote-1/settings/advanced");
-    expect(screen.getByRole("link", { name: "Usage" }))
-      .toHaveAttribute("href", "/servers/remote-1/settings/advanced/usage");
+    expect(screen.getByRole("link", { name: "Advanced" })).toHaveAttribute(
+      "href",
+      "/servers/remote-1/settings/advanced",
+    );
+    expect(screen.getByRole("link", { name: "Usage" })).toHaveAttribute(
+      "href",
+      "/servers/remote-1/settings/advanced/usage",
+    );
     expect(screen.queryByRole("link", { name: "Evals" })).not.toBeInTheDocument();
   });
 
   it("adds settings contributions under the selected server", async () => {
     getPluginContributions.mockResolvedValue({
-      plugins: [{ name: "telegram", settings: { title: "Telegram" } }], count: 1,
+      plugins: [{ name: "telegram", settings: { title: "Telegram" } }],
+      count: 1,
     });
     render(
       <MemoryRouter initialEntries={["/servers/remote-1/settings"]}>
@@ -78,8 +104,10 @@ describe("SettingsPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("link", { name: "Telegram" }))
-      .toHaveAttribute("href", "/servers/remote-1/settings/integrations/telegram");
+    expect(await screen.findByRole("link", { name: "Telegram" })).toHaveAttribute(
+      "href",
+      "/servers/remote-1/settings/integrations/telegram",
+    );
     expect(getPluginContributions).toHaveBeenCalledWith();
   });
 
@@ -90,9 +118,7 @@ describe("SettingsPage", () => {
       baseURL: "https://remote.test",
       token: "secret",
     };
-    setGlobalAgentShellScript.mockRejectedValue(
-      new Error("line 1: syntax error"),
-    );
+    setGlobalAgentShellScript.mockRejectedValue(new Error("line 1: syntax error"));
     render(
       <MemoryRouter>
         <Routes>
@@ -104,22 +130,13 @@ describe("SettingsPage", () => {
 
     const script = await screen.findByLabelText("Global Agent Shell Script");
     await waitFor(() => expect(script).toBeEnabled());
-    fireEvent.change(
-      script,
-      {
-        target: { value: "if then" },
-      },
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save global agent shell script" }),
-    );
+    fireEvent.change(script, {
+      target: { value: "if then" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save global agent shell script" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "line 1: syntax error",
-    );
-    expect(screen.getByLabelText("Global Agent Shell Script")).toHaveValue(
-      "if then",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("line 1: syntax error");
+    expect(screen.getByLabelText("Global Agent Shell Script")).toHaveValue("if then");
     expect(getGlobalAgentShellScript).toHaveBeenCalledWith();
     expect(setGlobalAgentShellScript).toHaveBeenCalledWith("if then");
   });
@@ -133,7 +150,9 @@ describe("SettingsPage", () => {
     };
     let resolveLoad!: (value: { script: string }) => void;
     getGlobalAgentShellScript.mockReturnValue(
-      new Promise((resolve) => { resolveLoad = resolve; }),
+      new Promise((resolve) => {
+        resolveLoad = resolve;
+      }),
     );
     render(
       <MemoryRouter>

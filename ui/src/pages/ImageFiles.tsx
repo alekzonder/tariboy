@@ -2,9 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import FileBrowser from "@/components/FileBrowser";
 import { useImageContext } from "@/components/imageContext";
 import { useApi } from "@/components/apiContext";
-import {
-  type FileContent, type FileEntry, type FileListing, type ImageFileEntry,
-} from "@/lib/api";
+import { type FileContent, type FileEntry, type FileListing, type ImageFileEntry } from "@/lib/api";
 
 // Read-only Files tab for an image. The backend serves a FLAT list of every
 // packed tar member (full slash paths) plus a single-file read; the shared
@@ -19,7 +17,9 @@ export default function ImageFiles() {
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
-    return () => { alive.current = false; };
+    return () => {
+      alive.current = false;
+    };
   }, []);
   // Cache the flat member list per digest so repeated listDir calls (one per
   // expanded directory) don't re-hit the endpoint.
@@ -29,7 +29,10 @@ export default function ImageFiles() {
 
   const loadAll = useCallback(async (): Promise<ImageFileEntry[]> => {
     if (cache.current?.key === sourceKey) return cache.current.entries;
-    const r = await api.images.imageFilesList(ref, digest).catch((error) => { if (alive.current) onReadError(error); throw error; });
+    const r = await api.images.imageFilesList(ref, digest).catch((error) => {
+      if (alive.current) onReadError(error);
+      throw error;
+    });
     const entries = r.files ?? [];
     cache.current = { key: sourceKey, entries };
     return entries;
@@ -66,7 +69,10 @@ export default function ImageFiles() {
 
   const readFile = useCallback(
     async (path: string): Promise<FileContent> => {
-      const r = await api.images.imageFileRead(ref, path, digest).catch((error) => { if (alive.current) onReadError(error); throw error; });
+      const r = await api.images.imageFileRead(ref, path, digest).catch((error) => {
+        if (alive.current) onReadError(error);
+        throw error;
+      });
       return { path: r.path, kind: "text", content: r.content, size: r.content.length };
     },
     [api, ref, digest, onReadError],

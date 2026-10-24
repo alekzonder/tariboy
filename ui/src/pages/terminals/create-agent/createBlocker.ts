@@ -32,8 +32,7 @@ export function createBlocker(state: {
       message: `Image ${state.image} is not built on ${state.hostLabel}`,
       error: true,
     };
-  if (state.manifestError)
-    return { message: state.manifestError, error: true, retryImage: true };
+  if (state.manifestError) return { message: state.manifestError, error: true, retryImage: true };
   if (!state.manifestIsCurrent)
     return {
       message: `Loading image ${state.image} on ${state.hostLabel}…`,

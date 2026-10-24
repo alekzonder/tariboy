@@ -52,7 +52,8 @@ export function imageSourcesApi(t: Transport) {
   return {
     listImageSources: () =>
       t.get<{ sources: ImageSourceSummary[]; count: number }>("/api/image-sources"),
-    createImageSource: (input: CreateImageSource) => t.post<ImageSource>("/api/image-sources", input),
+    createImageSource: (input: CreateImageSource) =>
+      t.post<ImageSource>("/api/image-sources", input),
     getImageSource: (name: string) => t.get<ImageSource>(sourcePath(name)),
     deleteImageSource: (name: string) => t.delete<{ removed: string }>(sourcePath(name)),
     listImageSourceFiles: (name: string) =>

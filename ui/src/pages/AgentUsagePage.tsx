@@ -31,7 +31,9 @@ const GROUPINGS: { key: "iteration" | "task" | "epic" | "model"; label: string }
 
 // period, when given, is the Activity tab's shared window: it replaces the
 // page's own window presets.
-export default function AgentUsagePage({ period }: { period?: { since: string; until: string } } = {}) {
+export default function AgentUsagePage({
+  period,
+}: { period?: { since: string; until: string } } = {}) {
   const api = useApi();
   const name = useAgentName();
   const [preset, setPreset] = useState<Preset>("24h");
@@ -49,8 +51,15 @@ export default function AgentUsagePage({ period }: { period?: { since: string; u
   const periodUntil = period?.until ?? "";
   const buildParams = useCallback((): Record<string, string> => {
     if (managed) {
-      const span = periodSince ? Date.parse(periodUntil || new Date().toISOString()) - Date.parse(periodSince) : 0;
-      return { since: periodSince, until: periodUntil, group_by: groupBy, bucket: span ? closestBucket(span) : "1h" };
+      const span = periodSince
+        ? Date.parse(periodUntil || new Date().toISOString()) - Date.parse(periodSince)
+        : 0;
+      return {
+        since: periodSince,
+        until: periodUntil,
+        group_by: groupBy,
+        bucket: span ? closestBucket(span) : "1h",
+      };
     }
     if (preset === "custom") {
       const since = customSince ? new Date(customSince).toISOString() : "";
@@ -85,51 +94,63 @@ export default function AgentUsagePage({ period }: { period?: { since: string; u
   return (
     <div className="flex flex-col gap-4">
       {/* (1) Window selector */}
-      {!period && <div className="flex flex-wrap items-center gap-2">
-        {PRESET_ORDER.map((p) => (
-          <button
-            key={p}
-            onClick={() => setPreset(p)}
-            className={cn(
-              "rounded border px-3 py-1 text-sm hover:bg-accent",
-              preset === p && "bg-accent font-medium",
-            )}
-          >
-            {p === "custom" ? "Custom" : p}
-          </button>
-        ))}
-        {preset === "custom" && (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <label className="flex items-center gap-1">
-              <span className="text-muted-foreground">from</span>
-              <input
-                type="datetime-local"
-                value={customSince}
-                onChange={(e) => setCustomSince(e.target.value)}
-                className="rounded border bg-background px-2 py-1"
-              />
-            </label>
-            <label className="flex items-center gap-1">
-              <span className="text-muted-foreground">to</span>
-              <input
-                type="datetime-local"
-                value={customUntil}
-                onChange={(e) => setCustomUntil(e.target.value)}
-                className="rounded border bg-background px-2 py-1"
-              />
-            </label>
-          </div>
-        )}
-      </div>}
+      {!period && (
+        <div className="flex flex-wrap items-center gap-2">
+          {PRESET_ORDER.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPreset(p)}
+              className={cn(
+                "rounded border px-3 py-1 text-sm hover:bg-accent",
+                preset === p && "bg-accent font-medium",
+              )}
+            >
+              {p === "custom" ? "Custom" : p}
+            </button>
+          ))}
+          {preset === "custom" && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <label className="flex items-center gap-1">
+                <span className="text-muted-foreground">from</span>
+                <input
+                  type="datetime-local"
+                  value={customSince}
+                  onChange={(e) => setCustomSince(e.target.value)}
+                  className="rounded border bg-background px-2 py-1"
+                />
+              </label>
+              <label className="flex items-center gap-1">
+                <span className="text-muted-foreground">to</span>
+                <input
+                  type="datetime-local"
+                  value={customUntil}
+                  onChange={(e) => setCustomUntil(e.target.value)}
+                  className="rounded border bg-background px-2 py-1"
+                />
+              </label>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* (2) Totals cards */}
-      <dl aria-label="Usage totals" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <dl
+        aria-label="Usage totals"
+        className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+      >
         <UsageSummaryCard label="Requests" value={totals ? String(totals.requests) : "—"} />
         <UsageSummaryCard label="Tokens in" value={totals ? fmtTokens(totals.input_tokens) : "—"} />
-        <UsageSummaryCard label="Tokens out" value={totals ? fmtTokens(totals.output_tokens) : "—"} />
+        <UsageSummaryCard
+          label="Tokens out"
+          value={totals ? fmtTokens(totals.output_tokens) : "—"}
+        />
         <UsageSummaryCard
           label="Cache w/r"
-          value={totals ? `${fmtTokens(totals.cache_write_tokens)} / ${fmtTokens(totals.cache_read_tokens)}` : "—"}
+          value={
+            totals
+              ? `${fmtTokens(totals.cache_write_tokens)} / ${fmtTokens(totals.cache_read_tokens)}`
+              : "—"
+          }
         />
         <UsageSummaryCard label="Cost" value={totals ? fmtCost(totals.cost_usd) : "—"} />
       </dl>
@@ -157,7 +178,9 @@ export default function AgentUsagePage({ period }: { period?: { since: string; u
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
             <tr>
-              <th className="px-3 py-2">{GROUPINGS.find((g) => g.key === groupBy)?.label ?? "Key"}</th>
+              <th className="px-3 py-2">
+                {GROUPINGS.find((g) => g.key === groupBy)?.label ?? "Key"}
+              </th>
               <th className="px-3 py-2 text-right">Requests</th>
               <th className="px-3 py-2 text-right">In</th>
               <th className="px-3 py-2 text-right">Out</th>
@@ -170,7 +193,13 @@ export default function AgentUsagePage({ period }: { period?: { since: string; u
             {rows.map((r, i) => (
               <tr key={i} className="border-t">
                 <td className="px-3 py-1.5">
-                  <RowKey name={name} groupBy={groupBy} rowKey={r.key} title={r.title} onOpenTask={setTaskKey} />
+                  <RowKey
+                    name={name}
+                    groupBy={groupBy}
+                    rowKey={r.key}
+                    title={r.title}
+                    onOpenTask={setTaskKey}
+                  />
                 </td>
                 <td className="px-3 py-1.5 text-right">{r.requests}</td>
                 <td className="px-3 py-1.5 text-right font-mono">{r.input_tokens}</td>
@@ -190,13 +219,7 @@ export default function AgentUsagePage({ period }: { period?: { since: string; u
           </tbody>
         </table>
       </div>
-      {taskKey && (
-        <TaskDrawer
-          key={taskKey}
-          taskKey={taskKey}
-          onClose={() => setTaskKey("")}
-        />
-      )}
+      {taskKey && <TaskDrawer key={taskKey} taskKey={taskKey} onClose={() => setTaskKey("")} />}
     </div>
   );
 }

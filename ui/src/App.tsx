@@ -1,5 +1,13 @@
 import { lazy, useState } from "react";
-import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { Segmented } from "@/components/ui/segmented";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -16,11 +24,7 @@ import { TitlebarSlotContext } from "@/pages/terminals/titlebarSlotContext";
 import { hostToParam } from "@/lib/terminalsHost";
 import { defaultAgentTab } from "@/lib/uiMode";
 import { CustomerQuestionNotifications } from "@/components/CustomerQuestionNotifications";
-import {
-  AppSettings,
-  DesktopUpdatesProvider,
-  UpdateBanner,
-} from "@/components/DesktopUpdates";
+import { AppSettings, DesktopUpdatesProvider, UpdateBanner } from "@/components/DesktopUpdates";
 
 // Server sub-pages load on first open, inside the Suspense boundary of the
 // layout that renders their Outlet.
@@ -28,10 +32,18 @@ const ImageOverview = lazy(() => import("@/pages/ImageOverview"));
 const ImageTemplate = lazy(() => import("@/pages/images/ImageTemplate"));
 const ImageSkills = lazy(() => import("@/pages/images/ImageSkills"));
 const ImageFiles = lazy(() => import("@/pages/ImageFiles"));
-const GeneralSettings = lazy(() => import("@/pages/settings/SettingsPage").then((m) => ({ default: m.GeneralSettings })));
-const CliSettings = lazy(() => import("@/pages/settings/SettingsPage").then((m) => ({ default: m.CliSettings })));
-const AppearanceSettings = lazy(() => import("@/pages/settings/SettingsPage").then((m) => ({ default: m.AppearanceSettings })));
-const AdvancedSettingsIndex = lazy(() => import("@/pages/settings/SettingsPage").then((m) => ({ default: m.AdvancedSettingsIndex })));
+const GeneralSettings = lazy(() =>
+  import("@/pages/settings/SettingsPage").then((m) => ({ default: m.GeneralSettings })),
+);
+const CliSettings = lazy(() =>
+  import("@/pages/settings/SettingsPage").then((m) => ({ default: m.CliSettings })),
+);
+const AppearanceSettings = lazy(() =>
+  import("@/pages/settings/SettingsPage").then((m) => ({ default: m.AppearanceSettings })),
+);
+const AdvancedSettingsIndex = lazy(() =>
+  import("@/pages/settings/SettingsPage").then((m) => ({ default: m.AdvancedSettingsIndex })),
+);
 const PluginSettings = lazy(() => import("@/pages/settings/PluginSettings"));
 const UsagePage = lazy(() => import("@/pages/UsagePage"));
 const GroupsPage = lazy(() => import("@/pages/GroupsPage"));
@@ -69,9 +81,9 @@ function MainApp() {
   const sidebar = useSharedSidebarState();
   const [titlebarSlot, setTitlebarSlot] = useState<HTMLElement | null>(null);
   const sidebarRoute =
-    location.pathname === "/"
-    || location.pathname.startsWith("/agents/")
-    || location.pathname.startsWith("/servers/");
+    location.pathname === "/" ||
+    location.pathname.startsWith("/agents/") ||
+    location.pathname.startsWith("/servers/");
   const allTasks = searchParams.get("view") === "all";
   return (
     <TitlebarSlotContext.Provider value={titlebarSlot}>
@@ -85,11 +97,13 @@ function MainApp() {
         <div className="flex min-w-0 items-center">
           {/* Room for the macOS traffic lights under the Desktop app's overlay
               titlebar; a browser or the Android app has none. */}
-          {isDesktop() && <div
-            aria-hidden="true"
-            data-testid="titlebar-window-controls-gap"
-            className="h-full w-[72px] shrink-0"
-          />}
+          {isDesktop() && (
+            <div
+              aria-hidden="true"
+              data-testid="titlebar-window-controls-gap"
+              className="h-full w-[72px] shrink-0"
+            />
+          )}
           {sidebarRoute && !allTasks && sidebar.compact && (
             <Button
               type="button"
@@ -114,9 +128,11 @@ function MainApp() {
               title={sidebar.hidden ? "Show agents" : "Hide agents"}
               onClick={() => sidebar.setHidden(!sidebar.hidden)}
             >
-              {sidebar.hidden
-                ? <PanelLeftOpen className="size-4" />
-                : <PanelLeftClose className="size-4" />}
+              {sidebar.hidden ? (
+                <PanelLeftOpen className="size-4" />
+              ) : (
+                <PanelLeftClose className="size-4" />
+              )}
             </Button>
           )}
           {/* The workspace switcher of the console pages portals in here. */}
@@ -131,19 +147,18 @@ function MainApp() {
               className="ml-2"
               options={VIEW_OPTIONS}
               value={allTasks ? "all" : "agents"}
-              onChange={(value) => setSearchParams((current) => {
-                const next = new URLSearchParams(current);
-                if (value === "all") next.set("view", "all");
-                else next.delete("view");
-                return next;
-              })}
+              onChange={(value) =>
+                setSearchParams((current) => {
+                  const next = new URLSearchParams(current);
+                  if (value === "all") next.set("view", "all");
+                  else next.delete("view");
+                  return next;
+                })
+              }
             />
           )}
         </div>
-        <div
-          aria-hidden="true"
-          className="h-full min-w-4 flex-1"
-        />
+        <div aria-hidden="true" className="h-full min-w-4 flex-1" />
         <div className="flex items-center gap-0.5">
           <Button
             asChild
@@ -171,22 +186,40 @@ function MainApp() {
           <Route path="/agents/:hostId/teams/:team" element={<TerminalsPage />} />
           <Route path="/agents/:hostId/:agent/:tab/*" element={<TerminalsPage />} />
           <Route path="/servers/:hostId/tasks" element={<TerminalsPage serverView="tasks" />} />
-          <Route path="/servers/:hostId/activity" element={<TerminalsPage serverView="activity" />} />
+          <Route
+            path="/servers/:hostId/activity"
+            element={<TerminalsPage serverView="activity" />}
+          />
 
           <Route path="/servers/:hostId/images" element={<TerminalsPage serverView="images" />} />
-          <Route path="/servers/:hostId/images/:name" element={<TerminalsPage serverView="image-tags" />} />
-          <Route path="/servers/:hostId/images/:name/:tag" element={<TerminalsPage serverView="image-detail" />}>
+          <Route
+            path="/servers/:hostId/images/:name"
+            element={<TerminalsPage serverView="image-tags" />}
+          />
+          <Route
+            path="/servers/:hostId/images/:name/:tag"
+            element={<TerminalsPage serverView="image-detail" />}
+          >
             <Route index element={<ImageOverview />} />
             <Route path="template" element={<ImageTemplate />} />
             <Route path="skills" element={<ImageSkills />} />
             <Route path="files" element={<ImageFiles />} />
           </Route>
 
-          <Route path="/servers/:hostId/workflows" element={<TerminalsPage serverView="workflows" />} />
-          <Route path="/servers/:hostId/workflows/:name/:tag" element={<TerminalsPage serverView="workflow-detail" />} />
+          <Route
+            path="/servers/:hostId/workflows"
+            element={<TerminalsPage serverView="workflows" />}
+          />
+          <Route
+            path="/servers/:hostId/workflows/:name/:tag"
+            element={<TerminalsPage serverView="workflow-detail" />}
+          />
 
           <Route path="/servers/:hostId/stores" element={<TerminalsPage serverView="stores" />} />
-          <Route path="/servers/:hostId/stores/:name" element={<TerminalsPage serverView="store-detail" />} />
+          <Route
+            path="/servers/:hostId/stores/:name"
+            element={<TerminalsPage serverView="store-detail" />}
+          />
 
           <Route path="/servers/:hostId/settings" element={<TerminalsPage serverView="settings" />}>
             <Route index element={<GeneralSettings />} />
@@ -233,7 +266,9 @@ function PluginSettingsRoute() {
 
 function LegacyTerminalRedirect() {
   const { hostId = "local", agent = "" } = useParams();
-  return <Navigate to={`/agents/${hostId}/${encodeURIComponent(agent)}/${defaultAgentTab()}`} replace />;
+  return (
+    <Navigate to={`/agents/${hostId}/${encodeURIComponent(agent)}/${defaultAgentTab()}`} replace />
+  );
 }
 
 function CanonicalCreateRedirect() {
@@ -255,13 +290,15 @@ function LegacyAgentRedirect() {
   const host = activeId || "local";
   const first = tail.split("/")[0];
   const tab =
-    first === "logs" || first === "usage" ? "activity"
-    : first === "settings" ? "configuration"
-    : first === "" ? defaultAgentTab()
-    : "advanced";
-  const query = tab === "advanced" && first
-    ? `?view=${encodeURIComponent(first)}`
-    : location.search;
+    first === "logs" || first === "usage"
+      ? "activity"
+      : first === "settings"
+        ? "configuration"
+        : first === ""
+          ? defaultAgentTab()
+          : "advanced";
+  const query =
+    tab === "advanced" && first ? `?view=${encodeURIComponent(first)}` : location.search;
   return (
     <Navigate
       to={`/agents/${encodeURIComponent(host)}/${encodeURIComponent(name)}/${tab}${query}`}
@@ -270,9 +307,7 @@ function LegacyAgentRedirect() {
   );
 }
 
-function LegacyServerSurfaceRedirect({ section }: {
-  section: "tasks" | "images" | "settings";
-}) {
+function LegacyServerSurfaceRedirect({ section }: { section: "tasks" | "images" | "settings" }) {
   const location = useLocation();
   const { activeId } = useDaemons();
   const legacyBase = `/${section}`;

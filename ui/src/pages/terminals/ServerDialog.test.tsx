@@ -35,7 +35,9 @@ describe("ServerDialog in the Android app", () => {
       "http://127.0.0.1:9990 or https://host:port",
     );
     fireEvent.change(screen.getByLabelText("label"), { target: { value: "fwd" } });
-    fireEvent.change(screen.getByLabelText("base URL"), { target: { value: "http://127.0.0.1:9990" } });
+    fireEvent.change(screen.getByLabelText("base URL"), {
+      target: { value: "http://127.0.0.1:9990" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
@@ -48,7 +50,9 @@ describe("ServerDialog in the Android app", () => {
     vi.stubEnv("VITE_TARIBOY_SHELL", "android");
     renderDialog();
     fireEvent.change(screen.getByLabelText("label"), { target: { value: "lan" } });
-    fireEvent.change(screen.getByLabelText("base URL"), { target: { value: "http://192.168.1.5:9990" } });
+    fireEvent.change(screen.getByLabelText("base URL"), {
+      target: { value: "http://192.168.1.5:9990" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
     expect(
@@ -99,7 +103,9 @@ describe("ServerDialog", () => {
     await waitFor(() =>
       expect((screen.getByLabelText("label") as HTMLInputElement).value).toBe("prod"),
     );
-    expect((screen.getByLabelText("base URL") as HTMLInputElement).value).toBe("http://127.0.0.1:9992");
+    expect((screen.getByLabelText("base URL") as HTMLInputElement).value).toBe(
+      "http://127.0.0.1:9992",
+    );
     expect((screen.getByLabelText("token") as HTMLInputElement).value).toBe("");
     expect(await screen.findByText("token set for this session")).toBeInTheDocument();
   });
@@ -152,8 +158,12 @@ describe("ServerDialog", () => {
   it("surfaces credential-store errors while opening the editor", async () => {
     const meta = await seed();
     const getItem = Storage.prototype.getItem;
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (this: Storage, key: string) {
-      if (this === sessionStorage && key.endsWith(meta.id)) throw new Error("credential store unavailable");
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+    ) {
+      if (this === sessionStorage && key.endsWith(meta.id))
+        throw new Error("credential store unavailable");
       return getItem.call(this, key);
     });
 
@@ -223,7 +233,9 @@ describe("ServerDialog desktop SSH flow", () => {
     const events = mockNativeEvents();
     vi.spyOn(desktop, "hostSaveSsh").mockResolvedValue(nativeHost());
     const connect = vi.spyOn(desktop, "hostConnect").mockResolvedValue(null);
-    const provision = vi.spyOn(desktop, "hostProvision").mockResolvedValue({ operation_id: "op-1" });
+    const provision = vi
+      .spyOn(desktop, "hostProvision")
+      .mockResolvedValue({ operation_id: "op-1" });
     renderDialog();
 
     fireEvent.click(screen.getByRole("radio", { name: "Connect to existing Tariboy" }));
@@ -242,20 +254,24 @@ describe("ServerDialog desktop SSH flow", () => {
     await waitFor(() => expect(connect).toHaveBeenCalledWith("ssh-1"));
     expect(provision).not.toHaveBeenCalled();
 
-    await events.state(nativeHost({
-      state: "failed",
-      phase: "connect",
-      message: "Host key verification failed.",
-    }));
+    await events.state(
+      nativeHost({
+        state: "failed",
+        phase: "connect",
+        message: "Host key verification failed.",
+      }),
+    );
     expect(screen.getAllByTestId("host-progress-step")[0]).toHaveTextContent("failed");
     expect(screen.getAllByTestId("host-progress-step")[1]).toHaveTextContent("pending");
 
-    await events.state(nativeHost({
-      state: "ready",
-      base_url: "http://127.0.0.1:18444",
-      local_port: 18444,
-      last_daemon_version: "99.0.0",
-    }));
+    await events.state(
+      nativeHost({
+        state: "ready",
+        base_url: "http://127.0.0.1:18444",
+        local_port: 18444,
+        last_daemon_version: "99.0.0",
+      }),
+    );
     expect(screen.getByText("Host connected")).toBeInTheDocument();
     expect(provision).not.toHaveBeenCalled();
   });
@@ -264,7 +280,9 @@ describe("ServerDialog desktop SSH flow", () => {
     const events = mockNativeEvents();
     const save = vi.spyOn(desktop, "hostSaveSsh").mockResolvedValue(nativeHost());
     const connect = vi.spyOn(desktop, "hostConnect").mockResolvedValue(null);
-    const provision = vi.spyOn(desktop, "hostProvision").mockResolvedValue({ operation_id: "op-install" });
+    const provision = vi
+      .spyOn(desktop, "hostProvision")
+      .mockResolvedValue({ operation_id: "op-install" });
     renderDialog();
 
     fireEvent.click(screen.getByRole("radio", { name: "Connect to existing Tariboy" }));
@@ -273,10 +291,12 @@ describe("ServerDialog desktop SSH flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add and connect" }));
     await waitFor(() => expect(connect).toHaveBeenCalledWith("ssh-1"));
 
-    await events.state(nativeHost({
-      state: "connecting",
-      message: "remote daemon health timed out: connection refused; retrying in 1s",
-    }));
+    await events.state(
+      nativeHost({
+        state: "connecting",
+        message: "remote daemon health timed out: connection refused; retrying in 1s",
+      }),
+    );
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Existing Tariboy is unavailable at 127.0.0.1:9990.",
@@ -293,10 +313,12 @@ describe("ServerDialog desktop SSH flow", () => {
       label: "gpu",
       ssh_alias: "gpu-box",
     });
-    await events.state(nativeHost({
-      state: "connecting",
-      message: "remote daemon health timed out: connection refused; retrying in 2s",
-    }));
+    await events.state(
+      nativeHost({
+        state: "connecting",
+        message: "remote daemon health timed out: connection refused; retrying in 2s",
+      }),
+    );
 
     const install = screen.getByRole("button", { name: "Install Tariboy" });
     fireEvent.click(install);
@@ -354,10 +376,12 @@ describe("ServerDialog desktop SSH flow", () => {
       text: "Verification code:",
       prompt: "authentication",
     });
-    await events.state(nativeHost({
-      state: "needs_auth",
-      message: "authentication reply required",
-    }));
+    await events.state(
+      nativeHost({
+        state: "needs_auth",
+        message: "authentication reply required",
+      }),
+    );
 
     const details = screen.getByText("Technical details").closest("details");
     expect(details).not.toHaveAttribute("open");
@@ -371,8 +395,7 @@ describe("ServerDialog desktop SSH flow", () => {
 
   it("runs update as one uninterrupted operation even when running work is reported", async () => {
     const events = mockNativeEvents();
-    const update = vi.spyOn(desktop, "hostUpdate")
-      .mockResolvedValue({ operation_id: "update-1" });
+    const update = vi.spyOn(desktop, "hostUpdate").mockResolvedValue({ operation_id: "update-1" });
     const server: DaemonMeta = {
       id: "ssh-1",
       label: "gpu",
@@ -459,16 +482,19 @@ describe("ServerDialog desktop SSH flow", () => {
     expect(alert).not.toHaveTextContent("ssh_failed");
     expect(alert).not.toHaveTextContent("tariboyd: OK");
     expect(
-      screen.getAllByTestId("host-progress-step").find((step) =>
-        step.textContent?.includes("Install release")),
+      screen
+        .getAllByTestId("host-progress-step")
+        .find((step) => step.textContent?.includes("Install release")),
     ).toHaveTextContent("failed");
     expect(screen.getByRole("button", { name: "Retry update" })).toBeInTheDocument();
 
-    await events.state(nativeHost({
-      state: "ready",
-      phase: "connect",
-      base_url: "http://127.0.0.1:18444",
-    }));
+    await events.state(
+      nativeHost({
+        state: "ready",
+        phase: "connect",
+        base_url: "http://127.0.0.1:18444",
+      }),
+    );
 
     expect(screen.getByRole("alert")).toHaveTextContent("Update failed");
     expect(screen.getByRole("button", { name: "Retry update" })).toBeInTheDocument();
@@ -495,14 +521,19 @@ describe("ServerDialog desktop SSH flow", () => {
       }),
       prompt: null,
     });
-    await events.state(nativeHost({
-      state: "failed",
-      message: "unsupported_host: remote installation requires Linux x86_64/aarch64 or macOS arm64",
-    }));
+    await events.state(
+      nativeHost({
+        state: "failed",
+        message:
+          "unsupported_host: remote installation requires Linux x86_64/aarch64 or macOS arm64",
+      }),
+    );
 
     expect(screen.getByText("Unsupported host: Linux/armv7l")).toBeInTheDocument();
     expect(screen.getByText("Install blocked")).toBeInTheDocument();
-    expect(screen.getByText("Missing install requirements: Linux x86_64/aarch64 or macOS arm64")).toBeInTheDocument();
+    expect(
+      screen.getByText("Missing install requirements: Linux x86_64/aarch64 or macOS arm64"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Optional agent tools not found: tmux, codex")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "remote installation requires Linux x86_64/aarch64 or macOS arm64",

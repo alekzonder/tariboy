@@ -13,15 +13,18 @@ export function useTaskActivity(window: ActivityWindow, agent?: string) {
   const target = api.target;
   const { since, until, error: windowError } = window;
   const key = `${target?.id ?? ""}\0${since}\0${until}\0${agent ?? ""}`;
-  const [state, setState] = useState<{ key: string; report: TaskActivityReport | null; error: string }>(
-    { key: "", report: null, error: "" },
-  );
+  const [state, setState] = useState<{
+    key: string;
+    report: TaskActivityReport | null;
+    error: string;
+  }>({ key: "", report: null, error: "" });
 
   useEffect(() => {
     if (windowError || !since) return;
     const controller = new AbortController();
     const load = () => {
-      void api.usage.getTaskActivity({ since, until, agent }, controller.signal)
+      void api.usage
+        .getTaskActivity({ since, until, agent }, controller.signal)
         .then((report) => {
           if (!controller.signal.aborted) setState({ key, report, error: "" });
         })
@@ -39,5 +42,9 @@ export function useTaskActivity(window: ActivityWindow, agent?: string) {
     };
   }, [key, api, since, until, agent, windowError]);
 
-  return { report: state.report, error: state.key === key ? state.error : "", current: state.key === key };
+  return {
+    report: state.report,
+    error: state.key === key ? state.error : "",
+    current: state.key === key,
+  };
 }

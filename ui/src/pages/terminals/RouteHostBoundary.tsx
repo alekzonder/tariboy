@@ -5,7 +5,11 @@ import { getActiveDaemon } from "@/lib/api";
 import { hostConnected } from "@/lib/desktop";
 import type { Daemon } from "@/lib/daemons";
 
-export function RouteHostBoundary({ hostId, unavailable = false, children }: {
+export function RouteHostBoundary({
+  hostId,
+  unavailable = false,
+  children,
+}: {
   hostId: string;
   unavailable?: boolean;
   children: ReactNode | ((target: Daemon | null) => ReactNode);
@@ -18,9 +22,8 @@ export function RouteHostBoundary({ hostId, unavailable = false, children }: {
   const status = selection.hostId === hostId ? selection.status : "connecting";
   const host = daemons.find((entry) => entry.id === hostId);
   const knownHost = hostId === "" || host !== undefined;
-  const hostReady = hostId === "" || (
-    !!host?.baseURL && (host.kind !== "ssh" || hostConnected(host.state))
-  );
+  const hostReady =
+    hostId === "" || (!!host?.baseURL && (host.kind !== "ssh" || hostConnected(host.state)));
 
   useEffect(() => {
     let cancelled = false;
@@ -29,7 +32,9 @@ export function RouteHostBoundary({ hostId, unavailable = false, children }: {
         setSelection({ hostId, status: selected ? "ready" : "unavailable" });
       }
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [hostId, select]);
 
   if (!knownHost || status === "unavailable") {

@@ -21,7 +21,6 @@ try {
   // private mode / blocked storage — the default registry is what we want anyway
 }
 
-
 // TerminalsPage is the application shell: the agents sidebar, the resize handle,
 // the server context bar and whichever server surface the route selects. It is
 // mounted under App.tsx's provider stack — daemons, shared sidebar state, desktop

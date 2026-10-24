@@ -20,7 +20,7 @@ const VIEWS = [
   ["usage", "Raw usage"],
   ["raw", "Raw settings"],
 ] as const;
-type View = typeof VIEWS[number][0];
+type View = (typeof VIEWS)[number][0];
 
 // Channels and Messages moved to the Chat tab (Channels and Queue); links saved
 // before the move land there instead of on an unrelated default view.
@@ -39,23 +39,38 @@ function RawSnapshot() {
       .then(([configuration, status]) => setSnapshot({ configuration, status }))
       .catch((error) => setSnapshot({ error: String(error) }));
   }, [api, name]);
-  return <pre className="overflow-auto rounded-md border bg-muted/30 p-4 text-xs">{JSON.stringify(snapshot, null, 2)}</pre>;
+  return (
+    <pre className="overflow-auto rounded-md border bg-muted/30 p-4 text-xs">
+      {JSON.stringify(snapshot, null, 2)}
+    </pre>
+  );
 }
 
 export default function AgentAdvancedTab() {
   const [params, setParams] = useSearchParams();
   const requested = params.get("view");
   const moved = requested ? MOVED[requested] : undefined;
-  if (moved) return <Navigate to={{ pathname: "../chat", search: `?view=${moved}` }} relative="path" replace />;
+  if (moved)
+    return (
+      <Navigate to={{ pathname: "../chat", search: `?view=${moved}` }} relative="path" replace />
+    );
   const view: View = isView(requested) ? requested : "prompt";
   const content =
-    view === "prompt" ? <AgentPrompt />
-    : view === "context" ? <AgentContext />
-    : view === "files" ? <AgentFiles />
-    : view === "scripts" ? <AgentScripts />
-    : view === "audit" ? <AuditLogPage />
-    : view === "usage" ? <AgentUsagePage />
-    : <RawSnapshot />;
+    view === "prompt" ? (
+      <AgentPrompt />
+    ) : view === "context" ? (
+      <AgentContext />
+    ) : view === "files" ? (
+      <AgentFiles />
+    ) : view === "scripts" ? (
+      <AgentScripts />
+    ) : view === "audit" ? (
+      <AuditLogPage />
+    ) : view === "usage" ? (
+      <AgentUsagePage />
+    ) : (
+      <RawSnapshot />
+    );
   return (
     <TabPage>
       <div className="flex flex-wrap gap-2">

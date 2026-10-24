@@ -38,22 +38,23 @@ export default function ServerActivityPage({ hostId }: { hostId: string }) {
     <TabPage className="overflow-auto">
       <ActivityPeriodBar window={window} onPeriod={setPeriod} onCustom={setCustom} />
       <ActivityTotals totals={report?.totals ?? null} />
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
       <ActivityTabs views={VIEWS} active={view} onSelect={selectView} />
       {view === "tasks" ? (
         <>
-          <TaskActivityTable
-            rows={report?.tasks ?? []}
-            showAgents
-            onOpenTask={setTaskKey}
-          />
+          <TaskActivityTable rows={report?.tasks ?? []} showAgents onOpenTask={setTaskKey} />
           {report?.truncated && <TruncatedNote shown={report.tasks.length} />}
         </>
       ) : (
         <AgentActivityTable
           agents={report?.agents ?? []}
           agentHref={(agent) =>
-            `/agents/${encodeURIComponent(hostToParam(hostId))}/${encodeURIComponent(agent)}/activity?${periodQuery(window)}`}
+            `/agents/${encodeURIComponent(hostToParam(hostId))}/${encodeURIComponent(agent)}/activity?${periodQuery(window)}`
+          }
         />
       )}
       {taskKey && <TaskDrawer key={taskKey} taskKey={taskKey} onClose={() => setTaskKey("")} />}

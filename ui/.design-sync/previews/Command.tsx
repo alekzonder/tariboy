@@ -37,11 +37,7 @@ export const PathAutocomplete = () => (
 );
 
 export const AgentPalette = () => (
-  <Command
-    value="builder"
-    className="rounded-lg border shadow-md"
-    style={{ width: 380 }}
-  >
+  <Command value="builder" className="rounded-lg border shadow-md" style={{ width: 380 }}>
     <CommandInput placeholder="Search agents and actions…" />
     <CommandList>
       <CommandGroup heading="Agents">
@@ -88,11 +84,7 @@ export const NoMatchingFolders = () => (
     className="relative overflow-visible bg-transparent"
     style={{ width: 360 }}
   >
-    <CommandInput
-      id="agent-cwd-empty"
-      value="/srv/tariboy/work/zzz"
-      onValueChange={() => {}}
-    />
+    <CommandInput id="agent-cwd-empty" value="/srv/tariboy/work/zzz" onValueChange={() => {}} />
     <CommandList
       className="mt-1 w-full rounded-lg border bg-popover shadow-md"
       style={{ position: "static" }}

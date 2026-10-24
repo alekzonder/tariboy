@@ -35,9 +35,7 @@ export function EditablePresetCombobox({
   const visibleGroups = (groups ?? [{ label: "", options: [...options] }])
     .map((group) => ({
       ...group,
-      options: group.options.filter((option) =>
-        option.toLowerCase().includes(normalizedFilter),
-      ),
+      options: group.options.filter((option) => option.toLowerCase().includes(normalizedFilter)),
     }))
     .filter((group) => group.options.length > 0 || group.note);
 
@@ -108,9 +106,7 @@ export function EditablePresetCombobox({
                   {group.label}
                 </div>
                 {group.note && (
-                  <div className="px-2 pb-1.5 text-xs text-muted-foreground">
-                    {group.note}
-                  </div>
+                  <div className="px-2 pb-1.5 text-xs text-muted-foreground">{group.note}</div>
                 )}
                 {group.options.map(renderOption)}
               </div>

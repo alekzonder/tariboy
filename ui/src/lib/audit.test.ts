@@ -1,13 +1,36 @@
 import { describe, it, expect } from "vitest";
-import { tone, pretty, isBoundary, descriptor, salientArg, hhmmss, collapseThinking, fmtTokens, hasHarnessOutput, mergeProxyCalls, type AuditEvent, type DisplayRow } from "./audit";
+import {
+  tone,
+  pretty,
+  isBoundary,
+  descriptor,
+  salientArg,
+  hhmmss,
+  collapseThinking,
+  fmtTokens,
+  hasHarnessOutput,
+  mergeProxyCalls,
+  type AuditEvent,
+  type DisplayRow,
+} from "./audit";
 import type { Call } from "@/lib/api";
 
-const ev = (over: Partial<AuditEvent>): AuditEvent =>
-  ({ seq: 1, kind: "iteration_started", source: "system", at: "t", data: "{}", iteration_id: "it-1", ...over });
+const ev = (over: Partial<AuditEvent>): AuditEvent => ({
+  seq: 1,
+  kind: "iteration_started",
+  source: "system",
+  at: "t",
+  data: "{}",
+  iteration_id: "it-1",
+  ...over,
+});
 
-const ho = (inner: Record<string, unknown>): string => JSON.stringify({ line: JSON.stringify(inner) });
-const asst = (block: Record<string, unknown>): string => ho({ type: "assistant", message: { content: [block] } });
-const usr = (block: Record<string, unknown>): string => ho({ type: "user", message: { content: [block] } });
+const ho = (inner: Record<string, unknown>): string =>
+  JSON.stringify({ line: JSON.stringify(inner) });
+const asst = (block: Record<string, unknown>): string =>
+  ho({ type: "assistant", message: { content: [block] } });
+const usr = (block: Record<string, unknown>): string =>
+  ho({ type: "user", message: { content: [block] } });
 
 describe("audit helpers", () => {
   it("tone is error for *_error and success for finished/done", () => {
@@ -23,7 +46,12 @@ describe("audit helpers", () => {
   });
 
   it("pretty decodes nested JSON-string fields", () => {
-    const out = pretty(ev({ kind: "harness_output", data: JSON.stringify({ line: JSON.stringify({ type: "assistant" }) }) }));
+    const out = pretty(
+      ev({
+        kind: "harness_output",
+        data: JSON.stringify({ line: JSON.stringify({ type: "assistant" }) }),
+      }),
+    );
     expect(out).toContain('"type": "assistant"');
     expect(out).not.toContain('\\"type\\"');
   });
@@ -31,21 +59,37 @@ describe("audit helpers", () => {
 
 describe("descriptor", () => {
   it("assistant text → 💬 assistant + text", () => {
-    const d = descriptor(ev({ kind: "harness_output", data: asst({ type: "text", text: "Let me check the state" }) }));
+    const d = descriptor(
+      ev({ kind: "harness_output", data: asst({ type: "text", text: "Let me check the state" }) }),
+    );
     expect(d.icon).toBe("💬");
     expect(d.label).toBe("assistant");
     expect(d.preview).toBe("Let me check the state");
   });
 
   it("assistant tool_use → 🔧 <ToolName> + salient arg", () => {
-    const d = descriptor(ev({ kind: "harness_output", data: asst({ type: "tool_use", name: "Bash", input: { command: "git status" } }) }));
+    const d = descriptor(
+      ev({
+        kind: "harness_output",
+        data: asst({ type: "tool_use", name: "Bash", input: { command: "git status" } }),
+      }),
+    );
     expect(d.icon).toBe("🔧");
     expect(d.label).toBe("Bash");
     expect(d.preview).toBe("git status");
   });
 
   it("user tool_result success → ✅ result, neutral", () => {
-    const d = descriptor(ev({ kind: "harness_output", data: usr({ type: "tool_result", content: "(Bash completed with no output)", is_error: false }) }));
+    const d = descriptor(
+      ev({
+        kind: "harness_output",
+        data: usr({
+          type: "tool_result",
+          content: "(Bash completed with no output)",
+          is_error: false,
+        }),
+      }),
+    );
     expect(d.icon).toBe("✅");
     expect(d.label).toBe("result");
     expect(d.preview).toBe("(Bash completed with no output)");
@@ -53,18 +97,33 @@ describe("descriptor", () => {
   });
 
   it("user tool_result error → ❌ result, error tone", () => {
-    const d = descriptor(ev({ kind: "harness_output", data: usr({ type: "tool_result", content: "boom", is_error: true }) }));
+    const d = descriptor(
+      ev({
+        kind: "harness_output",
+        data: usr({ type: "tool_result", content: "boom", is_error: true }),
+      }),
+    );
     expect(d.icon).toBe("❌");
     expect(d.tone).toBe("error");
   });
 
   it("tool_result with content array → joins text blocks", () => {
-    const d = descriptor(ev({ kind: "harness_output", data: usr({ type: "tool_result", content: [{ type: "text", text: "hello" }] }) }));
+    const d = descriptor(
+      ev({
+        kind: "harness_output",
+        data: usr({ type: "tool_result", content: [{ type: "text", text: "hello" }] }),
+      }),
+    );
     expect(d.preview).toBe("hello");
   });
 
   it("system/init → ⚙ session with model and cwd", () => {
-    const d = descriptor(ev({ kind: "harness_output", data: ho({ type: "system", subtype: "init", model: "claude-opus-4-8", cwd: "/repo" }) }));
+    const d = descriptor(
+      ev({
+        kind: "harness_output",
+        data: ho({ type: "system", subtype: "init", model: "claude-opus-4-8", cwd: "/repo" }),
+      }),
+    );
     expect(d.icon).toBe("⚙");
     expect(d.label).toBe("session");
     expect(d.preview).toContain("claude-opus-4-8");
@@ -72,29 +131,65 @@ describe("descriptor", () => {
   });
 
   it("system/hook_started → 🪝 hook + hook_name", () => {
-    const d = descriptor(ev({ kind: "harness_output", data: ho({ type: "system", subtype: "hook_started", hook_name: "SessionStart:startup" }) }));
+    const d = descriptor(
+      ev({
+        kind: "harness_output",
+        data: ho({ type: "system", subtype: "hook_started", hook_name: "SessionStart:startup" }),
+      }),
+    );
     expect(d.icon).toBe("🪝");
     expect(d.preview).toBe("SessionStart:startup");
   });
 
   it("rate_limit_event allowed → ⏳ neutral, limited → warn", () => {
-    const ok = descriptor(ev({ kind: "harness_output", data: ho({ type: "rate_limit_event", rate_limit_info: { status: "allowed" } }) }));
+    const ok = descriptor(
+      ev({
+        kind: "harness_output",
+        data: ho({ type: "rate_limit_event", rate_limit_info: { status: "allowed" } }),
+      }),
+    );
     expect(ok.icon).toBe("⏳");
     expect(ok.tone).toBe("neutral");
-    const lim = descriptor(ev({ kind: "harness_output", data: ho({ type: "rate_limit_event", rate_limit_info: { status: "rejected" } }) }));
+    const lim = descriptor(
+      ev({
+        kind: "harness_output",
+        data: ho({ type: "rate_limit_event", rate_limit_info: { status: "rejected" } }),
+      }),
+    );
     expect(lim.tone).toBe("warn");
   });
 
   it("iteration_started → ▶, iteration_finished success/error tone", () => {
-    expect(descriptor(ev({ kind: "iteration_started", data: JSON.stringify({ trigger: "manual" }) })).icon).toBe("▶");
-    expect(descriptor(ev({ kind: "iteration_finished", data: JSON.stringify({ status: "done" }) })).tone).toBe("success");
-    expect(descriptor(ev({ kind: "iteration_finished", data: JSON.stringify({ status: "harness_error" }) })).tone).toBe("error");
+    expect(
+      descriptor(ev({ kind: "iteration_started", data: JSON.stringify({ trigger: "manual" }) }))
+        .icon,
+    ).toBe("▶");
+    expect(
+      descriptor(ev({ kind: "iteration_finished", data: JSON.stringify({ status: "done" }) })).tone,
+    ).toBe("success");
+    expect(
+      descriptor(
+        ev({ kind: "iteration_finished", data: JSON.stringify({ status: "harness_error" }) }),
+      ).tone,
+    ).toBe("error");
   });
 
   it("launching_harness / status / shim_error", () => {
-    expect(descriptor(ev({ kind: "launching_harness", data: JSON.stringify({ harness: "claude", interactive: false }) })).preview).toBe("claude (batch)");
-    expect(descriptor(ev({ kind: "status", data: JSON.stringify({ message: "checking state" }) })).preview).toBe("checking state");
-    expect(descriptor(ev({ kind: "shim_error", data: JSON.stringify({ line: "oops" }) })).tone).toBe("error");
+    expect(
+      descriptor(
+        ev({
+          kind: "launching_harness",
+          data: JSON.stringify({ harness: "claude", interactive: false }),
+        }),
+      ).preview,
+    ).toBe("claude (batch)");
+    expect(
+      descriptor(ev({ kind: "status", data: JSON.stringify({ message: "checking state" }) }))
+        .preview,
+    ).toBe("checking state");
+    expect(
+      descriptor(ev({ kind: "shim_error", data: JSON.stringify({ line: "oops" }) })).tone,
+    ).toBe("error");
   });
 
   it("malformed data never throws → neutral fallback", () => {
@@ -127,8 +222,17 @@ describe("hhmmss", () => {
   });
 });
 
-const thinkTokens = (n: number): string => JSON.stringify({ line: JSON.stringify({ type: "system", subtype: "thinking_tokens", estimated_tokens: n }) });
-const thinkBlock = (): string => JSON.stringify({ line: JSON.stringify({ type: "assistant", message: { content: [{ type: "thinking", thinking: "" }] } }) });
+const thinkTokens = (n: number): string =>
+  JSON.stringify({
+    line: JSON.stringify({ type: "system", subtype: "thinking_tokens", estimated_tokens: n }),
+  });
+const thinkBlock = (): string =>
+  JSON.stringify({
+    line: JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "thinking", thinking: "" }] },
+    }),
+  });
 
 describe("collapseThinking", () => {
   it("empty → []", () => {
@@ -136,7 +240,9 @@ describe("collapseThinking", () => {
   });
 
   it("passes non-thinking events through as event rows", () => {
-    const rows = collapseThinking([ev({ seq: 1, kind: "status", data: JSON.stringify({ message: "hi" }) })]);
+    const rows = collapseThinking([
+      ev({ seq: 1, kind: "status", data: JSON.stringify({ message: "hi" }) }),
+    ]);
     expect(rows).toEqual([{ kind: "event", key: 1, event: expect.objectContaining({ seq: 1 }) }]);
   });
 
@@ -172,12 +278,22 @@ describe("fmtTokens", () => {
   });
 });
 
-const call = (seq: number, ts: string): Call =>
-  ({ seq, ts, provider: "anthropic", model: "m", instructions: "S", instructions_changed: seq === 0, delta: [], response: { blocks: [] } });
+const call = (seq: number, ts: string): Call => ({
+  seq,
+  ts,
+  provider: "anthropic",
+  model: "m",
+  instructions: "S",
+  instructions_changed: seq === 0,
+  delta: [],
+  response: { blocks: [] },
+});
 
 describe("hasHarnessOutput", () => {
   it("true when a harness_output event exists", () => {
-    expect(hasHarnessOutput([ev({ seq: 1, kind: "harness_output", at: "2026-07-10T00:00:01Z" })])).toBe(true);
+    expect(
+      hasHarnessOutput([ev({ seq: 1, kind: "harness_output", at: "2026-07-10T00:00:01Z" })]),
+    ).toBe(true);
   });
   it("false for interactive (no harness_output)", () => {
     expect(hasHarnessOutput([ev({ seq: 1, kind: "shim", at: "t" })])).toBe(false);
@@ -209,7 +325,12 @@ describe("mergeProxyCalls", () => {
 
   it("uses events[0].at for thinking rows when sorting", () => {
     const rows: DisplayRow[] = [
-      { kind: "thinking", key: 1, events: [ev({ seq: 1, at: "2026-07-10T00:00:01Z" })], tokens: 10 },
+      {
+        kind: "thinking",
+        key: 1,
+        events: [ev({ seq: 1, at: "2026-07-10T00:00:01Z" })],
+        tokens: 10,
+      },
     ];
     const merged = mergeProxyCalls(rows, [call(5, "2026-07-10T00:00:00Z")], "full");
     expect(merged.map((r) => r.kind)).toEqual(["proxycall", "thinking"]);
@@ -242,11 +363,24 @@ describe("mergeProxyCalls", () => {
 
 describe("harness error reasons", () => {
   it("shows the iteration_finished error next to its status", () => {
-    const d = descriptor(ev({ kind: "iteration_finished", data: JSON.stringify({ status: "harness_error", error: "spawn shim: chdir /x: no such file or directory" }) }));
+    const d = descriptor(
+      ev({
+        kind: "iteration_finished",
+        data: JSON.stringify({
+          status: "harness_error",
+          error: "spawn shim: chdir /x: no such file or directory",
+        }),
+      }),
+    );
     expect(d.preview).toBe("harness_error: spawn shim: chdir /x: no such file or directory");
   });
   it("shows the shim_error error field", () => {
-    const d = descriptor(ev({ kind: "shim_error", data: JSON.stringify({ error: "chdir /x: no such file or directory" }) }));
+    const d = descriptor(
+      ev({
+        kind: "shim_error",
+        data: JSON.stringify({ error: "chdir /x: no such file or directory" }),
+      }),
+    );
     expect(d.preview).toBe("chdir /x: no such file or directory");
   });
 });

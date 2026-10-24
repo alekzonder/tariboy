@@ -20,5 +20,7 @@ export function ApiProvider(props: ApiProviderProps) {
   const override = props.client;
   // oxlint-disable-next-line react/exhaustive-deps -- keyed by identity on purpose: an equal target keeps the same client
   const created = useMemo(() => (override ? null : createApi(target)), [override, identity]);
-  return <ApiContext.Provider value={props.client ?? created}>{props.children}</ApiContext.Provider>;
+  return (
+    <ApiContext.Provider value={props.client ?? created}>{props.children}</ApiContext.Provider>
+  );
 }

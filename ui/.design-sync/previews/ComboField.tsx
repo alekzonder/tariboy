@@ -36,7 +36,12 @@ export const InOverviewHeader = () => (
   >
     <div style={{ display: "flex", flexDirection: "column", gap: 2, marginRight: "auto" }}>
       <span style={{ fontSize: 14, fontWeight: 600 }}>builder</span>
-      <span style={{ font: "12px ui-monospace, SFMono-Regular, Menlo, monospace", color: "var(--muted-foreground)" }}>
+      <span
+        style={{
+          font: "12px ui-monospace, SFMono-Regular, Menlo, monospace",
+          color: "var(--muted-foreground)",
+        }}
+      >
         claude · TB-142
       </span>
     </div>

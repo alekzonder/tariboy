@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAgentName } from "@/lib/agent";
-import {
-  ApiError,
-  type AgentPromptLayer,
-} from "@/lib/api";
+import { ApiError, type AgentPromptLayer } from "@/lib/api";
 import { guard } from "@/lib/toast-guard";
 import { useApi } from "@/components/apiContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,17 +11,38 @@ function UserPromptEditor({ name }: { name: string }) {
   const api = useApi();
   const [text, setText] = useState("");
   useEffect(() => {
-    void api.agents.agentUserPromptGet(name).then((r) => setText(r.user_prompt)).catch(() => setText(""));
+    void api.agents
+      .agentUserPromptGet(name)
+      .then((r) => setText(r.user_prompt))
+      .catch(() => setText(""));
   }, [api, name]);
   return (
     <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-base">User prompt</CardTitle></CardHeader>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">User prompt</CardTitle>
+      </CardHeader>
       <CardContent className="space-y-2">
-        <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} className="font-mono text-xs" />
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={6}
+          className="font-mono text-xs"
+        />
         <div className="flex gap-2">
-          <Button size="sm" onClick={() => guard("user-prompt", () => api.agents.agentUserPromptSet(name, text))}>Save prompt</Button>
-          <Button size="sm" variant="secondary"
-            onClick={() => { setText(""); void guard("user-prompt", () => api.agents.agentUserPromptSet(name, "")); }}>
+          <Button
+            size="sm"
+            onClick={() => guard("user-prompt", () => api.agents.agentUserPromptSet(name, text))}
+          >
+            Save prompt
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              setText("");
+              void guard("user-prompt", () => api.agents.agentUserPromptSet(name, ""));
+            }}
+          >
             Clear
           </Button>
         </div>
@@ -39,13 +57,20 @@ function PromptPreview({ name }: { name: string }) {
   const [layers, setLayers] = useState<AgentPromptLayer[]>([]);
   const [error, setError] = useState("");
   useEffect(() => {
-    void api.agents.agentPromptGet(name)
-      .then((r) => { setPrompt(r.prompt); setLayers(r.layers ?? []); setError(""); })
+    void api.agents
+      .agentPromptGet(name)
+      .then((r) => {
+        setPrompt(r.prompt);
+        setLayers(r.layers ?? []);
+        setError("");
+      })
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   }, [api, name]);
   return (
     <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-base">Prompt preview</CardTitle></CardHeader>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Prompt preview</CardTitle>
+      </CardHeader>
       <CardContent className="space-y-2">
         {error ? (
           <p className="text-xs text-muted-foreground">{error}</p>
@@ -56,15 +81,22 @@ function PromptPreview({ name }: { name: string }) {
               <ul className="text-xs text-muted-foreground">
                 {layers.map((layer, index) => {
                   if ("name" in layer) {
-                    return <li key={`${index}-${layer.name}`}>{layer.name} — {layer.sha256.slice(0, 12)}</li>;
+                    return (
+                      <li key={`${index}-${layer.name}`}>
+                        {layer.name} — {layer.sha256.slice(0, 12)}
+                      </li>
+                    );
                   }
                   if (layer.kind === "runtime") {
-                    return <li key={`${index}-runtime-${layer.runtime}`}>runtime — {layer.runtime}</li>;
+                    return (
+                      <li key={`${index}-runtime-${layer.runtime}`}>runtime — {layer.runtime}</li>
+                    );
                   }
                   const label = layer.source ?? layer.archive_path ?? `file ${index + 1}`;
                   return (
                     <li key={`${index}-file-${label}`}>
-                      {label}{layer.sha256 ? ` — ${layer.sha256.slice(0, 12)}` : ""}
+                      {label}
+                      {layer.sha256 ? ` — ${layer.sha256.slice(0, 12)}` : ""}
                     </li>
                   );
                 })}

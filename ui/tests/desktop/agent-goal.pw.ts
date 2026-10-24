@@ -28,28 +28,58 @@ test("configures an agent goal and task release fields", async ({ desktop, deskt
     return true;
   `);
   desktopWorker.registerAgentForCleanup("worker");
-  await expect.poll(() => desktop.execute<string>("return window.__agentGoalSetup || '';"), {
-    timeout: 60_000,
-  }).toBe("ready");
-  await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("worker");
-  await desktop.execute(`window.location.hash = "#/agents/local/worker/configuration"; return true;`);
-  await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("Current goal");
-  await expect.poll(() => desktop.execute<string>(`
+  await expect
+    .poll(() => desktop.execute<string>("return window.__agentGoalSetup || '';"), {
+      timeout: 60_000,
+    })
+    .toBe("ready");
+  await expect
+    .poll(() => desktop.execute<string>("return document.body.innerText"))
+    .toContain("worker");
+  await desktop.execute(
+    `window.location.hash = "#/agents/local/worker/configuration"; return true;`,
+  );
+  await expect
+    .poll(() => desktop.execute<string>("return document.body.innerText"))
+    .toContain("Current goal");
+  await expect
+    .poll(
+      () =>
+        desktop.execute<string>(`
     return document.querySelector("#current-goal-task")?.value || "";
-  `), { timeout: 30_000 }).toBe("TARI-1");
+  `),
+      { timeout: 30_000 },
+    )
+    .toBe("TARI-1");
 
   await desktop.elementClick(await desktop.findElement("css selector", "#goal-enabled"));
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Save']"));
-  await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("All changes saved");
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Save']"),
+  );
+  await expect
+    .poll(() => desktop.execute<string>("return document.body.innerText"))
+    .toContain("All changes saved");
   await desktop.execute(`window.location.hash = "#/servers/local/tasks"; return true;`);
-  await desktop.execute(`window.location.hash = "#/agents/local/worker/configuration"; return true;`);
-  await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("Current goal");
-  await expect.poll(() => desktop.execute<boolean>(`
+  await desktop.execute(
+    `window.location.hash = "#/agents/local/worker/configuration"; return true;`,
+  );
+  await expect
+    .poll(() => desktop.execute<string>("return document.body.innerText"))
+    .toContain("Current goal");
+  await expect
+    .poll(() =>
+      desktop.execute<boolean>(`
     return document.querySelector("#goal-enabled")?.getAttribute("data-state") === "unchecked";
-  `)).toBe(true);
-  await expect.poll(() => desktop.execute<string>(`
+  `),
+    )
+    .toBe(true);
+  await expect
+    .poll(() =>
+      desktop.execute<string>(`
     return document.querySelector("#current-goal-task")?.value || "";
-  `)).toBe("No current goal");
+  `),
+    )
+    .toBe("No current goal");
 
   await desktop.elementClick(await desktop.findElement("css selector", "#goal-enabled"));
   await desktop.execute(`
@@ -58,20 +88,42 @@ test("configures an agent goal and task release fields", async ({ desktop, deskt
     input.dispatchEvent(new Event("input", { bubbles: true }));
     return true;
   `);
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Save']"));
-  await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("All changes saved");
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Save']"),
+  );
+  await expect
+    .poll(() => desktop.execute<string>("return document.body.innerText"))
+    .toContain("All changes saved");
   await desktop.execute(`window.location.hash = "#/servers/local/tasks"; return true;`);
-  await desktop.execute(`window.location.hash = "#/agents/local/worker/configuration"; return true;`);
-  await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("Current goal");
-  await expect.poll(() => desktop.execute<boolean>(`
+  await desktop.execute(
+    `window.location.hash = "#/agents/local/worker/configuration"; return true;`,
+  );
+  await expect
+    .poll(() => desktop.execute<string>("return document.body.innerText"))
+    .toContain("Current goal");
+  await expect
+    .poll(() =>
+      desktop.execute<boolean>(`
     return document.querySelector("#goal-enabled")?.getAttribute("data-state") === "checked";
-  `)).toBe(true);
-  await expect.poll(() => desktop.execute<string>(`
+  `),
+    )
+    .toBe(true);
+  await expect
+    .poll(() =>
+      desktop.execute<string>(`
     return document.querySelector("#goal-wait-customer-timeout")?.value || "";
-  `)).toBe("120");
-  await expect.poll(() => desktop.execute<string>(`
+  `),
+    )
+    .toBe("120");
+  await expect
+    .poll(
+      () =>
+        desktop.execute<string>(`
     return document.querySelector("#current-goal-task")?.value || "";
-  `), { timeout: 30_000 }).toBe("TARI-1");
+  `),
+      { timeout: 30_000 },
+    )
+    .toBe("TARI-1");
 
   await desktop.execute(`
     window.__agentGoalPR = "saving";
@@ -97,22 +149,40 @@ test("configures an agent goal and task release fields", async ({ desktop, deskt
       .catch((error) => { window.__agentGoalPR = "error: " + String(error); });
     return true;
   `);
-  await expect.poll(() => desktop.execute<string>("return window.__agentGoalPR || '';"), {
-    timeout: 30_000,
-  }).toBe("saved");
+  await expect
+    .poll(() => desktop.execute<string>("return window.__agentGoalPR || '';"), {
+      timeout: 30_000,
+    })
+    .toBe("saved");
 
   await desktop.execute(`window.location.hash = "#/servers/local/tasks"; return true;`);
-  await desktop.execute(`window.location.hash = "#/agents/local/worker/configuration"; return true;`);
-  await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("Current goal");
-  await expect.poll(() => desktop.execute<string>(`
+  await desktop.execute(
+    `window.location.hash = "#/agents/local/worker/configuration"; return true;`,
+  );
+  await expect
+    .poll(() => desktop.execute<string>("return document.body.innerText"))
+    .toContain("Current goal");
+  await expect
+    .poll(
+      () =>
+        desktop.execute<string>(`
     return document.querySelector("#current-goal-task")?.value || "";
-  `), { timeout: 30_000 }).toBe("No current goal");
+  `),
+      { timeout: 30_000 },
+    )
+    .toBe("No current goal");
 
   await desktop.execute(`window.location.hash = "#/servers/local/tasks?task=TARI-1"; return true;`);
-  await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("TARI-1");
-  await expect.poll(() => desktop.execute<string>(`
+  await expect
+    .poll(() => desktop.execute<string>("return document.body.innerText"))
+    .toContain("TARI-1");
+  await expect
+    .poll(() =>
+      desktop.execute<string>(`
     return [...document.querySelectorAll(".task-detail-panel label")]
       .find((label) => label.textContent.trim().startsWith("Pull request URL"))
       ?.querySelector("input")?.value || "";
-  `)).toBe("https://github.com/acme/tariboy/pull/43");
+  `),
+    )
+    .toBe("https://github.com/acme/tariboy/pull/43");
 });

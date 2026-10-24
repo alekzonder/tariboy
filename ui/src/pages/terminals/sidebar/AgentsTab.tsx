@@ -6,7 +6,11 @@ import type { SidebarAgent } from "./sidebarModel";
  * pinned on top, then whoever is calling for a person. The separator only
  * appears when there is something pinned to separate.
  */
-export function AgentsTab({ pinned, rest, actions }: {
+export function AgentsTab({
+  pinned,
+  rest,
+  actions,
+}: {
   pinned: SidebarAgent[];
   rest: SidebarAgent[];
   actions: AgentRowActions;
@@ -16,11 +20,18 @@ export function AgentsTab({ pinned, rest, actions }: {
   }
   return (
     <div className="pt-1.5">
-      {pinned.map((row) => <SidebarAgentRow key={row.key} row={row} actions={actions} />)}
+      {pinned.map((row) => (
+        <SidebarAgentRow key={row.key} row={row} actions={actions} />
+      ))}
       {pinned.length > 0 && (
-        <div aria-hidden="true" className="mx-3.5 my-2.5 h-px bg-[color-mix(in_oklab,var(--border)_55%,transparent)]" />
+        <div
+          aria-hidden="true"
+          className="mx-3.5 my-2.5 h-px bg-[color-mix(in_oklab,var(--border)_55%,transparent)]"
+        />
       )}
-      {rest.map((row) => <SidebarAgentRow key={row.key} row={row} actions={actions} />)}
+      {rest.map((row) => (
+        <SidebarAgentRow key={row.key} row={row} actions={actions} />
+      ))}
     </div>
   );
 }

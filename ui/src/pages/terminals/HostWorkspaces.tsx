@@ -37,7 +37,11 @@ function hostsIn(state: WorkspacesState, hosts: WorkspaceHost[], id: string) {
 }
 
 /** Titlebar control: the current workspace and a menu to switch or manage. */
-export function WorkspaceSwitcher({ hosts, onSelect, onManage }: {
+export function WorkspaceSwitcher({
+  hosts,
+  onSelect,
+  onManage,
+}: {
   hosts: WorkspaceHost[];
   onSelect: (id: string) => void;
   /** Opens the manager on the current workspace; `focusNew` for "New workspace…". */
@@ -94,9 +98,11 @@ export function WorkspaceSwitcher({ hosts, onSelect, onManage }: {
             <span className="text-[11.5px] text-muted-foreground tabular-nums">
               {hostCount(hostsIn(state, hosts, workspace.id).length)}
             </span>
-            {workspace.id === state.active
-              ? <Check aria-hidden="true" className="size-3 text-primary" />
-              : <span aria-hidden="true" className="w-3" />}
+            {workspace.id === state.active ? (
+              <Check aria-hidden="true" className="size-3 text-primary" />
+            ) : (
+              <span aria-hidden="true" className="w-3" />
+            )}
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator className="mx-[3px] my-1" />
@@ -115,7 +121,13 @@ export function WorkspaceSwitcher({ hosts, onSelect, onManage }: {
 
 /** Create, rename and delete workspaces, and move hosts between them. The
  *  caller remounts it (via `open`) so each opening starts on `initialId`. */
-export function WorkspaceManager({ hosts, open, initialId, focusNew, onOpenChange }: {
+export function WorkspaceManager({
+  hosts,
+  open,
+  initialId,
+  focusNew,
+  onOpenChange,
+}: {
   hosts: WorkspaceHost[];
   open: boolean;
   initialId: string;
@@ -129,7 +141,11 @@ export function WorkspaceManager({ hosts, open, initialId, focusNew, onOpenChang
   );
 }
 
-function ManagerBody({ hosts, initialId, focusNew }: {
+function ManagerBody({
+  hosts,
+  initialId,
+  focusNew,
+}: {
   hosts: WorkspaceHost[];
   initialId: string;
   focusNew: boolean;
@@ -197,12 +213,16 @@ function ManagerBody({ hosts, initialId, focusNew }: {
               ref={newNameRef}
               value={newName}
               onChange={(event) => setNewName(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter") create(); }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") create();
+              }}
               placeholder="New workspace name"
               aria-label="New workspace name"
               className="h-7 min-w-0 rounded-[8px] bg-muted px-[9px] text-[12.5px] outline-none placeholder:text-muted-foreground"
             />
-            <Button size="sm" variant="secondary" onClick={create}>Create workspace</Button>
+            <Button size="sm" variant="secondary" onClick={create}>
+              Create workspace
+            </Button>
           </div>
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
@@ -215,7 +235,9 @@ function ManagerBody({ hosts, initialId, focusNew }: {
                   <span className="inline-flex h-[18px] items-center rounded-[5px] bg-primary/12 px-1.5 text-[10.5px] font-medium text-primary">
                     built-in
                   </span>
-                  <span className="text-[12px] text-muted-foreground">Can't be renamed or deleted.</span>
+                  <span className="text-[12px] text-muted-foreground">
+                    Can't be renamed or deleted.
+                  </span>
                 </div>
               ) : (
                 <NameInput key={selected.id} id={selected.id} name={selected.name} />
@@ -238,15 +260,21 @@ function ManagerBody({ hosts, initialId, focusNew }: {
                         host.ready ? "bg-status-running" : "bg-status-stopped",
                       )}
                     />
-                    <span className="min-w-0 flex-1 truncate font-mono text-[12px] font-medium">{host.label}</span>
-                    <span className="text-[12px] text-muted-foreground">{host.ready ? "ready" : "offline"}</span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-[12px] font-medium">
+                      {host.label}
+                    </span>
+                    <span className="text-[12px] text-muted-foreground">
+                      {host.ready ? "ready" : "offline"}
+                    </span>
                     {state.workspaces.length > 1 && (
                       <button
                         type="button"
                         aria-label={`Move ${host.label} to…`}
                         aria-expanded={moving === host.id}
                         title="Move to workspace"
-                        onClick={() => setMoving((current) => current === host.id ? null : host.id)}
+                        onClick={() =>
+                          setMoving((current) => (current === host.id ? null : host.id))
+                        }
                         className="inline-flex h-6 shrink-0 items-center gap-1 rounded-[7px] border px-2 text-[12px] hover:bg-accent"
                       >
                         <ArrowLeftRight aria-hidden="true" className="size-3" />
@@ -256,19 +284,21 @@ function ManagerBody({ hosts, initialId, focusNew }: {
                   </div>
                   {moving === host.id && (
                     <div className="flex flex-wrap items-center gap-1 rounded-[8px] bg-muted px-[7px] py-1.5">
-                      {state.workspaces.filter((w) => w.id !== selected.id).map((target) => (
-                        <button
-                          key={target.id}
-                          type="button"
-                          onClick={() => {
-                            moveHost(host.id, target.id);
-                            setMoving(null);
-                          }}
-                          className="h-6 rounded-[6px] border bg-card px-[9px] text-[12px] hover:border-ring"
-                        >
-                          {target.name}
-                        </button>
-                      ))}
+                      {state.workspaces
+                        .filter((w) => w.id !== selected.id)
+                        .map((target) => (
+                          <button
+                            key={target.id}
+                            type="button"
+                            onClick={() => {
+                              moveHost(host.id, target.id);
+                              setMoving(null);
+                            }}
+                            className="h-6 rounded-[6px] border bg-card px-[9px] text-[12px] hover:border-ring"
+                          >
+                            {target.name}
+                          </button>
+                        ))}
                     </div>
                   )}
                 </div>
@@ -282,7 +312,9 @@ function ManagerBody({ hosts, initialId, focusNew }: {
                   <span className="min-w-0 flex-1 text-[12.5px]">
                     Delete {selected.name}? Its hosts move to Default.
                   </span>
-                  <Button size="sm" variant="secondary" onClick={() => setConfirming(false)}>Cancel</Button>
+                  <Button size="sm" variant="secondary" onClick={() => setConfirming(false)}>
+                    Cancel
+                  </Button>
                   <Button
                     size="sm"
                     variant="destructive"

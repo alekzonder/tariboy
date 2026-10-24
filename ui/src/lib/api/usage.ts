@@ -23,7 +23,10 @@ export function usageApi(t: Transport) {
       return t.agentGet<AgentUsageReport>(name, `usage${s ? `?${s}` : ""}`);
     },
     // Work on tasks in a window; without agent, server-wide.
-    getTaskActivity: (params: { since: string; until: string; agent?: string }, signal?: AbortSignal) => {
+    getTaskActivity: (
+      params: { since: string; until: string; agent?: string },
+      signal?: AbortSignal,
+    ) => {
       const q = new URLSearchParams({ since: params.since, until: params.until });
       if (params.agent) q.set("agent", params.agent);
       return t.request<TaskActivityReport>("GET", `/api/task-activity?${q}`, undefined, signal);

@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import {
-  storeApi, StoreApiError, setToken, clearToken, hasToken,
-  getInfo, listRepos, getTags, getManifest, probeAuth,
+  storeApi,
+  StoreApiError,
+  setToken,
+  clearToken,
+  hasToken,
+  getInfo,
+  listRepos,
+  getTags,
+  getManifest,
+  probeAuth,
 } from "./storeApi";
 
 function mockFetch(status: number, body: unknown, capture?: (init: RequestInit) => void) {
@@ -20,7 +28,10 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("storeApi envelope + bearer", () => {
   it("unwraps result on ok:true", async () => {
-    vi.stubGlobal("fetch", mockFetch(200, { ok: true, result: { version: "9.9", anon_pull: true } }));
+    vi.stubGlobal(
+      "fetch",
+      mockFetch(200, { ok: true, result: { version: "9.9", anon_pull: true } }),
+    );
     const r = await getInfo();
     expect(r.version).toBe("9.9");
     expect(r.anon_pull).toBe(true);
@@ -28,7 +39,10 @@ describe("storeApi envelope + bearer", () => {
 
   it("injects Authorization: Bearer when a token is set", async () => {
     let seen: RequestInit = {};
-    vi.stubGlobal("fetch", mockFetch(200, { ok: true, result: { repos: [], count: 0 } }, (i) => (seen = i)));
+    vi.stubGlobal(
+      "fetch",
+      mockFetch(200, { ok: true, result: { repos: [], count: 0 } }, (i) => (seen = i)),
+    );
     setToken("s3cr3t");
     await listRepos();
     const h = seen.headers as Record<string, string>;
@@ -38,16 +52,24 @@ describe("storeApi envelope + bearer", () => {
 
   it("sends no Authorization header when no token is set", async () => {
     let seen: RequestInit = {};
-    vi.stubGlobal("fetch", mockFetch(200, { ok: true, result: { repos: [], count: 0 } }, (i) => (seen = i)));
+    vi.stubGlobal(
+      "fetch",
+      mockFetch(200, { ok: true, result: { repos: [], count: 0 } }, (i) => (seen = i)),
+    );
     await listRepos();
     const h = (seen.headers as Record<string, string>) ?? {};
     expect(h["Authorization"]).toBeUndefined();
   });
 
   it("throws StoreApiError with status+code on ok:false", async () => {
-    vi.stubGlobal("fetch", mockFetch(401, { ok: false, error: { code: "unauthorized", message: "nope" } }));
+    vi.stubGlobal(
+      "fetch",
+      mockFetch(401, { ok: false, error: { code: "unauthorized", message: "nope" } }),
+    );
     await expect(storeApi("GET", "/v1/images")).rejects.toMatchObject({
-      status: 401, code: "unauthorized", message: "nope",
+      status: 401,
+      code: "unauthorized",
+      message: "nope",
     });
   });
 
@@ -58,7 +80,10 @@ describe("storeApi envelope + bearer", () => {
 
   it("never sends Authorization on /v1/info, even when a token is set", async () => {
     let seen: RequestInit = {};
-    vi.stubGlobal("fetch", mockFetch(200, { ok: true, result: { version: "1.0", anon_pull: false } }, (i) => (seen = i)));
+    vi.stubGlobal(
+      "fetch",
+      mockFetch(200, { ok: true, result: { version: "1.0", anon_pull: false } }, (i) => (seen = i)),
+    );
     setToken("s3cr3t");
     await getInfo();
     const h = (seen.headers as Record<string, string>) ?? {};
@@ -88,7 +113,19 @@ describe("storeApi envelope + bearer", () => {
       "fetch",
       mockFetch(200, {
         ok: true,
-        result: { schema_version: 1, name: "x", tag: "latest", built_at: "t", parents: [], plugins: [], requires_secrets: [], harness: { type: "cli", interactive: false }, env: {}, policy: {}, layers: [] },
+        result: {
+          schema_version: 1,
+          name: "x",
+          tag: "latest",
+          built_at: "t",
+          parents: [],
+          plugins: [],
+          requires_secrets: [],
+          harness: { type: "cli", interactive: false },
+          env: {},
+          policy: {},
+          layers: [],
+        },
       }),
     );
     const m = await getManifest("x", "latest");
@@ -103,7 +140,10 @@ describe("probeAuth", () => {
     expect(await probeAuth()).toBe(true);
   });
   it("returns false on 401/403", async () => {
-    vi.stubGlobal("fetch", mockFetch(401, { ok: false, error: { code: "unauthorized", message: "x" } }));
+    vi.stubGlobal(
+      "fetch",
+      mockFetch(401, { ok: false, error: { code: "unauthorized", message: "x" } }),
+    );
     expect(await probeAuth()).toBe(false);
   });
   it("rethrows non-auth errors", async () => {

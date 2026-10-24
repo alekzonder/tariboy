@@ -45,7 +45,8 @@ function stringField(record: Record<string, unknown> | undefined, field: string)
 /** Every task the message is about: the key the daemon attached to it first,
  *  then any key written in its text, each listed once. */
 export function taskKeysOf(message: ChatMessage): string[] {
-  const attached = stringField(message.data, "task_key") || stringField(message.subject, "task_key");
+  const attached =
+    stringField(message.data, "task_key") || stringField(message.subject, "task_key");
   return [...new Set([attached, ...(message.text.match(TASK_KEY) ?? [])].filter(Boolean))];
 }
 
@@ -68,7 +69,8 @@ function dayKey(iso: string, now: Date): { key: string; label: string } {
   return {
     key,
     label: at.toLocaleDateString(undefined, {
-      day: "numeric", month: "short",
+      day: "numeric",
+      month: "short",
       ...(at.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
     }),
   };
@@ -84,7 +86,10 @@ export function shortTime(iso: string): string {
  *  after the mark. A system notice addressed to the agent is not from a
  *  participant, so it never is. */
 function isUnread(
-  message: ChatMessage, customer: string, readTS: string, participants: readonly string[],
+  message: ChatMessage,
+  customer: string,
+  readTS: string,
+  participants: readonly string[],
 ): boolean {
   return message.from !== customer && message.ts > readTS && participants.includes(message.from);
 }
@@ -95,7 +100,10 @@ function isUnread(
  *  agent sent is new. That is the same rule the daemon counts by, which is what
  *  keeps this number equal to the sidebar's. */
 export function unreadCount(
-  messages: ChatMessage[], customer: string, readTS: string, participants: readonly string[],
+  messages: ChatMessage[],
+  customer: string,
+  readTS: string,
+  participants: readonly string[],
 ): number {
   return messages.filter((message) => isUnread(message, customer, readTS, participants)).length;
 }
@@ -118,8 +126,8 @@ export function buildFeed(
   now: Date = new Date(),
 ): FeedItem[] {
   const items: FeedItem[] = [];
-  const firstUnread = messages.findIndex(
-    (message) => isUnread(message, customer, readTS, participants),
+  const firstUnread = messages.findIndex((message) =>
+    isUnread(message, customer, readTS, participants),
   );
   let day = "";
   let previousAuthor = "";
@@ -134,7 +142,8 @@ export function buildFeed(
       const count = messages.length - index;
       previousAuthor = "";
       items.push({
-        kind: "unread", id: "unread",
+        kind: "unread",
+        id: "unread",
         label: `${count} new message${count === 1 ? "" : "s"}`,
       });
     }
@@ -147,17 +156,20 @@ export function buildFeed(
     // One label per run of own messages: the label belongs to the last read
     // one, so a burst of three messages reports being read once.
     const nextMine = messages[index + 1];
-    const runEnds = !nextMine || nextMine.from !== customer
-      || !messages.find((later) => later.from !== customer && later.ts > nextMine.ts);
+    const runEnds =
+      !nextMine ||
+      nextMine.from !== customer ||
+      !messages.find((later) => later.from !== customer && later.ts > nextMine.ts);
     items.push({
       kind: "message",
       message,
       mine,
       head: message.from !== previousAuthor,
       receipt: mine ? (answer ? "read" : "delivered") : undefined,
-      readLabel: mine && answer && runEnds
-        ? `Read by ${principalName(answer.from)} · ${shortTime(answer.ts)}`
-        : undefined,
+      readLabel:
+        mine && answer && runEnds
+          ? `Read by ${principalName(answer.from)} · ${shortTime(answer.ts)}`
+          : undefined,
     });
     previousAuthor = message.from;
   });

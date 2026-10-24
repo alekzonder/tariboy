@@ -1,8 +1,4 @@
-import {
-  closestCenter,
-  pointerWithin,
-  type Announcements,
-} from "@dnd-kit/core";
+import { closestCenter, pointerWithin, type Announcements } from "@dnd-kit/core";
 
 export type ReorderKind = "servers" | "groups" | "agents";
 export type DragIdentity = [ReorderKind, string, string, string?, string?];
@@ -20,21 +16,21 @@ const readableDragId = (id: string | number) => {
 export const rowCollision: typeof closestCenter = (args) => {
   const source = identityFor(args.active.id);
   const droppableContainers = args.droppableContainers.filter((container) =>
-    sameScope(source, identityFor(container.id))
+    sameScope(source, identityFor(container.id)),
   );
   const compatibleArgs = { ...args, droppableContainers };
-  return args.pointerCoordinates
-    ? pointerWithin(compatibleArgs)
-    : closestCenter(compatibleArgs);
+  return args.pointerCoordinates ? pointerWithin(compatibleArgs) : closestCenter(compatibleArgs);
 };
 
 export const sidebarAnnouncements: Announcements = {
   onDragStart: ({ active }) => `Picked up ${readableDragId(active.id)}.`,
-  onDragOver: ({ active, over }) => over
-    ? `${readableDragId(active.id)} is over ${readableDragId(over.id)}.`
-    : `${readableDragId(active.id)} is not over a compatible row.`,
-  onDragEnd: ({ active, over }) => over && active.id !== over.id
-    ? `Moved ${readableDragId(active.id)} to ${readableDragId(over.id)}.`
-    : `Did not move ${readableDragId(active.id)}.`,
+  onDragOver: ({ active, over }) =>
+    over
+      ? `${readableDragId(active.id)} is over ${readableDragId(over.id)}.`
+      : `${readableDragId(active.id)} is not over a compatible row.`,
+  onDragEnd: ({ active, over }) =>
+    over && active.id !== over.id
+      ? `Moved ${readableDragId(active.id)} to ${readableDragId(over.id)}.`
+      : `Did not move ${readableDragId(active.id)}.`,
   onDragCancel: ({ active }) => `Cancelled moving ${readableDragId(active.id)}.`,
 };

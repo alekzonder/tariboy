@@ -8,17 +8,9 @@ export function LoopSection({
   draft,
   updateDraft,
   formDisabled,
-}: Pick<
-  CreateAgentForm,
-  | "draft"
-  | "updateDraft"
-  | "formDisabled"
->) {
+}: Pick<CreateAgentForm, "draft" | "updateDraft" | "formDisabled">) {
   return (
-    <section
-      aria-labelledby="create-agent-loop-section"
-      className="space-y-3 rounded border p-3"
-    >
+    <section aria-labelledby="create-agent-loop-section" className="space-y-3 rounded border p-3">
       <h3 id="create-agent-loop-section" className="font-medium">
         Loop
       </h3>
@@ -69,25 +61,15 @@ export function LoopSection({
           disabled={formDisabled}
           min={0}
         />
-        <MessagesFields
-          draft={draft}
-          updateDraft={updateDraft}
-          formDisabled={formDisabled}
-        />
+        <MessagesFields draft={draft} updateDraft={updateDraft} formDisabled={formDisabled} />
       </div>
-      <GoalFields
-        draft={draft}
-        updateDraft={updateDraft}
-        formDisabled={formDisabled}
-      />
+      <GoalFields draft={draft} updateDraft={updateDraft} formDisabled={formDisabled} />
       <Field label="standing user prompt" id="create-agent-user-prompt">
         <Textarea
           id="create-agent-user-prompt"
           aria-label="standing user prompt"
           value={draft.userPrompt}
-          onChange={(event) =>
-            updateDraft("userPrompt", event.target.value)
-          }
+          onChange={(event) => updateDraft("userPrompt", event.target.value)}
           disabled={formDisabled}
         />
       </Field>

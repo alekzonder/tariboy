@@ -26,22 +26,36 @@ export default function App() {
   const [version, setVersion] = useState("");
 
   // The gate starts at "loading"; a re-check after login or logout sets it first.
-  const evaluate = useCallback(() => checkGate().then((next) => {
-    if (next.version !== undefined) setVersion(next.version);
-    setGate(next.gate);
-  }), []);
+  const evaluate = useCallback(
+    () =>
+      checkGate().then((next) => {
+        if (next.version !== undefined) setVersion(next.version);
+        setGate(next.gate);
+      }),
+    [],
+  );
 
   useEffect(() => {
     void evaluate();
   }, [evaluate]);
 
   if (gate === "loading") return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
-  if (gate === "login") return <Login onAuthed={() => { setGate("loading"); void evaluate(); }} />;
+  if (gate === "login")
+    return (
+      <Login
+        onAuthed={() => {
+          setGate("loading");
+          void evaluate();
+        }}
+      />
+    );
 
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center justify-between border-b px-4 py-2">
-        <a href="/" className="font-semibold">tariboy-store</a>
+        <a href="/" className="font-semibold">
+          tariboy-store
+        </a>
         <div className="flex items-center gap-2">
           {version && <span className="text-xs text-muted-foreground">v{version}</span>}
           {hasToken() && (

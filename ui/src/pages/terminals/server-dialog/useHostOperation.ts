@@ -33,14 +33,15 @@ export function useHostOperation(
   const [output, setOutput] = useState<HostOutputEvent[]>([]);
   const [prompt, setPrompt] = useState<HostOutputEvent | null>(null);
   const onSavedRef = useRef(onSaved);
-  const updateOperation = useCallback((
-    update: HostOperation | ((current: HostOperation) => HostOperation),
-  ) => {
-    const current = operationRef.current;
-    const next = typeof update === "function" ? update(current) : update;
-    operationRef.current = next;
-    setOperation(next);
-  }, []);
+  const updateOperation = useCallback(
+    (update: HostOperation | ((current: HostOperation) => HostOperation)) => {
+      const current = operationRef.current;
+      const next = typeof update === "function" ? update(current) : update;
+      operationRef.current = next;
+      setOperation(next);
+    },
+    [],
+  );
 
   useEffect(() => {
     onSavedRef.current = onSaved;
@@ -55,19 +56,18 @@ export function useHostOperation(
         platform: next.platform || current?.platform || "",
         arch: next.arch || current?.arch || "",
         prerequisites:
-          next.prerequisites.length > 0
-            ? next.prerequisites
-            : current?.prerequisites ?? [],
+          next.prerequisites.length > 0 ? next.prerequisites : (current?.prerequisites ?? []),
       }));
       const phaseStep = hostStepForPhase(next.phase);
-      const existingUnavailable = operationRef.current.kind === "connect"
-        && next.state === "connecting"
-        && next.message.startsWith("remote daemon health timed out:");
-      const existingNeedsAuth = operationRef.current.kind === "connect"
-        && next.state === "needs_auth";
+      const existingUnavailable =
+        operationRef.current.kind === "connect" &&
+        next.state === "connecting" &&
+        next.message.startsWith("remote daemon health timed out:");
+      const existingNeedsAuth =
+        operationRef.current.kind === "connect" && next.state === "needs_auth";
       if (
-        (next.state === "failed" || existingNeedsAuth || existingUnavailable)
-        && operationRef.current.status !== "idle"
+        (next.state === "failed" || existingNeedsAuth || existingUnavailable) &&
+        operationRef.current.status !== "idle"
       ) {
         updateOperation((current) => ({
           ...current,
@@ -76,17 +76,15 @@ export function useHostOperation(
             ? "reconnect"
             : current.kind === "connect"
               ? "connect"
-              : phaseStep ?? current.currentStep ?? "connect",
+              : (phaseStep ?? current.currentStep ?? "connect"),
           error: existingUnavailable
             ? "Existing Tariboy is unavailable at 127.0.0.1:9990."
             : formatHostOperationError(next.message),
         }));
       } else if (
-        hostConnected(next.state)
-        && (
-          operationRef.current.status === "running"
-          || (operationRef.current.kind === "connect" && operationRef.current.status === "failed")
-        )
+        hostConnected(next.state) &&
+        (operationRef.current.status === "running" ||
+          (operationRef.current.kind === "connect" && operationRef.current.status === "failed"))
       ) {
         updateOperation((current) => ({
           ...current,
@@ -105,10 +103,7 @@ export function useHostOperation(
     const offOutput = onHostProvisionOutput((event) => {
       if (event.host_id !== hostIdRef.current) return;
       if (operationRef.current.status === "idle") return;
-      if (
-        operationIdRef.current
-        && operationIdRef.current !== event.operation_id
-      ) {
+      if (operationIdRef.current && operationIdRef.current !== event.operation_id) {
         return;
       }
       if (!operationIdRef.current) {
@@ -129,9 +124,7 @@ export function useHostOperation(
       if (event.prompt) setPrompt(event);
       const preflight = preflightView(event);
       if (preflight) {
-        setHost((current) =>
-          current ? { ...current, ...preflight } : current,
-        );
+        setHost((current) => (current ? { ...current, ...preflight } : current));
       }
       if (isTerminalHostOutput(event.stream)) {
         updateOperation((current) => ({
@@ -187,9 +180,7 @@ export function useHostOperation(
     setOperationId("");
     operationIdRef.current = "";
     const nextOperation = idleOperation(
-      server?.kind === "ssh" && hostConnected(server.state)
-        ? "update"
-        : "provision",
+      server?.kind === "ssh" && hostConnected(server.state) ? "update" : "provision",
     );
     operationRef.current = nextOperation;
     setOperation(nextOperation);
