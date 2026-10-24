@@ -3,10 +3,10 @@ import { useState } from "react";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { TransitionRequest, WorkflowOutcome, WorkflowView } from "@/lib/api";
+import type { WorkflowOutcome, WorkflowView } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { DANGER_FILL, EMPTY, LABEL, MONO } from "./panelStyles";
-import { useFollowRequest } from "./workflowShared";
+import { useFollowRequest, visibleNotice, type Notice } from "./workflowShared";
 
 const RESULT_LABEL: Record<string, string> = {
   rejected: "Rejected",
@@ -14,10 +14,11 @@ const RESULT_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-type Notice =
-  | { kind: "result"; request: TransitionRequest }
-  | { kind: "error"; label: string; message: string }
-  | { kind: "timeout"; requestId: number };
+/** Who decides a status that is not the customer's. */
+const OWNER_NOTE: Record<string, string> = {
+  script: "The status's watch script decides.",
+};
+const POOL_NOTE = "The agent decides; the outcomes are listed for reference.";
 
 /**
  * The outcomes of the current status: each with its target, the artifacts it
@@ -40,9 +41,66 @@ export default function WorkflowOutcomes({
   /** Refetch the view only. */
   onRefresh: () => void;
 }) {
-  const api = useApi();
   const customer = view.owner === "customer";
   const paused = view.waiting_on === "pause";
+  const { message, setMessage, checking, notice, advance } = useAdvance(
+    taskKey,
+    view,
+    onChanged,
+    onRefresh,
+  );
+
+  const last = view.last_request;
+  const shown = visibleNotice(notice, last);
+  const pendingElsewhere = !checking && last?.state === "pending";
+  const disabled = checking || paused || pendingElsewhere;
+  const some = view.outcomes.length > 0;
+
+  return (
+    <section className="flex min-w-0 flex-col gap-1.5">
+      <span className={LABEL}>Outcomes</span>
+      {!some && <span className={EMPTY}>This status has no outcomes.</span>}
+      {!customer && some && <span className={EMPTY}>{OWNER_NOTE[view.owner] ?? POOL_NOTE}</span>}
+      <ul className="flex min-w-0 flex-col gap-1.5">
+        {view.outcomes.map((outcome) => (
+          <OutcomeRow
+            key={outcome.on}
+            outcome={outcome}
+            onAdvance={customer ? () => advance(outcome.on) : undefined}
+            disabled={disabled}
+          />
+        ))}
+      </ul>
+      {customer && some && (
+        <Textarea
+          aria-label="Outcome message"
+          placeholder="Message (optional)"
+          value={message}
+          disabled={checking}
+          maxLength={4096}
+          onChange={(event) => setMessage(event.target.value)}
+          className="min-h-12 rounded-md border-0 bg-muted text-body-sm md:text-body-sm"
+        />
+      )}
+      {(checking || pendingElsewhere) && (
+        <CheckingStatus onRefresh={pendingElsewhere ? onRefresh : undefined} />
+      )}
+      {shown && <OutcomeNotice notice={shown} onRefresh={onRefresh} />}
+    </section>
+  );
+}
+
+/**
+ * The customer's advance with its message, followed until its checks finish.
+ * A request that settled without applying leaves a notice.
+ */
+function useAdvance(
+  taskKey: string,
+  view: WorkflowView,
+  onChanged: () => void,
+  onRefresh: () => void,
+) {
+  const api = useApi();
   const [message, setMessage] = useState("");
   const { checking, follow } = useFollowRequest(taskKey);
   // A notice belongs to the status it was given in; once the view shows
@@ -81,115 +139,97 @@ export default function WorkflowOutcomes({
       },
     );
   };
+  return { message, setMessage, checking, notice, advance };
+}
 
-  const last = view.last_request;
-  // A notice about a request the view now carries is the problem block's to
-  // explain; one about a request the view has not caught up with stays.
-  const shown: Notice | null =
-    notice &&
-    ((notice.kind === "timeout" && last?.id === notice.requestId && last.state !== "pending") ||
-      (notice.kind === "result" && last?.id === notice.request.id))
-      ? null
-      : notice;
-  const pendingElsewhere = !checking && last?.state === "pending";
-  const disabled = checking || paused || pendingElsewhere;
-
+/**
+ * One outcome: a button where the customer declares it, its name otherwise,
+ * then its target, the artifacts it requires, and its checks.
+ */
+function OutcomeRow({
+  outcome,
+  onAdvance,
+  disabled,
+}: {
+  outcome: WorkflowOutcome;
+  /** Declares the outcome; absent where the customer does not decide. */
+  onAdvance?: () => void;
+  disabled: boolean;
+}) {
+  const missing = new Set(outcome.missing ?? []);
   return (
-    <section className="flex min-w-0 flex-col gap-1.5">
-      <span className={LABEL}>Outcomes</span>
-      {view.outcomes.length === 0 && <span className={EMPTY}>This status has no outcomes.</span>}
-      {!customer && view.outcomes.length > 0 && (
-        <span className={EMPTY}>
-          {view.owner === "script"
-            ? "The status's watch script decides."
-            : "The agent decides; the outcomes are listed for reference."}
-        </span>
-      )}
-      <ul className="flex min-w-0 flex-col gap-1.5">
-        {view.outcomes.map((outcome) => {
-          const missing = new Set(outcome.missing ?? []);
-          return (
-            <li key={outcome.on} className="flex min-w-0 flex-col gap-0.5">
-              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                {customer ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-7"
-                    disabled={disabled || missing.size > 0}
-                    onClick={() => advance(outcome.on)}
-                  >
-                    {outcome.on}
-                  </Button>
-                ) : (
-                  <span className={cn(MONO, "font-medium")}>{outcome.on}</span>
-                )}
-                {customer && missing.size > 0 && (
-                  <span className="text-meta text-status-failed">
-                    needs: {[...missing].join(", ")}
-                  </span>
-                )}
-                <ArrowRight aria-hidden="true" className="size-3 text-muted-foreground" />
-                <span className={cn(MONO, "min-w-0 break-all")}>{outcome.to}</span>
-                {(outcome.requires ?? []).length > 0 && (
-                  <span className="text-meta text-muted-foreground">requires</span>
-                )}
-                {(outcome.requires ?? []).map((name) =>
-                  missing.has(name) ? (
-                    <span
-                      key={name}
-                      data-missing="true"
-                      title="No value yet"
-                      className={cn(MONO, "rounded-chip px-1.5", DANGER_FILL)}
-                    >
-                      {name}
-                    </span>
-                  ) : (
-                    <span
-                      key={name}
-                      data-present="true"
-                      title="Set"
-                      className={cn(MONO, "inline-flex items-center gap-0.5")}
-                    >
-                      <Check
-                        aria-hidden="true"
-                        className="size-2.5 text-status-running [stroke-width:2.5]"
-                      />
-                      {name}
-                    </span>
-                  ),
-                )}
-              </div>
-              <Checks outcome={outcome} />
-            </li>
-          );
-        })}
-      </ul>
-      {customer && view.outcomes.length > 0 && (
-        <Textarea
-          aria-label="Outcome message"
-          placeholder="Message (optional)"
-          value={message}
-          disabled={checking}
-          maxLength={4096}
-          onChange={(event) => setMessage(event.target.value)}
-          className="min-h-12 rounded-md border-0 bg-muted text-body-sm md:text-body-sm"
-        />
-      )}
-      {(checking || pendingElsewhere) && (
-        <div className="flex items-center gap-2">
-          <span role="status" className={EMPTY}>
-            checking…
+    <li className="flex min-w-0 flex-col gap-0.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        {onAdvance ? (
+          <Button
+            type="button"
+            size="sm"
+            className="h-7"
+            disabled={disabled || missing.size > 0}
+            onClick={onAdvance}
+          >
+            {outcome.on}
+          </Button>
+        ) : (
+          <span className={cn(MONO, "font-medium")}>{outcome.on}</span>
+        )}
+        {onAdvance && missing.size > 0 && (
+          <span className="text-meta text-status-failed">needs: {[...missing].join(", ")}</span>
+        )}
+        <ArrowRight aria-hidden="true" className="size-3 text-muted-foreground" />
+        <span className={cn(MONO, "min-w-0 break-all")}>{outcome.to}</span>
+        <RequiredArtifacts names={outcome.requires ?? []} missing={missing} />
+      </div>
+      <Checks outcome={outcome} />
+    </li>
+  );
+}
+
+/** The artifacts an outcome requires, each marked set or still missing. */
+function RequiredArtifacts({ names, missing }: { names: string[]; missing: Set<string> }) {
+  if (names.length === 0) return null;
+  return (
+    <>
+      <span className="text-meta text-muted-foreground">requires</span>
+      {names.map((name) =>
+        missing.has(name) ? (
+          <span
+            key={name}
+            data-missing="true"
+            title="No value yet"
+            className={cn(MONO, "rounded-chip px-1.5", DANGER_FILL)}
+          >
+            {name}
           </span>
-          {pendingElsewhere && (
-            <Button type="button" variant="ghost" className="h-6 px-2 text-ui" onClick={onRefresh}>
-              Refresh
-            </Button>
-          )}
-        </div>
+        ) : (
+          <span
+            key={name}
+            data-present="true"
+            title="Set"
+            className={cn(MONO, "inline-flex items-center gap-0.5")}
+          >
+            <Check aria-hidden="true" className="size-2.5 text-status-running [stroke-width:2.5]" />
+            {name}
+          </span>
+        ),
       )}
-      {shown && <OutcomeNotice notice={shown} onRefresh={onRefresh} />}
-    </section>
+    </>
+  );
+}
+
+/** A request is running; Refresh is offered when it was sent from elsewhere. */
+function CheckingStatus({ onRefresh }: { onRefresh?: () => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span role="status" className={EMPTY}>
+        checking…
+      </span>
+      {onRefresh && (
+        <Button type="button" variant="ghost" className="h-6 px-2 text-ui" onClick={onRefresh}>
+          Refresh
+        </Button>
+      )}
+    </div>
   );
 }
 

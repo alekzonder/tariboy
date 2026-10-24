@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { followNoticeText, type FollowResult } from "./workflowShared";
+import type { TransitionRequest } from "@/lib/api";
+import { followNoticeText, visibleNotice, type FollowResult, type Notice } from "./workflowShared";
 
 describe("followNoticeText", () => {
   it.each<[string, Exclude<FollowResult, { kind: "applied" }>, string]>([
@@ -46,5 +47,32 @@ describe("followNoticeText", () => {
     ],
   ])("reads %s", (_name, notice, text) => {
     expect(followNoticeText(notice)).toBe(text);
+  });
+});
+
+describe("visibleNotice", () => {
+  const req = (id: number, state: TransitionRequest["state"]): TransitionRequest => ({
+    id,
+    task_key: "REL-1",
+    outcome: "approve",
+    actor: "u",
+    state,
+    created_at: "2026-10-01T10:05:00Z",
+  });
+  const timeout: Notice = { kind: "timeout", requestId: 4 };
+  const result: Notice = { kind: "result", request: req(4, "rejected") };
+  const error: Notice = { kind: "error", label: "Advance failed", message: "boom" };
+
+  it.each<[string, Notice | null, TransitionRequest | undefined, Notice | null]>([
+    ["no notice", null, req(4, "rejected"), null],
+    ["a timeout the view has not caught up with", timeout, undefined, timeout],
+    ["a timeout whose request still runs", timeout, req(4, "pending"), timeout],
+    ["a timeout whose request settled", timeout, req(4, "rejected"), null],
+    ["a timeout about another request", timeout, req(5, "rejected"), timeout],
+    ["a result the view carries", result, req(4, "rejected"), null],
+    ["a result about another request", result, req(5, "failed"), result],
+    ["an error", error, req(4, "rejected"), error],
+  ])("shows %s as expected", (_name, notice, last, shown) => {
+    expect(visibleNotice(notice, last)).toBe(shown);
   });
 });

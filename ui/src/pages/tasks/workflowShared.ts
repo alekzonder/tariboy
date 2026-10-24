@@ -72,6 +72,29 @@ export type FollowResult =
   /** The send or a poll was refused or failed. `stale` says the view should be refetched; `status` is the one a status_changed names. */
   | { kind: "error"; label: string; message: string; stale: boolean; status?: string };
 
+/** What the outcomes block says about the last advance it sent. */
+export type Notice =
+  | { kind: "result"; request: TransitionRequest }
+  | { kind: "error"; label: string; message: string }
+  | { kind: "timeout"; requestId: number };
+
+/**
+ * The notice the outcomes block still shows. A notice about a request the
+ * view now carries is the problem block's to explain; one about a request the
+ * view has not caught up with stays.
+ */
+export function visibleNotice(
+  notice: Notice | null,
+  last: TransitionRequest | undefined,
+): Notice | null {
+  if (!notice || !last) return notice;
+  if (notice.kind === "timeout") {
+    return last.id === notice.requestId && last.state !== "pending" ? null : notice;
+  }
+  if (notice.kind === "result") return last.id === notice.request.id ? null : notice;
+  return notice;
+}
+
 /** One line about a request that settled without applying, as Retry reports it. */
 export function followNoticeText(notice: Exclude<FollowResult, { kind: "applied" }>): string {
   switch (notice.kind) {
