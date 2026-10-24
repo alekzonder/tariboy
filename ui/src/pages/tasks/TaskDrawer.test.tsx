@@ -175,7 +175,7 @@ it("posts a comment and reloads the task", async () => {
   await screen.findByText("Ship the drawer")
   const comments = screen.getByText("Comments").closest("section")!
   await userEvent.click(within(comments).getByRole("button", { name: "Markdown" }))
-  await userEvent.type(screen.getByLabelText("Comment"), "on it")
+  await userEvent.type(await screen.findByLabelText("Comment"), "on it")
   await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
   await waitFor(() => expect(api.addTaskComment).toHaveBeenCalledWith(
     "TEST-1", expect.stringContaining("on it"), expect.any(String),

@@ -166,7 +166,7 @@ frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
 `staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. The
 frontend target runs UI typecheck, lint, the unused-code check, unit tests,
-branding, and the documentation checks. Before checking, `backend-check` runs `go mod download`
+branding, the initial bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
 `scripts/npm-ci-locked.sh` for locked installs under both `ui/` and `docs/`.
 They do not write into
@@ -360,7 +360,7 @@ npm ci
 ```
 
 `make check` then covers `npx tsc -b`, `npm run lint`, `npm run lint:unused`,
-`npm test`, and `npm run branding:check`. `make full-check` adds `npm run test:tasks-browser`
+`npm test`, `npm run branding:check`, and `npm run bundle:budget`. `make full-check` adds `npm run test:tasks-browser`
 and `npm run test:images-browser`, and builds the desktop bundle through its
 desktop step. Run any of them directly under `ui/` while iterating:
 
@@ -369,11 +369,23 @@ cd ui
 npm test
 npm run lint
 npm run lint:unused
+npm run bundle:budget
 npm run build:desktop
 npm run test:tasks-browser
 npm run test:images-browser
 npm run build:store
 ```
+
+`npm run bundle:budget` runs `ui/scripts/bundle-budget.mjs`. It builds the
+production Desktop bundle into a temporary directory, reads the Vite manifest,
+and removes the directory afterwards. It fails when the entry chunk, or the
+entry chunk plus every chunk it imports statically, is larger than 800,000
+bytes. The sizes are minified bytes before compression. Chunks that load
+through a dynamic import, such as a lazily loaded screen, do not count. The
+failure message gives both sizes, the limit, and every counted file. A missing
+entry, manifest import, or output file is also a failure. To fix a failure,
+load the new code with `React.lazy`, or keep the library out of the groups that
+the shell imports (see [Code splitting](/docs/architecture/web-ui#code-splitting)).
 
 `npm run lint:unused` runs [Knip](https://knip.dev) from `ui/knip.json` and
 fails when it finds an unused file or an unused export. It does not delete

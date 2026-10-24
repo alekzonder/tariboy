@@ -610,6 +610,7 @@ frontend-check:
 	run_step "ui-unused"    'cd ui && npm run lint:unused'; \
 	run_step "ui-test"      'cd ui && npm test'; \
 	run_step "ui-branding"  'cd ui && npm run branding:check'; \
+	run_step "ui-bundle-budget" 'cd ui && npm run bundle:budget'; \
 	run_step "docs"         'cd docs && npm run doctor && npm run build && ../scripts/docs-build-contract-test.sh'; \
 	summarize frontend-check
 

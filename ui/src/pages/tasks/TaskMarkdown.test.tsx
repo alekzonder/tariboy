@@ -2,7 +2,8 @@ import { useState } from "react"
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import type { Editor } from "@tiptap/react"
 import { describe, expect, it, vi } from "vitest"
-import { MarkdownContent, MarkdownEditor } from "./TaskMarkdown"
+import { MarkdownContent } from "./TaskMarkdown"
+import MarkdownEditor from "./TaskMarkdownEditor"
 
 const { openExternalUrl } = vi.hoisted(() => ({ openExternalUrl: vi.fn().mockResolvedValue(null) }))
 

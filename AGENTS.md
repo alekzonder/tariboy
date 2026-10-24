@@ -79,7 +79,8 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   `fmt-check`, `go vet`, `staticcheck`, the `gocyclo` complexity threshold,
   Go unit tests, Store skills, and smoke contracts;
   frontend checks cover UI typecheck, lint, unused files and exports (Knip),
-  unit tests, branding, and the documentation `doctor` plus `build`. Before
+  unit tests, branding, the initial UI bundle budget, and the documentation
+  `doctor` plus `build`. Before
   checking, they download Go
   modules and install locked UI and documentation dependencies with `npm ci`
   when the saved fingerprint is missing or differs. The fingerprint covers

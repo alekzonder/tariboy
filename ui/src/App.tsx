@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { Segmented } from "@/components/ui/segmented";
 import { Toaster } from "@/components/ui/sonner";
@@ -8,25 +8,7 @@ import { DaemonProvider, useDaemons } from "@/components/DaemonProvider";
 import { Button } from "@/components/ui/button";
 import { Menu, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import { isDesktop } from "@/lib/desktop";
-import ImageOverview from "@/pages/ImageOverview";
-import ImageTemplate from "@/pages/images/ImageTemplate";
-import ImageSkills from "@/pages/images/ImageSkills";
-import ImageFiles from "@/pages/ImageFiles";
 import TerminalsPage from "@/pages/terminals/TerminalsPage";
-import {
-  AdvancedSettingsIndex,
-  AppearanceSettings,
-  CliSettings,
-  GeneralSettings,
-} from "@/pages/settings/SettingsPage";
-import PluginSettings from "@/pages/settings/PluginSettings";
-import UsagePage from "@/pages/UsagePage";
-import GroupsPage from "@/pages/GroupsPage";
-import BudgetsPage from "@/pages/BudgetsPage";
-import PluginsPage from "@/pages/PluginsPage";
-import OpsPage from "@/pages/OpsPage";
-import ChannelsPage from "@/pages/ChannelsPage";
-import DaemonsPage from "@/pages/DaemonsPage";
 import { SidebarStateProvider } from "@/pages/terminals/SidebarStateProvider";
 import { useSharedSidebarState } from "@/pages/terminals/sidebarStateContext";
 import { TitlebarSlotContext } from "@/pages/terminals/titlebarSlotContext";
@@ -38,6 +20,25 @@ import {
   DesktopUpdatesProvider,
   UpdateBanner,
 } from "@/components/DesktopUpdates";
+
+// Server sub-pages load on first open, inside the Suspense boundary of the
+// layout that renders their Outlet.
+const ImageOverview = lazy(() => import("@/pages/ImageOverview"));
+const ImageTemplate = lazy(() => import("@/pages/images/ImageTemplate"));
+const ImageSkills = lazy(() => import("@/pages/images/ImageSkills"));
+const ImageFiles = lazy(() => import("@/pages/ImageFiles"));
+const GeneralSettings = lazy(() => import("@/pages/settings/SettingsPage").then((m) => ({ default: m.GeneralSettings })));
+const CliSettings = lazy(() => import("@/pages/settings/SettingsPage").then((m) => ({ default: m.CliSettings })));
+const AppearanceSettings = lazy(() => import("@/pages/settings/SettingsPage").then((m) => ({ default: m.AppearanceSettings })));
+const AdvancedSettingsIndex = lazy(() => import("@/pages/settings/SettingsPage").then((m) => ({ default: m.AdvancedSettingsIndex })));
+const PluginSettings = lazy(() => import("@/pages/settings/PluginSettings"));
+const UsagePage = lazy(() => import("@/pages/UsagePage"));
+const GroupsPage = lazy(() => import("@/pages/GroupsPage"));
+const BudgetsPage = lazy(() => import("@/pages/BudgetsPage"));
+const PluginsPage = lazy(() => import("@/pages/PluginsPage"));
+const OpsPage = lazy(() => import("@/pages/OpsPage"));
+const ChannelsPage = lazy(() => import("@/pages/ChannelsPage"));
+const DaemonsPage = lazy(() => import("@/pages/DaemonsPage"));
 
 export default function App() {
   return (

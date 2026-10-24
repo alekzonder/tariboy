@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, useCallback, useEffect, useState } from "react";
 import { NavLink, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Container } from "lucide-react";
 import { toast } from "sonner";
@@ -18,19 +18,23 @@ import { openHostPathInVSCode } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { hostToParam, targetFor } from "@/lib/terminalsHost";
 import type { AgentStatus, AgentSummary, AgentView } from "@/lib/types";
-import AgentConsoleTab from "./AgentConsoleTab";
-import AgentActivityTab from "./AgentActivityTab";
-import AgentConfigurationTab from "./AgentConfigurationTab";
-import AgentAdvancedTab from "./AgentAdvancedTab";
-import AgentChatTab from "./AgentChatTab";
-import TasksWorkspace from "@/pages/tasks/TasksWorkspace";
-import TaskDrawer from "@/pages/tasks/TaskDrawer";
+import { LazyBoundary } from "@/components/LazyBoundary";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
 import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
 import { GoalHelp } from "@/components/GoalHelp";
 import { useChatUnread } from "./chat/useChatUnread";
 import { useUiMode } from "@/lib/uiMode";
+
+// Each tab loads on first open: the terminal brings xterm, the chat Markdown
+// and highlighting, Tasks the rich text editor.
+const AgentConsoleTab = lazy(() => import("./AgentConsoleTab"));
+const AgentActivityTab = lazy(() => import("./AgentActivityTab"));
+const AgentConfigurationTab = lazy(() => import("./AgentConfigurationTab"));
+const AgentAdvancedTab = lazy(() => import("./AgentAdvancedTab"));
+const AgentChatTab = lazy(() => import("./AgentChatTab"));
+const TasksWorkspace = lazy(() => import("@/pages/tasks/TasksWorkspace"));
+const TaskDrawer = lazy(() => import("@/pages/tasks/TaskDrawer"));
 
 const TABS = [
   ["chat", "Chat"],
@@ -330,9 +334,13 @@ function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable 
             aria-disabled={unavailable || undefined}
             className="min-h-0 flex-1 overflow-auto"
           >
-            {content}
+            <LazyBoundary resetKey={tab}>{content}</LazyBoundary>
           </section>
-          {goalTask && <TaskDrawer key={goalTask} taskKey={goalTask} onClose={() => setGoalTask("")} />}
+          {goalTask && (
+            <LazyBoundary resetKey={goalTask}>
+              <TaskDrawer key={goalTask} taskKey={goalTask} onClose={() => setGoalTask("")} />
+            </LazyBoundary>
+          )}
         </div>
       </AgentStatusContext.Provider>
     </AgentNameContext.Provider>
