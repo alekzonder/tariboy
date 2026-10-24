@@ -64,7 +64,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-describe("FileBrowser public integration", () => {
+describe("FileBrowser public integration: navigation", () => {
   it("loads the root, caches collapsed directories and selects nested files", async () => {
     const props = source();
     render(<FileBrowser {...props} />);
@@ -111,7 +111,9 @@ describe("FileBrowser public integration", () => {
     await act(async () => late.resolve(content("readme.md", "late text")));
     expect(screen.getByDisplayValue("code.ts")).toBeInTheDocument();
   });
+});
 
+describe("FileBrowser public integration: editing", () => {
   it("switches markdown preview/source and preserves drafts after save errors", async () => {
     const writeFile = vi
       .fn()
