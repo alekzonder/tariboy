@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ApiClient, TeamImportOperation } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { guard } from "@/lib/toast-guard";
+import { readKey, removeKey, storageKeys, writeKey } from "@/lib/storage";
 import { GroupWizard } from "@/components/GroupWizard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -65,15 +66,12 @@ export default function GroupsPage() {
   }>(null);
   const [importOperation, setImportOperation] = useState<TeamImportOperation | null>(null);
   const [operationRef, setOperationRef] = useState<{ id: string; api: ApiClient } | null>(() => {
-    const saved = localStorage.getItem("tariboy:team-import");
-    if (!saved) return null;
-    try {
-      const record = JSON.parse(saved) as { id: string; hostId: string };
-      return record.hostId === (api.target?.id ?? "") ? { id: record.id, api } : null;
-    } catch {
-      localStorage.removeItem("tariboy:team-import");
+    const record = readKey(storageKeys.teamImport);
+    if (!record) {
+      removeKey(storageKeys.teamImport); // drops an unreadable record
       return null;
     }
+    return record.hostId === (api.target?.id ?? "") ? { id: record.id, api } : null;
   });
 
   const refreshSelected = (team = sel?.name) => {
@@ -122,7 +120,7 @@ export default function GroupsPage() {
     void operationRef.api.groups
       .getTeamImportOperation(operationRef.id)
       .then(setImportOperation)
-      .catch(() => localStorage.removeItem("tariboy:team-import"));
+      .catch(() => removeKey(storageKeys.teamImport));
   }, [operationRef]);
   useEffect(() => {
     if (!operationRef || importOperation?.status !== "running") return;
@@ -133,7 +131,7 @@ export default function GroupsPage() {
           .then((operation) => {
             setImportOperation(operation);
             if (operation.status === "complete") {
-              localStorage.removeItem("tariboy:team-import");
+              removeKey(storageKeys.teamImport);
               void load();
             }
           })
@@ -572,10 +570,10 @@ export default function GroupsPage() {
                       .filter((image) => image.original !== image.resolved)
                       .map((image) => [image.original, image.resolved]),
                   );
-                  localStorage.setItem(
-                    "tariboy:team-import",
-                    JSON.stringify({ id: preview.import_id, hostId: preview.api.target?.id ?? "" }),
-                  );
+                  writeKey(storageKeys.teamImport, {
+                    id: preview.import_id,
+                    hostId: preview.api.target?.id ?? "",
+                  });
                   setImportOperation((operation) =>
                     operation ? { ...operation, status: "running" } : operation,
                   );
@@ -589,7 +587,7 @@ export default function GroupsPage() {
                     .then((operation) => {
                       setImportOperation(operation);
                       if (operation.status === "complete") {
-                        localStorage.removeItem("tariboy:team-import");
+                        removeKey(storageKeys.teamImport);
                         toast.success("team archive imported");
                         setArchivePreview(null);
                         void load();

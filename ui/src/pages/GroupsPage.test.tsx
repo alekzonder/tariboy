@@ -242,3 +242,87 @@ it("opens the team named by the workspace management link", async () => {
   expect(paths.filter((path) => path === "/api/groups")).toHaveLength(1);
   expect(paths.filter((path) => path === "/api/groups/team")).toHaveLength(1);
 });
+
+it("resumes a saved team import after a reload and forgets it once complete", async () => {
+  localStorage.setItem("tariboy:team-import", JSON.stringify({ id: "imp-9", hostId: "" }));
+  let reads = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((path: string) => {
+      const result =
+        path === "/api/team-imports/imp-9"
+          ? {
+              import_id: "imp-9",
+              team: "portable",
+              status: reads++ === 0 ? "running" : "complete",
+              steps: [],
+              updated_at: "now",
+            }
+          : { groups: [] };
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result }),
+      } as Response);
+    }),
+  );
+  render(
+    <MemoryRouter>
+      <GroupsPage />
+    </MemoryRouter>,
+  );
+
+  await waitFor(() => expect(reads).toBeGreaterThan(1));
+  await waitFor(() => expect(localStorage.getItem("tariboy:team-import")).toBeNull());
+});
+
+it("drops an unreadable saved team import", async () => {
+  localStorage.setItem("tariboy:team-import", "{broken");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true, result: { groups: [] } }),
+    } as Response),
+  );
+  render(
+    <MemoryRouter>
+      <GroupsPage />
+    </MemoryRouter>,
+  );
+
+  await waitFor(() => expect(localStorage.getItem("tariboy:team-import")).toBeNull());
+  expect(vi.mocked(fetch).mock.calls.map(([path]) => String(path))).not.toContain(
+    "/api/team-imports/imp-9",
+  );
+});
+
+it("still lists groups when storage is blocked", async () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage")!;
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    get() {
+      throw new Error("blocked");
+    },
+  });
+  try {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({ ok: true, result: { groups: [{ name: "team", lead: "boss" }] } }),
+      } as Response),
+    );
+    render(
+      <MemoryRouter>
+        <GroupsPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("team")).toBeInTheDocument();
+  } finally {
+    Object.defineProperty(globalThis, "localStorage", original);
+  }
+});
