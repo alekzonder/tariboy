@@ -798,7 +798,8 @@ targets with `returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the
 upgrade form appears when `canUpgrade` finds the view's `queue_digest` differs
 from its `digest` and sends `upgradeTaskWorkflow`, the move form uses
 `moveTaskWorkflow` (targets from the view's `statuses`), and cancel uses
-`cancelWorkflowTask`. `stepMarks`, `returnTargets`, and `defaultReturnTarget`
+`cancelWorkflowTask`. The move and upgrade forms live in
+`WorkflowMoveForms.tsx`. `stepMarks`, `returnTargets`, and `defaultReturnTarget`
 read `runVisits`, the visits of the task's current workflow digest. Outcomes, the problem block, and the return form follow
 a transition request through `useFollowRequest` in `workflowShared.ts`
 (`getTransitionRequest` once a second until the request settles or
@@ -811,7 +812,10 @@ artifact is switched to **Text**. Every call uses the client of the surrounding
 the detail, so the row agrees with the drawer before the socket reports the
 change. Queue settings are `QueueSettingsDialog`: a large `Dialog` (full
 screen on a phone) with the queue list on the left and the selected queue in
-tabs on the right. When it opens it reads each queue's binding
+tabs on the right. `QueueSettingsDetail.tsx` renders the selected queue and
+the new-queue form; `queueSettingsModel.ts` holds the pure readings: a list
+row's summary and warning, the tabs, the form requests, and how a refused bind
+reads. When it opens it reads each queue's binding
 (`getQueueWorkflow`), the bound manifest (`getWorkflowImage` by digest), and
 its pools (`listAgentPools`), so each list row can show the workflow and a dot
 for a required pool without agents; a queue that fails to load shows an error
