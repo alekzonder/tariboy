@@ -194,4 +194,44 @@ describe("explainProblem", () => {
     expect(explainProblem(poolView)).toBeNull();
     expect(explainProblem(customerView)).toBeNull();
   });
+
+  const watchRun: WorkflowScriptRun = {
+    ...failedRun,
+    id: 9,
+    kind: "watch",
+    request_id: undefined,
+    created_at: "2026-10-01T10:06:00Z",
+    started_at: "2026-10-01T10:06:01Z",
+  };
+  const unheld = { ...poolView, holder: undefined, category: "open" } as WorkflowView;
+
+  it.each([
+    ["a failed request", { ...poolView, last_request: request("failed") }, "failed", "danger"],
+    [
+      "a rejected request",
+      { ...poolView, last_request: request("rejected") },
+      "rejected",
+      "attention",
+    ],
+    ["a pending request", { ...poolView, last_request: request("pending") }, "checking", "quiet"],
+    ["a failed watch", { ...poolView, runs: [watchRun] }, "watch_failed", "danger"],
+    ["an unheld pool status", unheld, "no_agent", "attention"],
+    ["idle iterations", withCounters(poolView, { idle_iterations: 1 }), "idle", "quiet"],
+    [
+      "a request before a failed watch",
+      { ...poolView, last_request: request("rejected"), runs: [watchRun] },
+      "rejected",
+      "attention",
+    ],
+    ["a failed watch before no agent", { ...unheld, runs: [watchRun] }, "watch_failed", "danger"],
+    [
+      "no agent before idle iterations",
+      withCounters(unheld, { idle_iterations: 1 }),
+      "no_agent",
+      "attention",
+    ],
+  ] as const)("reads %s", (_name, view, kind, tone) => {
+    const problem = explainProblem(view as WorkflowView);
+    expect([problem?.kind, problem?.tone]).toEqual([kind, tone]);
+  });
 });
