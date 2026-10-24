@@ -1,4 +1,5 @@
 import { clearServerQueries, queryClient } from "./queryClient";
+import { readKey, removeKey, storageKeyFamilies, storageKeys, writeKey } from "./storage";
 // Async host registry facade. The desktop app persists metadata in native
 // hosts.json and HTTPS tokens in macOS Keychain; browser development keeps the
 // historical localStorage/sessionStorage implementation as a fallback.
@@ -14,10 +15,7 @@ import {
   type DesktopHostView,
 } from "./desktop";
 
-const META_KEY = "tariboy_daemons";
-const ACTIVE_KEY = "tariboy_active_daemon";
-const TOKEN_PREFIX = "tariboy_daemon_token_";
-const REJECTED_CLEARTEXT_KEY = "tariboy_daemons_rejected_cleartext";
+const tokenKey = storageKeyFamilies.daemonToken.key;
 
 export interface DaemonMeta {
   id: string;
@@ -46,18 +44,13 @@ let migration: Promise<void> | null = null;
 const sessionCache = new Map<string, Daemon>();
 
 function loadBrowserMeta(): DaemonMeta[] {
-  const raw = localStorage.getItem(META_KEY);
-  if (!raw) return [];
-  try {
-    const value = JSON.parse(raw);
-    return Array.isArray(value) ? (value as DaemonMeta[]) : [];
-  } catch {
-    return [];
-  }
+  const value = readKey(storageKeys.daemons);
+  return Array.isArray(value) ? (value as DaemonMeta[]) : [];
 }
 
 function saveBrowserMeta(list: DaemonMeta[]): void {
-  localStorage.setItem(META_KEY, JSON.stringify(list));
+  // Callers report this: a host that silently vanished on reload would be worse.
+  if (!writeKey(storageKeys.daemons, list)) throw new Error("Could not save the host list");
 }
 
 function newBrowserId(): string {
@@ -93,7 +86,7 @@ function requireNative<T>(value: T | null, command: string): T {
 async function migrateLegacyDesktopRegistry(): Promise<void> {
   if (!isDesktop()) return;
   const legacy = loadBrowserMeta();
-  const oldActive = localStorage.getItem(ACTIVE_KEY) ?? "";
+  const oldActive = readKey(storageKeys.activeDaemon);
   const native = requireNative(await hostsList(), "hosts_list");
   const activeMap = new Map<string, string>();
   const rejectedCleartext: DaemonMeta[] = [];
@@ -113,7 +106,7 @@ async function migrateLegacyDesktopRegistry(): Promise<void> {
       });
       continue;
     }
-    const token = sessionStorage.getItem(TOKEN_PREFIX + old.id) ?? "";
+    const token = readKey(tokenKey(old.id));
     const existing = native.find(
       (host) =>
         host.kind === "https" &&
@@ -140,13 +133,14 @@ async function migrateLegacyDesktopRegistry(): Promise<void> {
   // a safe retry; de-duplication prevents duplicate native records.
   if (legacy.length > 0) {
     if (rejectedCleartext.length > 0) {
-      localStorage.setItem(REJECTED_CLEARTEXT_KEY, JSON.stringify(rejectedCleartext));
+      if (!writeKey(storageKeys.daemonsRejectedCleartext, rejectedCleartext))
+        throw new Error("Could not keep the rejected cleartext hosts");
     }
-    localStorage.removeItem(META_KEY);
-    for (const old of legacy) sessionStorage.removeItem(TOKEN_PREFIX + old.id);
+    removeKey(storageKeys.daemons);
+    for (const old of legacy) removeKey(tokenKey(old.id));
     const migratedActive = activeMap.get(oldActive) ?? "";
-    if (migratedActive) localStorage.setItem(ACTIVE_KEY, migratedActive);
-    else localStorage.removeItem(ACTIVE_KEY);
+    if (migratedActive) writeKey(storageKeys.activeDaemon, migratedActive);
+    else removeKey(storageKeys.activeDaemon);
   }
 }
 
@@ -179,7 +173,7 @@ export async function addDaemon(input: {
     const list = loadBrowserMeta();
     list.push(meta);
     saveBrowserMeta(list);
-    sessionStorage.setItem(TOKEN_PREFIX + meta.id, input.token);
+    writeKey(tokenKey(meta.id), input.token);
     sessionCache.set(meta.id, { ...meta, token: input.token });
     return meta;
   }
@@ -221,7 +215,7 @@ export async function updateDaemon(
 export async function removeDaemon(id: string): Promise<void> {
   if (!isDesktop()) {
     saveBrowserMeta(loadBrowserMeta().filter((meta) => meta.id !== id));
-    sessionStorage.removeItem(TOKEN_PREFIX + id);
+    removeKey(tokenKey(id));
   } else {
     await ensureDesktopMigration();
     await hostRemove(id);
@@ -234,7 +228,7 @@ export async function removeDaemon(id: string): Promise<void> {
 export async function setDaemonToken(id: string, token: string): Promise<void> {
   clearServerQueries(queryClient, id);
   if (!isDesktop()) {
-    sessionStorage.setItem(TOKEN_PREFIX + id, token);
+    writeKey(tokenKey(id), token);
     const meta = loadBrowserMeta().find((item) => item.id === id);
     if (meta) sessionCache.set(id, { ...meta, token });
     return;
@@ -250,7 +244,7 @@ export async function setDaemonToken(id: string, token: string): Promise<void> {
 }
 
 export async function getDaemonToken(id: string): Promise<string> {
-  if (!isDesktop()) return sessionStorage.getItem(TOKEN_PREFIX + id) ?? "";
+  if (!isDesktop()) return readKey(tokenKey(id));
   await ensureDesktopMigration();
   const credentials = requireNative(await hostSessionCredentials(id), "host_session_credentials");
   return credentials.token;
@@ -259,7 +253,7 @@ export async function getDaemonToken(id: string): Promise<string> {
 export async function clearDaemonToken(id: string): Promise<void> {
   clearServerQueries(queryClient, id);
   if (!isDesktop()) {
-    sessionStorage.removeItem(TOKEN_PREFIX + id);
+    removeKey(tokenKey(id));
     const meta = loadBrowserMeta().find((item) => item.id === id);
     if (meta) sessionCache.set(id, { ...meta, token: "" });
     return;
@@ -268,30 +262,30 @@ export async function clearDaemonToken(id: string): Promise<void> {
 }
 
 export async function hasDaemonToken(id: string): Promise<boolean> {
-  if (!isDesktop()) return (sessionStorage.getItem(TOKEN_PREFIX + id) ?? "") !== "";
+  if (!isDesktop()) return readKey(tokenKey(id)) !== "";
   await ensureDesktopMigration();
   return requireNative(await hostHasToken(id), "host_has_token");
 }
 
 export function peekActiveId(): string {
-  return typeof localStorage === "undefined" ? "" : (localStorage.getItem(ACTIVE_KEY) ?? "");
+  return readKey(storageKeys.activeDaemon);
 }
 
 export async function getActiveId(): Promise<string> {
-  if (!isDesktop()) return localStorage.getItem(ACTIVE_KEY) ?? "";
+  if (!isDesktop()) return readKey(storageKeys.activeDaemon);
   await ensureDesktopMigration();
   return peekActiveId();
 }
 
 export async function setActiveId(id: string): Promise<void> {
   if (!isDesktop()) {
-    if (id) localStorage.setItem(ACTIVE_KEY, id);
-    else localStorage.removeItem(ACTIVE_KEY);
+    if (id) writeKey(storageKeys.activeDaemon, id);
+    else removeKey(storageKeys.activeDaemon);
     return;
   }
   await ensureDesktopMigration();
-  if (id) localStorage.setItem(ACTIVE_KEY, id);
-  else localStorage.removeItem(ACTIVE_KEY);
+  if (id) writeKey(storageKeys.activeDaemon, id);
+  else removeKey(storageKeys.activeDaemon);
 }
 
 // Pages key effects on the host object, and the sidebar re-resolves every
@@ -313,7 +307,7 @@ export async function resolveDaemon(id: string): Promise<Daemon | null> {
     if (!meta) return null;
     const daemon = {
       ...meta,
-      token: sessionStorage.getItem(TOKEN_PREFIX + id) ?? "",
+      token: readKey(tokenKey(id)),
     };
     return remember(daemon);
   }

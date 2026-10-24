@@ -1,10 +1,11 @@
 import { useSyncExternalStore } from "react";
+import { readKey, storageKeys, writeKey } from "./storage";
 
 /** Host workspaces: a window-level grouping of registered hosts. Hosts are the
  *  set of daemons, so no single daemon can own this; it lives in the app's
  *  WebView storage next to the server order. A host absent from the map is in
  *  the built-in Default, so new hosts land there without any migration. */
-export const WORKSPACES_KEY = "app:workspaces:v1";
+export const WORKSPACES_KEY = storageKeys.workspaces.name;
 export const DEFAULT_WORKSPACE_ID = "default";
 
 export interface Workspace {
@@ -52,11 +53,7 @@ function sanitize(value: unknown): WorkspacesState {
 }
 
 function read(): WorkspacesState {
-  try {
-    return sanitize(JSON.parse(localStorage.getItem(WORKSPACES_KEY) ?? "null"));
-  } catch {
-    return sanitize(null);
-  }
+  return sanitize(readKey(storageKeys.workspaces));
 }
 
 let state: WorkspacesState | null = null;
@@ -69,19 +66,13 @@ function current(): WorkspacesState {
 
 function update(next: WorkspacesState) {
   state = sanitize({ version: 1, ...next, workspaces: next.workspaces.slice(1) });
-  try {
-    localStorage.setItem(
-      WORKSPACES_KEY,
-      JSON.stringify({
-        version: 1,
-        workspaces: state.workspaces.slice(1),
-        hostWorkspace: state.hostWorkspace,
-        active: state.active,
-      }),
-    );
-  } catch {
-    // Unavailable storage keeps the change for this session only.
-  }
+  // Unavailable storage keeps the change for this session only.
+  writeKey(storageKeys.workspaces, {
+    version: 1,
+    workspaces: state.workspaces.slice(1),
+    hostWorkspace: state.hostWorkspace,
+    active: state.active,
+  });
   for (const listener of listeners) listener();
 }
 

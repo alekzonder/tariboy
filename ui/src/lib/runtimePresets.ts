@@ -1,3 +1,4 @@
+import { readKey, storageKeys, writeKey } from "./storage";
 import type { HarnessCatalog } from "./types";
 
 export type RuntimePresetField = "models" | "efforts";
@@ -14,21 +15,13 @@ export interface HarnessCatalogState {
   error: string;
 }
 
-export const RUNTIME_PRESETS_STORAGE_KEY = "tariboy:runtime-presets:v1";
+export const RUNTIME_PRESETS_STORAGE_KEY = storageKeys.runtimePresets.name;
 export const EFFORT_PRESETS = ["low", "medium", "high", "xhigh", "max", "ultracode"] as const;
 
 const LEARNED_PRESET_LIMIT = 20;
 
 type LearnedHarnessPresets = Partial<Record<RuntimePresetField, string[]>>;
 type LearnedRuntimePresets = Record<string, LearnedHarnessPresets>;
-
-function storage(): Storage | null {
-  try {
-    return globalThis.localStorage ?? null;
-  } catch {
-    return null;
-  }
-}
 
 function stringValues(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -40,24 +33,18 @@ function stringValues(value: unknown): string[] {
 }
 
 function loadLearnedPresets(): LearnedRuntimePresets {
-  try {
-    const raw = storage()?.getItem(RUNTIME_PRESETS_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const parsed = readKey(storageKeys.runtimePresets);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
 
-    const learned: LearnedRuntimePresets = {};
-    for (const [harness, value] of Object.entries(parsed)) {
-      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-      const entry = value as Record<string, unknown>;
-      const models = stringValues(entry.models);
-      const efforts = stringValues(entry.efforts);
-      if (models.length || efforts.length) learned[harness] = { models, efforts };
-    }
-    return learned;
-  } catch {
-    return {};
+  const learned: LearnedRuntimePresets = {};
+  for (const [harness, value] of Object.entries(parsed)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const entry = value as Record<string, unknown>;
+    const models = stringValues(entry.models);
+    const efforts = stringValues(entry.efforts);
+    if (models.length || efforts.length) learned[harness] = { models, efforts };
   }
+  return learned;
 }
 
 function uniqueTrimmed(groups: readonly (readonly (string | undefined)[])[]): string[] {
@@ -99,11 +86,8 @@ export function rememberRuntimePreset(
     [field]: next,
   };
 
-  try {
-    storage()?.setItem(RUNTIME_PRESETS_STORAGE_KEY, JSON.stringify(learned));
-  } catch {
-    // Presets are a convenience. Storage failures must not block creation.
-  }
+  // Presets are a convenience. Storage failures must not block creation.
+  writeKey(storageKeys.runtimePresets, learned);
 }
 
 function catalogValues(

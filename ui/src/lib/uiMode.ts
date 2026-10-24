@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { readKey, storageKeys, writeKey } from "./storage";
 
 /**
  * Simple shows an ordinary user only the agent's Chat, Tasks, Terminal and
@@ -8,16 +9,12 @@ import { useSyncExternalStore } from "react";
  */
 export type UiMode = "simple" | "expert";
 
-export const UI_MODE_KEY = "app:ui-mode:v1";
+export const UI_MODE_KEY = storageKeys.uiMode.name;
 
 const listeners = new Set<() => void>();
 
 export function readUiMode(): UiMode {
-  try {
-    return localStorage.getItem(UI_MODE_KEY) === "expert" ? "expert" : "simple";
-  } catch {
-    return "simple";
-  }
+  return readKey(storageKeys.uiMode);
 }
 
 /** The tab an agent opens on: Chat in Simple, Terminal in Expert. */
@@ -26,11 +23,8 @@ export function defaultAgentTab(): "chat" | "console" {
 }
 
 export function writeUiMode(mode: UiMode): void {
-  try {
-    localStorage.setItem(UI_MODE_KEY, mode);
-  } catch {
-    // Unavailable storage leaves the interface in Simple rather than breaking it.
-  }
+  // Unavailable storage leaves the interface in Simple rather than breaking it.
+  writeKey(storageKeys.uiMode, mode);
   listeners.forEach((listener) => listener());
 }
 

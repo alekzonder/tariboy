@@ -21,9 +21,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Segmented } from "@/components/ui/segmented";
+import { readKeyResult, storageKeys, writeKey } from "@/lib/storage";
 import { useUiMode, writeUiMode, type UiMode } from "@/lib/uiMode";
 
-const AUTO_DOWNLOAD_KEY = "desktop:updates:auto-download:v1";
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 const STORAGE_ERROR = "Could not save the automatic download setting.";
 
@@ -43,12 +43,8 @@ interface DesktopUpdatesContextValue {
 const DesktopUpdatesContext = createContext<DesktopUpdatesContextValue | null>(null);
 
 function readPreference(): { automatic: boolean; error: string } {
-  try {
-    const stored = localStorage.getItem(AUTO_DOWNLOAD_KEY);
-    return { automatic: stored === null ? true : stored === "true", error: "" };
-  } catch {
-    return { automatic: true, error: STORAGE_ERROR };
-  }
+  const { value, ok } = readKeyResult(storageKeys.desktopAutoDownload);
+  return { automatic: value, error: ok ? "" : STORAGE_ERROR };
 }
 
 export function DesktopUpdatesProvider({ children }: { children: ReactNode }) {
@@ -141,12 +137,7 @@ export function DesktopUpdatesProvider({ children }: { children: ReactNode }) {
 
   const setAutomatic = (enabled: boolean) => {
     setAutomaticState(enabled);
-    try {
-      localStorage.setItem(AUTO_DOWNLOAD_KEY, String(enabled));
-      setStorageError("");
-    } catch {
-      setStorageError(STORAGE_ERROR);
-    }
+    setStorageError(writeKey(storageKeys.desktopAutoDownload, enabled) ? "" : STORAGE_ERROR);
   };
 
   return (

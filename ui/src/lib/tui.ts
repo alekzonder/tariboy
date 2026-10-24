@@ -1,11 +1,5 @@
-import { useCallback, useState } from "react";
-
-/** localStorage key holding the retained inject-modal draft for one agent's
- * section. Keyed by agent name AND section so the manager and worker drafts
- * never clobber each other. */
-function tuiDraftKey(name: string, section: string): string {
-  return `tui:draft:${name}:${section}`;
-}
+import { useCallback, useMemo, useState } from "react";
+import { readKey, removeKey, storageKeyFamilies, writeKey } from "./storage";
 
 /** Append `extra` to a draft body so it lands at the END, separated from the
  * existing text by a single newline. Empty `extra` is a no-op; appending to an
@@ -17,19 +11,17 @@ export function appendDraft(prev: string, extra: string): string {
 }
 
 /** An inject-modal draft for one agent's section. Persistent callers keep the
- * body in `localStorage` (keyed via {@link tuiDraftKey}) across modal closes and
- * page reloads. Workspace callers opt out, keeping the body only in component
+ * body in Web Storage across modal closes and page reloads, keyed by agent name
+ * AND section so the manager and worker drafts never clobber each other. Workspace callers opt out, keeping the body only in component
  * memory. Cleared on explicit Cancel or a successful Send. */
 export function useTuiDraft(name: string, section: string, persistent = true) {
-  const key = tuiDraftKey(name, section);
-  const [text, setTextState] = useState<string>(() =>
-    persistent ? (localStorage.getItem(key) ?? "") : "",
-  );
+  const key = useMemo(() => storageKeyFamilies.tuiDraft.key(name, section), [name, section]);
+  const [text, setTextState] = useState<string>(() => (persistent ? readKey(key) : ""));
   const persist = useCallback(
     (next: string) => {
       if (!persistent) return;
-      if (next) localStorage.setItem(key, next);
-      else localStorage.removeItem(key);
+      if (next) writeKey(key, next);
+      else removeKey(key);
     },
     [key, persistent],
   );
