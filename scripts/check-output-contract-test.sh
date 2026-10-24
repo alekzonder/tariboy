@@ -71,6 +71,10 @@ if [ "$1" = ci ]; then
   [ "${TEST_NPM_FAIL:-0}" != 1 ] || exit 7
   mkdir -p node_modules
 fi
+if [ "$*" = 'run fmt:check' ] && [ "${TEST_FMT_FAIL:-0}" = 1 ]; then
+  echo FMT_DRIFT
+  exit 1
+fi
 EOF
 cat >"$fixture/bin/npx" <<'EOF'
 #!/bin/sh
@@ -106,13 +110,28 @@ printf '{}\n' | tee "$fixture/ui/package-lock.json" "$fixture/docs/package-lock.
 PATH="$fixture/bin:$PATH" make --no-print-directory -C "$fixture" frontend-check
 test "$(sed -n '1p' "$fixture/events")" = 'ui:npm ci --no-audit --no-fund'
 test "$(sed -n '2p' "$fixture/events")" = 'docs:npm ci --no-audit --no-fund'
-test "$(sed -n '3p' "$fixture/events")" = 'ui:npx tsc -b'
-test "$(sed -n '4p' "$fixture/events")" = 'ui:npm run lint'
-test "$(sed -n '5p' "$fixture/events")" = 'ui:npm run lint:unused'
-test "$(sed -n '6p' "$fixture/events")" = 'ui:npm test'
-test "$(sed -n '7p' "$fixture/events")" = 'ui:npm run branding:check'
-test "$(sed -n '8p' "$fixture/events")" = 'ui:npm run bundle:budget'
+test "$(sed -n '3p' "$fixture/events")" = 'ui:npm run fmt:check'
+test "$(sed -n '4p' "$fixture/events")" = 'ui:npx tsc -b'
+test "$(sed -n '5p' "$fixture/events")" = 'ui:npm run lint'
+test "$(sed -n '6p' "$fixture/events")" = 'ui:npm run lint:unused'
+test "$(sed -n '7p' "$fixture/events")" = 'ui:npm test'
+test "$(sed -n '8p' "$fixture/events")" = 'ui:npm run branding:check'
+test "$(sed -n '9p' "$fixture/events")" = 'ui:npm run bundle:budget'
 echo "Check dependency preparation contract ok"
+
+# Format drift fails the aggregate without skipping the later steps.
+: >"$fixture/events"
+if TEST_FMT_FAIL=1 PATH="$fixture/bin:$PATH" make --no-print-directory -C "$fixture" frontend-check >"$output" 2>&1; then
+  echo "FAIL: format drift was ignored" >&2
+  exit 1
+fi
+grep -Eq 'ui-fmt-check +FAIL +[0-9]+s' "$output"
+grep -Fq 'command: cd ui && npm run fmt:check' "$output"
+grep -Fq 'FMT_DRIFT' "$output"
+grep -Eq 'ui-typecheck +ok +[0-9]+s' "$output"
+grep -q 'ui:npm run bundle:budget' "$fixture/events"
+grep -Fq 'frontend-check FAILED' "$output"
+echo "Format check contract ok"
 
 # The real installer must reuse only successful installs with matching inputs.
 run_frontend() {
