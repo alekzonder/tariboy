@@ -174,7 +174,10 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
   };
 
   return (
-    <div className="tasks-workspace" data-testid="all-tasks-workspace">
+    <div
+      className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)]"
+      data-testid="all-tasks-workspace"
+    >
       {Object.entries(sequences).map(([serverId, after]) => (
         <ServerTasksLive
           key={serverId}
@@ -183,7 +186,7 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
           onChange={() => refresh(serverId)}
         />
       ))}
-      <main className="tasks-center">
+      <main className="min-h-0 min-w-0 overflow-auto">
         <TaskFilterBar
           mode="servers"
           query={view.query}
@@ -236,7 +239,7 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
             ))}
           </div>
         ) : (
-          <div className="task-tree-list">
+          <div className="min-h-[calc(100%-60px)] pb-20">
             <TaskTableHeader mode="servers" sticky />
             {rows.map((row: VisibleTaskRow & { task: ServerTask }) => {
               const id = rowId(row.task);
@@ -380,7 +383,10 @@ function NewTaskForm({
   };
 
   return (
-    <form className="task-inline-form" onSubmit={(event) => void submit(event)}>
+    <form
+      className="task-inline-form mx-3.5 my-2.5 flex gap-1.5 rounded-panel border border-border bg-card p-2.5 shadow-[0_8px_30px_oklch(0_0_0/0.07)]"
+      onSubmit={(event) => void submit(event)}
+    >
       <select
         aria-label="Task agent"
         value={choice}

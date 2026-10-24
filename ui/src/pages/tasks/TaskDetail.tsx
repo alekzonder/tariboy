@@ -106,7 +106,7 @@ export default function TaskDetail({
           onTransfer={onTransfer}
           onRequeue={onRequeue}
         />
-        <div className="task-detail-panel">
+        <div className="task-detail-panel relative min-h-0 min-w-0 overflow-auto bg-card">
           {/* Sticky: whatever the panel is scrolled to, the key, the title and the
           status stay in view. The one shadow here is the same rule the selected
           row and the active segment carry. */}
@@ -120,7 +120,7 @@ export default function TaskDetail({
             onRequeue={() => setRequeueOpen(true)}
             onTransfer={() => setTransferOpen(true)}
           />
-          <div className="task-detail-body flex min-w-0 flex-col gap-4.5 px-4 pt-3.5 pb-7">
+          <div className="flex min-w-0 flex-col gap-4.5 px-4 pt-3.5 pb-7">
             <TaskDetailDraftAlerts
               task={task}
               draft={draft}
@@ -129,7 +129,7 @@ export default function TaskDetail({
               onClose={onClose}
             />
             {task.access === "context" ? (
-              <div className="tasks-empty">
+              <div className="px-5 py-10 text-center text-body text-muted-foreground">
                 Context ancestor — open a visible descendant to edit.
               </div>
             ) : (

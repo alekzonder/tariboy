@@ -51,7 +51,7 @@ export function TaskDetailFields({
         <span className={LABEL}>Title</span>
         <Input className={FIELD} value={title} onChange={(event) => setTitle(event.target.value)} />
       </label>
-      <div className="task-description flex min-w-0 flex-col gap-1.75">
+      <div className="task-description grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.75">
         <div className="flex items-center gap-2">
           <label htmlFor="task-description" className={LABEL}>
             Description

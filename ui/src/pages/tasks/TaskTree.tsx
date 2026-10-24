@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import {
   DndContext,
   KeyboardSensor,
@@ -30,7 +31,10 @@ function RootDrop({ children }: { children: React.ReactNode }) {
     <div
       ref={setNodeRef}
       data-testid="tasks-tree-root"
-      className={`task-tree-list ${isOver ? "is-drop-target" : ""}`}
+      className={cn(
+        "min-h-[calc(100%-60px)] pb-20",
+        isOver && "shadow-[inset_0_0_0_2px_color-mix(in_oklch,var(--primary)_30%,transparent)]",
+      )}
     >
       {children}
     </div>
@@ -128,7 +132,11 @@ export default function TaskTree({
               onPriorityChange={(priority) => onPriorityChange(row.task.key, priority)}
             />
           ))}
-          {visible.length === 0 && <div className="tasks-empty">No tasks match this view.</div>}
+          {visible.length === 0 && (
+            <div className="px-5 py-10 text-center text-body text-muted-foreground">
+              No tasks match this view.
+            </div>
+          )}
         </RootDrop>
       </DndContext>
     </>
