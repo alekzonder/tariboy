@@ -135,7 +135,7 @@ export function TuiScreen({
   /** Standalone Terminal tab chrome or a flush surface embedded in a Workspace pane. */
   surface?: "standalone" | "workspace"
 }) {
-  const { absent, name, send, status } = controller
+  const { absent, name, send, sendResize, attachTerm, status } = controller
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [focused, setFocused] = useState(false)
   // Set by the mount effect below; lets other effects (re)fit the live terminal
@@ -210,7 +210,7 @@ export function TuiScreen({
     const webLinksAddon = new WebLinksAddon(openWebLink)
     term.loadAddon(webLinksAddon)
     term.open(el)
-    controller.attachTerm(term)
+    attachTerm(term)
     term.onData((d) => {
       // `q` is copy-mode's quit key and the very byte our own Exit scrollback
       // button sends, so tracking it is exactly as accurate as tracking that
@@ -237,7 +237,7 @@ export function TuiScreen({
         // ignore and let the next ResizeObserver tick retry.
         return
       }
-      if (term.cols > 0 && term.rows > 0) controller.sendResize(term.cols, term.rows)
+      if (term.cols > 0 && term.rows > 0) sendResize(term.cols, term.rows)
     }
 
     // Deferred refit, coalesced into one animation frame. Needed because a
@@ -271,10 +271,9 @@ export function TuiScreen({
       webLinksAddon.dispose()
       term.dispose()
     }
-    // controller.attachTerm/send/sendResize are stable useCallbacks; re-running
-    // only on the agent name or the absent→live transition is intentional.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [absent, name])
+    // attachTerm/send/sendResize are stable useCallbacks, so this re-runs only
+    // on the agent name or the absent→live transition.
+  }, [absent, name, attachTerm, send, sendResize])
 
   // Re-fit whenever a socket opens (agent switch, backoff reconnect, redial):
   // the mount-effect's fit can land while the ws is still CONNECTING, so its

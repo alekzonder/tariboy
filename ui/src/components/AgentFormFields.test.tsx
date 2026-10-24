@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commaFieldError, serializeEnv, type EnvRow } from "./AgentFormFields";
+import { commaFieldError, serializeEnv, type EnvRow } from "./agentFormValues";
 
 // parseKV mirrors the daemon's env parser (internal/commands/agents.go): split
 // the K=V,K=V string on ',' with no escaping, then split each pair on the first

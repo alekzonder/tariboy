@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ApiClient, TeamImportOperation } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { guard } from "@/lib/toast-guard";
@@ -55,9 +55,12 @@ export default function GroupsPage() {
     URL.revokeObjectURL(url);
   };
 
-  const load = () => api.request<{ groups: GroupRow[] }>("GET", "/api/groups").then((r) => setGroups(r.groups)).catch(() => setGroups([]));
-  const inspect = (name: string) => api.request<GroupView>("GET", `/api/groups/${encodeURIComponent(name)}`).then((group) => { setSel(group); setRename(group.name); }).catch(() => setSel(null));
-  useEffect(() => { void load(); const requested = searchParams.get("team"); if (requested) void inspect(requested); }, [api]);
+  const load = useCallback(() => api.request<{ groups: GroupRow[] }>("GET", "/api/groups").then((r) => setGroups(r.groups)).catch(() => setGroups([])), [api]);
+  const inspect = useCallback((name: string) => api.request<GroupView>("GET", `/api/groups/${encodeURIComponent(name)}`).then((group) => { setSel(group); setRename(group.name); }).catch(() => setSel(null)), [api]);
+  // The team named in the URL opens on arrival and whenever the link names another one.
+  const requestedTeam = searchParams.get("team");
+  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (requestedTeam) void inspect(requestedTeam); }, [inspect, requestedTeam]);
   useEffect(() => {
     if (!operationRef) return;
     void operationRef.api.groups.getTeamImportOperation(operationRef.id).then(setImportOperation).catch(() => localStorage.removeItem("tariboy:team-import"));
@@ -69,7 +72,7 @@ export default function GroupsPage() {
       if (operation.status === "complete") { localStorage.removeItem("tariboy:team-import"); void load(); }
     }).catch(() => {}), 500);
     return () => window.clearInterval(timer);
-  }, [operationRef, importOperation?.status]);
+  }, [operationRef, importOperation?.status, load]);
 
   return (
     <div className="space-y-4 p-6">

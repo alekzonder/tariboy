@@ -76,9 +76,6 @@ function AttentionMark({ attention }: { attention: WorkflowAttention }) {
   )
 }
 
-/* @dnd-kit intentionally exposes callback refs and live attributes from its
- * hook for render-time spreading; they are not mutable React ref reads. */
-/* eslint-disable react-hooks/refs */
 export default function TaskRow({
   row,
   mode,
@@ -109,18 +106,18 @@ export default function TaskRow({
   // The every-server table has no drag and no add-child: neither can cross the
   // server boundary the rows sit on.
   const disabled = readOnly || mode === "servers"
-  const drag = useDraggable({ id: row.task.key, disabled })
-  const dropBefore = useDroppable({ id: `before:${row.task.key}`, disabled })
-  const dropInside = useDroppable({ id: `inside:${row.task.key}`, disabled })
-  const dropAfter = useDroppable({ id: `after:${row.task.key}`, disabled })
+  const { setNodeRef, setActivatorNodeRef, isDragging, listeners, attributes } = useDraggable({ id: row.task.key, disabled })
+  const { setNodeRef: setBeforeRef, isOver: overBefore } = useDroppable({ id: `before:${row.task.key}`, disabled })
+  const { setNodeRef: setInsideRef, isOver: overInside } = useDroppable({ id: `inside:${row.task.key}`, disabled })
+  const { setNodeRef: setAfterRef, isOver: overAfter } = useDroppable({ id: `after:${row.task.key}`, disabled })
   const tone = taskTone(row.task.category)
   const workflow = isWorkflowTask(row.task)
   const columns = useTaskColumns(mode)
   return (
     <div
-      ref={drag.setNodeRef}
+      ref={setNodeRef}
       data-testid={`task-row-${row.task.key}`}
-      style={{ opacity: drag.isDragging ? 0.45 : undefined }}
+      style={{ opacity: isDragging ? 0.45 : undefined }}
       // A mouse or finger opens the task anywhere on the row; the keyboard keeps
       // the title button. The row's own buttons, and clicks React bubbles up
       // from the priority menu's portal, keep their own action.
@@ -132,35 +129,35 @@ export default function TaskRow({
       className={cn(
         "group/row relative flex min-h-[30px] cursor-pointer items-center gap-2.5 px-4 text-[13px]",
         selected ? "bg-accent" : "hover:bg-muted",
-        dropInside.isOver && "ring-1 ring-primary ring-inset",
+        overInside && "ring-1 ring-primary ring-inset",
         row.task.access === "context" && "opacity-60",
       )}
     >
       <span
-        ref={dropBefore.setNodeRef}
+        ref={setBeforeRef}
         data-testid={`drop-before-${row.task.key}`}
-        className={`task-drop-zone before ${dropBefore.isOver ? "is-over" : ""}`}
+        className={`task-drop-zone before ${overBefore ? "is-over" : ""}`}
       />
       <span
-        ref={dropInside.setNodeRef}
+        ref={setInsideRef}
         data-testid={`drop-inside-${row.task.key}`}
         className="task-drop-zone inside"
       />
       <span
-        ref={dropAfter.setNodeRef}
+        ref={setAfterRef}
         data-testid={`drop-after-${row.task.key}`}
-        className={`task-drop-zone after ${dropAfter.isOver ? "is-over" : ""}`}
+        className={`task-drop-zone after ${overAfter ? "is-over" : ""}`}
       />
       {/* The grip lives in the row's own left padding: the reference table has
           no column for it, and it is only there under the pointer anyway. */}
       {mode !== "servers" && (
         <button
           type="button"
-          ref={drag.setActivatorNodeRef}
+          ref={setActivatorNodeRef}
           className="task-row-grip absolute top-1/2 left-0 z-2 grid h-6 w-4 -translate-y-1/2 cursor-grab place-items-center text-muted-foreground opacity-0 group-hover/row:opacity-60"
           aria-label={`Move ${row.task.key}`}
-          {...drag.listeners}
-          {...drag.attributes}
+          {...listeners}
+          {...attributes}
         >
           <GripVertical aria-hidden="true" className="size-3" />
         </button>
@@ -387,37 +384,37 @@ export function TaskTableHeader({ mode, sticky = false }: { mode: TaskRowMode; s
 }
 
 function TaskHeaderCell({ column, editable }: { column: TaskColumn; editable: boolean }) {
-  const drag = useDraggable({ id: column.id, disabled: !editable })
-  const drop = useDroppable({ id: column.id })
+  const { setNodeRef, setActivatorNodeRef, isDragging, listeners, attributes, transform } = useDraggable({ id: column.id, disabled: !editable })
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: column.id })
   const label = TASK_COLUMN_LABELS[column.id]
   const end = column.id === "duration" || column.id === "updated"
   return (
     <span
       ref={(node) => {
-        drag.setNodeRef(node)
-        drop.setNodeRef(node)
+        setNodeRef(node)
+        setDropRef(node)
       }}
       data-column={column.id}
       style={{
         width: column.width,
-        transform: drag.transform ? `translate3d(${drag.transform.x}px, 0, 0)` : undefined,
+        transform: transform ? `translate3d(${transform.x}px, 0, 0)` : undefined,
       }}
       className={cn(
         "relative flex h-full shrink-0 items-center",
         column.id === "task" && "min-w-0 flex-1",
         end && "justify-end",
-        drag.isDragging && "z-4 rounded-[6px] bg-muted opacity-80",
-        drop.isOver && !drag.isDragging && "rounded-[6px] ring-1 ring-primary ring-inset",
+        isDragging && "z-4 rounded-[6px] bg-muted opacity-80",
+        isOver && !isDragging && "rounded-[6px] ring-1 ring-primary ring-inset",
       )}
     >
       {editable ? (
         <button
           type="button"
-          ref={drag.setActivatorNodeRef}
+          ref={setActivatorNodeRef}
           aria-label={`Move ${label} column`}
           className="task-column-grip min-w-0 cursor-grab truncate"
-          {...drag.listeners}
-          {...drag.attributes}
+          {...listeners}
+          {...attributes}
         >
           {label}
         </button>

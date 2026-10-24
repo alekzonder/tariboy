@@ -46,4 +46,5 @@ function Badge({
   )
 }
 
+// oxlint-disable-next-line react/only-export-components -- shadcn exports the variants beside the component, and the kit stays upstream-shaped
 export { Badge, badgeVariants }

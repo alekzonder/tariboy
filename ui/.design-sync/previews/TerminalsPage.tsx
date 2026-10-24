@@ -47,6 +47,7 @@ try {
 // event to open a Radix menu.
 function Deferred({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
+  // oxlint-disable-next-line react/set-state-in-effect -- the second commit is the point: it mounts the page after the first paint
   useEffect(() => setMounted(true), []);
   return <>{mounted ? children : null}</>;
 }

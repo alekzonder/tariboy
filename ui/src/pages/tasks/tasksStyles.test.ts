@@ -32,7 +32,7 @@ it("preserves task sheet positioning, button colors and Markdown containment aft
   document.body.append(dialog)
   try {
     const button = renderToStaticMarkup(createElement(Button, null, "Send comment"))
-    const markdown = renderToStaticMarkup(createElement(MarkdownContent, { children: "long".repeat(200) }))
+    const markdown = renderToStaticMarkup(createElement(MarkdownContent, null, "long".repeat(200)))
     dialog.innerHTML = `${button}<section class="task-comments"><form>${button}</form><div class="task-comment-list"><article>${markdown}</article></div></section>`
     const buttons = dialog.querySelectorAll("button")
     expect(getComputedStyle(buttons[0]).backgroundColor).toBe("rgb(10, 20, 30)")

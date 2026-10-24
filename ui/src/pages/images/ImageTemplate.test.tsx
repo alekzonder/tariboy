@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import { apiWrapper } from "@/test/api";
 import ImageTemplate from "./ImageTemplate";
 
-vi.mock("@/components/ImageLayout", () => ({
+vi.mock("@/components/imageContext", () => ({
   useImageContext: () => ({ ref: "reviewer:v2", hostKey: "", manifest: null, provenance: null }),
 }));
 

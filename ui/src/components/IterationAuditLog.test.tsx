@@ -45,6 +45,17 @@ describe("IterationAuditLog", () => {
     expect(subSpy.mock.calls[0][1]).toContain("proxy");
   });
 
+  it("hides the previous iteration's events while the next one loads", async () => {
+    vi.spyOn(api.agents, "subscribeAgentEvents").mockReturnValue(() => {});
+    vi.spyOn(api.audit, "fetchTranscript").mockResolvedValue([]);
+    vi.spyOn(api.audit, "listAuditEvents").mockImplementation((_name, qs) =>
+      qs?.includes("old") ? Promise.resolve({ events: EVENTS } as never) : new Promise(() => {}));
+    const view = render(<IterationAuditLog name="dev-worker" iterationId="old" iterationStatus="done" />);
+    await waitFor(() => expect(screen.getByText("manual")).toBeInTheDocument());
+    view.rerender(<IterationAuditLog name="dev-worker" iterationId="new" iterationStatus="running" />);
+    expect(screen.queryByText("manual")).not.toBeInTheDocument();
+  });
+
   it("with no iteration id shows a placeholder and does not fetch logs", () => {
     render(<IterationAuditLog name="dev-worker" iterationId="" iterationStatus="" />);
     expect(screen.getByText(/no iterations yet/i)).toBeInTheDocument();

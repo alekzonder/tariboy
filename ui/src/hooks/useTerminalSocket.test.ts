@@ -540,12 +540,13 @@ describe("useTerminalSocket", () => {
 describe("useTerminalSocket host", () => {
   const remote: Daemon = { id: "r", label: "Remote", baseURL: "https://r.example", token: "one" }
   function HostWrapper({ host, children }: PropsWithChildren<{ host: Daemon }>) {
+    // oxlint-disable-next-line react/no-children-prop -- ApiProvider types children as a required prop, so createElement passes it there
     return createElement(ApiProvider, { target: host, children })
   }
 
   it("dials the provider's host and keeps the socket across ordinary re-renders", () => {
     const { rerender } = rtlRenderHook(() => useTerminalSocket("bob", true), {
-      wrapper: ({ children }: PropsWithChildren) => createElement(HostWrapper, { host: { ...remote }, children }),
+      wrapper: ({ children }: PropsWithChildren) => createElement(HostWrapper, { host: { ...remote } }, children),
     })
     expect(FakeWebSocket.instances).toHaveLength(1)
     expect(FakeWebSocket.last!.url).toBe("wss://r.example/api/agents/bob/terminal?cols=80&rows=24&token=one")
@@ -556,6 +557,7 @@ describe("useTerminalSocket host", () => {
   it("re-dials when the provider's token changes", () => {
     let client: ApiClient = createApi(remote)
     const { rerender } = rtlRenderHook(() => useTerminalSocket("bob", true), {
+      // oxlint-disable-next-line react/no-children-prop -- ApiProvider types children as a required prop, so createElement passes it there
       wrapper: ({ children }: PropsWithChildren) => createElement(ApiProvider, { client, children }),
     })
     expect(FakeWebSocket.instances).toHaveLength(1)

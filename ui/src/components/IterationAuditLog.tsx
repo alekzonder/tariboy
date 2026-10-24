@@ -19,6 +19,9 @@ function shortIter(id: string): string {
   return `${ts}-${n}`;
 }
 
+const NONE: AuditEvent[] = [];
+const NO_CALLS: Call[] = [];
+
 // IterationAuditLog shows the audit events of a single iteration — the running
 // one on Overview, or the last one once it finished. A header chip names the
 // iteration and its status; the events stream chat-style, pinned to the bottom.
@@ -38,8 +41,14 @@ export function IterationAuditLog({
   iterationProductive?: boolean;
 }) {
   const api = useApi();
-  const [events, setEvents] = useState<AuditEvent[]>([]);
-  const [calls, setCalls] = useState<Call[]>([]);
+  // Loaded data carries the iteration it belongs to, so a switch shows nothing
+  // from the previous iteration while the next one loads.
+  const key = name && iterationId ? `${name}/${iterationId}` : "";
+  const [loaded, setLoaded] = useState<{ key: string; events: AuditEvent[]; calls: Call[] }>(
+    { key: "", events: [], calls: [] },
+  );
+  const events = loaded.key === key ? loaded.events : NONE;
+  const calls = loaded.key === key ? loaded.calls : NO_CALLS;
   const [open, setOpen] = useState<Set<number>>(new Set());
   const rootRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -47,26 +56,21 @@ export function IterationAuditLog({
     rootRef.current?.querySelector<HTMLElement>('[data-slot="scroll-area-viewport"]') ?? null;
 
   useEffect(() => {
-    if (!name || !iterationId) {
-      setEvents([]);
-      setCalls([]);
-      return;
-    }
+    if (!name || !iterationId) return;
     let active = true;
     let transcriptInFlight = false;
     const controller = new AbortController();
     const running = iterationStatus === "running";
-    setEvents([]);
-    setCalls([]);
+    const current = (prev: typeof loaded) => (prev.key === key ? prev : { key, events: [], calls: [] });
     const load = () =>
       void api.audit.listAuditEvents(name, `iteration=${encodeURIComponent(iterationId)}`)
-        .then((r) => { if (active) setEvents(r.events ?? []); })
+        .then((r) => { if (active) setLoaded((prev) => ({ ...current(prev), events: r.events ?? [] })); })
         .catch(() => { /* keep last events on a transient failure */ });
     const loadTranscript = () => {
       if (transcriptInFlight) return;
       transcriptInFlight = true;
       void api.audit.fetchTranscript(name, iterationId, controller.signal)
-        .then((next) => { if (active) setCalls(next); })
+        .then((next) => { if (active) setLoaded((prev) => ({ ...current(prev), calls: next })); })
         .catch(() => { /* keep last transcript on a transient failure */ })
         .finally(() => { transcriptInFlight = false; });
     };
@@ -81,7 +85,7 @@ export function IterationAuditLog({
       window.clearInterval(t);
       off();
     };
-  }, [api, name, iterationId, iterationStatus]);
+  }, [api, key, name, iterationId, iterationStatus]);
 
   useEffect(() => {
     const v = viewport();

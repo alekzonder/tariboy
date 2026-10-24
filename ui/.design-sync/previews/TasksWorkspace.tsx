@@ -55,8 +55,7 @@ function useClickSequence(frameRef: RefObject<HTMLDivElement | null>, labels: st
     };
     frame = window.requestAnimationFrame(step);
     return () => window.cancelAnimationFrame(frame);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frameRef, labels.join("|")]);
+  }, [frameRef, labels]);
 }
 
 export const AllTasks = () => (
@@ -75,9 +74,12 @@ export const ScopedToAgent = () => (
   </DaemonProvider>
 );
 
+const queueLabels = ["Queues", "New queue"];
+const notificationLabels = ["Notifications"];
+
 export const Queues = () => {
   const frameRef = useRef<HTMLDivElement | null>(null);
-  useClickSequence(frameRef, ["Queues", "New queue"]);
+  useClickSequence(frameRef, queueLabels);
   return (
     <DaemonProvider>
       <Shell frameRef={frameRef}>
@@ -89,7 +91,7 @@ export const Queues = () => {
 
 export const Notifications = () => {
   const frameRef = useRef<HTMLDivElement | null>(null);
-  useClickSequence(frameRef, ["Notifications"]);
+  useClickSequence(frameRef, notificationLabels);
   return (
     <DaemonProvider>
       <Shell frameRef={frameRef}>

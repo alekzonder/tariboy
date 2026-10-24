@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import CodeMirror from "@uiw/react-codemirror";
 import { Loader2 } from "lucide-react";
-import { useTheme } from "@/components/theme-provider";
+import { useTheme } from "@/components/themeContext";
 import type { FileContent } from "@/lib/api";
 import { errMsg, isMarkdown } from "./paths";
 import { langFor } from "./languages";

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { validChannel } from "./channelName";
 import {
   Command, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
@@ -13,19 +14,6 @@ interface Sub { name: string; kind: string; protected: boolean }
 interface Chan { name: string; kind: string }
 
 const errmsg = (e: unknown) => (e instanceof ApiError ? e.message : String(e));
-
-// validChannel mirrors the daemon's bus.ValidChannel (internal/bus/bus.go): a
-// known kind prefix plus every ':'-separated segment matching the name rule. It
-// gates free-text input client-side so a typo never POSTs a junk channel — the
-// daemon still re-validates, this just surfaces the error inline before submit.
-const CHANNEL_SEG = /^[a-z0-9][a-z0-9_-]*$/;
-const CHANNEL_PREFIXES = new Set(["agent", "group", "user", "chat", "plugin", "system"]);
-export function validChannel(name: string): boolean {
-  if (!name || !name.includes(":")) return false;
-  const parts = name.split(":");
-  if (!CHANNEL_PREFIXES.has(parts[0])) return false;
-  return parts.every((p) => CHANNEL_SEG.test(p));
-}
 
 // AgentSubscriptions manages the per-agent bus subscriptions: protected rows
 // (own inbox, group:*) are read-only; ad-hoc rows get an Unsubscribe button. The
@@ -44,13 +32,13 @@ export function AgentSubscriptions(
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const load = () => {
+  const load = useCallback(() => {
     api.get<{ channels: Sub[] }>(`/api/agents/${encodeURIComponent(name)}/subscriptions`)
       .then((r) => setSubs(r.channels)).catch(() => setSubs([]));
     api.get<{ channels: Chan[] }>("/api/channels")
       .then((r) => setChannels(r.channels)).catch(() => setChannels([]));
-  };
-  useEffect(() => { load(); }, [api, name]);
+  }, [api, name]);
+  useEffect(() => { load(); }, [load]);
 
   // Channels not already subscribed, filtered by what the operator has typed so
   // the dropdown narrows as a substring match (case-insensitive).

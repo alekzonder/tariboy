@@ -81,4 +81,17 @@ describe("FullAuditLog (paged)", () => {
     fireEvent.click(screen.getByText("Clear"));
     await waitFor(() => expect(screen.getByText("done")).toBeInTheDocument());
   });
+
+  it("searches afresh after a clear instead of showing the previous matches", async () => {
+    recent = [RECENT[0]];
+    renderLog();
+    await waitFor(() => expect(screen.getByText("done")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Search text"), { target: { value: "boom" } });
+    await waitFor(() => expect(screen.getByText(/1 match/)).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Clear"));
+    await waitFor(() => expect(screen.getByText("done")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Filter by type"), { target: { value: "status" } });
+    expect(screen.getByText("Searching…")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("reviewing")).toBeInTheDocument());
+  });
 });

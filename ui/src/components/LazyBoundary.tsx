@@ -31,15 +31,15 @@ function LazyLoading() {
 
 type BoundaryProps = { resetKey: string; reload: () => void; children: ReactNode };
 
-class LoadErrorBoundary extends Component<BoundaryProps, { failed: boolean }> {
-  state = { failed: false };
+class LoadErrorBoundary extends Component<BoundaryProps, { failed: boolean; resetKey: string }> {
+  state = { failed: false, resetKey: this.props.resetKey };
 
   static getDerivedStateFromError() {
     return { failed: true };
   }
 
-  componentDidUpdate(previous: BoundaryProps) {
-    if (this.state.failed && previous.resetKey !== this.props.resetKey) this.setState({ failed: false });
+  static getDerivedStateFromProps(props: BoundaryProps, state: { resetKey: string }) {
+    return props.resetKey === state.resetKey ? null : { failed: false, resetKey: props.resetKey };
   }
 
   render() {

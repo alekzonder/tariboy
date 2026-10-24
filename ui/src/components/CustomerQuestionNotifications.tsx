@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useNavigate } from "react-router-dom"
-import { useDaemons } from "@/components/DaemonProvider"
+import { useDaemons } from "@/components/daemonContext"
 import { useTasksSocket } from "@/hooks/useTasksSocket"
 import { hasLocalDaemon, onTaskNotificationActivated, showTaskNotification } from "@/lib/desktop"
 import { resolveDaemon, type Daemon } from "@/lib/daemons"

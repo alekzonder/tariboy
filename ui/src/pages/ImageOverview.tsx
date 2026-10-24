@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { useImageContext } from "@/components/ImageLayout";
+import { useImageContext } from "@/components/imageContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Read-only presentation of an image manifest. Every section renders only when

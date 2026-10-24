@@ -34,8 +34,7 @@ function useDrive(steps: Step[]) {
       }
     }, 150);
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [steps]);
   return ref;
 }
 
@@ -54,11 +53,13 @@ export const EmptyDraft = () => (
 
 // Group named and the lead row named: the `lead:` line resolves and the
 // leader-name warning clears. Create stays disabled until the row has an image.
+const namedSteps: Step[] = [
+  { selector: "#grp-name", value: "dev-team" },
+  { selector: "#name-0", value: "builder" },
+];
+
 export const NamedGroup = () => {
-  const ref = useDrive([
-    { selector: "#grp-name", value: "dev-team" },
-    { selector: "#name-0", value: "builder" },
-  ]);
+  const ref = useDrive(namedSteps);
   return (
     <div ref={ref}>
       <Frame>
@@ -71,12 +72,13 @@ export const NamedGroup = () => {
 // The per-row Advanced panel opened through its own Collapsible trigger:
 // harness / model / timeout / effort, the interactive + Autopilot switches, and
 // the env (K=V) editor.
+const advancedSteps: Step[] = [
+  ...namedSteps,
+  { selector: '[data-slot="agent-row"] button', text: "Advanced", click: true },
+];
+
 export const AdvancedOpen = () => {
-  const ref = useDrive([
-    { selector: "#grp-name", value: "dev-team" },
-    { selector: "#name-0", value: "builder" },
-    { selector: '[data-slot="agent-row"] button', text: "Advanced", click: true },
-  ]);
+  const ref = useDrive(advancedSteps);
   return (
     <div ref={ref}>
       <Frame>

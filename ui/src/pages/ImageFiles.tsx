@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import FileBrowser from "@/components/FileBrowser";
-import { useImageContext } from "@/components/ImageLayout";
+import { useImageContext } from "@/components/imageContext";
 import { useApi } from "@/components/apiContext";
 import {
   type FileContent, type FileEntry, type FileListing, type ImageFileEntry,

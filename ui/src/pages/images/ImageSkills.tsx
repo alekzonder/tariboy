@@ -1,4 +1,4 @@
-import { useImageContext } from "@/components/ImageLayout";
+import { useImageContext } from "@/components/imageContext";
 
 export default function ImageSkills() {
   const { manifest } = useImageContext();

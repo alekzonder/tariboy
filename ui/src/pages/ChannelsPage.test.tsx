@@ -128,3 +128,34 @@ it("scopes to one agent's subscriptions and no longer shows the messenger card",
   // The messenger chat-routes card is gone from the agent tab.
   expect(screen.queryByText("messenger chats")).toBeNull();
 });
+
+it("never shows one channel's tail or watches under another, even when the first answers late", async () => {
+  let resolveLate!: (r: Response) => void;
+  const respond = (result: unknown) =>
+    Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }) } as Response);
+  let firstMessages = true;
+  vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string) => {
+    if (path === "/api/channels") return respond({ channels: [{ name: "chat:a", kind: "chat" }, { name: "chat:b", kind: "chat" }], count: 2 });
+    if (path.includes("chat%3Aa/messages")) {
+      if (firstMessages) { firstMessages = false; return respond({ messages: [{ id: "a1", ts: "", type: "note", source: "op", text: "from-a" }] }); }
+      return new Promise<Response>((resolve) => { resolveLate = resolve; });
+    }
+    if (path.includes("chat%3Aa/watches")) return respond({ watches: [{ watch: "watch-a" }] });
+    if (path.includes("chat%3Ab/")) return new Promise<Response>(() => {});
+    return respond({});
+  }));
+  renderGlobal();
+  fireEvent.click(await screen.findByText("chat:a"));
+  await waitFor(() => expect(screen.getByText("from-a")).toBeInTheDocument());
+  expect(screen.getByText("1 watch · refreshed every 2s")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByText("chat:b"));
+  expect(screen.queryByText("from-a")).not.toBeInTheDocument();
+  expect(screen.getByText("0 watches · refreshed every 2s")).toBeInTheDocument();
+  // Re-select A to start a second, slow tail request, then switch back to B.
+  fireEvent.click(screen.getByText("chat:a"));
+  fireEvent.click(screen.getByText("chat:b"));
+  resolveLate(await respond({ messages: [{ id: "a2", ts: "", type: "note", source: "op", text: "late-a" }] }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(screen.queryByText("late-a")).not.toBeInTheDocument();
+});

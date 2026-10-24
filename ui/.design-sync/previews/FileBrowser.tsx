@@ -110,9 +110,14 @@ function useTreeClicks(steps: string[]) {
       tries = 0;
     }, 25);
     return () => window.clearInterval(id);
-  }, []);
+  }, [steps]);
   return ref;
 }
+
+// Module constants keep each step list's identity stable, so the walk runs once.
+const workdirSteps = ["internal", "main.go"];
+const imageSteps = ["manifest.json"];
+const noSteps: string[] = [];
 
 const Pane = ({ inner, height = 480, children }: { inner: React.RefObject<HTMLDivElement | null>; height?: number; children: React.ReactNode }) => (
   <div ref={inner} style={{ height }}>{children}</div>
@@ -121,7 +126,7 @@ const Pane = ({ inner, height = 480, children }: { inner: React.RefObject<HTMLDi
 // The agent Files tab: tree on the left, the selected file in CodeMirror with
 // the Edit affordance, New file / New folder in the tree header.
 export const AgentWorkdir = () => {
-  const ref = useTreeClicks(["internal", "main.go"]);
+  const ref = useTreeClicks(workdirSteps);
   return (
     <Pane inner={ref}>
       <FileBrowser
@@ -140,7 +145,7 @@ export const AgentWorkdir = () => {
 // The image detail Files tab passes `readOnly`: no create/rename/delete in the
 // header or the rows, and the viewer offers no Edit.
 export const ImageFilesReadOnly = () => {
-  const ref = useTreeClicks(["manifest.json"]);
+  const ref = useTreeClicks(imageSteps);
   return (
     <Pane inner={ref}>
       <FileBrowser sourceKey="worker:v2" listDir={listImage} readFile={read} readOnly />
@@ -151,7 +156,7 @@ export const ImageFilesReadOnly = () => {
 // A managed workdir the agent has not written to yet — both panes state it
 // plainly instead of showing an empty frame.
 export const EmptyWorkdir = () => {
-  const ref = useTreeClicks([]);
+  const ref = useTreeClicks(noSteps);
   return (
     <Pane inner={ref} height={220}>
       <FileBrowser sourceKey="docs-bot" listDir={listEmpty} readFile={read} writeFile={write} createFile={create} />

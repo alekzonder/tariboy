@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   getTags, getManifest,
@@ -24,7 +24,7 @@ export default function RepoDetail() {
   // and from a row click) rather than via a tag-keyed effect — chaining the
   // manifest request onto the same call site keeps it a single hop behind
   // the version-history render instead of stacking an extra effect-flush cycle.
-  function selectTag(t: string) {
+  const selectTag = useCallback((t: string) => {
     setTag(t);
     setError("");
     const myReq = ++reqRef.current;
@@ -32,7 +32,7 @@ export default function RepoDetail() {
     getManifest(name, t)
       .then((m) => { if (myReq === reqRef.current) setManifest(m); })
       .catch(() => { if (myReq === reqRef.current) setManifest(null); });
-  }
+  }, [name]);
 
   // Bumping the token on unmount invalidates any in-flight request so its
   // resolution/rejection is a no-op instead of calling setManifest on an
@@ -52,11 +52,7 @@ export default function RepoDetail() {
     return () => {
       alive = false;
     };
-    // selectTag is a plain function redefined on every render that closes
-    // over the current `name`/`reqRef`; it is not a stable dep, and adding it
-    // here would refetch tags every render, so `name` alone is correct.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name]);
+  }, [name, selectTag]);
 
   const pullCmd = useMemo(
     () => `tariboy pull ${name}:${tag || "latest"} --registry ${window.location.origin}`,

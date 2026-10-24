@@ -17,7 +17,7 @@ export function ApiProvider(props: ApiProviderProps) {
   const target = props.client ? null : props.target;
   const identity = target ? [target.id, target.baseURL, target.token].join("\n") : "";
   // The client depends on the target's identity and credentials only.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // oxlint-disable-next-line react/exhaustive-deps -- keyed by identity on purpose: an equal target keeps the same client
   const created = useMemo(() => (props.client ? null : createApi(target)), [props.client, identity]);
   return <ApiContext.Provider value={props.client ?? created}>{props.children}</ApiContext.Provider>;
 }

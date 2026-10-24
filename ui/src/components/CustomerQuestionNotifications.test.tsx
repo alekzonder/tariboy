@@ -29,7 +29,7 @@ const model = vi.hoisted(() => ({
   taskDetails: new Map<string, TaskDetail>(),
 }))
 
-vi.mock("@/components/DaemonProvider", () => ({
+vi.mock("@/components/daemonContext", () => ({
   useDaemons: () => ({ daemons: model.daemons }),
   useOptionalDaemons: () => ({ activeId: "" }),
 }))
@@ -99,11 +99,15 @@ vi.mock("@/hooks/useTasksSocket", async () => {
     }) => {
     const hostId = options.target?.id ?? ""
     const [status, setStatus] = React.useState<"connecting" | "open" | "closed">("open")
+    const enabled = options.enabled
     React.useEffect(() => {
-      if (options.enabled) model.sockets.set(hostId, { ...options, setStatus })
-      else model.sockets.delete(hostId)
+      if (!enabled) model.sockets.delete(hostId)
       return () => { model.sockets.delete(hostId) }
-    }, [hostId, options.enabled])
+    }, [hostId, enabled])
+    // Refresh the socket's view of the options after every commit, without a reconnect.
+    React.useEffect(() => {
+      if (enabled) model.sockets.set(hostId, { ...options, setStatus })
+    }, [enabled, hostId, options])
     return options.enabled ? status : "closed"
   },
   }

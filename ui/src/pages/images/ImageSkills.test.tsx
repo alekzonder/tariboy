@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ImageSkills from "./ImageSkills";
 
 const useImageContext = vi.fn();
-vi.mock("@/components/ImageLayout", () => ({ useImageContext: () => useImageContext() }));
+vi.mock("@/components/imageContext", () => ({ useImageContext: () => useImageContext() }));
 
 describe("ImageSkills", () => {
   beforeEach(() => useImageContext.mockReset());

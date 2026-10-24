@@ -9,7 +9,7 @@ import BuiltImages from "./BuiltImages";
 // BuiltImages renders under the route host's ApiProvider.
 const on = (target: Daemon | null) => ({ wrapper: apiWrapper(createApi(target)) });
 
-vi.mock("@/components/DaemonProvider", () => ({ useOptionalDaemons: () => null }));
+vi.mock("@/components/daemonContext", () => ({ useOptionalDaemons: () => null }));
 afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); setActiveDaemon(null); });
 
 it("groups names and distinguishes latest from newest by parsed build date with stable ties", async () => {

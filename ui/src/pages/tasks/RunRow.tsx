@@ -37,7 +37,9 @@ export default function RunRow({ head, state, verdict, exitCode, startedAt, fini
   autoLoad?: boolean
 }) {
   const [log, setLog] = useState<{ text: string; truncated: boolean } | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(autoLoad)
+  // The reader at mount: a later readLog prop reads the same run.
+  const [mountReadLog] = useState(() => readLog)
   const [error, setError] = useState("")
   const read = () => {
     setLoading(true)
@@ -51,9 +53,14 @@ export default function RunRow({ head, state, verdict, exitCode, startedAt, fini
     if (log) { setLog(null); return }
     read()
   }
-  // Read once on mount when asked; a later change of readLog is the same run.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (autoLoad) read() }, [autoLoad])
+  // Read once on mount when asked; loading starts true for that read.
+  useEffect(() => {
+    if (!autoLoad) return
+    mountReadLog()
+      .then(setLog)
+      .catch((failure) => setError(errorText(failure)))
+      .finally(() => setLoading(false))
+  }, [autoLoad, mountReadLog])
   const tone = runTone(state, verdict)
   return (
     <li data-tone={tone} className={cn("flex min-w-0 flex-col gap-1 border-l-2 pl-2", TONE_BAR[tone])}>

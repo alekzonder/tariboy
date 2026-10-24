@@ -4,17 +4,18 @@ export function useChatScroll(shownCount: number) {
   const bottom = useRef<HTMLDivElement | null>(null);
   const unreadRule = useRef<HTMLDivElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
+  // The effect reads position from a ref: changing position alone must not scroll.
+  const atBottomRef = useRef(true);
 
   // Arrivals follow only when the customer is already at the conversation end.
   useEffect(() => {
-    if (atBottom) bottom.current?.scrollIntoView({ block: "end" });
-    // Changing position alone must not itself force a scroll.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (atBottomRef.current) bottom.current?.scrollIntoView({ block: "end" });
   }, [shownCount]);
 
   const onScroll = (event: UIEvent<HTMLDivElement>) => {
     const box = event.currentTarget;
-    setAtBottom(box.scrollHeight - box.scrollTop - box.clientHeight < 40);
+    atBottomRef.current = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    setAtBottom(atBottomRef.current);
   };
 
   return { bottom, unreadRule, atBottom, onScroll };

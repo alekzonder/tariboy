@@ -9,32 +9,34 @@ import { Button } from "@/components/ui/button";
 
 type Gate = "loading" | "login" | "ready";
 
+async function checkGate(): Promise<{ version?: string; gate: Gate }> {
+  let version: string | undefined;
+  try {
+    const info = await getInfo();
+    version = info.version;
+    if (info.anon_pull && !hasToken()) return { version, gate: "ready" };
+    return { version, gate: (await probeAuth()) ? "ready" : "login" };
+  } catch {
+    return { version, gate: "login" };
+  }
+}
+
 export default function App() {
   const [gate, setGate] = useState<Gate>("loading");
   const [version, setVersion] = useState("");
 
-  const evaluate = useCallback(async () => {
-    setGate("loading");
-    try {
-      const info = await getInfo();
-      setVersion(info.version);
-      if (info.anon_pull && !hasToken()) {
-        setGate("ready");
-        return;
-      }
-      const ok = await probeAuth();
-      setGate(ok ? "ready" : "login");
-    } catch {
-      setGate("login");
-    }
-  }, []);
+  // The gate starts at "loading"; a re-check after login or logout sets it first.
+  const evaluate = useCallback(() => checkGate().then((next) => {
+    if (next.version !== undefined) setVersion(next.version);
+    setGate(next.gate);
+  }), []);
 
   useEffect(() => {
     void evaluate();
   }, [evaluate]);
 
   if (gate === "loading") return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
-  if (gate === "login") return <Login onAuthed={() => void evaluate()} />;
+  if (gate === "login") return <Login onAuthed={() => { setGate("loading"); void evaluate(); }} />;
 
   return (
     <div className="flex h-screen flex-col">
@@ -48,6 +50,7 @@ export default function App() {
               size="sm"
               onClick={() => {
                 clearToken();
+                setGate("loading");
                 void evaluate();
               }}
             >

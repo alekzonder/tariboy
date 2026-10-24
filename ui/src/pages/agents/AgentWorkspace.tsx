@@ -2,7 +2,7 @@ import { lazy, useCallback, useEffect, useState } from "react";
 import { NavLink, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Container } from "lucide-react";
 import { toast } from "sonner";
-import { useDaemons } from "@/components/DaemonProvider";
+import { useDaemons } from "@/components/daemonContext";
 import { Button } from "@/components/ui/button";
 import { StatusDot, StatusPill } from "@/components/ui/status";
 import { AgentControls } from "@/components/AgentControls";

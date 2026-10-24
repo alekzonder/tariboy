@@ -387,6 +387,27 @@ entry, manifest import, or output file is also a failure. To fix a failure,
 load the new code with `React.lazy`, or keep the library out of the groups that
 the shell imports (see [Code splitting](/docs/architecture/web-ui#code-splitting)).
 
+`npm run lint` runs oxlint with `ui/.oxlintrc.json` and `--deny-warnings`.
+A warning therefore fails `make frontend-check` in the same way as an error.
+The configuration turns on the complete `correctness` category and adds
+selected rules from other categories. It has no rule overrides for single
+files.
+
+Fix the code before you suppress a diagnostic. If a suppression is necessary,
+put an oxlint comment on the line before the diagnostic. The comment names the
+rule and gives the reason after `--`:
+
+```tsx
+// oxlint-disable-next-line react/exhaustive-deps -- keyed by identity on purpose: an equal target keeps the same client
+```
+
+A generated file can use one file-level `/* oxlint-disable RULE -- reason */`
+comment. Do not use `eslint-disable` comments. `ui/src/test/lintPolicy.test.ts`
+fails on an `eslint-disable` comment, on an oxlint comment without a rule or a
+reason, and on a rule override for single files. Turn off a `correctness` rule
+for the complete project only when the rule does not apply to the project, and
+write the reason in this guide.
+
 `npm run lint:unused` runs [Knip](https://knip.dev) from `ui/knip.json` and
 fails when it finds an unused file or an unused export. It does not delete
 code. It runs two passes:

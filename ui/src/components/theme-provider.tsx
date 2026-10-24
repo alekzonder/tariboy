@@ -1,6 +1,5 @@
-import { createContext, useContext, useEffect, useState } from "react"
-
-export type Theme = "dark" | "light" | "system"
+import { useEffect, useState } from "react"
+import { ThemeProviderContext, type Theme, type ThemeProviderState } from "./themeContext"
 
 type ThemeProviderProps = {
   children: React.ReactNode
@@ -8,19 +7,7 @@ type ThemeProviderProps = {
   storageKey?: string
 }
 
-type ThemeProviderState = {
-  theme: Theme
-  setTheme: (theme: Theme) => void
-}
-
 const STORAGE_KEY = "tariboy-theme"
-
-const initialState: ThemeProviderState = {
-  theme: "system",
-  setTheme: () => null,
-}
-
-const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
 function systemTheme(): "light" | "dark" {
   return window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -69,12 +56,4 @@ export function ThemeProvider({
       {children}
     </ThemeProviderContext.Provider>
   )
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function useTheme() {
-  const context = useContext(ThemeProviderContext)
-  if (context === undefined)
-    throw new Error("useTheme must be used within a ThemeProvider")
-  return context
 }

@@ -69,17 +69,18 @@ function useFillInputs(
       }
     }, 0);
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frameRef]);
+  }, [frameRef, values]);
 }
 
 export const Images = () => <Screen />;
 
+const buildInputs = [
+  { placeholder: "/absolute/path/to/image", value: "/home/agent/github/tariboy" },
+  { placeholder: "name (required)", value: "worker" },
+];
+
 export const BuildFromDirectory = () => {
   const frameRef = useRef<HTMLDivElement | null>(null);
-  useFillInputs(frameRef, [
-    { placeholder: "/absolute/path/to/image", value: "/home/agent/github/tariboy" },
-    { placeholder: "name (required)", value: "worker" },
-  ]);
+  useFillInputs(frameRef, buildInputs);
   return <Screen frameRef={frameRef} />;
 };

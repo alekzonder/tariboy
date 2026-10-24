@@ -8,7 +8,7 @@ import { AgentSidebar } from "./sidebar/AgentSidebar";
 import { useSharedSidebarState } from "./sidebarStateContext";
 import { CreateAgentDialog, type CloneAgentSource } from "./CreateAgentDialog";
 import { ServerDialog } from "./ServerDialog";
-import { useDaemons } from "@/components/DaemonProvider";
+import { useDaemons } from "@/components/daemonContext";
 import { listDaemons, removeDaemon, resolveDaemon, type DaemonMeta } from "@/lib/daemons";
 import { createApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";

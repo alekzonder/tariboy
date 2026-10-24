@@ -5,7 +5,8 @@ export function usePolling<T>(fn: () => Promise<T>, ms = 1000) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const fnRef = useRef(fn);
-  fnRef.current = fn;
+  // Update after commit; this effect runs before the polling effect below.
+  useEffect(() => { fnRef.current = fn; }, [fn]);
 
   const tick = useCallback(async () => {
     if (typeof document !== "undefined" && document.hidden) return;

@@ -8,7 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useTheme, type Theme } from "@/components/theme-provider"
+import { useTheme, type Theme } from "@/components/themeContext"
 
 const OPTIONS: { value: Theme; label: string }[] = [
   { value: "system", label: "System" },
