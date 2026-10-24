@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useTasksSocket } from "@/hooks/useTasksSocket";
 import type { HostAgents } from "@/lib/aggregate";
 import { createApi, type TaskPriority, type TaskQueue, type TaskStatusView } from "@/lib/api";
+import { readKey, storageKeys, writeKey } from "@/lib/storage";
 import { buildTaskForest, flattenVisible, type VisibleTaskRow } from "@/lib/taskTree";
 import { hostToParam, targetFor } from "@/lib/terminalsHost";
 import { TaskFilterBar } from "./TaskFilterBar";
@@ -17,24 +18,19 @@ import "./tasks.css";
 
 // Search, status and server survive the Agents <-> All tasks switch the same
 // way the queue filter does: per session, beside it.
-const VIEW_KEY = "tasks:all-view:v1";
 type ViewFilters = { query: string; statusView: TaskStatusView; server: string };
 const DEFAULT_VIEW: ViewFilters = { query: "", statusView: "active", server: "" };
 
 function readView(): ViewFilters {
-  try {
-    return { ...DEFAULT_VIEW, ...JSON.parse(globalThis.sessionStorage?.getItem(VIEW_KEY) ?? "{}") };
-  } catch {
-    return DEFAULT_VIEW;
-  }
+  const stored = readKey(storageKeys.allTasksView);
+  return stored && typeof stored === "object"
+    ? { ...DEFAULT_VIEW, ...(stored as Partial<ViewFilters>) }
+    : DEFAULT_VIEW;
 }
 
 function persistView(view: ViewFilters): void {
-  try {
-    globalThis.sessionStorage?.setItem(VIEW_KEY, JSON.stringify(view));
-  } catch {
-    // Web Storage is a best-effort Desktop convenience.
-  }
+  // Web Storage is a best-effort Desktop convenience.
+  writeKey(storageKeys.allTasksView, view);
 }
 
 const rowId = (task: ServerTask) => `${task.serverId}\u0000${task.key}`;

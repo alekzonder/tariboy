@@ -115,7 +115,11 @@ describe("storage access", () => {
   it("returns the fallback and reports failure when the storage throws", () => {
     restore = breakStorage("localStorage");
     expect(readKey(storageKeys.theme)).toBe("system");
-    expect(readKeyResult(storageKeys.desktopAutoDownload)).toEqual({ value: true, ok: false });
+    expect(readKeyResult(storageKeys.desktopAutoDownload)).toEqual({
+      value: true,
+      error: new Error("blocked"),
+    });
+    expect(readKeyResult(storageKeys.storeToken)).toEqual({ value: "" });
     expect(writeKey(storageKeys.theme, "dark")).toBe(false);
     expect(() => removeKey(storageKeys.theme)).not.toThrow();
   });

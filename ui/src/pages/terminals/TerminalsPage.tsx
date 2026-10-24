@@ -32,6 +32,7 @@ import { TitlebarSlotContext } from "./titlebarSlotContext";
 import { WorkspaceManager, WorkspaceSwitcher, type WorkspaceHost } from "./HostWorkspaces";
 import { useWorkspaces, workspaceOf } from "@/lib/workspaces";
 import { defaultAgentTab } from "@/lib/uiMode";
+import { readKey, storageKeys, writeKey } from "@/lib/storage";
 
 // Server pages load on first open, so the initial bundle carries only the
 // shell, the agent list and the agent workspace.
@@ -123,17 +124,13 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   } | null>(null);
   const [hostError, setHostError] = useState("");
   const [serverOrder, setServerOrder] = useState<string[]>(() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem("terminals:server-order:v1") ?? "null") as {
-        version?: number;
-        ids?: unknown;
-      } | null;
-      return parsed?.version === 1 && Array.isArray(parsed.ids)
-        ? parsed.ids.filter((id): id is string => typeof id === "string")
-        : [];
-    } catch {
-      return [];
-    }
+    const parsed = readKey(storageKeys.terminalsServerOrder) as {
+      version?: number;
+      ids?: unknown;
+    } | null;
+    return parsed?.version === 1 && Array.isArray(parsed.ids)
+      ? parsed.ids.filter((id): id is string => typeof id === "string")
+      : [];
   });
   const [sidebarOrderOverrides, setSidebarOrderOverrides] = useState(
     () => new Map<string, NonNullable<HostAgents["sidebarOrder"]>>(),
@@ -326,11 +323,9 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         .map((id) => (visible.has(id) ? ids[next++] : id));
       const previous = serverOrder;
       setServerOrder(ids);
-      try {
-        localStorage.setItem("terminals:server-order:v1", JSON.stringify({ version: 1, ids }));
-      } catch (cause) {
+      if (!writeKey(storageKeys.terminalsServerOrder, { version: 1, ids })) {
         setServerOrder(previous);
-        setHostError(`Could not save server order: ${String(cause)}`);
+        setHostError("Could not save server order: browser storage is unavailable or full");
       }
       return;
     }

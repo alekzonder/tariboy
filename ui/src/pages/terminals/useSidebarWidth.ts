@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
+import { readKey, storageKeys, writeKey } from "@/lib/storage";
 
-export const SIDEBAR_STATE_KEY = "terminals:sidebar:v1";
+export const SIDEBAR_STATE_KEY = storageKeys.terminalsSidebar.name;
 /** The removed terminal canvas kept the sidebar inside its own record; it is
  *  read once so an existing width and hidden state survive the upgrade. */
-export const LEGACY_WORKSPACE_STATE_KEY = "terminals:workspace:v1";
+export const LEGACY_WORKSPACE_STATE_KEY = storageKeys.terminalsLegacyWorkspace.name;
 
 export const DEFAULT_SIDEBAR_WIDTH = 268;
 export const MIN_SIDEBAR_WIDTH = 160;
@@ -26,29 +27,18 @@ function sanitize(
 }
 
 /** Best-effort: a missing, malformed or unavailable store means the default. */
-function readJSON(key: string): unknown {
-  try {
-    return JSON.parse(localStorage.getItem(key) ?? "null");
-  } catch {
-    return null;
-  }
-}
-
 function readSidebarState(): SidebarState {
   return (
-    sanitize(readJSON(SIDEBAR_STATE_KEY) as SidebarState | null) ??
+    sanitize(readKey(storageKeys.terminalsSidebar) as SidebarState | null) ??
     sanitize(
-      (readJSON(LEGACY_WORKSPACE_STATE_KEY) as { sidebar?: SidebarState } | null)?.sidebar,
+      (readKey(storageKeys.terminalsLegacyWorkspace) as { sidebar?: SidebarState } | null)?.sidebar,
     ) ?? { width: DEFAULT_SIDEBAR_WIDTH, hidden: false }
   );
 }
 
 function writeSidebarState(state: SidebarState) {
-  try {
-    localStorage.setItem(SIDEBAR_STATE_KEY, JSON.stringify(state));
-  } catch {
-    // Unavailable storage keeps the in-memory state for this session.
-  }
+  // Unavailable storage keeps the in-memory state for this session.
+  writeKey(storageKeys.terminalsSidebar, state);
 }
 
 export function readSidebarWidth(): number {

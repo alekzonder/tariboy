@@ -1,5 +1,12 @@
 import { clearServerQueries, queryClient } from "./queryClient";
-import { readKey, removeKey, storageKeyFamilies, storageKeys, writeKey } from "./storage";
+import {
+  readKey,
+  readKeyResult,
+  removeKey,
+  storageKeyFamilies,
+  storageKeys,
+  writeKey,
+} from "./storage";
 // Async host registry facade. The desktop app persists metadata in native
 // hosts.json and HTTPS tokens in macOS Keychain; browser development keeps the
 // historical localStorage/sessionStorage implementation as a fallback.
@@ -262,7 +269,12 @@ export async function clearDaemonToken(id: string): Promise<void> {
 }
 
 export async function hasDaemonToken(id: string): Promise<boolean> {
-  if (!isDesktop()) return readKey(tokenKey(id)) !== "";
+  if (!isDesktop()) {
+    // The server editor shows this, as it shows a Keychain error on Desktop.
+    const { value, error } = readKeyResult(tokenKey(id));
+    if (error) throw error;
+    return value !== "";
+  }
   await ensureDesktopMigration();
   return requireNative(await hostHasToken(id), "host_has_token");
 }

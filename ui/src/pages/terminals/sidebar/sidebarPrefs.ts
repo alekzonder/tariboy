@@ -6,47 +6,32 @@
  * taking the sidebar down with it.
  */
 
+import { readKey, storageKeys, writeKey } from "@/lib/storage";
+
 export type SidebarTab = "servers" | "agents";
 
-export const SIDEBAR_TAB_KEY = "terminals:sidebar-tab:v1";
-export const SIDEBAR_PINNED_KEY = "terminals:sidebar-pinned:v1";
-
-const TABS: readonly SidebarTab[] = ["servers", "agents"];
+export const SIDEBAR_TAB_KEY = storageKeys.terminalsSidebarTab.name;
+export const SIDEBAR_PINNED_KEY = storageKeys.terminalsSidebarPinned.name;
 
 export function readSidebarTab(): SidebarTab {
-  try {
-    const raw = localStorage.getItem(SIDEBAR_TAB_KEY);
-    return TABS.find((tab) => tab === raw) ?? "servers";
-  } catch {
-    return "servers";
-  }
+  return readKey(storageKeys.terminalsSidebarTab);
 }
 
 export function writeSidebarTab(tab: SidebarTab): void {
-  try {
-    localStorage.setItem(SIDEBAR_TAB_KEY, tab);
-  } catch {
-    // A full or unavailable localStorage must not break switching tabs.
-  }
+  // A full or unavailable storage must not break switching tabs.
+  writeKey(storageKeys.terminalsSidebarTab, tab);
 }
 
 export function readPinnedAgents(): Set<string> {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(SIDEBAR_PINNED_KEY) ?? "null") as {
-      version?: number;
-      keys?: unknown;
-    } | null;
-    if (parsed?.version !== 1 || !Array.isArray(parsed.keys)) return new Set();
-    return new Set(parsed.keys.filter((key): key is string => typeof key === "string"));
-  } catch {
-    return new Set();
-  }
+  const parsed = readKey(storageKeys.terminalsSidebarPinned) as {
+    version?: number;
+    keys?: unknown;
+  } | null;
+  if (parsed?.version !== 1 || !Array.isArray(parsed.keys)) return new Set();
+  return new Set(parsed.keys.filter((key): key is string => typeof key === "string"));
 }
 
 export function writePinnedAgents(keys: ReadonlySet<string>): void {
-  try {
-    localStorage.setItem(SIDEBAR_PINNED_KEY, JSON.stringify({ version: 1, keys: [...keys] }));
-  } catch {
-    // Same as the tab: a pin that cannot be saved still applies to this session.
-  }
+  // Same as the tab: a pin that cannot be saved still applies to this session.
+  writeKey(storageKeys.terminalsSidebarPinned, { version: 1, keys: [...keys] });
 }
