@@ -1,4 +1,4 @@
-import { readResult, type Transport } from "./client";
+import type { Transport } from "./client";
 import type { PromptLayer } from "./agents";
 
 // One image as listed by GET /api/images (the create form's image combobox).
@@ -144,8 +144,10 @@ export function imagesApi(t: Transport) {
       t.get<{ path: string; content: string }>(`${imagePath(ref)}/files/${encImagePath(path)}${imageDigestQuery(expectedDigest)}`),
     removeImage: (ref: string) => t.delete<{ removed: string }>(imagePath(ref)),
     downloadImageArchive: async (ref: string) => (await t.raw("GET", `${imagePath(ref)}/export`)).blob(),
-    uploadImageArchive: async (archive: Blob) =>
-      readResult<ImageArchiveUpload>(await t.raw("POST", "/api/image-imports", archive)),
+    uploadImageArchive: async (archive: Blob) => {
+      const response = await t.raw("POST", "/api/image-imports", archive);
+      return ((await response.json()) as { result: ImageArchiveUpload }).result;
+    },
     applyImageArchive: (importID: string, ref?: string) =>
       t.post(`/api/image-imports/${encodeURIComponent(importID)}/apply`, ref ? { ref } : {}),
   };
