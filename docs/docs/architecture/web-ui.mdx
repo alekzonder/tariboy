@@ -541,6 +541,15 @@ Their internal modules separate form state, requests, and presentation:
 - Tasks separates local view state, panel sizing, query composition, and write
   actions. `TaskDetail` keeps one draft with its original revision. Its fields,
   relations, history, and dialogs render that state without another server cache.
+- `components/tui-screen` separates the xterm lifecycle and sizing hook and the
+  tmux scrollback hook from the toolbar, compose, and help markup. The input
+  handler stays stable, so a render does not recreate the terminal.
+- `lib/audit.ts` and `lib/auditCodex.ts` read an audit record through handler
+  tables keyed by event kind, harness message type, and Codex item type.
+  `components/audit` renders each row kind in its own small component and keeps
+  the full log's filter and paging state in hooks.
+- `pages/audit-log` separates the URL query and the polled iteration list from
+  the list and tag editor markup.
 
 ## Shared helpers and styles
 

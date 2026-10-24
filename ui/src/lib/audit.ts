@@ -4,7 +4,7 @@ export type { AuditEvent };
 
 // parseData turns the JSON-string data field back into an object. On any parse
 // failure it returns {} so callers never throw on a malformed record.
-function parseData(data: string): Record<string, unknown> {
+export function parseData(data: string): Record<string, unknown> {
   try {
     const v = JSON.parse(data);
     return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
@@ -121,119 +121,6 @@ export interface Descriptor {
   tone: Tone;
 }
 
-// CodexHarnessPresentation is the small, user-facing subset of a Codex JSONL
-// item. The original event stays available through pretty(); this only avoids
-// making routine commands and messages look like an escaped protocol envelope.
-export interface CodexHarnessPresentation {
-  type: "command" | "message" | "tool" | "skill" | "thinking" | "file";
-  label: string;
-  icon: string;
-  text: string;
-  status?: string;
-  output?: string;
-}
-
-function nonEmptyString(value: unknown): string | undefined {
-  return typeof value === "string" && value !== "" ? value : undefined;
-}
-
-// codexHarnessPresentation recognizes the item.started/item.completed events
-// emitted by the Codex harness. It deliberately returns undefined for every
-// other line so generic harness and audit rendering remains unchanged.
-export function codexHarnessPresentation(e: AuditEvent): CodexHarnessPresentation | undefined {
-  if (e.kind !== "harness_output") return undefined;
-  const line = parseData(e.data).line;
-  if (typeof line !== "string") return undefined;
-  try {
-    const outer = JSON.parse(line) as Record<string, unknown>;
-    if (outer.type !== "item.started" && outer.type !== "item.completed") return undefined;
-    const item = outer.item;
-    if (!item || typeof item !== "object") return undefined;
-    const record = item as Record<string, unknown>;
-    if (record.type === "command_execution") {
-      const text = nonEmptyString(record.command) ?? nonEmptyString(record.cmd);
-      if (!text) return undefined;
-      const exitCode = record.exit_code;
-      const status =
-        nonEmptyString(record.status) ??
-        (outer.type === "item.started"
-          ? "running"
-          : typeof exitCode === "number" && exitCode !== 0
-            ? "failed"
-            : "completed");
-      const output =
-        nonEmptyString(record.aggregated_output) ??
-        nonEmptyString(record.output) ??
-        nonEmptyString(record.result);
-      return { type: "command", label: "command", icon: "⌨", text, status, output };
-    }
-    if (record.type === "agent_message") {
-      const text = nonEmptyString(record.text) ?? nonEmptyString(record.message);
-      return text
-        ? {
-            type: "message",
-            label: "message",
-            icon: "💬",
-            text,
-            status: nonEmptyString(record.status),
-          }
-        : undefined;
-    }
-    if (record.type === "mcp_tool_call") {
-      const server = nonEmptyString(record.server) ?? nonEmptyString(record.server_name) ?? "MCP";
-      const tool = nonEmptyString(record.tool) ?? nonEmptyString(record.name) ?? "tool";
-      const args =
-        record.arguments && typeof record.arguments === "object"
-          ? (record.arguments as Record<string, unknown>)
-          : {};
-      const detail = salientArg(tool, args);
-      return {
-        type: "tool",
-        label: "Tool",
-        icon: "🔧",
-        text: `${server} · ${tool}${detail && detail !== "{}" ? ` — ${detail}` : ""}`,
-        status: nonEmptyString(record.status),
-        output: nonEmptyString(record.result) ?? nonEmptyString(record.error),
-      };
-    }
-    if (record.type === "skill") {
-      const text = nonEmptyString(record.name) ?? nonEmptyString(record.skill);
-      return text
-        ? { type: "skill", label: "Skill", icon: "✦", text, status: nonEmptyString(record.status) }
-        : undefined;
-    }
-    if (record.type === "reasoning") {
-      const text = nonEmptyString(record.text) ?? nonEmptyString(record.summary);
-      return text ? { type: "thinking", label: "Thinking", icon: "🧠", text } : undefined;
-    }
-    if (record.type === "file_change") {
-      const changes = Array.isArray(record.changes) ? record.changes : [];
-      const text = changes
-        .map((change) => {
-          if (!change || typeof change !== "object") return "";
-          const item = change as Record<string, unknown>;
-          const path = nonEmptyString(item.path) ?? nonEmptyString(item.file_path) ?? "";
-          const kind = nonEmptyString(item.kind) ?? nonEmptyString(item.type) ?? "";
-          return path ? `${path}${kind ? ` (${kind})` : ""}` : "";
-        })
-        .filter(Boolean)
-        .join(", ");
-      return text
-        ? {
-            type: "file",
-            label: "File change",
-            icon: "📝",
-            text,
-            status: nonEmptyString(record.status),
-          }
-        : undefined;
-    }
-  } catch {
-    // Malformed protocol lines retain the existing generic rendering.
-  }
-  return undefined;
-}
-
 // resultText flattens a tool_result content (string, or an array of {text}
 // blocks) into a single preview string.
 function resultText(content: unknown): string {
@@ -250,131 +137,174 @@ function resultText(content: unknown): string {
   return "";
 }
 
-// harnessDescriptor maps a decoded stream-json line to a descriptor.
-function harnessDescriptor(inner: Record<string, unknown>): Descriptor {
-  const t = inner.type;
-  const st = inner.subtype;
-  if (t === "assistant") {
-    const content = (inner.message as Record<string, unknown> | undefined)?.content;
-    const block = Array.isArray(content) ? (content[0] as Record<string, unknown>) : undefined;
-    if (block?.type === "text")
-      return {
-        icon: "💬",
-        label: "assistant",
-        preview: truncate(String(block.text ?? "")),
-        tone: "neutral",
-      };
-    if (block?.type === "tool_use") {
-      const name = String(block.name ?? "tool");
-      const input = (block.input && typeof block.input === "object" ? block.input : {}) as Record<
-        string,
-        unknown
-      >;
-      return {
-        icon: "🔧",
-        label: name,
-        preview: truncate(salientArg(name, input)),
-        tone: "neutral",
-      };
-    }
-    // thinking or unknown assistant block — collapseThinking folds thinking away.
-    return { icon: "🧠", label: "thinking", preview: "", tone: "neutral" };
-  }
-  if (t === "user") {
-    const content = (inner.message as Record<string, unknown> | undefined)?.content;
-    const block = Array.isArray(content) ? (content[0] as Record<string, unknown>) : undefined;
-    const isErr = block?.is_error === true;
+type Inner = Record<string, unknown>;
+
+// firstBlock returns the first content block of a stream-json line message, or
+// undefined when the message has no content array.
+function firstBlock(inner: Inner): Record<string, unknown> | undefined {
+  const content = (inner.message as Record<string, unknown> | undefined)?.content;
+  return Array.isArray(content) ? (content[0] as Record<string, unknown>) : undefined;
+}
+
+// lookup reads an own entry of a dispatch table, so keys such as "constructor"
+// never resolve to Object.prototype members.
+function lookup<T>(table: Record<string, T>, key: unknown): T | undefined {
+  return typeof key === "string" && Object.hasOwn(table, key) ? table[key] : undefined;
+}
+
+function assistantDescriptor(inner: Inner): Descriptor {
+  const block = firstBlock(inner);
+  if (block?.type === "text")
     return {
-      icon: isErr ? "❌" : "✅",
-      label: "result",
-      preview: truncate(resultText(block?.content)),
-      tone: isErr ? "error" : "neutral",
+      icon: "💬",
+      label: "assistant",
+      preview: truncate(String(block.text ?? "")),
+      tone: "neutral",
     };
-  }
-  if (t === "system") {
-    if (st === "init")
-      return {
-        icon: "⚙",
-        label: "session",
-        preview: truncate(`${inner.model ?? "?"} · ${inner.cwd ?? "?"}`),
-        tone: "neutral",
-      };
+  if (block?.type === "tool_use") {
+    const name = String(block.name ?? "tool");
+    const input = (block.input && typeof block.input === "object" ? block.input : {}) as Record<
+      string,
+      unknown
+    >;
     return {
-      icon: "🪝",
-      label: "hook",
-      preview: truncate(String(inner.hook_name ?? st ?? "")),
+      icon: "🔧",
+      label: name,
+      preview: truncate(salientArg(name, input)),
       tone: "neutral",
     };
   }
-  if (t === "rate_limit_event") {
-    const status = String(
-      (inner.rate_limit_info as Record<string, unknown> | undefined)?.status ?? "",
-    );
+  // thinking or unknown assistant block — collapseThinking folds thinking away.
+  return { icon: "🧠", label: "thinking", preview: "", tone: "neutral" };
+}
+
+function userDescriptor(inner: Inner): Descriptor {
+  const block = firstBlock(inner);
+  const isErr = block?.is_error === true;
+  return {
+    icon: isErr ? "❌" : "✅",
+    label: "result",
+    preview: truncate(resultText(block?.content)),
+    tone: isErr ? "error" : "neutral",
+  };
+}
+
+function systemDescriptor(inner: Inner): Descriptor {
+  const st = inner.subtype;
+  if (st === "init")
     return {
-      icon: "⏳",
-      label: "rate limit",
-      preview: status,
-      tone: status === "allowed" ? "neutral" : "warn",
+      icon: "⚙",
+      label: "session",
+      preview: truncate(`${inner.model ?? "?"} · ${inner.cwd ?? "?"}`),
+      tone: "neutral",
     };
-  }
+  return {
+    icon: "🪝",
+    label: "hook",
+    preview: truncate(String(inner.hook_name ?? st ?? "")),
+    tone: "neutral",
+  };
+}
+
+function rateLimitDescriptor(inner: Inner): Descriptor {
+  const status = String(
+    (inner.rate_limit_info as Record<string, unknown> | undefined)?.status ?? "",
+  );
+  return {
+    icon: "⏳",
+    label: "rate limit",
+    preview: status,
+    tone: status === "allowed" ? "neutral" : "warn",
+  };
+}
+
+const HARNESS_DESCRIPTORS: Record<string, (inner: Inner) => Descriptor> = {
+  assistant: assistantDescriptor,
+  user: userDescriptor,
+  system: systemDescriptor,
+  rate_limit_event: rateLimitDescriptor,
+};
+
+// harnessDescriptor maps a decoded stream-json line to a descriptor.
+function harnessDescriptor(inner: Inner): Descriptor {
+  const handler = lookup(HARNESS_DESCRIPTORS, inner.type);
+  if (handler) return handler(inner);
   return {
     icon: "·",
-    label: String(t ?? "harness"),
+    label: String(inner.type ?? "harness"),
     preview: truncate(JSON.stringify(inner)),
     tone: "neutral",
   };
 }
 
+// EventFields is the parsed data of one audit event plus a string-field reader.
+interface EventFields {
+  e: AuditEvent;
+  d: Record<string, unknown>;
+  s: (k: string) => string;
+}
+
+function harnessOutputDescriptor({ s }: EventFields): Descriptor {
+  try {
+    const inner = JSON.parse(s("line")) as Inner;
+    return harnessDescriptor(inner);
+  } catch {
+    return { icon: "·", label: "harness", preview: truncate(s("line")), tone: "neutral" };
+  }
+}
+
+function iterationFinishedDescriptor({ e, s }: EventFields): Descriptor {
+  return {
+    icon: "⏹",
+    label: "iteration",
+    preview: s("error") ? `${s("status")}: ${truncate(s("error"))}` : s("status"),
+    tone: tone(e.kind, e.data),
+  };
+}
+
+function shimDescriptor({ e, s }: EventFields): Descriptor {
+  return {
+    icon: "·",
+    label: "shim",
+    preview: truncate(s("line") || s("error")),
+    tone: tone(e.kind, e.data),
+  };
+}
+
+const EVENT_DESCRIPTORS: Record<string, (f: EventFields) => Descriptor> = {
+  harness_output: harnessOutputDescriptor,
+  iteration_started: ({ s }) => ({
+    icon: "▶",
+    label: "iteration",
+    preview: s("trigger"),
+    tone: "neutral",
+  }),
+  iteration_finished: iterationFinishedDescriptor,
+  iteration_done: iterationFinishedDescriptor,
+  launching_harness: ({ d, s }) => ({
+    icon: "🚀",
+    label: "harness",
+    preview: `${s("harness")} (${d.interactive ? "interactive" : "batch"})`,
+    tone: "neutral",
+  }),
+  harness_spawned: () => ({ icon: "🚀", label: "harness", preview: "spawned", tone: "neutral" }),
+  status: ({ s }) => ({ icon: "📍", label: "status", preview: s("message"), tone: "neutral" }),
+  shim: shimDescriptor,
+  shim_error: shimDescriptor,
+};
+
 // descriptor maps one audit event to its chat-line display form. Never throws.
 export function descriptor(e: AuditEvent): Descriptor {
   const d = parseData(e.data);
   const s = (k: string) => (typeof d[k] === "string" ? (d[k] as string) : "");
-  switch (e.kind) {
-    case "harness_output": {
-      try {
-        const inner = JSON.parse(s("line")) as Record<string, unknown>;
-        return harnessDescriptor(inner);
-      } catch {
-        return { icon: "·", label: "harness", preview: truncate(s("line")), tone: "neutral" };
-      }
-    }
-    case "iteration_started":
-      return { icon: "▶", label: "iteration", preview: s("trigger"), tone: "neutral" };
-    case "iteration_finished":
-    case "iteration_done":
-      return {
-        icon: "⏹",
-        label: "iteration",
-        preview: s("error") ? `${s("status")}: ${truncate(s("error"))}` : s("status"),
-        tone: tone(e.kind, e.data),
-      };
-    case "launching_harness":
-      return {
-        icon: "🚀",
-        label: "harness",
-        preview: `${s("harness")} (${d.interactive ? "interactive" : "batch"})`,
-        tone: "neutral",
-      };
-    case "harness_spawned":
-      return { icon: "🚀", label: "harness", preview: "spawned", tone: "neutral" };
-    case "status":
-      return { icon: "📍", label: "status", preview: s("message"), tone: "neutral" };
-    case "shim":
-    case "shim_error":
-      return {
-        icon: "·",
-        label: "shim",
-        preview: truncate(s("line") || s("error")),
-        tone: tone(e.kind, e.data),
-      };
-    default:
-      return {
-        icon: "·",
-        label: e.kind,
-        preview: truncate(s("reason") || s("message") || JSON.stringify(d)),
-        tone: tone(e.kind, e.data),
-      };
-  }
+  const handler = lookup(EVENT_DESCRIPTORS, e.kind);
+  if (handler) return handler({ e, d, s });
+  return {
+    icon: "·",
+    label: e.kind,
+    preview: truncate(s("reason") || s("message") || JSON.stringify(d)),
+    tone: tone(e.kind, e.data),
+  };
 }
 
 export type DisplayRow =
@@ -392,11 +322,7 @@ function isThinking(e: AuditEvent): boolean {
   try {
     const inner = JSON.parse(line) as Record<string, unknown>;
     if (inner.type === "system" && inner.subtype === "thinking_tokens") return true;
-    if (inner.type === "assistant") {
-      const content = (inner.message as Record<string, unknown> | undefined)?.content;
-      const block = Array.isArray(content) ? (content[0] as Record<string, unknown>) : undefined;
-      return block?.type === "thinking";
-    }
+    if (inner.type === "assistant") return firstBlock(inner)?.type === "thinking";
   } catch {
     /* not thinking */
   }
