@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
+import { readKey, storageKeys, writeKey } from "@/lib/storage";
 import { ThemeProviderContext, type Theme, type ThemeProviderState } from "./themeContext";
 
 type ThemeProviderProps = {
   children: React.ReactNode;
   defaultTheme?: Theme;
-  storageKey?: string;
 };
-
-const STORAGE_KEY = "tariboy-theme";
 
 function systemTheme(): "light" | "dark" {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -19,13 +17,9 @@ function applyTheme(theme: Theme) {
   root.classList.add(theme === "system" ? systemTheme() : theme);
 }
 
-export function ThemeProvider({
-  children,
-  defaultTheme = "system",
-  storageKey = STORAGE_KEY,
-}: ThemeProviderProps) {
-  const [theme, setThemeState] = useState<Theme>(
-    () => (localStorage.getItem(storageKey) as Theme) || defaultTheme,
+export function ThemeProvider({ children, defaultTheme = "system" }: ThemeProviderProps) {
+  const [theme, setThemeState] = useState<Theme>(() =>
+    readKey({ ...storageKeys.theme, fallback: defaultTheme }),
   );
 
   useEffect(() => {
@@ -44,7 +38,7 @@ export function ThemeProvider({
   const value: ThemeProviderState = {
     theme,
     setTheme: (next: Theme) => {
-      localStorage.setItem(storageKey, next);
+      writeKey(storageKeys.theme, next);
       setThemeState(next);
     },
   };
