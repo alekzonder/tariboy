@@ -28,7 +28,7 @@ function buildTime(image: ImageRow): number {
   return Number.isFinite(value) ? value : -Infinity;
 }
 
-function compareTags(a: ImageRow, b: ImageRow): number {
+function compareBuiltImages(a: ImageRow, b: ImageRow): number {
   const time = buildTime(b) - buildTime(a);
   if (time && !Number.isNaN(time)) return time;
   const rank = (image: ImageRow) =>
@@ -143,7 +143,7 @@ export default function BuiltImages({
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
       .map(([name, tags]) => ({
         name,
-        tags: tags.sort(compareTags),
+        tags: tags.sort(compareBuiltImages),
         latest: tags.find((tag) => tag.tag === "latest"),
       }));
   }, [images]);

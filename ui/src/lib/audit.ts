@@ -133,7 +133,7 @@ export interface CodexHarnessPresentation {
   output?: string;
 }
 
-function stringField(value: unknown): string | undefined {
+function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
@@ -151,37 +151,37 @@ export function codexHarnessPresentation(e: AuditEvent): CodexHarnessPresentatio
     if (!item || typeof item !== "object") return undefined;
     const record = item as Record<string, unknown>;
     if (record.type === "command_execution") {
-      const text = stringField(record.command) ?? stringField(record.cmd);
+      const text = nonEmptyString(record.command) ?? nonEmptyString(record.cmd);
       if (!text) return undefined;
       const exitCode = record.exit_code;
       const status =
-        stringField(record.status) ??
+        nonEmptyString(record.status) ??
         (outer.type === "item.started"
           ? "running"
           : typeof exitCode === "number" && exitCode !== 0
             ? "failed"
             : "completed");
       const output =
-        stringField(record.aggregated_output) ??
-        stringField(record.output) ??
-        stringField(record.result);
+        nonEmptyString(record.aggregated_output) ??
+        nonEmptyString(record.output) ??
+        nonEmptyString(record.result);
       return { type: "command", label: "command", icon: "⌨", text, status, output };
     }
     if (record.type === "agent_message") {
-      const text = stringField(record.text) ?? stringField(record.message);
+      const text = nonEmptyString(record.text) ?? nonEmptyString(record.message);
       return text
         ? {
             type: "message",
             label: "message",
             icon: "💬",
             text,
-            status: stringField(record.status),
+            status: nonEmptyString(record.status),
           }
         : undefined;
     }
     if (record.type === "mcp_tool_call") {
-      const server = stringField(record.server) ?? stringField(record.server_name) ?? "MCP";
-      const tool = stringField(record.tool) ?? stringField(record.name) ?? "tool";
+      const server = nonEmptyString(record.server) ?? nonEmptyString(record.server_name) ?? "MCP";
+      const tool = nonEmptyString(record.tool) ?? nonEmptyString(record.name) ?? "tool";
       const args =
         record.arguments && typeof record.arguments === "object"
           ? (record.arguments as Record<string, unknown>)
@@ -192,18 +192,18 @@ export function codexHarnessPresentation(e: AuditEvent): CodexHarnessPresentatio
         label: "Tool",
         icon: "🔧",
         text: `${server} · ${tool}${detail && detail !== "{}" ? ` — ${detail}` : ""}`,
-        status: stringField(record.status),
-        output: stringField(record.result) ?? stringField(record.error),
+        status: nonEmptyString(record.status),
+        output: nonEmptyString(record.result) ?? nonEmptyString(record.error),
       };
     }
     if (record.type === "skill") {
-      const text = stringField(record.name) ?? stringField(record.skill);
+      const text = nonEmptyString(record.name) ?? nonEmptyString(record.skill);
       return text
-        ? { type: "skill", label: "Skill", icon: "✦", text, status: stringField(record.status) }
+        ? { type: "skill", label: "Skill", icon: "✦", text, status: nonEmptyString(record.status) }
         : undefined;
     }
     if (record.type === "reasoning") {
-      const text = stringField(record.text) ?? stringField(record.summary);
+      const text = nonEmptyString(record.text) ?? nonEmptyString(record.summary);
       return text ? { type: "thinking", label: "Thinking", icon: "🧠", text } : undefined;
     }
     if (record.type === "file_change") {
@@ -212,8 +212,8 @@ export function codexHarnessPresentation(e: AuditEvent): CodexHarnessPresentatio
         .map((change) => {
           if (!change || typeof change !== "object") return "";
           const item = change as Record<string, unknown>;
-          const path = stringField(item.path) ?? stringField(item.file_path) ?? "";
-          const kind = stringField(item.kind) ?? stringField(item.type) ?? "";
+          const path = nonEmptyString(item.path) ?? nonEmptyString(item.file_path) ?? "";
+          const kind = nonEmptyString(item.kind) ?? nonEmptyString(item.type) ?? "";
           return path ? `${path}${kind ? ` (${kind})` : ""}` : "";
         })
         .filter(Boolean)
@@ -224,7 +224,7 @@ export function codexHarnessPresentation(e: AuditEvent): CodexHarnessPresentatio
             label: "File change",
             icon: "📝",
             text,
-            status: stringField(record.status),
+            status: nonEmptyString(record.status),
           }
         : undefined;
     }

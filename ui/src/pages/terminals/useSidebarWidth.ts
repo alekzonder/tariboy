@@ -19,7 +19,7 @@ export function clampSidebarWidth(px: number): number {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, Math.round(px)));
 }
 
-function sanitize(
+function sanitizeSidebarState(
   value: { width?: unknown; hidden?: unknown } | null | undefined,
 ): SidebarState | null {
   if (typeof value?.width !== "number" || !Number.isFinite(value.width)) return null;
@@ -29,8 +29,8 @@ function sanitize(
 /** Best-effort: a missing, malformed or unavailable store means the default. */
 function readSidebarState(): SidebarState {
   return (
-    sanitize(readKey(storageKeys.terminalsSidebar) as SidebarState | null) ??
-    sanitize(
+    sanitizeSidebarState(readKey(storageKeys.terminalsSidebar) as SidebarState | null) ??
+    sanitizeSidebarState(
       (readKey(storageKeys.terminalsLegacyWorkspace) as { sidebar?: SidebarState } | null)?.sidebar,
     ) ?? { width: DEFAULT_SIDEBAR_WIDTH, hidden: false }
   );

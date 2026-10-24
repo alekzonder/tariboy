@@ -1,5 +1,5 @@
 import type { Task, TaskCategory } from "./api";
-import { taskStatusLabel as flexibleStatusLabel } from "./statusTone";
+import { flexibleStatusLabel } from "./statusTone";
 
 /**
  * A workflow task reports a workflow status ID in `status`, a flexible task its

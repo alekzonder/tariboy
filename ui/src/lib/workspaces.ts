@@ -22,7 +22,7 @@ export interface WorkspacesState {
 
 const DEFAULT_WORKSPACE: Workspace = { id: DEFAULT_WORKSPACE_ID, name: "Default" };
 
-function sanitize(value: unknown): WorkspacesState {
+function sanitizeWorkspaces(value: unknown): WorkspacesState {
   const raw = (typeof value === "object" && value !== null ? value : {}) as {
     version?: unknown;
     workspaces?: unknown;
@@ -53,7 +53,7 @@ function sanitize(value: unknown): WorkspacesState {
 }
 
 function read(): WorkspacesState {
-  return sanitize(readKey(storageKeys.workspaces));
+  return sanitizeWorkspaces(readKey(storageKeys.workspaces));
 }
 
 let state: WorkspacesState | null = null;
@@ -65,7 +65,7 @@ function current(): WorkspacesState {
 }
 
 function update(next: WorkspacesState) {
-  state = sanitize({ version: 1, ...next, workspaces: next.workspaces.slice(1) });
+  state = sanitizeWorkspaces({ version: 1, ...next, workspaces: next.workspaces.slice(1) });
   // Unavailable storage keeps the change for this session only.
   writeKey(storageKeys.workspaces, {
     version: 1,
