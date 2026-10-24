@@ -93,3 +93,61 @@ export function canDropTaskInside(
   if (!find(forest)) return false;
   return !descendants.has(targetKey);
 }
+
+export interface TaskDrop {
+  key: string;
+  parentKey: string;
+  beforeKey: string;
+}
+
+function keyAfter(tasks: Task[], movingKey: string, target: Task): string {
+  const siblings = tasks
+    .filter((task) => task.parent_key === target.parent_key && task.key !== movingKey)
+    .sort((left, right) => left.position - right.position);
+  return siblings[siblings.findIndex((task) => task.key === target.key) + 1]?.key ?? "";
+}
+
+function dropDestination(
+  tasks: Task[],
+  moving: Task | undefined,
+  placement: string,
+  target: Task,
+): Omit<TaskDrop, "key"> | null {
+  if (placement !== "before" && placement !== "after") {
+    return { parentKey: target.key, beforeKey: "" };
+  }
+  if (!canReorderTaskBeside(moving, target)) return null;
+  const beforeKey = placement === "before" ? target.key : keyAfter(tasks, moving!.key, target);
+  return { parentKey: target.parent_key, beforeKey };
+}
+
+/**
+ * Turns a drop onto a row zone (`before:KEY`, `inside:KEY`, `after:KEY`) or
+ * the tree root (`__root__`) into a move, or null when the drop is not allowed.
+ */
+export function resolveTaskDrop({
+  tasks,
+  forest,
+  activeKey,
+  overId,
+}: {
+  tasks: Task[];
+  forest: TaskTreeNode[];
+  activeKey: string;
+  overId: string;
+}): TaskDrop | null {
+  if (activeKey === overId) return null;
+  if (overId === "__root__") return { key: activeKey, parentKey: "", beforeKey: "" };
+  const byKey = new Map(tasks.map((task) => [task.key, task]));
+  const [placement, targetKey] = overId.split(":", 2);
+  const target = byKey.get(targetKey);
+  if (targetKey === activeKey || !target) return null;
+  const moving = byKey.get(activeKey);
+  const destination = dropDestination(tasks, moving, placement, target);
+  if (!destination || !moving) return null;
+  const { parentKey } = destination;
+  const parent = parentKey ? byKey.get(parentKey) : undefined;
+  if (parent && parent.queue !== moving.queue) return null;
+  if (parentKey && !canDropTaskInside(forest, activeKey, parentKey)) return null;
+  return { key: activeKey, ...destination };
+}
