@@ -181,6 +181,31 @@ describe("stepArtifacts", () => {
     ]);
   });
 
+  it.each([
+    ["an open task's current status", "in_progress", "draft", [["summary", true]]],
+    [
+      "a closed task's last status",
+      "done",
+      "draft",
+      [
+        ["notes", false],
+        ["summary", true],
+      ],
+    ],
+    ["another status of an open task", "in_progress", "review", [["notes", false]]],
+  ] as const)("reads the way out of %s", (_name, category, statusId, expected) => {
+    const view: WorkflowView = {
+      ...poolView,
+      category,
+      outcomes: [{ on: "drafted", to: "review", requires: ["summary"], missing: ["summary"] }],
+    };
+    const leave = [...stepArtifacts(view, statusId).leave].map(([name, list]) => [
+      name,
+      list[0].missing,
+    ]);
+    expect(leave).toEqual(expected);
+  });
+
   it("is empty for a step that requires nothing, or one the manifest does not declare", () => {
     for (const id of ["done", "gone"]) {
       const step = stepArtifacts(customerView, id);
@@ -219,6 +244,7 @@ describe("counterText", () => {
     };
     expect(counterText(view, "rejected_requests")).toBe("2 of 5 rejections");
     expect(counterText(view, "idle_iterations")).toBe("0 of 3 idle iterations");
+    expect(counterText(view, "script_failures")).toBe("0 of 3 script failures");
     const noLimits = {
       ...poolView,
       statuses: poolView.statuses.map((status) => ({ ...status, limits: undefined })),
