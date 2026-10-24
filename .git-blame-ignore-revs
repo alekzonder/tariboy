@@ -1,0 +1,6 @@
+# Formatting-only commits. Skip them in blame with:
+#   git blame --ignore-revs-file .git-blame-ignore-revs FILE
+# or once per clone: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Format the UI with oxfmt
+6c8b240d8754202be82a3b27709138d059dcdf8e
