@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { normalizeField, validateField, type Values } from "./registry";
+import { normalizeField, type Values } from "./registry";
+import { releaseSent, submitUnits, validateDraft } from "./draftSave";
 
 // A commit unit is one server request. Most hold one field; a budget or a
 // retention policy holds several fields that the daemon takes in one request.
@@ -88,20 +89,7 @@ export function useConfigDraft({
 
   const save = async () => {
     if (savingRef.current || dirtyKeys.length === 0) return;
-    const invalid: Values = {};
-    for (const key of dirtyKeys) {
-      const message = validateField(key, normalized[key], normalized);
-      if (message) invalid[key] = message;
-    }
-    // A pair such as a secret key and its value is checked as a pair: an
-    // unchanged partner can be the one that is missing.
-    for (const unit of units) {
-      if (!unit.keys.some((key) => dirtyKeys.includes(key))) continue;
-      for (const key of unit.keys) {
-        const message = key in baseline ? validateField(key, normalized[key], normalized) : "";
-        if (message) invalid[key] = message;
-      }
-    }
+    const invalid = validateDraft({ dirtyKeys, units, baseline, normalized });
     const firstInvalid = Object.keys(invalid)[0];
     if (firstInvalid) {
       setError(INVALID);
@@ -115,33 +103,17 @@ export function useConfigDraft({
     setError("");
     setFieldErrors({});
     setNotice("");
-    const sent: Values = {};
-    let failedKey = "";
-    let failedMessage = "";
-    for (const unit of units) {
-      const changed = unit.keys.filter((key) => dirtyKeys.includes(key));
-      if (changed.length === 0) continue;
-      try {
-        await unit.submit(normalized);
-        for (const key of unit.keys) if (key in drafts) sent[key] = drafts[key];
-      } catch (cause) {
-        // Stop here: every unit after this one stays an unsent dirty draft.
-        failedKey = changed[0];
-        failedMessage = cause instanceof Error ? cause.message : String(cause);
-        break;
-      }
-    }
+    const { sent, failedKey, failedMessage } = await submitUnits({
+      units,
+      dirtyKeys,
+      drafts,
+      normalized,
+    });
     // Reload first, then release the acknowledged drafts, so those fields move
     // straight from the operator's value to the server's canonical one. A
     // field edited again while the save ran keeps its newer draft.
     await reload();
-    setDrafts((prev) => {
-      const next = { ...prev };
-      for (const [key, value] of Object.entries(sent)) {
-        if (next[key] === value) delete next[key];
-      }
-      return next;
-    });
+    setDrafts((prev) => releaseSent(prev, sent));
     if (failedKey) {
       setError(PARTIAL_FAILURE);
       setFieldErrors({ [failedKey]: failedMessage });
