@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Task } from "./api";
-import { isActiveCategory, isWorkflowTask, taskCategoryLabel, taskStatusLabel } from "./tasks";
+import {
+  isActiveCategory,
+  isWorkflowTask,
+  taskCategoryLabel,
+  taskStatusLabel,
+  workflowAttentionTone,
+  workflowStatusBadge,
+} from "./tasks";
 
 // Request tests for tasks and workflows live in lib/api/tasks.test.ts.
 describe("workflow task helpers", () => {
@@ -35,5 +42,29 @@ describe("workflow task helpers", () => {
     expect(["wait_customer", "done", "cancelled"].some((c) => isActiveCategory(c as never))).toBe(
       false,
     );
+  });
+
+  it("tones only the attention kinds a row marks", () => {
+    expect(workflowAttentionTone({ kind: "failed" } as never)).toBe("danger");
+    expect(workflowAttentionTone({ kind: "script_failed" } as never)).toBe("danger");
+    expect(workflowAttentionTone({ kind: "rejected" } as never)).toBe("attention");
+    expect(workflowAttentionTone({ kind: "idle" } as never)).toBeNull();
+    expect(workflowAttentionTone(undefined)).toBeNull();
+  });
+
+  it("picks one status badge: paused, then a problem, then the wait", () => {
+    const rejected = { kind: "rejected" } as never;
+    expect(workflowStatusBadge(task({ waiting_on: "pause", workflow_attention: rejected }))).toBe(
+      "paused",
+    );
+    expect(
+      workflowStatusBadge(task({ waiting_on: "customer", workflow_attention: rejected })),
+    ).toBe("attention");
+    expect(
+      workflowStatusBadge(
+        task({ waiting_on: "customer", workflow_attention: { kind: "idle" } as never }),
+      ),
+    ).toBe("waiting");
+    expect(workflowStatusBadge(task({}))).toBeNull();
   });
 });

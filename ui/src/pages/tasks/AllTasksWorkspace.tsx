@@ -10,7 +10,8 @@ import { buildTaskForest, flattenVisible, type VisibleTaskRow } from "@/lib/task
 import { hostToParam, targetFor } from "@/lib/terminalsHost";
 import { TaskFilterBar } from "./TaskFilterBar";
 import TaskDrawer, { type AssigneeChoice } from "./TaskDrawer";
-import TaskRow, { TaskTableHeader } from "./TaskRow";
+import TaskRow from "./TaskRow";
+import TaskTableHeader from "./TaskTableHeader";
 import { readTaskQueueFilter, persistTaskQueueFilter } from "./taskFilterStorage";
 import { readRememberedQueue, rememberQueue } from "./taskQueueMemory";
 import { useAllServersTasks, type ServerTask } from "./useAllServersTasks";

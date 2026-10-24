@@ -9,7 +9,8 @@ import {
   setTaskColumnWidth,
 } from "./taskColumnLayout";
 import { TASK_COLUMNS, type TaskRowMode } from "./taskColumns";
-import TaskRow, { TaskTableHeader } from "./TaskRow";
+import TaskRow from "./TaskRow";
+import TaskTableHeader from "./TaskTableHeader";
 import { formatTaskDuration } from "./taskTime";
 
 const task: Task = {

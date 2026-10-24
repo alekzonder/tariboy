@@ -12,7 +12,8 @@ import {
 import { buildTaskForest, flattenVisible, resolveTaskDrop } from "@/lib/taskTree";
 import type { Task, TaskPriority } from "@/lib/api";
 import type { TaskRowMode } from "./taskColumns";
-import TaskRow, { TaskTableHeader } from "./TaskRow";
+import TaskRow from "./TaskRow";
+import TaskTableHeader from "./TaskTableHeader";
 
 function preferSpecificDropTarget(args: Parameters<typeof pointerWithin>[0]) {
   const collisions = pointerWithin(args);
