@@ -130,7 +130,7 @@ describe("FileBrowser public integration", () => {
     click("Preview");
     expect(screen.getByTestId("md-preview")).toHaveTextContent("changed");
     click("Save");
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Error: write failed"));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("write failed"));
     expect(screen.getByTestId("dirty")).toBeInTheDocument();
     click("Source");
     expect(screen.getByDisplayValue("# changed")).toBeInTheDocument();

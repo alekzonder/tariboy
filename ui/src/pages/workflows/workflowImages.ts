@@ -8,7 +8,7 @@ import type {
   WorkflowLimits,
 } from "@/lib/api";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
-import { errorText } from "@/pages/tasks/workflowShared";
+import { errorText } from "@/lib/errors";
 
 /** `latest` first, then the other tags newest version first. */
 function compareTags(a: WorkflowImage, b: WorkflowImage): number {

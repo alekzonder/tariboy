@@ -10,17 +10,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ApiError } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { guard } from "@/lib/toast-guard";
 import { ActionRow, DraftField } from "./ConfigControls";
 import { fieldOfKey, type ConfigField } from "./registry";
 import type { BlockProps } from "./ConfigurationBlocks";
+import { errorText } from "@/lib/errors";
 
 const field = (key: string) => fieldOfKey(key) as ConfigField;
-
-const reason = (e: unknown) =>
-  e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e);
 
 export function RetentionBlock({ draft, matched, sources, name }: BlockProps) {
   const api = useApi();
@@ -38,7 +35,7 @@ export function RetentionBlock({ draft, matched, sources, name }: BlockProps) {
       await api.agentPost(name, "prune", { "dry-run": false });
       await sources.reloadAll();
     } catch (e) {
-      setPruneError(reason(e));
+      setPruneError(errorText(e));
     }
     setPruning(false);
   };

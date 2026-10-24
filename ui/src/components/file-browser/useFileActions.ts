@@ -3,7 +3,8 @@ import { toast } from "sonner";
 import type { FileEntry } from "@/lib/api";
 import type { FileBrowserApi } from "../FileBrowser";
 import type { FileTreeApi } from "./useFileTree";
-import { dirName, errMsg } from "./paths";
+import { dirName } from "./paths";
+import { errorText } from "@/lib/errors";
 
 type NewKind = "file" | "dir";
 interface RenameState {
@@ -66,7 +67,7 @@ export function useFileActions(
           refreshParent(path);
           setNewKind(null);
         })
-        .catch((e) => toast.error(errMsg(e)));
+        .catch((e) => toast.error(errorText(e)));
     },
     [createFile, refreshParent],
   );
@@ -82,7 +83,7 @@ export function useFileActions(
           if (selected === from) setSelected(to);
           setRename(null);
         })
-        .catch((e) => toast.error(errMsg(e)));
+        .catch((e) => toast.error(errorText(e)));
     },
     [renameFile, refreshParent, selected, setSelected],
   );
@@ -128,7 +129,7 @@ export function useFileActions(
           refreshParent(path);
           if (selected === path) setSelected(null);
         })
-        .catch((e) => toast.error(errMsg(e)));
+        .catch((e) => toast.error(errorText(e)));
     },
     [deleteFile, refreshParent, selected, setSelected],
   );

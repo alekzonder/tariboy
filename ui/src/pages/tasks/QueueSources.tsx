@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { COUNT, EMPTY, LABEL, MONO, QUIET_ACTION } from "./panelStyles";
 import RunRow from "./RunRow";
 import { formatTaskTime } from "./taskTime";
-import { errorText } from "./workflowShared";
+import { errorText } from "@/lib/errors";
 
 /**
  * The sources of a queue's bound workflow: each with its schedule and its

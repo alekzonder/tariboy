@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ApiError } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { validChannel } from "./channelName";
 import { Command, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { errorText } from "@/lib/errors";
 
 interface Sub {
   name: string;
@@ -17,8 +17,6 @@ interface Chan {
   name: string;
   kind: string;
 }
-
-const errmsg = (e: unknown) => (e instanceof ApiError ? e.message : String(e));
 
 // AgentSubscriptions manages the per-agent bus subscriptions: protected rows
 // (own inbox, group:*) are read-only; ad-hoc rows get an Unsubscribe button. The
@@ -74,7 +72,7 @@ export function AgentSubscriptions({
       toast.success(label);
       load();
     } catch (e) {
-      toast.error(`${label} failed: ${errmsg(e)}`);
+      toast.error(`${label} failed: ${errorText(e)}`);
     } finally {
       setBusy(false);
     }

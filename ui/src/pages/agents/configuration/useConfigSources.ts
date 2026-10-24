@@ -3,6 +3,7 @@ import { isConnectionError, type AgentImageStatus, type ImageRow } from "@/lib/a
 import { subscribeImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
 import type { AgentStatus, AgentView } from "@/lib/types";
+import { errorText } from "@/lib/errors";
 
 interface RetentionLimits {
   keep_iterations: number;
@@ -36,7 +37,6 @@ export interface ConfigSources {
   reloadAll: () => Promise<void>;
 }
 
-const message = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
 const empty = <T>(): Loaded<T> => ({ value: null, error: "" });
 
 // useConfigSources is the page's one load point. A scope is one agent on one
@@ -88,7 +88,10 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
       <T>(set: (update: (prev: Loaded<T>) => Loaded<T>) => void) =>
       (cause: unknown) => {
         if (current())
-          set((prev) => ({ value: prev.value, error: prev.value === null ? message(cause) : "" }));
+          set((prev) => ({
+            value: prev.value,
+            error: prev.value === null ? errorText(cause) : "",
+          }));
       };
     await Promise.all([
       api.agents.getAgent(name).then(
@@ -133,7 +136,7 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
         if (!scope.active || request !== scope.image) return;
         // An unreachable host keeps the last inventory; the error still shows.
         if (!isConnectionError(cause)) setImages([]);
-        setInventoryError(message(cause));
+        setInventoryError(errorText(cause));
       })
       .finally(() => {
         if (scope.active && request === scope.image) setInventoryLoading(false);
@@ -146,7 +149,7 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
     } catch (cause) {
       if (!scope.active || request !== scope.image) return;
       if (!isConnectionError(cause)) setImageStatus(null);
-      setImageError(message(cause));
+      setImageError(errorText(cause));
     }
   }, [name, api, targetId]);
 

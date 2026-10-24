@@ -13,10 +13,7 @@ import { cn } from "@/lib/utils";
 import { COUNT, LABEL, PRIMARY_FILL, QUIET_ACTION, SelectShell } from "./panelStyles";
 import { formatTaskTime } from "./taskTime";
 import type { TaskComment, TaskPrincipals, TaskWait } from "@/lib/api";
-
-function idempotencyKey(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `comment-${Date.now()}-${Math.random()}`;
-}
+import { idempotencyKey } from "@/lib/ids";
 
 /** Two letters is enough to tell one author from another down a column. */
 function initials(author: string): string {
@@ -71,7 +68,7 @@ export default function TaskComments({
     if (busy || uploading) return;
     setBusy(true);
     try {
-      await onComment(text, idempotencyKey());
+      await onComment(text, idempotencyKey("comment"));
       if (resetForm) {
         setBody("");
         setAsk({ assignee, principal: defaultAsk });

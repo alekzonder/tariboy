@@ -9,7 +9,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { useAgentName } from "@/lib/agent";
-import { ApiError, type ScriptDefinition, type ScriptMode, type ScriptRun } from "@/lib/api";
+import { type ScriptDefinition, type ScriptMode, type ScriptRun } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { fmtDateTime } from "@/lib/time";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { errorText } from "@/lib/errors";
 
 const activeRunStatuses = new Set(["pending", "running"]);
 const emptyForm = {
@@ -38,9 +39,6 @@ const emptyForm = {
 
 function when(value?: string) {
   return value ? fmtDateTime(value) : "—";
-}
-function errorText(error: unknown) {
-  return error instanceof ApiError ? error.message : String(error);
 }
 function duration(run: ScriptRun) {
   if (!run.started_at || !run.finished_at) return "—";

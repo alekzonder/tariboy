@@ -3,7 +3,7 @@ import { createApi, type ImageManifest, type ImageRow } from "@/lib/api";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import type { CreateAgentDialogProps } from "../CreateAgentDialog";
 import type { AgentCreateDraft } from "../agentCreateDraft";
-import { errorMessage } from "./errorMessage";
+import { errorText } from "@/lib/errors";
 
 const LOCAL_HOST_VALUE = "__local__";
 
@@ -71,7 +71,7 @@ export function useCreateAgentResources(
         setTarget(null);
         setResolvedRevision(selectedHostRevision);
         setImages([]);
-        setImagesError(`Could not load images: ${errorMessage(error)}`);
+        setImagesError(`Could not load images: ${errorText(error)}`);
       }
     })();
     return () => {
@@ -104,7 +104,7 @@ export function useCreateAgentResources(
         if (!alive) return;
         setManifest(null);
         setManifestKey(expectedManifestKey);
-        setManifestError(`Could not load image ${draft.image}: ${errorMessage(error)}`);
+        setManifestError(`Could not load image ${draft.image}: ${errorText(error)}`);
       });
     return () => {
       alive = false;

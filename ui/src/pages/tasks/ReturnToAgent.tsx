@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 import { EMPTY, LABEL, SelectShell } from "./panelStyles";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
 import { defaultReturnTarget, returnTargets, type ReturnTarget } from "./workflowGraph";
-import { errorText, useFollowRequest, useMounted } from "./workflowShared";
+import { errorText } from "@/lib/errors";
+import { useFollowRequest, useMounted } from "./workflowShared";
 
 /** The transition message limit of the daemon, in characters. */
 const MAX_MESSAGE = 4096;

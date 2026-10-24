@@ -6,11 +6,8 @@ import { Button } from "@/components/ui/button";
 import { ApiError, type AgentPool } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EMPTY, FIELD, MONO } from "./panelStyles";
-import { errorText } from "./workflowShared";
-
-function actionKey(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `pool-${Date.now()}-${Math.random()}`;
-}
+import { errorText } from "@/lib/errors";
+import { idempotencyKey } from "@/lib/ids";
 
 /**
  * A queue's agent pools, one row each: the pools the bound workflow requires,
@@ -175,7 +172,7 @@ function PoolRow({
         name,
         draft,
         pool?.revision ?? 0,
-        actionKey(),
+        idempotencyKey("pool"),
       );
       onSaved(updated);
       toast.success(`Pool ${name} saved`);

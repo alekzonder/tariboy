@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { ApiError, type ApiClient, type ImageRow } from "@/lib/api";
+import { type ApiClient, type ImageRow } from "@/lib/api";
 import { useOptionalDaemons } from "@/components/daemonContext";
 import { useApi } from "@/components/apiContext";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
@@ -21,6 +21,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ImageTransferDialog } from "./ImageTransferDialog";
+import { errorText } from "@/lib/errors";
 
 function buildTime(image: ImageRow): number {
   const value = Date.parse(image.built_at ?? "");
@@ -37,10 +38,6 @@ function compareTags(a: ImageRow, b: ImageRow): number {
 
 function builtDate(image?: ImageRow): string {
   return image && Number.isFinite(buildTime(image)) ? image.built_at! : "—";
-}
-
-function message(error: unknown): string {
-  return error instanceof ApiError ? error.message : String(error);
 }
 
 export default function BuiltImages({
@@ -128,7 +125,7 @@ export default function BuiltImages({
         }
       })
       .catch((err) => {
-        if (alive) setError(message(err));
+        if (alive) setError(errorText(err));
       });
     return () => {
       alive = false;
@@ -168,7 +165,7 @@ export default function BuiltImages({
       );
       toast.success(`image ${ref} removed`);
     } catch (error) {
-      toast.error(`remove failed: ${message(error)}`);
+      toast.error(`remove failed: ${errorText(error)}`);
     }
   };
 
@@ -187,7 +184,7 @@ export default function BuiltImages({
       URL.revokeObjectURL(url);
       toast.success(`image ${ref} saved to file ${filename}`);
     } catch (error) {
-      toast.error(`export failed: ${message(error)}`);
+      toast.error(`export failed: ${errorText(error)}`);
     }
   };
 
@@ -222,7 +219,7 @@ export default function BuiltImages({
                     hostId,
                   });
                 })
-                .catch((error) => toast.error(`import failed: ${message(error)}`));
+                .catch((error) => toast.error(`import failed: ${errorText(error)}`));
             }}
           />
           {imageImport?.hostId === hostId && (
@@ -257,7 +254,7 @@ export default function BuiltImages({
                       setImageImport(null);
                       setRevision((value) => value + 1);
                     })
-                    .catch((error) => toast.error(`import failed: ${message(error)}`))
+                    .catch((error) => toast.error(`import failed: ${errorText(error)}`))
                 }
               >
                 Import image

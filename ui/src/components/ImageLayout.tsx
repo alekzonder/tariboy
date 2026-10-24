@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import type { ImageOutletContext } from "./imageContext";
+import { errorText } from "@/lib/errors";
 
 const TABS = [
   { to: ".", label: "Overview", end: true },
@@ -36,10 +37,6 @@ const TABS = [
   { to: "skills", label: "Skills", end: false },
   { to: "files", label: "Files", end: false },
 ];
-
-function message(error: unknown): string {
-  return error instanceof ApiError ? error.message : String(error);
-}
 
 export function ImageLayout({
   hostId,
@@ -94,7 +91,7 @@ function ImageDetail({
         return;
       }
     }
-    setError(message(cause));
+    setError(errorText(cause));
   }, []);
 
   useEffect(() => {
@@ -131,7 +128,7 @@ function ImageDetail({
       toast.success(`image ${ref} removed`);
       navigate(`${basePath}/${encodeURIComponent(name)}`);
     } catch (err) {
-      toast.error(`remove failed: ${message(err)}`);
+      toast.error(`remove failed: ${errorText(err)}`);
     }
   };
 
@@ -193,7 +190,7 @@ function ImageDetail({
                 variant="outline"
                 onClick={() => {
                   void openHostPathInVSCode(hostKey, provenance.source_cwd!).catch((error) =>
-                    toast.error(`Open in VS Code failed: ${message(error)}`),
+                    toast.error(`Open in VS Code failed: ${errorText(error)}`),
                   );
                 }}
               >

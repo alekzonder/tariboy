@@ -8,7 +8,7 @@ import { COUNT, DANGER_FILL, EMPTY, LABEL, MONO, QUIET_ACTION } from "./panelSty
 import { MarkdownContent, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown";
 import { formatTaskTime } from "./taskTime";
 import type { Requirement, StepArtifacts } from "./workflowGraph";
-import { errorText } from "./workflowShared";
+import { errorText } from "@/lib/errors";
 
 /** A value longer than this many lines, or characters, starts collapsed. */
 const COLLAPSED_LINES = 6;

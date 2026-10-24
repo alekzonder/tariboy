@@ -5,7 +5,7 @@ import type { AgentCreateDraft } from "../agentCreateDraft";
 import type { CreateAgentDialogProps } from "../CreateAgentDialog";
 import type { useCreateAgentResources } from "./useCreateAgentResources";
 import { buildCreateAgentSpec } from "./createAgentSpec";
-import { errorMessage } from "./errorMessage";
+import { errorText } from "@/lib/errors";
 
 export function useCreateAgentSubmit(
   draft: AgentCreateDraft,
@@ -34,7 +34,7 @@ export function useCreateAgentSubmit(
     try {
       spec = buildCreateAgentSpec(draft, bare, schemaV2);
     } catch (error) {
-      setSubmitError(errorMessage(error));
+      setSubmitError(errorText(error));
       return;
     }
 
@@ -61,11 +61,11 @@ export function useCreateAgentSubmit(
         onOpenChange(false);
       } catch (error) {
         setStartError(
-          `Agent created but could not be started: ${errorMessage(error)}. Check the host and retry start.`,
+          `Agent created but could not be started: ${errorText(error)}. Check the host and retry start.`,
         );
       }
     } catch (error) {
-      const message = errorMessage(error);
+      const message = errorText(error);
       setSubmitError(message);
       toast.error(`create failed: ${message}`);
     } finally {
@@ -81,9 +81,7 @@ export function useCreateAgentSubmit(
       await api.agents.startAgent(created.name);
       onOpenChange(false);
     } catch (error) {
-      setStartError(
-        `Agent is still stopped: ${errorMessage(error)}. Check the host and retry start.`,
-      );
+      setStartError(`Agent is still stopped: ${errorText(error)}. Check the host and retry start.`);
     } finally {
       setBusy(false);
     }

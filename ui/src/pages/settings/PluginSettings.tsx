@@ -1,13 +1,10 @@
 import { useEffect, useState } from "react";
-import { ApiError, type PluginContribution, type PluginSettingField } from "@/lib/api";
+import { type PluginContribution, type PluginSettingField } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-function message(error: unknown): string {
-  return error instanceof ApiError || error instanceof Error ? error.message : String(error);
-}
+import { errorText } from "@/lib/errors";
 
 function statusValue(value: unknown): string {
   if (typeof value === "boolean") return value ? "Yes" : "No";
@@ -57,7 +54,7 @@ export default function PluginSettings({ name }: { name: string }) {
         setStatus(nextStatus);
       })
       .catch((cause) => {
-        if (current) setError(message(cause));
+        if (current) setError(errorText(cause));
       })
       .finally(() => {
         if (current) setLoading(false);
@@ -90,7 +87,7 @@ export default function PluginSettings({ name }: { name: string }) {
       await loadStatus();
       setNotice("Saved");
     } catch (cause) {
-      setError(message(cause));
+      setError(errorText(cause));
     } finally {
       setSaving("");
     }

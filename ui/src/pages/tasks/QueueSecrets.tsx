@@ -6,7 +6,8 @@ import type { QueueSecretInfo } from "@/lib/api";
 import { COUNT, EMPTY, FIELD, LABEL, QUIET_ACTION } from "./panelStyles";
 import { formatTaskTime } from "./taskTime";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
-import { errorText, keyProblem } from "./workflowShared";
+import { errorText } from "@/lib/errors";
+import { keyProblem } from "./workflowShared";
 
 /**
  * A queue's secrets: keys with their time, Set and Remove, and the required

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, type FileEntry, type FileListing } from "@/lib/api";
-import { baseName, dirName, errMsg } from "./paths";
+import { baseName, dirName } from "./paths";
+import { errorText } from "@/lib/errors";
 
 interface DirState {
   entries: FileEntry[] | null;
@@ -46,7 +47,7 @@ export function useFileTree(listDir: (path: string) => Promise<FileListing>): Fi
         .catch((e) =>
           setDirs((prev) => ({
             ...prev,
-            [path]: { entries: prev[path]?.entries ?? null, loading: false, error: errMsg(e) },
+            [path]: { entries: prev[path]?.entries ?? null, loading: false, error: errorText(e) },
           })),
         );
     },
@@ -65,7 +66,10 @@ export function useFileTree(listDir: (path: string) => Promise<FileListing>): Fi
       })
       .catch((e) => {
         if (alive)
-          setDirs((prev) => ({ ...prev, "": { entries: null, loading: false, error: errMsg(e) } }));
+          setDirs((prev) => ({
+            ...prev,
+            "": { entries: null, loading: false, error: errorText(e) },
+          }));
       });
     return () => {
       alive = false;

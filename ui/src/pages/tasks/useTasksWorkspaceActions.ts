@@ -11,17 +11,14 @@ import {
   type TaskRelationType,
   type TaskStatus,
 } from "@/lib/api";
-import { errorText as errorMessage } from "@/lib/queryClient";
+import { errorText } from "@/lib/errors";
 import { buildTaskForest, canDropTaskInside } from "@/lib/taskTree";
 import { resolveDaemon } from "@/lib/daemons";
 import { taskKeys, refreshTasks, writeTask, retainTaskRevision } from "./taskQueries";
 import { rememberQueue } from "./taskQueueMemory";
 import type { TasksWorkspaceView } from "./useTasksWorkspaceView";
 import type { TasksWorkspaceData } from "./useTasksWorkspaceData";
-
-function idempotencyKey(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `task-action-${Date.now()}-${Math.random()}`;
-}
+import { idempotencyKey } from "@/lib/ids";
 
 export function useTasksWorkspaceActions(
   server: string,
@@ -43,7 +40,7 @@ export function useTasksWorkspaceActions(
       }
       await loadDetail(created.key);
     } catch (error) {
-      toast.error(errorMessage(error));
+      toast.error(errorText(error));
     }
   };
 
@@ -63,7 +60,7 @@ export function useTasksWorkspaceActions(
       toast.success("Task updated");
       return retainTaskRevision(client, api, updated);
     } catch (error) {
-      toast.error(errorMessage(error));
+      toast.error(errorText(error));
       throw error;
     }
   };
@@ -73,7 +70,7 @@ export function useTasksWorkspaceActions(
     try {
       await write(() => api.tasks.addTaskComment(detail.task.key, body, idempotencyKey));
     } catch (error) {
-      toast.error(errorMessage(error));
+      toast.error(errorText(error));
       throw error;
     }
   };
@@ -105,7 +102,7 @@ export function useTasksWorkspaceActions(
       if (parentKey) setExpanded((current) => new Set(current).add(parentKey));
     } catch (error) {
       setTasks(previous);
-      toast.error(errorMessage(error));
+      toast.error(errorText(error));
     } finally {
       await refreshTasks(client, api);
     }
@@ -120,7 +117,7 @@ export function useTasksWorkspaceActions(
       );
       retainTaskRevision(client, api, updated);
     } catch (error) {
-      toast.error(errorMessage(error));
+      toast.error(errorText(error));
     }
   };
 
@@ -133,7 +130,9 @@ export function useTasksWorkspaceActions(
     // One client per side for the whole move: the source as it is now, the
     // destination as it resolved.
     const destination = createApi(host);
-    await write(() => transferTask(key, api.tasks, destination.tasks, label, idempotencyKey()));
+    await write(() =>
+      transferTask(key, api.tasks, destination.tasks, label, idempotencyKey("task-action")),
+    );
     await refreshTasks(client, destination);
     toast.success(`${key} moved to ${label}`);
   };
@@ -152,7 +151,7 @@ export function useTasksWorkspaceActions(
       const created = await write(() => api.tasks.createTaskQueue(input));
       selectQueue(created.prefix);
     } catch (error) {
-      toast.error(errorMessage(error));
+      toast.error(errorText(error));
     }
   };
 
@@ -162,7 +161,7 @@ export function useTasksWorkspaceActions(
       toast.success("Queue updated");
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) await loadMetadata();
-      toast.error(errorMessage(error));
+      toast.error(errorText(error));
     }
   };
 
@@ -174,7 +173,7 @@ export function useTasksWorkspaceActions(
         targetKey,
         type,
         detail.task.revision,
-        idempotencyKey(),
+        idempotencyKey("task-action"),
       ),
     );
   };
@@ -185,7 +184,7 @@ export function useTasksWorkspaceActions(
         detail.task.key,
         relationID,
         detail.task.revision,
-        idempotencyKey(),
+        idempotencyKey("task-action"),
       ),
     );
   };
