@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
+import { apiWrapper } from "@/test/api";
 import { useChatUnread } from "./useChatUnread";
 
 afterEach(() => {
@@ -33,6 +34,6 @@ it("counts every chat of the agent, not the first one listed", async () => {
     }),
   } as Response));
 
-  const { result } = renderHook(() => useChatUnread(null, "worker"));
+  const { result } = renderHook(() => useChatUnread("worker"), { wrapper: apiWrapper() });
   await waitFor(() => expect(result.current).toBe(7));
 });

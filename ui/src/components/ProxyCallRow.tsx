@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { fmtTokens } from "@/lib/audit";
-import { fetchTranscriptRaw, type Call, type Block, type Message } from "@/lib/transcript";
+import type { Call, Block, Message } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 
 function toolInput(input: unknown): Record<string, unknown> {
   if (input && typeof input === "object") return input as Record<string, unknown>;
@@ -46,6 +47,7 @@ function activityBlock(block: Block, key: string) {
 export function ProxyCallRow({
   call, mode, name, iteration,
 }: { call: Call; mode: "enrich" | "full"; name: string; iteration: string }) {
+  const api = useApi();
   const [showInstr, setShowInstr] = useState(false);
   const [showThink, setShowThink] = useState(false);
   const [raw, setRaw] = useState<{ request: string; response: string } | null>(null);
@@ -64,7 +66,7 @@ export function ProxyCallRow({
   const openRaw = async () => {
     setRawOpen((v) => !v);
     if (!raw) {
-      const calls = await fetchTranscriptRaw(name, iteration);
+      const calls = await api.audit.fetchTranscriptRaw(name, iteration);
       const mine = calls.find((c) => c.seq === call.seq);
       if (mine) setRaw({ request: mine.request, response: mine.response });
     }

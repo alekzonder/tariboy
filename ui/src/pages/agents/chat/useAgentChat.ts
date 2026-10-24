@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useAgentName } from "@/lib/agent";
-import {
-  ApiError, chatListOn, chatMessagesOn, messageSendOn, targetReady,
-  type ChatMessage, type ChatSummary,
-} from "@/lib/api";
+import { ApiError, type ChatMessage, type ChatSummary } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { useMessagesSocket } from "@/hooks/useMessagesSocket";
-import { targetFor } from "@/lib/terminalsHost";
 import { DEFAULT_CHAT_TYPES, loadChatTypes, saveChatTypes } from "./chatTypes";
 import { buildFeed, unreadCount, type FeedMessage } from "./chatFeed";
 import { sharedChats } from "./chatModel";
@@ -17,7 +14,7 @@ const QUESTION_TYPE = "task.question";
 
 export function useAgentChat(hostId: string) {
   const name = useAgentName();
-  const target = targetFor(hostId);
+  const api = useApi();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [customer, setCustomer] = useState("user:customer");
   const [types, setTypes] = useState<string[]>(() => loadChatTypes());
@@ -46,13 +43,13 @@ export function useAgentChat(hostId: string) {
   );
 
   const { anchor, captureAnchor, markShownRead, markRead, markUnread } = useChatReadState({
-    name, hostId, selected, target, chatId, messages, customer,
+    name, hostId, selected, chatId, messages, customer,
   });
 
   const load = useCallback(async () => {
-    if (!name || !targetReady(target)) return;
+    if (!name || !api.ready) return;
     try {
-      const page = await chatMessagesOn(target, chatId, { types });
+      const page = await api.messages.chatMessages(chatId, { types });
       captureAnchor(page.read_ts ?? "");
       setMessages(page.messages ?? []);
       setCustomer(page.customer || "user:customer");
@@ -67,10 +64,10 @@ export function useAgentChat(hostId: string) {
       // Keep the last conversation on a transient failure.
     }
     // typesKey stands for the type list, which changes identity every render.
-    // target keeps its identity until the host's endpoint moves, and a moved
-    // endpoint (a reconnect) must re-read the conversation.
+    // The client keeps its identity until the host's endpoint moves, and a
+    // moved endpoint (a reconnect) must re-read the conversation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, target, typesKey, selected]);
+  }, [name, api, typesKey, selected]);
 
   useEffect(() => {
     setMessages([]);
@@ -80,20 +77,19 @@ export function useAgentChat(hostId: string) {
   // The shared chats are read from the same list the sidebar reads, so a chat
   // created in another window appears here without its own endpoint.
   const loadShared = useCallback(async () => {
-    if (!name || !targetReady(target)) return;
+    if (!name || !api.ready) return;
     try {
-      const page = await chatListOn(target);
+      const page = await api.messages.chatList();
       setShared(sharedChats(page.chats ?? [], name));
     } catch {
       // A transient failure keeps the tabs that are already shown.
     }
-  }, [name, target]);
+  }, [name, api]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { void loadShared(); }, [loadShared]);
   useMessagesSocket({
-    target,
-    enabled: (!target || Boolean(target.baseURL)) && Boolean(name),
+    enabled: api.ready && Boolean(name),
     // A frame that names its chat refetches only that one; a publication on a
     // channel no chat owns still falls back to the agent it concerns.
     onHint: (hint) => {
@@ -144,7 +140,7 @@ export function useAgentChat(hostId: string) {
     try {
       // The chat owns this channel, so the agent reply lands here without the
       // client having to name a reply target.
-      await messageSendOn(target, { channel: chatChannel, type: "message", text });
+      await api.messages.messageSend({ channel: chatChannel, type: "message", text });
       setDraft("");
       // Speaking is reading: the customer has answered whatever was new.
       markRead();
@@ -163,7 +159,7 @@ export function useAgentChat(hostId: string) {
   }
 
   return {
-    name, target, messages, customer, types, draft, setDraft, query, setQuery,
+    name, messages, customer, types, draft, setDraft, query, setQuery,
     sending, selected, setSelected, shared, current, writable, shown,
     newCount, openQuestion, markRead, markUnread, toggleType, resetTypes,
     send, reply, loadShared,

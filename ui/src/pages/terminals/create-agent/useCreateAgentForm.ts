@@ -20,7 +20,7 @@ export function useCreateAgentForm(props: CreateAgentDialogProps) {
   const { sourceState } = source;
   const {
     host,
-    target,
+    api,
     targetIsCurrent,
     targetIsUsable,
     targetImageAvailable,
@@ -35,7 +35,7 @@ export function useCreateAgentForm(props: CreateAgentDialogProps) {
   // An unresolved host asks nothing: a null target would address the local
   // daemon instead of the selected one.
   const harnessCatalog = useHarnessCatalog(
-    target,
+    api,
     targetIsCurrent && targetIsUsable ? draft.harness : "",
   );
   const modelPresets = runtimePresetGroups({

@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
-import {
-  getIterationRetentionDefaultOn, getMaintenanceOn, runMaintenanceOn, setIterationRetentionDefaultOn, setMaintenanceOn,
-  type ApiTarget, type IterationRetention, type MaintenanceRun, type MaintenanceSettings,
-} from "@/lib/api";
+import type { IterationRetention, MaintenanceRun, MaintenanceSettings } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,8 +22,10 @@ function describeRun(run: MaintenanceRun) {
   ].join(" · ");
 }
 
-// Mount with a per-host key so a draft for one host is never saved to another.
-export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
+// Mount with a per-host key (and inside that host's ApiProvider) so a draft for
+// one host is never saved to another.
+export function MaintenanceSettingsCard() {
+  const api = useApi();
   const [form, setForm] = useState<MaintenanceSettings | null>(null);
   const [saved, setSaved] = useState<MaintenanceSettings | null>(null);
   const [ret, setRet] = useState<IterationRetention | null>(null);
@@ -36,7 +36,7 @@ export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
 
   useEffect(() => {
     let current = true;
-    getMaintenanceOn(target)
+    api.daemon.getMaintenance()
       .then((r) => {
         if (!current) return;
         setForm(r.settings);
@@ -45,7 +45,7 @@ export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
         setError(r.last_run?.error ?? "");
       })
       .catch((e) => { if (current) setError(reason(e)); });
-    getIterationRetentionDefaultOn(target)
+    api.daemon.getIterationRetentionDefault()
       .then((r) => {
         if (!current) return;
         const p = { keep_iterations: r.keep_iterations, keep_days: r.keep_days, max_bytes: r.max_bytes };
@@ -54,7 +54,7 @@ export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
       })
       .catch((e) => { if (current) setError(reason(e)); });
     return () => { current = false; };
-  }, [target]);
+  }, [api]);
 
   const act = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -64,16 +64,16 @@ export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
   };
   const save = () => act(async () => {
     if (!form) return;
-    const next = await setMaintenanceOn(target, form);
+    const next = await api.daemon.setMaintenance(form);
     setForm(next);
     setSaved(next);
     if (!ret) return;
-    const nextRet = await setIterationRetentionDefaultOn(target, ret);
+    const nextRet = await api.daemon.setIterationRetentionDefault(ret);
     setRet(nextRet);
     setSavedRet(nextRet);
   });
   const run = () => act(async () => {
-    const r = await runMaintenanceOn(target);
+    const r = await api.daemon.runMaintenance();
     setLastRun(r);
     if (r.error) setError(r.error);
   });

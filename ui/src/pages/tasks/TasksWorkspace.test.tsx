@@ -1,11 +1,16 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { ApiError, setActiveDaemon } from "@/lib/api"
-import type { Task, TaskDetail, TaskNotification, TaskQueue } from "@/lib/tasks"
+import type { ReactElement } from "react"
+import { ApiProvider } from "@/components/ApiProvider"
+import { ApiError, setActiveDaemon, type Task, type TaskDetail, type TaskNotification, type TaskQueue } from "@/lib/api"
 import { taskKeys } from "./taskQueries"
 import TasksWorkspace from "./TasksWorkspace"
 import { customerView } from "./workflowFixtures"
+import type { Daemon } from "@/lib/daemons"
+
+/** The workspace below a server-selection boundary for `target`. */
+const onHost = (target: Daemon | null, ui: ReactElement) => <ApiProvider target={target}>{ui}</ApiProvider>
 
 const api = vi.hoisted(() => ({
   addTaskComment: vi.fn(),
@@ -43,10 +48,34 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  ...api,
+// Where each request takes the host it goes to in the mocks: every client
+// passes its own host there, so an assertion that names a host (null = local)
+// proves the request went through that host's client.
+const hostArgument = vi.hoisted((): Record<string, number> => ({
+  addTaskComment: 2, addTaskRelation: 4, createTask: 1, createTaskQueue: 1, deleteTaskRelation: 3,
+  advanceTask: 4, getTask: 1, getTaskWorkflow: 1, getQueueWorkflow: 1, listAgentPools: 1, rebindAgentPool: 5,
+  listTaskNotifications: 1, listTaskEvents: 3, listTaskPrincipals: 0, listTaskQueues: 0, listTasks: 1,
+  markTaskNotificationRead: 1, moveTask: 2, updateTask: 2, updateTaskQueue: 2,
 }))
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>()
+  return {
+    ...actual,
+    createApi: (target: Parameters<typeof actual.createApi>[0]) => {
+      const client = actual.createApi(target)
+      const tasks: Record<string, unknown> = { ...client.tasks }
+      const workflows: Record<string, unknown> = { ...client.workflows }
+      for (const [name, at] of Object.entries(hostArgument)) {
+        const domain = name in tasks ? tasks : workflows
+        domain[name] = (...args: unknown[]) => {
+          args.splice(at, 0, client.target)
+          return (api as Record<string, (...values: unknown[]) => unknown>)[name](...args)
+        }
+      }
+      return { ...client, tasks, workflows }
+    },
+  }
+})
 vi.mock("@/hooks/useTasksSocket", () => ({
   useTasksSocket: vi.fn((options) => {
     taskSocket.options = options
@@ -220,7 +249,7 @@ describe("TasksWorkspace", () => {
     api.getTask.mockResolvedValue({ ...detail, task: { ...root, assignee: "" } })
     const upload = deferred<Response>()
     const fetchMock = vi.spyOn(globalThis, "fetch").mockReturnValue(upload.promise)
-    render(<TasksWorkspace target={target} />)
+    render(onHost(target, <TasksWorkspace />))
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     const description = screen.getByLabelText("Description").closest(".task-description")!
     const comments = screen.getByText("Comments").closest("section")!
@@ -542,12 +571,12 @@ describe("TasksWorkspace", () => {
     api.getTask.mockResolvedValue({ ...detail, task: asked })
     const target = () => ({ id: "remote", label: "Remote", baseURL: "https://remote.example", token: "test" })
 
-    const view = render(<TasksWorkspace target={target()} initialTaskKey="ASK-7" />)
+    const view = render(onHost(target(), <TasksWorkspace initialTaskKey="ASK-7" />))
     expect(await screen.findByRole("heading", { name: "ASK-7" })).toBeInTheDocument()
     await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
     const loads = api.listTaskEvents.mock.calls.length
 
-    view.rerender(<TasksWorkspace target={target()} initialTaskKey="ASK-7" />)
+    view.rerender(onHost(target(), <TasksWorkspace initialTaskKey="ASK-7" />))
     await act(async () => {})
 
     expect(api.listTaskEvents).toHaveBeenCalledTimes(loads)
@@ -556,7 +585,7 @@ describe("TasksWorkspace", () => {
 
   it("keeps the list, the open task and its drafts while the host reconnects", async () => {
     const remote = (baseURL: string) => ({ id: "remote", label: "Remote", baseURL, token: "test" })
-    const view = render(<TasksWorkspace target={remote("http://127.0.0.1:41001")} />)
+    const view = render(onHost(remote("http://127.0.0.1:41001"), <TasksWorkspace />))
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     await screen.findByRole("heading", { name: root.key })
     const comments = screen.getByText("Comments").closest("section")!
@@ -565,11 +594,11 @@ describe("TasksWorkspace", () => {
     const loads = api.listTasks.mock.calls.length
 
     const offline = remote("")
-    view.rerender(<TasksWorkspace target={offline} />)
+    view.rerender(onHost(offline, <TasksWorkspace />))
     await act(async () => {})
     expect(api.listTasks.mock.calls.filter(([, target]) => target === offline)).toHaveLength(0)
     const back = remote("http://127.0.0.1:41002")
-    view.rerender(<TasksWorkspace target={back} />)
+    view.rerender(onHost(back, <TasksWorkspace />))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(expect.anything(), back, expect.any(AbortSignal)))
 
     expect(api.listTasks.mock.calls.length).toBe(loads + 1)
@@ -932,7 +961,7 @@ describe("TasksWorkspace", () => {
       category: input.status ?? root.category,
       revision: Number(input.revision) + 1,
     }))
-    render(<TasksWorkspace target={target} />)
+    render(onHost(target, <TasksWorkspace />))
 
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     await userEvent.selectOptions(await screen.findByLabelText("Status"), "wait_customer")
@@ -1139,13 +1168,12 @@ describe("TasksWorkspace", () => {
 
   it("resets the global workspace when the active daemon changes", async () => {
     const nextTree = deferred<{ tasks: Task[]; sequence: number }>()
-    const { rerender } = render(<TasksWorkspace />)
+    // The active-host boundary hands the workspace a client for the new host.
+    const { rerender } = render(onHost(null, <TasksWorkspace />))
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
     api.listTasks.mockReturnValueOnce(nextTree.promise)
 
-    setActiveDaemon({ id: "second-host", label: "Second", baseURL: "https://second.test", token: "" })
-    daemonContext.activeId = "second-host"
-    rerender(<TasksWorkspace />)
+    rerender(onHost({ id: "second-host", label: "Second", baseURL: "https://second.test", token: "" }, <TasksWorkspace />))
 
     expect(await screen.findByText("Loading tasks…")).toBeInTheDocument()
     expect(screen.queryByText("Ship native tasks")).toBeNull()
@@ -1161,14 +1189,14 @@ describe("TasksWorkspace", () => {
       .mockResolvedValueOnce({ customer: "user:first", agents: [], groups: [] })
       .mockReturnValueOnce(secondPeople.promise)
 
-    const { rerender } = render(<TasksWorkspace target={firstTarget} />)
+    const { rerender } = render(onHost(firstTarget, <TasksWorkspace />))
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
     await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ waiting_for: "user:first" }),
       firstTarget, expect.any(AbortSignal)))
 
-    rerender(<TasksWorkspace target={secondTarget} />)
+    rerender(onHost(secondTarget, <TasksWorkspace />))
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
     await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
     const secondTargetCalls = () => api.listTasks.mock.calls.filter(([, callTarget]) => callTarget === secondTarget)
@@ -1188,9 +1216,9 @@ describe("TasksWorkspace", () => {
       .mockReturnValueOnce(firstPeople.promise)
       .mockResolvedValueOnce({ customer: "user:second", agents: [], groups: [] })
 
-    const { rerender } = render(<TasksWorkspace target={firstTarget} />)
+    const { rerender } = render(onHost(firstTarget, <TasksWorkspace />))
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    rerender(<TasksWorkspace target={secondTarget} />)
+    rerender(onHost(secondTarget, <TasksWorkspace />))
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
     await userEvent.click(screen.getByRole("button", { name: "My tasks" }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
@@ -1275,7 +1303,7 @@ describe("TasksWorkspace", () => {
     first.unmount()
 
     const target = { id: "remote", label: "Remote", baseURL: "https://remote.example", token: "test" }
-    render(<TasksWorkspace target={target} />)
+    render(onHost(target, <TasksWorkspace />))
     await screen.findByText("Ship native tasks")
     await userEvent.click(screen.getByRole("button", { name: "New task" }))
     // The remembered queue no longer exists on this server.
@@ -1285,17 +1313,17 @@ describe("TasksWorkspace", () => {
   it("keys the remembered queue by the active server and lets the toolbar filter win", async () => {
     const ops = { ...queue, prefix: "OPS", name: "Operations" }
     api.listTaskQueues.mockResolvedValue({ queues: [queue, ops], count: 2 })
-    daemonContext.activeId = "mac-mini"
+    const active = { id: "mac-mini", label: "Mac mini", baseURL: "https://mac-mini.test", token: "" }
     localStorage.setItem("tasks:new-task-queue:v1", JSON.stringify({ local: "TEST", "mac-mini": "OPS" }))
     sessionStorage.setItem("tasks:queue-filter:v1", "TEST")
-    const filtered = render(<TasksWorkspace />)
+    const filtered = render(onHost(active, <TasksWorkspace />))
     await screen.findByText("Ship native tasks")
     await userEvent.click(screen.getByRole("button", { name: "New task" }))
     expect(screen.getByLabelText("Task queue")).toHaveValue("TEST")
     filtered.unmount()
 
     sessionStorage.clear()
-    render(<TasksWorkspace />)
+    render(onHost(active, <TasksWorkspace />))
     await screen.findByText("Ship native tasks")
     await userEvent.click(screen.getByRole("button", { name: "New task" }))
     expect(screen.getByLabelText("Task queue")).toHaveValue("OPS")
@@ -1556,7 +1584,7 @@ describe("priority in the list", () => {
   it("saves a priority picked on the row with its revision and shows the saved value", async () => {
     const target = { id: "remote", label: "Remote", baseURL: "https://remote.example", token: "test" }
     api.updateTask.mockResolvedValue({ ...root, priority: "P2", revision: 3 })
-    render(<TasksWorkspace target={target} />)
+    render(onHost(target, <TasksWorkspace />))
     const row = await screen.findByTestId(`task-row-${root.key}`)
 
     await userEvent.click(within(row).getByRole("button", { name: "P0 Critical" }))

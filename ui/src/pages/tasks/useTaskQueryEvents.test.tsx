@@ -12,8 +12,8 @@ it("coalesces staggered copies of one event across consumers and retains a trail
   let finish!: () => void
   const read = vi.fn().mockResolvedValue("initial")
   function Reader() {
-    useApiQuery({ queryKey: taskKeys.notifications(null), queryFn: () => read() }, null)
-    useTaskQueryEvents(null, 10)
+    useApiQuery({ queryKey: taskKeys.notifications(null), queryFn: () => read() })
+    useTaskQueryEvents(10)
     return null
   }
   const mounted = render(<><Reader /><Reader /></>)

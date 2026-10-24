@@ -1,12 +1,16 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import type { ReactElement } from "react"
+import { act, fireEvent, render as renderWith, screen, within } from "@/test/queryRender"
 import { beforeEach, expect, it, vi } from "vitest"
-import { ApiError } from "@/lib/api"
-import type { QueueSource, SourceRun } from "@/lib/tasks"
+import { ApiError, type QueueSource, type SourceRun } from "@/lib/api"
 import QueueSources from "./QueueSources"
 import { remoteTarget } from "./workflowFixtures"
+import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ listQueueSources: vi.fn(), getQueueSourceRunLog: vi.fn() }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/tasks")>(), ...api }))
+// The mocks are methods of a client bound to the remote host, so each call
+// they record went to that host.
+const remoteApi = fakeApi({ workflows: { listQueueSources: api.listQueueSources, getQueueSourceRunLog: api.getQueueSourceRunLog } }, remoteTarget)
+const render = (ui: ReactElement) => renderWith(ui, { api: remoteApi })
 
 const finished: SourceRun = {
   id: 4, queue: "DEV", source: "pull-requests", script: "./sources/prs.sh", state: "finished", verdict: "failure",
@@ -25,9 +29,9 @@ beforeEach(() => {
 })
 
 it("lists each source with its schedule and its runs, newest first", async () => {
-  render(<QueueSources queue="DEV" target={remoteTarget} />)
+  render(<QueueSources queue="DEV" />)
   const item = await screen.findByRole("group", { name: "Source pull-requests" })
-  expect(api.listQueueSources).toHaveBeenCalledWith("DEV", remoteTarget)
+  expect(api.listQueueSources).toHaveBeenCalledWith("DEV")
   expect(item).toHaveTextContent("./sources/prs.sh")
   expect(item).toHaveTextContent("every 2m")
   expect(item).toHaveTextContent("1 failed in a row")
@@ -41,13 +45,13 @@ it("lists each source with its schedule and its runs, newest first", async () =>
 
 it("says so when the workflow has no sources", async () => {
   api.listQueueSources.mockResolvedValue([])
-  render(<QueueSources queue="DEV" target={remoteTarget} />)
+  render(<QueueSources queue="DEV" />)
   expect(await screen.findByText("No sources")).toBeInTheDocument()
 })
 
 it("shows a failed load with Retry instead of claiming there are no sources", async () => {
   api.listQueueSources.mockRejectedValueOnce(new ApiError(403, "forbidden", "only the customer may read sources"))
-  render(<QueueSources queue="DEV" target={remoteTarget} />)
+  render(<QueueSources queue="DEV" />)
   expect(await screen.findByRole("alert")).toHaveTextContent("only the customer may read sources")
   expect(screen.queryByText("No sources")).not.toBeInTheDocument()
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Retry" })) })
@@ -57,19 +61,19 @@ it("shows a failed load with Retry instead of claiming there are no sources", as
 it("reads a run's log on demand and refreshes the log of a running run", async () => {
   api.getQueueSourceRunLog.mockResolvedValueOnce({ text: "polling", truncated: false })
     .mockResolvedValueOnce({ text: "polling\nfound 2", truncated: false })
-  render(<QueueSources queue="DEV" target={remoteTarget} />)
+  render(<QueueSources queue="DEV" />)
   const item = await screen.findByRole("group", { name: "Source pull-requests" })
   const row = within(item).getAllByRole("listitem")[0]
   expect(api.getQueueSourceRunLog).not.toHaveBeenCalled()
   await act(async () => { fireEvent.click(within(row).getByRole("button", { name: "Log" })) })
-  expect(api.getQueueSourceRunLog).toHaveBeenCalledWith("DEV", 5, undefined, remoteTarget)
+  expect(api.getQueueSourceRunLog).toHaveBeenCalledWith("DEV", 5, undefined)
   expect(row.querySelector("pre")!.textContent).toBe("polling")
   await act(async () => { fireEvent.click(within(row).getByRole("button", { name: "Refresh log" })) })
   expect(row.querySelector("pre")!.textContent).toBe("polling\nfound 2")
 })
 
 it("reloads the list on demand", async () => {
-  render(<QueueSources queue="DEV" target={remoteTarget} />)
+  render(<QueueSources queue="DEV" />)
   await screen.findByRole("group", { name: "Source pull-requests" })
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Reload sources" })) })
   expect(api.listQueueSources).toHaveBeenCalledTimes(2)

@@ -1,4 +1,5 @@
 import { useHarnessCatalog } from "@/hooks/useHarnessCatalog";
+import { useApi } from "@/components/apiContext";
 import { runtimePresetGroups } from "@/lib/runtimePresets";
 import { DraftField } from "./ConfigControls";
 import { fieldOfKey, type ConfigField } from "./registry";
@@ -13,10 +14,11 @@ const field = (key: string) => fieldOfKey(key) as ConfigField;
 // already on 'stub' still shows it as its current value.
 const HARNESS_OPTIONS = ["claude", "codex", "opencode", "cursor"] as const;
 
-export function RuntimeBlock({ draft, matched, sources, target }: BlockProps) {
+export function RuntimeBlock({ draft, matched, sources }: BlockProps) {
+  const api = useApi();
   const view = sources.view!;
   const harness = draft.values.harness ?? view.harness;
-  const catalog = useHarnessCatalog(target, harness);
+  const catalog = useHarnessCatalog(api, harness);
   const modelPresets = runtimePresetGroups({ harness, field: "models", catalog, extras: [view.model] });
   const effortPresets = runtimePresetGroups({ harness, field: "efforts", catalog, model: draft.values.model, extras: [view.effort] });
   // The operator subset, plus the agent's current harness if it falls outside

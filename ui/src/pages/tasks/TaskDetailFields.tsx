@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from "react"
-import { isWorkflowTask, type Task, type TaskStatus, type TaskPriority } from "@/lib/tasks"
+import type { Task, TaskStatus, TaskPriority } from "@/lib/api"
+import { isWorkflowTask } from "@/lib/tasks"
 import { Input } from "@/components/ui/input"
 import { SendFilesButton } from "@/components/SendFilesButton"
 import { cn } from "@/lib/utils"
@@ -10,9 +11,9 @@ import WorkflowAssignee from "./WorkflowAssignee"
 import type { TaskDetailProps } from "./TaskDetailTypes"
 import type { useTaskDetailDraft } from "./useTaskDetailDraft"
 
-export function TaskDetailFields({ task, draft, target, principals, assigneeOptions, onTaskChanged,
+export function TaskDetailFields({ task, draft, principals, assigneeOptions, onTaskChanged,
   descriptionMode, setDescriptionMode, setUploadingDescription,
-}: Pick<TaskDetailProps, "target" | "principals" | "assigneeOptions" | "onTaskChanged"> & {
+}: Pick<TaskDetailProps, "principals" | "assigneeOptions" | "onTaskChanged"> & {
   task: Task
   draft: ReturnType<typeof useTaskDetailDraft>
   descriptionMode: MarkdownMode
@@ -35,7 +36,7 @@ export function TaskDetailFields({ task, draft, target, principals, assigneeOpti
         <div className="flex items-center gap-2">
           <label htmlFor="task-description" className={LABEL}>Description</label>
           <MarkdownModeSegment label="Description editing mode" mode={descriptionMode} onModeChange={setDescriptionMode} disabled={saving} />
-          <SendFilesButton daemon={target} disabled={saving} onUploadingChange={setUploadingDescription}
+          <SendFilesButton disabled={saving} onUploadingChange={setUploadingDescription}
             className={cn(QUIET_ACTION, "ml-auto border-0 bg-transparent")}
             onUploaded={(paths) => setDescription((current) => current + (current && !current.endsWith("\n") ? "\n" : "") + paths.join("\n"))} />
         </div>
@@ -56,7 +57,7 @@ export function TaskDetailFields({ task, draft, target, principals, assigneeOpti
           <option value="P2">P2 Normal</option>
           <option value="P3">P3 Low</option>
         </SelectField>
-        {workflow && <WorkflowAssignee task={task} target={target} onTaskChanged={onTaskChanged} />}
+        {workflow && <WorkflowAssignee task={task} onTaskChanged={onTaskChanged} />}
         {!workflow && assigneeOptions && <SelectField label="Assignee" value={assignee} onChange={setAssignee} mono>
           <option value="">Unassigned</option>
           {[task.assignee, principals?.customer ?? ""]

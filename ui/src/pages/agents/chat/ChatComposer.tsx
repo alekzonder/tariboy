@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { ApiError, serverUploadFile, type ApiTarget } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import ChatMarkdown from "./ChatMarkdown";
 
 /** The glyph toolbar: mono marks rather than icons, because each one is the
@@ -18,12 +19,9 @@ const MARKS = [
 ] as const;
 
 export default function ChatComposer({
-  agent, target, value, onChange, onSend, sending, hint,
+  agent, value, onChange, onSend, sending, hint,
 }: {
   agent: string;
-  /** The host this chat belongs to: an attachment must land on the same
-   *  server the agent reads from, never on whichever daemon is active. */
-  target: ApiTarget;
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
@@ -31,6 +29,9 @@ export default function ChatComposer({
   /** What this message will do beyond being a message, when it will. */
   hint?: string;
 }) {
+  // The host this chat belongs to: an attachment must land on the same server
+  // the agent reads from, never on whichever daemon is active.
+  const api = useApi();
   const box = useRef<HTMLTextAreaElement | null>(null);
   const file = useRef<HTMLInputElement | null>(null);
   const [preview, setPreview] = useState(false);
@@ -45,7 +46,7 @@ export default function ChatComposer({
     if (!picked) return;
     setUploading(true);
     try {
-      const { abs } = await serverUploadFile(picked, target);
+      const { abs } = await api.files.serverUploadFile(picked);
       onChange(value ? `${value}\n${abs}` : abs);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : String(error));

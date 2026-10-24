@@ -1,4 +1,4 @@
-import type { Task } from "./tasks"
+import type { Task } from "./api"
 
 export interface TaskTreeNode {
   task: Task

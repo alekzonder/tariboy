@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
-import { ApiError, type ApiTarget } from "@/lib/api"
+import { useApi } from "@/components/apiContext"
+import { ApiError, type TransitionRequest } from "@/lib/api"
 import type { StatusTone } from "@/lib/statusTone"
-import { getTransitionRequest, type TransitionRequest } from "@/lib/tasks"
 
 /** Helpers shared by the workflow panel and the queue workflow settings. */
 
@@ -65,7 +65,8 @@ export type FollowResult =
  * `handle`. Nothing is handed over once the component is unmounted. Outcomes,
  * the problem block, and Return to agent all wait for a request the same way.
  */
-export function useFollowRequest(taskKey: string, target?: ApiTarget) {
+export function useFollowRequest(taskKey: string) {
+  const api = useApi()
   const [checking, setChecking] = useState(false)
   const mountedRef = useMounted()
   const follow = async (send: () => Promise<TransitionRequest>, handle: (result: FollowResult) => void): Promise<void> => {
@@ -83,7 +84,7 @@ export function useFollowRequest(taskKey: string, target?: ApiTarget) {
         await sleep(1000)
         if (!mountedRef.current) return
         try {
-          request = await getTransitionRequest(taskKey, request.id, target)
+          request = await api.workflows.getTransitionRequest(taskKey, request.id)
         } catch (error) {
           // The request may still be applying; only reading it failed.
           settle({ kind: "error", label: "Could not read the request", message: errorText(error), stale: false })

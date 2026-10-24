@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react"
 import { Copy } from "lucide-react"
 import { toast } from "sonner"
-import type { TaskComment, TaskPrincipals, TaskWait } from "@/lib/tasks"
 import { MarkdownEditor, MarkdownContent, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown"
 import { Button } from "@/components/ui/button"
 import { SendFilesButton } from "@/components/SendFilesButton"
 import { cn } from "@/lib/utils"
 import { COUNT, LABEL, PRIMARY_FILL, QUIET_ACTION, SelectShell } from "./panelStyles"
 import { formatTaskTime } from "./taskTime"
-import type { ApiTarget } from "@/lib/api"
+import type { TaskComment, TaskPrincipals, TaskWait } from "@/lib/api"
 
 function idempotencyKey(): string {
   return globalThis.crypto?.randomUUID?.() ?? `comment-${Date.now()}-${Math.random()}`
@@ -30,7 +29,6 @@ export default function TaskComments({
   onOrderChange,
   onComment,
   onDirtyChange,
-  target,
   onUploadingChange,
 }: {
   comments: TaskComment[]
@@ -42,7 +40,6 @@ export default function TaskComments({
   onOrderChange: (order: "newest" | "oldest") => void
   onDirtyChange: (dirty: boolean) => void
   onComment: (body: string, idempotencyKey: string) => Promise<void>
-  target?: ApiTarget
   onUploadingChange: (uploading: boolean) => void
 }) {
   const defaultAsk = assignee.replace(/^agent:/, "")
@@ -139,7 +136,7 @@ export default function TaskComments({
         <div className="flex items-center gap-2 pb-[7px]">
           <label htmlFor="task-comment" className={LABEL}>Comment</label>
           <MarkdownModeSegment label="Comment editing mode" mode={mode} onModeChange={setMode} disabled={busy} />
-          <SendFilesButton daemon={target} disabled={busy} onUploadingChange={setUploading}
+          <SendFilesButton disabled={busy} onUploadingChange={setUploading}
             className={cn(QUIET_ACTION, "ml-auto border-0 bg-transparent")}
             onUploaded={(paths) => setBody((current) => current + (current && !current.endsWith("\n") ? "\n" : "") + paths.join("\n"))} />
         </div>

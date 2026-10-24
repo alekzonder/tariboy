@@ -1,14 +1,10 @@
 import { toast } from "sonner"
 import { useQueryClient } from "@tanstack/react-query"
-import { ApiError, type ApiTarget } from "@/lib/api"
+import { useApi } from "@/components/apiContext"
+import { ApiError, createApi, transferTask, type CreateQueueInput, type UpdateQueueInput, type TaskPriority, type TaskRelationType, type TaskStatus } from "@/lib/api"
 import { errorText as errorMessage } from "@/lib/queryClient"
 import { buildTaskForest, canDropTaskInside } from "@/lib/taskTree"
 import { resolveDaemon } from "@/lib/daemons"
-import {
-  addTaskComment, addTaskRelation, createTask, createTaskQueue, deleteTaskRelation,
-  moveTask, requeueTask, transferTask, updateTaskQueue, updateTask,
-  type CreateQueueInput, type TaskPriority, type TaskRelationType, type TaskStatus,
-} from "@/lib/tasks"
 import { taskKeys, refreshTasks, writeTask, retainTaskRevision } from "./taskQueries"
 import { rememberQueue } from "./taskQueueMemory"
 import type { TasksWorkspaceView } from "./useTasksWorkspaceView"
@@ -18,14 +14,15 @@ function idempotencyKey(): string {
   return globalThis.crypto?.randomUUID?.() ?? `task-action-${Date.now()}-${Math.random()}`
 }
 
-export function useTasksWorkspaceActions(target: Exclude<ApiTarget, undefined>, server: string, state: TasksWorkspaceView, data: TasksWorkspaceData) {
+export function useTasksWorkspaceActions(server: string, state: TasksWorkspaceView, data: TasksWorkspaceData) {
+  const api = useApi()
   const client = useQueryClient()
   const { setCreatingParent, setExpanded, loadDetail, selectQueue } = state
   const { tasks, detail, setTasks, loadMetadata } = data
-  const write = <T,>(operation: () => Promise<T>) => writeTask(client, target, operation)
+  const write = <T,>(operation: () => Promise<T>) => writeTask(client, api, operation)
   const create = async (input: { queue: string; parent_key: string; title: string }) => {
     try {
-      const created = await write(() => createTask(input, target))
+      const created = await write(() => api.tasks.createTask(input))
       if (!input.parent_key) rememberQueue(server, input.queue)
       setCreatingParent(null)
       if (input.parent_key) {
@@ -49,9 +46,9 @@ export function useTasksWorkspaceActions(target: Exclude<ApiTarget, undefined>, 
   }) => {
     if (!detail) throw new Error("Task is no longer selected")
     try {
-      const updated = await write(() => updateTask(detail.task.key, { ...input }, target))
+      const updated = await write(() => api.tasks.updateTask(detail.task.key, { ...input }))
       toast.success("Task updated")
-      return retainTaskRevision(client, target, updated)
+      return retainTaskRevision(client, api, updated)
     } catch (error) {
       toast.error(errorMessage(error))
       throw error
@@ -61,7 +58,7 @@ export function useTasksWorkspaceActions(target: Exclude<ApiTarget, undefined>, 
   const comment = async (body: string, idempotencyKey: string) => {
     if (!detail) return
     try {
-      await write(() => addTaskComment(detail.task.key, body, target, idempotencyKey))
+      await write(() => api.tasks.addTaskComment(detail.task.key, body, idempotencyKey))
     } catch (error) {
       toast.error(errorMessage(error))
       throw error
@@ -77,22 +74,22 @@ export function useTasksWorkspaceActions(target: Exclude<ApiTarget, undefined>, 
       toast.error("Tasks can only move inside their queue and outside their own subtree")
       return
     }
-    await client.cancelQueries({ queryKey: taskKeys.server(target) })
+    await client.cancelQueries({ queryKey: taskKeys.server(api.target) })
     const previous = tasks
     setTasks((current) => current.map((task) => task.key === key ? { ...task, parent_key: parentKey } : task))
     try {
-      const updated = await moveTask(key, {
+      const updated = await api.tasks.moveTask(key, {
         parent_key: parentKey,
         before_key: beforeKey,
         revision: moving.revision,
-      }, target)
+      })
       setTasks((current) => current.map((task) => task.key === key ? updated : task))
       if (parentKey) setExpanded((current) => new Set(current).add(parentKey))
     } catch (error) {
       setTasks(previous)
       toast.error(errorMessage(error))
     } finally {
-      await refreshTasks(client, target)
+      await refreshTasks(client, api)
     }
   }
 
@@ -100,8 +97,8 @@ export function useTasksWorkspaceActions(target: Exclude<ApiTarget, undefined>, 
     const changing = tasks.find((task) => task.key === key)
     if (!changing) return
     try {
-      const updated = await write(() => updateTask(key, { priority, revision: changing.revision }, target))
-      retainTaskRevision(client, target, updated)
+      const updated = await write(() => api.tasks.updateTask(key, { priority, revision: changing.revision }))
+      retainTaskRevision(client, api, updated)
     } catch (error) {
       toast.error(errorMessage(error))
     }
@@ -113,30 +110,33 @@ export function useTasksWorkspaceActions(target: Exclude<ApiTarget, undefined>, 
     const host = await resolveDaemon(hostID)
     if (!host) throw new Error("That server is no longer registered")
     const label = host.label || host.id
-    await write(() => transferTask(key, target, host, label, idempotencyKey()))
-    await refreshTasks(client, host)
+    // One client per side for the whole move: the source as it is now, the
+    // destination as it resolved.
+    const destination = createApi(host)
+    await write(() => transferTask(key, api.tasks, destination.tasks, label, idempotencyKey()))
+    await refreshTasks(client, destination)
     toast.success(`${key} moved to ${label}`)
   }
 
   const requeueDetail = async (queue: string) => {
     if (!detail) throw new Error("Task is no longer selected")
-    const moved = await write(() => requeueTask(detail.task.key, queue, detail.task.revision, target))
+    const moved = await write(() => api.tasks.requeueTask(detail.task.key, queue, detail.task.revision))
     toast.success(`${detail.task.key} moved to ${queue} as ${moved.key}`)
     await loadDetail(moved.key)
   }
 
   const createQueue = async (input: CreateQueueInput) => {
     try {
-      const created = await write(() => createTaskQueue(input, target))
+      const created = await write(() => api.tasks.createTaskQueue(input))
       selectQueue(created.prefix)
     } catch (error) {
       toast.error(errorMessage(error))
     }
   }
 
-  const updateQueue = async (prefix: string, input: Parameters<typeof updateTaskQueue>[1]) => {
+  const updateQueue = async (prefix: string, input: UpdateQueueInput) => {
     try {
-      await write(() => updateTaskQueue(prefix, input, target))
+      await write(() => api.tasks.updateTaskQueue(prefix, input))
       toast.success("Queue updated")
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) await loadMetadata()
@@ -146,11 +146,11 @@ export function useTasksWorkspaceActions(target: Exclude<ApiTarget, undefined>, 
 
   const addRelation = async (targetKey: string, type: TaskRelationType) => {
     if (!detail) return
-    await write(() => addTaskRelation(detail.task.key, targetKey, type, detail.task.revision, target, idempotencyKey()))
+    await write(() => api.tasks.addTaskRelation(detail.task.key, targetKey, type, detail.task.revision, idempotencyKey()))
   }
   const deleteRelation = async (relationID: number) => {
     if (!detail) return
-    await write(() => deleteTaskRelation(detail.task.key, relationID, detail.task.revision, target, idempotencyKey()))
+    await write(() => api.tasks.deleteTaskRelation(detail.task.key, relationID, detail.task.revision, idempotencyKey()))
   }
   return { create, saveDetail, comment, performMove, changePriority, transferDetail, requeueDetail, createQueue, updateQueue, addRelation, deleteRelation }
 }

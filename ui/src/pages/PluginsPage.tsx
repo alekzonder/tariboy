@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { apiGet, apiPost, apiDelete } from "@/lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { useApi } from "@/components/apiContext";
 import { guard } from "@/lib/toast-guard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,14 +14,15 @@ import {
 interface Plugin { name: string; version: string; types: string[]; enabled: boolean; state: string }
 
 export default function PluginsPage() {
+  const api = useApi();
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [logs, setLogs] = useState<{ name: string; lines: string[] } | null>(null);
   const [path, setPath] = useState("");
 
-  const load = () => apiGet<{ plugins: Plugin[] }>("/api/plugins").then((r) => setPlugins(r.plugins)).catch(() => setPlugins([]));
+  const load = useCallback(() => api.get<{ plugins: Plugin[] }>("/api/plugins").then((r) => setPlugins(r.plugins)).catch(() => setPlugins([])), [api]);
   const showLogs = (name: string) =>
-    apiGet<{ lines: string[] }>(`/api/plugins/${encodeURIComponent(name)}/logs`).then((r) => setLogs({ name, lines: r.lines })).catch(() => setLogs({ name, lines: [] }));
-  useEffect(() => { void load(); }, []);
+    api.get<{ lines: string[] }>(`/api/plugins/${encodeURIComponent(name)}/logs`).then((r) => setLogs({ name, lines: r.lines })).catch(() => setLogs({ name, lines: [] }));
+  useEffect(() => { void load(); }, [load]);
 
   return (
     <div className="space-y-4 p-6">
@@ -30,7 +31,7 @@ export default function PluginsPage() {
         <CardHeader className="pb-2"><CardTitle className="text-base">Install plugin</CardTitle></CardHeader>
         <CardContent className="flex items-end gap-2">
           <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="daemon-accessible plugin dir" className="h-8 w-96 min-w-0" />
-          <Button size="sm" onClick={() => guard("install", () => apiPost("/api/plugins", { path }), { verb: "ok", after: () => { setPath(""); void load(); } })}>Install</Button>
+          <Button size="sm" onClick={() => guard("install", () => api.post("/api/plugins", { path }), { verb: "ok", after: () => { setPath(""); void load(); } })}>Install</Button>
         </CardContent>
       </Card>
       <div className="overflow-x-auto rounded border">
@@ -50,7 +51,7 @@ export default function PluginsPage() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => guard("restart", () => apiPost(`/api/plugins/${encodeURIComponent(pl.name)}/restart`), { verb: "ok", after: () => void load() })}
+                    onClick={() => guard("restart", () => api.post(`/api/plugins/${encodeURIComponent(pl.name)}/restart`), { verb: "ok", after: () => void load() })}
                   >Restart</Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild><Button size="sm" variant="destructive">Remove</Button></AlertDialogTrigger>
@@ -61,7 +62,7 @@ export default function PluginsPage() {
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => guard("remove", () => apiDelete(`/api/plugins/${encodeURIComponent(pl.name)}?force=true`), { verb: "ok", after: () => void load() })}>Remove</AlertDialogAction>
+                        <AlertDialogAction onClick={() => guard("remove", () => api.delete(`/api/plugins/${encodeURIComponent(pl.name)}?force=true`), { verb: "ok", after: () => void load() })}>Remove</AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>

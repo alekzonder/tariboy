@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
+import { ApiProvider } from "@/components/ApiProvider";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import { CustomerQuestionNotificationsContext } from "@/components/customerQuestionNotificationsContext";
 import { SidebarStateProvider } from "@/pages/terminals/SidebarStateProvider";
@@ -585,7 +586,9 @@ describe("Store reconnect", () => {
     }));
     const page = (baseURL: string) => (
       <MemoryRouter>
-        <StoresPage target={{ id: "remote", label: "Remote", baseURL, token: "t" }} name="old" basePath="/servers/remote/stores" />
+        <ApiProvider target={{ id: "remote", label: "Remote", baseURL, token: "t" }}>
+          <StoresPage name="old" basePath="/servers/remote/stores" />
+        </ApiProvider>
       </MemoryRouter>
     );
     const view = render(page("http://127.0.0.1:41001"));
@@ -609,7 +612,7 @@ describe("Tariboy Store button", () => {
   const renderList = () => render(
     <MemoryRouter initialEntries={["/servers/remote/stores"]}>
       <Routes>
-        <Route path="/servers/remote/stores" element={<StoresPage target={target} basePath="/servers/remote/stores" />} />
+        <Route path="/servers/remote/stores" element={<ApiProvider target={target}><StoresPage basePath="/servers/remote/stores" /></ApiProvider>} />
         <Route path="/servers/remote/stores/:name" element={<h1>Opened Store detail</h1>} />
       </Routes>
     </MemoryRouter>,

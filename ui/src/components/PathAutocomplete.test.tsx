@@ -1,16 +1,20 @@
 import { useState } from "react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, waitFor } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import type { ReactElement } from "react"
+import { render as renderWithApi } from "@/test/queryRender"
+import { fakeApi } from "@/test/api"
+import type { FilesApi } from "@/lib/api"
 
 import { PathAutocomplete, splitPath } from "./PathAutocomplete"
 
-// Mock the api module so the component's fsList calls hit our fixture instead of
-// the network. Each prefix returns a distinct listing so we can assert the
+// Replace the client's fsList so the component's calls hit our fixture instead
+// of the network. Each prefix returns a distinct listing so we can assert the
 // request path and the re-list after a Tab completion.
-vi.mock("@/lib/api", () => ({ fsList: vi.fn() }))
-import { fsList } from "@/lib/api"
-const mockFsList = vi.mocked(fsList)
+const mockFsList = vi.fn<FilesApi["fsList"]>()
+const render = (el: ReactElement) =>
+  renderWithApi(el, { api: fakeApi({ files: { fsList: mockFsList } }) })
 
 const ROOT = [
   { name: "projects", dir: true },
@@ -64,7 +68,7 @@ describe("PathAutocomplete", () => {
     await userEvent.type(input, "pr")
 
     // Requested the root prefix ("") and shows only the folder matching "pr".
-    await waitFor(() => expect(mockFsList).toHaveBeenCalledWith("", undefined))
+    await waitFor(() => expect(mockFsList).toHaveBeenCalledWith(""))
     expect(await screen.findByRole("option", { name: "projects" })).toBeInTheDocument()
     expect(option("documents")).not.toBeInTheDocument()
     expect(option("pictures")).not.toBeInTheDocument()
@@ -89,7 +93,7 @@ describe("PathAutocomplete", () => {
     await userEvent.tab()
 
     expect(screen.getByTestId("val").textContent).toBe("projects/")
-    await waitFor(() => expect(mockFsList).toHaveBeenCalledWith("projects/", undefined))
+    await waitFor(() => expect(mockFsList).toHaveBeenCalledWith("projects/"))
     expect(await screen.findByRole("option", { name: "alpha" })).toBeInTheDocument()
     expect(await screen.findByRole("option", { name: "beta" })).toBeInTheDocument()
   })
@@ -141,7 +145,7 @@ describe("PathAutocomplete", () => {
 
     // Drill into projects/: issues the deferred (still-pending) request.
     await userEvent.type(input, "/")
-    await waitFor(() => expect(mockFsList).toHaveBeenCalledWith("projects/", undefined))
+    await waitFor(() => expect(mockFsList).toHaveBeenCalledWith("projects/"))
 
     // Navigate back to the cached root before projects/ resolves.
     await userEvent.clear(input)
@@ -155,7 +159,7 @@ describe("PathAutocomplete", () => {
     expect(option("beta")).not.toBeInTheDocument()
   })
 
-  it("passes the target daemon to fsList", async () => {
+  it("lists through the client of the surrounding host", async () => {
     const d = { id: "d1", label: "x", baseURL: "https://h", token: "t" }
     function DaemonHarness() {
       const [v, setV] = useState("")
@@ -166,16 +170,25 @@ describe("PathAutocomplete", () => {
           placeholder="cwd"
           aria-label="cwd"
           debounceMs={0}
-          daemon={d}
         />
       )
     }
-    render(<DaemonHarness />)
-    const input = screen.getByLabelText("cwd")
-    await userEvent.click(input)
-    await userEvent.type(input, "pr")
+    // A real client for the host: the request must carry its origin and token.
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, result: { path: "", parent: "", entries: ROOT } })))
+    vi.stubGlobal("fetch", fetchMock)
+    try {
+      renderWithApi(<DaemonHarness />, { api: fakeApi({}, d) })
+      const input = screen.getByLabelText("cwd")
+      await userEvent.click(input)
+      await userEvent.type(input, "pr")
 
-    await waitFor(() => expect(mockFsList).toHaveBeenCalledWith("", d))
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("https://h/api/fs/list", expect.objectContaining({
+        method: "GET", headers: { Authorization: "Bearer t" },
+      })))
+      expect(await screen.findByRole("option", { name: "projects" })).toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it("Escape closes the dropdown without changing the value", async () => {

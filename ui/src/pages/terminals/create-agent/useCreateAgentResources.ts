@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { imageManifestGet, listImages, type ImageManifest, type ImageRow } from "@/lib/api";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { createApi, type ImageManifest, type ImageRow } from "@/lib/api";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import type { CreateAgentDialogProps } from "../CreateAgentDialog";
 import type { AgentCreateDraft } from "../agentCreateDraft";
@@ -15,6 +15,9 @@ export function useCreateAgentResources(
 ) {
   const [host, setHost] = useState(hostId);
   const [target, setTarget] = useState<Daemon | null>(null);
+  // The dialog picks its own host, so it holds its own client: every
+  // follow-up request stays pinned to the host the images were listed from.
+  const api = useMemo(() => createApi(target), [target]);
   const [resolvedRevision, setResolvedRevision] = useState("");
   const [images, setImages] = useState<ImageRow[]>([]);
   const [manifest, setManifest] = useState<ImageManifest | null>(null);
@@ -64,7 +67,7 @@ export function useCreateAgentResources(
       try {
         const nextTarget = host ? await resolveDaemon(host) : null;
         if (host && !nextTarget) throw new Error(`host ${host} was not found`);
-        const result = await listImages(nextTarget);
+        const result = await createApi(nextTarget).images.listImages();
         if (!alive) return;
         setTarget(nextTarget);
         setResolvedRevision(selectedHostRevision);
@@ -88,7 +91,7 @@ export function useCreateAgentResources(
       return;
     if (!targetImageAvailable) return;
     let alive = true;
-    void imageManifestGet(draft.image, target)
+    void api.images.imageManifestGet(draft.image)
       .then((next) => {
         if (!alive) return;
         setManifest(next);
@@ -134,7 +137,7 @@ export function useCreateAgentResources(
     loadingImages,
     manifestAttempt,
     runtimeTargetKey,
-    target,
+    api,
     targetImageAvailable,
     targetIsCurrent,
     targetIsUsable,
@@ -171,6 +174,7 @@ export function useCreateAgentResources(
   return {
     host,
     target,
+    api,
     images,
     loadingImages,
     loadingManifest,

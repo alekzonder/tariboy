@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { chatListOn, type ApiTarget } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { useMessagesSocket } from "@/hooks/useMessagesSocket";
 
 /**
@@ -11,12 +11,13 @@ import { useMessagesSocket } from "@/hooks/useMessagesSocket";
  * The tab is not mounted when another tab is open, which is exactly when the
  * dot has to be right, so this cannot live inside the chat itself.
  */
-export function useChatUnread(target: ApiTarget, agent: string, enabled = true): number {
+export function useChatUnread(agent: string, enabled = true): number {
+  const api = useApi();
   const [unread, setUnread] = useState(0);
   const load = useCallback(async () => {
     if (!enabled || !agent) return;
     try {
-      const page = await chatListOn(target);
+      const page = await api.messages.chatList();
       // The agent owns three chats; the dot stands for the agent, so an unread
       // task notification cannot hide behind a quiet conversation.
       setUnread((page.chats ?? []).reduce(
@@ -24,22 +25,19 @@ export function useChatUnread(target: ApiTarget, agent: string, enabled = true):
     } catch {
       // A transient failure keeps the last known count rather than clearing it.
     }
-    // target is derived from the host id and changes identity every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agent, enabled, target?.baseURL]);
+  }, [agent, api, enabled]);
 
   // The socket only fires for new messages, and the chat's own Mark read and
   // Mark unread move this count without one; a slow poll keeps the dot honest
   // in those two cases without making the socket carry read state.
   useEffect(() => {
-    void load();
+    void Promise.resolve().then(load);
     if (!enabled) return;
     const timer = window.setInterval(() => void load(), 10_000);
     return () => window.clearInterval(timer);
   }, [enabled, load]);
   useMessagesSocket({
-    target,
-    enabled: enabled && Boolean(agent) && (!target || Boolean(target.baseURL)),
+    enabled: enabled && Boolean(agent) && api.ready,
     onHint: (hint) => { if (hint.agent === agent) void load(); },
     onOpen: () => { void load(); },
   });

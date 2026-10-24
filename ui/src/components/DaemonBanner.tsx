@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePolling } from "@/hooks/usePolling";
-import { getDaemonStatus, setLocalBaseURL } from "@/lib/api";
+import { setLocalBaseURL } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import {
   hasLocalDaemon, isDesktop, daemonState, daemonStart, daemonRestart, openDaemonLog,
   onDaemonState, versionMismatch, missingHTTPListener,
@@ -21,7 +22,8 @@ export function DaemonBanner() {
 const PROBE_POLL_MS = 10000;
 
 function BrowserBanner() {
-  const { data, error } = usePolling(getDaemonStatus, PROBE_POLL_MS);
+  const api = useApi();
+  const { data, error } = usePolling(api.daemon.getDaemonStatus, PROBE_POLL_MS);
   if (error) return <Bar tone="error">daemon unreachable — is tariboyd running?</Bar>;
   if (data?.state === "error") return <Bar tone="error">tariboyd: {data.message}</Bar>;
   return null;
@@ -42,6 +44,7 @@ const DESKTOP_POLL_MS = 3000;
 //     child the app spawned itself, so Rust never learns that a daemon it merely
 //     attached to was stopped from a terminal or crashed.
 function DesktopBanner() {
+  const api = useApi();
   const [st, setSt] = useState<DesktopDaemonState | null>(null);
   // Bumped by every push. A `daemon_status` response describes the state as of
   // the moment the read was ISSUED, so a push that lands while it is in flight
@@ -91,8 +94,8 @@ function DesktopBanner() {
   // reason.
   const probeable = st?.state === "ready" && st.base_url !== "";
   const reachable = useCallback(
-    () => (probeable ? getDaemonStatus() : Promise.resolve(null)),
-    [probeable],
+    () => (probeable ? api.daemon.getDaemonStatus() : Promise.resolve(null)),
+    [api, probeable],
   );
   const { data: status, error: unreachable } = usePolling(reachable, PROBE_POLL_MS);
 

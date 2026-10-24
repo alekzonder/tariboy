@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PathAutocomplete } from "@/components/PathAutocomplete";
-import { agentImageCancelOn, agentImageSetOn } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { guard } from "@/lib/toast-guard";
 import { serverPath } from "@/lib/terminalsHost";
 import { ActionRow, DraftField, FieldFrame, ReadOnly } from "./ConfigControls";
@@ -19,13 +19,14 @@ function shortDigest(digest: string): string {
   return digest.length > 24 ? `${digest.slice(0, 14)}…${digest.slice(-8)}` : digest;
 }
 
-export function GeneralBlock({ draft, matched, sources, target, name, stopped, refresh }: BlockProps) {
+export function GeneralBlock({ draft, matched, sources, name, stopped, refresh }: BlockProps) {
+  const api = useApi();
   const { view, imageStatus, imageError, images, inventoryLoading, inventoryError } = sources;
   const [copied, setCopied] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
   const imageHref = (ref: string) => {
     const split = ref.lastIndexOf(":");
-    const base = serverPath(target?.id ?? "", "images");
+    const base = serverPath(api.target?.id ?? "", "images");
     return split < 0 ? base : `${base}/${encodeURIComponent(ref.slice(0, split))}/${encodeURIComponent(ref.slice(split + 1))}`;
   };
   const imageAction = async (label: string, run: () => Promise<unknown>) => {
@@ -113,7 +114,6 @@ export function GeneralBlock({ draft, matched, sources, target, name, stopped, r
               id="cwd"
               value={draft.values.cwd ?? ""}
               onChange={(value) => draft.setField("cwd", value)}
-              daemon={target}
               aria-label="Working directory"
             />
           </FieldFrame>
@@ -132,12 +132,12 @@ export function GeneralBlock({ draft, matched, sources, target, name, stopped, r
           {view?.digest && <Button size="sm" variant="outline" onClick={() => void copyDigest(view.digest)}>Copy digest</Button>}
           {copied && <span role="status" className="text-xs text-muted-foreground">Digest copied</span>}
           {imageStatus?.pending.error && (
-            <Button size="sm" variant="outline" disabled={imageBusy} onClick={() => void imageAction("image assignment", () => agentImageSetOn(target, name, imageStatus.pending.ref))}>
+            <Button size="sm" variant="outline" disabled={imageBusy} onClick={() => void imageAction("image assignment", () => api.agents.agentImageSet(name, imageStatus.pending.ref))}>
               Retry
             </Button>
           )}
           {imageStatus?.pending.ref && (
-            <Button size="sm" variant="outline" disabled={imageBusy} onClick={() => void imageAction("pending image cancellation", () => agentImageCancelOn(target, name))}>
+            <Button size="sm" variant="outline" disabled={imageBusy} onClick={() => void imageAction("pending image cancellation", () => api.agents.agentImageCancel(name))}>
               Cancel pending
             </Button>
           )}

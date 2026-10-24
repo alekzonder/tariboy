@@ -1,7 +1,5 @@
 import { useEffect, useRef } from "react"
-import { useOptionalDaemons } from "@/components/DaemonProvider"
-import { useApiTarget } from "@/hooks/useApiQuery"
-import type { ApiTarget } from "@/lib/api"
+import { useApi } from "@/components/apiContext"
 import { hostToParam } from "@/lib/terminalsHost"
 import { useTasksWorkspaceView } from "./useTasksWorkspaceView"
 import { useTasksWorkspaceLayout } from "./useTasksWorkspaceLayout"
@@ -12,17 +10,15 @@ import "./tasks.css"
 
 type TasksWorkspaceProps = {
   scopeAgent?: string
-  target?: ApiTarget
   initialTaskKey?: string
   onNotificationsChanged?: () => void
 }
 
-function TasksWorkspaceController({ scopeAgent, target: inputTarget, initialTaskKey, onNotificationsChanged, server }: TasksWorkspaceProps & { server: string }) {
-  const target = useApiTarget(inputTarget)
+function TasksWorkspaceController({ scopeAgent, initialTaskKey, onNotificationsChanged, server }: TasksWorkspaceProps & { server: string }) {
   const state = useTasksWorkspaceView()
   const layout = useTasksWorkspaceLayout()
-  const data = useTasksWorkspaceData(target, scopeAgent, state, onNotificationsChanged)
-  const actions = useTasksWorkspaceActions(target, server, state, data)
+  const data = useTasksWorkspaceData(scopeAgent, state, onNotificationsChanged)
+  const actions = useTasksWorkspaceActions(server, state, data)
   const { loadDetail } = state
   const openedInitialKeyRef = useRef("")
   useEffect(() => {
@@ -31,18 +27,13 @@ function TasksWorkspaceController({ scopeAgent, target: inputTarget, initialTask
     void loadDetail(initialTaskKey)
   }, [initialTaskKey, loadDetail])
 
-  return <TasksWorkspaceContent scopeAgent={scopeAgent} target={target} server={server}
+  return <TasksWorkspaceContent scopeAgent={scopeAgent} server={server}
     state={state} data={data} actions={actions} layout={layout} />
 }
 
+/** The tasks of the server of the nearest ApiProvider. */
 export default function TasksWorkspace(props: TasksWorkspaceProps) {
-  const activeId = useOptionalDaemons()?.activeId ?? ""
-  const server = props.target === undefined
-    ? hostToParam(activeId)
-    : props.target === null
-      ? hostToParam("")
-      // Not the endpoint: a reconnect moves it and must keep the open state.
-      : props.target.id
-  const targetKey = `${props.target === undefined ? "active" : "explicit"}:${server}`
-  return <TasksWorkspaceController key={`${targetKey}:${props.scopeAgent ?? ""}`} {...props} server={server} />
+  // Not the endpoint: a reconnect moves it and must keep the open state.
+  const server = hostToParam(useApi().target?.id ?? "")
+  return <TasksWorkspaceController key={`${server}:${props.scopeAgent ?? ""}`} {...props} server={server} />
 }

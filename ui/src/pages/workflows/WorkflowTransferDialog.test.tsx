@@ -1,13 +1,32 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { afterEach, expect, it, vi } from "vitest"
-import { ApiError } from "@/lib/api"
-import * as teamApi from "@/lib/teamApi"
+import { afterEach, beforeEach, expect, it, vi } from "vitest"
+import { ApiError, createApi, type ApiClient, type WorkflowBuildResult } from "@/lib/api"
+import type { Daemon } from "@/lib/daemons"
+import { apiWrapper } from "@/test/api"
 import { WorkflowTransferDialog } from "./WorkflowTransferDialog"
 
-vi.mock("@/lib/teamApi", () => ({ downloadWorkflowArchiveOn: vi.fn(), importWorkflowArchiveOn: vi.fn() }))
-const download = vi.mocked(teamApi.downloadWorkflowArchiveOn)
-const upload = vi.mocked(teamApi.importWorkflowArchiveOn)
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>()
+  return { ...actual, createApi: vi.fn(actual.createApi) }
+})
+const actualApi = await vi.importActual<typeof import("@/lib/api")>("@/lib/api")
 
+// Each archive call records the host of the client that made it.
+const download = vi.fn<(target: Daemon | null, name: string, tag: string) => Promise<Blob>>()
+const upload = vi.fn<(target: Daemon | null, archive: Blob) => Promise<WorkflowBuildResult>>()
+function archiveClient(target: Daemon | null): ApiClient {
+  const client = actualApi.createApi(target)
+  return {
+    ...client,
+    workflows: {
+      ...client.workflows,
+      downloadWorkflowArchive: (name: string, tag: string) => download(target, name, tag),
+      importWorkflowArchive: (archive: Blob) => upload(target, archive),
+    },
+  }
+}
+
+beforeEach(() => { vi.mocked(createApi).mockImplementation((target) => archiveClient(actualApi.resolveTarget(target))) })
 afterEach(() => vi.resetAllMocks())
 
 const source = { id: "source", label: "Source", baseURL: "https://source", state: "ready", token: "s" } as const
@@ -18,8 +37,8 @@ const c = { id: "c", label: "Gamma", baseURL: "https://c", state: "ready", token
 const result = (created: boolean) => ({ name: "dev", version: "1.0.0", digest: "d", tags: ["1.0.0", "latest"], created })
 
 function open(onComplete = vi.fn()) {
-  render(<WorkflowTransferDialog open onOpenChange={() => undefined} source={source} name="dev" tag="1.0.0"
-    daemons={[source, a, b, c]} onComplete={onComplete} />)
+  render(<WorkflowTransferDialog open onOpenChange={() => undefined} name="dev" tag="1.0.0"
+    daemons={[source, a, b, c]} onComplete={onComplete} />, { wrapper: apiWrapper(archiveClient(source)) })
   return onComplete
 }
 

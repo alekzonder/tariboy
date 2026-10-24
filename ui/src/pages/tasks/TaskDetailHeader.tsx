@@ -1,6 +1,7 @@
 import type { Ref } from "react"
 import { MoreHorizontal, X } from "lucide-react"
-import { isWorkflowTask, taskStatusLabel, type Task } from "@/lib/tasks"
+import type { Task } from "@/lib/api"
+import { isWorkflowTask, taskStatusLabel } from "@/lib/tasks"
 import { Button } from "@/components/ui/button"
 import { DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"

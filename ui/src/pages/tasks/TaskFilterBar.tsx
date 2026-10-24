@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Segmented } from "@/components/ui/segmented"
 import { cn } from "@/lib/utils"
-import type { TaskQueue, TaskStatusView } from "@/lib/tasks"
+import type { TaskQueue, TaskStatusView } from "@/lib/api"
 import TaskColumnsMenu from "./TaskColumnsMenu"
 import type { TaskRowMode } from "./taskColumns"
 

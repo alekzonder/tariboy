@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import type { ApiTarget } from "@/lib/api"
-import { listQueueEnv, removeQueueEnv, setQueueEnv, type QueueEnvVar } from "@/lib/tasks"
+import type { QueueEnvVar } from "@/lib/api"
 import { COUNT, EMPTY, FIELD, LABEL, QUIET_ACTION } from "./panelStyles"
 import QueueSecrets from "./QueueSecrets"
 import { formatTaskTime } from "./taskTime"
@@ -14,9 +14,8 @@ import { errorText, keyProblem } from "./workflowShared"
  * Both reach the scripts of the queue's workflow the same way; a key is one or
  * the other, so a change in either block reloads both.
  */
-export default function QueueEnvironment({ queue, target, missing, missingMessage }: {
+export default function QueueEnvironment({ queue, missing, missingMessage }: {
   queue: string
-  target?: ApiTarget
   /** Names a failed bind reported without a value. */
   missing?: string[]
   missingMessage?: string
@@ -27,22 +26,22 @@ export default function QueueEnvironment({ queue, target, missing, missingMessag
   const changed = useCallback(() => setRevision((value) => value + 1), [])
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <QueueEnv queue={queue} target={target} revision={revision} secretKeys={secretKeys} onKeys={setEnvKeys} onChanged={changed} />
-      <QueueSecrets queue={queue} target={target} missing={missing} missingMessage={missingMessage}
+      <QueueEnv queue={queue} revision={revision} secretKeys={secretKeys} onKeys={setEnvKeys} onChanged={changed} />
+      <QueueSecrets queue={queue} missing={missing} missingMessage={missingMessage}
         revision={revision} envKeys={envKeys} onKeys={setSecretKeys} onChanged={changed} />
     </div>
   )
 }
 
 /** Plain env vars: keys with their values, Set and Remove. A value is not secret. */
-function QueueEnv({ queue, target, revision, secretKeys, onKeys, onChanged }: {
+function QueueEnv({ queue, revision, secretKeys, onKeys, onChanged }: {
   queue: string
-  target?: ApiTarget
   revision: number
   secretKeys: string[]
   onKeys: (keys: string[]) => void
   onChanged: () => void
 }) {
+  const api = useApi()
   const [items, setItems] = useState<QueueEnvVar[]>([])
   const [key, setKey] = useState("")
   const [value, setValue] = useState("")
@@ -53,12 +52,12 @@ function QueueEnv({ queue, target, revision, secretKeys, onKeys, onChanged }: {
 
   const load = useCallback(async () => {
     try {
-      const list = await listQueueEnv(queue, target)
+      const list = await api.workflows.listQueueEnv(queue)
       setItems(list)
       onKeys(list.map((item) => item.key))
       setLoaded(true)
     } catch (err) { setError(errorText(err)) }
-  }, [queue, target, onKeys])
+  }, [queue, api, onKeys])
   useEffect(() => { void Promise.resolve().then(load) }, [load, revision])
 
   const submit = (event: React.FormEvent) => {
@@ -70,7 +69,7 @@ function QueueEnv({ queue, target, revision, secretKeys, onKeys, onChanged }: {
       setError("")
       setBusy(true)
       try {
-        await setQueueEnv(queue, name, value, target)
+        await api.workflows.setQueueEnv(queue, name, value)
         setKey("")
         setValue("")
         onChanged()
@@ -92,7 +91,7 @@ function QueueEnv({ queue, target, revision, secretKeys, onKeys, onChanged }: {
     run: () => {
       setError("")
       setBusy(true)
-      removeQueueEnv(queue, name, target).then(onChanged, (err) => setError(errorText(err))).finally(() => setBusy(false))
+      api.workflows.removeQueueEnv(queue, name).then(onChanged, (err) => setError(errorText(err))).finally(() => setBusy(false))
     },
   })
 

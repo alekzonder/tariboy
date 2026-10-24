@@ -23,7 +23,8 @@ import {
 import { PriorityTag, StatusPill } from "@/components/ui/status"
 import { cn } from "@/lib/utils"
 import { TONE_TEXT, taskTone, type StatusTone } from "@/lib/statusTone"
-import { isWorkflowTask, taskStatusLabel, type TaskPriority, type WorkflowAttention } from "@/lib/tasks"
+import type { TaskPriority, WorkflowAttention } from "@/lib/api"
+import { isWorkflowTask, taskStatusLabel } from "@/lib/tasks"
 import type { VisibleTaskRow } from "@/lib/taskTree"
 import TaskColumnResizeHandle from "./TaskColumnResizeHandle"
 import {

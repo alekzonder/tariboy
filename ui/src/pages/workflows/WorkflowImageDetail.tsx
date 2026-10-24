@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { ApiError, targetReady } from "@/lib/api"
-import type { Daemon } from "@/lib/daemons"
-import { getWorkflowImage, removeWorkflowImage, type WorkflowManifest } from "@/lib/tasks"
+import { ApiError, type WorkflowManifest } from "@/lib/api"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
 import { useWorkflowConfirm } from "@/pages/tasks/WorkflowConfirm"
 import { errorText, useMounted } from "@/pages/tasks/workflowShared"
@@ -21,32 +20,32 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /** One workflow image, read from its manifest. Every manifest value renders as plain text. */
-export default function WorkflowImageDetail({ target, name, tag, basePath }: {
-  target: Daemon | null
+export default function WorkflowImageDetail({ name, tag, basePath }: {
   name: string
   tag: string
   basePath: string
 }) {
+  const api = useApi()
   const [manifest, setManifest] = useState<WorkflowManifest | null>(null)
   const [error, setError] = useState("")
   const [removeError, setRemoveError] = useState("")
   const [busy, setBusy] = useState(false)
   const [transfer, setTransfer] = useState(false)
-  const bindings = useQueueBindings(target)
+  const bindings = useQueueBindings()
   const transferDaemons = useTransferDaemons()
   const { confirm, dialog } = useWorkflowConfirm()
   const navigate = useNavigate()
   const mounted = useMounted()
 
   useEffect(() => {
-    if (!targetReady(target)) return
+    if (!api.ready) return
     let alive = true
-    getWorkflowImage(name, tag, target).then(
+    api.workflows.getWorkflowImage(name, tag).then(
       (result) => { if (alive) { setManifest(result); setError("") } },
       (err) => { if (alive) setError(errorText(err)) },
     )
     return () => { alive = false }
-  }, [name, tag, target])
+  }, [name, tag, api])
 
   if (error && !manifest) return <p role="alert" className="p-3 text-sm text-destructive">{error}</p>
   if (!manifest) return <p className="p-3 text-sm text-muted-foreground">Loading workflow image…</p>
@@ -64,7 +63,7 @@ export default function WorkflowImageDetail({ target, name, tag, basePath }: {
     run: () => {
       setRemoveError("")
       setBusy(true)
-      removeWorkflowImage(name, tag, target).then(
+      api.workflows.removeWorkflowImage(name, tag).then(
         () => navigate(basePath),
         (err) => {
           if (!mounted.current) return
@@ -184,7 +183,7 @@ export default function WorkflowImageDetail({ target, name, tag, basePath }: {
     </Section>
 
     {dialog}
-    {transfer && <WorkflowTransferDialog open onOpenChange={setTransfer} source={target} name={name} tag={tag}
+    {transfer && <WorkflowTransferDialog open onOpenChange={setTransfer} name={name} tag={tag}
       daemons={transferDaemons.daemons} onComplete={() => undefined} />}
   </div>
 }

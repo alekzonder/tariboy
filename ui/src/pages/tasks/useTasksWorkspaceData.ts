@@ -1,10 +1,10 @@
 import { useEffect, useMemo } from "react"
 import { toast } from "sonner"
 import { keepPreviousData, useMutation, useQueries, useQueryClient } from "@tanstack/react-query"
+import { useApi } from "@/components/apiContext"
 import { useApiQuery } from "@/hooks/useApiQuery"
-import { isConnectionError, targetReady, type ApiTarget } from "@/lib/api"
+import { isConnectionError, type Task, type TaskNotification } from "@/lib/api"
 import { errorText as errorMessage } from "@/lib/queryClient"
-import { markTaskNotificationRead, type Task, type TaskNotification } from "@/lib/tasks"
 import { taskKeys, taskQueries } from "./taskQueries"
 import { useTaskQueryEvents } from "./useTaskQueryEvents"
 import type { TasksWorkspaceView } from "./useTasksWorkspaceView"
@@ -13,12 +13,13 @@ function actorAgent(name: string): string {
   return name.startsWith("agent:") ? name : `agent:${name}`
 }
 
-export function useTasksWorkspaceData(target: Exclude<ApiTarget, undefined>, scopeAgent: string | undefined, state: TasksWorkspaceView, onNotificationsChanged?: () => void) {
+export function useTasksWorkspaceData(scopeAgent: string | undefined, state: TasksWorkspaceView, onNotificationsChanged?: () => void) {
+  const api = useApi()
   const client = useQueryClient()
   const { view, query, statusView, selectedKey, queue } = state
-  const queueQuery = useApiQuery(taskQueries.queues(target), target)
-  const peopleQuery = useApiQuery(taskQueries.principals(target), target)
-  const inboxQuery = useApiQuery(taskQueries.notifications(target), target)
+  const queueQuery = useApiQuery(taskQueries.queues(api))
+  const peopleQuery = useApiQuery(taskQueries.principals(api))
+  const inboxQuery = useApiQuery(taskQueries.notifications(api))
   const queues = queueQuery.data?.queues ?? []
   const principals = peopleQuery.data ?? null
   const notifications = useMemo(() => inboxQuery.data?.notifications ?? [], [inboxQuery.data])
@@ -30,9 +31,9 @@ export function useTasksWorkspaceData(target: Exclude<ApiTarget, undefined>, sco
     ...(view === "mine" ? { assignee: scopeAgent ? actorAgent(scopeAgent) : principalFilter } : {}),
     ...(view === "waiting" ? { waiting_for: scopeAgent ? actorAgent(scopeAgent) : principalFilter } : {}),
   }
-  const treeQuery = useApiQuery({ ...taskQueries.list(target, filters), enabled: !waitingForPrincipal, placeholderData: keepPreviousData }, target)
-  const detailQuery = useApiQuery(taskQueries.detail(target, selectedKey), target)
-  const historyQuery = useApiQuery(taskQueries.history(target, selectedKey, "latest"), target)
+  const treeQuery = useApiQuery({ ...taskQueries.list(api, filters), enabled: !waitingForPrincipal, placeholderData: keepPreviousData })
+  const detailQuery = useApiQuery(taskQueries.detail(api, selectedKey))
+  const historyQuery = useApiQuery(taskQueries.history(api, selectedKey, "latest"))
   const tasks = useMemo(() => treeQuery.data?.tasks ?? [], [treeQuery.data])
   const detail = detailQuery.data ?? null
   const events = historyQuery.data ?? []
@@ -40,37 +41,37 @@ export function useTasksWorkspaceData(target: Exclude<ApiTarget, undefined>, sco
   const loading = waitingForPrincipal ? !principalMetadataError : treeQuery.isPending
   const refreshing = treeQuery.isFetching && !!treeQuery.data
   const loadTree = async () => {
-    if (!targetReady(target)) return
-    await client.cancelQueries({ queryKey: taskKeys.list(target, filters) })
+    if (!api.ready) return
+    await client.cancelQueries({ queryKey: taskKeys.list(api.target, filters) })
     await treeQuery.refetch()
   }
   const loadMetadata = async () => {
-    if (!targetReady(target)) return
-    await client.cancelQueries({ queryKey: taskKeys.principals(target) })
+    if (!api.ready) return
+    await client.cancelQueries({ queryKey: taskKeys.principals(api.target) })
     await Promise.all([queueQuery.refetch(), peopleQuery.refetch(), inboxQuery.refetch()])
   }
-  const setTasks = (update: Task[] | ((current: Task[]) => Task[])) => client.setQueryData(taskKeys.list(target, filters), (page: { tasks: Task[]; sequence: number } | undefined) =>
+  const setTasks = (update: Task[] | ((current: Task[]) => Task[])) => client.setQueryData(taskKeys.list(api.target, filters), (page: { tasks: Task[]; sequence: number } | undefined) =>
     page ? { ...page, tasks: typeof update === "function" ? update(page.tasks) : update } : page)
-  useTaskQueryEvents(target, treeQuery.data?.sequence)
+  useTaskQueryEvents(treeQuery.data?.sequence)
   useEffect(() => {
     const error = treeQuery.error ?? peopleQuery.error ?? detailQuery.error ?? historyQuery.error
     if (error && !isConnectionError(error)) toast.error(errorMessage(error))
   }, [treeQuery.error, peopleQuery.error, detailQuery.error, historyQuery.error])
   const markRead = useMutation({
     mutationFn: async (unread: TaskNotification[]) => {
-      await client.cancelQueries({ queryKey: taskKeys.notifications(target) })
+      await client.cancelQueries({ queryKey: taskKeys.notifications(api.target) })
       const read = new Set<string>()
       for (const notification of unread) {
-        try { await markTaskNotificationRead(notification.id, target); read.add(notification.id) }
+        try { await api.tasks.markTaskNotificationRead(notification.id); read.add(notification.id) }
         catch { /* Leave the indicator for the next open. */ }
       }
       if (!read.size) return
-      await client.cancelQueries({ queryKey: taskKeys.notifications(target) })
-      client.setQueryData(taskKeys.notifications(target), (page: { notifications: TaskNotification[]; count: number } | undefined) => page ? {
+      await client.cancelQueries({ queryKey: taskKeys.notifications(api.target) })
+      client.setQueryData(taskKeys.notifications(api.target), (page: { notifications: TaskNotification[]; count: number } | undefined) => page ? {
         ...page, notifications: page.notifications.map((item) => read.has(item.id) ? { ...item, read_at: new Date().toISOString() } : item),
       } : page)
       // The next socket/manual read reconciles the inbox; no extra cycle is started here.
-      await client.invalidateQueries({ queryKey: taskKeys.notifications(target), refetchType: "none" })
+      await client.invalidateQueries({ queryKey: taskKeys.notifications(api.target), refetchType: "none" })
       onNotificationsChanged?.()
     },
   })
@@ -101,7 +102,7 @@ export function useTasksWorkspaceData(target: Exclude<ApiTarget, undefined>, sco
       .filter((key) => !listed.has(key))
       .sort()
   }, [notifications, query, scopeAgent, statusView, tasks, view])
-  const questionQueries = useQueries({ queries: missingQuestionKeys.map((key) => ({ ...taskQueries.detail(target, key), enabled: targetReady(target) })) })
+  const questionQueries = useQueries({ queries: missingQuestionKeys.map((key) => ({ ...taskQueries.detail(api, key), enabled: api.ready })) })
   const questionTasks = questionQueries.flatMap((result) => result.data ? [result.data.task] : [])
   const listed = new Set(tasks.map((task) => task.key))
   const listedTasks = [...tasks, ...questionTasks.filter((task) => !listed.has(task.key))]

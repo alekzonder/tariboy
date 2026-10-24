@@ -1,13 +1,12 @@
-import { render, screen, within } from "@testing-library/react"
+import type { ReactElement } from "react"
+import { render as renderWith, screen, within } from "@/test/queryRender"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
 import TaskRequeueDialog from "./TaskRequeueDialog"
+import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ listTaskQueues: vi.fn() }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  ...api,
-}))
+const render = (ui: ReactElement) => renderWith(ui, { api: fakeApi({ tasks: { listTaskQueues: api.listTaskQueues } }) })
 
 const queue = (prefix: string, name: string) => ({
   prefix, name, description: "", owners: [], responsible_agent: "", revision: 1, created_at: "", updated_at: "",

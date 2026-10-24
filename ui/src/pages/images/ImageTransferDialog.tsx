@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ApiError } from "@/lib/api";
+import { ApiError, createApi, type ApiClient } from "@/lib/api";
 import type { Daemon } from "@/lib/daemons";
-import { applyImageArchiveOn, downloadImageArchiveOn, uploadImageArchiveOn } from "@/lib/teamApi";
+import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,7 +17,6 @@ import { eligibleImageTransferTargets, type ImageTransferTarget } from "./imageT
 interface ImageTransferDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  source: Daemon | null;
   imageRef: string;
   daemons: Daemon[];
   onComplete: () => void;
@@ -30,6 +29,8 @@ interface TransferRow {
   error?: string;
   retryRef?: string;
 }
+
+type DestinationTarget = ImageTransferTarget & { api: ApiClient };
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 const isConflict = (error: unknown) => error instanceof ApiError && error.status === 409;
@@ -46,17 +47,23 @@ export function ImageTransferDialog({
 
 function ImageTransferDialogSession({
   onOpenChange,
-  source,
   imageRef,
   daemons,
   onComplete,
 }: Omit<ImageTransferDialogProps, "open">) {
+  // The source is the host this dialog was opened on; it and every
+  // destination client are fixed for the open dialog, so a host switch or a
+  // registry change never redirects a running transfer.
+  const currentSource = useApi();
+  const [source] = useState(currentSource);
   const discoveredTargets = useMemo(
-    () => eligibleImageTransferTargets(source, daemons),
+    () => eligibleImageTransferTargets(source.target, daemons),
     [source, daemons],
   );
-  const [openTargets] = useState<ImageTransferTarget[]>(discoveredTargets);
-  const [runTargets, setRunTargets] = useState<ImageTransferTarget[] | null>(null);
+  const [openTargets] = useState<DestinationTarget[]>(
+    () => discoveredTargets.map((target) => ({ ...target, api: createApi(target.target) })),
+  );
+  const [runTargets, setRunTargets] = useState<DestinationTarget[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [rows, setRows] = useState<Record<string, TransferRow>>({});
   const [phase, setPhase] = useState<"idle" | "exporting" | "transferring">("idle");
@@ -84,10 +91,10 @@ function ImageTransferDialogSession({
     if (mounted.current && transfer.current === run) setRows((current) => ({ ...current, [id]: row }));
   };
 
-  const uploadRetainedArchive = async (target: Daemon | null) => {
+  const uploadRetainedArchive = async (destination: ApiClient) => {
     const retainedArchive = archive.current;
     if (!retainedArchive) throw new Error("transfer archive is no longer available");
-    return uploadImageArchiveOn(target, retainedArchive);
+    return destination.images.uploadImageArchive(retainedArchive);
   };
 
   const cancel = () => {
@@ -128,7 +135,7 @@ function ImageTransferDialogSession({
     setPhase("exporting");
     setRows(Object.fromEntries(selectedTargets.map((target) => [target.id, { status: "exporting" }])));
     try {
-      archive.current = await downloadImageArchiveOn(source, imageRef);
+      archive.current = await source.images.downloadImageArchive(imageRef);
       if (!mounted.current || transfer.current !== run) return;
     } catch (error) {
       const failure = { status: "failed" as const, error: errorMessage(error) };
@@ -151,10 +158,10 @@ function ImageTransferDialogSession({
       }
       try {
         setRow(target.id, { status: "previewing" }, run);
-        const preview = await uploadRetainedArchive(target.target);
+        const preview = await uploadRetainedArchive(target.api);
         if (transfer.current !== run) return;
         setRow(target.id, { status: "importing", importID: preview.import_id }, run);
-        const result = await applyImageArchiveOn(target.target, preview.import_id, imageRef) as { reused?: boolean };
+        const result = await target.api.images.applyImageArchive(preview.import_id, imageRef) as { reused?: boolean };
         setRow(target.id, { status: result?.reused ? "already-present" : "completed" }, run);
       } catch (error) {
         setRow(target.id, {
@@ -179,10 +186,10 @@ function ImageTransferDialogSession({
     setPhase("transferring");
     try {
       setRow(targetID, { status: "previewing" }, run);
-      const preview = await uploadRetainedArchive(target.target);
+      const preview = await uploadRetainedArchive(target.api);
       if (transfer.current !== run) return;
       setRow(targetID, { status: "importing", importID: preview.import_id }, run);
-      const result = await applyImageArchiveOn(target.target, preview.import_id, normalizedRetryRef) as { reused?: boolean };
+      const result = await target.api.images.applyImageArchive(preview.import_id, normalizedRetryRef) as { reused?: boolean };
       setRow(targetID, { status: result?.reused ? "already-present" : "completed" }, run);
       if (mounted.current && transfer.current === run) onComplete();
     } catch (error) {

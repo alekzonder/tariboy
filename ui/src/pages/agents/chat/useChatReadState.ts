@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ApiError, chatReadOn, type ApiTarget, type ChatMessage } from "@/lib/api";
+import { ApiError, type ChatMessage } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 
 export function useChatReadState({
-  name, hostId, selected, target, chatId, messages, customer,
+  name, hostId, selected, chatId, messages, customer,
 }: {
   name: string;
   hostId: string;
   selected: string;
-  target: ApiTarget;
   chatId: string;
   messages: ChatMessage[];
   customer: string;
 }) {
+  const api = useApi();
   // Capture the opening mark once so arrivals cannot move the unread divider.
   const [anchor, setAnchor] = useState<string | null>(null);
   const anchorRef = useRef<string | null>(null);
@@ -36,16 +37,16 @@ export function useChatReadState({
   const markShownRead = useCallback(async (newest?: ChatMessage) => {
     // A hidden tab and an explicit Mark unread must never advance the mark.
     if (newest && !keepUnread.current && document.visibilityState !== "hidden") {
-      await chatReadOn(target, chatId, newest.ts);
+      await api.messages.chatRead(chatId, newest.ts);
     }
-  }, [target, chatId]);
+  }, [api, chatId]);
 
   function markRead() {
     const newest = messages.at(-1);
     keepUnread.current = false;
     anchorRef.current = newest?.ts ?? "";
     setAnchor(anchorRef.current);
-    if (newest && name) void chatReadOn(target, chatId, newest.ts).catch(() => undefined);
+    if (newest && name) void api.messages.chatRead(chatId, newest.ts).catch(() => undefined);
   }
 
   async function markUnread() {
@@ -59,7 +60,7 @@ export function useChatReadState({
     anchorRef.current = back;
     setAnchor(back);
     try {
-      await chatReadOn(target, chatId, back, { exact: true });
+      await api.messages.chatRead(chatId, back, { exact: true });
     } catch (error) {
       toast.error(`Could not mark the chat unread: ${error instanceof ApiError ? error.message : String(error)}`);
     }

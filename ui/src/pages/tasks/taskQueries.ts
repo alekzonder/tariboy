@@ -1,10 +1,11 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query"
-import type { ApiTarget } from "@/lib/api"
+import type { ApiClient, Task, TaskDetail, TaskEvent, TaskFilters } from "@/lib/api"
+import type { Daemon } from "@/lib/daemons"
 import { apiServerKey } from "@/lib/queryClient"
-import { getTask, getTaskWorkflow, listAgentPools, listTaskEvents, listTaskNotifications, listTaskPrincipals, listTaskQueues, listTasks, type Task, type TaskDetail, type TaskEvent, type TaskFilters } from "@/lib/tasks"
 import { listAllTasks } from "./useAllServersTasks"
 
-type Target = Exclude<ApiTarget, undefined>
+// Keys are built from the client's host; credentials never enter a key.
+type Target = Daemon | null
 export const taskKeys = {
   server: (target: Target) => [...apiServerKey(target), "tasks"] as const,
   list: (target: Target, filters: TaskFilters) => [...taskKeys.server(target), "list", filters] as const,
@@ -18,20 +19,20 @@ export const taskKeys = {
 }
 
 export const taskQueries = {
-  list: (target: Target, filters: TaskFilters) => queryOptions({
-    queryKey: taskKeys.list(target, filters), queryFn: ({ signal }) => listAllTasks(filters, target, signal),
+  list: (api: ApiClient, filters: TaskFilters) => queryOptions({
+    queryKey: taskKeys.list(api.target, filters), queryFn: ({ signal }) => listAllTasks(filters, api.tasks, signal),
   }),
-  detail: (target: Target, key: string) => queryOptions({
-    queryKey: taskKeys.detail(target, key), queryFn: ({ signal }) => getTask(key, target, signal), enabled: !!key,
+  detail: (api: ApiClient, key: string) => queryOptions({
+    queryKey: taskKeys.detail(api.target, key), queryFn: ({ signal }) => api.tasks.getTask(key, signal), enabled: !!key,
   }),
-  history: (target: Target, key: string, policy: "first" | "latest") => queryOptions({
-    queryKey: taskKeys.history(target, key, policy), enabled: !!key,
+  history: (api: ApiClient, key: string, policy: "first" | "latest") => queryOptions({
+    queryKey: taskKeys.history(api.target, key, policy), enabled: !!key,
     queryFn: async ({ signal }) => {
       const events: TaskEvent[] = []
       let after = 0
       for (;;) {
         signal.throwIfAborted()
-        const page = await listTaskEvents(key, after, 200, target, signal)
+        const page = await api.tasks.listTaskEvents(key, after, 200, signal)
         const batch = page.events ?? []
         events.push(...batch)
         if (policy === "first" || batch.length < 200) return policy === "first" ? events : events.slice(-200)
@@ -41,43 +42,43 @@ export const taskQueries = {
       }
     },
   }),
-  workflow: (target: Target, key: string) => queryOptions({
-    queryKey: taskKeys.workflow(target, key), queryFn: ({ signal }) => getTaskWorkflow(key, target, signal),
+  workflow: (api: ApiClient, key: string) => queryOptions({
+    queryKey: taskKeys.workflow(api.target, key), queryFn: ({ signal }) => api.workflows.getTaskWorkflow(key, signal),
   }),
-  queues: (target: Target) => queryOptions({
-    queryKey: taskKeys.queues(target), queryFn: ({ signal }) => listTaskQueues(target, signal),
+  queues: (api: ApiClient) => queryOptions({
+    queryKey: taskKeys.queues(api.target), queryFn: ({ signal }) => api.tasks.listTaskQueues(signal),
   }),
-  pools: (target: Target, queue: string) => queryOptions({
-    queryKey: taskKeys.pools(target, queue), queryFn: () => listAgentPools(queue, target), enabled: !!queue,
+  pools: (api: ApiClient, queue: string) => queryOptions({
+    queryKey: taskKeys.pools(api.target, queue), queryFn: () => api.tasks.listAgentPools(queue), enabled: !!queue,
   }),
-  principals: (target: Target) => queryOptions({
-    queryKey: taskKeys.principals(target), queryFn: ({ signal }) => listTaskPrincipals(target, signal),
+  principals: (api: ApiClient) => queryOptions({
+    queryKey: taskKeys.principals(api.target), queryFn: ({ signal }) => api.tasks.listTaskPrincipals(signal),
   }),
-  notifications: (target: Target) => queryOptions({
-    queryKey: taskKeys.notifications(target), queryFn: ({ signal }) => listTaskNotifications(false, target, signal),
+  notifications: (api: ApiClient) => queryOptions({
+    queryKey: taskKeys.notifications(api.target), queryFn: ({ signal }) => api.tasks.listTaskNotifications(false, signal),
   }),
-  sequence: (target: Target) => queryOptions({
-    queryKey: [...taskKeys.server(target), "sequence"], queryFn: ({ signal }) => listTasks({ limit: 1 }, target, signal),
+  sequence: (api: ApiClient) => queryOptions({
+    queryKey: [...taskKeys.server(api.target), "sequence"], queryFn: ({ signal }) => api.tasks.listTasks({ limit: 1 }, signal),
   }),
 }
 
-export async function refreshTasks(client: QueryClient, target: Target) {
-  await client.cancelQueries({ queryKey: taskKeys.server(target) })
-  await client.invalidateQueries({ queryKey: taskKeys.server(target) })
+export async function refreshTasks(client: QueryClient, api: ApiClient) {
+  await client.cancelQueries({ queryKey: taskKeys.server(api.target) })
+  await client.invalidateQueries({ queryKey: taskKeys.server(api.target) })
 }
 
-export async function writeTask<T>(client: QueryClient, target: Target, write: () => Promise<T>): Promise<T> {
-  await client.cancelQueries({ queryKey: taskKeys.server(target) })
+export async function writeTask<T>(client: QueryClient, api: ApiClient, write: () => Promise<T>): Promise<T> {
+  await client.cancelQueries({ queryKey: taskKeys.server(api.target) })
   try { return await write() }
-  finally { await refreshTasks(client, target) }
+  finally { await refreshTasks(client, api) }
 }
 
 /** A mutation response can fill an older snapshot, but never lower a revision. */
-export function retainTaskRevision(client: QueryClient, target: Target, updated: Task): Task {
-  const detailKey = taskKeys.detail(target, updated.key)
+export function retainTaskRevision(client: QueryClient, api: ApiClient, updated: Task): Task {
+  const detailKey = taskKeys.detail(api.target, updated.key)
   client.setQueryData<TaskDetail>(detailKey, (current) => current && current.task.revision < updated.revision
     ? { ...current, task: updated } : current)
-  client.setQueriesData<{ tasks: Task[] }>({ queryKey: [...taskKeys.server(target), "list"] }, (page) => page ? {
+  client.setQueriesData<{ tasks: Task[] }>({ queryKey: [...taskKeys.server(api.target), "list"] }, (page) => page ? {
     ...page, tasks: page.tasks.map((task) => task.key === updated.key && task.revision < updated.revision ? updated : task),
   } : page)
   return client.getQueryData<TaskDetail>(detailKey)?.task ?? updated

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useParams } from "react-router-dom";
 import { usePolling } from "@/hooks/usePolling";
-import { getAgentStatus, listAgents } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import { AgentColorSwatch } from "@/components/AgentColorSwatch";
 import { AliasEditor } from "@/components/AliasEditor";
@@ -28,7 +28,8 @@ const TABS = [
  */
 export function AgentLayout() {
   const { name = "" } = useParams();
-  const { data, refresh } = usePolling(listAgents, 5000);
+  const api = useApi();
+  const { data, refresh } = usePolling(api.agents.listAgents, 5000);
   const agents = data?.agents ?? [];
   const current = agents.find((a) => a.name === name);
   // Capture the app title index.html seeded (the single source of truth for the
@@ -52,7 +53,7 @@ export function AgentLayout() {
   // every tab) can show the live loop state; same call the Overview tab used.
   // Shared to the tabs via AgentStatusContext so Overview reads this snapshot
   // instead of opening a second identical 2s /status poll.
-  const { data: status, refresh: refreshStatus } = usePolling(() => getAgentStatus(name), 2000);
+  const { data: status, refresh: refreshStatus } = usePolling(() => api.agents.getAgentStatus(name), 2000);
 
   // Optimistic color for the selected agent: the header/swatch read from the
   // polled `/api/agents` snapshot, so a freshly-saved color wouldn't appear

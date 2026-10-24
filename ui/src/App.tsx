@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Navigate, Route, Routes, useLocation, useOutletContext, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { Segmented } from "@/components/ui/segmented";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -33,7 +33,6 @@ import { TitlebarSlotContext } from "@/pages/terminals/titlebarSlotContext";
 import { hostToParam } from "@/lib/terminalsHost";
 import { defaultAgentTab } from "@/lib/uiMode";
 import { CustomerQuestionNotifications } from "@/components/CustomerQuestionNotifications";
-import type { ApiTarget } from "@/lib/api";
 import {
   AppSettings,
   DesktopUpdatesProvider,
@@ -226,9 +225,8 @@ function MainApp() {
 }
 
 function PluginSettingsRoute() {
-  const target = useOutletContext<ApiTarget>();
   const { plugin = "" } = useParams();
-  return <PluginSettings name={plugin} target={target} />;
+  return <PluginSettings name={plugin} />;
 }
 
 function LegacyTerminalRedirect() {

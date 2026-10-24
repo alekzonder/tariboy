@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Copy, Download } from "lucide-react";
 import { toast } from "sonner";
-import { fetchAuditArchive, fetchAuditMarkdown } from "@/lib/auditExport";
+import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -14,13 +14,14 @@ function filenamePart(value: string): string {
 }
 
 export function AuditExportActions({ name, iteration }: { name: string; iteration?: string }) {
+  const api = useApi();
   const [copying, setCopying] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const copy = async () => {
     setCopying(true);
     try {
-      await navigator.clipboard.writeText(await fetchAuditMarkdown(name, iteration));
+      await navigator.clipboard.writeText(await api.audit.fetchAuditMarkdown(name, iteration));
       toast.success(iteration ? "Iteration audit copied" : "Full audit copied");
     } catch (error) {
       toast.error(`Could not copy audit: ${String(error)}`);
@@ -32,7 +33,7 @@ export function AuditExportActions({ name, iteration }: { name: string; iteratio
   const download = async () => {
     setExporting(true);
     try {
-      const blob = await fetchAuditArchive(name, iteration);
+      const blob = await api.audit.fetchAuditArchive(name, iteration);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;

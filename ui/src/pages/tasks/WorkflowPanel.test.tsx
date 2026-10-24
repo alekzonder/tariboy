@@ -1,9 +1,11 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender"
+import type { ReactElement } from "react"
+import { act, fireEvent, render as renderWith, screen, waitFor, within } from "@/test/queryRender"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
 import { WorkflowPanel } from "./WorkflowPanel"
 import { customerView, poolView, workflowTask, remoteTarget } from "./workflowFixtures"
+import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({
   getTaskWorkflow: vi.fn(),
@@ -13,12 +15,11 @@ const api = vi.hoisted(() => ({
   cancelWorkflowTask: vi.fn(),
   resumeTaskWorkflow: vi.fn(),
 }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  ...api,
-}))
+// The mocks are methods of a client bound to the remote host, so each call
+// they record went to that host.
+const remoteApi = fakeApi({ workflows: { getTaskWorkflow: api.getTaskWorkflow, advanceTask: api.advanceTask, moveTaskWorkflow: api.moveTaskWorkflow, upgradeTaskWorkflow: api.upgradeTaskWorkflow, cancelWorkflowTask: api.cancelWorkflowTask, resumeTaskWorkflow: api.resumeTaskWorkflow } }, remoteTarget)
+const render = (ui: ReactElement) => renderWith(ui, { api: remoteApi })
 
-const target = remoteTarget
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -30,14 +31,14 @@ beforeEach(() => {
 
 function renderPanel(task = workflowTask) {
   const onTaskChanged = vi.fn()
-  const view = render(<WorkflowPanel task={task} target={target} onTaskChanged={onTaskChanged} />)
+  const view = render(<WorkflowPanel task={task} onTaskChanged={onTaskChanged} />)
   return { onTaskChanged, ...view }
 }
 
 it("renders the header, outcomes, artifacts, runs and visits of the view", async () => {
   renderPanel()
   expect(await screen.findByText("release@1.2.0")).toBeInTheDocument()
-  expect(api.getTaskWorkflow).toHaveBeenCalledWith("REL-1", target, expect.any(AbortSignal))
+  expect(api.getTaskWorkflow).toHaveBeenCalledWith("REL-1", expect.any(AbortSignal))
   const header = screen.getByText("release@1.2.0").parentElement!
   expect(header).toHaveTextContent("review")
   expect(header).toHaveTextContent("customer")
@@ -79,9 +80,9 @@ it("shows a failed view request with a retry", async () => {
 it("refetches the view when the task's revision changes", async () => {
   const { rerender, onTaskChanged } = renderPanel()
   await screen.findByText("release@1.2.0")
-  rerender(<WorkflowPanel task={{ ...workflowTask }} target={target} onTaskChanged={onTaskChanged} />)
+  rerender(<WorkflowPanel task={{ ...workflowTask }} onTaskChanged={onTaskChanged} />)
   expect(api.getTaskWorkflow).toHaveBeenCalledTimes(1)
-  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 5 }} target={target} onTaskChanged={onTaskChanged} />)
+  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 5 }} onTaskChanged={onTaskChanged} />)
   await waitFor(() => expect(api.getTaskWorkflow).toHaveBeenCalledTimes(2))
 })
 
@@ -118,7 +119,7 @@ it("moves to a declared status with a required reason after confirmation", async
   await userEvent.click(move)
   const dialog = await screen.findByRole("alertdialog")
   await userEvent.click(within(dialog).getByRole("button", { name: "Move task" }))
-  await waitFor(() => expect(api.moveTaskWorkflow).toHaveBeenCalledWith("REL-1", "draft", "found a regression", target))
+  await waitFor(() => expect(api.moveTaskWorkflow).toHaveBeenCalledWith("REL-1", "draft", "found a regression"))
   await waitFor(() => expect(onTaskChanged).toHaveBeenCalledTimes(1))
   expect(api.getTaskWorkflow).toHaveBeenCalledTimes(2)
 })
@@ -152,11 +153,11 @@ it("moves the default step with the task until a step is chosen", async () => {
   const { rerender } = renderPanel()
   await screen.findByTestId("artifact-filter")
   api.getTaskWorkflow.mockResolvedValue(poolView)
-  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 5 }} target={target} onTaskChanged={vi.fn()} />)
+  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 5 }} onTaskChanged={vi.fn()} />)
   await waitFor(() => expect(screen.getByTestId("artifact-filter")).toHaveTextContent("Step draft"))
   await userEvent.click(screen.getByRole("button", { name: /^publish/ }))
   api.getTaskWorkflow.mockResolvedValue(customerView)
-  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 6 }} target={target} onTaskChanged={vi.fn()} />)
+  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 6 }} onTaskChanged={vi.fn()} />)
   await waitFor(() => expect(api.getTaskWorkflow).toHaveBeenCalledTimes(3))
   await waitFor(() => expect(screen.getByRole("button", { name: /^review/ })).toHaveAttribute("aria-current", "step"))
   expect(screen.getByTestId("artifact-filter")).toHaveTextContent("Step publish")
@@ -167,10 +168,10 @@ it("falls back to the current step when the chosen one leaves the manifest, and 
   await userEvent.click(await screen.findByRole("button", { name: /^publish/ }))
   const statuses = customerView.statuses.filter((status) => status.id !== "publish")
   api.getTaskWorkflow.mockResolvedValue({ ...customerView, statuses })
-  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 5 }} target={target} onTaskChanged={vi.fn()} />)
+  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 5 }} onTaskChanged={vi.fn()} />)
   await waitFor(() => expect(screen.getByTestId("artifact-filter")).toHaveTextContent("Step review"))
   api.getTaskWorkflow.mockResolvedValue({ ...customerView, statuses, status: "gone", category: "done" })
-  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 6 }} target={target} onTaskChanged={vi.fn()} />)
+  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 6 }} onTaskChanged={vi.fn()} />)
   await waitFor(() => expect(screen.getByRole("list", { name: "All artifacts" })).toBeInTheDocument())
 })
 
@@ -193,7 +194,7 @@ it("returns the task to the agent through the declared outcome, with the message
   await userEvent.type(screen.getByLabelText("Message to the agent"), "add tests")
   await userEvent.click(screen.getByRole("button", { name: "Return to agent" }))
   await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Return to agent" }))
-  await waitFor(() => expect(api.advanceTask).toHaveBeenCalledWith("REL-1", "rework", "add tests", "review", target))
+  await waitFor(() => expect(api.advanceTask).toHaveBeenCalledWith("REL-1", "rework", "add tests", "review"))
   await waitFor(() => expect(onTaskChanged).toHaveBeenCalledTimes(1))
   expect(screen.queryByLabelText("Message to the agent")).not.toBeInTheDocument()
 })
@@ -224,7 +225,7 @@ it("cancels the task after confirmation, and not when declined", async () => {
   expect(api.cancelWorkflowTask).not.toHaveBeenCalled()
   await openAction("Cancel task")
   await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Cancel task" }))
-  await waitFor(() => expect(api.cancelWorkflowTask).toHaveBeenCalledWith("REL-1", target))
+  await waitFor(() => expect(api.cancelWorkflowTask).toHaveBeenCalledWith("REL-1"))
   await waitFor(() => expect(onTaskChanged).toHaveBeenCalledTimes(1))
 })
 
@@ -275,7 +276,7 @@ it("refetches the view on a workflow event and shows a rejection that arrives wh
   api.getTaskWorkflow.mockResolvedValueOnce({ ...customerView,
     last_request: { ...pending, state: "rejected", result_message: "no heading", wait_seconds: undefined } })
   // The task's revision is unchanged: only the event sequence moved.
-  rerender(<WorkflowPanel task={workflowTask} eventSequence={12} target={target} onTaskChanged={onTaskChanged} />)
+  rerender(<WorkflowPanel task={workflowTask} eventSequence={12} onTaskChanged={onTaskChanged} />)
   expect(await screen.findByRole("alert")).toHaveTextContent("no heading")
   expect(screen.queryByText("checking…")).not.toBeInTheDocument()
   expect(api.getTaskWorkflow).toHaveBeenCalledTimes(2)
@@ -288,7 +289,7 @@ it("drops a view response that arrives after a newer one", async () => {
     .mockResolvedValueOnce({ ...customerView, status: "draft", owner: "pool:writers" })
   const { rerender, onTaskChanged } = renderPanel()
   await waitFor(() => expect(api.getTaskWorkflow).toHaveBeenCalledTimes(1))
-  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 5 }} target={target} onTaskChanged={onTaskChanged} />)
+  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 5 }} onTaskChanged={onTaskChanged} />)
   const header = (await screen.findByText("release@1.2.0")).parentElement!
   await waitFor(() => expect(header).toHaveTextContent("pool:writers"))
   await act(async () => { resolveOld(customerView) })
@@ -369,7 +370,7 @@ it("upgrades to the queue's version with an optional reason after confirmation",
   const dialog = await screen.findByRole("alertdialog")
   expect(dialog).toHaveTextContent(/first status of release@1.3.0/)
   await userEvent.click(within(dialog).getByRole("button", { name: "Upgrade task" }))
-  await waitFor(() => expect(api.upgradeTaskWorkflow).toHaveBeenCalledWith("REL-1", "new review step", target))
+  await waitFor(() => expect(api.upgradeTaskWorkflow).toHaveBeenCalledWith("REL-1", "new review step"))
   await waitFor(() => expect(onTaskChanged).toHaveBeenCalledTimes(1))
   expect(api.getTaskWorkflow).toHaveBeenCalledTimes(2)
 })
@@ -382,7 +383,7 @@ it("shows a refused upgrade inline", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Upgrade" }))
   await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Upgrade task" }))
   expect(await screen.findByRole("alert")).toHaveTextContent("workflow secrets have no value: GH_TOKEN")
-  expect(api.upgradeTaskWorkflow).toHaveBeenCalledWith("REL-1", "", target)
+  expect(api.upgradeTaskWorkflow).toHaveBeenCalledWith("REL-1", "")
   expect(onTaskChanged).not.toHaveBeenCalled()
 })
 

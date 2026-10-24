@@ -1,13 +1,4 @@
-import {
-  agentApiPath,
-  agentImageSetOn,
-  agentPostOn,
-  apiOn,
-  resolveTarget,
-  setAgentCwdOn,
-  setAgentShellScriptOn,
-  type ApiTarget,
-} from "@/lib/api";
+import { agentApiPath, type ApiClient } from "@/lib/api";
 import { rememberRuntimePreset } from "@/lib/runtimePresets";
 import type { AgentImageStatus } from "@/lib/api";
 import type { AgentView } from "@/lib/types";
@@ -83,16 +74,16 @@ const one = (key: string, submit: (value: string, values: Values) => Promise<unk
 // before model and effort, so a model is remembered for the harness it is
 // saved with. The backend has no batch endpoint: what Save changes is when and
 // how many of these requests are sent, never which ones exist.
-export function buildUnits(target: ApiTarget, name: string): CommitUnit[] {
-  const post = (path: string, body: unknown) => agentPostOn(target, name, path, body);
+export function buildUnits(api: ApiClient, name: string): CommitUnit[] {
+  const post = (path: string, body: unknown) => api.agentPost(name, path, body);
   const loopNumber = (field: string) => one(field, (value) => post(`loop/${field}`, { value: Number(value) }));
   const loopText = (field: string) => one(field, (value) => post(`loop/${field}`, { value }));
   return [
-    one("image", (value) => agentImageSetOn(target, name, value)),
+    one("image", (value) => api.agents.agentImageSet(name, value)),
     {
       id: "cwd",
       keys: ["cwd", "cwd-create"],
-      submit: (values) => setAgentCwdOn(target, name, values.cwd, values["cwd-create"] === "true"),
+      submit: (values) => api.agents.setAgentCwd(name, values.cwd, values["cwd-create"] === "true"),
     },
     one("harness", (value) => post("harness", { value })),
     one("model", async (value, values) => {
@@ -127,10 +118,10 @@ export function buildUnits(target: ApiTarget, name: string): CommitUnit[] {
         month_usd: values["budget-month"],
       }),
     },
-    one("shell-script", (value) => setAgentShellScriptOn(target, name, value)),
+    one("shell-script", (value) => api.agents.setAgentShellScript(name, value)),
     one("secrets-remove", async (value) => {
       for (const key of removedSecrets(value)) {
-        await apiOn(resolveTarget(target), "DELETE", `${agentApiPath(name, "secrets")}?key=${encodeURIComponent(key)}`);
+        await api.request("DELETE", `${agentApiPath(name, "secrets")}?key=${encodeURIComponent(key)}`);
       }
     }),
     {

@@ -5,19 +5,13 @@ import { yaml } from "@codemirror/lang-yaml";
 import { markdown } from "@codemirror/lang-markdown";
 import type { Extension } from "@codemirror/state";
 import { ApiError } from "@/lib/api";
-import { useOptionalDaemons } from "@/components/DaemonProvider";
-import {
-  buildImageSource,
-  getImageSource,
-  getImageSourceFile,
-  listImageSourceFiles,
-  putImageSourceFile,
-  validateImageSource,
-  type ImageBuildResult,
-  type ImageDiagnostic,
-  type ImageSource,
-  type ImageSourceFile,
-} from "@/lib/imageSources";
+import { useApi } from "@/components/apiContext";
+import type {
+  ImageSource,
+  ImageSourceBuildResult as ImageBuildResult,
+  ImageSourceDiagnostic as ImageDiagnostic,
+  ImageSourceFile,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,7 +28,7 @@ function language(path: string): Extension[] {
 
 export default function ImageSourceEditor() {
   const { name = "" } = useParams();
-  const hostKey = useOptionalDaemons()?.activeId ?? "";
+  const api = useApi();
   const [source, setSource] = useState<ImageSource | null>(null);
   const [files, setFiles] = useState<ImageSourceFile[]>([]);
   const [selected, setSelected] = useState("");
@@ -50,7 +44,7 @@ export default function ImageSourceEditor() {
 
   useEffect(() => {
     let alive = true;
-    void Promise.all([getImageSource(name), listImageSourceFiles(name)])
+    void Promise.all([api.imageSources.getImageSource(name), api.imageSources.listImageSourceFiles(name)])
       .then(([nextSource, listing]) => {
         if (!alive) return;
         const editable = (listing.files ?? []).filter(
@@ -68,12 +62,12 @@ export default function ImageSourceEditor() {
         if (alive) setError(message(err));
       });
     return () => { alive = false; };
-  }, [hostKey, name]);
+  }, [api, name]);
 
   useEffect(() => {
     if (!selected) return;
     let alive = true;
-    void getImageSourceFile(name, selected)
+    void api.imageSources.getImageSourceFile(name, selected)
       .then((file) => {
         if (alive) {
           setSaved(file.content);
@@ -85,7 +79,7 @@ export default function ImageSourceEditor() {
         if (alive) setError(message(err));
       });
     return () => { alive = false; };
-  }, [hostKey, name, selected]);
+  }, [api, name, selected]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -123,7 +117,7 @@ export default function ImageSourceEditor() {
     setBusy("save");
     setError("");
     try {
-      await putImageSourceFile(name, selected, draft);
+      await api.imageSources.putImageSourceFile(name, selected, draft);
       setSaved(draft);
     } catch (err) {
       setError(message(err));
@@ -137,7 +131,7 @@ export default function ImageSourceEditor() {
     setError("");
     setBuildResult(null);
     try {
-      const result = await validateImageSource(name);
+      const result = await api.imageSources.validateImageSource(name);
       setDiagnostics(result.diagnostics ?? []);
       setValidationOK(result.valid);
     } catch (err) {
@@ -152,7 +146,7 @@ export default function ImageSourceEditor() {
     setError("");
     setBuildResult(null);
     try {
-      const result = await buildImageSource(name, tag || "latest");
+      const result = await api.imageSources.buildImageSource(name, tag || "latest");
       setBuildResult(result);
       setDiagnostics([]);
       setValidationOK(true);

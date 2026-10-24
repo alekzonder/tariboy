@@ -1,13 +1,10 @@
 import { useEffect, useState } from "react";
 import {
   ApiError,
-  getPluginContributionsOn,
-  getPluginStatusOn,
-  runPluginActionOn,
-  type ApiTarget,
   type PluginContribution,
   type PluginSettingField,
 } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,7 +30,8 @@ function integerList(field: PluginSettingField, value: string): number[] {
   });
 }
 
-export default function PluginSettings({ name, target = null }: { name: string; target?: ApiTarget }) {
+export default function PluginSettings({ name }: { name: string }) {
+  const api = useApi();
   const [plugin, setPlugin] = useState<PluginContribution>();
   const [status, setStatus] = useState<Record<string, unknown>>({});
   const [values, setValues] = useState<Record<string, string>>({});
@@ -42,7 +40,7 @@ export default function PluginSettings({ name, target = null }: { name: string; 
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const loadStatus = async () => setStatus(await getPluginStatusOn(target, name));
+  const loadStatus = async () => setStatus(await api.plugins.getPluginStatus(name));
 
   useEffect(() => {
     let current = true;
@@ -50,7 +48,7 @@ export default function PluginSettings({ name, target = null }: { name: string; 
       if (!current) return null;
       setLoading(true);
       setError("");
-      return Promise.all([getPluginContributionsOn(target), getPluginStatusOn(target, name)]);
+      return Promise.all([api.plugins.getPluginContributions(), api.plugins.getPluginStatus(name)]);
     })
       .then((result) => {
         if (!current || !result) return;
@@ -61,7 +59,7 @@ export default function PluginSettings({ name, target = null }: { name: string; 
       .catch((cause) => { if (current) setError(message(cause)); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [name, target]);
+  }, [name, api]);
 
   const act = async (action: string, fieldNames: string[], fields: PluginSettingField[]) => {
     if (saving) return;
@@ -77,7 +75,7 @@ export default function PluginSettings({ name, target = null }: { name: string; 
         data[field.name] = field.type === "integer-list" ? integerList(field, value) : value;
       }
       setSaving(action);
-      await runPluginActionOn(target, name, action, data);
+      await api.plugins.runPluginAction(name, action, data);
       setValues((current) => {
         const next = { ...current };
         for (const field of fields) if (field.type === "password") next[field.name] = "";

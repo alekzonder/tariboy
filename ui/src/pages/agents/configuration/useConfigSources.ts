@@ -1,15 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  agentGetOn,
-  agentImageStatusGetOn,
-  getAgentShellScriptOn,
   isConnectionError,
-  listImagesOn,
-  targetReady,
   type AgentImageStatus,
   type ImageRow,
 } from "@/lib/api";
-import type { Daemon } from "@/lib/daemons";
+import { useApi } from "@/components/apiContext";
 import type { AgentStatus, AgentView } from "@/lib/types";
 
 interface RetentionLimits { keep_iterations: number; keep_days: number; max_bytes: number }
@@ -40,8 +35,10 @@ const empty = <T,>(): Loaded<T> => ({ value: null, error: "" });
 // useConfigSources is the page's one load point. A scope is one agent on one
 // host: a reconnect moves the endpoint but keeps the scope, so loaded values
 // survive it, while a response that arrives after the scope changed is
-// dropped. The page keys its draft by the same scope.
-export function useConfigSources(target: Daemon | null, name: string, status: AgentStatus | null): ConfigSources {
+// dropped. The page keys its draft by the same scope. The host is the
+// surrounding ApiProvider's.
+export function useConfigSources(name: string, status: AgentStatus | null): ConfigSources {
+  const api = useApi();
   const [view, setView] = useState<AgentView | null>(null);
   const [imageStatus, setImageStatus] = useState<AgentImageStatus | null>(null);
   const [imageError, setImageError] = useState("");
@@ -51,7 +48,7 @@ export function useConfigSources(target: Daemon | null, name: string, status: Ag
   const [script, setScript] = useState<Loaded<string>>(empty);
   const [retention, setRetention] = useState<Loaded<RetentionPolicy>>(empty);
   const [secrets, setSecrets] = useState<Loaded<string[]>>(empty);
-  const targetId = target?.id;
+  const targetId = api.target?.id;
 
   const requests = useRef({ name, targetId, active: false, agent: 0, image: 0 });
   useEffect(() => {
@@ -75,29 +72,29 @@ export function useConfigSources(target: Daemon | null, name: string, status: Ag
   const loadAgent = useCallback(async () => {
     const scope = requests.current;
     if (!scope.active || scope.name !== name || scope.targetId !== targetId) return;
-    if (!targetReady(target)) return;
+    if (!api.ready) return;
     const request = ++scope.agent;
     const current = () => scope.active && request === scope.agent;
     const keep = <T,>(set: (update: (prev: Loaded<T>) => Loaded<T>) => void) => (cause: unknown) => {
       if (current()) set((prev) => ({ value: prev.value, error: prev.value === null ? message(cause) : "" }));
     };
     await Promise.all([
-      agentGetOn<AgentView>(target, name, "").then((next) => {
+      api.agents.getAgent(name).then((next) => {
         if (current()) setView(next);
       }, () => {
         // Keep the last loaded agent: a failed read is not an empty agent.
       }),
-      getAgentShellScriptOn(target, name).then((next) => {
+      api.agents.getAgentShellScript(name).then((next) => {
         if (current()) setScript({ value: typeof next?.script === "string" ? next.script : "", error: "" });
       }, keep(setScript)),
-      agentGetOn<RetentionPolicy>(target, name, "retention").then((next) => {
+      api.agentGet<RetentionPolicy>(name, "retention").then((next) => {
         if (current()) setRetention({ value: next, error: "" });
       }, keep(setRetention)),
-      agentGetOn<{ keys: string[] | null }>(target, name, "secrets").then((next) => {
+      api.agentGet<{ keys: string[] | null }>(name, "secrets").then((next) => {
         if (current()) setSecrets({ value: Array.isArray(next?.keys) ? next.keys : [], error: "" });
       }, keep(setSecrets)),
     ]);
-  }, [name, target, targetId]);
+  }, [name, api, targetId]);
 
   useEffect(() => {
     void Promise.resolve().then(loadAgent);
@@ -106,10 +103,10 @@ export function useConfigSources(target: Daemon | null, name: string, status: Ag
   const loadImages = useCallback(async () => {
     const scope = requests.current;
     if (!scope.active || scope.name !== name || scope.targetId !== targetId) return;
-    if (!targetReady(target)) return;
+    if (!api.ready) return;
     const request = ++scope.image;
     setInventoryLoading(true);
-    void listImagesOn(target).then((listing) => {
+    void api.images.listImages().then((listing) => {
       if (!scope.active || request !== scope.image) return;
       setImages(listing.images ?? []);
       setInventoryError("");
@@ -122,7 +119,7 @@ export function useConfigSources(target: Daemon | null, name: string, status: Ag
       if (scope.active && request === scope.image) setInventoryLoading(false);
     });
     try {
-      const state = await agentImageStatusGetOn(target, name);
+      const state = await api.agents.agentImageStatusGet(name);
       if (!scope.active || request !== scope.image) return;
       setImageStatus(state);
       setImageError("");
@@ -131,7 +128,7 @@ export function useConfigSources(target: Daemon | null, name: string, status: Ag
       if (!isConnectionError(cause)) setImageStatus(null);
       setImageError(message(cause));
     }
-  }, [name, target, targetId]);
+  }, [name, api, targetId]);
 
   useEffect(() => {
     const scope = requests.current;

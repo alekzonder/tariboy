@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import {
-  ApiError, buildImageDirectory, validateImageDirectory,
-  type ApiTarget, type ImageDiagnostic, type ImageValidationResult,
+  ApiError,
+  type ImageDiagnostic, type ImageValidationResult,
 } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 const message = (error: unknown) => error instanceof ApiError ? error.message : String(error);
 
-export default function ImageBuildFromDirectory({ target = null }: { target?: ApiTarget }) {
+export default function ImageBuildFromDirectory() {
+  const api = useApi();
   const [path, setPath] = useState("");
   const [name, setName] = useState("");
   const [tag, setTag] = useState("latest");
@@ -26,10 +28,10 @@ export default function ImageBuildFromDirectory({ target = null }: { target?: Ap
   const validate = async () => {
     setBusy(true);
     try {
-      const result = await validateImageDirectory({
+      const result = await api.images.validateImageDirectory({
         path: path.trim(), name: name.trim(),
         ...(tag.trim() && tag.trim() !== "latest" ? { tag: tag.trim() } : {}),
-      }, target);
+      });
       setValidation(result);
       setDiagnostics(result.diagnostics ?? []);
       if (result.valid) toast.success("Tariboyfile is valid");
@@ -47,10 +49,10 @@ export default function ImageBuildFromDirectory({ target = null }: { target?: Ap
     }
     setBusy(true);
     try {
-      const result = await buildImageDirectory({
+      const result = await api.images.buildImageDirectory({
         path: path.trim(), name: name.trim(),
         ...(tag.trim() && tag.trim() !== "latest" ? { tag: tag.trim() } : {}),
-      }, target);
+      });
       setDiagnostics([]);
       toast.success(`built ${result.name}:${result.tag}`);
       window.dispatchEvent(new Event("tariboy:image-built"));

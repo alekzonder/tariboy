@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { WorkflowView } from "@/lib/tasks"
+import type { WorkflowView } from "@/lib/api"
 import { canReturnToAgent, counterText, currentVisit, defaultReturnTarget, inCurrentVisit, requiredBy, returnTargets, stepArtifacts, stepMarks, stepOf } from "./workflowGraph"
 import { customerView, poolView } from "./workflowFixtures"
 

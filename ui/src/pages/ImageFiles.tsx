@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
 import FileBrowser from "@/components/FileBrowser";
 import { useImageContext } from "@/components/ImageLayout";
+import { useApi } from "@/components/apiContext";
 import {
-  imageFileRead, imageFilesList,
   type FileContent, type FileEntry, type FileListing, type ImageFileEntry,
 } from "@/lib/api";
 
@@ -14,7 +14,8 @@ import {
 // on demand. No write callbacks are passed and readOnly is set, so the browser
 // renders with no edit/create/rename/delete affordances.
 export default function ImageFiles() {
-  const { ref, hostKey, manifest, target, onReadError } = useImageContext();
+  const api = useApi();
+  const { ref, hostKey, manifest, onReadError } = useImageContext();
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -28,11 +29,11 @@ export default function ImageFiles() {
 
   const loadAll = useCallback(async (): Promise<ImageFileEntry[]> => {
     if (cache.current?.key === sourceKey) return cache.current.entries;
-    const r = await imageFilesList(ref, target, digest).catch((error) => { if (alive.current) onReadError(error); throw error; });
+    const r = await api.images.imageFilesList(ref, digest).catch((error) => { if (alive.current) onReadError(error); throw error; });
     const entries = r.files ?? [];
     cache.current = { key: sourceKey, entries };
     return entries;
-  }, [ref, sourceKey, target, digest, onReadError]);
+  }, [api, ref, sourceKey, digest, onReadError]);
 
   const listDir = useCallback(
     async (dir: string): Promise<FileListing> => {
@@ -65,10 +66,10 @@ export default function ImageFiles() {
 
   const readFile = useCallback(
     async (path: string): Promise<FileContent> => {
-      const r = await imageFileRead(ref, path, target, digest).catch((error) => { if (alive.current) onReadError(error); throw error; });
+      const r = await api.images.imageFileRead(ref, path, digest).catch((error) => { if (alive.current) onReadError(error); throw error; });
       return { path: r.path, kind: "text", content: r.content, size: r.content.length };
     },
-    [ref, target, digest, onReadError],
+    [api, ref, digest, onReadError],
   );
 
   return <FileBrowser sourceKey={sourceKey} listDir={listDir} readFile={readFile} readOnly />;

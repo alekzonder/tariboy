@@ -1,4 +1,4 @@
-import type { TaskNotification } from "@/lib/tasks"
+import type { TaskNotification } from "@/lib/api"
 
 export const CUSTOMER_QUESTION_RETRY_MS = 3000
 

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { agentGet, subscribeAgentEvents } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { AuditRow } from "@/components/AuditRow";
@@ -18,6 +18,7 @@ const FILTER_DATALIST = "audit-type-presets";
 // paged window only holds a slice of the log. The paging/tail machinery pauses
 // while a filter is active and resumes when it is cleared.
 export function FullAuditLog({ name }: { name: string }) {
+  const api = useApi();
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [open, setOpen] = useState<Set<number>>(new Set());
   // Filter state: `type` (a preset from the datalist or a free-form value) and a
@@ -47,7 +48,7 @@ export function FullAuditLog({ name }: { name: string }) {
   useEffect(() => {
     if (!name) return;
     let live = true;
-    void agentGet<{ events: AuditEvent[] }>(name, "logs")
+    void api.audit.listAuditEvents(name)
       .then((r) => {
         if (!live) return;
         const recent = (r.events ?? []).slice().reverse();
@@ -56,18 +57,18 @@ export function FullAuditLog({ name }: { name: string }) {
       })
       .catch(() => { if (live) setEvents([]); });
     return () => { live = false; };
-  }, [name]);
+  }, [api, name]);
 
   // Preset type list, enumerated from the real audit data (distinct types),
   // backing the type filter's datalist. Free-form entries stay allowed.
   useEffect(() => {
     if (!name) return;
     let live = true;
-    void agentGet<{ types: string[] }>(name, "logs?distinct=types")
+    void api.audit.listAuditEventTypes(name)
       .then((r) => { if (live) setPresets(r.types ?? []); })
       .catch(() => {});
     return () => { live = false; };
-  }, [name]);
+  }, [api, name]);
 
   // Filtered mode: debounce, then scan the whole log server-side and show the
   // matches. Runs only while a filter is active; clearing it drops back to the
@@ -79,7 +80,7 @@ export function FullAuditLog({ name }: { name: string }) {
       const qs = new URLSearchParams();
       if (type.trim()) qs.set("type", type.trim());
       if (query.trim()) qs.set("q", query.trim());
-      void agentGet<{ events: AuditEvent[]; capped?: boolean }>(name, `logs?${qs.toString()}`)
+      void api.audit.listAuditEvents(name, qs.toString())
         .then((r) => {
           if (!live) return;
           setFiltered((r.events ?? []).slice().reverse()); // newest-first → chronological
@@ -88,7 +89,7 @@ export function FullAuditLog({ name }: { name: string }) {
         .catch(() => { if (live) { setFiltered([]); setCapped(false); } });
     }, 250);
     return () => { live = false; window.clearTimeout(t); };
-  }, [name, filtering, type, query]);
+  }, [api, name, filtering, type, query]);
 
   // Live tail: append events newer than what we hold. Reads newestSeq via the
   // ref so this effect subscribes once per agent, not on every append. Paused
@@ -96,23 +97,23 @@ export function FullAuditLog({ name }: { name: string }) {
   useEffect(() => {
     if (!name || filtering) return;
     const tail = () =>
-      void agentGet<{ events: AuditEvent[] }>(name, `logs?since=${newestSeq()}`)
+      void api.audit.listAuditEvents(name, `since=${newestSeq()}`)
         .then((r) => {
           const fresh = r.events ?? [];
           if (fresh.length) setEvents((prev) => [...prev, ...fresh]);
         })
         .catch(() => {});
     const t = window.setInterval(tail, 3000);
-    const off = subscribeAgentEvents(name, ["audit", "iteration"], () => tail());
+    const off = api.agents.subscribeAgentEvents(name, ["audit", "iteration"], () => tail());
     return () => { window.clearInterval(t); off(); };
-  }, [name, filtering]);
+  }, [api, name, filtering]);
 
   const loadOlder = () => {
     if (!name || loadingOlder.current || !hasMore.current || eventsRef.current.length === 0) return;
     loadingOlder.current = true;
     const v = viewport();
     anchor.current = v ? v.scrollHeight : null;
-    void agentGet<{ events: AuditEvent[] }>(name, `logs?before=${oldestSeq()}&limit=${PAGE}`)
+    void api.audit.listAuditEvents(name, `before=${oldestSeq()}&limit=${PAGE}`)
       .then((r) => {
         const older = r.events ?? [];
         hasMore.current = older.length >= PAGE;

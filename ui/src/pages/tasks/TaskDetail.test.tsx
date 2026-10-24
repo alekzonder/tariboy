@@ -1,18 +1,17 @@
-import { cleanup, render, screen, waitFor, within } from "@/test/queryRender"
+import type { ReactElement } from "react"
+import { cleanup, render as renderWith, screen, waitFor, within } from "@/test/queryRender"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
-import type { Task, TaskComment, TaskDetail as Detail, TaskEvent, TaskWait } from "@/lib/tasks"
 import TaskDetail from "./TaskDetail"
-import { ApiError } from "@/lib/api"
+import { ApiError, type Task, type TaskComment, type TaskDetail as Detail, type TaskEvent, type TaskWait } from "@/lib/api"
 import { agentPool, customerView, poolView, workflowTask } from "./workflowFixtures"
+import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({
   getTaskWorkflow: vi.fn(), resumeTaskWorkflow: vi.fn(), listAgentPools: vi.fn(), reassignTaskWorkflow: vi.fn(),
 }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  ...api,
-}))
+const localApi = fakeApi({ tasks: { listAgentPools: api.listAgentPools }, workflows: { getTaskWorkflow: api.getTaskWorkflow, resumeTaskWorkflow: api.resumeTaskWorkflow, reassignTaskWorkflow: api.reassignTaskWorkflow } })
+const render = (ui: ReactElement) => renderWith(ui, { api: localApi })
 
 const flexible: Task = {
   ...workflowTask,
@@ -145,7 +144,7 @@ it("confirms a pause decision inside the open sheet without closing it", async (
   const { onTaskChanged, onClose } = renderDetail({ ...workflowTask, waiting_on: "pause" })
   await userEvent.click(await screen.findByRole("button", { name: "Continue" }))
   await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Continue" }))
-  await waitFor(() => expect(api.resumeTaskWorkflow).toHaveBeenCalledWith("REL-1", "continue", null))
+  await waitFor(() => expect(api.resumeTaskWorkflow).toHaveBeenCalledWith("REL-1", "continue"))
   await waitFor(() => expect(onTaskChanged).toHaveBeenCalled())
   expect(onClose).not.toHaveBeenCalled()
   expect(screen.getByText("Release notes")).toBeInTheDocument()
@@ -192,7 +191,7 @@ it("changes the agent of a workflow task in a pool status to another member of t
     .toEqual(["agent:writer", "agent:editor"]))
   expect(select).toHaveValue("agent:writer")
   await userEvent.selectOptions(select, "agent:editor")
-  await waitFor(() => expect(api.reassignTaskWorkflow).toHaveBeenCalledWith("REL-1", "editor", null))
+  await waitFor(() => expect(api.reassignTaskWorkflow).toHaveBeenCalledWith("REL-1", "editor"))
   await waitFor(() => expect(onTaskChanged).toHaveBeenCalled())
   expect(onSave).not.toHaveBeenCalled()
 })

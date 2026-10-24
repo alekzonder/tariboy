@@ -1,17 +1,17 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import type { ReactElement } from "react"
+import { act, fireEvent, render as renderWith, screen, within } from "@/test/queryRender"
 import { beforeEach, expect, it, vi } from "vitest"
-import { ApiError } from "@/lib/api"
-import type { WorkflowArtifact } from "@/lib/tasks"
+import { ApiError, type WorkflowArtifact } from "@/lib/api"
 import WorkflowArtifacts from "./WorkflowArtifacts"
 import { remoteTarget } from "./workflowFixtures"
+import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ setTaskArtifact: vi.fn(), getTaskArtifactHistory: vi.fn() }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  ...api,
-}))
+// The mocks are methods of a client bound to the remote host, so each call
+// they record went to that host.
+const remoteApi = fakeApi({ workflows: { setTaskArtifact: api.setTaskArtifact, getTaskArtifactHistory: api.getTaskArtifactHistory } }, remoteTarget)
+const render = (ui: ReactElement) => renderWith(ui, { api: remoteApi })
 
-const target = remoteTarget
 const notes: WorkflowArtifact = {
   id: 3, name: "notes", value: "<i>one</i>\n2\n3\n4\n5\n6\n7\n8", author: "agent:writer", created_at: "2026-10-01T10:04:00Z",
 }
@@ -22,7 +22,7 @@ function renderArtifacts(props: Partial<Parameters<typeof WorkflowArtifacts>[0]>
   const onChanged = vi.fn()
   render(<WorkflowArtifacts taskKey="REL-1" artifacts={[notes]}
     declared={[{ name: "notes", description: "The notes." }, { name: "summary", description: "One paragraph." }]}
-    editable target={target} onChanged={onChanged} {...props} />)
+    editable onChanged={onChanged} {...props} />)
   return { onChanged }
 }
 
@@ -136,7 +136,7 @@ it("loads the history only when asked", async () => {
   expect(api.getTaskArtifactHistory).not.toHaveBeenCalled()
   const item = screen.getByText("notes").closest("li")!
   await act(async () => { fireEvent.click(within(item).getByRole("button", { name: "History" })) })
-  expect(api.getTaskArtifactHistory).toHaveBeenCalledWith("REL-1", "notes", target)
+  expect(api.getTaskArtifactHistory).toHaveBeenCalledWith("REL-1", "notes")
   expect(within(item).getByText("older value")).toBeInTheDocument()
 })
 
@@ -147,7 +147,7 @@ it("saves an edited value and reports the change", async () => {
   fireEvent.click(within(item).getByRole("button", { name: "Edit" }))
   fireEvent.change(within(item).getByLabelText("Value of notes"), { target: { value: "new" } })
   await act(async () => { fireEvent.click(within(item).getByRole("button", { name: "Save" })) })
-  expect(api.setTaskArtifact).toHaveBeenCalledWith("REL-1", "notes", "new", target)
+  expect(api.setTaskArtifact).toHaveBeenCalledWith("REL-1", "notes", "new")
   expect(onChanged).toHaveBeenCalled()
   expect(within(item).queryByLabelText("Value of notes")).not.toBeInTheDocument()
 })

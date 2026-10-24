@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { createAgent, startAgent } from "@/lib/api";
 import { rememberRuntimePreset } from "@/lib/runtimePresets";
 import type { AgentCreateDraft } from "../agentCreateDraft";
 import type { CreateAgentDialogProps } from "../CreateAgentDialog";
@@ -10,7 +9,7 @@ import { errorMessage } from "./errorMessage";
 
 export function useCreateAgentSubmit(
   draft: AgentCreateDraft,
-  { host, target, targetIsUsable, bare, schemaV2, defaultModel, defaultEffort }: ReturnType<typeof useCreateAgentResources>,
+  { host, api, targetIsUsable, bare, schemaV2, defaultModel, defaultEffort }: ReturnType<typeof useCreateAgentResources>,
   blocker: { message: string } | null,
   { onCreated, onOpenChange }: CreateAgentDialogProps,
 ) {
@@ -35,7 +34,7 @@ export function useCreateAgentSubmit(
     setSubmitError("");
     setStartError("");
     try {
-      const result = await createAgent(spec, target);
+      const result = await api.agents.createAgent(spec);
       if (draft.model.trim() && draft.model.trim() !== defaultModel) {
         rememberRuntimePreset(draft.harness, "models", draft.model);
       }
@@ -50,7 +49,7 @@ export function useCreateAgentSubmit(
         return;
       }
       try {
-        await startAgent(result.name, target);
+        await api.agents.startAgent(result.name);
         onOpenChange(false);
       } catch (error) {
         setStartError(
@@ -71,7 +70,7 @@ export function useCreateAgentSubmit(
     setBusy(true);
     setStartError("");
     try {
-      await startAgent(created.name, target);
+      await api.agents.startAgent(created.name);
       onOpenChange(false);
     } catch (error) {
       setStartError(

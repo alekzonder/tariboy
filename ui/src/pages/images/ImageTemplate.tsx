@@ -1,10 +1,11 @@
 import { useEffect,useState } from "react";
-import { imageTemplateGet,type ImagePromptTemplate } from "@/lib/api";
+import type { ImagePromptTemplate } from "@/lib/api";
 import { useImageContext } from "@/components/ImageLayout";
+import { useApi } from "@/components/apiContext";
 
 export default function ImageTemplate(){
-  const {ref,hostKey,manifest,target,onReadError}=useImageContext();const [template,setTemplate]=useState<ImagePromptTemplate|null>(null);const [error,setError]=useState("");
-  useEffect(()=>{let alive=true;void imageTemplateGet(ref,target,manifest?.digest).then(value=>{if(alive){setTemplate(value);setError("")}}).catch(cause=>{if(alive){setError(String(cause));onReadError(cause)}});return()=>{alive=false}},[hostKey,ref,manifest?.digest,target,onReadError]);
+  const api=useApi();const {ref,hostKey,manifest,onReadError}=useImageContext();const [template,setTemplate]=useState<ImagePromptTemplate|null>(null);const [error,setError]=useState("");
+  useEffect(()=>{let alive=true;void api.images.imageTemplateGet(ref,manifest?.digest).then(value=>{if(alive){setTemplate(value);setError("")}}).catch(cause=>{if(alive){setError(String(cause));onReadError(cause)}});return()=>{alive=false}},[hostKey,ref,manifest?.digest,api,onReadError]);
   if(error)return <p className="text-sm text-destructive">{error}</p>;if(!template)return <p className="text-sm text-muted-foreground">Loading…</p>;
   return <div className="space-y-3"><div className="font-mono text-xs text-muted-foreground">template sha256 {template.sha256}</div>
     <ol className="space-y-2">{template.entries.map((entry,index)=><li key={`${index}-${entry.archive_path??entry.runtime}`} className="rounded border p-3 text-sm">

@@ -1,6 +1,6 @@
 import { X } from "lucide-react"
 import { errorText } from "@/lib/queryClient"
-import type { TaskDetail, TaskRelationType } from "@/lib/tasks"
+import type { TaskDetail, TaskRelationType } from "@/lib/api"
 import { taskStatusLabel as flexibleStatusLabel, taskTone } from "@/lib/statusTone"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"

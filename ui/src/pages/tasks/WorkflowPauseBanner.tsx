@@ -1,8 +1,7 @@
 import { PauseCircle } from "lucide-react"
 import { useState } from "react"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
-import type { ApiTarget } from "@/lib/api"
-import { cancelWorkflowTask, resumeTaskWorkflow } from "@/lib/tasks"
 import { cn } from "@/lib/utils"
 import { DANGER_FILL } from "./panelStyles"
 import { useWorkflowConfirm } from "./WorkflowConfirm"
@@ -23,13 +22,13 @@ const BUTTON = "h-6 shrink-0 rounded-[7px] px-2.5 text-[12px] text-status-failed
  * release the holder (pool statuses only), or cancel. A plain comment does not
  * resume a task, so the decisions live here and nowhere else.
  */
-export default function WorkflowPauseBanner({ taskKey, reason, pool, target, onChanged }: {
+export default function WorkflowPauseBanner({ taskKey, reason, pool, onChanged }: {
   taskKey: string
   reason: string
   pool: boolean
-  target?: ApiTarget
   onChanged: () => void
 }) {
+  const api = useApi()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const { confirm, dialog } = useWorkflowConfirm()
@@ -57,19 +56,19 @@ export default function WorkflowPauseBanner({ taskKey, reason, pool, target, onC
             ? "The same holder continues and the counters are reset."
             : "Resume the task in its current status. The counters are reset.",
           action: "Continue",
-          run: () => decide(() => resumeTaskWorkflow(taskKey, "continue", target)),
+          run: () => decide(() => api.workflows.resumeTaskWorkflow(taskKey, "continue")),
         })}>Continue</Button>
         {pool && <Button type="button" variant="ghost" className={BUTTON} disabled={busy} onClick={() => confirm({
           title: "Release the holder?",
           description: "The holder loses this task, and the task is dispatched to another member of the pool.",
           action: "Release holder",
-          run: () => decide(() => resumeTaskWorkflow(taskKey, "release", target)),
+          run: () => decide(() => api.workflows.resumeTaskWorkflow(taskKey, "release")),
         })}>Release holder</Button>}
         <Button type="button" variant="ghost" className={BUTTON} disabled={busy} onClick={() => confirm({
           title: "Cancel this task?",
           description: "The task closes as cancelled and its scripts stop.",
           action: "Cancel task",
-          run: () => decide(() => cancelWorkflowTask(taskKey, target)),
+          run: () => decide(() => api.workflows.cancelWorkflowTask(taskKey)),
         })}>Cancel task</Button>
       </div>
       {error && <p role="alert" className="text-[12px]">{error}</p>}

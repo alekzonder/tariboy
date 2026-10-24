@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@/test/queryRender";
 import { ConfigurationBlocks } from "./ConfigurationBlocks";
 import { BLOCKS } from "./registry";
 import { useConfigDraft } from "./useConfigDraft";
@@ -18,7 +18,6 @@ it("edits message settings in the shared page draft without its own Save", () =>
       matched={new Set(["messages-batch"])}
       dirty={draft.dirtyKeys.length}
       sources={{} as ConfigSources}
-      target={null}
       name="worker"
       stopped
       refresh={vi.fn()}

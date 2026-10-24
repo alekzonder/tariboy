@@ -1,9 +1,9 @@
 import { TriangleAlert } from "lucide-react"
 import { useState } from "react"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
-import type { ApiTarget } from "@/lib/api"
+import type { WorkflowView } from "@/lib/api"
 import { TONE_TEXT } from "@/lib/statusTone"
-import { getTaskScriptRunLog, retryTransitionRequest, type WorkflowView } from "@/lib/tasks"
 import { cn } from "@/lib/utils"
 import { DANGER_FILL, MONO, PRIMARY_FILL } from "./panelStyles"
 import RunRow from "./RunRow"
@@ -19,22 +19,22 @@ const FILL: Partial<Record<Problem["tone"], string>> = { danger: DANGER_FILL, at
  * A failed request has Retry, which runs its checks again once the cause is
  * fixed. A pause is explained by its own banner.
  */
-export default function WorkflowProblem({ taskKey, view, target, onChanged, onRefresh }: {
+export default function WorkflowProblem({ taskKey, view, onChanged, onRefresh }: {
   taskKey: string
   view: WorkflowView
-  target?: ApiTarget
   /** The transition applied: refetch the view and the task. */
   onChanged: () => void
   /** Refetch the view only. */
   onRefresh: () => void
 }) {
+  const api = useApi()
   const problem = explainProblem(view)
-  const { checking, follow } = useFollowRequest(taskKey, target)
+  const { checking, follow } = useFollowRequest(taskKey)
   const [notice, setNotice] = useState<FollowResult | null>(null)
   if (!problem || problem.kind === "checking") return null
   const retry = (id: number) => {
     setNotice(null)
-    void follow(() => retryTransitionRequest(taskKey, id, target), (result) => {
+    void follow(() => api.workflows.retryTransitionRequest(taskKey, id), (result) => {
       if (result.kind === "applied") { onChanged(); return }
       setNotice(result)
       if (result.kind === "result" || (result.kind === "error" && result.stale)) onRefresh()
@@ -73,7 +73,7 @@ export default function WorkflowProblem({ taskKey, view, target, onChanged, onRe
           state={problem.run.state} verdict={problem.run.verdict} exitCode={problem.run.exit_code}
           startedAt={problem.run.started_at ?? problem.run.created_at} finishedAt={problem.run.finished_at}
           going={problem.run.state === "pending" || problem.run.state === "running"}
-          readLog={() => getTaskScriptRunLog(taskKey, problem.run!.id, undefined, target)} />
+          readLog={() => api.workflows.getTaskScriptRunLog(taskKey, problem.run!.id, undefined)} />
       </ul>}
     </section>
   )

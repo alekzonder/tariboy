@@ -20,7 +20,7 @@ import type { TaskDetailProps } from "./TaskDetailTypes"
 export { TaskDetailLoading } from "./TaskDetailLoading"
 
 export default function TaskDetail({
-  detail, target, events, liveSequence, principals, width, resizeHandle, onClose,
+  detail, events, liveSequence, principals, width, resizeHandle, onClose,
   onSave, onComment, onAddRelation, onDeleteRelation, onTransfer, onRequeue,
   onTaskChanged, assigneeOptions,
 }: TaskDetailProps) {
@@ -61,7 +61,7 @@ export default function TaskDetail({
       onOpenAutoFocus={(event) => { event.preventDefault(); initialFocusRef.current?.focus() }}
       onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus() }}>
     {resizeHandle}
-    <TaskDetailDialogs task={task} workflow={workflow} target={target}
+    <TaskDetailDialogs task={task} workflow={workflow}
       transferOpen={transferOpen} setTransferOpen={setTransferOpen}
       requeueOpen={requeueOpen} setRequeueOpen={setRequeueOpen}
       onTransfer={onTransfer} onRequeue={onRequeue} />
@@ -92,11 +92,11 @@ export default function TaskDetail({
             <Meta label="Parent" value={task.parent_key} />
           </dl>
           {task.access !== "respond" ? <>
-          <TaskDetailFields task={task} draft={draft} target={target} principals={principals}
+          <TaskDetailFields task={task} draft={draft} principals={principals}
             assigneeOptions={assigneeOptions} onTaskChanged={onTaskChanged} descriptionMode={descriptionMode}
             setDescriptionMode={setDescriptionMode} setUploadingDescription={setUploadingDescription} />
           {/* In place of the status select: the workflow changes the status. */}
-          {workflow && <WorkflowPanel task={task} eventSequence={eventSequence} target={target} onTaskChanged={onTaskChanged} />}
+          {workflow && <WorkflowPanel task={task} eventSequence={eventSequence} onTaskChanged={onTaskChanged} />}
           <TaskRelationsSection detail={detail} relations={relations} />
           </> : <div className="flex min-w-0 flex-col gap-2">
             {/* No second title here: the sticky header already carries it, and
@@ -107,7 +107,7 @@ export default function TaskDetail({
           </div>}
           <TaskComments comments={comments} waits={commentWaits} principals={principals} assignee={task.assignee}
             formFirst={commentOrder === "newest"} order={commentOrder} onOrderChange={setCommentOrder}
-            onComment={onComment} onDirtyChange={setCommentDirty} target={target} onUploadingChange={setUploadingComment} />
+            onComment={onComment} onDirtyChange={setCommentDirty} onUploadingChange={setUploadingComment} />
           <TaskHistorySection events={events} historyOpen={historyOpen} setHistoryOpen={setHistoryOpen} />
         </>
       )}

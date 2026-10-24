@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useContext, useEffect, useRef, useState } from "react"
 import type { Terminal } from "@xterm/xterm"
 import type { Daemon } from "@/lib/daemons"
 import { getLocalBaseURL } from "@/lib/api"
+import { ApiContext } from "@/components/apiContext"
 
 /** Connection lifecycle exposed to the Terminal tab. "connecting" covers both
  * the initial dial and any backoff-driven reconnect attempt. */
@@ -73,8 +74,13 @@ export function terminalWsUrl(name: string, cols: number, rows: number, target?:
  * grace before surfacing `absent`. A normal `1000/eof` close means an attached
  * PTY ended and stops immediately. Transport failures are retried with capped
  * exponential backoff while `enabled` stays true and the component is mounted.
+ * `target` names the host explicitly (null = same-origin local).
  */
 export function useTerminalSocket(name: string, enabled: boolean, target?: Daemon | null): TerminalSocketController {
+  // Omitted, the terminal is on the server of the surrounding ApiProvider.
+  const provided = useContext(ApiContext)
+  if (target === undefined && !provided) throw new Error("useApi must be used within an ApiProvider")
+  const host = target === undefined ? provided!.target : target
   const [status, setStatus] = useState<TerminalSocketStatus>("connecting")
   const [absent, setAbsent] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
@@ -104,7 +110,7 @@ export function useTerminalSocket(name: string, enabled: boolean, target?: Daemo
   // Serialize the target so the connect effect keys off its VALUE (host +
   // token), not object identity — a caller re-rendering with a fresh but
   // equivalent Daemon object must not force a re-dial.
-  const targetKey = JSON.stringify(target ?? null)
+  const targetKey = JSON.stringify(host)
 
   useEffect(() => {
     if (!enabled) return

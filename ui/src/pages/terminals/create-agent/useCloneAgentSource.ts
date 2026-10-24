@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import { agentGetOn } from "@/lib/api";
-import type { AgentView } from "@/lib/types";
+import { createApi } from "@/lib/api";
 import { resolveDaemon } from "@/lib/daemons";
 import { cloneAgentDraft, type AgentCreateDraft } from "../agentCreateDraft";
 import type { CloneAgentSource } from "../CreateAgentDialog";
@@ -21,11 +20,9 @@ export function useCloneAgentSource(
       if (cloneSource.hostId && !sourceTarget) {
         throw new Error(`host ${cloneSource.hostId} was not found`);
       }
-      const source = await agentGetOn<AgentView>(
-        sourceTarget,
-        cloneSource.agentName,
-        "",
-      );
+      // The source agent is read from its own host, whichever host the
+      // dialog creates on.
+      const source = await createApi(sourceTarget).agents.getAgent(cloneSource.agentName);
       return cloneAgentDraft(source);
     }, [cloneSource]);
 

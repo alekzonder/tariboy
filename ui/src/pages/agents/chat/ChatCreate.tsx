@@ -6,7 +6,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, apiOn, chatCreateOn, resolveTarget, type ApiTarget } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import type { AgentSummary } from "@/lib/types";
 import { chatIdFromTitle } from "./chatModel";
 
@@ -17,12 +18,12 @@ import { chatIdFromTitle } from "./chatModel";
  * every agent named here is subscribed to the new chat's channel and is woken
  * by a message in it exactly as it is by one in its own conversation.
  */
-export default function ChatCreate({ agent, target, onClose, onCreated }: {
+export default function ChatCreate({ agent, onClose, onCreated }: {
   agent: string;
-  target: ApiTarget;
   onClose: () => void;
   onCreated: (chatId: string) => void;
 }) {
+  const api = useApi();
   const [title, setTitle] = useState("");
   const [others, setOthers] = useState<AgentSummary[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
@@ -30,18 +31,16 @@ export default function ChatCreate({ agent, target, onClose, onCreated }: {
   const id = chatIdFromTitle(title);
 
   useEffect(() => {
-    void apiOn<{ agents: AgentSummary[] }>(resolveTarget(target), "GET", "/api/agents")
+    void api.get<{ agents: AgentSummary[] }>("/api/agents")
       .then((page) => setOthers((page.agents ?? []).filter((row) => row.name !== agent)))
       .catch(() => setOthers([]));
-    // target is derived from the host id and changes identity every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agent, target?.baseURL]);
+  }, [agent, api]);
 
   async function create() {
     if (!id || saving) return;
     setSaving(true);
     try {
-      const chat = await chatCreateOn(target, {
+      const chat = await api.messages.chatCreate({
         id,
         title: title.trim(),
         participants: [agent, ...picked].map((name) => `agent:${name}`),

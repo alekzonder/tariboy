@@ -9,7 +9,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core"
 import { buildTaskForest, canDropTaskInside, canReorderTaskBeside, flattenVisible } from "@/lib/taskTree"
-import type { Task, TaskPriority } from "@/lib/tasks"
+import type { Task, TaskPriority } from "@/lib/api"
 import type { TaskRowMode } from "./taskColumns"
 import TaskRow, { TaskTableHeader } from "./TaskRow"
 

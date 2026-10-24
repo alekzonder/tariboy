@@ -1,16 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Daemon } from "./daemons";
-import {
-  buildImageSource,
-  createImageSource,
-  deleteImageSource,
-  getImageSource,
-  getImageSourceFile,
-  listImageSourceFiles,
-  listImageSources,
-  putImageSourceFile,
-  validateImageSource,
-} from "./imageSources";
+import type { Daemon } from "../daemons";
+import { createApi } from ".";
 
 interface Call {
   url: string;
@@ -50,19 +40,23 @@ describe("managed image source client", () => {
   it("targets one explicit host for CRUD, validation, and build", async () => {
     const calls: Call[] = [];
     captureFetch(calls);
+    const {
+      buildImageSource, createImageSource, deleteImageSource, getImageSource, getImageSourceFile,
+      listImageSourceFiles, listImageSources, putImageSourceFile, validateImageSource,
+    } = createApi(target).imageSources;
 
-    await listImageSources(target);
+    await listImageSources();
     await createImageSource({
       name: "reviewer dev",
       prompt: "Review.",
-    }, target);
-    await getImageSource("reviewer dev", target);
-    await listImageSourceFiles("reviewer dev", target);
-    await getImageSourceFile("reviewer dev", "skills/a b/#review.md", target);
-    await putImageSourceFile("reviewer dev", "skills/a b/#review.md", "# Review", target);
-    await validateImageSource("reviewer dev", target);
-    await buildImageSource("reviewer dev", "canary", target);
-    await deleteImageSource("reviewer dev", target);
+    });
+    await getImageSource("reviewer dev");
+    await listImageSourceFiles("reviewer dev");
+    await getImageSourceFile("reviewer dev", "skills/a b/#review.md");
+    await putImageSourceFile("reviewer dev", "skills/a b/#review.md", "# Review");
+    await validateImageSource("reviewer dev");
+    await buildImageSource("reviewer dev", "canary");
+    await deleteImageSource("reviewer dev");
 
     expect(calls.map(({ url, method }) => ({ url, method }))).toEqual([
       { url: "https://remote.example/api/image-sources", method: "GET" },
@@ -99,7 +93,7 @@ describe("managed image source client", () => {
       ],
     }]);
 
-    const result = await validateImageSource("reviewer", null);
+    const result = await createApi(null).imageSources.validateImageSource("reviewer");
 
     expect(result).toEqual({
       valid: false,

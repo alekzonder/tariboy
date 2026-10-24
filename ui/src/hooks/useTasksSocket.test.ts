@@ -87,7 +87,7 @@ describe("tasks websocket", () => {
   it("ignores malformed and duplicate hints and exposes a server reset", () => {
     const onHint = vi.fn()
     const onReset = vi.fn()
-    renderHook(() => useTasksSocket({ after: 9, onHint, onReset }))
+    renderHook(() => useTasksSocket({ target: null, after: 9, onHint, onReset }))
     const socket = FakeWebSocket.instances[0]
 
     act(() => {
@@ -102,7 +102,7 @@ describe("tasks websocket", () => {
 
   it("uses capped exponential reconnect and closes cleanly on unmount", () => {
     vi.useFakeTimers()
-    const { unmount } = renderHook(() => useTasksSocket({ onHint: vi.fn() }))
+    const { unmount } = renderHook(() => useTasksSocket({ target: null, onHint: vi.fn() }))
 
     for (const elapsed of [250, 500, 1000, 2000, 4000, 5000]) {
       const current = FakeWebSocket.instances.at(-1)!

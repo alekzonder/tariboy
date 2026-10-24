@@ -1,18 +1,18 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react"
+import type { ReactElement } from "react"
+import { act, render as renderWith, screen, waitFor, within } from "@/test/queryRender"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
-import { ApiError } from "@/lib/api"
-import type { TransitionRequest, WorkflowView } from "@/lib/tasks"
+import { ApiError, type TransitionRequest, type WorkflowView } from "@/lib/api"
 import ReturnToAgent from "./ReturnToAgent"
 import { customerView, poolView, remoteTarget, workflowTask } from "./workflowFixtures"
+import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ advanceTask: vi.fn(), moveTaskWorkflow: vi.fn(), getTransitionRequest: vi.fn() }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  ...api,
-}))
+// The mocks are methods of a client bound to the remote host, so each call
+// they record went to that host.
+const remoteApi = fakeApi({ workflows: { advanceTask: api.advanceTask, moveTaskWorkflow: api.moveTaskWorkflow, getTransitionRequest: api.getTransitionRequest } }, remoteTarget)
+const render = (ui: ReactElement) => renderWith(ui, { api: remoteApi })
 
-const target = remoteTarget
 const applied: TransitionRequest = { id: 11, task_key: "REL-1", outcome: "rework", actor: "user:owner", state: "applied", created_at: "" }
 /** The task in the script status `publish`, after draft and review. */
 const scriptView: WorkflowView = { ...customerView, status: "publish", owner: "script", waiting_on: "script", outcomes: [{ on: "published", to: "done" }],
@@ -27,7 +27,7 @@ beforeEach(() => {
 function renderReturn(view: WorkflowView) {
   const onChanged = vi.fn()
   const onDone = vi.fn()
-  render(<ReturnToAgent taskKey="REL-1" view={view} target={target} onChanged={onChanged} onDone={onDone} />)
+  render(<ReturnToAgent taskKey="REL-1" view={view} onChanged={onChanged} onDone={onDone} />)
   return { onChanged, onDone }
 }
 
@@ -47,7 +47,7 @@ it("declares the outcome of a customer status with the message, and closes once 
   expect(screen.getByText("declares rework")).toBeInTheDocument()
   expect(screen.getByRole("button", { name: "Return to agent" })).toBeDisabled()
   await sendMessage("Please add a heading")
-  await waitFor(() => expect(api.advanceTask).toHaveBeenCalledWith("REL-1", "rework", "Please add a heading", "review", target))
+  await waitFor(() => expect(api.advanceTask).toHaveBeenCalledWith("REL-1", "rework", "Please add a heading", "review"))
   expect(api.moveTaskWorkflow).not.toHaveBeenCalled()
   await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1))
   expect(onDone).toHaveBeenCalledTimes(1)
@@ -60,7 +60,7 @@ it("moves the task back to the pool status it visited when no outcome leads ther
   expect(select.querySelector("optgroup")).toHaveAttribute("label", "By move")
   expect(screen.getByText("operator move")).toBeInTheDocument()
   await sendMessage("CI is red on the branch")
-  await waitFor(() => expect(api.moveTaskWorkflow).toHaveBeenCalledWith("REL-1", "draft", "CI is red on the branch", target))
+  await waitFor(() => expect(api.moveTaskWorkflow).toHaveBeenCalledWith("REL-1", "draft", "CI is red on the branch"))
   expect(api.advanceTask).not.toHaveBeenCalled()
   await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1))
   expect(onChanged).toHaveBeenCalledTimes(1)
@@ -71,7 +71,7 @@ it("offers a paused pool status itself as a restart, by move", async () => {
   const options = within(screen.getByLabelText("Return to status")).getAllByRole("option")
   expect(options.map((option) => option.textContent)).toEqual(["draft (restart this step)"])
   await sendMessage("Start over from the plan")
-  await waitFor(() => expect(api.moveTaskWorkflow).toHaveBeenCalledWith("REL-1", "draft", "Start over from the plan", target))
+  await waitFor(() => expect(api.moveTaskWorkflow).toHaveBeenCalledWith("REL-1", "draft", "Start over from the plan"))
 })
 
 it("keeps the form open and shows the refusal when the daemon says no", async () => {

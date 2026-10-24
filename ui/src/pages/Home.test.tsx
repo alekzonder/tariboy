@@ -1,5 +1,5 @@
 import { it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@/test/queryRender";
 import { MemoryRouter } from "react-router-dom";
 import Home from "./Home";
 

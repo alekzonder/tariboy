@@ -1,11 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useApiQuery, useApiTarget } from "@/hooks/useApiQuery"
+import { useApi } from "@/components/apiContext"
+import { useApiQuery } from "@/hooks/useApiQuery"
 import { taskKeys, taskQueries, refreshTasks, writeTask } from "./taskQueries"
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import type { ApiTarget } from "@/lib/api"
-import { cancelWorkflowTask, moveTaskWorkflow, type Task, upgradeTaskWorkflow, type WorkflowView } from "@/lib/tasks"
+import type { Task, WorkflowView } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { EMPTY, FIELD, LABEL, MONO, QUIET_ACTION, ROW, SelectShell } from "./panelStyles"
 import ReturnToAgent from "./ReturnToAgent"
@@ -32,7 +32,7 @@ type OpenForm = "move" | "return" | "upgrade" | null
  * return to the agent, a move, a cancel, or a pause decision. The Desktop
  * acts as the customer (operator routes).
  */
-export function WorkflowPanel({ task, eventSequence = 0, target: inputTarget, onTaskChanged }: {
+export function WorkflowPanel({ task, eventSequence = 0, onTaskChanged }: {
   task: Task
   /**
    * The latest task event the detail holds. A workflow event (a rejected
@@ -40,12 +40,11 @@ export function WorkflowPanel({ task, eventSequence = 0, target: inputTarget, on
    * sequence refetches the view too.
    */
   eventSequence?: number
-  target?: ApiTarget
   onTaskChanged?: () => void
 }) {
-  const target = useApiTarget(inputTarget)
+  const api = useApi()
   const client = useQueryClient()
-  const workflow = useApiQuery(taskQueries.workflow(target, task.key), target)
+  const workflow = useApiQuery(taskQueries.workflow(api, task.key))
   const view = workflow.data
   const error = workflow.error ? errorText(workflow.error) : ""
   const [form, setForm] = useState<OpenForm>(null)
@@ -55,18 +54,18 @@ export function WorkflowPanel({ task, eventSequence = 0, target: inputTarget, on
   useEffect(() => {
     if (lastChange.current[0] === task.revision && lastChange.current[1] === eventSequence) return
     lastChange.current = [task.revision, eventSequence]
-    const queryKey = taskKeys.workflow(target, task.key)
+    const queryKey = taskKeys.workflow(api.target, task.key)
     // A mounted shared detail owns server-wide event/write refreshes, including
     // workflow. Standalone panels still react to changes in their input props.
-    const sharedDetail = client.getQueryCache().find({ queryKey: taskKeys.detail(target, task.key), exact: true })
+    const sharedDetail = client.getQueryCache().find({ queryKey: taskKeys.detail(api.target, task.key), exact: true })
     if (sharedDetail?.isActive()) return
     void client.cancelQueries({ queryKey }).then(() => client.invalidateQueries({ queryKey }))
-  }, [client, target, task.key, task.revision, eventSequence])
+  }, [client, api, task.key, task.revision, eventSequence])
   const cancellation = useMutation({
-    mutationFn: () => writeTask(client, target, () => cancelWorkflowTask(task.key, target)),
+    mutationFn: () => writeTask(client, api, () => api.workflows.cancelWorkflowTask(task.key)),
     onSuccess: () => onTaskChanged?.(),
   })
-  const changed = () => { cancellation.reset(); void refreshTasks(client, target); onTaskChanged?.() }
+  const changed = () => { cancellation.reset(); void refreshTasks(client, api); onTaskChanged?.() }
   const refresh = () => { cancellation.reset(); void workflow.refetch() }
 
   const failure = error && <div role="alert" className="flex items-center gap-2 text-[12px] text-status-failed">
@@ -97,7 +96,7 @@ export function WorkflowPanel({ task, eventSequence = 0, target: inputTarget, on
     description: "The move skips outcomes, required artifacts, and checks, stops the current scripts, and cancels a pending request.",
     action: "Move task",
     onCancel: () => resolve(false),
-    run: () => { writeTask(client, target, () => moveTaskWorkflow(task.key, to, reason, target)).then(() => { resolve(true); onTaskChanged?.() }, reject) },
+    run: () => { writeTask(client, api, () => api.workflows.moveTaskWorkflow(task.key, to, reason)).then(() => { resolve(true); onTaskChanged?.() }, reject) },
   }))
   const upgradeTo = `${view.name}@${view.queue_version ?? ""}`
   // Resolves true once upgraded, false when the confirmation is declined.
@@ -106,7 +105,7 @@ export function WorkflowPanel({ task, eventSequence = 0, target: inputTarget, on
     description: `The task starts again at the first status of ${upgradeTo}. The current status ends, its scripts stop, and a pending request is cancelled. Artifacts stay.`,
     action: "Upgrade task",
     onCancel: () => resolve(false),
-    run: () => { writeTask(client, target, () => upgradeTaskWorkflow(task.key, reason, target)).then(() => { resolve(true); onTaskChanged?.() }, reject) },
+    run: () => { writeTask(client, api, () => api.workflows.upgradeTaskWorkflow(task.key, reason)).then(() => { resolve(true); onTaskChanged?.() }, reject) },
   }))
   const open = (next: OpenForm) => { cancellation.reset(); setForm(form === next ? null : next) }
 
@@ -114,8 +113,8 @@ export function WorkflowPanel({ task, eventSequence = 0, target: inputTarget, on
     <div className="flex min-w-0 flex-col gap-[18px]">
       {view.waiting_on === "pause" && <WorkflowPauseBanner taskKey={task.key}
         reason={view.paused_reason ?? task.workflow_paused_reason ?? ""} pool={view.owner.startsWith("pool:")}
-        target={target} onChanged={changed} />}
-      <WorkflowProblem taskKey={task.key} view={view} target={target} onChanged={changed} onRefresh={refresh} />
+        onChanged={changed} />}
+      <WorkflowProblem taskKey={task.key} view={view} onChanged={changed} onRefresh={refresh} />
       <WorkflowStepper view={view} selected={selected} onSelect={setChosen} />
       <div className="flex min-w-0 items-center gap-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[12px] text-muted-foreground">
@@ -143,12 +142,12 @@ export function WorkflowPanel({ task, eventSequence = 0, target: inputTarget, on
       {cancellation.error && <p role="alert" className="text-[12px] text-status-failed">{errorText(cancellation.error)}</p>}
       {form === "move" && <MoveForm view={view} onDone={() => setForm(null)} onMove={move} />}
       {form === "upgrade" && <UpgradeForm onDone={() => setForm(null)} onUpgrade={upgrade} />}
-      {form === "return" && <ReturnToAgent taskKey={task.key} view={view} target={target} onChanged={changed} onDone={() => setForm(null)} />}
-      <WorkflowOutcomes taskKey={task.key} view={view} target={target} onChanged={changed} onRefresh={refresh} />
+      {form === "return" && <ReturnToAgent taskKey={task.key} view={view} onChanged={changed} onDone={() => setForm(null)} />}
+      <WorkflowOutcomes taskKey={task.key} view={view} onChanged={changed} onRefresh={refresh} />
       <WorkflowArtifacts taskKey={task.key} artifacts={view.artifacts} declared={view.declared_artifacts ?? []}
         required={closed ? undefined : requiredBy(view)} step={selected ? { status: selected, ...stepArtifacts(view, selected) } : undefined}
-        onShowAll={() => setChosen(null)} editable={editable && !closed} target={target} onChanged={changed} />
-      <WorkflowRuns taskKey={task.key} runs={view.runs ?? []} target={target} />
+        onShowAll={() => setChosen(null)} editable={editable && !closed} onChanged={changed} />
+      <WorkflowRuns taskKey={task.key} runs={view.runs ?? []} />
       <section className="flex min-w-0 flex-col gap-1">
         <span className={LABEL}>Visits</span>
         <ol className="flex min-w-0 flex-col">

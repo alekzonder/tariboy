@@ -1,20 +1,15 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import PluginSettings from "./PluginSettings";
-import {
-  getPluginContributionsOn,
-  getPluginStatusOn,
-  runPluginActionOn,
-  type PluginContribution,
-} from "@/lib/api";
+import type { PluginContribution } from "@/lib/api";
 import type { Daemon } from "@/lib/daemons";
+import { apiWrapper, fakeApi } from "@/test/api";
 
-vi.mock("@/lib/api", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/api")>(),
-  getPluginContributionsOn: vi.fn(),
-  getPluginStatusOn: vi.fn(),
-  runPluginActionOn: vi.fn(),
-}));
+const getPluginContributions = vi.fn();
+const getPluginStatus = vi.fn();
+const runPluginAction = vi.fn();
+const pluginsFor = (target: Daemon | null) =>
+  apiWrapper(fakeApi({ plugins: { getPluginContributions, getPluginStatus, runPluginAction } }, target));
 
 const remote: Daemon = {
   id: "remote-1", label: "Production", baseURL: "https://production.example", token: "daemon-token",
@@ -41,13 +36,13 @@ const telegram: PluginContribution = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(getPluginContributionsOn).mockResolvedValue({ plugins: [telegram], count: 1 });
-  vi.mocked(getPluginStatusOn).mockResolvedValue({ token_configured: true, allowlist_count: 2 });
-  vi.mocked(runPluginActionOn).mockResolvedValue({ configured: true });
+  getPluginContributions.mockResolvedValue({ plugins: [telegram], count: 1 });
+  getPluginStatus.mockResolvedValue({ token_configured: true, allowlist_count: 2 });
+  runPluginAction.mockResolvedValue({ configured: true });
 });
 
 it("renders write-only fields and sends normalized action data to the selected server", async () => {
-  render(<PluginSettings name="telegram" target={remote} />);
+  render(<PluginSettings name="telegram" />, { wrapper: pluginsFor(remote) });
 
   expect(await screen.findByRole("heading", { name: "Telegram" })).toBeInTheDocument();
   expect(screen.getByText("Token configured: Yes")).toBeInTheDocument();
@@ -59,7 +54,7 @@ it("renders write-only fields and sends normalized action data to the selected s
   fireEvent.change(screen.getByLabelText("Allowed UIDs"), { target: { value: "22, 11" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-  await waitFor(() => expect(runPluginActionOn).toHaveBeenCalledWith(remote, "telegram", "configure", {
+  await waitFor(() => expect(runPluginAction).toHaveBeenCalledWith("telegram", "configure", {
     token: "123:secret",
     allowed_uids: [22, 11],
   }));
@@ -67,10 +62,10 @@ it("renders write-only fields and sends normalized action data to the selected s
 });
 
 it("rejects a malformed integer list before sending", async () => {
-  render(<PluginSettings name="telegram" target={null} />);
+  render(<PluginSettings name="telegram" />, { wrapper: pluginsFor(null) });
   await screen.findByRole("heading", { name: "Telegram" });
   fireEvent.change(screen.getByLabelText("Allowed UIDs"), { target: { value: "11,nope" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Allowed UIDs must be a comma-separated integer list");
-  expect(runPluginActionOn).not.toHaveBeenCalled();
+  expect(runPluginAction).not.toHaveBeenCalled();
 });

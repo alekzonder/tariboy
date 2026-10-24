@@ -1,49 +1,54 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CodexApprovalCard } from "./CodexApprovalSettings";
-import { getCodexApprovalOn, setCodexApprovalOn } from "@/lib/api";
-
-vi.mock("@/lib/api", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/api")>(),
-  getCodexApprovalOn: vi.fn(),
-  setCodexApprovalOn: vi.fn(),
-}));
+import { render } from "@/test/queryRender";
+import { fakeApi } from "@/test/api";
+import type { CodexApprovalMode } from "@/lib/api";
 
 const target = { id: "r", label: "R", baseURL: "https://r.test", token: "t" };
 
+const getCodexApproval = vi.fn<() => Promise<{ mode: CodexApprovalMode }>>();
+const setCodexApproval = vi.fn<(mode: CodexApprovalMode) => Promise<{ mode: CodexApprovalMode }>>();
+// The client of the explicit host: every request goes through it.
+const hostApi = () => fakeApi({ harnesses: { getCodexApproval, setCodexApproval } }, target);
+
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(getCodexApprovalOn).mockResolvedValue({ mode: "yolo" });
-  vi.mocked(setCodexApprovalOn).mockImplementation(async (_t, mode) => ({ mode }));
+  getCodexApproval.mockResolvedValue({ mode: "yolo" });
+  setCodexApproval.mockImplementation(async (mode) => ({ mode }));
 });
 
 describe("CodexApprovalCard", () => {
   it("shows the host's mode", async () => {
-    vi.mocked(getCodexApprovalOn).mockResolvedValue({ mode: "approve-for-me" });
-    render(<CodexApprovalCard target={target} />);
+    getCodexApproval.mockResolvedValue({ mode: "approve-for-me" });
+    const api = hostApi();
+    render(<CodexApprovalCard />, { api });
     expect(await screen.findByRole("radio", { name: "Approve for me" })).toBeChecked();
     expect(screen.getByRole("radio", { name: "Yolo" })).not.toBeChecked();
-    expect(getCodexApprovalOn).toHaveBeenCalledWith(target);
+    expect(getCodexApproval).toHaveBeenCalledWith();
+    expect(api.target).toBe(target);
   });
 
   it("saves a new mode to the explicit target", async () => {
-    render(<CodexApprovalCard target={target} />);
+    const api = hostApi();
+    render(<CodexApprovalCard />, { api });
     fireEvent.click(await screen.findByRole("radio", { name: "Approve for me" }));
-    await waitFor(() => expect(setCodexApprovalOn).toHaveBeenCalledWith(target, "approve-for-me"));
+    await waitFor(() => expect(setCodexApproval).toHaveBeenCalledWith("approve-for-me"));
+    expect(api.target).toBe(target);
     await waitFor(() => expect(screen.getByRole("radio", { name: "Approve for me" })).toBeChecked());
   });
 
   it("keeps the previous mode and reports a failed save", async () => {
-    vi.mocked(setCodexApprovalOn).mockRejectedValue(new Error("daemon down"));
-    render(<CodexApprovalCard target={target} />);
+    setCodexApproval.mockRejectedValue(new Error("daemon down"));
+    render(<CodexApprovalCard />, { api: hostApi() });
     fireEvent.click(await screen.findByRole("radio", { name: "Approve for me" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("daemon down");
     expect(screen.getByRole("radio", { name: "Yolo" })).toBeChecked();
   });
 
   it("reports a failed load", async () => {
-    vi.mocked(getCodexApprovalOn).mockRejectedValue(new Error("unreachable"));
-    render(<CodexApprovalCard target={target} />);
+    getCodexApproval.mockRejectedValue(new Error("unreachable"));
+    render(<CodexApprovalCard />, { api: hostApi() });
     expect(await screen.findByRole("alert")).toHaveTextContent("unreachable");
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
   });

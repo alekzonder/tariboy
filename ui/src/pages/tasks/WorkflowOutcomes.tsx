@@ -1,9 +1,9 @@
 import { ArrowRight, Check } from "lucide-react"
 import { useState } from "react"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import type { ApiTarget } from "@/lib/api"
-import { advanceTask, type TransitionRequest, type WorkflowOutcome, type WorkflowView } from "@/lib/tasks"
+import type { TransitionRequest, WorkflowOutcome, WorkflowView } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { DANGER_FILL, EMPTY, LABEL, MONO } from "./panelStyles"
 import { useFollowRequest } from "./workflowShared"
@@ -20,19 +20,19 @@ type Notice = { kind: "result"; request: TransitionRequest } | { kind: "error"; 
  * its watch script decides. A request that settled without applying is
  * explained by the problem block once the view carries it.
  */
-export default function WorkflowOutcomes({ taskKey, view, target, onChanged, onRefresh }: {
+export default function WorkflowOutcomes({ taskKey, view, onChanged, onRefresh }: {
   taskKey: string
   view: WorkflowView
-  target?: ApiTarget
   /** The transition applied: refetch the view and the task. */
   onChanged: () => void
   /** Refetch the view only. */
   onRefresh: () => void
 }) {
+  const api = useApi()
   const customer = view.owner === "customer"
   const paused = view.waiting_on === "pause"
   const [message, setMessage] = useState("")
-  const { checking, follow } = useFollowRequest(taskKey, target)
+  const { checking, follow } = useFollowRequest(taskKey)
   // A notice belongs to the status it was given in; once the view shows
   // another status it no longer applies and is not shown.
   const [held, setHeld] = useState<{ status: string; notice: Notice } | null>(null)
@@ -41,7 +41,7 @@ export default function WorkflowOutcomes({ taskKey, view, target, onChanged, onR
 
   const advance = (outcome: string) => {
     setNotice(null)
-    void follow(() => advanceTask(taskKey, outcome, message, view.status, target), (result) => {
+    void follow(() => api.workflows.advanceTask(taskKey, outcome, message, view.status), (result) => {
       switch (result.kind) {
         case "applied": setMessage(""); onChanged(); return
         case "result": setNotice({ kind: "result", request: result.request }); onRefresh(); return

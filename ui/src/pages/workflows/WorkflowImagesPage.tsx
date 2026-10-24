@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { targetReady } from "@/lib/api"
-import type { Daemon } from "@/lib/daemons"
-import { listWorkflowImages, type WorkflowImage } from "@/lib/tasks"
+import type { WorkflowImage } from "@/lib/api"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
 import { errorText } from "@/pages/tasks/workflowShared"
 import WorkflowBuildFromDirectory from "./WorkflowBuildFromDirectory"
@@ -12,29 +11,30 @@ import { boundTo, groupWorkflowImages, useQueueBindings, useTransferDaemons } fr
 const CELL = "px-3 py-2"
 
 /** The workflow image registry of one server: build, list, and copy to other servers. */
-export default function WorkflowImagesPage({ target, basePath }: { target: Daemon | null; basePath: string }) {
+export default function WorkflowImagesPage({ basePath }: { basePath: string }) {
+  const api = useApi()
   const [images, setImages] = useState<WorkflowImage[] | null>(null)
   const [error, setError] = useState("")
   const [revision, setRevision] = useState(0)
   const [transfer, setTransfer] = useState<WorkflowImage | null>(null)
-  const bindings = useQueueBindings(target)
+  const bindings = useQueueBindings()
   const transferDaemons = useTransferDaemons()
   const reloadBindings = bindings.reload
 
   useEffect(() => {
-    if (!targetReady(target)) return
+    if (!api.ready) return
     let alive = true
-    listWorkflowImages(target).then(
+    api.workflows.listWorkflowImages().then(
       (result) => { if (alive) { setImages(result); setError("") } },
       (err) => { if (alive) setError(errorText(err)) },
     )
     return () => { alive = false }
-  }, [target, revision])
+  }, [api, revision])
   const reload = useCallback(() => { setRevision((value) => value + 1); reloadBindings() }, [reloadBindings])
   const groups = useMemo(() => groupWorkflowImages(images ?? []), [images])
 
   return <div className="h-full space-y-3 overflow-auto p-3">
-    <WorkflowBuildFromDirectory target={target} onBuilt={reload} />
+    <WorkflowBuildFromDirectory onBuilt={reload} />
     {error && <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
       <span>{error}</span>
       <Button size="sm" variant="secondary" onClick={() => { setError(""); reload() }}>Retry</Button>
@@ -70,6 +70,6 @@ export default function WorkflowImagesPage({ target, basePath }: { target: Daemo
           </table>
         </div>}
     {transfer && <WorkflowTransferDialog open onOpenChange={(open) => { if (!open) setTransfer(null) }}
-      source={target} name={transfer.name} tag={transfer.tag} daemons={transferDaemons.daemons} onComplete={() => undefined} />}
+      name={transfer.name} tag={transfer.tag} daemons={transferDaemons.daemons} onComplete={() => undefined} />}
   </div>
 }

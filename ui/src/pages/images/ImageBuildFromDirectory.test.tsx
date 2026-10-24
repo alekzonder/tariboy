@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { setActiveDaemon } from "@/lib/api";
+import { createApi, setActiveDaemon } from "@/lib/api";
+import { apiWrapper } from "@/test/api";
 import ImageBuildFromDirectory from "./ImageBuildFromDirectory";
 
 afterEach(() => { vi.restoreAllMocks(); setActiveDaemon(null); });
@@ -15,7 +16,7 @@ it("sends an explicit name and non-default tag while leaving sources in place", 
     }),
   } as Response);
   vi.stubGlobal("fetch", fetchMock);
-  render(<ImageBuildFromDirectory />);
+  render(<ImageBuildFromDirectory />, { wrapper: apiWrapper() });
 
   fireEvent.change(screen.getByLabelText("Image source directory"), { target: { value: "/srv/images/reviewer" } });
   fireEvent.change(screen.getByLabelText("Image name"), { target: { value: "reviewer" } });
@@ -61,7 +62,7 @@ it("shows the exact resolved template and warnings before build", async () => {
     }),
 	} as Response);
 	vi.stubGlobal("fetch", fetchMock);
-	render(<ImageBuildFromDirectory />);
+	render(<ImageBuildFromDirectory />, { wrapper: apiWrapper() });
 	fireEvent.change(screen.getByLabelText("Image source directory"), { target: { value: "/srv/images/reviewer" } });
 	fireEvent.change(screen.getByLabelText("Image name"), { target: { value: "reviewer" } });
 	fireEvent.change(screen.getByLabelText("Image tag"), { target: { value: "v3" } });
@@ -100,7 +101,7 @@ it("dismisses validation diagnostics and the resolved template", async () => {
     }),
   } as Response);
   vi.stubGlobal("fetch", fetchMock);
-  render(<ImageBuildFromDirectory />);
+  render(<ImageBuildFromDirectory />, { wrapper: apiWrapper() });
 
   fireEvent.change(screen.getByLabelText("Image source directory"), { target: { value: "/srv/images/reviewer" } });
   fireEvent.change(screen.getByLabelText("Image name"), { target: { value: "reviewer" } });
@@ -123,7 +124,7 @@ it("keeps validation and build on the explicit target when the active host diffe
     calls.push(String(input));
     return new Response(JSON.stringify({ ok: true, result: { valid: true, schema_version: 2, name: "reviewer", tag: "latest" } }));
   }));
-  render(<ImageBuildFromDirectory target={target} />);
+  render(<ImageBuildFromDirectory />, { wrapper: apiWrapper(createApi(target)) });
   fireEvent.change(screen.getByLabelText("Image source directory"), { target: { value: "/srv/image" } });
   fireEvent.change(screen.getByLabelText("Image name"), { target: { value: "reviewer" } });
   fireEvent.click(screen.getByRole("button", { name: "Validate" }));

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { subscribeAgentEvents, subscribeAgentEventsOn, setActiveDaemon } from "./api";
-import type { Daemon } from "./daemons";
+import { createApi, subscribeAgentEventsOn, setActiveDaemon } from "@/lib/api";
+import type { Daemon } from "@/lib/daemons";
 
 // Capture the URL EventSource is constructed with.
 class SpyES {
@@ -27,7 +27,7 @@ afterEach(() => {
 
 describe("subscribeAgentEvents SSE targeting", () => {
   it("same-origin (no active daemon): relative URL, NO token query", () => {
-    const stop = subscribeAgentEvents("foo", ["iteration"], () => {});
+    const stop = createApi(undefined).agents.subscribeAgentEvents("foo", ["iteration"], () => {});
     expect(SpyES.lastUrl).toBe("/api/agents/foo/events?types=iteration");
     stop();
   });
@@ -42,6 +42,13 @@ describe("subscribeAgentEvents SSE targeting", () => {
     stop();
   });
 
+  it("a client subscribes on its own host with its token", () => {
+    const d: Daemon = { id: "d2", label: "b", baseURL: "https://b:2/", token: "tb" };
+    const stop = createApi(d).agents.subscribeAgentEvents("foo", ["audit"], () => {});
+    expect(SpyES.lastUrl).toBe("https://b:2/api/agents/foo/events?types=audit&token=tb");
+    stop();
+  });
+
   it("cross-origin daemon with NO types: still carries the token", () => {
     const d: Daemon = { id: "d1", label: "p", baseURL: "https://p:1", token: "tk" };
     const stop = subscribeAgentEventsOn(d, "bar", [], () => {});
@@ -51,7 +58,7 @@ describe("subscribeAgentEvents SSE targeting", () => {
 
   it("fails closed for an unresolved remote instead of opening local SSE", () => {
     setActiveDaemon({ id: "d0", label: "remote", baseURL: "", token: "" });
-    const stop = subscribeAgentEvents("baz", [], () => {});
+    const stop = createApi(undefined).agents.subscribeAgentEvents("baz", [], () => {});
     expect(SpyES.lastUrl).toBe("");
     stop();
   });

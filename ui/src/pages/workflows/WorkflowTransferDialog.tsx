@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
+import { createApi } from "@/lib/api"
 import type { Daemon } from "@/lib/daemons"
-import { downloadWorkflowArchiveOn, importWorkflowArchiveOn } from "@/lib/teamApi"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -17,7 +18,6 @@ const statusLabel = (status: Status) =>
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
-  source: Daemon | null
   name: string
   tag: string
   daemons: Daemon[]
@@ -34,8 +34,13 @@ export function WorkflowTransferDialog({ open, ...props }: Props) {
   return <TransferSession {...props} />
 }
 
-function TransferSession({ onOpenChange, source, name, tag, daemons, onComplete }: Omit<Props, "open">) {
-  const [targets] = useState(() => eligibleImageTransferTargets(source, daemons))
+function TransferSession({ onOpenChange, name, tag, daemons, onComplete }: Omit<Props, "open">) {
+  // The source is the host the dialog was opened on; it and one client per
+  // destination are fixed for the open dialog.
+  const currentSource = useApi()
+  const [source] = useState(currentSource)
+  const [targets] = useState(() => eligibleImageTransferTargets(source.target, daemons)
+    .map((target) => ({ ...target, api: createApi(target.target) })))
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [rows, setRows] = useState<Record<string, Row>>({})
   const [phase, setPhase] = useState<"idle" | "exporting" | "transferring">("idle")
@@ -61,7 +66,7 @@ function TransferSession({ onOpenChange, source, name, tag, daemons, onComplete 
     setRows(Object.fromEntries(chosen.map((target) => [target.id, { status: "exporting" }])))
     let archive: Blob
     try {
-      archive = await downloadWorkflowArchiveOn(source, name, tag)
+      archive = await source.workflows.downloadWorkflowArchive(name, tag)
     } catch (err) {
       if (!mounted.current) return
       setRows(Object.fromEntries(chosen.map((target) => [target.id, { status: "failed", error: errorText(err) }])))
@@ -75,7 +80,7 @@ function TransferSession({ onOpenChange, source, name, tag, daemons, onComplete 
       if (cancelled.current) { setRow(target.id, { status: "cancelled" }); continue }
       setRow(target.id, { status: "importing" })
       try {
-        const result = await importWorkflowArchiveOn(target.target, archive)
+        const result = await target.api.workflows.importWorkflowArchive(archive)
         setRow(target.id, { status: result.created ? "completed" : "already-present" })
       } catch (err) {
         setRow(target.id, { status: "failed", error: errorText(err) })

@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { ApiError, listImagesOn, removeImage, type ImageRow } from "@/lib/api";
+import { ApiError, type ApiClient, type ImageRow } from "@/lib/api";
 import { useOptionalDaemons } from "@/components/DaemonProvider";
+import { useApi } from "@/components/apiContext";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  applyImageArchiveOn, downloadImageArchiveOn, uploadImageArchiveOn,
-} from "@/lib/teamApi";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -42,11 +40,14 @@ export default function BuiltImages({ hostId, basePath = "/images", imageName }:
   basePath?: string;
   imageName?: string;
 }) {
+  const api = useApi();
   const daemonContext = useOptionalDaemons();
-  const [images, setImages] = useState<ImageRow[]>([]);
+  // Images are kept with the client that listed them: rows of a previous
+  // route host are never shown (or acted on) for the current one.
+  const [listed, setListed] = useState<{ api: ApiClient; images: ImageRow[] } | null>(null);
+  const images = useMemo(() => listed?.api === api ? listed.images : [], [api, listed]);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
-  const [source, setSource] = useState<{ hostId: string; target: Daemon | null } | null>(null);
   const registryDaemons = useMemo(() => daemonContext?.daemons ?? [], [daemonContext?.daemons]);
   const registryGeneration = useMemo(() => JSON.stringify(registryDaemons.map((daemon) => ({
     id: daemon.id,
@@ -58,31 +59,14 @@ export default function BuiltImages({ hostId, basePath = "/images", imageName }:
     generation: string;
     daemons: Daemon[];
   }>({ generation: "", daemons: [] });
-  const [transfer, setTransfer] = useState<{ ref: string; sourceTarget: Daemon | null; hostId: string } | null>(null);
-  const [imageImport, setImageImport] = useState<{ id: string; ref: string; name: string; tag: string; target: Daemon | null; hostId: string } | null>(null);
+  const [transfer, setTransfer] = useState<{ ref: string; hostId: string } | null>(null);
+  const [imageImport, setImageImport] = useState<{ id: string; ref: string; name: string; tag: string; api: ApiClient; hostId: string } | null>(null);
   const mounted = useRef(true);
 
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
-
-  useEffect(() => {
-    let alive = true;
-    void resolveDaemon(hostId)
-      .then((target) => {
-        if (!alive) return;
-        if (hostId && !target) {
-          setError(`host ${hostId} is not available`);
-          return;
-        }
-        setSource({ hostId, target });
-      })
-      .catch((err) => {
-        if (alive) setError(message(err));
-      });
-    return () => { alive = false; };
-  }, [hostId]);
 
   useEffect(() => {
     let alive = true;
@@ -105,12 +89,11 @@ export default function BuiltImages({ hostId, basePath = "/images", imageName }:
   }, []);
 
   useEffect(() => {
-    if (source?.hostId !== hostId) return;
     let alive = true;
-    void listImagesOn(source.target)
+    void api.images.listImages()
       .then((result) => {
         if (alive) {
-          setImages(result.images ?? []);
+          setListed({ api, images: result.images ?? [] });
           setError("");
         }
       })
@@ -118,7 +101,7 @@ export default function BuiltImages({ hostId, basePath = "/images", imageName }:
         if (alive) setError(message(err));
       });
     return () => { alive = false; };
-  }, [hostId, revision, source]);
+  }, [api, revision]);
 
   const groups = useMemo(() => {
     const byName = new Map<string, ImageRow[]>();
@@ -132,14 +115,15 @@ export default function BuiltImages({ hostId, basePath = "/images", imageName }:
   }, [images]);
   const tags = groups.find((group) => group.name === imageName)?.tags ?? [];
 
-  const sourceReady = source?.hostId === hostId;
   const transferDaemonsReady = resolvedTransferDaemons.generation === registryGeneration;
 
   const remove = async (ref: string) => {
-    if (source?.hostId !== hostId) return;
+    const source = api;
     try {
-      await removeImage(ref, source.target);
-      setImages((current) => current.filter((image) => `${image.name}:${image.tag}` !== ref));
+      await source.images.removeImage(ref);
+      setListed((current) => current?.api === source
+        ? { ...current, images: current.images.filter((image) => `${image.name}:${image.tag}` !== ref) }
+        : current);
       toast.success(`image ${ref} removed`);
     } catch (error) {
       toast.error(`remove failed: ${message(error)}`);
@@ -147,9 +131,8 @@ export default function BuiltImages({ hostId, basePath = "/images", imageName }:
   };
 
   const saveArchive = async (ref: string) => {
-    if (source?.hostId !== hostId) return;
     try {
-      const blob = await downloadImageArchiveOn(source.target, ref);
+      const blob = await api.images.downloadImageArchive(ref);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       const separator = ref.lastIndexOf(":");
@@ -168,8 +151,7 @@ export default function BuiltImages({ hostId, basePath = "/images", imageName }:
       {imageName === undefined && <div className="rounded border p-3">
         <label htmlFor="image-archive" className="text-sm font-medium">Import runnable image</label>
         <Input id="image-archive" aria-label="Import image archive" type="file" accept=".gz,.tgz,application/gzip" className="mt-1"
-          disabled={!sourceReady}
-          onChange={(event) => { const file = event.target.files?.[0]; if (!file || source?.hostId !== hostId) return; const target = source.target; void uploadImageArchiveOn(target, file).then((preview) => { const separator = preview.ref.lastIndexOf(":"); setImageImport({ id: preview.import_id, ref: preview.ref, name: preview.ref.slice(0, separator), tag: preview.ref.slice(separator + 1), target, hostId }); }).catch((error) => toast.error(`import failed: ${message(error)}`)); }} />
+          onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; const source = api; void source.images.uploadImageArchive(file).then((preview) => { const separator = preview.ref.lastIndexOf(":"); setImageImport({ id: preview.import_id, ref: preview.ref, name: preview.ref.slice(0, separator), tag: preview.ref.slice(separator + 1), api: source, hostId }); }).catch((error) => toast.error(`import failed: ${message(error)}`)); }} />
         {imageImport?.hostId === hostId && <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
           <label className="text-xs">Import name
             <Input aria-label="Import name" value={imageImport.name} onChange={(event) => setImageImport({ ...imageImport, name: event.target.value })} />
@@ -177,7 +159,7 @@ export default function BuiltImages({ hostId, basePath = "/images", imageName }:
           <label className="text-xs">Import tag
             <Input aria-label="Import tag" value={imageImport.tag} onChange={(event) => setImageImport({ ...imageImport, tag: event.target.value })} />
           </label>
-          <Button size="sm" disabled={!imageImport.name.trim() || !imageImport.tag.trim()} onClick={() => void applyImageArchiveOn(imageImport.target, imageImport.id, `${imageImport.name.trim()}:${imageImport.tag.trim()}`).then(() => { toast.success("image imported"); setImageImport(null); setRevision((value) => value + 1); }).catch((error) => toast.error(`import failed: ${message(error)}`))}>Import image</Button>
+          <Button size="sm" disabled={!imageImport.name.trim() || !imageImport.tag.trim()} onClick={() => void imageImport.api.images.applyImageArchive(imageImport.id, `${imageImport.name.trim()}:${imageImport.tag.trim()}`).then(() => { toast.success("image imported"); setImageImport(null); setRevision((value) => value + 1); }).catch((error) => toast.error(`import failed: ${message(error)}`))}>Import image</Button>
         </div>}
       </div>}
       {imageName === undefined ? <div className="overflow-x-auto rounded border">
@@ -259,16 +241,16 @@ export default function BuiltImages({ hostId, basePath = "/images", imageName }:
                     </Button>
                     {!image.bare && (
                       <span title="Export runnable image artifact (original sources are not included)">
-                        <Button size="sm" variant="outline" disabled={!image.exportable || !sourceReady}
+                        <Button size="sm" variant="outline" disabled={!image.exportable}
                           aria-label={`Export ${ref}`} onClick={() => void saveArchive(ref)}>Export</Button>
                       </span>
                     )}
-                    {!image.bare && image.exportable && sourceReady && (
+                    {!image.bare && image.exportable && (
                       <Button size="sm" variant="outline" aria-label={`Upload to servers ${ref}`}
                         disabled={!transferDaemonsReady}
                         title={transferDaemonsReady ? undefined : "Loading transfer servers"}
                         onClick={() => {
-                          if (transferDaemonsReady) setTransfer({ ref, sourceTarget: source.target, hostId });
+                          if (transferDaemonsReady) setTransfer({ ref, hostId });
                         }}>Upload to servers</Button>
                     )}
                     {!image.bare && (
@@ -278,7 +260,7 @@ export default function BuiltImages({ hostId, basePath = "/images", imageName }:
                             size="sm"
                             variant="destructive"
                             aria-label={`Remove ${ref}`}
-                            disabled={!sourceReady || !!image.current_agents?.length || !!image.pending_agents?.length}
+                            disabled={!!image.current_agents?.length || !!image.pending_agents?.length}
                           >
                             Remove
                           </Button>
@@ -321,7 +303,6 @@ export default function BuiltImages({ hostId, basePath = "/images", imageName }:
         <ImageTransferDialog
           open
           onOpenChange={(open) => { if (!open) setTransfer(null); }}
-          source={transfer.sourceTarget}
           imageRef={transfer.ref}
           daemons={resolvedTransferDaemons.daemons}
           onComplete={() => { if (mounted.current) setRevision((value) => value + 1); }}

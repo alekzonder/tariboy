@@ -1,6 +1,5 @@
 import { Input } from "@/components/ui/input";
 import { GoalHelp } from "@/components/GoalHelp";
-import type { Daemon } from "@/lib/daemons";
 import { fieldOfKey, type ConfigBlock, type ConfigField } from "./registry";
 import type { ConfigDraft } from "./useConfigDraft";
 import type { ConfigSources } from "./useConfigSources";
@@ -19,7 +18,6 @@ export interface BlockProps {
   matched: Set<string>;
   dirty: number;
   sources: ConfigSources;
-  target: Daemon | null;
   name: string;
   stopped: boolean;
   refresh: () => void;

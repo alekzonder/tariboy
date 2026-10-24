@@ -1,4 +1,3 @@
-import type { ApiTarget } from "@/lib/api"
 import { errorText as errorMessage } from "@/lib/queryClient"
 import QueueSettingsDialog from "./QueueSettingsDialog"
 import { TaskFilterBar } from "./TaskFilterBar"
@@ -12,9 +11,8 @@ import type { TasksWorkspaceData } from "./useTasksWorkspaceData"
 import type { TasksWorkspaceActions } from "./useTasksWorkspaceActions"
 import type { useTasksWorkspaceLayout } from "./useTasksWorkspaceLayout"
 
-export function TasksWorkspaceContent({ scopeAgent, target, server, state, data, actions, layout }: {
+export function TasksWorkspaceContent({ scopeAgent, server, state, data, actions, layout }: {
   scopeAgent?: string
-  target: ApiTarget
   server: string
   state: TasksWorkspaceView
   data: TasksWorkspaceData
@@ -103,7 +101,7 @@ export function TasksWorkspaceContent({ scopeAgent, target, server, state, data,
         )}
       </main>
       <QueueSettingsDialog open={queuesOpen} onOpenChange={setQueuesOpen} queues={queues}
-        onCreate={createQueue} onUpdate={updateQueue} target={target} />
+        onCreate={createQueue} onUpdate={updateQueue} />
       {loadingKey ? (
         <TaskDetailLoading
           taskKey={loadingKey}
@@ -115,7 +113,6 @@ export function TasksWorkspaceContent({ scopeAgent, target, server, state, data,
       ) : detail && (
         <TaskDetail
           key={detail.task.key}
-          target={target}
           detail={detail}
           principals={principals}
           width={effectiveDetailWidth}

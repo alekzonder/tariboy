@@ -2,6 +2,7 @@ import { Field } from "./formControls";
 import { HARNESSES } from "@/components/AgentFormFields";
 import { EditablePresetCombobox } from "@/components/EditablePresetCombobox";
 import { PathAutocomplete } from "@/components/PathAutocomplete";
+import { ApiProvider } from "@/components/ApiProvider";
 import { unresolvedDaemon } from "@/lib/daemons";
 import type { CreateAgentForm } from "./useCreateAgentForm";
 
@@ -76,11 +77,9 @@ export function RuntimeFields({
       </div>
       <div className="sm:col-span-2">
         <Field label="cwd" id="create-agent-cwd">
-          <PathAutocomplete
-            id="create-agent-cwd"
-            value={draft.cwd}
-            onChange={(value) => updateDraft("cwd", value)}
-            daemon={
+          {/* The cwd is browsed on the host the agent is created on. */}
+          <ApiProvider
+            target={
               host === ""
                 ? null
                 : targetIsCurrent && target
@@ -90,9 +89,15 @@ export function RuntimeFields({
                       hosts.find((entry) => entry.id === host)?.label,
                     )
             }
-            placeholder="empty = managed workdir"
-            aria-label="cwd"
-          />
+          >
+            <PathAutocomplete
+              id="create-agent-cwd"
+              value={draft.cwd}
+              onChange={(value) => updateDraft("cwd", value)}
+              placeholder="empty = managed workdir"
+              aria-label="cwd"
+            />
+          </ApiProvider>
         </Field>
       </div>
     </div>

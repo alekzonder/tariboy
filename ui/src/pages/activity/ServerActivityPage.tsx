@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { ApiTarget } from "@/lib/api";
 import { periodQuery, useActivityWindow } from "@/lib/activityPeriod";
 import { hostToParam } from "@/lib/terminalsHost";
 import { useTaskActivity } from "@/hooks/useTaskActivity";
@@ -21,12 +20,13 @@ const VIEWS: Array<{ view: View; label: string }> = [
   { view: "agents", label: "Agents" },
 ];
 
-/** Work on tasks across every agent of one server in the selected period. */
-export default function ServerActivityPage({ hostId, target }: { hostId: string; target: ApiTarget }) {
+/** Work on tasks across every agent of one server in the selected period. The
+ *  server is the surrounding ApiProvider's. */
+export default function ServerActivityPage({ hostId }: { hostId: string }) {
   const { window, setPeriod, setCustom } = useActivityWindow();
   const [searchParams, setSearchParams] = useSearchParams();
   const view: View = searchParams.get("view") === "agents" ? "agents" : "tasks";
-  const { report, error } = useTaskActivity(target, window);
+  const { report, error } = useTaskActivity(window);
   const [taskKey, setTaskKey] = useState("");
   const selectView = (next: View) => {
     const params = new URLSearchParams(searchParams);
@@ -56,7 +56,7 @@ export default function ServerActivityPage({ hostId, target }: { hostId: string;
             `/agents/${encodeURIComponent(hostToParam(hostId))}/${encodeURIComponent(agent)}/activity?${periodQuery(window)}`}
         />
       )}
-      {taskKey && <TaskDrawer key={taskKey} taskKey={taskKey} target={target} onClose={() => setTaskKey("")} />}
+      {taskKey && <TaskDrawer key={taskKey} taskKey={taskKey} onClose={() => setTaskKey("")} />}
     </TabPage>
   );
 }

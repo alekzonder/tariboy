@@ -4,7 +4,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { agentPostOn, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { guard } from "@/lib/toast-guard";
 import { ActionRow, DraftField } from "./ConfigControls";
 import { fieldOfKey, type ConfigField } from "./registry";
@@ -14,7 +15,8 @@ const field = (key: string) => fieldOfKey(key) as ConfigField;
 
 const reason = (e: unknown) => (e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e));
 
-export function RetentionBlock({ draft, matched, sources, target, name }: BlockProps) {
+export function RetentionBlock({ draft, matched, sources, name }: BlockProps) {
+  const api = useApi();
   const policy = sources.retention.value;
   // Prune is the one destructive action on this page: it is confirmed first,
   // it cannot be submitted twice while in flight, and a failure is reported
@@ -26,7 +28,7 @@ export function RetentionBlock({ draft, matched, sources, target, name }: BlockP
     setPruning(true);
     setPruneError("");
     try {
-      await agentPostOn(target, name, "prune", { "dry-run": false });
+      await api.agentPost(name, "prune", { "dry-run": false });
       await sources.reloadAll();
     } catch (e) {
       setPruneError(reason(e));
@@ -48,7 +50,7 @@ export function RetentionBlock({ draft, matched, sources, target, name }: BlockP
         </p>
       )}
       <ActionRow>
-        <Button size="sm" variant="outline" onClick={() => void guard("prune (dry-run)", () => agentPostOn(target, name, "prune", { "dry-run": true }), { verb: "ok" })}>
+        <Button size="sm" variant="outline" onClick={() => void guard("prune (dry-run)", () => api.agentPost(name, "prune", { "dry-run": true }), { verb: "ok" })}>
           Preview cleanup
         </Button>
         <Button size="sm" variant="destructive" disabled={pruning} onClick={() => setConfirmOpen(true)}>Prune now</Button>

@@ -2,10 +2,9 @@ import { Fragment, type FormEvent, type ReactNode, useCallback, useEffect, useRe
 import { toast } from "sonner";
 import { useAgentName } from "@/lib/agent";
 import {
-  ApiError, cancelAgentScript, downloadAgentScriptLog, getAgentScriptLog,
-  listAgentScriptRuns, listAgentScripts, removeAgentScript, rerunAgentScript,
-  runAgentScriptOnce, scheduleAgentScript, type ScriptDefinition, type ScriptMode, type ScriptRun,
+  ApiError, type ScriptDefinition, type ScriptMode, type ScriptRun,
 } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { fmtDateTime } from "@/lib/time";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +32,7 @@ function nextGeneration(generations: Record<string, number>, key: string) {
 }
 
 export default function AgentScripts() {
+  const api = useApi();
   const name = useAgentName();
   const [scripts, setScripts] = useState<ScriptDefinition[]>([]);
   const [runs, setRuns] = useState<Record<string, ScriptRun[]>>({});
@@ -47,22 +47,22 @@ export default function AgentScripts() {
   const logGenerations = useRef<Record<string, number>>({});
 
   const load = useCallback(async () => {
-    try { setScripts((await listAgentScripts(name)).scripts ?? []); }
+    try { setScripts((await api.scripts.listAgentScripts(name)).scripts ?? []); }
     catch (error) { toast.error(`Could not load scripts: ${errorText(error)}`); }
-  }, [name]);
+  }, [api, name]);
 
   const refreshExpandedRuns = useCallback(async (forceLogs = false) => {
     await Promise.all([...expandedScripts].map(async (scriptID) => {
       const runsGeneration = nextGeneration(runsGenerations.current, scriptID);
       try {
-        const result = await listAgentScriptRuns(name, scriptID);
+        const result = await api.scripts.listAgentScriptRuns(name, scriptID);
         if (runsGeneration !== runsGenerations.current[scriptID]) return;
         const nextRuns = result.runs ?? [];
         const previousRuns = new Map((runs[scriptID] ?? []).map((run) => [run.id, run]));
         setRuns((current) => ({ ...current, [scriptID]: nextRuns }));
         await Promise.all(nextRuns.filter((run) => expandedRuns.has(run.id) && (forceLogs || activeRunStatuses.has(run.status) || activeRunStatuses.has(previousRuns.get(run.id)?.status ?? ""))).map(async (run) => {
           const logGeneration = nextGeneration(logGenerations.current, run.id);
-          const log = await getAgentScriptLog(name, run.id);
+          const log = await api.scripts.getAgentScriptLog(name, run.id);
           if (logGeneration !== logGenerations.current[run.id]) return;
           setLogs((current) => ({ ...current, [run.id]: log.log }));
         }));
@@ -70,7 +70,7 @@ export default function AgentScripts() {
         // Polling is best-effort. An explicit expand still reports load errors.
       }
     }));
-  }, [expandedRuns, expandedScripts, name, runs]);
+  }, [api, expandedRuns, expandedScripts, name, runs]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -102,8 +102,8 @@ export default function AgentScripts() {
     setBusy(true);
     try {
       const common = { script_name: form.script_name, description: form.description, command: form.command };
-      if (form.mode === "once") await runAgentScriptOnce(name, common);
-      else await scheduleAgentScript(name, { ...common, interval_seconds: interval });
+      if (form.mode === "once") await api.scripts.runAgentScriptOnce(name, common);
+      else await api.scripts.scheduleAgentScript(name, { ...common, interval_seconds: interval });
       setForm(emptyForm);
       toast.success(form.mode === "once" ? "One-shot run queued" : "Scheduled script started");
       await load();
@@ -117,7 +117,7 @@ export default function AgentScripts() {
     if (!open && !runs[definition.id]) {
       const generation = nextGeneration(runsGenerations.current, definition.id);
       try {
-        const result = await listAgentScriptRuns(name, definition.id);
+        const result = await api.scripts.listAgentScriptRuns(name, definition.id);
         if (generation !== runsGenerations.current[definition.id]) return;
         setRuns((current) => ({ ...current, [definition.id]: result.runs ?? [] }));
       }
@@ -132,7 +132,7 @@ export default function AgentScripts() {
       const logGeneration = nextGeneration(logGenerations.current, run.id);
       const runsGeneration = nextGeneration(runsGenerations.current, run.script_id);
       try {
-        const result = await getAgentScriptLog(name, run.id);
+        const result = await api.scripts.getAgentScriptLog(name, run.id);
         if (logGeneration === logGenerations.current[run.id]) {
           setLogs((current) => ({ ...current, [run.id]: result.log }));
         }
@@ -144,11 +144,11 @@ export default function AgentScripts() {
   };
 
   const cancel = async (id: string) => {
-    try { await cancelAgentScript(name, id); toast.success("Cancellation requested"); await load(); }
+    try { await api.scripts.cancelAgentScript(name, id); toast.success("Cancellation requested"); await load(); }
     catch (error) { toast.error(`Could not cancel script: ${errorText(error)}`); }
   };
   const rerun = async (definition: ScriptDefinition) => {
-    try { await rerunAgentScript(name, definition.id); nextGeneration(runsGenerations.current, definition.id); toast.success("Run queued"); setRuns((current) => { const next = { ...current }; delete next[definition.id]; return next; }); await load(); }
+    try { await api.scripts.rerunAgentScript(name, definition.id); nextGeneration(runsGenerations.current, definition.id); toast.success("Run queued"); setRuns((current) => { const next = { ...current }; delete next[definition.id]; return next; }); await load(); }
     catch (error) { toast.error(`Could not execute script: ${errorText(error)}`); }
   };
   const copyPath = async (path: string) => {
@@ -157,7 +157,7 @@ export default function AgentScripts() {
   };
   const download = async (run: ScriptRun) => {
     try {
-      const blob = await downloadAgentScriptLog(name, run.id);
+      const blob = await api.scripts.downloadAgentScriptLog(name, run.id);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url; anchor.download = `${run.id}.log`; anchor.click();
@@ -166,7 +166,7 @@ export default function AgentScripts() {
   };
   const confirmRemove = async () => {
     if (!remove) return;
-    try { await removeAgentScript(name, remove.id); toast.success("Script removed"); setRemove(null); await load(); }
+    try { await api.scripts.removeAgentScript(name, remove.id); toast.success("Script removed"); setRemove(null); await load(); }
     catch (error) { toast.error(`Could not remove script: ${errorText(error)}`); }
   };
 

@@ -1,16 +1,14 @@
 import { useState } from "react"
 import { toast } from "sonner"
-import { ApiError, type ApiTarget } from "@/lib/api"
-import {
-  buildWorkflowDirectory, validateWorkflowDirectory,
-  type WorkflowValidation, type WorkflowValidationError,
-} from "@/lib/tasks"
+import { ApiError, type WorkflowValidation, type WorkflowValidationError } from "@/lib/api"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { errorText } from "@/pages/tasks/workflowShared"
 
-/** Validate and build a workflow source directory on the host of `target`. */
-export default function WorkflowBuildFromDirectory({ target, onBuilt }: { target: ApiTarget; onBuilt: () => void }) {
+/** Validate and build a workflow source directory on the host of the nearest ApiProvider. */
+export default function WorkflowBuildFromDirectory({ onBuilt }: { onBuilt: () => void }) {
+  const api = useApi()
   const [path, setPath] = useState("")
   const [busy, setBusy] = useState(false)
   const [validation, setValidation] = useState<WorkflowValidation | null>(null)
@@ -27,7 +25,7 @@ export default function WorkflowBuildFromDirectory({ target, onBuilt }: { target
 
   const validate = () => run(async () => {
     try {
-      const result = await validateWorkflowDirectory(path.trim(), target)
+      const result = await api.workflows.validateWorkflowDirectory(path.trim())
       if (result.valid) setValidation(result)
       else setErrors(result.errors)
     } catch (err) { setFailure({ message: errorText(err) }) }
@@ -35,7 +33,7 @@ export default function WorkflowBuildFromDirectory({ target, onBuilt }: { target
 
   const build = () => run(async () => {
     try {
-      const result = await buildWorkflowDirectory(path.trim(), target)
+      const result = await api.workflows.buildWorkflowDirectory(path.trim())
       const ref = `${result.name}:${result.version}`
       toast.success(result.created ? `built ${ref}` : `${ref} already built`)
       onBuilt()

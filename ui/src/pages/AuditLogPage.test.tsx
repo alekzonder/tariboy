@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@/test/queryRender";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import AuditLogPage from "./AuditLogPage";
 import { AgentNameContext } from "@/lib/agent";

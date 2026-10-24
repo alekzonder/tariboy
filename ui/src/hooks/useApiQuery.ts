@@ -1,21 +1,18 @@
 import { useEffect } from "react"
 import { useQuery, useQueryClient, type QueryClient, type QueryKey, type UseQueryOptions } from "@tanstack/react-query"
-import { useOptionalDaemons } from "@/components/DaemonProvider"
-import { getLocalBaseURL, resolveTarget, targetReady, type ApiTarget } from "@/lib/api"
+import { useApi } from "@/components/apiContext"
+import { getLocalBaseURL } from "@/lib/api"
 import { apiServerKey } from "@/lib/queryClient"
 
 type Connection = { endpoint: string; token: string; ready: boolean }
 const connections = new WeakMap<QueryClient, Map<string, Connection>>()
 
-/** Resolve the default once; every query and write receives an explicit target. */
-export function useApiTarget(target: ApiTarget) {
-  useOptionalDaemons()
-  return resolveTarget(target)
-}
-
-export function useApiQuery<T, K extends QueryKey>(options: UseQueryOptions<T, Error, T, K>, target: Exclude<ApiTarget, undefined>) {
+/** Runs a read against the server of the nearest ApiProvider. */
+export function useApiQuery<T, K extends QueryKey>(options: UseQueryOptions<T, Error, T, K>) {
   const client = useQueryClient()
-  const ready = targetReady(target)
+  const api = useApi()
+  const target = api.target
+  const ready = api.ready
   const server = target?.id ?? "local"
   const endpoint = target?.baseURL ?? getLocalBaseURL()
   const token = target?.token ?? ""

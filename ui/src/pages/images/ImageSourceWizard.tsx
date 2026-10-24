@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError } from "@/lib/api";
-import { createImageSource } from "@/lib/imageSources";
+import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 export default function ImageSourceWizard() {
+  const api = useApi();
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -19,7 +20,7 @@ export default function ImageSourceWizard() {
     setPending(true);
     setError("");
     try {
-      const source = await createImageSource({
+      const source = await api.imageSources.createImageSource({
         name: name.trim(),
         prompt,
       });

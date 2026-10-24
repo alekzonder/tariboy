@@ -5,15 +5,9 @@ import { DaemonProvider } from "@/components/DaemonProvider";
 import TerminalsPage from "./TerminalsPage";
 import { UI_MODE_KEY } from "@/lib/uiMode";
 import { fetchAllAgents } from "@/lib/aggregate";
-import {
-  agentGetOn,
-  apiOn,
-  createAgent,
-  imageManifestGet,
-  listImages,
-  startAgent,
-} from "@/lib/api";
-import { addDaemon, listDaemons, getDaemonToken } from "@/lib/daemons";
+import type { CreateAgentResult, CreateAgentSpec, ImageManifest, ImageRow } from "@/lib/api";
+import type { AgentLifecycleResult, AgentView } from "@/lib/types";
+import { addDaemon, listDaemons, getDaemonToken, type Daemon } from "@/lib/daemons";
 import * as desktop from "@/lib/desktop";
 import { SidebarStateProvider } from "./SidebarStateProvider";
 import { CustomerQuestionNotificationsContext } from "@/components/customerQuestionNotificationsContext";
@@ -26,17 +20,42 @@ vi.mock("@/lib/aggregate", () => ({
   fetchAllAgents: vi.fn(),
 }));
 
+// Requests the page and its dialog send, each recorded with the host of the
+// client that sent it. apiOn records the daemon config writes (sidebar order).
+const calls = vi.hoisted(() => ({
+  agentGetOn: vi.fn<(target: Daemon | null, name: string, action: string) => Promise<unknown>>(),
+  apiOn: vi.fn<(target: Daemon | null, method: string, path: string, body?: unknown) => Promise<unknown>>(),
+  createAgent: vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<CreateAgentResult>>(),
+  imageManifestGet: vi.fn<(ref: string, target: Daemon | null) => Promise<ImageManifest>>(),
+  listImages: vi.fn<(target: Daemon | null) => Promise<{ images: ImageRow[]; count: number }>>(),
+  startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentLifecycleResult>>(),
+}));
+const { agentGetOn, apiOn, createAgent, imageManifestGet, listImages, startAgent } = calls;
+
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return {
-    ...actual,
-    agentGetOn: vi.fn(),
-    apiOn: vi.fn(),
-    createAgent: vi.fn(),
-    imageManifestGet: vi.fn(),
-    listImages: vi.fn(),
-    startAgent: vi.fn(),
+  const createApi: typeof actual.createApi = (target) => {
+    const client = actual.createApi(target);
+    const host = client.target;
+    return {
+      ...client,
+      post: <T,>(path: string, body?: unknown) => path === "/api/daemon/config"
+        ? calls.apiOn(host, "POST", path, body) as Promise<T>
+        : client.post<T>(path, body),
+      agents: {
+        ...client.agents,
+        getAgent: (name: string) => calls.agentGetOn(host, name, "") as Promise<AgentView>,
+        createAgent: (spec: CreateAgentSpec) => calls.createAgent(spec, host),
+        startAgent: (name: string) => calls.startAgent(name, host),
+      },
+      images: {
+        ...client.images,
+        listImages: () => calls.listImages(host),
+        imageManifestGet: (ref: string) => calls.imageManifestGet(ref, host),
+      },
+    } as typeof client;
   };
+  return { ...actual, createApi };
 });
 
 // Selecting an agent mounts TerminalPane, which dials a websocket and renders
@@ -92,7 +111,7 @@ beforeEach(() => {
   resetWorkspacesForTest();
   // Terminal navigation is Expert behaviour; Simple opens Chat.
   localStorage.setItem(UI_MODE_KEY, "expert");
-  vi.mocked(apiOn).mockReset().mockResolvedValue(undefined);
+  apiOn.mockReset().mockResolvedValue(undefined);
   vi.mocked(fetchAllAgents).mockResolvedValue([
     {
       host: { id: "", label: "This daemon (local)" },
@@ -103,11 +122,11 @@ beforeEach(() => {
     },
     { host: { id: "d1", label: "prod" }, agents: [], error: "unauthorized: nope" },
   ]);
-  vi.mocked(listImages).mockResolvedValue({
+  listImages.mockResolvedValue({
     images: [{ name: "worker", tag: "v1", bare: false }],
     count: 1,
   });
-  vi.mocked(imageManifestGet).mockResolvedValue({
+  imageManifestGet.mockResolvedValue({
     schema_version: 1,
     name: "worker",
     tag: "v1",
@@ -121,8 +140,8 @@ beforeEach(() => {
     policy: {},
     layers: null,
   });
-  vi.mocked(startAgent).mockResolvedValue({ name: "new-agent", action: "start" });
-  vi.mocked(agentGetOn).mockResolvedValue(cloneProjection);
+  startAgent.mockResolvedValue({ name: "new-agent", action: "start" });
+  agentGetOn.mockResolvedValue(cloneProjection);
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -449,7 +468,7 @@ describe("TerminalsPage", () => {
       groups: [{ name: "a", lead: "", members: 0 }, { name: "b", lead: "", members: 0 }],
     }]);
     mockRowRects({ "Open team a": 0, "Open team b": 30 });
-    vi.mocked(apiOn).mockResolvedValueOnce(undefined);
+    apiOn.mockResolvedValueOnce(undefined);
     renderAt("/");
     await screen.findByRole("button", { name: "Open team a" });
 
@@ -475,7 +494,7 @@ describe("TerminalsPage", () => {
     }]);
     mockRowRects({ "Open a1": 0, "Open a2": 30 });
     let rejectSave!: (cause: Error) => void;
-    vi.mocked(apiOn).mockImplementationOnce(() => new Promise<void>((_, reject) => {
+    apiOn.mockImplementationOnce(() => new Promise<void>((_, reject) => {
       rejectSave = reject;
     }));
     renderAt("/");
@@ -504,7 +523,7 @@ describe("TerminalsPage", () => {
     }]);
     let finishFirst!: () => void;
     let failSecond!: (cause: Error) => void;
-    vi.mocked(apiOn)
+    apiOn
       .mockImplementationOnce(() => new Promise<void>((resolve) => { finishFirst = resolve; }))
       .mockImplementationOnce(() => new Promise<void>((_, reject) => { failSecond = reject; }));
     mockRowRects({
@@ -552,7 +571,7 @@ describe("TerminalsPage", () => {
 
     let failThird!: (cause: Error) => void;
     let failFourth!: (cause: Error) => void;
-    vi.mocked(apiOn)
+    apiOn
       .mockImplementationOnce(() => new Promise<void>((_, reject) => { failThird = reject; }))
       .mockImplementationOnce(() => new Promise<void>((_, reject) => { failFourth = reject; }));
     await keyboardMove("Open b1", "ArrowDown");
@@ -653,7 +672,7 @@ describe("TerminalsPage", () => {
         { name: "solo", image: "worker:v1", state: "stopped", harness: "codex", group: null, interactive: true },
       ],
     }]);
-    vi.mocked(agentGetOn).mockResolvedValueOnce({ ...cloneProjection, name: agentName, group });
+    agentGetOn.mockResolvedValueOnce({ ...cloneProjection, name: agentName, group });
     renderAt("/");
 
     const row = await screen.findByRole("button", { name: `Open ${agentName}` });
@@ -864,7 +883,7 @@ describe("TerminalsPage", () => {
 
   it("re-polls immediately after creating an agent instead of waiting for the next tick", async () => {
     serversTab();
-    vi.mocked(createAgent).mockResolvedValue({ name: "new-agent", state: "running" });
+    createAgent.mockResolvedValue({ name: "new-agent", state: "running" });
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
     const callsBefore = vi.mocked(fetchAllAgents).mock.calls.length;

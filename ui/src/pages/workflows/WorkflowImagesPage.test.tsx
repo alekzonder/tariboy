@@ -1,13 +1,22 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, expect, it, vi } from "vitest"
+import { ApiProvider } from "@/components/ApiProvider"
+import type { Daemon } from "@/lib/daemons"
+import { fakeApi } from "@/test/api"
 import WorkflowImagesPage from "./WorkflowImagesPage"
 
-const api = vi.hoisted(() => ({ listWorkflowImages: vi.fn(), listTaskQueues: vi.fn(), getQueueWorkflow: vi.fn() }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/tasks")>(), ...api }))
+const api = { listWorkflowImages: vi.fn(), listTaskQueues: vi.fn(), getQueueWorkflow: vi.fn() }
 vi.mock("@/components/DaemonProvider", () => ({ useOptionalDaemons: () => ({ daemons: [] }) }))
 
+// A client for `target` whose registry calls go to `mocks`.
+const clientFor = (target: Daemon, mocks: typeof api) => fakeApi({
+  workflows: { listWorkflowImages: mocks.listWorkflowImages, getQueueWorkflow: mocks.getQueueWorkflow },
+  tasks: { listTaskQueues: mocks.listTaskQueues },
+}, target)
+
 const remote = { id: "remote", label: "Remote", baseURL: "https://remote", token: "t" }
+const remoteApi = clientFor(remote, api)
 const digestA = "a".repeat(64)
 const digestB = "b".repeat(64)
 
@@ -26,7 +35,7 @@ beforeEach(() => {
   })
 })
 
-const renderPage = () => render(<MemoryRouter><WorkflowImagesPage target={remote} basePath="/servers/remote/workflows" /></MemoryRouter>)
+const renderPage = () => render(<MemoryRouter><ApiProvider client={remoteApi}><WorkflowImagesPage basePath="/servers/remote/workflows" /></ApiProvider></MemoryRouter>)
 
 it("lists tags grouped by name with latest first, short digests, and bindings", async () => {
   renderPage()
@@ -37,8 +46,8 @@ it("lists tags grouped by name with latest first, short digests, and bindings", 
   expect(within(rows[0]).getByText(digestA.slice(0, 12))).toHaveAttribute("title", digestA)
   expect(within(rows[0]).getByRole("link", { name: "latest" })).toHaveAttribute("href", "/servers/remote/workflows/development/latest")
   expect(within(rows[2]).getByText("unknown")).toHaveAttribute("title", "Could not read the binding of BAD")
-  expect(api.listWorkflowImages).toHaveBeenCalledWith(remote)
-  expect(api.listTaskQueues).toHaveBeenCalledWith(remote)
+  expect(api.listWorkflowImages).toHaveBeenCalledWith()
+  expect(api.listTaskQueues).toHaveBeenCalledWith()
   expect(within(rows[0]).getByRole("button", { name: "Upload to servers development:latest" })).toBeInTheDocument()
 })
 
@@ -60,9 +69,10 @@ it("keeps the table and skips loads while the host reconnects", async () => {
   const view = renderPage()
   await screen.findByRole("table")
   const offline = { ...remote, baseURL: "" }
-  view.rerender(<MemoryRouter><WorkflowImagesPage target={offline} basePath="/servers/remote/workflows" /></MemoryRouter>)
+  const offlineCalls = { listWorkflowImages: vi.fn(), listTaskQueues: vi.fn(), getQueueWorkflow: vi.fn() }
+  view.rerender(<MemoryRouter><ApiProvider client={clientFor(offline, offlineCalls)}><WorkflowImagesPage basePath="/servers/remote/workflows" /></ApiProvider></MemoryRouter>)
   await waitFor(() => expect(screen.getByRole("table")).toBeInTheDocument())
   expect(screen.queryByRole("alert")).toBeNull()
-  expect(api.listWorkflowImages).not.toHaveBeenCalledWith(offline)
-  expect(api.listTaskQueues).not.toHaveBeenCalledWith(offline)
+  expect(offlineCalls.listWorkflowImages).not.toHaveBeenCalled()
+  expect(offlineCalls.listTaskQueues).not.toHaveBeenCalled()
 })

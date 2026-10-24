@@ -3,14 +3,14 @@ import { createPortal } from "react-dom";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { usePolling } from "@/hooks/usePolling";
 import { fetchAllAgents, type HostAgents } from "@/lib/aggregate";
-import { paramToHost, hostToParam, serverPath, targetFor } from "@/lib/terminalsHost";
+import { paramToHost, hostToParam, serverPath } from "@/lib/terminalsHost";
 import { AgentSidebar } from "./sidebar/AgentSidebar";
 import { useSharedSidebarState } from "./sidebarStateContext";
 import { CreateAgentDialog, type CloneAgentSource } from "./CreateAgentDialog";
 import { ServerDialog } from "./ServerDialog";
 import { useDaemons } from "@/components/DaemonProvider";
 import { listDaemons, removeDaemon, resolveDaemon, type DaemonMeta } from "@/lib/daemons";
-import { apiOn } from "@/lib/api";
+import { createApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { hasLocalDaemon, hostConnect, hostConnected, hostUpdate } from "@/lib/desktop";
@@ -280,7 +280,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     setSidebarOrderOverrides((current) => new Map(current).set(id, next));
     const save = (sidebarSaveQueues.current.get(id) ?? Promise.resolve())
       .catch(() => undefined)
-      .then(async () => apiOn(await resolveDaemon(id), "POST", "/api/daemon/config", {
+      .then(async () => createApi(await resolveDaemon(id)).post("/api/daemon/config", {
         key: "sidebar_order_v1",
         value: JSON.stringify(next),
       }));
@@ -393,14 +393,13 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         ) : serverView === "tasks" && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
             <TasksWorkspace
-              target={targetFor(hostId)}
               initialTaskKey={searchParams.get("task") ?? undefined}
               onNotificationsChanged={() => void refreshHost(hostId)}
             />
           </RouteHostBoundary>
         ) : serverView === "activity" && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            {(target) => <ServerActivityPage key={hostId} hostId={hostId} target={target} />}
+            <ServerActivityPage key={hostId} hostId={hostId} />
           </RouteHostBoundary>
         ) : serverView === "images" && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
@@ -416,34 +415,31 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
           </RouteHostBoundary>
         ) : serverView === "workflows" && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            {(target) => <WorkflowImagesPage
+            <WorkflowImagesPage
               key={hostId}
-              target={target}
               basePath={`${serverBasePath}/workflows`}
-            />}
+            />
           </RouteHostBoundary>
         ) : serverView === "workflow-detail" && hostId !== undefined && storeName && routeTag ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            {(target) => <WorkflowImageDetail
+            <WorkflowImageDetail
               key={`${hostId}\u0000${storeName}\u0000${routeTag}`}
-              target={target}
               name={storeName}
               tag={routeTag}
               basePath={`${serverBasePath}/workflows`}
-            />}
+            />
           </RouteHostBoundary>
         ) : (serverView === "stores" || serverView === "store-detail") && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            {(target) => <StoresPage
+            <StoresPage
               key={`${hostId}\u0000${storeName ?? ""}`}
-              target={target}
               name={storeName}
               basePath={`${serverBasePath}/stores`}
-            />}
+            />
           </RouteHostBoundary>
         ) : serverView === "settings" && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            {(target) => <SettingsPage basePath={`${serverBasePath}/settings`} target={target} />}
+            <SettingsPage basePath={`${serverBasePath}/settings`} />
           </RouteHostBoundary>
         ) : teamName && selectedHost && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>

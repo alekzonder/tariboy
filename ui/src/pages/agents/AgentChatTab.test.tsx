@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@/test/queryRender";
 import { MemoryRouter } from "react-router-dom";
 import AgentChatTab from "./AgentChatTab";
 import { AgentNameContext } from "@/lib/agent";

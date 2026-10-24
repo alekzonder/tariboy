@@ -1,4 +1,4 @@
-import type { AgentPool, WorkflowDefinition } from "@/lib/tasks"
+import type { AgentPool, WorkflowDefinition } from "@/lib/api"
 
 /** Each pool the workflow's statuses name, with those statuses in manifest order. */
 export function requiredPools(definition: WorkflowDefinition): Map<string, string[]> {

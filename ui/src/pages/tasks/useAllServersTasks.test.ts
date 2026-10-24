@@ -1,14 +1,22 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
-import { ApiError } from "@/lib/api"
-import type { Task } from "@/lib/tasks"
+import { ApiError, type Task } from "@/lib/api"
+import type { Daemon } from "@/lib/daemons"
 import { useAllServersTasks } from "./useAllServersTasks"
 
+// Every per-server client records its own host as the second argument, so a
+// call proves which server's client made it.
 const api = vi.hoisted(() => ({ listTasks: vi.fn() }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  ...api,
-}))
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>()
+  return {
+    ...actual,
+    createApi: (target: Daemon | null) => {
+      const client = actual.createApi(target)
+      return { ...client, tasks: { ...client.tasks, listTasks: (query: unknown, ...rest: unknown[]) => api.listTasks(query, target, ...rest) } }
+    },
+  }
+})
 vi.mock("@/lib/terminalsHost", () => ({
   targetFor: (id: string) => (id === "" ? null : { id, label: id, baseURL: `https://${id}`, token: "t" }),
 }))

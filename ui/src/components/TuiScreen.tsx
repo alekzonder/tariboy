@@ -24,7 +24,6 @@ import { SendFilesButton } from "@/components/SendFilesButton"
 import { useFileDropTarget } from "@/hooks/useFileDropTarget"
 import { useSendFiles } from "@/hooks/useSendFiles"
 import type { TerminalSocketController } from "@/hooks/useTerminalSocket"
-import type { Daemon } from "@/lib/daemons"
 import { isAndroidShell, openExternalUrl } from "@/lib/desktop"
 import { HOTKEY_BYTES } from "@/lib/terminalBytes"
 import { buildPathsText, useTuiDraft } from "@/lib/tui"
@@ -123,7 +122,6 @@ export function TuiScreen({
   controller,
   onStart,
   fill = false,
-  daemon,
   persistDraft = true,
   surface = "standalone",
 }: {
@@ -131,9 +129,6 @@ export function TuiScreen({
   onStart?: () => void
   /** Fill the parent's height (flex column) instead of a fixed 32rem screen. */
   fill?: boolean
-  /** Target host for uploads (undefined = active daemon, null = same-origin),
-   * for cross-host views like /terminals. */
-  daemon?: Daemon | null
   /** Retain compose text in localStorage. Workspace tiles disable this so
    * operator text and uploaded paths never enter persisted workspace state. */
   persistDraft?: boolean
@@ -179,14 +174,12 @@ export function TuiScreen({
   const draft = useTuiDraft(name, "terminal", persistDraft)
   const workspaceSurface = surface === "workspace"
   const liveUpload = useSendFiles({
-    daemon,
     onUploaded: (paths) => {
       draft.append(buildPathsText(paths))
       setModalOpen(true)
     },
   })
   const absentUpload = useSendFiles({
-    daemon,
     onUploaded: (paths) => toast.success(`uploaded: ${paths.join(", ")}`),
   })
   const liveDrop = useFileDropTarget(liveUpload.sendFiles)
@@ -377,7 +370,6 @@ export function TuiScreen({
           {/* Files still upload to the server even with no live session,
               so the operator can pre-stage them; report the saved paths. */}
           <SendFilesButton
-            daemon={daemon}
             onUploaded={(paths) => toast.success(`uploaded: ${paths.join(", ")}`)}
           />
         </div>
@@ -426,7 +418,6 @@ export function TuiScreen({
         )}
       >
         <SendFilesButton
-          daemon={daemon}
           onUploaded={(paths) => {
             draft.append(buildPathsText(paths))
             setModalOpen(true)

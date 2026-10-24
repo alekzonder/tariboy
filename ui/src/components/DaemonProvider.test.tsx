@@ -33,7 +33,8 @@ vi.mock("@/lib/daemons", () => ({
   unresolvedDaemon: (id: string, label = id) => ({ id, label, baseURL: "", token: "" }),
 }));
 
-vi.mock("@/lib/api", () => ({
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/api")>(),
   setActiveDaemon: (daemon: unknown) => model.setActiveDaemon(daemon),
 }));
 

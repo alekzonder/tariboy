@@ -1,13 +1,18 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import type { ReactElement } from "react"
+import { fireEvent, render as renderWith, screen, waitFor } from "@/test/queryRender"
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
 import QueueSecrets from "./QueueSecrets"
 import { remoteTarget } from "./workflowFixtures"
+import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ listQueueSecrets: vi.fn(), setQueueSecret: vi.fn(), removeQueueSecret: vi.fn() }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/tasks")>(), ...api }))
+// The mocks are methods of a client bound to the remote host, so each call
+// they record went to that host.
+const remoteApi = fakeApi({ workflows: { listQueueSecrets: api.listQueueSecrets, setQueueSecret: api.setQueueSecret, removeQueueSecret: api.removeQueueSecret } }, remoteTarget)
+const render = (ui: ReactElement) => renderWith(ui, { api: remoteApi })
 
-const renderIt = () => render(<QueueSecrets queue="REL" target={remoteTarget} />)
+const renderIt = () => render(<QueueSecrets queue="REL" />)
 const fill = (key: string, value: string) => {
   fireEvent.change(screen.getByLabelText("Secret key"), { target: { value: key } })
   fireEvent.change(screen.getByLabelText("Secret value"), { target: { value } })
@@ -22,7 +27,7 @@ it("lists keys only and uses a password input for the value", async () => {
   renderIt()
   expect(await screen.findByText("TOKEN")).toBeInTheDocument()
   expect(screen.getByLabelText("Secret value")).toHaveAttribute("type", "password")
-  expect(api.listQueueSecrets).toHaveBeenCalledWith("REL", remoteTarget)
+  expect(api.listQueueSecrets).toHaveBeenCalledWith("REL")
 })
 
 it("shows a failed load instead of claiming there are no secrets", async () => {
@@ -39,7 +44,7 @@ it("sets a secret, clears the value input, and never renders the value", async (
   await screen.findByLabelText("Secret key")
   fill("NEW_KEY", "s3cr3t-value")
   fireEvent.click(screen.getByRole("button", { name: "Set" }))
-  await waitFor(() => expect(api.setQueueSecret).toHaveBeenCalledWith("REL", "NEW_KEY", "s3cr3t-value", remoteTarget))
+  await waitFor(() => expect(api.setQueueSecret).toHaveBeenCalledWith("REL", "NEW_KEY", "s3cr3t-value"))
   await screen.findByRole("button", { name: "Remove NEW_KEY" })
   expect(screen.getByLabelText("Secret value")).toHaveValue("")
   expect(container.innerHTML).not.toContain("s3cr3t-value")
@@ -76,7 +81,7 @@ it("asks before removing and does nothing when declined", async () => {
   expect(api.removeQueueSecret).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole("button", { name: "Remove TOKEN" }))
   fireEvent.click(await screen.findByRole("button", { name: "Remove secret" }))
-  await waitFor(() => expect(api.removeQueueSecret).toHaveBeenCalledWith("REL", "TOKEN", remoteTarget))
+  await waitFor(() => expect(api.removeQueueSecret).toHaveBeenCalledWith("REL", "TOKEN"))
 })
 
 it("shows a refused remove inline", async () => {
@@ -106,7 +111,7 @@ it("disables Set and every Remove while a request runs", async () => {
 it("drops a needed name once that key is in the list", async () => {
   api.setQueueSecret.mockResolvedValue({ queue: "REL", key: "API_KEY", updated_at: "2026-10-02T11:00:00Z" })
   api.listQueueSecrets.mockResolvedValueOnce({ secrets: [], global_env: [] }).mockResolvedValue({ secrets: [{ key: "API_KEY", updated_at: "2026-10-02T11:00:00Z" }], global_env: [] })
-  render(<QueueSecrets queue="REL" target={remoteTarget} missing={["API_KEY", "OTHER"]} />)
+  render(<QueueSecrets queue="REL" missing={["API_KEY", "OTHER"]} />)
   expect(await screen.findByRole("alert", { name: "Secrets needed" })).toHaveTextContent("API_KEY, OTHER")
   fill("API_KEY", "v")
   fireEvent.click(screen.getByRole("button", { name: "Set" }))
@@ -115,7 +120,7 @@ it("drops a needed name once that key is in the list", async () => {
 })
 
 it("renders the names a bind needs next to the control", async () => {
-  render(<QueueSecrets queue="REL" target={remoteTarget} missing={["API_KEY"]} missingMessage="workflow secrets have no value: API_KEY" />)
+  render(<QueueSecrets queue="REL" missing={["API_KEY"]} missingMessage="workflow secrets have no value: API_KEY" />)
   expect(await screen.findByRole("alert", { name: "Secrets needed" })).toHaveTextContent("API_KEY")
 })
 

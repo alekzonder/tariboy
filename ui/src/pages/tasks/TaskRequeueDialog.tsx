@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import type { ApiTarget } from "@/lib/api"
-import { listTaskQueues, type TaskQueue } from "@/lib/tasks"
+import type { TaskQueue } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { LABEL, MONO, SelectShell } from "./panelStyles"
 
@@ -15,7 +15,6 @@ export default function TaskRequeueDialog({
   taskKey,
   queue,
   workflow,
-  target,
   open,
   onOpenChange,
   onRequeue,
@@ -23,11 +22,11 @@ export default function TaskRequeueDialog({
   taskKey: string
   queue: string
   workflow: boolean
-  target?: ApiTarget
   open: boolean
   onOpenChange: (open: boolean) => void
   onRequeue: (queue: string) => Promise<void>
 }) {
+  const api = useApi()
   const [queues, setQueues] = useState<TaskQueue[]>([])
   const [choice, setChoice] = useState("")
   const [busy, setBusy] = useState(false)
@@ -36,12 +35,12 @@ export default function TaskRequeueDialog({
   useEffect(() => {
     if (!open) return
     let live = true
-    listTaskQueues(target).then(
+    api.tasks.listTaskQueues().then(
       (result) => { if (live) setQueues(result.queues.filter((item) => item.prefix !== queue)) },
       (cause) => { if (live) setError(cause instanceof Error ? cause.message : String(cause)) },
     )
     return () => { live = false }
-  }, [open, queue, target])
+  }, [open, queue, api])
 
   const requeue = async () => {
     if (!choice) return

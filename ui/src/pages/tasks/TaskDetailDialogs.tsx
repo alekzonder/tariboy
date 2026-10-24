@@ -1,5 +1,5 @@
 import { AlertCircle } from "lucide-react"
-import type { Task } from "@/lib/tasks"
+import type { Task } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import TaskTransferDialog from "./TaskTransferDialog"
 import TaskRequeueDialog from "./TaskRequeueDialog"
@@ -9,9 +9,9 @@ import { DANGER_FILL, LABEL, MONO } from "./panelStyles"
 import type { TaskDetailProps } from "./TaskDetailTypes"
 import type { useTaskDetailDraft } from "./useTaskDetailDraft"
 
-export function TaskDetailDialogs({ task, workflow, target, transferOpen, setTransferOpen,
+export function TaskDetailDialogs({ task, workflow, transferOpen, setTransferOpen,
   requeueOpen, setRequeueOpen, onTransfer, onRequeue,
-}: Pick<TaskDetailProps, "target" | "onTransfer" | "onRequeue"> & {
+}: Pick<TaskDetailProps, "onTransfer" | "onRequeue"> & {
   task: Task
   workflow: boolean
   transferOpen: boolean
@@ -22,7 +22,7 @@ export function TaskDetailDialogs({ task, workflow, target, transferOpen, setTra
   return <>
     <TaskTransferDialog taskKey={task.key} queue={task.queue} open={transferOpen}
       onOpenChange={setTransferOpen} onTransfer={onTransfer} />
-    <TaskRequeueDialog taskKey={task.key} queue={task.queue} workflow={workflow} target={target} open={requeueOpen}
+    <TaskRequeueDialog taskKey={task.key} queue={task.queue} workflow={workflow} open={requeueOpen}
       onOpenChange={setRequeueOpen} onRequeue={onRequeue} />
   </>
 }

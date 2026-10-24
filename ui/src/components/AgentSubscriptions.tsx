@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { apiGet, apiPost, apiDelete, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ export function AgentSubscriptions(
   { name, selected = null, onSelect }:
   { name: string; selected?: string | null; onSelect?: (ch: string) => void },
 ) {
+  const api = useApi();
   const [subs, setSubs] = useState<Sub[]>([]);
   const [channels, setChannels] = useState<Chan[]>([]);
   const [pick, setPick] = useState("");
@@ -43,12 +45,12 @@ export function AgentSubscriptions(
   const [busy, setBusy] = useState(false);
 
   const load = () => {
-    apiGet<{ channels: Sub[] }>(`/api/agents/${encodeURIComponent(name)}/subscriptions`)
+    api.get<{ channels: Sub[] }>(`/api/agents/${encodeURIComponent(name)}/subscriptions`)
       .then((r) => setSubs(r.channels)).catch(() => setSubs([]));
-    apiGet<{ channels: Chan[] }>("/api/channels")
+    api.get<{ channels: Chan[] }>("/api/channels")
       .then((r) => setChannels(r.channels)).catch(() => setChannels([]));
   };
-  useEffect(() => { load(); }, [name]);
+  useEffect(() => { load(); }, [api, name]);
 
   // Channels not already subscribed, filtered by what the operator has typed so
   // the dropdown narrows as a substring match (case-insensitive).
@@ -70,11 +72,11 @@ export function AgentSubscriptions(
 
   const subscribe = () => {
     if (!trimmed || invalid) return;
-    void run("subscribed", () => apiPost(`/api/agents/${encodeURIComponent(name)}/subscriptions`, { channel: trimmed }))
+    void run("subscribed", () => api.post(`/api/agents/${encodeURIComponent(name)}/subscriptions`, { channel: trimmed }))
       .then(() => { setPick(""); setOpen(false); });
   };
   const unsubscribe = (ch: string) =>
-    void run("unsubscribed", () => apiDelete(`/api/agents/${encodeURIComponent(name)}/subscriptions?channel=${encodeURIComponent(ch)}`));
+    void run("unsubscribed", () => api.delete(`/api/agents/${encodeURIComponent(name)}/subscriptions?channel=${encodeURIComponent(ch)}`));
 
   return (
     <div className="w-2/5 min-w-[12rem] shrink-0 overflow-auto">

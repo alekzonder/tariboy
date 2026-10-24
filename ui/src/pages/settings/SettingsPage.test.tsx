@@ -1,37 +1,42 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
+import { fireEvent, render as rtlRender, screen, waitFor, type RenderOptions } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsPage, { GeneralSettings } from "./SettingsPage";
-import {
-  getCodexApprovalOn,
-  getGlobalAgentShellScriptOn,
-  getIterationRetentionDefaultOn,
-  getMaintenanceOn,
-  getPluginContributionsOn,
-  setGlobalAgentShellScriptOn,
-} from "@/lib/api";
+import type { ApiClient } from "@/lib/api";
+import type { Daemon } from "@/lib/daemons";
+import { apiWrapper, fakeApi } from "@/test/api";
 
-vi.mock("@/lib/api", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/api")>(),
-  getCodexApprovalOn: vi.fn(),
-  getGlobalAgentShellScriptOn: vi.fn(),
-  getIterationRetentionDefaultOn: vi.fn(),
-  getMaintenanceOn: vi.fn(),
-  getPluginContributionsOn: vi.fn(),
-  setGlobalAgentShellScriptOn: vi.fn(),
-}));
+const getGlobalAgentShellScript = vi.fn();
+const setGlobalAgentShellScript = vi.fn();
+const getPluginContributions = vi.fn();
+
+function client(target: Daemon | null = null): ApiClient {
+  return fakeApi({
+    harnesses: { getCodexApproval: vi.fn().mockResolvedValue({ mode: "yolo" }) },
+    daemon: {
+      getGlobalAgentShellScript,
+      setGlobalAgentShellScript,
+      getIterationRetentionDefault: vi.fn().mockResolvedValue({ keep_iterations: 0, keep_days: 0, max_bytes: 0 }),
+      getMaintenance: vi.fn().mockResolvedValue({
+        settings: { enabled: true, time: "03:00", keep_backups: 7, retention_days: 90, chat_retention_days: 7, compact: true, compact_threshold_pct: 10 },
+        last_run: null,
+      }),
+    },
+    plugins: { getPluginContributions },
+  }, target);
+}
+
+function render(element: ReactElement, options: RenderOptions & { api?: ApiClient } = {}) {
+  const { api = client(), ...rest } = options;
+  return rtlRender(element, { ...rest, wrapper: apiWrapper(api) });
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(getCodexApprovalOn).mockResolvedValue({ mode: "yolo" });
-  vi.mocked(getGlobalAgentShellScriptOn).mockResolvedValue({ script: "export OK=1" });
-  vi.mocked(getPluginContributionsOn).mockResolvedValue({ plugins: [], count: 0 });
-  vi.mocked(getIterationRetentionDefaultOn).mockResolvedValue({ keep_iterations: 0, keep_days: 0, max_bytes: 0 });
-  vi.mocked(setGlobalAgentShellScriptOn).mockResolvedValue({ saved: true });
-  vi.mocked(getMaintenanceOn).mockResolvedValue({
-    settings: { enabled: true, time: "03:00", keep_backups: 7, retention_days: 90, chat_retention_days: 7, compact: true, compact_threshold_pct: 10 },
-    last_run: null,
-  });
+  getGlobalAgentShellScript.mockResolvedValue({ script: "export OK=1" });
+  getPluginContributions.mockResolvedValue({ plugins: [], count: 0 });
+  setGlobalAgentShellScript.mockResolvedValue({ saved: true });
 });
 
 describe("SettingsPage", () => {
@@ -59,7 +64,7 @@ describe("SettingsPage", () => {
   });
 
   it("adds settings contributions under the selected server", async () => {
-    vi.mocked(getPluginContributionsOn).mockResolvedValue({
+    getPluginContributions.mockResolvedValue({
       plugins: [{ name: "telegram", settings: { title: "Telegram" } }], count: 1,
     });
     render(
@@ -67,7 +72,7 @@ describe("SettingsPage", () => {
         <Routes>
           <Route
             path="/servers/remote-1/settings/*"
-            element={<SettingsPage basePath="/servers/remote-1/settings" target={null} />}
+            element={<SettingsPage basePath="/servers/remote-1/settings" />}
           />
         </Routes>
       </MemoryRouter>,
@@ -75,7 +80,7 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByRole("link", { name: "Telegram" }))
       .toHaveAttribute("href", "/servers/remote-1/settings/integrations/telegram");
-    expect(getPluginContributionsOn).toHaveBeenCalledWith(null);
+    expect(getPluginContributions).toHaveBeenCalledWith();
   });
 
   it("keeps an invalid global shell draft and shows Bash stderr", async () => {
@@ -85,17 +90,16 @@ describe("SettingsPage", () => {
       baseURL: "https://remote.test",
       token: "secret",
     };
-    vi.mocked(setGlobalAgentShellScriptOn).mockRejectedValue(
+    setGlobalAgentShellScript.mockRejectedValue(
       new Error("line 1: syntax error"),
     );
     render(
       <MemoryRouter>
         <Routes>
-          <Route element={<Outlet context={target} />}>
-            <Route index element={<GeneralSettings />} />
-          </Route>
+          <Route index element={<GeneralSettings />} />
         </Routes>
       </MemoryRouter>,
+      { api: client(target) },
     );
 
     const script = await screen.findByLabelText("Global Agent Shell Script");
@@ -116,8 +120,8 @@ describe("SettingsPage", () => {
     expect(screen.getByLabelText("Global Agent Shell Script")).toHaveValue(
       "if then",
     );
-    expect(getGlobalAgentShellScriptOn).toHaveBeenCalledWith(target);
-    expect(setGlobalAgentShellScriptOn).toHaveBeenCalledWith(target, "if then");
+    expect(getGlobalAgentShellScript).toHaveBeenCalledWith();
+    expect(setGlobalAgentShellScript).toHaveBeenCalledWith("if then");
   });
 
   it("blocks shell-script editing and saving until its initial load succeeds", async () => {
@@ -128,17 +132,16 @@ describe("SettingsPage", () => {
       token: "secret",
     };
     let resolveLoad!: (value: { script: string }) => void;
-    vi.mocked(getGlobalAgentShellScriptOn).mockReturnValue(
+    getGlobalAgentShellScript.mockReturnValue(
       new Promise((resolve) => { resolveLoad = resolve; }),
     );
     render(
       <MemoryRouter>
         <Routes>
-          <Route element={<Outlet context={target} />}>
-            <Route index element={<GeneralSettings />} />
-          </Route>
+          <Route index element={<GeneralSettings />} />
         </Routes>
       </MemoryRouter>,
+      { api: client(target) },
     );
 
     const script = await screen.findByLabelText("Global Agent Shell Script");
@@ -146,7 +149,7 @@ describe("SettingsPage", () => {
     expect(script).toBeDisabled();
     expect(save).toBeDisabled();
     fireEvent.click(save);
-    expect(setGlobalAgentShellScriptOn).not.toHaveBeenCalled();
+    expect(setGlobalAgentShellScript).not.toHaveBeenCalled();
     fireEvent.change(script, { target: { value: "if then" } });
     expect(script).toHaveValue("");
 
@@ -157,13 +160,11 @@ describe("SettingsPage", () => {
   });
 
   it("keeps shell-script editing and saving unavailable after load failure", async () => {
-    vi.mocked(getGlobalAgentShellScriptOn).mockRejectedValue(new Error("load failed"));
+    getGlobalAgentShellScript.mockRejectedValue(new Error("load failed"));
     render(
       <MemoryRouter>
         <Routes>
-          <Route element={<Outlet context={null} />}>
-            <Route index element={<GeneralSettings />} />
-          </Route>
+          <Route index element={<GeneralSettings />} />
         </Routes>
       </MemoryRouter>,
     );

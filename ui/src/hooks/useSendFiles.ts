@@ -1,17 +1,17 @@
 import { useCallback, useState } from "react"
 import { toast } from "sonner"
-import { serverUploadFile, ApiError } from "@/lib/api"
-import type { Daemon } from "@/lib/daemons"
+import { ApiError } from "@/lib/api"
+import { useApi } from "@/components/apiContext"
 
 /** Upload files to the server's shared directory and report their absolute
- * paths. Buttons and drop targets share progress and error behaviour. */
+ * paths. Buttons and drop targets share progress and error behaviour. The
+ * server is the surrounding ApiProvider's. */
 export function useSendFiles({
-  daemon,
   onUploaded,
 }: {
-  daemon?: Daemon | null
   onUploaded: (paths: string[]) => void
 }) {
+  const api = useApi()
   const [uploading, setUploading] = useState(false)
 
   const sendFiles = useCallback(async (files: File[]) => {
@@ -20,7 +20,7 @@ export function useSendFiles({
     const paths: string[] = []
     try {
       for (const file of files) {
-        const { abs } = await serverUploadFile(file, daemon)
+        const { abs } = await api.files.serverUploadFile(file)
         paths.push(abs)
       }
     } catch (err) {
@@ -29,7 +29,7 @@ export function useSendFiles({
       if (paths.length > 0) onUploaded(paths)
       setUploading(false)
     }
-  }, [daemon, onUploaded])
+  }, [api, onUploaded])
 
   return { uploading, sendFiles }
 }

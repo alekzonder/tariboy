@@ -8,7 +8,9 @@ import { StatusDot, StatusPill } from "@/components/ui/status";
 import { AgentControls } from "@/components/AgentControls";
 import { agentTone } from "@/lib/statusTone";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
-import { agentGetOn, isConnectionError } from "@/lib/api";
+import { isConnectionError } from "@/lib/api";
+import { ApiProvider } from "@/components/ApiProvider";
+import { useApi } from "@/components/apiContext";
 import { useAgentStatesSocket } from "@/hooks/useMessagesSocket";
 import { useCoalesced } from "@/hooks/useCoalesced";
 import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
@@ -41,13 +43,27 @@ const TABS = [
 // The tabs Simple mode keeps; the header, Start/Stop included, is the same in both.
 const SIMPLE_TABS: ReadonlySet<string> = new Set(["chat", "tasks", "console", "configuration"]);
 
-export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unavailable = false }: {
+type AgentWorkspaceProps = {
   hostId: string;
   hostLabel?: string;
   agent: AgentSummary;
   refresh: () => void;
   unavailable?: boolean;
-}) {
+};
+
+// The workspace is a server-selection boundary: the agent lives on the host the
+// route names, which need not be the active one, so everything inside it
+// (tabs, chat, configuration, tasks, controls) addresses that host. A new
+// endpoint or token for the same host swaps the client without remounting.
+export default function AgentWorkspace(props: AgentWorkspaceProps) {
+  return (
+    <ApiProvider target={targetFor(props.hostId)}>
+      <AgentWorkspaceContent {...props} />
+    </ApiProvider>
+  );
+}
+
+function AgentWorkspaceContent({ hostId, hostLabel, agent, refresh, unavailable = false }: AgentWorkspaceProps) {
   const simple = useUiMode() === "simple";
   const tabs = simple ? TABS.filter(([key]) => SIMPLE_TABS.has(key)) : TABS;
   const { tab = "console" } = useParams();
@@ -64,14 +80,14 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
   // Codex has no model until one is chosen; only Codex reports an effort.
   const runtime = [currentView?.harness || agent.harness, currentView?.model, currentView?.effort]
     .filter(Boolean).join(" · ");
-  const target = targetFor(hostId);
+  const api = useApi();
   const [execCount, setExecCount] = useState(0);
   // The Goal task opens over whichever tab is showing, not in Tasks.
   const [goalTask, setGoalTask] = useState("");
   const { attention, refreshHost } = useCustomerQuestionNotifications();
   // The Chat tab's dot. It is the daemon's own unread count rather than tab
   // state, so it is right while another tab is open and survives a remount.
-  const unreadChat = useChatUnread(target, agent.name, connection === "ready" && !unavailable);
+  const unreadChat = useChatUnread(agent.name, connection === "ready" && !unavailable);
   const tabStrip = useActiveLinkIntoView<HTMLElement>();
 
   useEffect(() => {
@@ -96,25 +112,23 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
 
   const refreshStatus = useCallback(async () => {
     if (connection !== "ready" || unavailable) return;
-    const requestTarget = targetFor(hostId);
     try {
-      setStatus(await agentGetOn<AgentStatus>(requestTarget, agent.name, "status"));
+      setStatus(await api.agents.getAgentStatus(agent.name));
     } catch (error) {
       // An unreachable host keeps the last status in the header.
       if (!isConnectionError(error)) setStatus(null);
     }
     try {
-      setView({ key: agentKey, view: await agentGetOn<AgentView>(requestTarget, agent.name, "") });
+      setView({ key: agentKey, view: await api.agents.getAgent(agent.name) });
     } catch {
       // Preserve the last successful value and retry with the next status poll.
     }
-  }, [agent.name, agentKey, connection, hostId, unavailable]);
+  }, [agent.name, agentKey, api, connection, unavailable]);
 
   // A state hint for this agent refetches at once; the poll is then only a
   // fallback. A host without the socket keeps the short poll.
   const refreshOnHint = useCoalesced(() => void refreshStatus(), 500);
   const statesSocket = useAgentStatesSocket({
-    target,
     enabled: connection === "ready" && !unavailable,
     onHint: (hint) => { if (hint.agent === agent.name) refreshOnHint(); },
   });
@@ -156,12 +170,11 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
     : tab === "activity" ? <AgentActivityTab />
     : tab === "tasks" ? <TasksWorkspace
       scopeAgent={agent.name}
-      target={target}
       initialTaskKey={searchParams.get("task") ?? undefined}
       onNotificationsChanged={() => void refreshHost(hostId)}
     />
     : tab === "chat" ? <AgentChatTab hostId={hostId} />
-    : tab === "configuration" ? <AgentConfigurationTab target={target} refresh={refresh} />
+    : tab === "configuration" ? <AgentConfigurationTab refresh={refresh} />
     : <AgentAdvancedTab />;
 
   return (
@@ -243,7 +256,6 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
                 </div>
               </div>
               <AgentControls
-                target={target}
                 name={agent.name}
                 alive={alive}
                 image={agent.image}
@@ -320,7 +332,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
           >
             {content}
           </section>
-          {goalTask && <TaskDrawer key={goalTask} taskKey={goalTask} target={target} onClose={() => setGoalTask("")} />}
+          {goalTask && <TaskDrawer key={goalTask} taskKey={goalTask} onClose={() => setGoalTask("")} />}
         </div>
       </AgentStatusContext.Provider>
     </AgentNameContext.Provider>

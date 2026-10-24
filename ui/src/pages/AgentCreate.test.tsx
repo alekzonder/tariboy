@@ -1,5 +1,5 @@
 import { it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@/test/queryRender";
 import { MemoryRouter } from "react-router-dom";
 import AgentCreate from "./AgentCreate";
 import { RUNTIME_PRESETS_STORAGE_KEY } from "@/lib/runtimePresets";

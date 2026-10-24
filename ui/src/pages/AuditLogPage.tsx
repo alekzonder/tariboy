@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useAgentName } from "@/lib/agent";
-import { agentGetOn, setIterationTagsOn, subscribeAgentEventsOn } from "@/lib/api";
 import type { IterationSummary } from "@/lib/types";
 import { FullAuditLog } from "@/components/FullAuditLog";
 import { IterationAuditLog } from "@/components/IterationAuditLog";
@@ -9,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { fmtDateTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
-import { paramToHost, targetFor } from "@/lib/terminalsHost";
+import { useApi } from "@/components/apiContext";
 
 // Map a backend iteration status to a badge variant. Backend Status is one of
 // running|done|no_i_am_done|harness_error|timeout|killed (internal/agent/
@@ -32,9 +31,8 @@ function statusVariant(
 // page's own started-at date filters.
 export default function AuditLogPage({ period }: { period?: { since: string; until: string } } = {}) {
   const name = useAgentName();
-  const { hostId: hostParam = "local" } = useParams();
-  const hostId = paramToHost(hostParam);
-  const descriptor = targetFor(hostId);
+  const api = useApi();
+  const descriptor = api.target;
   const [searchParams, setSearchParams] = useSearchParams();
   // Tag and started-at filters live in the URL beside ?iteration=, so a filtered
   // view is shareable and survives a reload. They are passed to the daemon,
@@ -51,7 +49,7 @@ export default function AuditLogPage({ period }: { period?: { since: string; unt
   const queryString = query.toString();
   // A rolling period moves every minute; the list keeps its rows while the
   // moved window reloads instead of blanking, so the period is not in the key.
-  const listKey = `${hostId}\0${descriptor?.baseURL ?? ""}\0${descriptor?.token ?? ""}\0${name}\0${period ? tagFilter : queryString}`;
+  const listKey = `${descriptor?.id ?? ""}\0${descriptor?.baseURL ?? ""}\0${descriptor?.token ?? ""}\0${name}\0${period ? tagFilter : queryString}`;
   const [listState, setListState] = useState<{ key: string; items: IterationSummary[] } | null>(null);
   const items = listState?.key === listKey ? listState.items : [];
   const loaded = listState?.key === listKey;
@@ -81,11 +79,9 @@ export default function AuditLogPage({ period }: { period?: { since: string; unt
     if (!name) return;
     let current = true;
     let generation = 0;
-    const target = targetFor(hostId);
     const load = () => {
       const requestGeneration = ++generation;
-      void agentGetOn<{ iterations: IterationSummary[]; count: number }>(
-        target,
+      void api.agentGet<{ iterations: IterationSummary[]; count: number }>(
         name,
         queryString ? `iterations?${queryString}` : "iterations",
       )
@@ -101,9 +97,9 @@ export default function AuditLogPage({ period }: { period?: { since: string; unt
     };
     load();
     const t = window.setInterval(load, 5000);
-    const off = subscribeAgentEventsOn(target, name, ["iteration"], () => load());
+    const off = api.agents.subscribeAgentEvents(name, ["iteration"], () => load());
     return () => { current = false; window.clearInterval(t); off(); };
-  }, [hostId, listKey, name, queryString]);
+  }, [api, listKey, name, queryString]);
 
   const selectedItem = selected ? items.find((it) => it.id === selected) : null;
 
@@ -113,7 +109,7 @@ export default function AuditLogPage({ period }: { period?: { since: string; unt
   const [tagError, setTagError] = useState("");
   const saveTags = (id: string, tags: string[]) => {
     setTagError("");
-    void setIterationTagsOn(targetFor(hostId), name, id, tags)
+    void api.iterations.setIterationTags(name, id, tags)
       .then((r) => {
         const applied = r.tags?.[id] ?? tags;
         setListState((prev) => prev && ({

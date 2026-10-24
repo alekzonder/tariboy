@@ -422,6 +422,66 @@ daemon. The client therefore still needs memory proportional to the archive;
 streaming directly to a file requires a separate authenticated Desktop/Rust
 download API.
 
+## API layer
+
+`ui/src/lib/api/` is the only HTTP client of the Desktop UI. `@/lib/api`
+resolves to its `index.ts`, which assembles the client and re-exports the
+modules; it holds no requests of its own.
+
+- `client.ts` owns the transport: JSON requests that unwrap the
+  `{ok, result}` / `{ok, error}` envelope, raw requests for archives, uploads
+  and text exports, and the single `ApiError` class (`status`, `code`,
+  `message`, `details`). Every request uses `cache: "no-store"`, sends the
+  host's bearer token, and passes the caller's `AbortSignal`.
+- `hosts.ts` owns server selection: the active host that the host switcher
+  sets, the local daemon origin that Desktop sets at boot, and the
+  `ApiTarget` type (`undefined` = the active host, `null` = the local daemon,
+  a `Daemon` = that host).
+- One module per domain: `agents`, `iterations`, `usage`, `daemon`,
+  `harnesses`, `plugins`, `scripts`, `files`, `images`, `imageSources`,
+  `groups`, `stores`, `messages`, `audit`, `tasks`, and `workflows`. Each
+  module keeps the hand-written types of its responses and exports a factory
+  that receives a transport bound to one host. Domain methods never take a
+  target. `lib/tasks.ts` and `lib/audit.ts` keep only presentation helpers.
+
+`createApi(target)` returns an `ApiClient`: the bound transport plus one
+section per domain, such as `api.tasks.getTask(key)` or
+`api.images.listImages()`. The target is fixed when the client is created:
+`undefined` resolves to the active host once, and a later host switch never
+redirects an existing client. A registered host without an endpoint (an SSH
+tunnel that is reconnecting) yields a client whose `ready` is false; its
+requests fail with `host_not_ready` and never fall back to the local daemon.
+
+React code reads the client from context:
+
+~~~tsx
+const api = useApi()
+const detail = await api.tasks.getTask(taskKey, signal)
+~~~
+
+`ApiProvider` fixes the server for the tree below it. `DaemonProvider`
+provides the active host, `RouteHostBoundary` provides the route host, and
+an agent workspace, a server pane, or a dialog with its own host picker mounts
+a provider for that host. Components do not pass a target down to children.
+`useApi()` outside a provider throws, and component tests render through
+`@/test/queryRender` or the `apiWrapper` / `fakeApi` helpers in
+`@/test/api.tsx`. An equal target keeps the same client across renders, so
+effects and subscriptions that depend on `api` do not restart. A new endpoint
+or token for the same host gives a new client without changing any tree key:
+loaded data and unsaved drafts survive a reconnect, while requests and
+subscriptions move to the new connection. A response from the previous client
+never replaces data of the current one.
+
+Code that works with several hosts at once creates one client per host with
+`createApi(daemon)`: the all-hosts agent list, the all-servers task view, and
+customer question notifications. A transfer between hosts (a task, an image,
+a workflow image) holds one source client and one destination client for the
+whole operation. The native host registry, SSH tunnels, and Keychain tokens
+stay in `lib/daemons.ts` and `lib/desktop.ts`.
+
+Response types are still written by hand. When a module's types are generated
+from the daemon's OpenAPI description, they replace that one module's types.
+
 ## Component boundaries
 
 The public screen components keep their existing imports and properties.
@@ -455,9 +515,8 @@ List keys include the agent scope, text, status view, assignee, and waiting
 principal. Queue filtering remains local. History keys distinguish the
 workspace's latest 200 events from the drawer's first 200 events.
 
-The connection adapter resolves an omitted ApiTarget to an explicit target
-before a request starts. A null target always selects the local server.
-Server identity is independent of its endpoint. A new SSH port cancels old
+Queries read the server from the surrounding `ApiProvider`; a client for
+the local daemon has the identity `local`. Server identity is independent of its endpoint. A new SSH port cancels old
 reads and refreshes active queries without changing their keys or form state.
 An unavailable endpoint disables background reads. Credentials never appear
 in query keys, logs, or persistent storage. Credential changes clear that
@@ -489,8 +548,8 @@ stale for the next socket, manual, or mount refresh.
 For another Tasks reader, reuse its typed query options:
 
 ~~~tsx
-const target = useApiTarget(inputTarget)
-const detail = useApiQuery(taskQueries.detail(target, taskKey), target)
+const api = useApi()
+const detail = useApiQuery(taskQueries.detail(api, taskKey))
 ~~~
 
 Keep selection, drafts, expansion, sizing, and focus in the component.
@@ -602,8 +661,8 @@ a transition request through `useFollowRequest` in `workflowShared.ts`
 the controlled alert dialog of `useWorkflowConfirm`; `workflowShared.ts` also holds
 `errorText` and `useMounted`. Messages and logs render as React text;
 artifact values render through `MarkdownContent`, or as React text when an
-artifact is switched to **Text**. Every call passes the `ApiTarget` of the surrounding
-component. After a drawer action `TasksWorkspace` reloads the tree as well as
+artifact is switched to **Text**. Every call uses the client of the surrounding
+`ApiProvider`. After a drawer action `TasksWorkspace` reloads the tree as well as
 the detail, so the row agrees with the drawer before the socket reports the
 change. Queue settings are `QueueSettingsDialog`: a large `Dialog` (full
 screen on a phone) with the queue list on the left and the selected queue in

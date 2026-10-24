@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from "@/test/queryRender"
 import { useLayoutEffect, useRef } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { MemoryRouter, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom"
-import type { Task, TaskDetail, TaskNotification } from "@/lib/tasks"
+import type { Task, TaskDetail, TaskNotification } from "@/lib/api"
 
 const model = vi.hoisted(() => ({
   daemons: [] as Array<{ id: string; label: string }>,
@@ -43,16 +43,26 @@ vi.mock("@/lib/daemons", () => ({
   } : null,
 }))
 
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  listTaskNotifications: async (_includeDismissed: boolean, target?: { id?: string }) => {
+// Every client's task domain is built by tasksApi, so replacing it here routes
+// each host's calls to the model keyed by the host that client was created for.
+vi.mock("@/lib/api/tasks", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/tasks")>()
+  return {
+    ...actual,
+    tasksApi: (t: Parameters<typeof actual.tasksApi>[0]) => ({ ...actual.tasksApi(t), ...hostTasks(t.target) }),
+  }
+})
+
+function hostTasks(target: { id?: string } | null) {
+  return {
+  listTaskNotifications: async (_includeDismissed?: boolean) => {
     const hostId = target?.id ?? ""
     if (model.failures.has(hostId)) throw new Error(`inbox failed for ${hostId || "local"}`)
     if (model.deferredInbox) return model.deferredInbox
     const notifications = model.snapshots.get(hostId) ?? []
     return { notifications, count: notifications.length }
   },
-  listTasks: async (_filters: unknown, target?: { id?: string }) => {
+  listTasks: async (_filters?: unknown) => {
     const hostId = target?.id ?? ""
     if (model.failures.has(hostId)) throw new Error(`tasks failed for ${hostId || "local"}`)
     return { tasks: [], sequence: model.sequences.get(hostId) ?? 1 }
@@ -65,7 +75,7 @@ vi.mock("@/lib/tasks", async (importOriginal) => ({
     if (!detail) throw new Error(`missing task ${key}`)
     return detail
   },
-  markTaskNotificationRead: async (notificationId: string, target?: { id?: string } | null) => {
+  markTaskNotificationRead: async (notificationId: string) => {
     const hostId = target?.id
     model.readAttempts.push({ notificationId, hostId })
     if (model.rejectRead) throw new Error("read failed")
@@ -75,7 +85,8 @@ vi.mock("@/lib/tasks", async (importOriginal) => ({
       item.id === notificationId ? { ...item, read_at: "2026-08-18T12:05:00Z" } : item,
     ))
   },
-}))
+  }
+}
 
 vi.mock("@/hooks/useTasksSocket", async () => {
   const React = await import("react")
@@ -113,6 +124,7 @@ vi.mock("@/lib/desktop", async (importOriginal) => ({
 }))
 
 import { CustomerQuestionNotifications } from "./CustomerQuestionNotifications"
+import { ApiProvider } from "./ApiProvider"
 import {
   useCustomerQuestionNotifications,
 } from "./customerQuestionNotificationsContext"
@@ -178,10 +190,9 @@ function ActivateOnAttention({
 function ActivatedTaskWorkspace() {
   const { hostId = "" } = useParams()
   const [searchParams] = useSearchParams()
-  return <TasksWorkspace
-    initialTaskKey={searchParams.get("task") ?? undefined}
-    target={hostId === "local" ? null : { id: hostId, label: hostId, baseURL: `http://${hostId}.test`, token: "test-token" }}
-  />
+  return <ApiProvider target={hostId === "local" ? null : { id: hostId, label: hostId, baseURL: `http://${hostId}.test`, token: "test-token" }}>
+    <TasksWorkspace initialTaskKey={searchParams.get("task") ?? undefined} />
+  </ApiProvider>
 }
 
 function taskDetail(key: string, description: string): TaskDetail {

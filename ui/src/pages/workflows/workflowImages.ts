@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useOptionalDaemons } from "@/components/DaemonProvider"
-import { targetReady, type ApiTarget } from "@/lib/api"
+import { useApi } from "@/components/apiContext"
+import type {
+  WorkflowDefinition, WorkflowDefinitionStatus, WorkflowImage, WorkflowLimits,
+} from "@/lib/api"
 import { resolveDaemon, type Daemon } from "@/lib/daemons"
-import {
-  getQueueWorkflow, listTaskQueues,
-  type WorkflowDefinition, type WorkflowDefinitionStatus, type WorkflowImage, type WorkflowLimits,
-} from "@/lib/tasks"
 import { errorText } from "@/pages/tasks/workflowShared"
 
 /** `latest` first, then the other tags newest version first. */
@@ -33,26 +32,27 @@ export interface QueueBindings {
 }
 
 /**
- * Which queues bind which digest, read from the queue list and the binding of
- * each queue. A queue whose binding fails is reported in `unknown`; the rest
- * still show.
+ * Which queues bind which digest on the host of the nearest ApiProvider, read
+ * from the queue list and the binding of each queue. A queue whose binding
+ * fails is reported in `unknown`; the rest still show.
  */
-export function useQueueBindings(target: ApiTarget): QueueBindings {
+export function useQueueBindings(): QueueBindings {
+  const api = useApi()
   const [state, setState] = useState<Omit<QueueBindings, "reload">>(
     { loaded: false, byDigest: new Map(), unknown: [], failed: "" })
   const [revision, setRevision] = useState(0)
   useEffect(() => {
-    if (!targetReady(target)) return
+    if (!api.ready) return
     let alive = true
     void (async () => {
       let queues: string[]
       try {
-        queues = (await listTaskQueues(target)).queues.map((queue) => queue.prefix)
+        queues = (await api.tasks.listTaskQueues()).queues.map((queue) => queue.prefix)
       } catch (err) {
         if (alive) setState({ loaded: true, byDigest: new Map(), unknown: [], failed: errorText(err) })
         return
       }
-      const results = await Promise.allSettled(queues.map((queue) => getQueueWorkflow(queue, target)))
+      const results = await Promise.allSettled(queues.map((queue) => api.workflows.getQueueWorkflow(queue)))
       const byDigest = new Map<string, string[]>()
       const unknown: string[] = []
       results.forEach((result, index) => {
@@ -62,7 +62,7 @@ export function useQueueBindings(target: ApiTarget): QueueBindings {
       if (alive) setState({ loaded: true, byDigest, unknown, failed: "" })
     })()
     return () => { alive = false }
-  }, [target, revision])
+  }, [api, revision])
   const reload = useCallback(() => setRevision((value) => value + 1), [])
   return { ...state, reload }
 }

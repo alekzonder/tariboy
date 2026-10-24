@@ -1,18 +1,23 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import type { ReactElement } from "react"
+import { fireEvent, render as renderWith, screen, waitFor, within } from "@/test/queryRender"
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
 import QueuePools from "./QueuePools"
 import { agentPool, remoteTarget } from "./workflowFixtures"
+import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ rebindAgentPool: vi.fn() }))
+// The mocks are methods of a client bound to the remote host, so each call
+// they record went to that host.
+const remoteApi = fakeApi({ tasks: { rebindAgentPool: api.rebindAgentPool } }, remoteTarget)
+const render = (ui: ReactElement) => renderWith(ui, { api: remoteApi })
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/tasks")>(), ...api }))
 
 const required = new Map([["developers", ["plan", "implement"]], ["reviewers", ["review"]]])
 const renderIt = (props: Partial<Parameters<typeof QueuePools>[0]> = {}) => {
   const onSaved = vi.fn()
   const onReload = vi.fn()
-  render(<QueuePools queue="DEV" target={remoteTarget} pools={[agentPool("developers", ["dev-a"], 4)]}
+  render(<QueuePools queue="DEV" pools={[agentPool("developers", ["dev-a"], 4)]}
     required={required} agents={["dev-a", "dev-b", "rev-a"]} onSaved={onSaved} onReload={onReload} {...props} />)
   return { onSaved, onReload }
 }
@@ -36,7 +41,7 @@ it("adds an agent and saves the full list with revision 0 for a new pool", async
   fireEvent.click(within(reviewers).getByRole("button", { name: "Add" }))
   expect(within(reviewers).getByText("rev-a")).toBeInTheDocument()
   fireEvent.click(within(reviewers).getByRole("button", { name: "Save pool reviewers" }))
-  await waitFor(() => expect(api.rebindAgentPool).toHaveBeenCalledWith("DEV", "reviewers", ["rev-a"], 0, expect.any(String), remoteTarget))
+  await waitFor(() => expect(api.rebindAgentPool).toHaveBeenCalledWith("DEV", "reviewers", ["rev-a"], 0, expect.any(String)))
   expect(onSaved).toHaveBeenCalledWith(agentPool("reviewers", ["rev-a"], 1))
 })
 
@@ -46,7 +51,7 @@ it("removes an agent and saves with the pool's revision", async () => {
   const developers = screen.getByRole("group", { name: "Pool developers" })
   fireEvent.click(within(developers).getByRole("button", { name: "Remove old from developers" }))
   fireEvent.click(within(developers).getByRole("button", { name: "Save pool developers" }))
-  await waitFor(() => expect(api.rebindAgentPool).toHaveBeenCalledWith("DEV", "developers", ["dev-a", "dev-b"], 4, expect.any(String), remoteTarget))
+  await waitFor(() => expect(api.rebindAgentPool).toHaveBeenCalledWith("DEV", "developers", ["dev-a", "dev-b"], 4, expect.any(String)))
 })
 
 it("reloads and says so when the pool changed elsewhere", async () => {

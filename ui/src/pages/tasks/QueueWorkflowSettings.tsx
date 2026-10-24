@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
+import { useApi } from "@/components/apiContext"
 import { Button } from "@/components/ui/button"
-import { ApiError, type ApiTarget } from "@/lib/api"
-import {
-  clearQueueWorkflow, getQueueWorkflow, getWorkflowImage, listWorkflowImages, setQueueWorkflow,
-  type AgentPool, type QueueWorkflow, type WorkflowDefinition, type WorkflowImage,
-} from "@/lib/tasks"
+import { ApiError, type AgentPool, type QueueWorkflow, type WorkflowDefinition, type WorkflowImage } from "@/lib/api"
 import { EMPTY, LABEL, MONO, SelectShell } from "./panelStyles"
 import { useWorkflowConfirm } from "./WorkflowConfirm"
 import WorkflowStatusMap from "./WorkflowStatusMap"
@@ -34,9 +31,8 @@ function bindingRef(binding: QueueWorkflow, images: WorkflowImage[]): string {
  * A bind refused for empty pools or missing secrets lists them with a way to
  * the tab that fixes them; the pools list shrinks as `pools` gains agents.
  */
-export default function QueueWorkflowSettings({ queue, target, pools, onOpenTab, onPoolsMissing, onSecretsMissing, onChanged }: {
+export default function QueueWorkflowSettings({ queue, pools, onOpenTab, onPoolsMissing, onSecretsMissing, onChanged }: {
   queue: string
-  target?: ApiTarget
   /** The queue's pools, kept current by the Pools tab. */
   pools: AgentPool[]
   onOpenTab: (tab: "pools" | "environment") => void
@@ -47,6 +43,7 @@ export default function QueueWorkflowSettings({ queue, target, pools, onOpenTab,
   /** Told after the binding changed here. */
   onChanged: () => void
 }) {
+  const api = useApi()
   const [binding, setBinding] = useState<QueueWorkflow | null>(null)
   // True only after a load succeeded: until then the binding is unknown.
   const [loaded, setLoaded] = useState(false)
@@ -63,18 +60,18 @@ export default function QueueWorkflowSettings({ queue, target, pools, onOpenTab,
 
   const loadBinding = useCallback(async () => {
     try {
-      setBinding(await getQueueWorkflow(queue, target))
+      setBinding(await api.workflows.getQueueWorkflow(queue))
       setLoaded(true)
       setLoadError("")
     } catch (err) {
       setLoaded(false)
       setLoadError(errorText(err))
     }
-  }, [queue, target])
+  }, [queue, api])
   useEffect(() => { void Promise.resolve().then(loadBinding) }, [loadBinding])
   useEffect(() => {
-    void listWorkflowImages(target).then(setImages, (err) => setError(errorText(err)))
-  }, [target])
+    void api.workflows.listWorkflowImages().then(setImages, (err) => setError(errorText(err)))
+  }, [api])
   const sorted = useMemo(() => sortImages(images), [images])
 
   const refused = async (err: unknown) => {
@@ -100,18 +97,18 @@ export default function QueueWorkflowSettings({ queue, target, pools, onOpenTab,
     if (!shownKey) return
     let alive = true
     const colon = shownKey.lastIndexOf(":")
-    getWorkflowImage(shownKey.slice(0, colon), shownKey.slice(colon + 1), target).then(
+    api.workflows.getWorkflowImage(shownKey.slice(0, colon), shownKey.slice(colon + 1)).then(
       (manifest) => { if (alive) setDefinition({ key: shownKey, value: manifest.definition, error: "" }) },
       (err) => { if (alive) setDefinition({ key: shownKey, value: null, error: errorText(err) }) },
     )
     return () => { alive = false }
-  }, [shownKey, target])
+  }, [shownKey, api])
 
   const bind = async () => {
     reset()
     setBusy(true)
     try {
-      setBinding(await setQueueWorkflow(queue, ref, binding?.revision ?? 0, target))
+      setBinding(await api.workflows.setQueueWorkflow(queue, ref, binding?.revision ?? 0))
       setRef("")
       onChanged()
     } catch (err) { await refused(err) } finally { setBusy(false) }
@@ -126,7 +123,7 @@ export default function QueueWorkflowSettings({ queue, target, pools, onOpenTab,
       run: () => {
         reset()
         setBusy(true)
-        clearQueueWorkflow(queue, binding.revision, target).then(() => { setBinding(null); onChanged() }, refused).finally(() => setBusy(false))
+        api.workflows.clearQueueWorkflow(queue, binding.revision).then(() => { setBinding(null); onChanged() }, refused).finally(() => setBusy(false))
       },
     })
   }

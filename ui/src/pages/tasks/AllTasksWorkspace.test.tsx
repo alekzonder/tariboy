@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from "@/test/queryRender"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
 import type { HostAgents } from "@/lib/aggregate"
-import type { Task } from "@/lib/tasks"
+import type { Task } from "@/lib/api"
 import AllTasksWorkspace from "./AllTasksWorkspace"
 import { resetTaskColumns } from "./taskColumnLayout"
 
@@ -18,10 +18,30 @@ const api = vi.hoisted(() => ({
   importTask: vi.fn(),
   updateTask: vi.fn(),
 }))
-vi.mock("@/lib/tasks", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/tasks")>(),
-  ...api,
+// Where each request takes the host it goes to in the mocks: every client the
+// workspace creates passes its own host there, so an assertion that names a
+// host proves the request went through that host's client.
+const hostArgument = vi.hoisted((): Record<string, number> => ({
+  createTask: 1, getTask: 1, listTaskEvents: 3, listTaskPrincipals: 0, listTaskQueues: 0,
+  listTasks: 1, addTaskComment: 2, exportTask: 1, importTask: 1, updateTask: 2,
 }))
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>()
+  return {
+    ...actual,
+    createApi: (target: Parameters<typeof actual.createApi>[0]) => {
+      const client = actual.createApi(target)
+      const tasks: Record<string, unknown> = { ...client.tasks }
+      for (const [name, at] of Object.entries(hostArgument)) {
+        tasks[name] = (...args: unknown[]) => {
+          args.splice(at, 0, client.target)
+          return (api as Record<string, (...values: unknown[]) => unknown>)[name](...args)
+        }
+      }
+      return { ...client, tasks }
+    },
+  }
+})
 vi.mock("@/lib/terminalsHost", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/terminalsHost")>(),
   targetFor: (id: string) => (id === "" ? null : { id, label: id, baseURL: `https://${id}`, token: "t" }),

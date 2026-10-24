@@ -1,4 +1,4 @@
-import type { TaskEvent } from "@/lib/tasks"
+import type { TaskEvent } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { SectionHeading } from "./TaskDetailControls"
 import { EMPTY, QUIET_ACTION, ROW } from "./panelStyles"

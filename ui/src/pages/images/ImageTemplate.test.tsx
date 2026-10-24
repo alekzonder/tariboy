@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import { apiWrapper } from "@/test/api";
 import ImageTemplate from "./ImageTemplate";
 
 vi.mock("@/components/ImageLayout", () => ({
@@ -32,7 +33,7 @@ it("renders static layers and runtime placeholders in declared order", async () 
     }),
   } as Response));
 
-  render(<ImageTemplate />);
+  render(<ImageTemplate />, { wrapper: apiWrapper() });
 
   expect(await screen.findByText(/template sha256 template-sha/)).toBeInTheDocument();
   const rows = screen.getAllByRole("listitem");
