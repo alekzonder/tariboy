@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from "react";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { readKey, storageKeys, writeKey } from "@/lib/storage";
 import { TASK_COLUMNS, type TaskRowMode } from "./taskColumns";
 
-export const TASK_COLUMN_LAYOUT_KEY = "tasks:columns:v1";
+export const TASK_COLUMN_LAYOUT_KEY = storageKeys.taskColumns.name;
 const TASK_COLUMN_LAYOUT_SCHEMA_VERSION = 1 as const;
 
 /** Every column a task table can show, in the default order. `task` takes the
@@ -98,12 +99,7 @@ function normalize(value: unknown): TaskColumnLayout {
 }
 
 export function readTaskColumnLayout(): TaskColumnLayout {
-  try {
-    const raw = globalThis.localStorage?.getItem(TASK_COLUMN_LAYOUT_KEY);
-    return raw ? normalize(JSON.parse(raw)) : defaultTaskColumnLayout();
-  } catch {
-    return defaultTaskColumnLayout();
-  }
+  return normalize(readKey(storageKeys.taskColumns));
 }
 
 // One layout for every task table on the page, so the header, the rows and the
@@ -118,17 +114,8 @@ function snapshot(): TaskColumnLayout {
 
 function commit(next: TaskColumnLayout): void {
   current = next;
-  try {
-    globalThis.localStorage?.setItem(
-      TASK_COLUMN_LAYOUT_KEY,
-      JSON.stringify({
-        schemaVersion: TASK_COLUMN_LAYOUT_SCHEMA_VERSION,
-        ...next,
-      }),
-    );
-  } catch {
-    // Web Storage is best effort: the change then lasts until a reload.
-  }
+  // Web Storage is best effort: the change then lasts until a reload.
+  writeKey(storageKeys.taskColumns, { schemaVersion: TASK_COLUMN_LAYOUT_SCHEMA_VERSION, ...next });
   listeners.forEach((listener) => listener());
 }
 

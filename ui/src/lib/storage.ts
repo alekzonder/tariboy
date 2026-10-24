@@ -128,19 +128,20 @@ function storageFor(area: StorageArea): Storage {
   return area === "local" ? globalThis.localStorage : globalThis.sessionStorage;
 }
 
-/** The stored value or the fallback; `ok` is false when the storage threw. */
-export function readKeyResult<T>(key: StorageKey<T>): { value: T; ok: boolean } {
+/** The stored value or the fallback; `error` is set only when the storage
+ *  itself threw, for callers that must tell the operator. */
+export function readKeyResult<T>(key: StorageKey<T>): { value: T; error?: unknown } {
   let raw: string | null;
   try {
     raw = storageFor(key.area).getItem(key.name);
-  } catch {
-    return { value: key.fallback, ok: false };
+  } catch (error) {
+    return { value: key.fallback, error: error ?? new Error("storage unavailable") };
   }
-  if (raw === null) return { value: key.fallback, ok: true };
+  if (raw === null) return { value: key.fallback };
   try {
-    return { value: key.parse(raw) ?? key.fallback, ok: true };
+    return { value: key.parse(raw) ?? key.fallback };
   } catch {
-    return { value: key.fallback, ok: true };
+    return { value: key.fallback };
   }
 }
 

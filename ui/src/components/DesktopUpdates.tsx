@@ -43,8 +43,8 @@ interface DesktopUpdatesContextValue {
 const DesktopUpdatesContext = createContext<DesktopUpdatesContextValue | null>(null);
 
 function readPreference(): { automatic: boolean; error: string } {
-  const { value, ok } = readKeyResult(storageKeys.desktopAutoDownload);
-  return { automatic: value, error: ok ? "" : STORAGE_ERROR };
+  const { value, error } = readKeyResult(storageKeys.desktopAutoDownload);
+  return { automatic: value, error: error ? STORAGE_ERROR : "" };
 }
 
 export function DesktopUpdatesProvider({ children }: { children: ReactNode }) {

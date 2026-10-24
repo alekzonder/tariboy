@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
+import { readKey, storageKeys, writeKey } from "@/lib/storage";
 
-export const TASK_PANEL_WIDTHS_KEY = "tasks:workspace:v1";
+export const TASK_PANEL_WIDTHS_KEY = storageKeys.taskPanelWidths.name;
 const TASK_PANEL_WIDTHS_SCHEMA_VERSION = 1 as const;
 
 export const MIN_TASK_DETAIL_WIDTH = 320;
@@ -30,34 +31,22 @@ export function clampTaskDetailWidth(value: number): number {
 }
 
 export function readTaskPanelWidths(): TaskPanelWidths {
-  try {
-    const raw = globalThis.localStorage?.getItem(TASK_PANEL_WIDTHS_KEY);
-    if (!raw) return defaults();
-    const value = JSON.parse(raw) as Record<string, unknown>;
-    if (
-      value.schemaVersion !== TASK_PANEL_WIDTHS_SCHEMA_VERSION ||
-      typeof value.detailWidth !== "number" ||
-      !Number.isFinite(value.detailWidth)
-    )
-      return defaults();
-    return { detailWidth: clampTaskDetailWidth(value.detailWidth) };
-  } catch {
+  const value = readKey(storageKeys.taskPanelWidths) as Record<string, unknown> | null;
+  if (
+    value?.schemaVersion !== TASK_PANEL_WIDTHS_SCHEMA_VERSION ||
+    typeof value.detailWidth !== "number" ||
+    !Number.isFinite(value.detailWidth)
+  )
     return defaults();
-  }
+  return { detailWidth: clampTaskDetailWidth(value.detailWidth) };
 }
 
 function persistTaskPanelWidths(widths: TaskPanelWidths): void {
-  try {
-    globalThis.localStorage?.setItem(
-      TASK_PANEL_WIDTHS_KEY,
-      JSON.stringify({
-        schemaVersion: TASK_PANEL_WIDTHS_SCHEMA_VERSION,
-        ...widths,
-      }),
-    );
-  } catch {
-    // Web Storage is a best-effort Desktop convenience.
-  }
+  // Web Storage is a best-effort Desktop convenience.
+  writeKey(storageKeys.taskPanelWidths, {
+    schemaVersion: TASK_PANEL_WIDTHS_SCHEMA_VERSION,
+    ...widths,
+  });
 }
 
 export function useTaskPanelWidths(): TaskPanelWidths & {
