@@ -5,6 +5,7 @@ import { ApiError, type ApiClient, type ImageRow } from "@/lib/api";
 import { useOptionalDaemons } from "@/components/daemonContext";
 import { useApi } from "@/components/apiContext";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
+import { subscribeImagesChanged } from "@/lib/imageEvents";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,11 +115,7 @@ export default function BuiltImages({
     };
   }, [registryDaemons, registryGeneration]);
 
-  useEffect(() => {
-    const refresh = () => setRevision((value) => value + 1);
-    window.addEventListener("tariboy:image-built", refresh);
-    return () => window.removeEventListener("tariboy:image-built", refresh);
-  }, []);
+  useEffect(() => subscribeImagesChanged(() => setRevision((value) => value + 1)), []);
 
   useEffect(() => {
     let alive = true;

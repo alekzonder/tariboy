@@ -7,6 +7,7 @@ import type { AgentImageStatus } from "@/lib/api";
 import type { AgentStatus, AgentView } from "@/lib/types";
 import { clearHarnessCatalogCache } from "@/hooks/useHarnessCatalog";
 import { RUNTIME_PRESETS_STORAGE_KEY } from "@/lib/runtimePresets";
+import { notifyImagesChanged } from "@/lib/imageEvents";
 import { ApiProvider } from "@/components/ApiProvider";
 import AgentConfigurationTab from "./AgentConfigurationTab";
 
@@ -621,7 +622,7 @@ it.each(["host", "agent", "refresh"])(
     });
     const { rerender } = render(tree());
     await waitFor(() => expect(finish).toBeDefined());
-    if (change === "refresh") act(() => window.dispatchEvent(new Event("tariboy:image-built")));
+    if (change === "refresh") act(() => notifyImagesChanged());
     else
       rerender(
         tree(
@@ -719,7 +720,7 @@ it("refreshes the image projection on status and build events without replacing 
   rerender(tree(remote, "worker", { name: "worker", state: "stopped" } as AgentStatus));
   expect(await screen.findByText("1.2.0")).toBeInTheDocument();
   state = { ...projection, next: { ...projection.next, image_version: "1.3.0" } };
-  act(() => window.dispatchEvent(new Event("tariboy:image-built")));
+  act(() => notifyImagesChanged());
   expect(await screen.findByText("1.3.0")).toBeInTheDocument();
   expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/draft");
 });

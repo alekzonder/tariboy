@@ -3,7 +3,7 @@
 // URL, never logged), {ok,result}|{ok,error} envelope unwrap. Response shapes are
 // authoritative from internal/storesvc/server.go + internal/image/manifest.go.
 
-const TOKEN_KEY = "tariboy_store_token";
+import { readKey, removeKey, storageKeys, writeKey } from "@/lib/storage";
 
 export class StoreApiError extends Error {
   status: number;
@@ -17,16 +17,16 @@ export class StoreApiError extends Error {
 }
 
 export function setToken(t: string): void {
-  sessionStorage.setItem(TOKEN_KEY, t);
+  writeKey(storageKeys.storeToken, t);
 }
 export function clearToken(): void {
-  sessionStorage.removeItem(TOKEN_KEY);
+  removeKey(storageKeys.storeToken);
 }
 export function hasToken(): boolean {
-  return !!sessionStorage.getItem(TOKEN_KEY);
+  return !!readKey(storageKeys.storeToken);
 }
 function authHeader(): Record<string, string> {
-  const t = sessionStorage.getItem(TOKEN_KEY);
+  const t = readKey(storageKeys.storeToken);
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 

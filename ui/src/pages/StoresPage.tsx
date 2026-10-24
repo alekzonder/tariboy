@@ -9,6 +9,7 @@ import {
   TARIBOY_STORE,
   type WorkflowImage,
 } from "@/lib/api";
+import { notifyImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -178,7 +179,7 @@ export default function StoresPage({ name, basePath }: { name?: string; basePath
             : `Built ${built.name}:${built.tag} and ${built.name}:latest.`,
         );
         setBusy("");
-        window.dispatchEvent(new Event("tariboy:image-built"));
+        notifyImagesChanged();
       }
       if (!isCurrent()) return;
       try {
@@ -206,7 +207,6 @@ export default function StoresPage({ name, basePath }: { name?: string; basePath
       if (!isCurrent()) return;
       setStatus(`Built ${built.name} ${built.version} (tags: ${built.tags.join(", ")}).`);
       setBusy("");
-      window.dispatchEvent(new Event("tariboy:workflow-image-built"));
       const [refreshed, images] = await Promise.all([
         api.stores.getStore(name),
         api.workflows.listWorkflowImages().catch(() => null),
