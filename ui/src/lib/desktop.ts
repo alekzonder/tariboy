@@ -113,7 +113,7 @@ export interface TaskNotificationResult {
   outcome: "shown" | "denied" | "unavailable";
 }
 
-export type DesktopUpdatePhase =
+type DesktopUpdatePhase =
   | "idle"
   | "checking"
   | "downloading"
@@ -192,7 +192,6 @@ export const daemonLogTail = (lines = 40) => invokeDesktop<string>("daemon_log",
 export const openDaemonLog = () => invokeDesktop<null>("open_daemon_log");
 export const openHostPathInVSCode = (hostId: string, path: string) =>
   invokeDesktop<null>("open_host_path_in_vscode", { hostId, path });
-export const openAgentCwdInVSCode = openHostPathInVSCode;
 export const supportBundleExport = (hostId: string, includeAgentData: boolean) =>
   invokeDesktop<SupportBundleResult | null>("support_bundle_export", {
     hostId,

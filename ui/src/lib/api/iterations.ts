@@ -29,4 +29,3 @@ export function iterationsApi(t: Transport) {
       }),
   };
 }
-export type IterationsApi = ReturnType<typeof iterationsApi>;

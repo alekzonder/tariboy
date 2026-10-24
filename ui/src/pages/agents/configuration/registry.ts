@@ -5,7 +5,7 @@
 
 export type Values = Record<string, string>;
 
-export type FieldKind =
+type FieldKind =
   | "text"
   | "number"
   | "select"

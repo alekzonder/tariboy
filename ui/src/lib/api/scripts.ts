@@ -2,8 +2,8 @@ import { agentApiPath, type Transport } from "./client";
 
 // ---- Durable agent scripts ----
 export type ScriptMode = "once" | "every";
-export type ScriptState = "active" | "completed" | "cancelled";
-export type ScriptRunStatus =
+type ScriptState = "active" | "completed" | "cancelled";
+type ScriptRunStatus =
   | "pending"
   | "running"
   | "succeeded"
@@ -81,4 +81,3 @@ export function scriptsApi(t: Transport) {
       t.agentDelete<{ id: string; removed: boolean }>(name, `scripts/${encodeURIComponent(id)}`),
   };
 }
-export type ScriptsApi = ReturnType<typeof scriptsApi>;

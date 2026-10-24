@@ -18,7 +18,7 @@ export interface RetentionPolicy extends RetentionLimits {
 
 // A loaded value, or the reason it is missing. A failed reload keeps the last
 // value: a failed read is not an empty one.
-export interface Loaded<T> {
+interface Loaded<T> {
   value: T | null;
   error: string;
 }

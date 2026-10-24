@@ -33,4 +33,3 @@ export function usageApi(t: Transport) {
     },
   };
 }
-export type UsageApi = ReturnType<typeof usageApi>;

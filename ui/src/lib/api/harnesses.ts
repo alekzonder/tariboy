@@ -15,4 +15,3 @@ export function harnessesApi(t: Transport) {
       t.post<{ mode: CodexApprovalMode }>("/api/harnesses/codex/approval-mode", { mode }),
   };
 }
-export type HarnessesApi = ReturnType<typeof harnessesApi>;

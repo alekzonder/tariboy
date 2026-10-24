@@ -6,7 +6,7 @@ import { ApiContext } from "@/components/apiContext";
 
 /** Connection lifecycle exposed to the Terminal tab. "connecting" covers both
  * the initial dial and any backoff-driven reconnect attempt. */
-export type TerminalSocketStatus = "connecting" | "open" | "closed";
+type TerminalSocketStatus = "connecting" | "open" | "closed";
 
 /** Everything the Terminal tab needs to drive a live xterm.js session over
  * `GET /api/agents/<name>/terminal`: connection status, whether the daemon

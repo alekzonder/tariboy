@@ -12,26 +12,26 @@ export interface WorkflowOutcome {
   check_details?: WorkflowCheckView[];
 }
 /** One check of a transition with its defaults resolved; `timeout` is a Go duration such as `1m0s`. */
-export interface WorkflowCheckView {
+interface WorkflowCheckView {
   script: string;
   description?: string;
   run_as: "queue" | "agent";
   timeout: string;
 }
-export interface WorkflowWatchView {
+interface WorkflowWatchView {
   script: string;
   description?: string;
   every: string;
   timeout: string;
 }
-export interface WorkflowTransitionView {
+interface WorkflowTransitionView {
   on: string;
   to: string;
   requires?: string[];
   checks?: WorkflowCheckView[];
 }
 /** The effective limits of a status; `unavailable_grace` is a Go duration such as `5m0s`. */
-export interface WorkflowLimitsView {
+interface WorkflowLimitsView {
   idle_iterations: number;
   rejected_requests: number;
   script_failures: number;
@@ -61,7 +61,7 @@ export interface WorkflowVisit {
   rejected_requests?: number;
   script_failures?: number;
 }
-export type TransitionState = "pending" | "applied" | "rejected" | "failed" | "cancelled";
+type TransitionState = "pending" | "applied" | "rejected" | "failed" | "cancelled";
 export interface TransitionRequest {
   id: number;
   task_key: string;
@@ -75,8 +75,8 @@ export interface TransitionRequest {
   // Only while pending: how long the checks may take, in seconds.
   wait_seconds?: number;
 }
-export type ScriptRunState = "pending" | "running" | "finished" | "interrupted" | "cancelled";
-export type ScriptRunVerdict = "pass" | "reject" | "outcome" | "quiet" | "failure";
+type ScriptRunState = "pending" | "running" | "finished" | "interrupted" | "cancelled";
+type ScriptRunVerdict = "pass" | "reject" | "outcome" | "quiet" | "failure";
 export interface WorkflowScriptRun {
   id: number;
   task_key: string;
@@ -188,7 +188,7 @@ export interface WorkflowImage {
   built_at: string;
 }
 /** `kind` is "" for a terminal status. */
-export interface WorkflowOwner {
+interface WorkflowOwner {
   kind: "pool" | "customer" | "script" | "";
   pool?: string;
 }
@@ -198,19 +198,19 @@ export interface WorkflowLimits {
   script_failures?: number;
   unavailable_grace?: string;
 }
-export interface WorkflowCheck {
+interface WorkflowCheck {
   script: string;
   run_as?: string;
   timeout?: string;
   description?: string;
 }
-export interface WorkflowWatch {
+interface WorkflowWatch {
   script: string;
   every: string;
   timeout?: string;
   description?: string;
 }
-export interface WorkflowTransition {
+interface WorkflowTransition {
   on: string;
   to: string;
   requires?: string[];
@@ -238,7 +238,7 @@ export interface WorkflowDefinition {
   artifacts?: WorkflowDeclaredArtifact[];
   statuses: WorkflowDefinitionStatus[];
 }
-export interface WorkflowFileEntry {
+interface WorkflowFileEntry {
   path: string;
   sha256: string;
   executable: boolean;
@@ -412,4 +412,3 @@ export function workflowsApi(t: Transport) {
     },
   };
 }
-export type WorkflowsApi = ReturnType<typeof workflowsApi>;

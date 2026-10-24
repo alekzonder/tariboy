@@ -185,4 +185,3 @@ export function messagesApi(t: Transport) {
       t.post<{ id: string; channel: string; sent: boolean }>("/api/messages", message),
   };
 }
-export type MessagesApi = ReturnType<typeof messagesApi>;

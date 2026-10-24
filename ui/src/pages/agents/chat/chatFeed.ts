@@ -14,7 +14,7 @@ export const TASK_KEY = /\b[A-Z][A-Z0-9]*-(?:[0-9a-z]{4}|\d+)\b/g;
  *  - `read` — the agent has spoken after it, which is the only evidence this
  *    side has that the agent consumed it.
  *  A true receipt would need the agent to record message consumption. */
-export type Receipt = "sent" | "delivered" | "read";
+type Receipt = "sent" | "delivered" | "read";
 
 export interface FeedMessage {
   kind: "message";
@@ -28,7 +28,7 @@ export interface FeedMessage {
   readLabel?: string;
 }
 
-export interface FeedDivider {
+interface FeedDivider {
   kind: "day" | "unread";
   /** Stable enough for a React key: a day repeats at most once. */
   id: string;
