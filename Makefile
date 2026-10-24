@@ -613,7 +613,7 @@ frontend-check:
 	run_step "ui-fmt-check" 'cd ui && npm run fmt:check'; \
 	run_step "ui-typecheck" 'cd ui && npx tsc -b'; \
 	run_step "ui-lint"      'cd ui && npm run lint'; \
-	run_step "ui-unused"    'cd ui && npm run lint:unused'; \
+	run_step "ui-dead-code" 'cd ui && npm run knip'; \
 	run_step "ui-test"      'cd ui && npm test'; \
 	run_step "ui-branding"  'cd ui && npm run branding:check'; \
 	run_step "ui-bundle-budget" 'cd ui && npm run bundle:budget'; \

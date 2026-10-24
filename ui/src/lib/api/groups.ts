@@ -7,7 +7,6 @@ export interface GroupRow {
   lead: string;
   members: number;
 }
-export type TeamRow = GroupRow;
 export interface TeamDetail {
   name: string;
   lead: string;
@@ -80,4 +79,3 @@ export function groupsApi(t: Transport) {
     },
   };
 }
-export type GroupsApi = ReturnType<typeof groupsApi>;

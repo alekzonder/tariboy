@@ -1,6 +1,6 @@
 import type { Transport } from "./client";
 
-export interface ImageBuildRecord {
+interface ImageBuildRecord {
   ref: string;
   digest: string;
   built_at: string;
@@ -21,7 +21,7 @@ export interface ImageSourceFile {
   size: number;
 }
 
-export interface ImageSourceDiagnostic {
+interface ImageSourceDiagnostic {
   path: string;
   field?: string;
   message: string;
@@ -67,4 +67,3 @@ export function imageSourcesApi(t: Transport) {
       t.post<ImageSourceBuildResult>(`${sourcePath(name)}/build`, { tag }),
   };
 }
-export type ImageSourcesApi = ReturnType<typeof imageSourcesApi>;

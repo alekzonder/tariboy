@@ -24,11 +24,11 @@ export interface Message {
   role: string;
   blocks: Block[];
 }
-export interface CallResponse {
+interface CallResponse {
   blocks: Block[];
   stop_reason?: string;
 }
-export interface Usage {
+interface Usage {
   input: number;
   output: number;
   cache_read: number;
@@ -102,4 +102,3 @@ export function auditApi(t: Transport) {
     },
   };
 }
-export type AuditApi = ReturnType<typeof auditApi>;

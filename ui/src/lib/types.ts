@@ -28,7 +28,7 @@ export interface AgentSummary {
   budget?: AgentBudgetStatus;
 }
 
-export interface AgentBudgetStatus {
+interface AgentBudgetStatus {
   hour_usd: number;
   day_usd: number;
   week_usd: number;
@@ -107,7 +107,7 @@ export interface AgentStatus {
   budget?: AgentBudgetStatus;
 }
 
-export interface ActiveIteration {
+interface ActiveIteration {
   id: string;
   started_at: string;
   timeout_period_s?: number;
@@ -160,7 +160,7 @@ export interface IterationLogs {
   stderr: string;
 }
 
-export interface UsageRow {
+interface UsageRow {
   agent: string;
   image: string;
   group_id: string | null;
@@ -180,7 +180,7 @@ export interface UsagePoint {
   cost_usd: number;
 }
 
-export interface UsageRequest {
+interface UsageRequest {
   id: string;
   ts: string;
   agent: string;
@@ -213,7 +213,7 @@ export interface UsageReport {
 // Per-agent Usage tab (epic dev-t-3e1). Mirrors GET
 // /api/agents/{name}/usage from internal/commands/usage.go: grouped rows
 // (by iteration|task|epic|model) plus a time-bucketed cost/traffic series.
-export interface AgentUsageTotals {
+interface AgentUsageTotals {
   requests: number;
   input_tokens: number;
   output_tokens: number;
@@ -222,7 +222,7 @@ export interface AgentUsageTotals {
   cost_usd: number;
 }
 
-export interface AgentUsageRow {
+interface AgentUsageRow {
   key: string; // iteration id / task id / epic id / model; "untagged" when unset
   title?: string; // present only for task/epic groupings (human title, else bare id)
   requests: number;
@@ -233,7 +233,7 @@ export interface AgentUsageRow {
   cost_usd: number;
 }
 
-export interface AgentUsagePoint {
+interface AgentUsagePoint {
   bucket_start: string; // RFC3339 UTC bucket start
   requests: number;
   tokens: number;
@@ -308,7 +308,7 @@ export interface AgentEvent {
   data?: Record<string, unknown>;
 }
 
-export interface HarnessModel {
+interface HarnessModel {
   id: string;
   label?: string;
   efforts?: string[];

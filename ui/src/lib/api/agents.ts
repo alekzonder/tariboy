@@ -172,4 +172,3 @@ export function agentsApi(t: Transport) {
       subscribeAgentEventsOn(t.target, name, types, onEvent),
   };
 }
-export type AgentsApi = ReturnType<typeof agentsApi>;

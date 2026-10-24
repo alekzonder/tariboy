@@ -79,7 +79,7 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   `fmt-check`, `go vet`, `staticcheck`, the `gocyclo` complexity threshold,
   Go unit tests, Store skills, and smoke contracts;
   frontend checks cover the UI format check (oxfmt), UI typecheck, lint,
-  unused files and exports (Knip),
+  unused files, exports, types and dependencies (Knip),
   unit tests, branding, the initial UI bundle budget, and the documentation
   `doctor` plus `build`. Before
   checking, they download Go

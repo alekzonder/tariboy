@@ -1,7 +1,16 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["store/main.tsx!"],
-  "project": ["src/**/*.{ts,tsx}!", "store/**/*.{ts,tsx}!", "!src/test/**!"],
+  "entry": ["tests/**/*.{ts,tsx,mjs}", ".design-sync/**/*.{ts,tsx,mjs}"],
+  "project": [
+    "src/**/*.{ts,tsx,css}!",
+    "store/**/*.{ts,tsx,css}!",
+    "!src/test/**!",
+    "tests/**/*.{ts,tsx,mjs}",
+    ".design-sync/**/*.{ts,tsx,mjs}"
+  ],
+  "playwright": { "config": ["playwright.*.config.ts"] },
+  "vite": { "config": ["vite*.config.ts"] },
+  "ignoreBinaries": ["go"],
   "ignoreIssues": {
     "src/components/ui/*.tsx": ["exports"],
     "src/components/ui/separator.tsx": ["files"],

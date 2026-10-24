@@ -92,11 +92,11 @@ export interface TagList {
   name: string;
   tags: PushRow[];
 }
-export interface ManifestPlugin {
+interface ManifestPlugin {
   name: string;
   version?: string;
 }
-export interface ManifestHarness {
+interface ManifestHarness {
   type: string;
   model?: string;
   effort?: string;

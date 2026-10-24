@@ -8,7 +8,7 @@ import { readKey, storageKeys, writeKey } from "./storage";
 export const WORKSPACES_KEY = storageKeys.workspaces.name;
 export const DEFAULT_WORKSPACE_ID = "default";
 
-export interface Workspace {
+interface Workspace {
   id: string;
   name: string;
 }

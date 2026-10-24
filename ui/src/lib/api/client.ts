@@ -14,7 +14,7 @@ export class ApiError extends Error {
   }
 }
 
-export interface Envelope<T> {
+interface Envelope<T> {
   ok: boolean;
   result?: T;
   error?: { code: string; message: string; details?: Record<string, unknown> };

@@ -22,7 +22,7 @@ import {
   hostConnect,
   hostUpdate,
   hostPromptReply,
-  openAgentCwdInVSCode,
+  openHostPathInVSCode,
   openExternalUrl,
   opensWebLinks,
   showTaskNotification,
@@ -63,7 +63,7 @@ describe("desktop calls outside Tauri", () => {
     await expect(daemonStart()).resolves.toBeNull();
     await expect(daemonRestart()).resolves.toBeNull();
     await expect(daemonLogTail()).resolves.toBeNull();
-    await expect(openAgentCwdInVSCode("", "/work/agent")).resolves.toBeNull();
+    await expect(openHostPathInVSCode("", "/work/agent")).resolves.toBeNull();
     await expect(installCli()).resolves.toBeNull();
     await expect(hostsList()).resolves.toBeNull();
     await expect(hostSaveSsh({ label: "dev", ssh_alias: "devbox" })).resolves.toBeNull();

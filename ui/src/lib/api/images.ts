@@ -21,11 +21,11 @@ export interface ImageRow {
 
 // ---- Images (read-only image detail: manifest / prompt / packed files) ----
 // `ref` is name:tag; it rides in the URL path so it is percent-encoded whole.
-export interface ImageManifestPlugin {
+interface ImageManifestPlugin {
   name: string;
   version?: string;
 }
-export interface ImageManifestSkill {
+interface ImageManifestSkill {
   name: string;
   description: string;
   source: string;
@@ -35,13 +35,13 @@ export interface ImageManifestSkill {
   size: number;
   tree_sha256: string;
 }
-export interface ImageManifestHarness {
+interface ImageManifestHarness {
   type: string;
   model?: string;
   effort?: string;
   interactive: boolean;
 }
-export interface ImageManifestPolicy {
+interface ImageManifestPolicy {
   tools_allow?: string[];
   tools_deny?: string[];
 }
@@ -158,4 +158,3 @@ export function imagesApi(t: Transport) {
       t.post(`/api/image-imports/${encodeURIComponent(importID)}/apply`, ref ? { ref } : {}),
   };
 }
-export type ImagesApi = ReturnType<typeof imagesApi>;

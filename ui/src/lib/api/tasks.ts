@@ -2,9 +2,9 @@ import type { Transport } from "./client";
 
 export type TaskStatus = "open" | "in_progress" | "wait_customer" | "done" | "cancelled";
 export type TaskCategory = TaskStatus;
-export type WaitingOn = "customer" | "script" | "pause";
+type WaitingOn = "customer" | "script" | "pause";
 export type TaskStatusView = "active" | "closed" | "all";
-export type TaskAccess = "write" | "respond" | "context";
+type TaskAccess = "write" | "respond" | "context";
 export type TaskPriority = "P0" | "P1" | "P2" | "P3";
 
 export interface TaskQueue {
@@ -37,7 +37,7 @@ export interface WorkflowAttention {
   run_id?: number;
 }
 /** The position of the current status in the manifest, counted from 1. */
-export interface WorkflowStep {
+interface WorkflowStep {
   index: number;
   total: number;
 }

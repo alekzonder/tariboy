@@ -18,7 +18,7 @@ export interface StoreImage {
   latest_error?: string;
 }
 
-export interface StoreAuto {
+interface StoreAuto {
   interval_minutes: number;
   images: string[];
 }
@@ -58,4 +58,3 @@ export function storesApi(t: Transport) {
       t.post<WorkflowBuildResult>("/api/workflow-images/build", { source }),
   };
 }
-export type StoresApi = ReturnType<typeof storesApi>;

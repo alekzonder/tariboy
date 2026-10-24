@@ -1,13 +1,13 @@
 import type { Transport } from "./client";
 
-export interface PluginOperatorArg {
+interface PluginOperatorArg {
   name: string;
   flag?: string;
   type: "string" | "integer" | "integer-list" | "boolean" | "secret-file";
   required?: boolean;
   help?: string;
 }
-export interface PluginOperatorCommand {
+interface PluginOperatorCommand {
   path: string;
   summary: string;
   action: string;
@@ -20,7 +20,7 @@ export interface PluginSettingField {
   required?: boolean;
   help?: string;
 }
-export interface PluginSettingsContribution {
+interface PluginSettingsContribution {
   title: string;
   status?: Array<{ name: string; label: string }>;
   sections?: Array<{
@@ -57,4 +57,3 @@ export function pluginsApi(t: Transport) {
       }),
   };
 }
-export type PluginsApi = ReturnType<typeof pluginsApi>;

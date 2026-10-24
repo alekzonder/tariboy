@@ -15,7 +15,7 @@ import {
  * that says what to do next. A paused task is explained by its banner, not
  * here.
  */
-export type ProblemKind = "failed" | "rejected" | "watch_failed" | "no_agent" | "idle" | "checking";
+type ProblemKind = "failed" | "rejected" | "watch_failed" | "no_agent" | "idle" | "checking";
 
 export interface Problem {
   kind: ProblemKind;
