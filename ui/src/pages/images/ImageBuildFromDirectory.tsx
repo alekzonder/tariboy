@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { ApiError, type ImageDiagnostic, type ImageValidationResult } from "@/lib/api";
+import { notifyImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,7 +55,7 @@ export default function ImageBuildFromDirectory() {
       });
       setDiagnostics([]);
       toast.success(`built ${result.name}:${result.tag}`);
-      window.dispatchEvent(new Event("tariboy:image-built"));
+      notifyImagesChanged();
     } catch (error) {
       toast.error(`build failed: ${message(error)}`);
     } finally {

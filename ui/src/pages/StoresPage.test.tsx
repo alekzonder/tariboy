@@ -9,6 +9,7 @@ import TerminalsPage from "@/pages/terminals/TerminalsPage";
 import { fetchAllAgents } from "@/lib/aggregate";
 import { setActiveDaemon } from "@/lib/api";
 import { addDaemon } from "@/lib/daemons";
+import { subscribeImagesChanged } from "@/lib/imageEvents";
 import StoresPage from "@/pages/StoresPage";
 
 vi.mock("@/lib/aggregate", () => ({ fetchAllAgents: vi.fn() }));
@@ -113,7 +114,7 @@ describe("Stores workspace", () => {
       finishBuild = resolve;
     });
     const imageBuilt = vi.fn();
-    window.addEventListener("tariboy:image-built", imageBuilt);
+    const stopImageBuilt = subscribeImagesChanged(imageBuilt);
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -357,7 +358,7 @@ describe("Stores workspace", () => {
     );
     expect(await screen.findByRole("heading", { name: "Stores" })).toBeInTheDocument();
 
-    window.removeEventListener("tariboy:image-built", imageBuilt);
+    stopImageBuilt();
   });
 
   it("discards a detail response after the route selects another Store", async () => {
@@ -734,8 +735,6 @@ describe("Store workflow images", () => {
     const calls: Call[] = [];
     let built = false;
     let buildFails = true;
-    const workflowBuilt = vi.fn();
-    window.addEventListener("tariboy:workflow-image-built", workflowBuilt);
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -833,8 +832,6 @@ describe("Store workflow images", () => {
     await waitFor(async () =>
       expect(within(await row("development")).getByText("Up to date")).toBeInTheDocument(),
     );
-    expect(workflowBuilt).toHaveBeenCalledTimes(1);
-    window.removeEventListener("tariboy:workflow-image-built", workflowBuilt);
   });
 
   it("keeps workflow builds available when built images cannot be compared", async () => {

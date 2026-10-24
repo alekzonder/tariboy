@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isConnectionError, type AgentImageStatus, type ImageRow } from "@/lib/api";
+import { subscribeImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
 import type { AgentStatus, AgentView } from "@/lib/types";
 
@@ -156,13 +157,13 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
       scope.image++;
     };
   }, [loadImages, status]);
-  useEffect(() => {
-    const reload = () => {
-      void loadImages();
-    };
-    window.addEventListener("tariboy:image-built", reload);
-    return () => window.removeEventListener("tariboy:image-built", reload);
-  }, [loadImages]);
+  useEffect(
+    () =>
+      subscribeImagesChanged(() => {
+        void loadImages();
+      }),
+    [loadImages],
+  );
 
   const reloadAll = useCallback(async () => {
     await Promise.all([loadAgent(), loadImages()]);

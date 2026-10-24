@@ -26,6 +26,32 @@ function mockFetch(status: number, body: unknown, capture?: (init: RequestInit) 
 beforeEach(() => clearToken());
 afterEach(() => vi.restoreAllMocks());
 
+describe("store token", () => {
+  it("lives only in sessionStorage", () => {
+    setToken("s3cr3t");
+    expect(sessionStorage.getItem("tariboy_store_token")).toBe("s3cr3t");
+    expect(localStorage.getItem("tariboy_store_token")).toBeNull();
+    clearToken();
+    expect(sessionStorage.getItem("tariboy_store_token")).toBeNull();
+  });
+
+  it("reads as signed out when storage is blocked", () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage")!;
+    Object.defineProperty(globalThis, "sessionStorage", {
+      configurable: true,
+      get() {
+        throw new Error("blocked");
+      },
+    });
+    try {
+      expect(hasToken()).toBe(false);
+      expect(() => setToken("s3cr3t")).not.toThrow();
+    } finally {
+      Object.defineProperty(globalThis, "sessionStorage", original);
+    }
+  });
+});
+
 describe("storeApi envelope + bearer", () => {
   it("unwraps result on ok:true", async () => {
     vi.stubGlobal(
