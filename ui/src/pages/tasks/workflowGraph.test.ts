@@ -8,6 +8,7 @@ import {
   inCurrentVisit,
   requiredBy,
   returnTargets,
+  selectedStep,
   stepArtifacts,
   stepMarks,
   stepOf,
@@ -361,5 +362,19 @@ describe("returnTargets", () => {
     const targets = returnTargets(view);
     expect(targets.map((target) => target.status)).toEqual(["plan", "draft"]);
     expect(defaultReturnTarget(view, targets)?.status).toBe("draft");
+  });
+});
+
+describe("selectedStep", () => {
+  const away = { ...customerView, status: "gone" };
+  it.each([
+    ["the chosen declared status", customerView, "draft", "draft"],
+    ["the current status before a choice", customerView, undefined, "review"],
+    ["the current status for an undeclared choice", customerView, "gone", "review"],
+    ["nothing after Show all", customerView, null, null],
+    ["nothing when neither is declared", away, "gone", null],
+    ["the choice even when the current status is undeclared", away, "draft", "draft"],
+  ] as const)("selects %s", (_name, view, chosen, selected) => {
+    expect(selectedStep(view, chosen)).toBe(selected);
   });
 });

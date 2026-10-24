@@ -56,6 +56,19 @@ export function stepOf(view: WorkflowView): { index: number; total: number } | n
   return index < 0 ? null : { index: index + 1, total: view.statuses.length };
 }
 
+/**
+ * The step the panel shows: the one the customer chose while the manifest
+ * declares it, otherwise the current status. `null` is the choice to show
+ * every artifact; `undefined` is no choice yet.
+ */
+export function selectedStep(view: WorkflowView, chosen: string | null | undefined): string | null {
+  if (chosen === null) return null;
+  const declares = (id: string | undefined) =>
+    !!id && view.statuses.some((status) => status.id === id);
+  if (declares(chosen)) return chosen!;
+  return declares(view.status) ? view.status : null;
+}
+
 export interface StepMark {
   status: WorkflowStatusInfo;
   /** `current` is where the task is; `visited` was entered before; `ahead` not yet. */
