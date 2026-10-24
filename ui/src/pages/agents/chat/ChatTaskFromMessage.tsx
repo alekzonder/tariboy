@@ -127,7 +127,7 @@ export default function ChatTaskFromMessage({
               readOnly
               rows={5}
               value={message.text}
-              className="font-mono text-[11.5px]"
+              className="font-mono text-meta"
             />
           </div>
         </div>

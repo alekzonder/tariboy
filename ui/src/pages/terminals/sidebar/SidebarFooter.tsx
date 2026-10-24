@@ -21,11 +21,11 @@ export function SidebarFooter({
     <div className="flex h-11 shrink-0 items-center gap-2 px-3">
       <span
         aria-hidden="true"
-        className="grid size-[22px] shrink-0 place-items-center rounded-full bg-accent text-muted-foreground"
+        className="grid size-5.5 shrink-0 place-items-center rounded-full bg-accent text-muted-foreground"
       >
         <Server className="size-3" />
       </span>
-      <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+      <span className="min-w-0 flex-1 truncate text-ui text-muted-foreground">
         {count(servers, "server")} · {count(agents, "agent")}
       </span>
       <span
@@ -40,7 +40,7 @@ export function SidebarFooter({
       <Button
         variant="ghost"
         size="icon-xs"
-        className="size-[22px] shrink-0 rounded-[6px] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+        className="size-5.5 shrink-0 rounded-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
         aria-label="Add host"
         title="Add host"
         onClick={onAddServer}

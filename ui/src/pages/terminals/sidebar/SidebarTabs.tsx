@@ -23,7 +23,7 @@ export function SidebarTabs({ onCreate }: { onCreate: () => void }) {
             key={tab.value}
             value={tab.value}
             className={cn(
-              "h-6 rounded-[7px] px-[9px] py-0 text-[12px] font-normal text-muted-foreground shadow-none",
+              "h-6 rounded-control px-2.25 py-0 text-ui font-normal text-muted-foreground shadow-none",
               "data-[state=active]:bg-accent data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=active]:shadow-none",
             )}
           >
@@ -34,7 +34,7 @@ export function SidebarTabs({ onCreate }: { onCreate: () => void }) {
       <Button
         variant="ghost"
         size="icon-xs"
-        className="ml-auto size-6 shrink-0 rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="ml-auto size-6 shrink-0 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
         aria-label="Add agent"
         title="Add agent"
         onClick={onCreate}

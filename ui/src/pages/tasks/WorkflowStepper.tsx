@@ -70,7 +70,7 @@ function Step({ mark, open, onToggle }: { mark: StepMark; open: boolean; onToggl
       data-state={state}
       onClick={onToggle}
       className={cn(
-        "flex min-w-0 max-w-full items-center gap-1.5 rounded-[7px] px-1.5 py-0.5 text-left hover:bg-accent",
+        "flex min-w-0 max-w-full items-center gap-1.5 rounded-control px-1.5 py-0.5 text-left hover:bg-accent",
         state === "current" && "bg-muted",
         open && "ring-1 ring-ring",
         state === "ahead" && "text-muted-foreground opacity-70",
@@ -82,10 +82,7 @@ function Step({ mark, open, onToggle }: { mark: StepMark; open: boolean; onToggl
           className="size-3 shrink-0 text-status-running [stroke-width:2]"
         />
       ) : status.terminal ? (
-        <span
-          aria-hidden="true"
-          className="size-[7px] shrink-0 rounded-[1.5px] bg-status-stopped"
-        />
+        <span aria-hidden="true" className="size-1.75 shrink-0 rounded-hair bg-status-stopped" />
       ) : (
         <StatusDot tone={tone} />
       )}
@@ -125,7 +122,7 @@ function StepDetail({ status }: { status: WorkflowStatusInfo }) {
   return (
     <div
       data-testid="step-detail"
-      className="flex min-w-0 flex-col gap-1.5 rounded-[8px] bg-muted/50 px-2.5 py-2 text-[12px]"
+      className="flex min-w-0 flex-col gap-1.5 rounded-md bg-muted/50 px-2.5 py-2 text-ui"
     >
       <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5">
         <span className={cn(MONO, "min-w-0 break-all font-medium")}>{status.id}</span>

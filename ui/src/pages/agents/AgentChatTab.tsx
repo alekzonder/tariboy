@@ -35,7 +35,7 @@ export default function AgentChatTab({ hostId = "" }: { hostId?: string }) {
     <div
       role="group"
       aria-label="Messaging view"
-      className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5"
+      className="flex shrink-0 gap-0.5 rounded-panel bg-muted p-0.5"
     >
       {VIEWS.map(([key, label]) => (
         <button
@@ -43,7 +43,7 @@ export default function AgentChatTab({ hostId = "" }: { hostId?: string }) {
           type="button"
           aria-pressed={view === key}
           onClick={() => pick(key)}
-          className={`h-[22px] rounded-[7px] px-[9px] text-[11.5px] ${
+          className={`h-5.5 rounded-control px-2.25 text-meta ${
             view === key
               ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
               : "text-muted-foreground hover:text-foreground"

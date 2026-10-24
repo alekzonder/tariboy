@@ -54,13 +54,13 @@ export default function QueueSources({ queue }: { queue: string }) {
         </Button>
       </div>
       {error && (
-        <div role="alert" className="flex items-center gap-2 text-[12px] text-destructive">
+        <div role="alert" className="flex items-center gap-2 text-ui text-destructive">
           <span>{error}</span>
           <Button
             type="button"
             size="sm"
             variant="secondary"
-            className="h-[26px]"
+            className="h-6.5"
             disabled={busy}
             onClick={() => void load()}
           >

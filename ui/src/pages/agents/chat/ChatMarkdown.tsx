@@ -72,15 +72,13 @@ function CodeBlock({ children }: { children: ReactNode }) {
   const language = /language-(\w+)/.exec(code?.props?.className ?? "")?.[1] ?? "text";
   const text = String(code?.props?.children ?? "");
   return (
-    <div className="my-1 overflow-hidden rounded-[8px] bg-muted">
-      <div className="flex h-[22px] items-center gap-1.5 pr-2 pl-2.5">
-        <span className="font-mono text-[10px] tracking-wide text-muted-foreground">
-          {language}
-        </span>
+    <div className="my-1 overflow-hidden rounded-md bg-muted">
+      <div className="flex h-5.5 items-center gap-1.5 pr-2 pl-2.5">
+        <span className="font-mono text-micro tracking-wide text-muted-foreground">{language}</span>
         <button
           type="button"
           aria-label="Copy code"
-          className="ml-auto flex h-[18px] items-center gap-1 rounded-[5px] px-1.5 text-[10.5px] text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="ml-auto flex h-4.5 items-center gap-1 rounded-chip px-1.5 text-tiny text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={() => {
             void navigator.clipboard
               ?.writeText(text.replace(/\n$/, ""))
@@ -95,7 +93,7 @@ function CodeBlock({ children }: { children: ReactNode }) {
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre className="m-0 px-2.5 pb-2 font-mono text-[11.5px] leading-[1.5] break-words whitespace-pre-wrap">
+      <pre className="m-0 px-2.5 pb-2 font-mono text-meta leading-[1.5] break-words whitespace-pre-wrap">
         {text.replace(/\n$/, "")}
       </pre>
     </div>
@@ -113,7 +111,7 @@ export default function ChatMarkdown({
   onOpenTask: (key: string) => void;
 }) {
   return (
-    <div className="chat-markdown text-[12.5px] leading-[1.5] text-pretty [&_blockquote]:my-[3px] [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:py-0.5 [&_blockquote]:pl-[9px] [&_blockquote]:text-muted-foreground [&_code]:rounded-[5px] [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-[11.5px] [&_em]:italic [&_li]:my-0 [&_ol]:my-[2px] [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-[1px] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_strong]:font-semibold [&_table]:my-2 [&_table]:block [&_table]:w-full [&_table]:overflow-x-auto [&_td]:border [&_td]:px-1.5 [&_td]:py-0.5 [&_th]:border [&_th]:bg-muted [&_th]:px-1.5 [&_th]:py-0.5 [&_ul]:my-[2px] [&_ul]:list-disc [&_ul]:pl-5">
+    <div className="chat-markdown text-body-sm leading-[1.5] text-pretty [&_blockquote]:my-0.75 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:py-0.5 [&_blockquote]:pl-2.25 [&_blockquote]:text-muted-foreground [&_code]:rounded-chip [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-meta [&_em]:italic [&_li]:my-0 [&_ol]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0.25 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_strong]:font-semibold [&_table]:my-2 [&_table]:block [&_table]:w-full [&_table]:overflow-x-auto [&_td]:border [&_td]:px-1.5 [&_td]:py-0.5 [&_th]:border [&_th]:bg-muted [&_th]:px-1.5 [&_th]:py-0.5 [&_ul]:my-0.5 [&_ul]:list-disc [&_ul]:pl-5">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkTaskKeys]}
         // The default transform drops every scheme it does not know, which

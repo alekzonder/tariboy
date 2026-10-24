@@ -155,7 +155,7 @@ export default function TaskRow({
         onSelect();
       }}
       className={cn(
-        "group/row relative flex min-h-[30px] cursor-pointer items-center gap-2.5 px-4 text-[13px]",
+        "group/row relative flex min-h-7.5 cursor-pointer items-center gap-2.5 px-4 text-body",
         selected ? "bg-accent" : "hover:bg-muted",
         overInside && "ring-1 ring-primary ring-inset",
         row.task.access === "context" && "opacity-60",
@@ -241,7 +241,7 @@ export default function TaskRow({
                     )}
                   />
                 </button>
-                <span className="min-w-0 truncate font-mono text-[11.5px] text-muted-foreground tabular-nums">
+                <span className="min-w-0 truncate font-mono text-meta text-muted-foreground tabular-nums">
                   {row.task.key}
                 </span>
               </span>
@@ -252,13 +252,13 @@ export default function TaskRow({
                 key="task"
                 type="button"
                 data-column="task"
-                className="task-row-main relative z-2 flex min-w-0 flex-1 items-center gap-[7px] overflow-hidden text-left"
+                className="task-row-main relative z-2 flex min-w-0 flex-1 items-center gap-1.75 overflow-hidden text-left"
                 onClick={onSelect}
               >
                 <span className="min-w-0 truncate">{row.task.title}</span>
                 {hasActiveQuestion && (
                   <span
-                    className="size-[5px] shrink-0 rounded-full bg-primary"
+                    className="size-1.25 shrink-0 rounded-full bg-primary"
                     role="img"
                     aria-label={`Unread question notification for ${row.task.key}`}
                   />
@@ -274,7 +274,7 @@ export default function TaskRow({
             return (
               <span key="agent" data-column="agent" style={style} className="shrink-0">
                 {row.task.assignee && (
-                  <span className="inline-flex h-[19px] max-w-full items-center truncate rounded-[6px] bg-muted px-[7px] text-[11.5px]">
+                  <span className="inline-flex h-4.75 max-w-full items-center truncate rounded-sm bg-muted px-1.75 text-meta">
                     {row.task.assignee.replace(/^agent:/, "")}
                   </span>
                 )}
@@ -286,7 +286,7 @@ export default function TaskRow({
                 key="server"
                 data-column="server"
                 style={style}
-                className="shrink-0 truncate font-mono text-[11.5px] text-muted-foreground"
+                className="shrink-0 truncate font-mono text-meta text-muted-foreground"
               >
                 {server}
               </span>
@@ -309,7 +309,7 @@ export default function TaskRow({
                 {row.task.workflow_step && (
                   <span
                     title={`Step ${row.task.workflow_step.index} of ${row.task.workflow_step.total}`}
-                    className="hidden shrink-0 font-mono text-[10.5px] tabular-nums text-muted-foreground sm:inline"
+                    className="hidden shrink-0 font-mono text-tiny tabular-nums text-muted-foreground sm:inline"
                   >
                     {row.task.workflow_step.index}/{row.task.workflow_step.total}
                   </span>
@@ -341,7 +341,7 @@ export default function TaskRow({
                 key="duration"
                 data-column="duration"
                 style={style}
-                className="shrink-0 truncate text-right font-mono text-[11.5px] text-muted-foreground tabular-nums"
+                className="shrink-0 truncate text-right font-mono text-meta text-muted-foreground tabular-nums"
               >
                 {formatTaskDuration(row.task)}
               </span>
@@ -352,7 +352,7 @@ export default function TaskRow({
                 key="updated"
                 data-column="updated"
                 style={style}
-                className="shrink-0 truncate text-right text-[12px] text-muted-foreground tabular-nums"
+                className="shrink-0 truncate text-right text-ui text-muted-foreground tabular-nums"
               >
                 {formatTaskTime(row.task.updated_at)}
               </span>
@@ -364,7 +364,7 @@ export default function TaskRow({
           {!disabled && (
             <button
               type="button"
-              className="relative z-2 grid size-6 place-items-center rounded-[7px] text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground group-hover/row:opacity-100"
+              className="relative z-2 grid size-6 place-items-center rounded-control text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground group-hover/row:opacity-100"
               aria-label={`Add child to ${row.task.key}`}
               onClick={onAddChild}
             >
@@ -401,7 +401,7 @@ function PriorityMenu({
       <DropdownMenuTrigger asChild disabled={saving}>
         <button
           type="button"
-          className="task-priority flex rounded-[6px] disabled:opacity-50"
+          className="task-priority flex rounded-sm disabled:opacity-50"
           aria-label={priorityName(priority)}
         >
           <PriorityTag priority={priority} aria-hidden="true" className="cursor-pointer" />
@@ -459,7 +459,7 @@ export function TaskTableHeader({ mode, sticky = false }: { mode: TaskRowMode; s
       <div
         data-testid="task-table-header"
         className={cn(
-          "flex h-[30px] items-center gap-2.5 px-4 text-[11.5px] text-muted-foreground",
+          "flex h-7.5 items-center gap-2.5 px-4 text-meta text-muted-foreground",
           sticky && "sticky top-0 z-2 bg-card",
         )}
       >
@@ -495,8 +495,8 @@ function TaskHeaderCell({ column, editable }: { column: TaskColumn; editable: bo
         "relative flex h-full shrink-0 items-center",
         column.id === "task" && "min-w-0 flex-1",
         end && "justify-end",
-        isDragging && "z-4 rounded-[6px] bg-muted opacity-80",
-        isOver && !isDragging && "rounded-[6px] ring-1 ring-primary ring-inset",
+        isDragging && "z-4 rounded-sm bg-muted opacity-80",
+        isOver && !isDragging && "rounded-sm ring-1 ring-primary ring-inset",
       )}
     >
       {editable ? (

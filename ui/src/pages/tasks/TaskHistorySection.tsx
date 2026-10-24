@@ -36,15 +36,15 @@ export function TaskHistorySection({
             <time
               dateTime={event.created_at}
               title={new Date(event.created_at).toLocaleString()}
-              className="w-[52px] shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground"
+              className="w-13 shrink-0 font-mono text-caption tabular-nums text-muted-foreground"
             >
               {formatTaskTime(event.created_at)}
             </time>
-            <span className="shrink-0 font-mono text-[11.5px] font-medium">{event.kind}</span>
-            <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+            <span className="shrink-0 font-mono text-meta font-medium">{event.kind}</span>
+            <span className="min-w-0 flex-1 truncate text-ui text-muted-foreground">
               {summarizePayload(event.payload)}
             </span>
-            <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+            <span className="shrink-0 font-mono text-caption text-muted-foreground">
               {event.actor}
             </span>
           </div>

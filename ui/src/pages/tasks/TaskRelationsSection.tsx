@@ -39,7 +39,7 @@ export function TaskRelationsSection({
           <div key={relation.id} className={ROW}>
             <span
               className={cn(
-                "inline-flex h-[19px] shrink-0 items-center rounded-[6px] px-[7px] text-[11px]",
+                "inline-flex h-4.75 shrink-0 items-center rounded-sm px-1.75 text-caption",
                 relation.type === "blocks"
                   ? cn(DANGER_FILL, "font-medium")
                   : "bg-muted text-muted-foreground",
@@ -50,10 +50,10 @@ export function TaskRelationsSection({
             {/* The key is underlined only as far as it reads; the title
                 takes the rest of the row and the pill closes it, so a
                 dependency says what it is without being opened. */}
-            <span className="shrink-0 border-b border-dotted border-border font-mono text-[11.5px] font-medium tabular-nums">
+            <span className="shrink-0 border-b border-dotted border-border font-mono text-meta font-medium tabular-nums">
               {other}
             </span>
-            <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground">
+            <span className="min-w-0 flex-1 truncate text-body-sm text-muted-foreground">
               {otherTitle}
             </span>
             {otherStatus && (
@@ -66,7 +66,7 @@ export function TaskRelationsSection({
               variant="ghost"
               size="icon-xs"
               aria-label={`Remove relation to ${other}`}
-              className="size-6 shrink-0 rounded-[7px] text-muted-foreground hover:bg-accent hover:text-destructive"
+              className="size-6 shrink-0 rounded-control text-muted-foreground hover:bg-accent hover:text-destructive"
               onClick={() => relationMutation.mutate({ id: relation.id })}
             >
               <X className="size-3" />
@@ -84,7 +84,7 @@ export function TaskRelationsSection({
         <SelectShell
           aria-label="Relation type"
           value={relationType}
-          className="h-[26px] w-auto text-[12px] md:text-[12px]"
+          className="h-6.5 w-auto text-ui md:text-ui"
           onChange={(event) => setRelationType(event.target.value as TaskRelationType)}
         >
           <option value="blocks">Blocks</option>
@@ -95,7 +95,7 @@ export function TaskRelationsSection({
           aria-label="Related task key"
           placeholder="TEST-2"
           value={relationTarget}
-          className={cn(FIELD, FIELD_MONO, "h-[26px] w-[118px]")}
+          className={cn(FIELD, FIELD_MONO, "h-6.5 w-29.5")}
           onChange={(event) => setRelationTarget(event.target.value)}
         />
         <Button
@@ -103,13 +103,13 @@ export function TaskRelationsSection({
           variant="ghost"
           onClick={submitRelation}
           disabled={relationMutation.isPending || !relationTarget.trim()}
-          className="h-[26px] rounded-[7px] bg-accent px-2.5 text-[12px] hover:bg-secondary"
+          className="h-6.5 rounded-control bg-accent px-2.5 text-ui hover:bg-secondary"
         >
           Add relation
         </Button>
       </form>
       {relationMutation.error && (
-        <p role="alert" className="text-[12px] text-status-failed">
+        <p role="alert" className="text-ui text-status-failed">
           {errorText(relationMutation.error)}
         </p>
       )}

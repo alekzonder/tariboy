@@ -19,6 +19,27 @@
    declaration of the name — both `font-mono` and `var(--font-mono)` resolve. */
 @theme {
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; /* @kind font */
+
+  /* Named sizes for the dense UI text. They set font-size only: without a
+     --text-*--line-height the element keeps its inherited line height. */
+  --text-nano: 9px;
+  --text-micro: 10px;
+  --text-tiny: 10.5px;
+  --text-caption: 11px;
+  --text-meta: 11.5px;
+  --text-ui: 12px;
+  --text-body-sm: 12.5px;
+  --text-body: 13px;
+  --text-body-lg: 14px;
+  --text-title: 15px;
+
+  /* Fixed radii between the --radius steps (rounded-xs 2px, sm 6px, md 8px,
+     lg 10px, xl 14px). */
+  --radius-hair: 1.5px;
+  --radius-chip: 5px;
+  --radius-control: 7px;
+  --radius-panel: 9px;
+  --radius-card: 12px;
 }
 
 @theme inline {

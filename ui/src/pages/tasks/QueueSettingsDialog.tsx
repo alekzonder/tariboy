@@ -78,7 +78,7 @@ export default function QueueSettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[min(760px,calc(100dvh-2rem))] w-[min(1100px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none max-sm:h-dvh max-sm:w-screen max-sm:rounded-none">
         <div className="border-b px-4 py-3 pr-12">
-          <DialogTitle className="text-[15px] font-semibold">Queues</DialogTitle>
+          <DialogTitle className="text-title font-semibold">Queues</DialogTitle>
           <DialogDescription className="sr-only">
             Create and rename queues, bind a workflow, and fill its agent pools and environment.
           </DialogDescription>
@@ -184,7 +184,7 @@ function QueueSettings({
       <nav
         aria-label="Queue list"
         className={cn(
-          "flex w-[270px] shrink-0 flex-col border-r bg-muted/30 max-sm:w-full max-sm:border-r-0",
+          "flex w-67.5 shrink-0 flex-col border-r bg-muted/30 max-sm:w-full max-sm:border-r-0",
           showDetail && "max-sm:hidden",
         )}
       >
@@ -208,15 +208,15 @@ function QueueSettings({
                   aria-current={queue?.prefix === item.prefix ? "true" : undefined}
                   aria-label={`Queue ${item.prefix}: ${item.name}, ${summary}${warn ? ", a pool has no agents" : ""}`}
                   className={cn(
-                    "flex w-full flex-col gap-0.5 rounded-[9px] px-2.5 py-2 text-left hover:bg-muted",
+                    "flex w-full flex-col gap-0.5 rounded-panel px-2.5 py-2 text-left hover:bg-muted",
                     queue?.prefix === item.prefix &&
                       "bg-[color-mix(in_oklab,var(--primary)_10%,transparent)] hover:bg-[color-mix(in_oklab,var(--primary)_14%,transparent)]",
                   )}
                   onClick={() => choose(item.prefix)}
                 >
                   <span className="flex min-w-0 items-baseline gap-2">
-                    <strong className={cn(MONO, "text-[12px] font-medium")}>{item.prefix}</strong>
-                    <span className="min-w-0 truncate text-[12.5px]">{item.name}</span>
+                    <strong className={cn(MONO, "text-ui font-medium")}>{item.prefix}</strong>
+                    <span className="min-w-0 truncate text-body-sm">{item.name}</span>
                     {warn && (
                       <span
                         role="img"
@@ -228,7 +228,7 @@ function QueueSettings({
                   </span>
                   <span
                     className={cn(
-                      "truncate text-[11px] text-muted-foreground",
+                      "truncate text-caption text-muted-foreground",
                       summary.includes("@") && MONO,
                     )}
                   >
@@ -265,7 +265,7 @@ function QueueSettings({
                 setShowDetail(false);
               }}
             >
-              <span className="text-[15px] font-semibold">New queue</span>
+              <span className="text-title font-semibold">New queue</span>
             </DetailHeader>
             <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
               <NewQueueForm
@@ -286,21 +286,21 @@ function QueueSettings({
         ) : (
           <>
             <DetailHeader onBack={() => setShowDetail(false)}>
-              <strong className={cn(MONO, "text-[13px] font-medium")}>{queue.prefix}</strong>
-              <h2 className="min-w-0 truncate text-[15px] font-semibold">{queue.name}</h2>
+              <strong className={cn(MONO, "text-body font-medium")}>{queue.prefix}</strong>
+              <h2 className="min-w-0 truncate text-title font-semibold">{queue.name}</h2>
             </DetailHeader>
             {loadError && (
               <div
                 role="alert"
                 aria-label={`Queue ${queue.prefix} error`}
-                className="mx-5 mt-3 flex items-center gap-2 text-[12px] text-destructive"
+                className="mx-5 mt-3 flex items-center gap-2 text-ui text-destructive"
               >
                 <span>{loadError}</span>
                 <Button
                   type="button"
                   size="sm"
                   variant="secondary"
-                  className="h-[26px]"
+                  className="h-6.5"
                   onClick={() => void load(queue.prefix)}
                 >
                   Retry
@@ -325,7 +325,7 @@ function QueueSettings({
                   <TabsTrigger
                     key={value}
                     value={value}
-                    className="rounded-none px-3 py-2 text-[12.5px] data-[state=active]:font-semibold data-[state=active]:shadow-[inset_0_-2px_0_var(--primary)]"
+                    className="rounded-none px-3 py-2 text-body-sm data-[state=active]:font-semibold data-[state=active]:shadow-[inset_0_-2px_0_var(--primary)]"
                   >
                     {TAB_LABELS[value]}
                     {value === "pools" && empty.length > 0 && (

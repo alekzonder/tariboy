@@ -281,7 +281,7 @@ function CostChart({ series }: { series: { bucket_start: string; cost_usd: numbe
 
   if (series.length === 0 || max === 0) {
     return (
-      <div className="flex h-[140px] items-center justify-center rounded border text-sm text-muted-foreground">
+      <div className="flex h-35 items-center justify-center rounded border text-sm text-muted-foreground">
         No cost in this window.
       </div>
     );
@@ -311,7 +311,7 @@ function CostChart({ series }: { series: { bucket_start: string; cost_usd: numbe
                   x={pad.left + i * slot + slot / 2}
                   y={H - 6}
                   textAnchor="middle"
-                  className="fill-muted-foreground text-[9px]"
+                  className="fill-muted-foreground text-nano"
                 >
                   {fmtDateTime(p.bucket_start)}
                 </text>

@@ -96,7 +96,7 @@ export default function ChatComposer({
 
   return (
     <div className="shrink-0 px-3.5 pt-2 pb-3">
-      <div className="overflow-hidden rounded-[10px] border border-input bg-card focus-within:ring-1 focus-within:ring-ring">
+      <div className="overflow-hidden rounded-lg border border-input bg-card focus-within:ring-1 focus-within:ring-ring">
         <div
           className="flex h-7 items-center gap-px border-b px-1.5 py-0.5"
           role="group"
@@ -109,7 +109,7 @@ export default function ChatComposer({
               aria-label={mark.title}
               title={mark.title}
               onClick={() => apply(mark)}
-              className="grid h-[22px] min-w-[22px] place-items-center rounded-[6px] px-1.5 font-mono text-[11.5px] font-semibold text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="grid h-5.5 min-w-5.5 place-items-center rounded-sm px-1.5 font-mono text-meta font-semibold text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               {mark.label}
             </button>
@@ -125,21 +125,21 @@ export default function ChatComposer({
             type="button"
             onClick={() => file.current?.click()}
             disabled={uploading}
-            className="flex h-[22px] items-center gap-1.5 rounded-[6px] px-1.5 text-[11.5px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+            className="flex h-5.5 items-center gap-1.5 rounded-sm px-1.5 text-meta text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
           >
             <Paperclip className="size-3" />
             {uploading ? "Uploading…" : "Attach"}
           </button>
-          <span className="ml-auto text-[10.5px] text-muted-foreground opacity-80">
+          <span className="ml-auto text-tiny text-muted-foreground opacity-80">
             Markdown supported
           </span>
         </div>
         {preview ? (
-          <div className="min-h-[52px] px-2.5 py-2">
+          <div className="min-h-13 px-2.5 py-2">
             {value.trim() ? (
               <ChatMarkdown onOpenTask={() => undefined}>{value}</ChatMarkdown>
             ) : (
-              <p className="text-[12.5px] text-muted-foreground">Nothing to preview yet.</p>
+              <p className="text-body-sm text-muted-foreground">Nothing to preview yet.</p>
             )}
           </div>
         ) : (
@@ -157,17 +157,17 @@ export default function ChatComposer({
               }
               if (event.key === "Escape") event.currentTarget.blur();
             }}
-            className="block w-full resize-none bg-transparent px-2.5 py-2 text-[12.5px] leading-[1.5] outline-none"
+            className="block w-full resize-none bg-transparent px-2.5 py-2 text-body-sm leading-[1.5] outline-none"
           />
         )}
-        <div className="flex items-center gap-2 pr-2 pb-[7px] pl-2.5">
-          {hint && <span className="text-[10.5px] text-muted-foreground">{hint}</span>}
+        <div className="flex items-center gap-2 pr-2 pb-1.75 pl-2.5">
+          {hint && <span className="text-tiny text-muted-foreground">{hint}</span>}
           <div className="ml-auto flex items-center gap-1.5">
             <button
               type="button"
               aria-pressed={preview}
               onClick={() => setPreview((open) => !open)}
-              className="h-[26px] rounded-[7px] px-2.5 text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="h-6.5 rounded-control px-2.5 text-ui text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               Preview
             </button>

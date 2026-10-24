@@ -127,12 +127,12 @@ export default function RunRow({
         </span>
       </div>
       {message && (
-        <span className="min-w-0 text-[12px] break-words whitespace-pre-wrap text-muted-foreground">
+        <span className="min-w-0 text-ui break-words whitespace-pre-wrap text-muted-foreground">
           {message}
         </span>
       )}
       {error && (
-        <p role="alert" className="text-[12px] text-status-failed">
+        <p role="alert" className="text-ui text-status-failed">
           {error}
         </p>
       )}
@@ -143,7 +143,7 @@ export default function RunRow({
           )}
           <pre
             tabIndex={0}
-            className="max-h-80 min-w-0 overflow-auto rounded-[8px] bg-muted px-2.5 py-2 font-mono text-[11px] whitespace-pre-wrap break-words"
+            className="max-h-80 min-w-0 overflow-auto rounded-md bg-muted px-2.5 py-2 font-mono text-caption whitespace-pre-wrap break-words"
           >
             {log.text}
           </pre>

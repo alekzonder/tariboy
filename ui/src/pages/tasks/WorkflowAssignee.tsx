@@ -43,9 +43,9 @@ export default function WorkflowAssignee({
 
   if (!pool) {
     return (
-      <dl className="flex min-w-0 flex-col gap-[5px]">
+      <dl className="flex min-w-0 flex-col gap-1.25">
         <dt className={LABEL}>Assignee</dt>
-        <dd className={cn(MONO, "flex h-[30px] min-w-0 items-center truncate")}>
+        <dd className={cn(MONO, "flex h-7.5 min-w-0 items-center truncate")}>
           {task.assignee || "Unassigned"}
         </dd>
       </dl>
@@ -53,7 +53,7 @@ export default function WorkflowAssignee({
   }
   const options = members.map((agent) => `agent:${agent}`);
   return (
-    <label className="flex min-w-0 flex-col gap-[5px]">
+    <label className="flex min-w-0 flex-col gap-1.25">
       <span className={LABEL}>Assignee</span>
       <SelectShell
         className={cn("flex", FIELD_MONO)}
@@ -76,7 +76,7 @@ export default function WorkflowAssignee({
         ))}
       </SelectShell>
       {reassign.error && (
-        <span role="alert" className="text-[12px] text-status-failed">
+        <span role="alert" className="text-ui text-status-failed">
           {errorText(reassign.error)}
         </span>
       )}

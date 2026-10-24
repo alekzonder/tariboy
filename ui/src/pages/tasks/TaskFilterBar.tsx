@@ -110,8 +110,8 @@ export function TaskFilterBar({
     })),
   );
   return (
-    <div className="flex flex-wrap items-center gap-1.5 px-4 pt-[11px] pb-[9px]">
-      <label className="flex h-7 w-[220px] shrink-0 items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2.75 pb-2.25">
+      <label className="flex h-7 w-55 shrink-0 items-center gap-1.75 rounded-md bg-muted px-2.25 text-muted-foreground">
         <Search aria-hidden="true" className="size-3 shrink-0" />
         <input
           type="search"
@@ -119,7 +119,7 @@ export function TaskFilterBar({
           placeholder={mode === "agent" ? "Search tasks" : "Search all tasks"}
           value={query}
           onChange={(event) => onQuery(event.target.value)}
-          className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
+          className="min-w-0 flex-1 bg-transparent text-ui text-foreground outline-none placeholder:text-muted-foreground"
         />
       </label>
       <Segmented
@@ -133,32 +133,32 @@ export function TaskFilterBar({
           <button
             type="button"
             aria-label={`Queue: ${queueLabel}`}
-            className="flex h-7 shrink-0 items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-[12px] hover:bg-accent"
+            className="flex h-7 shrink-0 items-center gap-1.75 rounded-md bg-muted px-2.25 text-ui hover:bg-accent"
           >
             <ListFilter aria-hidden="true" className="size-3 opacity-55" />
             <span className="text-muted-foreground">Queue:</span>
-            <span className="font-mono text-[11.5px] font-medium">{queueLabel}</span>
-            <ChevronDown aria-hidden="true" className="size-[9px] opacity-50" />
+            <span className="font-mono text-meta font-medium">{queueLabel}</span>
+            <ChevronDown aria-hidden="true" className="size-2.25 opacity-50" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-[214px] rounded-[12px] p-[5px]">
+        <DropdownMenuContent align="start" className="min-w-53.5 rounded-card p-1.25">
           {items.map((item) => (
             <DropdownMenuItem
               key={item.prefix || "__all__"}
               onSelect={() => onQueue(item.prefix)}
               className={cn(
-                "h-7 gap-2 rounded-[7px] px-[9px] text-[12.5px]",
+                "h-7 gap-2 rounded-control px-2.25 text-body-sm",
                 item.prefix === queue && "bg-accent",
               )}
             >
-              <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] font-medium">
+              <span className="min-w-0 flex-1 truncate font-mono text-meta font-medium">
                 {item.label}
               </span>
               <span className="text-muted-foreground tabular-nums">{item.count}</span>
               {item.prefix === queue ? (
-                <Check aria-hidden="true" className="size-[11px] text-primary" />
+                <Check aria-hidden="true" className="size-2.75 text-primary" />
               ) : (
-                <span aria-hidden="true" className="w-[11px]" />
+                <span aria-hidden="true" className="w-2.75" />
               )}
             </DropdownMenuItem>
           ))}
@@ -167,7 +167,7 @@ export function TaskFilterBar({
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={onManageQueues}
-                className="h-7 gap-2 rounded-[7px] px-[9px] text-[12.5px]"
+                className="h-7 gap-2 rounded-control px-2.25 text-body-sm"
               >
                 <Settings aria-hidden="true" className="size-3" />
                 Manage queues…
@@ -182,17 +182,17 @@ export function TaskFilterBar({
             <button
               type="button"
               aria-label={`Server: ${(server && servers.find((item) => item.id === server)?.label) || "all"}`}
-              className="flex h-7 shrink-0 items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-[12px] hover:bg-accent"
+              className="flex h-7 shrink-0 items-center gap-1.75 rounded-md bg-muted px-2.25 text-ui hover:bg-accent"
             >
               <Server aria-hidden="true" className="size-3 opacity-55" />
               <span className="text-muted-foreground">Server:</span>
-              <span className="font-mono text-[11.5px] font-medium">
+              <span className="font-mono text-meta font-medium">
                 {(server && servers.find((item) => item.id === server)?.label) || "all"}
               </span>
-              <ChevronDown aria-hidden="true" className="size-[9px] opacity-50" />
+              <ChevronDown aria-hidden="true" className="size-2.25 opacity-50" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-[214px] rounded-[12px] p-[5px]">
+          <DropdownMenuContent align="start" className="min-w-53.5 rounded-card p-1.25">
             {[
               {
                 id: "",
@@ -208,7 +208,7 @@ export function TaskFilterBar({
                   disabled={item.unavailable}
                   onSelect={() => onServer(item.id)}
                   className={cn(
-                    "h-7 gap-2 rounded-[7px] px-[9px] text-[12.5px]",
+                    "h-7 gap-2 rounded-control px-2.25 text-body-sm",
                     item.id === server && "bg-accent",
                   )}
                 >
@@ -218,16 +218,16 @@ export function TaskFilterBar({
                       className="size-1.5 shrink-0 rounded-full bg-status-failed"
                     />
                   )}
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] font-medium">
+                  <span className="min-w-0 flex-1 truncate font-mono text-meta font-medium">
                     {item.label}
                   </span>
                   <span className="text-muted-foreground tabular-nums">
                     {item.unavailable ? "unavailable" : item.count}
                   </span>
                   {item.id === server ? (
-                    <Check aria-hidden="true" className="size-[11px] text-primary" />
+                    <Check aria-hidden="true" className="size-2.75 text-primary" />
                   ) : (
-                    <span aria-hidden="true" className="w-[11px]" />
+                    <span aria-hidden="true" className="w-2.75" />
                   )}
                 </DropdownMenuItem>
               ))}
@@ -242,7 +242,7 @@ export function TaskFilterBar({
             aria-pressed={principalFilter === value}
             onClick={() => onPrincipalFilter?.(principalFilter === value ? "" : value)}
             className={cn(
-              "flex h-7 shrink-0 items-center gap-[6px] rounded-[8px] px-[9px] text-[12px]",
+              "flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.25 text-ui",
               principalFilter === value
                 ? "bg-primary/12 font-medium text-primary"
                 : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -253,14 +253,14 @@ export function TaskFilterBar({
           </button>
         ))}
       {scopeAgent && (
-        <span className="inline-flex h-7 shrink-0 items-center rounded-[8px] bg-primary/12 pr-1.5 pl-2.5 text-[12px] font-medium text-primary">
+        <span className="inline-flex h-7 shrink-0 items-center rounded-md bg-primary/12 pr-1.5 pl-2.5 text-ui font-medium text-primary">
           {scopeAgent}
           {onClearScopeAgent && (
             <button
               type="button"
               aria-label="Clear agent filter"
               onClick={onClearScopeAgent}
-              className="ml-1 grid size-[18px] place-items-center rounded-[5px]"
+              className="ml-1 grid size-4.5 place-items-center rounded-chip"
             >
               <X aria-hidden="true" className="size-3" />
             </button>
@@ -275,7 +275,7 @@ export function TaskFilterBar({
           size="icon-xs"
           aria-label="Refresh tasks"
           aria-busy={refreshing}
-          className="size-6 rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="size-6 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={onRefresh}
         >
           <RefreshCw aria-hidden="true" className={refreshing ? "is-refreshing" : undefined} />

@@ -49,7 +49,7 @@ export function WorkspaceSwitcher({
 }) {
   const state = useWorkspaces();
   const current = state.workspaces.find((w) => w.id === state.active) ?? state.workspaces[0];
-  const itemClass = "h-[30px] gap-2 rounded-[7px] px-[9px] text-[13px]";
+  const itemClass = "h-7.5 gap-2 rounded-control px-2.25 text-body";
   // The manager dialog takes focus; handing it back to this trigger as the
   // menu closes would steal it.
   const managing = useRef(false);
@@ -63,7 +63,7 @@ export function WorkspaceSwitcher({
         <button
           type="button"
           aria-label={`Workspace: ${current.name}`}
-          className="flex h-[26px] min-w-0 shrink-0 items-center gap-1.5 rounded-[7px] px-2 text-[13px] hover:bg-accent"
+          className="flex h-6.5 min-w-0 shrink-0 items-center gap-1.5 rounded-control px-2 text-body hover:bg-accent"
         >
           {/* A phone's titlebar has room for the icon only. */}
           <Layers aria-hidden="true" className="size-4 sm:hidden" />
@@ -74,13 +74,13 @@ export function WorkspaceSwitcher({
       <DropdownMenuContent
         align="start"
         sideOffset={5}
-        className="w-[260px] rounded-[12px] p-[5px] shadow-[var(--lift)] ring-0"
+        className="w-65 rounded-card p-1.25 shadow-[var(--lift)] ring-0"
         onCloseAutoFocus={(event) => {
           if (managing.current) event.preventDefault();
           managing.current = false;
         }}
       >
-        <DropdownMenuLabel className="px-[9px] pt-1.5 pb-1 text-[11px] font-semibold tracking-[.06em] uppercase">
+        <DropdownMenuLabel className="px-2.25 pt-1.5 pb-1 text-caption font-semibold tracking-[.06em] uppercase">
           Workspaces
         </DropdownMenuLabel>
         {state.workspaces.map((workspace) => (
@@ -95,7 +95,7 @@ export function WorkspaceSwitcher({
             }}
           >
             <span className="min-w-0 flex-1 truncate font-medium">{workspace.name}</span>
-            <span className="text-[11.5px] text-muted-foreground tabular-nums">
+            <span className="text-meta text-muted-foreground tabular-nums">
               {hostCount(hostsIn(state, hosts, workspace.id).length)}
             </span>
             {workspace.id === state.active ? (
@@ -105,13 +105,13 @@ export function WorkspaceSwitcher({
             )}
           </DropdownMenuItem>
         ))}
-        <DropdownMenuSeparator className="mx-[3px] my-1" />
+        <DropdownMenuSeparator className="mx-0.75 my-1" />
         <DropdownMenuItem className={itemClass} onSelect={() => manage(true)}>
           <Plus aria-hidden="true" className="size-3 text-muted-foreground" />
           New workspace…
         </DropdownMenuItem>
         <DropdownMenuItem className={itemClass} onSelect={() => manage(false)}>
-          <Settings aria-hidden="true" className="size-[13px] text-muted-foreground" />
+          <Settings aria-hidden="true" className="size-3.25 text-muted-foreground" />
           Manage workspaces…
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -174,21 +174,21 @@ function ManagerBody({
 
   return (
     <DialogContent
-      className="flex h-[min(500px,calc(100vh-32px))] w-[min(720px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden rounded-[14px] p-0 shadow-[var(--lift)] ring-0 sm:max-w-none"
+      className="flex h-[min(500px,calc(100vh-32px))] w-[min(720px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden rounded-xl p-0 shadow-[var(--lift)] ring-0 sm:max-w-none"
       onOpenAutoFocus={(event) => {
         if (!focusNew) return;
         event.preventDefault();
         newNameRef.current?.focus();
       }}
     >
-      <div className="flex shrink-0 items-center gap-2 border-b py-3 pr-12 pl-[18px]">
-        <DialogTitle className="text-[14px] font-semibold">Manage workspaces</DialogTitle>
-        <DialogDescription className="text-[12px] text-muted-foreground">
+      <div className="flex shrink-0 items-center gap-2 border-b py-3 pr-12 pl-4.5">
+        <DialogTitle className="text-body-lg font-semibold">Manage workspaces</DialogTitle>
+        <DialogDescription className="text-ui text-muted-foreground">
           New hosts join Default.
         </DialogDescription>
       </div>
       <div className="flex min-h-0 flex-1 max-sm:flex-col">
-        <div className="flex w-[220px] shrink-0 flex-col border-r max-sm:max-h-40 max-sm:w-auto max-sm:border-r-0 max-sm:border-b">
+        <div className="flex w-55 shrink-0 flex-col border-r max-sm:max-h-40 max-sm:w-auto max-sm:border-r-0 max-sm:border-b">
           <div className="grid min-h-0 flex-1 content-start gap-px overflow-auto px-1.5 py-2">
             {state.workspaces.map((workspace) => (
               <button
@@ -197,12 +197,12 @@ function ManagerBody({
                 aria-current={workspace.id === selected.id ? "true" : undefined}
                 onClick={() => pick(workspace.id)}
                 className={cn(
-                  "flex h-8 w-full items-center gap-2 rounded-[8px] px-2.5 text-left text-[13px] hover:bg-accent",
+                  "flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-body hover:bg-accent",
                   workspace.id === selected.id && "bg-accent font-medium",
                 )}
               >
                 <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
-                <span className="text-[11.5px] text-muted-foreground tabular-nums">
+                <span className="text-meta text-muted-foreground tabular-nums">
                   {hostsIn(state, hosts, workspace.id).length}
                 </span>
               </button>
@@ -218,7 +218,7 @@ function ManagerBody({
               }}
               placeholder="New workspace name"
               aria-label="New workspace name"
-              className="h-7 min-w-0 rounded-[8px] bg-muted px-[9px] text-[12.5px] outline-none placeholder:text-muted-foreground"
+              className="h-7 min-w-0 rounded-md bg-muted px-2.25 text-body-sm outline-none placeholder:text-muted-foreground"
             />
             <Button size="sm" variant="secondary" onClick={create}>
               Create workspace
@@ -226,16 +226,16 @@ function ManagerBody({
           </div>
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="grid min-h-0 flex-1 content-start gap-4 overflow-auto px-[18px] py-4">
+          <div className="grid min-h-0 flex-1 content-start gap-4 overflow-auto px-4.5 py-4">
             <div className="grid gap-1.5">
-              <span className="text-[11.5px] font-medium text-muted-foreground">Name</span>
+              <span className="text-meta font-medium text-muted-foreground">Name</span>
               {isDefault ? (
-                <div className="flex h-[30px] items-center gap-2">
-                  <span className="text-[13px] font-medium">Default</span>
-                  <span className="inline-flex h-[18px] items-center rounded-[5px] bg-primary/12 px-1.5 text-[10.5px] font-medium text-primary">
+                <div className="flex h-7.5 items-center gap-2">
+                  <span className="text-body font-medium">Default</span>
+                  <span className="inline-flex h-4.5 items-center rounded-chip bg-primary/12 px-1.5 text-tiny font-medium text-primary">
                     built-in
                   </span>
-                  <span className="text-[12px] text-muted-foreground">
+                  <span className="text-ui text-muted-foreground">
                     Can't be renamed or deleted.
                   </span>
                 </div>
@@ -244,15 +244,15 @@ function ManagerBody({
               )}
             </div>
             <div className="grid gap-1">
-              <span className="text-[11.5px] font-medium text-muted-foreground">Hosts</span>
+              <span className="text-meta font-medium text-muted-foreground">Hosts</span>
               {members.length === 0 && (
-                <div className="rounded-[10px] border border-dashed p-3.5 text-[12.5px] text-muted-foreground">
+                <div className="rounded-lg border border-dashed p-3.5 text-body-sm text-muted-foreground">
                   No hosts yet. Open another workspace and move a host here.
                 </div>
               )}
               {members.map((host) => (
-                <div key={host.id} className="grid gap-0.5 rounded-[10px] border px-2.5 py-2">
-                  <div className="flex h-[26px] items-center gap-2">
+                <div key={host.id} className="grid gap-0.5 rounded-lg border px-2.5 py-2">
+                  <div className="flex h-6.5 items-center gap-2">
                     <span
                       aria-hidden="true"
                       className={cn(
@@ -260,10 +260,10 @@ function ManagerBody({
                         host.ready ? "bg-status-running" : "bg-status-stopped",
                       )}
                     />
-                    <span className="min-w-0 flex-1 truncate font-mono text-[12px] font-medium">
+                    <span className="min-w-0 flex-1 truncate font-mono text-ui font-medium">
                       {host.label}
                     </span>
-                    <span className="text-[12px] text-muted-foreground">
+                    <span className="text-ui text-muted-foreground">
                       {host.ready ? "ready" : "offline"}
                     </span>
                     {state.workspaces.length > 1 && (
@@ -275,7 +275,7 @@ function ManagerBody({
                         onClick={() =>
                           setMoving((current) => (current === host.id ? null : host.id))
                         }
-                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded-[7px] border px-2 text-[12px] hover:bg-accent"
+                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded-control border px-2 text-ui hover:bg-accent"
                       >
                         <ArrowLeftRight aria-hidden="true" className="size-3" />
                         Move to…
@@ -283,7 +283,7 @@ function ManagerBody({
                     )}
                   </div>
                   {moving === host.id && (
-                    <div className="flex flex-wrap items-center gap-1 rounded-[8px] bg-muted px-[7px] py-1.5">
+                    <div className="flex flex-wrap items-center gap-1 rounded-md bg-muted px-1.75 py-1.5">
                       {state.workspaces
                         .filter((w) => w.id !== selected.id)
                         .map((target) => (
@@ -294,7 +294,7 @@ function ManagerBody({
                               moveHost(host.id, target.id);
                               setMoving(null);
                             }}
-                            className="h-6 rounded-[6px] border bg-card px-[9px] text-[12px] hover:border-ring"
+                            className="h-6 rounded-sm border bg-card px-2.25 text-ui hover:border-ring"
                           >
                             {target.name}
                           </button>
@@ -306,10 +306,10 @@ function ManagerBody({
             </div>
           </div>
           {!isDefault && (
-            <div className="flex shrink-0 items-center gap-2 border-t px-[18px] py-2.5">
+            <div className="flex shrink-0 items-center gap-2 border-t px-4.5 py-2.5">
               {confirming ? (
                 <>
-                  <span className="min-w-0 flex-1 text-[12.5px]">
+                  <span className="min-w-0 flex-1 text-body-sm">
                     Delete {selected.name}? Its hosts move to Default.
                   </span>
                   <Button size="sm" variant="secondary" onClick={() => setConfirming(false)}>
@@ -356,7 +356,7 @@ function NameInput({ id, name }: { id: string; name: string }) {
         renameWorkspace(id, event.target.value);
       }}
       onBlur={() => setDraft(name)}
-      className="h-[30px] max-w-[320px] rounded-[8px] bg-card text-[13px]"
+      className="h-7.5 max-w-80 rounded-md bg-card text-body"
     />
   );
 }

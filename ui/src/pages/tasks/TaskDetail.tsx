@@ -120,7 +120,7 @@ export default function TaskDetail({
             onRequeue={() => setRequeueOpen(true)}
             onTransfer={() => setTransferOpen(true)}
           />
-          <div className="task-detail-body flex min-w-0 flex-col gap-[18px] px-4 pt-3.5 pb-7">
+          <div className="task-detail-body flex min-w-0 flex-col gap-4.5 px-4 pt-3.5 pb-7">
             <TaskDetailDraftAlerts
               task={task}
               draft={draft}
@@ -143,7 +143,7 @@ export default function TaskDetail({
                     text={`Waiting for an answer from ${openWaits.map((wait) => wait.expected_principal).join(", ")} — reply in the comments below.`}
                   />
                 )}
-                <dl className="grid grid-cols-2 gap-x-6 gap-y-[9px]">
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-2.25">
                   <Meta label="Author" value={task.author} />
                   <Meta label="Customer" value={task.customer} />
                   <Meta label="Queue" value={task.queue} />
@@ -178,7 +178,7 @@ export default function TaskDetail({
                     {/* No second title here: the sticky header already carries it, and
                 it is the panel's only 600. */}
                     <span className={LABEL}>Description</span>
-                    <div className="rounded-[8px] bg-muted px-3 py-[11px]">
+                    <div className="rounded-md bg-muted px-3 py-2.75">
                       <MarkdownContent>{task.description}</MarkdownContent>
                     </div>
                     <p className={EMPTY}>Response access — comments only.</p>

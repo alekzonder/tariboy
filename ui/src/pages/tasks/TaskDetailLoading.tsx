@@ -40,11 +40,11 @@ export function TaskDetailLoading({
       >
         {resizeHandle}
         <div className="task-detail-panel" aria-busy={!error}>
-          <header className="sticky top-0 z-[3] flex items-start gap-2.5 bg-card px-3.5 pt-[11px] pb-2.5 shadow-[var(--raise)]">
-            <div className="flex min-w-0 flex-1 items-center gap-[9px]">
+          <header className="sticky top-0 z-[3] flex items-start gap-2.5 bg-card px-3.5 pt-2.75 pb-2.5 shadow-[var(--raise)]">
+            <div className="flex min-w-0 flex-1 items-center gap-2.25">
               {/* Names the dialog without being the task heading, which marks a loaded task. */}
               <DialogTitle asChild>
-                <span className="shrink-0 font-mono text-[12px] font-medium tabular-nums text-muted-foreground">
+                <span className="shrink-0 font-mono text-ui font-medium tabular-nums text-muted-foreground">
                   {taskKey}
                 </span>
               </DialogTitle>
@@ -54,7 +54,7 @@ export function TaskDetailLoading({
               size="icon"
               aria-label="Close task detail"
               onClick={onClose}
-              className="size-7 shrink-0 rounded-[8px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="size-7 shrink-0 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <X className="size-3.5" />
             </Button>

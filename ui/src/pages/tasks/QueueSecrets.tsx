@@ -124,7 +124,7 @@ export default function QueueSecrets({
         <span className={COUNT}>{secrets.length}</span>
       </div>
       {stillMissing.length > 0 && (
-        <div role="alert" aria-label="Secrets needed" className="text-[12px] text-destructive">
+        <div role="alert" aria-label="Secrets needed" className="text-ui text-destructive">
           <p>{missingMessage || "These secrets have no value:"}</p>
           <p className="font-mono">{stillMissing.join(", ")}</p>
         </div>
@@ -132,7 +132,7 @@ export default function QueueSecrets({
       {globalEnv.length > 0 && (
         <ul
           aria-label="Global env"
-          className="flex min-w-0 flex-col gap-1 text-[12px] text-muted-foreground"
+          className="flex min-w-0 flex-col gap-1 text-ui text-muted-foreground"
         >
           {globalEnv.map((name) => (
             <li key={name}>
@@ -147,7 +147,7 @@ export default function QueueSecrets({
       ) : (
         <ul className="flex min-w-0 flex-col gap-1">
           {secrets.map((secret) => (
-            <li key={secret.key} className="flex min-w-0 items-center gap-2 text-[12px]">
+            <li key={secret.key} className="flex min-w-0 items-center gap-2 text-ui">
               <span className="min-w-0 flex-1 truncate font-mono">{secret.key}</span>
               <span className="text-muted-foreground">{formatTaskTime(secret.updated_at)}</span>
               <button
@@ -172,7 +172,7 @@ export default function QueueSecrets({
           aria-label="Secret key"
           placeholder="KEY"
           value={key}
-          className={`${FIELD} h-[26px] min-w-[100px] flex-1`}
+          className={`${FIELD} h-6.5 min-w-25 flex-1`}
           onChange={(event) => setKey(event.target.value)}
         />
         <Input
@@ -181,20 +181,15 @@ export default function QueueSecrets({
           autoComplete="new-password"
           placeholder="Value"
           value={value}
-          className={`${FIELD} h-[26px] min-w-[100px] flex-1`}
+          className={`${FIELD} h-6.5 min-w-25 flex-1`}
           onChange={(event) => setValue(event.target.value)}
         />
-        <Button
-          type="submit"
-          size="sm"
-          className="h-[26px]"
-          disabled={busy || !key.trim() || !value}
-        >
+        <Button type="submit" size="sm" className="h-6.5" disabled={busy || !key.trim() || !value}>
           Set
         </Button>
       </form>
       {error && (
-        <p role="alert" className="text-[12px] text-destructive">
+        <p role="alert" className="text-ui text-destructive">
           {error}
         </p>
       )}

@@ -61,7 +61,7 @@ export default function TaskTransferDialog({
         if (!busy) onOpenChange(next);
       }}
     >
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="sm:max-w-105">
         <DialogHeader>
           <DialogTitle>Move to another server</DialogTitle>
           <DialogDescription>
@@ -72,7 +72,7 @@ export default function TaskTransferDialog({
           </DialogDescription>
         </DialogHeader>
         {targets.length === 0 ? (
-          <p className="text-[12.5px] text-muted-foreground">
+          <p className="text-body-sm text-muted-foreground">
             No other server is registered. Add a host first.
           </p>
         ) : (
@@ -94,7 +94,7 @@ export default function TaskTransferDialog({
           </label>
         )}
         {error && (
-          <p role="alert" className="text-[12.5px] text-destructive">
+          <p role="alert" className="text-body-sm text-destructive">
             {error}
           </p>
         )}

@@ -22,7 +22,7 @@ export default function WorkflowRuns({
       <div className="flex items-center gap-1.5">
         <span className={LABEL}>Script runs</span>
         <span className={COUNT}>{runs.length}</span>
-        <span className="text-[11.5px] text-muted-foreground">latest 20</span>
+        <span className="text-meta text-muted-foreground">latest 20</span>
       </div>
       {sorted.length === 0 && <span className={EMPTY}>No script has run yet.</span>}
       <ul className="flex min-w-0 flex-col gap-1">

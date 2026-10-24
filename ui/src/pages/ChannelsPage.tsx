@@ -118,13 +118,13 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
         {leading}
         {sel ? (
           <>
-            <span className="truncate font-mono text-[12.5px] font-medium">{sel}</span>
-            <span className="shrink-0 text-[11.5px] text-muted-foreground">
+            <span className="truncate font-mono text-body-sm font-medium">{sel}</span>
+            <span className="shrink-0 text-meta text-muted-foreground">
               {watches.length} watch{watches.length === 1 ? "" : "es"} · refreshed every 2s
             </span>
           </>
         ) : (
-          <span className="text-[11.5px] text-muted-foreground">Select a channel.</span>
+          <span className="text-meta text-muted-foreground">Select a channel.</span>
         )}
       </div>
       <div className="flex min-h-0 flex-1 border-t">
@@ -157,15 +157,15 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
               {msgs.map((m) => (
                 <div
                   key={m.id}
-                  className="grid grid-cols-[4.5rem_minmax(0,10rem)_minmax(0,1fr)] gap-2.5 px-4 py-1.5 text-[12.5px]"
+                  className="grid grid-cols-[4.5rem_minmax(0,10rem)_minmax(0,1fr)] gap-2.5 px-4 py-1.5 text-body-sm"
                 >
                   <span
-                    className="font-mono text-[11.5px] text-muted-foreground tabular-nums"
+                    className="font-mono text-meta text-muted-foreground tabular-nums"
                     title={m.ts}
                   >
                     {m.ts ? fmtTime(m.ts) : ""}
                   </span>
-                  <span className="truncate font-mono text-[11.5px] text-muted-foreground">
+                  <span className="truncate font-mono text-meta text-muted-foreground">
                     {m.source} · {m.type}
                   </span>
                   <span className="break-words whitespace-pre-wrap">{m.text}</span>

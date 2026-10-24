@@ -61,7 +61,7 @@ export default function WorkflowProblem({
       role={alert ? "alert" : "status"}
       data-problem={problem.kind}
       className={cn(
-        "flex min-w-0 flex-col gap-1.5 rounded-[8px] px-2.5 py-2",
+        "flex min-w-0 flex-col gap-1.5 rounded-md px-2.5 py-2",
         fill ?? "bg-muted/50 text-muted-foreground",
       )}
     >
@@ -74,17 +74,17 @@ export default function WorkflowProblem({
         )}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-            <span className="text-[12.5px] font-medium">{problem.title}</span>
+            <span className="text-body-sm font-medium">{problem.title}</span>
             {problem.counter && <span className={cn(MONO, "opacity-80")}>{problem.counter}</span>}
           </div>
           {problem.detail && (
-            <pre className="min-w-0 font-mono text-[11.5px] whitespace-pre-wrap break-words">
+            <pre className="min-w-0 font-mono text-meta whitespace-pre-wrap break-words">
               {problem.detail}
             </pre>
           )}
           <p
             className={cn(
-              "min-w-0 text-[12px] leading-[1.45] text-pretty",
+              "min-w-0 text-ui leading-[1.45] text-pretty",
               fill ? "opacity-90" : TONE_TEXT.quiet,
             )}
           >
@@ -96,7 +96,7 @@ export default function WorkflowProblem({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-6 shrink-0 px-2 text-[12px]"
+            className="h-6 shrink-0 px-2 text-ui"
             disabled={checking}
             onClick={() => retry(problem.request!.id)}
           >
@@ -105,7 +105,7 @@ export default function WorkflowProblem({
         )}
       </div>
       {notice && notice.kind !== "applied" && (
-        <p role="status" className="text-[12px]">
+        <p role="status" className="text-ui">
           {notice.kind === "timeout"
             ? "Still checking — the result appears here when the checks finish."
             : notice.kind === "error"

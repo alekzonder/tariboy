@@ -39,7 +39,7 @@ export function AgentRow({
       data-slot="agent-row"
       aria-current={selected ? "page" : undefined}
       className={cn(
-        "my-px flex h-[30px] w-full items-center gap-[9px] rounded-[8px] px-2.5 text-left text-[13px]",
+        "my-px flex h-7.5 w-full items-center gap-2.25 rounded-md px-2.5 text-left text-body",
         selected ? "bg-card shadow-[var(--raise)]" : "hover:bg-sidebar-accent",
         className,
       )}
@@ -49,7 +49,7 @@ export function AgentRow({
       <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
       {!interactive && (
         <span
-          className="shrink-0 text-[11px] text-muted-foreground"
+          className="shrink-0 text-caption text-muted-foreground"
           title="not interactive (no tty)"
         >
           non-tty
@@ -59,7 +59,7 @@ export function AgentRow({
         <span
           aria-label={`${unreadMessages} unread messages from ${name}`}
           title={`${unreadMessages} unread messages`}
-          className="shrink-0 rounded-full bg-primary px-1.5 text-[10px] leading-4 font-medium text-primary-foreground"
+          className="shrink-0 rounded-full bg-primary px-1.5 text-micro leading-4 font-medium text-primary-foreground"
         >
           {unreadMessages > 99 ? "99+" : unreadMessages}
         </span>

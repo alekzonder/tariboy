@@ -125,14 +125,14 @@ export default function WorkflowOutcomes({
                   <span className={cn(MONO, "font-medium")}>{outcome.on}</span>
                 )}
                 {customer && missing.size > 0 && (
-                  <span className="text-[11.5px] text-status-failed">
+                  <span className="text-meta text-status-failed">
                     needs: {[...missing].join(", ")}
                   </span>
                 )}
                 <ArrowRight aria-hidden="true" className="size-3 text-muted-foreground" />
                 <span className={cn(MONO, "min-w-0 break-all")}>{outcome.to}</span>
                 {(outcome.requires ?? []).length > 0 && (
-                  <span className="text-[11.5px] text-muted-foreground">requires</span>
+                  <span className="text-meta text-muted-foreground">requires</span>
                 )}
                 {(outcome.requires ?? []).map((name) =>
                   missing.has(name) ? (
@@ -140,7 +140,7 @@ export default function WorkflowOutcomes({
                       key={name}
                       data-missing="true"
                       title="No value yet"
-                      className={cn(MONO, "rounded-[5px] px-1.5", DANGER_FILL)}
+                      className={cn(MONO, "rounded-chip px-1.5", DANGER_FILL)}
                     >
                       {name}
                     </span>
@@ -173,7 +173,7 @@ export default function WorkflowOutcomes({
           disabled={checking}
           maxLength={4096}
           onChange={(event) => setMessage(event.target.value)}
-          className="min-h-12 rounded-[8px] border-0 bg-muted text-[12.5px] md:text-[12.5px]"
+          className="min-h-12 rounded-md border-0 bg-muted text-body-sm md:text-body-sm"
         />
       )}
       {(checking || pendingElsewhere) && (
@@ -182,12 +182,7 @@ export default function WorkflowOutcomes({
             checking…
           </span>
           {pendingElsewhere && (
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-6 px-2 text-[12px]"
-              onClick={onRefresh}
-            >
+            <Button type="button" variant="ghost" className="h-6 px-2 text-ui" onClick={onRefresh}>
               Refresh
             </Button>
           )}
@@ -207,7 +202,7 @@ function Checks({ outcome }: { outcome: WorkflowOutcome }) {
       {checks.map((script, index) => {
         const detail = outcome.check_details?.[index];
         return (
-          <li key={script} className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-[11.5px]">
+          <li key={script} className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-meta">
             <span className="text-muted-foreground">check</span>
             <span className={cn(MONO, "min-w-0 break-all text-muted-foreground")}>{script}</span>
             {detail?.description && (
@@ -228,9 +223,9 @@ function Checks({ outcome }: { outcome: WorkflowOutcome }) {
 function OutcomeNotice({ notice, onRefresh }: { notice: Notice; onRefresh: () => void }) {
   if (notice.kind === "timeout") {
     return (
-      <div role="status" className="flex items-center gap-2 text-[12px] text-muted-foreground">
+      <div role="status" className="flex items-center gap-2 text-ui text-muted-foreground">
         Still checking — the result appears here when the checks finish.
-        <Button type="button" variant="ghost" className="h-6 px-2 text-[12px]" onClick={onRefresh}>
+        <Button type="button" variant="ghost" className="h-6 px-2 text-ui" onClick={onRefresh}>
           Refresh
         </Button>
       </div>
@@ -244,19 +239,14 @@ function OutcomeNotice({ notice, onRefresh }: { notice: Notice; onRefresh: () =>
   return (
     <div
       role="alert"
-      className={cn(
-        "flex min-w-0 flex-col gap-1 rounded-[8px] px-2.5 py-2 text-[12px]",
-        DANGER_FILL,
-      )}
+      className={cn("flex min-w-0 flex-col gap-1 rounded-md px-2.5 py-2 text-ui", DANGER_FILL)}
     >
       <span className="font-medium">
         {label}
         {notice.kind === "result" ? ` · ${notice.request.outcome}` : ""}
       </span>
       {text && (
-        <pre className="min-w-0 font-mono text-[11.5px] whitespace-pre-wrap break-words">
-          {text}
-        </pre>
+        <pre className="min-w-0 font-mono text-meta whitespace-pre-wrap break-words">{text}</pre>
       )}
     </div>
   );

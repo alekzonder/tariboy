@@ -5,11 +5,11 @@ import { cn } from "@/lib/utils";
 
 /** The name of a group or a server, wherever it is clickable. */
 export const SECTION_TITLE_CLASS =
-  "min-w-0 truncate rounded-[6px] text-left text-[11px] font-semibold tracking-[.06em] uppercase text-muted-foreground hover:text-foreground";
+  "min-w-0 truncate rounded-sm text-left text-caption font-semibold tracking-[.06em] uppercase text-muted-foreground hover:text-foreground";
 
 /** Icon buttons in a section header are 20px, not the 24px of the tab row. */
 export const SECTION_ICON_CLASS =
-  "size-5 shrink-0 rounded-[6px] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground";
+  "size-5 shrink-0 rounded-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground";
 
 /** A server's state, said in the header rather than in a separate row. Only
  *  `ready` is alive; everything else — offline, needs auth, connecting — is the
@@ -18,11 +18,11 @@ function StateBadge({ state }: { state: string }) {
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center gap-1 text-[10.5px] font-medium tracking-[.04em] whitespace-nowrap uppercase",
+        "flex shrink-0 items-center gap-1 text-tiny font-medium tracking-[.04em] whitespace-nowrap uppercase",
         state === "ready" ? "text-status-running" : "text-status-stopped",
       )}
     >
-      <span aria-hidden="true" className="size-[5px] rounded-full bg-current" />
+      <span aria-hidden="true" className="size-1.25 rounded-full bg-current" />
       {state.replace(/_/g, " ")}
     </span>
   );
@@ -59,7 +59,7 @@ export function SidebarSectionHeader({
       {update && (
         <Button
           size="sm"
-          className="h-[19px] shrink-0 rounded-[6px] px-[7px] text-[10.5px] font-semibold tracking-[.02em]"
+          className="h-4.75 shrink-0 rounded-sm px-1.75 text-tiny font-semibold tracking-[.02em]"
           aria-label={updateLabel}
           title="Server update available"
           onClick={update}
@@ -76,7 +76,7 @@ export function SidebarSectionHeader({
           aria-label={addLabel}
           onClick={onAdd}
         >
-          <Plus className="size-[11px]" />
+          <Plus className="size-2.75" />
         </Button>
       )}
     </div>
@@ -85,5 +85,5 @@ export function SidebarSectionHeader({
 
 /** What a group or server with nothing in it says. */
 export function SectionEmpty() {
-  return <div className="px-2 pb-1 text-[12.5px] text-muted-foreground">No agents.</div>;
+  return <div className="px-2 pb-1 text-body-sm text-muted-foreground">No agents.</div>;
 }
