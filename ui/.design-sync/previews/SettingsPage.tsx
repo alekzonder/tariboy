@@ -49,10 +49,7 @@ const Settings = ({ path }: { path: string }) => (
     <DaemonProvider>
       <Shell>
         <Routes>
-          <Route
-            path="/servers/:hostId/settings"
-            element={<SettingsPage basePath={BASE} target={null} />}
-          >
+          <Route path="/servers/:hostId/settings" element={<SettingsPage basePath={BASE} />}>
             <Route index element={<GeneralSettings />} />
             <Route path="hosts" element={<DaemonsPage />} />
             <Route path="cli" element={<CliSettings />} />

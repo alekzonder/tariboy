@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.design-sync.tsbuildinfo",
+    "paths": { "@/*": ["./src/*"], "tariboy-ui": ["./.design-sync/entry.tsx"] }
+  },
+  "include": [".design-sync/entry.tsx", ".design-sync/previews"]
+}

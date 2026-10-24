@@ -41,16 +41,11 @@ export const Selected = () =>
     </>,
   );
 
-// The two quiet markers: an unread customer question, and an agent with no tty.
+// The two quiet markers: unread chat messages, and an agent with no tty.
 export const Markers = () =>
   sidebar(
     <>
-      <AgentRow
-        name="builder"
-        state="running"
-        unread
-        unreadLabel="Unread customer question for builder"
-      />
+      <AgentRow name="builder" state="running" unreadMessages={2} />
       <AgentRow name="reviewer" state="running" interactive={false} />
       <AgentRow name="packager" state="stopped" />
     </>,
@@ -76,7 +71,7 @@ export const InSidebar = () =>
         <span>Agents</span>
         <span>4</span>
       </div>
-      <AgentRow name="builder" state="running" selected unread />
+      <AgentRow name="builder" state="running" selected unreadMessages={2} />
       <AgentRow name="reviewer" state="running" interactive={false} />
       <AgentRow name="packager" state="failed" />
       <AgentRow name="docs-bot" state="stopped" outOfBudget />

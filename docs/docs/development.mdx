@@ -456,6 +456,18 @@ The repository keeps that kit complete for the design-sync catalog, so its
 unused exports and the unused `separator.tsx` and `tooltip.tsx` files are
 allowed.
 
+The design-sync catalog under `ui/.design-sync` is checked by `make check` in
+two places. `npx tsc -b` builds `ui/tsconfig.design-sync.json`, which
+type-checks `.design-sync/entry.tsx` and every preview against the real
+component props: the `tariboy-ui` import in a preview resolves to the
+generated entry. When a component's props change, update its preview in the
+same change. `src/test/designSyncCatalog.test.ts` fails when the committed
+`entry.tsx` differs from a fresh `node .design-sync/make-entry.mjs` run, when a
+`componentSrcMap` path in `config.json` names a missing file, or when a preview
+or an override has no `componentSrcMap` key. To fix the first case, run
+`node .design-sync/make-entry.mjs` from `ui/` and commit the result. For the
+other cases, correct `config.json`.
+
 For interactive visual checks of React-only changes, start the production UI
 and its real API together:
 

@@ -7,8 +7,8 @@ import { DaemonProvider, TasksWorkspace, QueryClientProvider, createQueryClient 
 // task" over the task tree. Selecting a task docks TaskDetail on the right.
 //
 // It needs no router (nothing in this subtree links) — DaemonProvider and an isolated query client,
-// because the workspace remounts itself per active daemon. `target={null}` pins
-// it to the same-origin local daemon instead of the registry.
+// because the workspace remounts itself per active daemon and addresses the
+// host of the surrounding ApiProvider.
 //
 // There is no daemon behind the capture server, so the queue, notification and
 // tree fetches fail: the rail, the toolbar and the component's own empty state
@@ -68,7 +68,7 @@ function useClickSequence(frameRef: RefObject<HTMLDivElement | null>, labels: st
 export const AllTasks = () => (
   <DaemonProvider>
     <Shell>
-      <TasksWorkspace target={null} />
+      <TasksWorkspace />
     </Shell>
   </DaemonProvider>
 );
@@ -76,7 +76,7 @@ export const AllTasks = () => (
 export const ScopedToAgent = () => (
   <DaemonProvider>
     <Shell>
-      <TasksWorkspace target={null} scopeAgent="builder" />
+      <TasksWorkspace scopeAgent="builder" />
     </Shell>
   </DaemonProvider>
 );
@@ -90,7 +90,7 @@ export const Queues = () => {
   return (
     <DaemonProvider>
       <Shell frameRef={frameRef}>
-        <TasksWorkspace target={null} />
+        <TasksWorkspace />
       </Shell>
     </DaemonProvider>
   );
@@ -102,7 +102,7 @@ export const Notifications = () => {
   return (
     <DaemonProvider>
       <Shell frameRef={frameRef}>
-        <TasksWorkspace target={null} />
+        <TasksWorkspace />
       </Shell>
     </DaemonProvider>
   );
