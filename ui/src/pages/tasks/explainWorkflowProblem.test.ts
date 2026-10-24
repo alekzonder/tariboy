@@ -194,7 +194,9 @@ describe("explainProblem", () => {
     expect(explainProblem(poolView)).toBeNull();
     expect(explainProblem(customerView)).toBeNull();
   });
+});
 
+describe("explainProblem kinds and priority", () => {
   const watchRun: WorkflowScriptRun = {
     ...failedRun,
     id: 9,
