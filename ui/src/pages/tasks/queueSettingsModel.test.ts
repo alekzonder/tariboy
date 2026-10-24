@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { ApiError, type AgentPool } from "@/lib/api";
-import { classifyBindError, stillEmptyPools } from "./queueSettingsModel";
+import { ApiError, type AgentPool, type QueueWorkflow } from "@/lib/api";
+import { agentPool, developmentManifest } from "@/test/fixtures/workflowFixtures";
+import {
+  classifyBindError,
+  generalInput,
+  newQueueInput,
+  queueSummary,
+  queueTabs,
+  queueWarns,
+  requiredWithMissing,
+  shownTab,
+  stillEmptyPools,
+  type QueueEntry,
+} from "./queueSettingsModel";
 
 describe("classifyBindError", () => {
   it.each<[string, unknown, ReturnType<typeof classifyBindError>]>([
@@ -52,5 +64,137 @@ describe("stillEmptyPools", () => {
     ["no named pools", [], [pool("dev", [])], []],
   ])("keeps %s", (_name, names, pools, expected) => {
     expect(stillEmptyPools(names, pools)).toEqual(expected);
+  });
+});
+
+const definition = developmentManifest.definition;
+const binding: QueueWorkflow = {
+  queue: "DEV",
+  name: "development",
+  version: "0.3.0",
+  digest: "9232ab",
+  tag: "latest",
+  revision: 2,
+  updated_at: "",
+};
+const staffed = [agentPool("developers", ["jack"]), agentPool("reviewers", ["rita"])];
+
+describe("queueSummary and queueWarns", () => {
+  it.each<[string, QueueEntry | undefined, string, boolean]>([
+    ["a queue still loading", undefined, "…", false],
+    ["a queue that failed to load", { error: "boom" }, "unknown", false],
+    [
+      "a flexible queue",
+      { state: { binding: null, definition: null, pools: [] } },
+      "flexible",
+      false,
+    ],
+    [
+      "a bound queue with every pool staffed",
+      { state: { binding, definition, pools: staffed } },
+      "development@0.3.0",
+      false,
+    ],
+    [
+      "a bound queue with an empty pool",
+      { state: { binding, definition, pools: [agentPool("developers", ["jack"])] } },
+      "development@0.3.0",
+      true,
+    ],
+  ])("reads %s", (_name, entry, summary, warns) => {
+    expect(queueSummary(entry)).toBe(summary);
+    expect(queueWarns(entry)).toBe(warns);
+  });
+});
+
+describe("requiredWithMissing", () => {
+  it.each<[string, Parameters<typeof requiredWithMissing>[0], string[], [string, string[]][]]>([
+    ["no definition and no refusal", null, [], []],
+    ["a refusal without a definition", null, ["qa"], [["qa", []]]],
+    [
+      "the definition's pools",
+      definition,
+      [],
+      [
+        ["developers", ["plan"]],
+        ["reviewers", ["review"]],
+      ],
+    ],
+    [
+      "a refused pool the definition already names",
+      definition,
+      ["developers", "qa"],
+      [
+        ["developers", ["plan"]],
+        ["reviewers", ["review"]],
+        ["qa", []],
+      ],
+    ],
+  ])("joins %s", (_name, def, missing, expected) => {
+    expect([...requiredWithMissing(def, missing)]).toEqual(expected);
+  });
+});
+
+describe("queueTabs and shownTab", () => {
+  it.each([
+    ["a flexible queue", null, ["general", "workflow", "pools", "environment"]],
+    ["a bound queue", binding, ["general", "workflow", "pools", "environment", "sources"]],
+  ] as const)("lists the tabs of %s", (_name, bound, tabs) => {
+    expect(queueTabs(bound)).toEqual(tabs);
+  });
+
+  it.each([
+    ["sources", null, "general"],
+    ["sources", binding, "sources"],
+    ["pools", null, "pools"],
+  ] as const)("shows %s with binding %#", (tab, bound, shown) => {
+    expect(shownTab(tab, bound)).toBe(shown);
+  });
+});
+
+describe("generalInput and newQueueInput", () => {
+  const form = (fields: Record<string, string>) => {
+    const values = new FormData();
+    for (const [key, value] of Object.entries(fields)) values.set(key, value);
+    return values;
+  };
+
+  it("trims the general fields and splits the owners", () => {
+    expect(
+      generalInput(
+        form({
+          name: " Dev ",
+          description: " Work ",
+          owners: " alice, , agent:bob ",
+          responsible: " jack ",
+        }),
+        7,
+      ),
+    ).toEqual({
+      name: "Dev",
+      description: "Work",
+      owners: ["alice", "agent:bob"],
+      responsible_agent: "jack",
+      revision: 7,
+    });
+  });
+
+  it("reads absent general fields as empty", () => {
+    expect(generalInput(form({}), 1)).toEqual({
+      name: "",
+      description: "",
+      owners: [],
+      responsible_agent: "",
+      revision: 1,
+    });
+  });
+
+  it("builds a new queue from its prefix, name, and form fields", () => {
+    expect(newQueueInput(" NEW ", " New ", form({ owners: "alice", responsible: "" }))).toEqual({
+      prefix: "NEW",
+      name: "New",
+      owners: ["alice"],
+      responsible_agent: "",
+    });
   });
 });
