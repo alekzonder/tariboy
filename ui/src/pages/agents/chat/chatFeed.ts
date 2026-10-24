@@ -37,7 +37,7 @@ export interface FeedDivider {
 
 export type FeedItem = FeedMessage | FeedDivider;
 
-function stringField(record: Record<string, unknown> | undefined, field: string): string {
+function recordString(record: Record<string, unknown> | undefined, field: string): string {
   const value = record?.[field];
   return typeof value === "string" ? value : "";
 }
@@ -46,7 +46,7 @@ function stringField(record: Record<string, unknown> | undefined, field: string)
  *  then any key written in its text, each listed once. */
 export function taskKeysOf(message: ChatMessage): string[] {
   const attached =
-    stringField(message.data, "task_key") || stringField(message.subject, "task_key");
+    recordString(message.data, "task_key") || recordString(message.subject, "task_key");
   return [...new Set([attached, ...(message.text.match(TASK_KEY) ?? [])].filter(Boolean))];
 }
 

@@ -85,6 +85,6 @@ const TASK_STATUS_LABELS: Record<string, string> = {
 };
 
 /** `wait_customer` → `Wait customer`; anything unknown is shown as it came. */
-export function taskStatusLabel(status: string): string {
+export function flexibleStatusLabel(status: string): string {
   return TASK_STATUS_LABELS[status] ?? status.replace(/_/g, " ");
 }

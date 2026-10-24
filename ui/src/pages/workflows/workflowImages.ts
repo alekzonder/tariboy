@@ -11,7 +11,7 @@ import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import { errorText } from "@/lib/errors";
 
 /** `latest` first, then the other tags newest version first. */
-function compareTags(a: WorkflowImage, b: WorkflowImage): number {
+function compareWorkflowTags(a: WorkflowImage, b: WorkflowImage): number {
   if (a.tag === "latest" || b.tag === "latest") return a.tag === "latest" ? -1 : 1;
   return b.tag.localeCompare(a.tag, undefined, { numeric: true });
 }
@@ -21,7 +21,7 @@ export function groupWorkflowImages(images: WorkflowImage[]) {
   for (const image of images) byName.set(image.name, [...(byName.get(image.name) ?? []), image]);
   return [...byName]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, tags]) => ({ name, tags: tags.sort(compareTags) }));
+    .map(([name, tags]) => ({ name, tags: tags.sort(compareWorkflowTags) }));
 }
 
 export interface QueueBindings {
