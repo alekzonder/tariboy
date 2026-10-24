@@ -72,6 +72,18 @@ export type FollowResult =
   /** The send or a poll was refused or failed. `stale` says the view should be refetched; `status` is the one a status_changed names. */
   | { kind: "error"; label: string; message: string; stale: boolean; status?: string };
 
+/** One line about a request that settled without applying, as Retry reports it. */
+export function followNoticeText(notice: Exclude<FollowResult, { kind: "applied" }>): string {
+  switch (notice.kind) {
+    case "timeout":
+      return "Still checking — the result appears here when the checks finish.";
+    case "error":
+      return `${notice.label}: ${notice.message}`;
+    case "result":
+      return `${notice.request.state}: ${notice.request.result_message ?? ""}`;
+  }
+}
+
 /**
  * Sends a transition request (an advance or a retry) and follows it, polling
  * once a second for as long as its checks may take, then hands the result to
