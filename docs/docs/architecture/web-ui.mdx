@@ -303,7 +303,8 @@ each with ref, manifest version, and digest. The next selection explains its
 pending, mutable-ref, or current-pinned origin; a digest difference signals an
 update even at equal versions. Inspection and activation failures remain visible
 without a pending ref. The preview is explicitly not a reservation. Ordinary
-agent status refreshes and image-build events reload it without overwriting
+agent status refreshes and image-build notifications (see
+[Image change notifications](#image-change-notifications)) reload it without overwriting
 runtime drafts, and responses from an older host, agent, or refresh are ignored.
 Selection becomes active at the next iteration boundary; cancelling pending
 keeps automatic mutable-ref following enabled.
@@ -359,9 +360,8 @@ and the version of that workflow's built `latest` tag on the same host. It shows
 source errors (Build disabled), missing latest, update needed (highlighted), and
 up to date; when the workflow image list cannot be read it shows "Comparison
 unavailable" and keeps Build. **Build** sends the `STORE/NAME` selector to the
-workflow-image build endpoint, reports the published version and tags,
-dispatches `tariboy:workflow-image-built`, and reloads the detail and the
-comparison. Workflow sources have no automatic builds.
+workflow-image build endpoint, reports the published version and tags, and
+reloads the detail and the comparison. Workflow sources have no automatic builds.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources
@@ -541,6 +541,64 @@ Their internal modules separate form state, requests, and presentation:
 - Tasks separates local view state, panel sizing, query composition, and write
   actions. `TaskDetail` keeps one draft with its original revision. Its fields,
   relations, history, and dialogs render that state without another server cache.
+
+## WebView storage
+
+`ui/src/lib/storage.ts` owns all access to `localStorage` and `sessionStorage`
+in the Desktop UI and the Store UI. It declares every key in one registry with
+its area, name, version, parser, and fallback value. Other modules call
+`readKey`, `writeKey`, and `removeKey` with a key from that registry. oxlint
+rejects a direct `localStorage`, `sessionStorage`, or `window.dispatchEvent` in
+production code under `ui/src` and `ui/store`. Tests and fixtures still seed
+raw values, so they detect a change of a stored format.
+
+Storage access is best effort. A missing value, a value the parser rejects,
+broken JSON, and storage that throws (blocked, private mode) all read as the
+fallback value. A failed write returns `false` and does not throw, so the
+interface keeps its state in memory until a reload. A read that finds a bad
+value does not delete it; the next write replaces it. Values are never logged,
+because some of them are tokens.
+
+Key names did not change when the registry was added, so saved state survives
+upgrades. A new key uses the form `<area>:<purpose>:v<N>`, and the registry
+test requires a versioned name to end with its version. When a format changes
+incompatibly, the key gets a new name with the next version. The old name
+stays in the registry only so it can be read once, like `terminals:workspace:v1`.
+
+| Key | Area | Owner | Value | Fallback |
+| --- | --- | --- | --- | --- |
+| `tariboy-theme` | local | theme provider | `light`, `dark`, or `system` | `system` |
+| `app:ui-mode:v1` | local | interface mode | `simple` or `expert` | `simple` |
+| `app:workspaces:v1` | local | host workspaces | JSON workspaces, host map, active workspace | Default only |
+| `desktop:updates:auto-download:v1` | local | Desktop updates | `true` or `false` | `true` |
+| `tariboy:runtime-presets:v1` | local | create-agent presets | JSON saved models and efforts per harness | none |
+| `tariboy_daemons` | local | browser host registry | JSON host metadata list | empty |
+| `tariboy_active_daemon` | local | host registry | selected host ID | none |
+| `tariboy_daemons_rejected_cleartext` | local | Desktop host migration | JSON cleartext hosts not imported | none |
+| `tariboy_daemon_token_<id>` | session | browser host registry | host token (browser mode only; Desktop uses the Keychain) | empty |
+| `tariboy:team-import` | local | Groups | JSON pending team import ID and host | none |
+| `terminals:server-order:v1` | local | sidebar | JSON host order | registry order |
+| `terminals:sidebar:v1` | local | sidebar | JSON width and hidden state | 268px, shown |
+| `terminals:workspace:v1` | local | sidebar (legacy, read once) | JSON record of the removed canvas | none |
+| `terminals:sidebar-tab:v1` | local | sidebar | `servers` or `agents` | `servers` |
+| `terminals:sidebar-pinned:v1` | local | sidebar | JSON pinned agents | none |
+| `terminals:chat-types:v1` | local | agent chat | JSON message types | default types |
+| `tui:draft:<agent>:<section>` | local | inject modal | draft text | empty |
+| `tasks:columns:v1` | local | task tables | JSON column order and widths | default layout |
+| `tasks:workspace:v1` | local | task detail panel | JSON detail width | half the window |
+| `tasks:new-task-queue:v1` | local | new task form | JSON last queue per server | none |
+| `tasks:queue-filter:v1` | session | task queue filter | queue prefix | none |
+| `tasks:all-view:v1` | session | All tasks | JSON search, status view, and server | active, all servers |
+| `tariboy_store_token` | session | Store UI | Store bearer token | none |
+
+### Image change notifications
+
+`ui/src/lib/imageEvents.ts` connects image builds to the image lists in the
+same window. A finished build from a directory or from a Store calls
+`notifyImagesChanged()`. **Built images** and the agent configuration sources
+subscribe with `subscribeImagesChanged()` and reload the images of their
+current host. A failing subscriber does not stop the others. Builds outside
+this window, for example from the CLI, do not notify the lists.
 
 ## Server data in Tasks
 
