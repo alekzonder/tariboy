@@ -33,12 +33,12 @@ function DraggableRow({
         drag.setNodeRef(node);
         drop.setNodeRef(node);
       }}
-      style={{ opacity: drag.isDragging ? 0.45 : undefined }}
       {...props}
       className={cn(
         "cursor-grab active:cursor-grabbing",
         drop.isOver && "ring-1 ring-primary",
         props.className,
+        drag.isDragging && "opacity-45",
       )}
       {...drag.attributes}
       {...drag.listeners}

@@ -39,11 +39,12 @@ function SortableButton({
         drop.setNodeRef(node);
       }}
       disabled={disabled}
-      style={{ ...style, opacity: drag.isDragging ? 0.45 : undefined }}
+      style={style}
       className={cn(
         "cursor-grab active:cursor-grabbing",
         drop.isOver && "ring-1 ring-primary",
         className,
+        drag.isDragging && "opacity-45",
       )}
       {...props}
       {...drag.attributes}
