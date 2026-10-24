@@ -74,7 +74,7 @@ const Pane = ({ children }: { children: React.ReactNode }) => (
 // The agent Console tab: live terminal above, toolbar below.
 export const LiveSession = () => (
   <Pane>
-    <TuiScreen controller={liveController} fill daemon={null} onStart={() => {}} />
+    <TuiScreen controller={liveController} fill onStart={() => {}} />
   </Pane>
 );
 
@@ -85,7 +85,6 @@ export const WorkspaceTile = () => (
     <TuiScreen
       controller={workspaceController}
       fill
-      daemon={null}
       surface="workspace"
       persistDraft={false}
       onStart={() => {}}
@@ -97,6 +96,6 @@ export const WorkspaceTile = () => (
 // be staged before the agent runs.
 export const SessionNotRunning = () => (
   <Pane>
-    <TuiScreen controller={absentController} fill daemon={null} onStart={() => {}} />
+    <TuiScreen controller={absentController} fill onStart={() => {}} />
   </Pane>
 );

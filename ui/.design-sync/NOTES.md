@@ -14,6 +14,11 @@
   - Because there is no `.d.ts` tree, the converter discovers **nothing** on its
     own — every card-level component must be listed in `cfg.componentSrcMap`.
     Adding a component to the repo does NOT add it to the sync automatically.
+  - `make check` catches drift: `tsconfig.design-sync.json` type-checks
+    `entry.tsx` and the previews against the real component props (`tsc -b`),
+    and `src/test/designSyncCatalog.test.ts` compares `entry.tsx` with a fresh
+    `make-entry.mjs` run and checks every `componentSrcMap` path and preview
+    name.
   - Do **not** let the converter fall back to synth-entry (drop `--entry`): it
     would `export *` every `.tsx` under `src/`, dragging pages, routing and
     `App.tsx` into the bundle.

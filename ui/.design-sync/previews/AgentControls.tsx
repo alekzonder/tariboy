@@ -18,7 +18,13 @@ export const AgentWorkspace = () => (
         worker:v2 · claude · running
       </span>
     </div>
-    <AgentControls name="builder" refresh={() => {}} />
+    <AgentControls
+      name="builder"
+      alive
+      image="worker:v2"
+      configurationPath="/agents/local/builder/configuration"
+      refresh={() => {}}
+    />
   </div>
 );
 
@@ -35,7 +41,13 @@ export const StoppedAgent = () => (
         bare:latest · codex · stopped
       </span>
     </div>
-    <AgentControls name="docs-bot" refresh={() => {}} />
+    <AgentControls
+      name="docs-bot"
+      alive={false}
+      image="bare:latest"
+      configurationPath="/agents/local/docs-bot/configuration"
+      refresh={() => {}}
+    />
   </div>
 );
 
@@ -43,6 +55,11 @@ export const StoppedAgent = () => (
 // exec prompt drops onto its own line instead of squeezing the buttons.
 export const NarrowColumn = () => (
   <div style={{ width: 380 }}>
-    <AgentControls name="packager" refresh={() => {}} />
+    <AgentControls
+      name="packager"
+      alive
+      configurationPath="/agents/local/packager/configuration"
+      refresh={() => {}}
+    />
   </div>
 );

@@ -1,14 +1,7 @@
 import { Button, Label, SendFilesButton, Textarea } from "tariboy-ui";
 
-// Cross-host target: /terminals and the task views pass an explicit daemon so
-// the upload lands on that host's shared files directory.
-const BUILD_01 = {
-  id: "d_build01",
-  label: "build-01",
-  baseURL: "https://10.0.4.11:7777",
-  kind: "ssh" as const,
-  token: "",
-};
+// Uploads address the surrounding ApiProvider's host and land in that host's
+// shared files directory.
 
 const Panel = ({ children, width = 620 }: { children: React.ReactNode; width?: number }) => (
   <div style={{ width, display: "grid", gap: 10 }}>{children}</div>
@@ -34,7 +27,7 @@ export const TerminalToolbar = () => (
       <div>builder@build-01:/work/tariboy$ </div>
     </div>
     <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-      <SendFilesButton daemon={BUILD_01} onUploaded={() => {}} />
+      <SendFilesButton onUploaded={() => {}} />
       <Button size="sm" variant="outline">
         Paste
       </Button>
@@ -63,7 +56,7 @@ export const NoLiveSession = () => (
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
         <Button size="sm">Start</Button>
-        <SendFilesButton daemon={BUILD_01} onUploaded={() => {}} />
+        <SendFilesButton onUploaded={() => {}} />
       </div>
     </div>
   </Panel>

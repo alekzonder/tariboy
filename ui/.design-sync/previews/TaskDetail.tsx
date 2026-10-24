@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { TaskDetail, QueryClientProvider, createQueryClient } from "tariboy-ui";
+import { useState, type ComponentProps } from "react";
+import { DaemonProvider, TaskDetail, QueryClientProvider, createQueryClient } from "tariboy-ui";
 
 // TaskDetail is the task panel TasksWorkspace docks on the right when a row is
 // selected: sticky header (Back · key · title · Save task · close), the metadata
@@ -32,7 +32,10 @@ const PRINCIPALS = {
   groups: ["core", "release"],
 };
 
-const BASE_TASK = {
+type Props = ComponentProps<typeof TaskDetail>;
+type Detail = Props["detail"];
+
+const BASE_TASK: Detail["task"] = {
   key: "TB-142",
   queue: "TB",
   parent_key: "TB-140",
@@ -53,6 +56,7 @@ const BASE_TASK = {
     "skills tree.",
   ].join("\n"),
   status: "in_progress",
+  category: "in_progress",
   pull_request: "https://github.com/alekzonder/tariboy/pull/318",
   author: "agent:builder",
   customer: "operator",
@@ -66,7 +70,7 @@ const BASE_TASK = {
   completed_at: "",
 };
 
-const COMMENTS = [
+const COMMENTS: Detail["comments"] = [
   {
     id: 41,
     task_key: "TB-142",
@@ -87,11 +91,15 @@ const COMMENTS = [
   },
 ];
 
-const RELATIONS = [
+const RELATIONS: Detail["relations"] = [
   {
     id: 8,
     source_key: "TB-142",
+    source_title: "Packager drops skills when the image template declares no plugins",
+    source_status: "in_progress",
     target_key: "TB-151",
+    target_title: "Ship the skills-tree validator with worker:v2",
+    target_status: "open",
     type: "blocks",
     created_by: "agent:builder",
     created_at: "2026-09-09T10:00:00Z",
@@ -99,14 +107,18 @@ const RELATIONS = [
   {
     id: 9,
     source_key: "TB-139",
+    source_title: "Template writer ignores an empty plugins block",
+    source_status: "done",
     target_key: "TB-142",
+    target_title: "Packager drops skills when the image template declares no plugins",
+    target_status: "in_progress",
     type: "related",
     created_by: "operator",
     created_at: "2026-09-09T10:02:00Z",
   },
 ];
 
-const EVENTS = [
+const EVENTS: Props["events"] = [
   {
     sequence: 210,
     event_id: "evt-210",
@@ -142,60 +154,17 @@ const EVENTS = [
   },
 ];
 
-const WORKFLOW = {
-  workflow: { name: "bugfix", version: "3" },
-  status_executions: [{ id: 1, state: "running" }],
-  assignments: [
-    { id: 11, agent: "packager", state: "claimed", attempt: 1, outcome: "" },
-    { id: 12, agent: "", state: "queued", attempt: 0, outcome: "" },
-    { id: 13, agent: "reviewer", state: "done", attempt: 1, outcome: "approved" },
-  ],
-  holds: [{ id: 3, reason: "Waiting on release freeze", scope: "queue:TB", released_at: null }],
-  observations: [{ id: 5, kind: "build.failed", payload: { image: "worker:v2", code: 2 } }],
-};
-
-const ARTIFACTS = [
-  { id: 21, name: "worker:v2 template", type: "template", content: "sha256:9ac71e3f52…" },
-  { id: 22, name: "build log", type: "log", content: "312 lines · 48 KB" },
-];
-
-const QUESTIONS = [
-  {
-    id: 31,
-    question: "Should an empty skills tree fail the build or only warn?",
-    state: "open",
-    blocking_scope: "task",
-  },
-];
-
 const noop = async () => {};
 const saveTask = async () => BASE_TASK;
 
-const Panel = ({
-  detail,
-  width = 820,
-  ...rest
-}: Record<string, unknown> & {
-  detail: unknown;
-  width?: number;
-}) => {
+const Panel = ({ detail, width = 820 }: { detail: Detail; width?: number }) => {
   const [client] = useState(createQueryClient);
   return (
     <QueryClientProvider client={client}>
       <TaskDetail
         detail={detail}
-        target={null}
         principals={PRINCIPALS}
         events={EVENTS}
-        workflow={null}
-        workflowArtifacts={[]}
-        workflowQuestions={[]}
-        executionLoading={false}
-        executionError=""
-        artifactsLoading={false}
-        artifactsError=""
-        questionsLoading={false}
-        questionsError=""
         width={width}
         resizeHandle={ResizeHandle}
         onClose={() => {}}
@@ -203,7 +172,8 @@ const Panel = ({
         onComment={noop}
         onAddRelation={noop}
         onDeleteRelation={noop}
-        {...rest}
+        onTransfer={noop}
+        onRequeue={noop}
       />
     </QueryClientProvider>
   );
@@ -213,30 +183,10 @@ export const OpenTask = () => (
   <Panel detail={{ task: BASE_TASK, comments: COMMENTS, waiting_for: [], relations: RELATIONS }} />
 );
 
-// A managed task's distinguishing surface — the "Managed workflow" section with
-// its assignment, hold, artifact, question and observation lists — sits below
-// the description, past the fold of a 700px capture. The panel scrolls for
-// real, so scroll it there: the header is sticky, so the card still shows the
-// task identity above the section. `.task-workflow` exists only on the managed
-// story, so querying the document cannot reach a neighbouring cell.
-function useScrollToWorkflow() {
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      for (const section of document.querySelectorAll(".task-workflow")) {
-        section.scrollIntoView({ block: "start" });
-        // The panel header is sticky: back off so it does not cover the
-        // section's own title and version/status strip.
-        const panel = section.closest(".task-detail-panel");
-        if (panel) panel.scrollTop -= 100;
-      }
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, []);
-}
-
-export const ManagedWorkflow = () => {
-  useScrollToWorkflow();
-  return (
+// A workflow task: the status select gives way to the Workflow panel, which
+// loads the workflow itself through the surrounding ApiProvider.
+export const ManagedWorkflow = () => (
+  <DaemonProvider>
     <Panel
       detail={{
         task: {
@@ -246,18 +196,14 @@ export const ManagedWorkflow = () => {
           description:
             "Blocked on TB-142. Ship the validator case with the next `worker:v2` build.",
           parent_key: "",
-          workflow_version_id: 3,
-          workflow_version: "bugfix@3",
-          workflow_status: "running",
-          workflow_revision: 12,
+          status: "implement",
+          workflow_name: "bugfix",
+          workflow_version: "3",
         },
         comments: COMMENTS,
         waiting_for: [],
         relations: RELATIONS,
       }}
-      workflow={WORKFLOW}
-      workflowArtifacts={ARTIFACTS}
-      workflowQuestions={QUESTIONS}
     />
-  );
-};
+  </DaemonProvider>
+);

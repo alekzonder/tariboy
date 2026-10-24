@@ -41,10 +41,7 @@ export const StoreList = () => (
     <DaemonProvider>
       <Shell>
         <Routes>
-          <Route
-            path="/servers/:hostId/stores"
-            element={<StoresPage target={null} basePath={BASE} />}
-          />
+          <Route path="/servers/:hostId/stores" element={<StoresPage basePath={BASE} />} />
         </Routes>
       </Shell>
     </DaemonProvider>
@@ -58,7 +55,7 @@ export const StoreDetail = () => (
         <Routes>
           <Route
             path="/servers/:hostId/stores/:name"
-            element={<StoresPage target={null} name="tariboy-images" basePath={BASE} />}
+            element={<StoresPage name="tariboy-images" basePath={BASE} />}
           />
         </Routes>
       </Shell>
