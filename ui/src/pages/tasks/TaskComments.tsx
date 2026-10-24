@@ -1,25 +1,9 @@
 import { useEffect, useState } from "react";
-import { Copy } from "lucide-react";
-import { toast } from "sonner";
-import {
-  MarkdownEditor,
-  MarkdownContent,
-  MarkdownModeSegment,
-  type MarkdownMode,
-} from "./TaskMarkdown";
-import { Button } from "@/components/ui/button";
-import { SendFilesButton } from "@/components/SendFilesButton";
-import { cn } from "@/lib/utils";
-import { COUNT, LABEL, PRIMARY_FILL, QUIET_ACTION, SelectShell } from "./panelStyles";
-import { formatTaskTime } from "./taskTime";
+import { COUNT, LABEL, SelectShell } from "./panelStyles";
+import { TaskCommentForm } from "./TaskCommentForm";
+import { TaskCommentList } from "./TaskCommentList";
 import type { TaskComment, TaskPrincipals, TaskWait } from "@/lib/api";
 import { idempotencyKey } from "@/lib/ids";
-
-/** Two letters is enough to tell one author from another down a column. */
-function initials(author: string): string {
-  const name = author.replace(/^[a-z]+:/, "");
-  return (name.slice(0, 2) || "··").toUpperCase();
-}
 
 export default function TaskComments({
   comments,
@@ -46,7 +30,6 @@ export default function TaskComments({
 }) {
   const defaultAsk = assignee.replace(/^agent:/, "");
   const [body, setBody] = useState("");
-  const [mode, setMode] = useState<MarkdownMode>("rich");
   const [ask, setAsk] = useState({ assignee, principal: defaultAsk });
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -92,144 +75,21 @@ export default function TaskComments({
     await send(askText(body.trim()), true);
   };
 
-  const copyComment = async (body: string) => {
-    try {
-      await navigator.clipboard.writeText(body);
-      toast.success("Comment Markdown copied");
-    } catch (error) {
-      toast.error(`Could not copy comment: ${String(error)}`);
-    }
-  };
-
-  const commentList = (
-    /* The grid column is what keeps long words and wide tables inside the
-       panel; the vertical rhythm is padding, not a rule between comments. */
-    <div key="list" className="task-comment-list grid grid-cols-[minmax(0,1fr)]">
-      {comments.map((comment) => (
-        <article key={comment.id} className="flex min-w-0 gap-2.25 py-1.75">
-          <span
-            aria-hidden="true"
-            className="mt-px grid size-5.5 shrink-0 place-items-center rounded-full bg-muted font-mono text-tiny text-muted-foreground"
-          >
-            {initials(comment.author)}
-          </span>
-          <div className="flex min-w-0 flex-1 flex-col gap-0.75">
-            <header className="flex min-w-0 items-center gap-2">
-              <strong className="shrink-0 font-mono text-meta font-medium">{comment.author}</strong>
-              {asking.has(comment.id) && (
-                <span
-                  className={cn(
-                    "inline-flex h-4.25 shrink-0 items-center rounded-chip px-1.5 text-tiny font-medium",
-                    PRIMARY_FILL,
-                  )}
-                >
-                  waiting for answer
-                </span>
-              )}
-              <span className="task-comment-actions ml-auto flex shrink-0 items-center gap-1">
-                <time
-                  className="font-mono text-caption tabular-nums text-muted-foreground"
-                  dateTime={comment.created_at}
-                  title={new Date(comment.created_at).toLocaleString()}
-                >
-                  {formatTaskTime(comment.created_at)}
-                </time>
-                <Button
-                  type="button"
-                  size="icon-xs"
-                  variant="ghost"
-                  className="size-5 rounded-sm text-muted-foreground opacity-0 transition-opacity duration-120 ease-[ease] [article:focus-within_&]:opacity-100 [article:hover_&]:opacity-100"
-                  aria-label="Copy comment Markdown"
-                  title="Copy comment Markdown"
-                  onClick={() => void copyComment(comment.body)}
-                >
-                  <Copy />
-                </Button>
-              </span>
-            </header>
-            <MarkdownContent>{comment.body}</MarkdownContent>
-          </div>
-        </article>
-      ))}
-      {comments.length === 0 && (
-        <p className="pt-0.5 text-ui text-muted-foreground opacity-80">No comments yet.</p>
-      )}
-    </div>
-  );
+  const commentList = <TaskCommentList key="list" comments={comments} asking={asking} />;
   const commentForm = (
-    <form
+    <TaskCommentForm
       key="form"
-      className="grid grid-cols-[minmax(0,1fr)] gap-2 rounded-md bg-muted p-3"
-      onSubmit={(event) => void submit(event)}
-    >
-      <label className="flex min-w-0 items-center gap-2">
-        <span className={LABEL}>Ask</span>
-        <SelectShell
-          aria-label="Ask"
-          className="h-6 bg-card pl-2.5 text-meta md:text-meta"
-          value={ask.principal}
-          onChange={(event) => setAsk({ assignee, principal: event.target.value })}
-        >
-          <option value="">No explicit answer needed</option>
-          {choices.map((principal) => (
-            <option key={principal} value={principal}>
-              {principal}
-            </option>
-          ))}
-        </SelectShell>
-      </label>
-      <div>
-        <div className="flex items-center gap-2 pb-1.75">
-          <label htmlFor="task-comment" className={LABEL}>
-            Comment
-          </label>
-          <MarkdownModeSegment
-            label="Comment editing mode"
-            mode={mode}
-            onModeChange={setMode}
-            disabled={busy}
-          />
-          <SendFilesButton
-            disabled={busy}
-            onUploadingChange={setUploading}
-            className={cn(QUIET_ACTION, "ml-auto border-0 bg-transparent")}
-            onUploaded={(paths) =>
-              setBody(
-                (current) =>
-                  current + (current && !current.endsWith("\n") ? "\n" : "") + paths.join("\n"),
-              )
-            }
-          />
-        </div>
-        <MarkdownEditor
-          id="task-comment"
-          placeholder="Comment"
-          value={body}
-          onChange={setBody}
-          disabled={busy}
-          mode={mode}
-          surface="card"
-        />
-      </div>
-      <div className="flex justify-end gap-1.5">
-        {/* Secondary, not ghost: it posts a comment, so it stays a button. */}
-        {!body.trim() && (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="h-7 rounded-control"
-            disabled={busy || uploading}
-            onClick={() => void send(askText("Ok"), false)}
-          >
-            Send Ok
-          </Button>
-        )}
-        <Button type="submit" size="sm" disabled={busy || uploading || !body.trim()}>
-          Send comment
-        </Button>
-      </div>
-    </form>
+      body={body}
+      onBodyChange={setBody}
+      askPrincipal={ask.principal}
+      onAskPrincipalChange={(principal) => setAsk({ assignee, principal })}
+      choices={choices}
+      busy={busy}
+      uploading={uploading}
+      onUploadingChange={setUploading}
+      onSubmit={submit}
+      onSendOk={() => void send(askText("Ok"), false)}
+    />
   );
 
   return (

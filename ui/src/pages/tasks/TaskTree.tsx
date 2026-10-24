@@ -9,15 +9,11 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import {
-  buildTaskForest,
-  canDropTaskInside,
-  canReorderTaskBeside,
-  flattenVisible,
-} from "@/lib/taskTree";
+import { buildTaskForest, flattenVisible, resolveTaskDrop } from "@/lib/taskTree";
 import type { Task, TaskPriority } from "@/lib/api";
 import type { TaskRowMode } from "./taskColumns";
-import TaskRow, { TaskTableHeader } from "./TaskRow";
+import TaskRow from "./TaskRow";
+import TaskTableHeader from "./TaskTableHeader";
 
 function preferSpecificDropTarget(args: Parameters<typeof pointerWithin>[0]) {
   const collisions = pointerWithin(args);
@@ -70,42 +66,16 @@ export default function TaskTree({
   );
   const forest = buildTaskForest(tasks);
   const visible = flattenVisible(forest, expanded);
-  const byKey = new Map(tasks.map((task) => [task.key, task]));
 
   const finish = ({ active, over }: DragEndEvent) => {
-    if (!over || active.id === over.id) return;
-    const key = String(active.id);
-    const destination = String(over.id);
-    if (destination === "__root__") {
-      onMove(key, "", "");
-      return;
-    }
-    const [placement, targetKey] = destination.split(":", 2);
-    if (targetKey === key) return;
-    const target = byKey.get(targetKey);
-    if (!target) return;
-    if (
-      (placement === "before" || placement === "after") &&
-      !canReorderTaskBeside(byKey.get(key), target)
-    )
-      return;
-    let parentKey = targetKey;
-    let beforeKey = "";
-    if (placement === "before" || placement === "after") {
-      parentKey = target.parent_key;
-      beforeKey = targetKey;
-      if (placement === "after") {
-        const siblings = tasks
-          .filter((task) => task.parent_key === parentKey && task.key !== key)
-          .sort((left, right) => left.position - right.position);
-        beforeKey = siblings[siblings.findIndex((task) => task.key === targetKey) + 1]?.key ?? "";
-      }
-    }
-    const moving = byKey.get(key);
-    const parent = parentKey ? byKey.get(parentKey) : undefined;
-    if (!moving || (parent && parent.queue !== moving.queue)) return;
-    if (parentKey && !canDropTaskInside(forest, key, parentKey)) return;
-    onMove(key, parentKey, beforeKey);
+    if (!over) return;
+    const drop = resolveTaskDrop({
+      tasks,
+      forest,
+      activeKey: String(active.id),
+      overId: String(over.id),
+    });
+    if (drop) onMove(drop.key, drop.parentKey, drop.beforeKey);
   };
 
   // The header moves columns in its own drag context, outside the rows' one.

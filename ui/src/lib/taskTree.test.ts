@@ -5,6 +5,7 @@ import {
   canReorderTaskBeside,
   canDropTaskInside,
   flattenVisible,
+  resolveTaskDrop,
 } from "./taskTree";
 
 function task(
@@ -122,5 +123,65 @@ describe("task tree model", () => {
     expect(canDropTaskInside(forest, "TEST-1", "TEST-1")).toBe(false);
     expect(canDropTaskInside(forest, "TEST-1", "TEST-3")).toBe(false);
     expect(canDropTaskInside(forest, "TEST-1", "TEST-4")).toBe(true);
+  });
+
+  describe("resolveTaskDrop", () => {
+    const rows = [
+      task("TEST-1", "", 1),
+      task("TEST-2", "", 2),
+      task("TEST-3", "", 3),
+      task("TEST-4", "TEST-1", 1),
+      task("TEST-5", "TEST-4", 1),
+      task("TEST-6", "", 4, "P0"),
+      { ...task("OTHER-1", "", 5), queue: "OTHER" },
+    ];
+    const resolve = (activeKey: string, overId: string) =>
+      resolveTaskDrop({ tasks: rows, forest: buildTaskForest(rows), activeKey, overId });
+
+    it("moves a task to the root", () => {
+      expect(resolve("TEST-4", "__root__")).toEqual({
+        key: "TEST-4",
+        parentKey: "",
+        beforeKey: "",
+      });
+    });
+
+    it("places a task before or after a sibling", () => {
+      expect(resolve("TEST-3", "before:TEST-2")).toEqual({
+        key: "TEST-3",
+        parentKey: "",
+        beforeKey: "TEST-2",
+      });
+      expect(resolve("TEST-1", "after:TEST-2")).toEqual({
+        key: "TEST-1",
+        parentKey: "",
+        beforeKey: "TEST-3",
+      });
+      expect(resolve("TEST-1", "after:OTHER-1")).toEqual({
+        key: "TEST-1",
+        parentKey: "",
+        beforeKey: "",
+      });
+    });
+
+    it("rejects a reorder beside a task of another priority", () => {
+      expect(resolve("TEST-1", "before:TEST-6")).toBeNull();
+    });
+
+    it("nests a task inside another one", () => {
+      expect(resolve("TEST-2", "inside:TEST-5")).toEqual({
+        key: "TEST-2",
+        parentKey: "TEST-5",
+        beforeKey: "",
+      });
+    });
+
+    it("rejects a drop into another queue, onto itself, into its subtree or onto nothing", () => {
+      expect(resolve("TEST-2", "inside:OTHER-1")).toBeNull();
+      expect(resolve("TEST-2", "TEST-2")).toBeNull();
+      expect(resolve("TEST-2", "inside:TEST-2")).toBeNull();
+      expect(resolve("TEST-1", "inside:TEST-5")).toBeNull();
+      expect(resolve("TEST-1", "inside:TEST-404")).toBeNull();
+    });
   });
 });
