@@ -73,6 +73,28 @@ export function hostAgents(host: HostAgents): SidebarAgent[] {
   );
 }
 
+/** A server's team names, declared or used by an agent, in the saved order. */
+export function teamNames(host: HostAgents, agents: SidebarAgent[]): string[] {
+  const names = [
+    ...new Set([
+      ...(host.groups ?? []).map((group) => group.name),
+      ...agents.map((row) => row.group).filter(Boolean),
+    ]),
+  ];
+  return ordered(names, host.sidebarOrder?.groups ?? [], (name) => name);
+}
+
+/** A server's teams with their members, a declared team with none included. */
+export function groupTeams(host: HostAgents, agents: SidebarAgent[]): Map<string, SidebarAgent[]> {
+  const teams = new Map<string, SidebarAgent[]>();
+  for (const name of teamNames(host, agents)) teams.set(name, []);
+  for (const row of agents) {
+    if (!row.group) continue;
+    teams.set(row.group, [...(teams.get(row.group) ?? []), row]);
+  }
+  return teams;
+}
+
 /** Every agent of every server, servers in sidebar order. */
 export function allAgents(hosts: HostAgents[]): SidebarAgent[] {
   return hosts.flatMap(hostAgents);

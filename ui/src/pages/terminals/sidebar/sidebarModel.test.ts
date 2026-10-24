@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { HostAgents } from "@/lib/aggregate";
 import type { AgentSummary } from "@/lib/types";
-import { agentKey, allAgents, filterHosts, groupSections, rankAgents } from "./sidebarModel";
+import {
+  agentKey,
+  allAgents,
+  filterHosts,
+  groupSections,
+  groupTeams,
+  hostAgents,
+  rankAgents,
+} from "./sidebarModel";
 import type { ChatSummary } from "@/lib/api";
 
 const chat = (agent: string, last_ts: string, unread = 0, kind = "direct"): ChatSummary => ({
@@ -118,6 +126,28 @@ describe("sidebar group sections", () => {
       "prod/gamma",
     ]);
     expect(sections[0].agents).toEqual([]);
+  });
+});
+
+describe("server teams", () => {
+  it("lists declared and used teams in the saved order, members in their own order", () => {
+    const host: HostAgents = {
+      ...hosts[0],
+      agents: [agent("alpha", "release"), agent("beta"), agent("omega", "ops")],
+      sidebarOrder: { version: 1, groups: ["ops"], agents: [] },
+    };
+    const teams = groupTeams(host, hostAgents(host));
+    expect([...teams.keys()]).toEqual(["ops", "release"]);
+    expect(teams.get("release")?.map((row) => row.agent.name)).toEqual(["alpha"]);
+    expect(teams.get("ops")?.map((row) => row.agent.name)).toEqual(["omega"]);
+  });
+
+  it("keeps a declared team with no members", () => {
+    const teams = groupTeams(hosts[1], hostAgents(hosts[1]));
+    expect([...teams.entries()].map(([name, rows]) => [name, rows.length])).toEqual([
+      ["idle-team", 0],
+      ["release", 1],
+    ]);
   });
 });
 
