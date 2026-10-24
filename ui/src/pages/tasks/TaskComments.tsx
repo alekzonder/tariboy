@@ -104,7 +104,7 @@ export default function TaskComments({
   const commentList = (
     /* The grid column is what keeps long words and wide tables inside the
        panel; the vertical rhythm is padding, not a rule between comments. */
-    <div key="list" className="task-comment-list">
+    <div key="list" className="task-comment-list grid grid-cols-[minmax(0,1fr)]">
       {comments.map((comment) => (
         <article key={comment.id} className="flex min-w-0 gap-2.25 py-1.75">
           <span
@@ -138,7 +138,7 @@ export default function TaskComments({
                   type="button"
                   size="icon-xs"
                   variant="ghost"
-                  className="task-comment-copy size-5 rounded-sm text-muted-foreground"
+                  className="size-5 rounded-sm text-muted-foreground opacity-0 transition-opacity duration-120 ease-[ease] [article:focus-within_&]:opacity-100 [article:hover_&]:opacity-100"
                   aria-label="Copy comment Markdown"
                   title="Copy comment Markdown"
                   onClick={() => void copyComment(comment.body)}
@@ -157,7 +157,11 @@ export default function TaskComments({
     </div>
   );
   const commentForm = (
-    <form key="form" className="rounded-md bg-muted p-3" onSubmit={(event) => void submit(event)}>
+    <form
+      key="form"
+      className="grid grid-cols-[minmax(0,1fr)] gap-2 rounded-md bg-muted p-3"
+      onSubmit={(event) => void submit(event)}
+    >
       <label className="flex min-w-0 items-center gap-2">
         <span className={LABEL}>Ask</span>
         <SelectShell
@@ -229,7 +233,7 @@ export default function TaskComments({
   );
 
   return (
-    <section className="task-comments flex min-w-0 flex-col gap-1.5">
+    <section className="flex min-w-0 flex-col gap-1.5">
       <div className="flex items-center gap-1.5">
         <span className={LABEL}>Comments</span>
         <span className={COUNT}>{comments.length}</span>

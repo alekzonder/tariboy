@@ -1,11 +1,14 @@
-/* The task workspace sits INSIDE the content island, so it paints nothing of
-   its own - the island's --card is the surface. */
-.tasks-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  height: 100%;
-  min-height: 0;
-}
+/* What stays in CSS, and why. Everything else in the task workspace is
+   Tailwind on the element.
+   - The panel and column resize handles: ::before grips, hover and focus
+     states, and a wider target under (pointer: coarse).
+   - The controls of .task-inline-form: unlayered rules restyle the shadcn
+     Input and the native select and buttons in every state, which variants
+     on the form cannot do without overriding each state.
+   - The row drop zones: their before/inside/after/is-over states.
+   - .task-detail-dialog: it must out-rank the centered DialogContent
+     position (tasksStyles.test.ts pins this), and the window below 1000px
+     drops the island. */
 
 /* Transparent until grabbed: the panel it resizes already carries the only
    line this seam needs. */
@@ -56,14 +59,6 @@
 .task-column-resize-handle:focus-visible {
   outline: none;
 }
-/* The header label is the column's drag grip: a held finger moves it, a swipe
-   still scrolls the table. */
-.task-column-grip {
-  touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-}
 @media (pointer: coarse) {
   .task-column-resize-handle {
     right: -13px;
@@ -82,56 +77,26 @@
 .task-inline-form select {
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: var(--background-base);
   padding: 7px 9px;
   color: var(--foreground);
-  font-size: 13px;
+  font-size: var(--text-body);
 }
-
-.tasks-center {
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
+.task-inline-form input {
+  flex: 1;
 }
-.task-primary-action,
 .task-inline-form button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   padding: 7px 10px;
   background: var(--background-base);
-  font-size: 12px;
+  font-size: var(--text-ui);
   font-weight: 560;
-}
-.task-primary-action {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-foreground);
-}
-.is-refreshing {
-  animation: tasks-refresh-spin 0.8s linear infinite;
-}
-@keyframes tasks-refresh-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .is-refreshing {
-    animation: none;
-  }
-}
-
-.task-tree-list {
-  min-height: calc(100% - 60px);
-  padding-bottom: 80px;
-}
-.task-tree-list.is-drop-target {
-  box-shadow: inset 0 0 0 2px color-mix(in oklch, var(--primary) 30%, transparent);
 }
 
 /* The three drop zones of a task row. They overlay the row (which is
@@ -159,32 +124,6 @@
 .task-drop-zone.before.is-over,
 .task-drop-zone.after.is-over {
   background: linear-gradient(to bottom, var(--primary) 3px, transparent 3px);
-}
-.tasks-empty {
-  padding: 40px 20px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--muted-foreground);
-}
-
-.task-inline-form {
-  display: flex;
-  gap: 6px;
-  margin: 10px 14px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--card);
-  box-shadow: 0 8px 30px oklch(0 0 0 / 0.07);
-}
-.task-inline-form input {
-  flex: 1;
-}
-.tasks-empty {
-  padding: 40px 20px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--muted-foreground);
 }
 
 /* The detail panel is the same island as the console content: a --card sheet
@@ -227,52 +166,6 @@
 .task-detail-dialog .task-panel-resize-handle:hover::before,
 .task-detail-dialog .task-panel-resize-handle:focus-visible::before {
   background: var(--muted-foreground);
-}
-
-/* The scroll lives in the panel, not on the page, so the header can stick.
-   Relative: an absolutely positioned descendant (an sr-only label) must be
-   clipped by this scroll, or it overflows the overflow:hidden dialog, which
-   focus then scrolls past the header where the wheel cannot bring it back. */
-.task-detail-panel {
-  position: relative;
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  background: var(--card);
-}
-.task-detail-body {
-  min-width: 0;
-}
-
-/* Containment, not decoration: the single minmax column is what keeps a long
-   URL, a wide table or a code block inside the panel instead of widening it.
-   Everything else about these sections is Tailwind on the element. */
-.task-description {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 7px;
-  min-width: 0;
-}
-.task-comment-list,
-.task-comments form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
-.task-comments form {
-  gap: 8px;
-}
-.task-markdown {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-/* The copy action is revealed by the comment it belongs to. */
-.task-comment-copy {
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-.task-comment-list article:hover .task-comment-copy,
-.task-comment-list article:focus-within .task-comment-copy {
-  opacity: 1;
 }
 
 @media (max-width: 1000px) {

@@ -278,7 +278,10 @@ export function TaskFilterBar({
           className="size-6 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={onRefresh}
         >
-          <RefreshCw aria-hidden="true" className={refreshing ? "is-refreshing" : undefined} />
+          <RefreshCw
+            aria-hidden="true"
+            className={refreshing ? "motion-safe:animate-[spin_0.8s_linear_infinite]" : undefined}
+          />
         </Button>
         <Button type="button" size="xs" onClick={onCreate}>
           <Plus aria-hidden="true" />

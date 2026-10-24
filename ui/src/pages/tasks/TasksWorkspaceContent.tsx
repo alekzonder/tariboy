@@ -92,11 +92,11 @@ export function TasksWorkspaceContent({
   return (
     <div
       ref={workspaceRef}
-      className="tasks-workspace"
+      className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)]"
       data-testid="tasks-workspace"
       data-scope-agent={scopeAgent ?? ""}
     >
-      <main className="tasks-center">
+      <main className="min-h-0 min-w-0 overflow-auto">
         <TaskFilterBar
           mode={scopeAgent ? "agent" : "all"}
           query={query}
@@ -132,15 +132,17 @@ export function TasksWorkspaceContent({
           />
         )}
         {principalMetadataError && !principalFilter ? (
-          <div className="tasks-empty" role="alert">
+          <div className="px-5 py-10 text-center text-body text-muted-foreground" role="alert">
             {principalMetadataError}
           </div>
         ) : treeQuery.error && !treeQuery.data ? (
-          <div className="tasks-empty" role="alert">
+          <div className="px-5 py-10 text-center text-body text-muted-foreground" role="alert">
             {errorText(treeQuery.error)}
           </div>
         ) : loading ? (
-          <div className="tasks-empty">Loading tasks…</div>
+          <div className="px-5 py-10 text-center text-body text-muted-foreground">
+            Loading tasks…
+          </div>
         ) : (
           <TaskTree
             tasks={visibleTasks}

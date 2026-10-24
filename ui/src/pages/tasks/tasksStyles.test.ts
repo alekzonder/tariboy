@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Button } from "@/components/ui/button";
 import { MarkdownContent } from "./TaskMarkdown";
 
-it("preserves task sheet positioning, button colors and Markdown containment after CSS minification", () => {
+it("preserves task sheet positioning and button colors after CSS minification", () => {
   const style = document.createElement("style");
   // Start with the centered DialogContent position that the sheet must override.
   style.textContent =
@@ -41,19 +41,12 @@ it("preserves task sheet positioning, button colors and Markdown containment aft
   document.body.append(dialog);
   try {
     const button = renderToStaticMarkup(createElement(Button, null, "Send comment"));
-    const markdown = renderToStaticMarkup(createElement(MarkdownContent, null, "long".repeat(200)));
-    dialog.innerHTML = `${button}<section class="task-comments"><form>${button}</form><div class="task-comment-list"><article>${markdown}</article></div></section>`;
+    dialog.innerHTML = `${button}<section><form>${button}</form></section>`;
     const buttons = dialog.querySelectorAll("button");
     expect(getComputedStyle(buttons[0]).backgroundColor).toBe("rgb(10, 20, 30)");
     expect(getComputedStyle(buttons[1]).backgroundColor).toBe(
       getComputedStyle(buttons[0]).backgroundColor,
     );
-    expect(getComputedStyle(dialog.querySelector("article > div")!).overflowWrap).toBe("anywhere");
-    for (const selector of [".task-comment-list", ".task-comments form"]) {
-      expect(getComputedStyle(dialog.querySelector(selector)!).gridTemplateColumns).toBe(
-        "minmax(0,1fr)",
-      );
-    }
     expect(getComputedStyle(dialog).translate).toBe("none");
     expect(getComputedStyle(dialog).width).toBe("var(--tasks-detail-width,50vw)");
   } finally {
@@ -61,3 +54,9 @@ it("preserves task sheet positioning, button colors and Markdown containment aft
     style.remove();
   }
 }, 20_000);
+
+// Containment moved from tasks.css to utilities: a long word wraps inside the panel.
+it("wraps long Markdown words inside the panel", () => {
+  const markdown = renderToStaticMarkup(createElement(MarkdownContent, null, "long".repeat(200)));
+  expect(markdown).toMatch(/class="[^"]*\bmin-w-0\b[^"]*\bwrap-anywhere\b/);
+});

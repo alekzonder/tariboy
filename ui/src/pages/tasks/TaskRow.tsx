@@ -504,7 +504,7 @@ function TaskHeaderCell({ column, editable }: { column: TaskColumn; editable: bo
           type="button"
           ref={setActivatorNodeRef}
           aria-label={`Move ${label} column`}
-          className="task-column-grip min-w-0 cursor-grab truncate"
+          className="min-w-0 cursor-grab touch-manipulation truncate select-none [-webkit-touch-callout:none]"
           {...listeners}
           {...attributes}
         >

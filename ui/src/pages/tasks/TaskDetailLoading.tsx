@@ -39,7 +39,10 @@ export function TaskDetailLoading({
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
         {resizeHandle}
-        <div className="task-detail-panel" aria-busy={!error}>
+        <div
+          className="task-detail-panel relative min-h-0 min-w-0 overflow-auto bg-card"
+          aria-busy={!error}
+        >
           <header className="sticky top-0 z-[3] flex items-start gap-2.5 bg-card px-3.5 pt-2.75 pb-2.5 shadow-[var(--raise)]">
             <div className="flex min-w-0 flex-1 items-center gap-2.25">
               {/* Names the dialog without being the task heading, which marks a loaded task. */}
@@ -59,7 +62,7 @@ export function TaskDetailLoading({
               <X className="size-3.5" />
             </Button>
           </header>
-          <div className="task-detail-body px-4 pt-3.5 pb-7">
+          <div className="min-w-0 px-4 pt-3.5 pb-7">
             {error ? (
               <p role="alert" className="text-status-failed">
                 {error}
