@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { rowCollision, sidebarAnnouncements } from "./sidebarDnd";
+import type { HostAgents } from "@/lib/aggregate";
+import type { AgentSummary } from "@/lib/types";
+import { dragId, reorderFromDrag, rowCollision, sidebarAnnouncements } from "./sidebarDnd";
 
 const rect = (top: number) => ({
   left: 0,
@@ -50,5 +52,53 @@ describe("sidebar row collision", () => {
     expect(sidebarAnnouncements.onDragEnd({ active: { id }, over: { id } } as never)).toBe(
       "Did not move server This daemon (local).",
     );
+  });
+});
+
+const agent = (name: string, group: string | null = null): AgentSummary => ({
+  name,
+  image: "img:latest",
+  state: "running",
+  harness: "claude",
+  group,
+});
+
+const hosts: HostAgents[] = [
+  {
+    host: { id: "", label: "local" },
+    agents: [agent("alpha", "red"), agent("beta"), agent("gamma", "blue")],
+    groups: [{ name: "idle", lead: "", members: 0 }],
+    sidebarOrder: { version: 1, groups: ["blue"], agents: ["beta"] },
+  },
+  { host: { id: "prod", label: "prod" }, agents: [] },
+];
+
+describe("reorder from a drag", () => {
+  it("moves a server among all servers", () => {
+    expect(
+      reorderFromDrag(hosts, dragId("servers", "", "prod"), dragId("servers", "", "")),
+    ).toEqual({ kind: "servers", hostId: "", ids: ["prod", ""] });
+  });
+
+  it("moves a team inside its server's saved team order", () => {
+    expect(
+      reorderFromDrag(hosts, dragId("groups", "", "red"), dragId("groups", "", "blue")),
+    ).toEqual({ kind: "groups", hostId: "", ids: ["red", "blue", "idle"] });
+  });
+
+  it("moves an agent inside its server's saved agent order", () => {
+    expect(
+      reorderFromDrag(hosts, dragId("agents", "", "gamma", ""), dragId("agents", "", "beta", "")),
+    ).toEqual({ kind: "agents", hostId: "", ids: ["gamma", "beta", "alpha"] });
+  });
+
+  it("ignores a drop on itself, outside the scope or on an unknown server", () => {
+    const id = dragId("agents", "", "beta", "");
+    expect(reorderFromDrag(hosts, id, id)).toBeUndefined();
+    expect(reorderFromDrag(hosts, id, dragId("agents", "", "alpha", "red"))).toBeUndefined();
+    expect(
+      reorderFromDrag(hosts, dragId("agents", "x", "a", ""), dragId("agents", "x", "b", "")),
+    ).toBeUndefined();
+    expect(reorderFromDrag(hosts, id, undefined)).toBeUndefined();
   });
 });

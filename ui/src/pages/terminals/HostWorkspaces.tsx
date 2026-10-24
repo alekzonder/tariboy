@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
-import { ArrowLeftRight, Check, ChevronDown, Layers, Plus, Settings } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Check, ChevronDown, Layers, Plus, Settings } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -11,18 +10,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import {
   DEFAULT_WORKSPACE_ID,
-  createWorkspace,
   deleteWorkspace,
-  moveHost,
+  hostsIn,
   renameWorkspace,
   selectWorkspace,
   useWorkspaces,
-  workspaceOf,
-  type WorkspacesState,
 } from "@/lib/workspaces";
+import { WorkspaceDeleteBar, WorkspaceHostRow, WorkspaceList } from "./WorkspaceManagerParts";
 
 export interface WorkspaceHost {
   id: string;
@@ -31,10 +27,6 @@ export interface WorkspaceHost {
 }
 
 const hostCount = (n: number) => `${n} host${n === 1 ? "" : "s"}`;
-
-function hostsIn(state: WorkspacesState, hosts: WorkspaceHost[], id: string) {
-  return hosts.filter((host) => workspaceOf(state, host.id) === id);
-}
 
 /** Titlebar control: the current workspace and a menu to switch or manage. */
 export function WorkspaceSwitcher({
@@ -152,7 +144,6 @@ function ManagerBody({
 }) {
   const state = useWorkspaces();
   const [selectedId, setSelectedId] = useState(initialId);
-  const [newName, setNewName] = useState("");
   const [moving, setMoving] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const newNameRef = useRef<HTMLInputElement | null>(null);
@@ -164,12 +155,6 @@ function ManagerBody({
     setSelectedId(id);
     setMoving(null);
     setConfirming(false);
-  };
-  const create = () => {
-    const id = createWorkspace(newName);
-    if (!id) return;
-    setNewName("");
-    pick(id);
   };
 
   return (
@@ -188,43 +173,13 @@ function ManagerBody({
         </DialogDescription>
       </div>
       <div className="flex min-h-0 flex-1 max-sm:flex-col">
-        <div className="flex w-55 shrink-0 flex-col border-r max-sm:max-h-40 max-sm:w-auto max-sm:border-r-0 max-sm:border-b">
-          <div className="grid min-h-0 flex-1 content-start gap-px overflow-auto px-1.5 py-2">
-            {state.workspaces.map((workspace) => (
-              <button
-                key={workspace.id}
-                type="button"
-                aria-current={workspace.id === selected.id ? "true" : undefined}
-                onClick={() => pick(workspace.id)}
-                className={cn(
-                  "flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-body hover:bg-accent",
-                  workspace.id === selected.id && "bg-accent font-medium",
-                )}
-              >
-                <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
-                <span className="text-meta text-muted-foreground tabular-nums">
-                  {hostsIn(state, hosts, workspace.id).length}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className="grid shrink-0 gap-1.5 border-t p-2.5">
-            <input
-              ref={newNameRef}
-              value={newName}
-              onChange={(event) => setNewName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") create();
-              }}
-              placeholder="New workspace name"
-              aria-label="New workspace name"
-              className="h-7 min-w-0 rounded-md bg-muted px-2.25 text-body-sm outline-none placeholder:text-muted-foreground"
-            />
-            <Button size="sm" variant="secondary" onClick={create}>
-              Create workspace
-            </Button>
-          </div>
-        </div>
+        <WorkspaceList
+          state={state}
+          hosts={hosts}
+          selectedId={selected.id}
+          newNameRef={newNameRef}
+          onPick={pick}
+        />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="grid min-h-0 flex-1 content-start gap-4 overflow-auto px-4.5 py-4">
             <div className="grid gap-1.5">
@@ -251,92 +206,30 @@ function ManagerBody({
                 </div>
               )}
               {members.map((host) => (
-                <div key={host.id} className="grid gap-0.5 rounded-lg border px-2.5 py-2">
-                  <div className="flex h-6.5 items-center gap-2">
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        "size-1.5 shrink-0 rounded-full",
-                        host.ready ? "bg-status-running" : "bg-status-stopped",
-                      )}
-                    />
-                    <span className="min-w-0 flex-1 truncate font-mono text-ui font-medium">
-                      {host.label}
-                    </span>
-                    <span className="text-ui text-muted-foreground">
-                      {host.ready ? "ready" : "offline"}
-                    </span>
-                    {state.workspaces.length > 1 && (
-                      <button
-                        type="button"
-                        aria-label={`Move ${host.label} to…`}
-                        aria-expanded={moving === host.id}
-                        title="Move to workspace"
-                        onClick={() =>
-                          setMoving((current) => (current === host.id ? null : host.id))
-                        }
-                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded-control border px-2 text-ui hover:bg-accent"
-                      >
-                        <ArrowLeftRight aria-hidden="true" className="size-3" />
-                        Move to…
-                      </button>
-                    )}
-                  </div>
-                  {moving === host.id && (
-                    <div className="flex flex-wrap items-center gap-1 rounded-md bg-muted px-1.75 py-1.5">
-                      {state.workspaces
-                        .filter((w) => w.id !== selected.id)
-                        .map((target) => (
-                          <button
-                            key={target.id}
-                            type="button"
-                            onClick={() => {
-                              moveHost(host.id, target.id);
-                              setMoving(null);
-                            }}
-                            className="h-6 rounded-sm border bg-card px-2.25 text-ui hover:border-ring"
-                          >
-                            {target.name}
-                          </button>
-                        ))}
-                    </div>
-                  )}
-                </div>
+                <WorkspaceHostRow
+                  key={host.id}
+                  host={host}
+                  state={state}
+                  selectedId={selected.id}
+                  moving={moving === host.id}
+                  onToggleMove={() =>
+                    setMoving((current) => (current === host.id ? null : host.id))
+                  }
+                  onMoved={() => setMoving(null)}
+                />
               ))}
             </div>
           </div>
           {!isDefault && (
-            <div className="flex shrink-0 items-center gap-2 border-t px-4.5 py-2.5">
-              {confirming ? (
-                <>
-                  <span className="min-w-0 flex-1 text-body-sm">
-                    Delete {selected.name}? Its hosts move to Default.
-                  </span>
-                  <Button size="sm" variant="secondary" onClick={() => setConfirming(false)}>
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => {
-                      deleteWorkspace(selected.id);
-                      pick(DEFAULT_WORKSPACE_ID);
-                    }}
-                  >
-                    Delete
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="text-destructive"
-                  onClick={() => setConfirming(true)}
-                >
-                  Delete workspace
-                </Button>
-              )}
-            </div>
+            <WorkspaceDeleteBar
+              name={selected.name}
+              confirming={confirming}
+              onConfirming={setConfirming}
+              onDelete={() => {
+                deleteWorkspace(selected.id);
+                pick(DEFAULT_WORKSPACE_ID);
+              }}
+            />
           )}
         </div>
       </div>

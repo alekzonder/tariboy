@@ -1,6 +1,13 @@
 import type { DaemonMeta } from "@/lib/daemons";
-import type { DesktopHostView, HostOutputEvent } from "@/lib/desktop";
-import type { HostOperationKind, HostOperationStatus, HostProgressStep } from "@/lib/hostProgress";
+import { hostConnected, type DesktopHostView, type HostOutputEvent } from "@/lib/desktop";
+import {
+  formatHostOperationError,
+  hostStepForPhase,
+  isTerminalHostOutput,
+  type HostOperationKind,
+  type HostOperationStatus,
+  type HostProgressStep,
+} from "@/lib/hostProgress";
 
 export interface HostOperation {
   kind: HostOperationKind;
@@ -52,4 +59,69 @@ export function preflightView(event: HostOutputEvent): Partial<DesktopHostView> 
   } catch {
     return null;
   }
+}
+
+/** A connect to an existing daemon that never answers its health check. */
+function existingUnavailable(current: HostOperation, next: DesktopHostView): boolean {
+  return (
+    current.kind === "connect" &&
+    next.state === "connecting" &&
+    next.message.startsWith("remote daemon health timed out:")
+  );
+}
+
+function hostStateFailed(current: HostOperation, next: DesktopHostView): boolean {
+  if (current.status === "idle") return false;
+  const needsAuth = current.kind === "connect" && next.state === "needs_auth";
+  return next.state === "failed" || needsAuth || existingUnavailable(current, next);
+}
+
+/** The operation after the host reports a new state; the same object when the
+ *  state changes nothing. */
+export function operationAfterHostState(
+  current: HostOperation,
+  next: DesktopHostView,
+): HostOperation {
+  const phaseStep = hostStepForPhase(next.phase);
+  if (hostStateFailed(current, next)) {
+    const unavailable = existingUnavailable(current, next);
+    return {
+      ...current,
+      status: "failed",
+      currentStep: unavailable
+        ? "reconnect"
+        : current.kind === "connect"
+          ? "connect"
+          : (phaseStep ?? current.currentStep ?? "connect"),
+      error: unavailable
+        ? "Existing Tariboy is unavailable at 127.0.0.1:9990."
+        : formatHostOperationError(next.message),
+    };
+  }
+  const retrying = current.kind === "connect" && current.status === "failed";
+  if (hostConnected(next.state) && (current.status === "running" || retrying)) {
+    return { ...current, status: "succeeded", currentStep: "reconnect", error: null };
+  }
+  if (phaseStep && current.status === "running") return { ...current, currentStep: phaseStep };
+  return current;
+}
+
+/** The operation after one line of its output: a phase line moves the step and
+ *  an error line fails it. The same object when the line changes nothing. */
+export function operationAfterOutput(
+  current: HostOperation,
+  event: HostOutputEvent,
+): HostOperation {
+  let next = current;
+  const step = event.stream === "phase" ? hostStepForPhase(event.text) : null;
+  if (step) next = { ...next, currentStep: step };
+  if (isTerminalHostOutput(event.stream)) {
+    next = {
+      ...next,
+      status: "failed",
+      currentStep: next.currentStep ?? "connect",
+      error: formatHostOperationError(event.text),
+    };
+  }
+  return next;
 }

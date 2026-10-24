@@ -1,5 +1,3 @@
-import type { ButtonHTMLAttributes } from "react";
-import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,40 +17,8 @@ import {
   SidebarSectionHeader,
 } from "./SidebarSectionHeader";
 import { SidebarAgentRow, type AgentRowActions } from "./SidebarAgentRow";
-import { hostAgents, ordered } from "./sidebarModel";
-
-function SortableButton({
-  dragKey,
-  disabled,
-  style,
-  className,
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  dragKey: string;
-}) {
-  const drag = useDraggable({ id: dragKey, disabled });
-  const drop = useDroppable({ id: dragKey, disabled });
-  return (
-    <button
-      ref={(node) => {
-        drag.setNodeRef(node);
-        drop.setNodeRef(node);
-      }}
-      disabled={disabled}
-      style={style}
-      className={cn(
-        "cursor-grab active:cursor-grabbing",
-        drop.isOver && "ring-1 ring-primary",
-        className,
-        drag.isDragging && "opacity-45",
-      )}
-      {...props}
-      {...drag.attributes}
-      {...drag.listeners}
-    />
-  );
-}
-/* eslint-enable react-hooks/refs */
+import { groupTeams, hostAgents, type SidebarAgent } from "./sidebarModel";
+import { SortableButton } from "./SortableButton";
 
 export interface ServerTabActions {
   selectedHostId?: string;
@@ -63,6 +29,194 @@ export interface ServerTabActions {
   onUpdateAll: (hostIds: string[]) => void;
   onRemoveServer: (hostId: string) => void;
   onConnectHost: (hostId: string) => void;
+}
+
+const SUBHEADING_CLASS =
+  "px-2 pt-1.5 pb-1 text-caption font-medium tracking-[.02em] text-muted-foreground";
+
+/** The server's own menu. The implicit local host has no registry entry (id
+ *  ""), so there is nothing to edit or remove for it. */
+function ServerMenu({ host, servers }: { host: HostAgents; servers: ServerTabActions }) {
+  if (host.host.id === "") return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className={SECTION_ICON_CLASS}
+          aria-label={`manage ${host.host.label}`}
+        >
+          ⋯
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => servers.onEditServer(host.host.id)}>
+          Edit host
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => servers.onRemoveServer(host.host.id)}>
+          Remove host
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function ServerSectionHeader({
+  host,
+  view,
+  appVersion,
+  servers,
+}: {
+  host: HostAgents;
+  view?: DaemonMeta;
+  appVersion: string;
+  servers: ServerTabActions;
+}) {
+  const selected = servers.selectedHostId === host.host.id;
+  return (
+    <SidebarSectionHeader
+      title={
+        <SortableButton
+          dragKey={dragId("servers", "", host.host.id, undefined, host.host.label)}
+          type="button"
+          aria-label={`Open server ${host.host.label}`}
+          aria-current={selected ? "page" : undefined}
+          onClick={() => servers.onSelectHost(host.host.id)}
+          className={cn(
+            SECTION_TITLE_CLASS,
+            "px-1 py-0.5 hover:bg-sidebar-accent",
+            selected && "bg-sidebar-accent text-foreground",
+          )}
+          title={host.host.label}
+        >
+          {host.host.label}
+        </SortableButton>
+      }
+      state={host.error ? "offline" : (view?.state ?? "ready")}
+      update={
+        view && hostUpdateAvailable(view, appVersion)
+          ? () => servers.onEditServer(host.host.id)
+          : undefined
+      }
+      updateLabel={`Update ${host.host.label}`}
+      menu={<ServerMenu host={host} servers={servers} />}
+      onAdd={host.error ? undefined : () => servers.onCreate(host.host.id)}
+      addLabel={`new agent on ${host.host.label}`}
+    />
+  );
+}
+
+function TeamsSection({
+  hostId,
+  teams,
+  filtering,
+  disabled,
+  actions,
+  onSelectTeam,
+}: {
+  hostId: string;
+  teams: Map<string, SidebarAgent[]>;
+  filtering: boolean;
+  disabled: boolean;
+  actions: AgentRowActions;
+  onSelectTeam: (hostId: string, team: string) => void;
+}) {
+  if (teams.size === 0) return null;
+  return (
+    <div className="mt-1">
+      <div className={SUBHEADING_CLASS}>Teams</div>
+      {[...teams.entries()]
+        .filter(([, rows]) => !filtering || rows.length > 0)
+        .map(([name, rows]) => (
+          <details key={name} open>
+            <summary className="cursor-pointer px-2 py-1 text-sm font-medium">
+              <SortableButton
+                dragKey={dragId("groups", hostId, name)}
+                type="button"
+                aria-label={`Open team ${name}`}
+                className="hover:underline"
+                disabled={disabled}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (!disabled) onSelectTeam(hostId, name);
+                }}
+              >
+                {name}
+              </SortableButton>
+            </summary>
+            <div className="pl-2">
+              {rows.map((row) => (
+                <SidebarAgentRow
+                  key={row.key}
+                  row={row}
+                  actions={actions}
+                  dragKey={dragId("agents", hostId, row.agent.name, row.group)}
+                />
+              ))}
+            </div>
+          </details>
+        ))}
+    </div>
+  );
+}
+
+function ServerSection({
+  host,
+  view,
+  filtering,
+  appVersion,
+  actions,
+  servers,
+}: {
+  host: HostAgents;
+  view?: DaemonMeta;
+  filtering: boolean;
+  appVersion: string;
+  actions: AgentRowActions;
+  servers: ServerTabActions;
+}) {
+  const agents = hostAgents(host);
+  const individuals = agents.filter((row) => !row.group);
+  return (
+    <section className="pb-2">
+      <ServerSectionHeader host={host} view={view} appVersion={appVersion} servers={servers} />
+      {view?.kind === "ssh" && (
+        <div className="px-2 pb-1">
+          <HostStatus
+            host={view}
+            appVersion={appVersion}
+            showUpdate={false}
+            showState={false}
+            onConnect={() => servers.onConnectHost(view.id)}
+            onUpdate={() => servers.onEditServer(view.id)}
+          />
+        </div>
+      )}
+      {host.error && <div className="px-2 text-xs text-destructive">{host.error}</div>}
+      <TeamsSection
+        hostId={host.host.id}
+        teams={groupTeams(host, agents)}
+        filtering={filtering}
+        disabled={Boolean(host.error)}
+        actions={actions}
+        onSelectTeam={servers.onSelectTeam}
+      />
+      <div className="mt-1">
+        <div className={SUBHEADING_CLASS}>Individual agents</div>
+        {individuals.map((row) => (
+          <SidebarAgentRow
+            key={row.key}
+            row={row}
+            actions={actions}
+            dragKey={dragId("agents", host.host.id, row.agent.name, "")}
+          />
+        ))}
+      </div>
+      {!host.error && host.agents.length === 0 && <SectionEmpty />}
+    </section>
+  );
 }
 
 /**
@@ -107,151 +261,17 @@ export function ServersTab({
           </Button>
         </div>
       )}
-      {hosts.map((host) => {
-        const view = viewFor(host.host.id);
-        const agents = hostAgents(host);
-        const groupNames = [
-          ...new Set([
-            ...(host.groups ?? []).map((group) => group.name),
-            ...agents.map((row) => row.group).filter(Boolean),
-          ]),
-        ];
-        const teams = new Map<string, typeof agents>();
-        for (const name of ordered(groupNames, host.sidebarOrder?.groups ?? [], (name) => name)) {
-          teams.set(name, []);
-        }
-        for (const row of agents) {
-          if (!row.group) continue;
-          teams.set(row.group, [...(teams.get(row.group) ?? []), row]);
-        }
-        const individuals = agents.filter((row) => !row.group);
-        const disabled = Boolean(host.error);
-
-        return (
-          <section key={host.host.id || "__local__"} className="pb-2">
-            <SidebarSectionHeader
-              title={
-                <SortableButton
-                  dragKey={dragId("servers", "", host.host.id, undefined, host.host.label)}
-                  type="button"
-                  aria-label={`Open server ${host.host.label}`}
-                  aria-current={servers.selectedHostId === host.host.id ? "page" : undefined}
-                  onClick={() => servers.onSelectHost(host.host.id)}
-                  className={cn(
-                    SECTION_TITLE_CLASS,
-                    "px-1 py-0.5 hover:bg-sidebar-accent",
-                    servers.selectedHostId === host.host.id && "bg-sidebar-accent text-foreground",
-                  )}
-                  title={host.host.label}
-                >
-                  {host.host.label}
-                </SortableButton>
-              }
-              state={host.error ? "offline" : (view?.state ?? "ready")}
-              update={
-                view && hostUpdateAvailable(view, appVersion)
-                  ? () => servers.onEditServer(host.host.id)
-                  : undefined
-              }
-              updateLabel={`Update ${host.host.label}`}
-              menu={
-                // The implicit local host has no registry entry (id ""), so
-                // there is nothing to edit or remove for it.
-                host.host.id !== "" && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        className={SECTION_ICON_CLASS}
-                        aria-label={`manage ${host.host.label}`}
-                      >
-                        ⋯
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => servers.onEditServer(host.host.id)}>
-                        Edit host
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => servers.onRemoveServer(host.host.id)}>
-                        Remove host
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )
-              }
-              onAdd={disabled ? undefined : () => servers.onCreate(host.host.id)}
-              addLabel={`new agent on ${host.host.label}`}
-            />
-            {view?.kind === "ssh" && (
-              <div className="px-2 pb-1">
-                <HostStatus
-                  host={view}
-                  appVersion={appVersion}
-                  showUpdate={false}
-                  showState={false}
-                  onConnect={() => servers.onConnectHost(view.id)}
-                  onUpdate={() => servers.onEditServer(view.id)}
-                />
-              </div>
-            )}
-            {host.error && <div className="px-2 text-xs text-destructive">{host.error}</div>}
-            {teams.size > 0 && (
-              <div className="mt-1">
-                <div className="px-2 pt-1.5 pb-1 text-caption font-medium tracking-[.02em] text-muted-foreground">
-                  Teams
-                </div>
-                {[...teams.entries()]
-                  .filter(([, rows]) => !filtering || rows.length > 0)
-                  .map(([name, rows]) => (
-                    <details key={name} open>
-                      <summary className="cursor-pointer px-2 py-1 text-sm font-medium">
-                        <SortableButton
-                          dragKey={dragId("groups", host.host.id, name)}
-                          type="button"
-                          aria-label={`Open team ${name}`}
-                          className="hover:underline"
-                          disabled={disabled}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            if (!disabled) servers.onSelectTeam(host.host.id, name);
-                          }}
-                        >
-                          {name}
-                        </SortableButton>
-                      </summary>
-                      <div className="pl-2">
-                        {rows.map((row) => (
-                          <SidebarAgentRow
-                            key={row.key}
-                            row={row}
-                            actions={actions}
-                            dragKey={dragId("agents", host.host.id, row.agent.name, row.group)}
-                          />
-                        ))}
-                      </div>
-                    </details>
-                  ))}
-              </div>
-            )}
-            <div className="mt-1">
-              <div className="px-2 pt-1.5 pb-1 text-caption font-medium tracking-[.02em] text-muted-foreground">
-                Individual agents
-              </div>
-              {individuals.map((row) => (
-                <SidebarAgentRow
-                  key={row.key}
-                  row={row}
-                  actions={actions}
-                  dragKey={dragId("agents", host.host.id, row.agent.name, "")}
-                />
-              ))}
-            </div>
-            {!host.error && host.agents.length === 0 && <SectionEmpty />}
-          </section>
-        );
-      })}
+      {hosts.map((host) => (
+        <ServerSection
+          key={host.host.id || "__local__"}
+          host={host}
+          view={viewFor(host.host.id)}
+          filtering={filtering}
+          appVersion={appVersion}
+          actions={actions}
+          servers={servers}
+        />
+      ))}
     </>
   );
 }

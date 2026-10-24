@@ -46,7 +46,7 @@ function foldAgentChats(chats: ChatSummary[]): Map<string, ChatSummary> {
 
 /** Sort `items` by an explicit id order, keeping unlisted items in their
  *  current relative order after the listed ones. */
-export function ordered<T>(items: T[], ids: string[], id: (item: T) => string): T[] {
+function ordered<T>(items: T[], ids: string[], id: (item: T) => string): T[] {
   const rank = new Map(ids.map((value, index) => [value, index]));
   return items
     .map((item, index) => ({ item, index, rank: rank.get(id(item)) }))
@@ -71,6 +71,28 @@ export function hostAgents(host: HostAgents): SidebarAgent[] {
       chat: chats.get(agent.name),
     }),
   );
+}
+
+/** A server's team names, declared or used by an agent, in the saved order. */
+export function teamNames(host: HostAgents, agents: SidebarAgent[]): string[] {
+  const names = [
+    ...new Set([
+      ...(host.groups ?? []).map((group) => group.name),
+      ...agents.map((row) => row.group).filter(Boolean),
+    ]),
+  ];
+  return ordered(names, host.sidebarOrder?.groups ?? [], (name) => name);
+}
+
+/** A server's teams with their members, a declared team with none included. */
+export function groupTeams(host: HostAgents, agents: SidebarAgent[]): Map<string, SidebarAgent[]> {
+  const teams = new Map<string, SidebarAgent[]>();
+  for (const name of teamNames(host, agents)) teams.set(name, []);
+  for (const row of agents) {
+    if (!row.group) continue;
+    teams.set(row.group, [...(teams.get(row.group) ?? []), row]);
+  }
+  return teams;
 }
 
 /** Every agent of every server, servers in sidebar order. */

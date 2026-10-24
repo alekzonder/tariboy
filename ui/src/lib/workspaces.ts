@@ -91,6 +91,15 @@ export function workspaceOf(value: WorkspacesState, hostId: string): string {
   return value.hostWorkspace[hostId] ?? DEFAULT_WORKSPACE_ID;
 }
 
+/** The hosts that belong to workspace `id`. */
+export function hostsIn<T extends { id: string }>(
+  value: WorkspacesState,
+  hosts: T[],
+  id: string,
+): T[] {
+  return hosts.filter((host) => workspaceOf(value, host.id) === id);
+}
+
 /** Returns the new workspace id, or undefined for a blank name. */
 export function createWorkspace(name: string): string | undefined {
   const trimmed = name.trim();
