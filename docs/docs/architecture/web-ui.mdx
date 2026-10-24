@@ -542,6 +542,51 @@ Their internal modules separate form state, requests, and presentation:
   actions. `TaskDetail` keeps one draft with its original revision. Its fields,
   relations, history, and dialogs render that state without another server cache.
 
+## Shared helpers and styles
+
+Helpers that more than one screen needs live in `ui/src/lib/`, and each name
+is declared once:
+
+- `lib/errors.ts` exports `errorText(error)`. It returns the message of any
+  `Error`, `ApiError` included, and `String(error)` for other values. A plain
+  error therefore shows `Failed to fetch`, without the class name.
+- `lib/ids.ts` exports `idempotencyKey(prefix)`. It returns
+  `crypto.randomUUID()`, or `prefix-<time>-<random>` when the WebView has no
+  `randomUUID`.
+- `lib/statusTone.ts` exports `flexibleStatusLabel(status)` for a flexible
+  task status. `lib/tasks.ts` alone exports `taskStatusLabel(task)`, the label
+  of any task.
+
+Styles are Tailwind utilities on the element. The `@theme` block of
+`ui/src/index.css` names the dense text sizes and the radii between the
+`--radius` steps:
+
+| Utility | Value |
+| --- | --- |
+| `text-nano`, `text-micro`, `text-tiny`, `text-caption`, `text-meta` | 9, 10, 10.5, 11, 11.5 px |
+| `text-ui`, `text-body-sm`, `text-body`, `text-body-lg`, `text-title` | 12, 12.5, 13, 14, 15 px |
+| `rounded-hair`, `rounded-xs`, `rounded-chip`, `rounded-sm`, `rounded-control` | 1.5, 2, 5, 6, 7 px |
+| `rounded-md`, `rounded-panel`, `rounded-lg`, `rounded-card`, `rounded-xl` | 8, 9, 10, 12, 14 px |
+
+The text sizes set only `font-size`, so the element keeps its line height.
+Sizes, spacing, and ring widths use the 4 px spacing scale: `h-6.5` is 26 px.
+`cn()` in `lib/utils.ts` tells tailwind-merge about the new names. Without
+that, tailwind-merge reads `text-ui` as a color and drops the color class next
+to it. When you add a text size or a radius to `@theme`, add it to `cn()` too.
+`ui/src/lib/utils.test.ts` fails when the two lists differ.
+
+`ui/src/test/arbitraryPxPolicy.test.ts` fails when production code under
+`ui/src` or `ui/store` uses a class of the form `utility-[Npx]`. Composite
+values, such as `grid-cols-[76px_minmax(0,1fr)]`, are allowed. The shadcn
+primitives under `ui/src/components/ui/` are not checked, so they stay the same
+as upstream. An inline `style` is only for a value that the code calculates at
+run time, such as a column width or a CSS variable.
+
+A CSS file is only for a rule that utilities cannot express clearly:
+pseudo-elements, a media query for one widget, or a rule that must override
+another component. `ui/src/pages/tasks/tasks.css` lists the rules it keeps
+and gives the reason for each at its top.
+
 ## WebView storage
 
 `ui/src/lib/storage.ts` owns all access to `localStorage` and `sessionStorage`
