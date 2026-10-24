@@ -5,6 +5,7 @@ import { useApi } from "@/components/apiContext";
 import { useApiQuery } from "@/hooks/useApiQuery";
 import { isConnectionError, type Task, type TaskNotification } from "@/lib/api";
 import { errorText } from "@/lib/errors";
+import { countTasksByQueue } from "@/lib/tasks";
 import { taskKeys, taskQueries } from "./taskQueries";
 import { useTaskQueryEvents } from "./useTaskQueryEvents";
 import type { TasksWorkspaceView } from "./useTasksWorkspaceView";
@@ -183,11 +184,7 @@ export function useTasksWorkspaceData(
   // The queue filter is applied here rather than in `listTasks`, so the queue
   // menu can count the queues from the same load instead of asking again.
   const visibleTasks = queue ? listedTasks.filter((task) => task.queue === queue) : listedTasks;
-  const queueCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const task of tasks) counts.set(task.queue, (counts.get(task.queue) ?? 0) + 1);
-    return counts;
-  }, [tasks]);
+  const queueCounts = useMemo(() => countTasksByQueue(tasks), [tasks]);
 
   return {
     queues,

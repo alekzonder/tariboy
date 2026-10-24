@@ -18,6 +18,13 @@ export const taskCategoryLabel = (category: TaskCategory): string => flexibleSta
 export const isActiveCategory = (category: TaskCategory): boolean =>
   category === "open" || category === "in_progress";
 
+/** How many of `tasks` each queue holds, for the queue menu. */
+export function countTasksByQueue(tasks: readonly Task[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const task of tasks) counts.set(task.queue, (counts.get(task.queue) ?? 0) + 1);
+  return counts;
+}
+
 /** The tone a row's problem mark takes, or null when the summary earns no mark:
  *  an idle holder is the panel's business, not the list's. */
 export function workflowAttentionTone(attention: WorkflowAttention | undefined): StatusTone | null {

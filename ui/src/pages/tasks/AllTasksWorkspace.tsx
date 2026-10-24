@@ -4,35 +4,23 @@ import { ApiProvider } from "@/components/ApiProvider";
 import { Input } from "@/components/ui/input";
 import { useTasksSocket } from "@/hooks/useTasksSocket";
 import type { HostAgents } from "@/lib/aggregate";
-import { createApi, type TaskPriority, type TaskQueue, type TaskStatusView } from "@/lib/api";
-import { readKey, storageKeys, writeKey } from "@/lib/storage";
-import { buildTaskForest, flattenVisible, type VisibleTaskRow } from "@/lib/taskTree";
+import { createApi, type TaskPriority, type TaskQueue } from "@/lib/api";
+import { countTasksByQueue } from "@/lib/tasks";
 import { hostToParam, targetFor } from "@/lib/terminalsHost";
+import {
+  allTasksQueues,
+  crossServerAssignees,
+  filterServerTasks,
+  serverTaskRows,
+} from "./allTasksView";
 import { TaskFilterBar } from "./TaskFilterBar";
-import TaskDrawer, { type AssigneeChoice } from "./TaskDrawer";
+import TaskDrawer from "./TaskDrawer";
 import TaskRow from "./TaskRow";
 import TaskTableHeader from "./TaskTableHeader";
-import { readTaskQueueFilter, persistTaskQueueFilter } from "./taskFilterStorage";
 import { readRememberedQueue, rememberQueue } from "./taskQueueMemory";
 import { useAllServersTasks, type ServerTask } from "./useAllServersTasks";
+import { useAllTasksView } from "./useAllTasksView";
 import "./tasks.css";
-
-// Search, status and server survive the Agents <-> All tasks switch the same
-// way the queue filter does: per session, beside it.
-type ViewFilters = { query: string; statusView: TaskStatusView; server: string };
-const DEFAULT_VIEW: ViewFilters = { query: "", statusView: "active", server: "" };
-
-function readView(): ViewFilters {
-  const stored = readKey(storageKeys.allTasksView);
-  return stored && typeof stored === "object"
-    ? { ...DEFAULT_VIEW, ...(stored as Partial<ViewFilters>) }
-    : DEFAULT_VIEW;
-}
-
-function persistView(view: ViewFilters): void {
-  // Web Storage is a best-effort Desktop convenience.
-  writeKey(storageKeys.allTasksView, view);
-}
 
 const rowId = (task: ServerTask) => `${task.serverId}\u0000${task.key}`;
 
@@ -58,18 +46,7 @@ function ServerTasksLive({
  * be any agent anywhere — one on another server moves the task there.
  */
 export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgents[] }) {
-  const [view, setViewState] = useState(readView);
-  const setView = (patch: Partial<ViewFilters>) =>
-    setViewState((current) => {
-      const next = { ...current, ...patch };
-      persistView(next);
-      return next;
-    });
-  const [queue, setQueueState] = useState(readTaskQueueFilter);
-  const setQueue = (prefix: string) => {
-    setQueueState(prefix);
-    persistTaskQueueFilter(prefix);
-  };
+  const { view, setView, queue, setQueue, filtersActive, clearFilters } = useAllTasksView();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<{ serverId: string; key: string } | null>(null);
   const [creating, setCreating] = useState(false);
@@ -87,27 +64,11 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
   });
 
   const visible = useMemo(
-    () =>
-      tasks.filter(
-        (task) =>
-          (!view.server || hostToParam(task.serverId) === view.server) &&
-          (!queue || task.queue === queue),
-      ),
+    () => filterServerTasks({ tasks, server: view.server, queue }),
     [tasks, queue, view.server],
   );
-
-  const queueCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const task of tasks) counts.set(task.queue, (counts.get(task.queue) ?? 0) + 1);
-    return counts;
-  }, [tasks]);
-  const queues = useMemo(
-    () =>
-      [...new Set([...queueCounts.keys(), ...(queue ? [queue] : [])])]
-        .sort()
-        .map((prefix) => ({ prefix })),
-    [queue, queueCounts],
-  );
+  const queueCounts = useMemo(() => countTasksByQueue(tasks), [tasks]);
+  const queues = useMemo(() => allTasksQueues(queueCounts, queue), [queue, queueCounts]);
   const serverItems = servers.map((server) => ({
     id: hostToParam(server.id),
     label: server.label,
@@ -115,46 +76,11 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
     unavailable: Boolean(errors[server.id]) && !tasks.some((task) => task.serverId === server.id),
   }));
 
-  const rows = useMemo(() => {
-    const byServer = new Map<string, ServerTask[]>();
-    for (const task of visible)
-      byServer.set(task.serverId, [...(byServer.get(task.serverId) ?? []), task]);
-    const roots: Array<{ serverId: string; node: ReturnType<typeof buildTaskForest>[number] }> = [];
-    for (const [serverId, list] of byServer) {
-      for (const node of buildTaskForest(list)) roots.push({ serverId, node });
-    }
-    roots.sort((left, right) =>
-      right.node.task.updated_at.localeCompare(left.node.task.updated_at),
-    );
-    return roots.flatMap(({ serverId, node }) => {
-      const open = new Set(
-        [...expanded]
-          .filter((id) => id.startsWith(`${serverId}\u0000`))
-          .map((id) => id.slice(serverId.length + 1)),
-      );
-      return flattenVisible([node], open).map((row) => ({ ...row, task: row.task as ServerTask }));
-    });
-  }, [expanded, visible]);
-
-  const assignees = useMemo<AssigneeChoice[]>(() => {
-    if (!open) return [];
-    return hosts
-      .filter((entry) => !entry.error)
-      .flatMap((entry) =>
-        entry.agents.map((item) => {
-          const assignee = `agent:${item.name}`;
-          const local = entry.host.id === open.serverId;
-          return {
-            // Same-server values are plain assignees, so an untouched field reads
-            // as unchanged; another server's carry its id to stay distinct.
-            value: local ? assignee : `${assignee}@${entry.host.id || "local"}`,
-            label: `${item.name} · ${entry.host.label}`,
-            assignee,
-            ...(local ? {} : { hostId: entry.host.id, hostLabel: entry.host.label }),
-          };
-        }),
-      );
-  }, [hosts, open]);
+  const rows = useMemo(() => serverTaskRows(visible, expanded), [expanded, visible]);
+  const assignees = useMemo(
+    () => (open ? crossServerAssignees(hosts, open.serverId) : []),
+    [hosts, open],
+  );
 
   const changePriority = async (task: ServerTask, priority: TaskPriority) => {
     try {
@@ -166,12 +92,6 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
       toast.error(error instanceof Error ? error.message : String(error));
     }
     reload(task.serverId);
-  };
-
-  const filtersActive = Boolean(view.query || view.statusView !== "active" || view.server || queue);
-  const clearFilters = () => {
-    setView(DEFAULT_VIEW);
-    setQueue("");
   };
 
   return (
@@ -216,23 +136,7 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
             }}
           />
         )}
-        {Object.entries(errors).map(([serverId, message]) => (
-          <div
-            key={serverId}
-            data-testid="server-warning"
-            title={message}
-            className="px-4 pb-1.5 text-ui text-muted-foreground"
-          >
-            {labelOf(serverId)} unavailable ·{" "}
-            <button
-              type="button"
-              className="underline-offset-2 hover:underline"
-              onClick={() => reload(serverId)}
-            >
-              Retry
-            </button>
-          </div>
-        ))}
+        <ServerWarnings errors={errors} labelOf={labelOf} onRetry={reload} />
         {loading ? (
           <div aria-label="Loading tasks" role="status">
             {Array.from({ length: 6 }, (_, index) => (
@@ -242,7 +146,7 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
         ) : (
           <div className="min-h-[calc(100%-60px)] pb-20">
             <TaskTableHeader mode="servers" sticky />
-            {rows.map((row: VisibleTaskRow & { task: ServerTask }) => {
+            {rows.map((row) => {
               const id = rowId(row.task);
               return (
                 <TaskRow
@@ -266,23 +170,7 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
               );
             })}
             {rows.length === 0 && (
-              <div className="flex flex-col items-center gap-1 py-12">
-                <span className="text-body font-medium">No tasks</span>
-                <span className="text-ui text-muted-foreground">
-                  {filtersActive
-                    ? "Nothing matches the current filters."
-                    : "No server has tasks yet."}
-                </span>
-                {filtersActive && (
-                  <button
-                    type="button"
-                    className="text-ui text-primary hover:underline"
-                    onClick={clearFilters}
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </div>
+              <NoTasks filtersActive={filtersActive} onClearFilters={clearFilters} />
             )}
           </div>
         )}
@@ -302,6 +190,60 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
             }}
           />
         </ApiProvider>
+      )}
+    </div>
+  );
+}
+
+function ServerWarnings({
+  errors,
+  labelOf,
+  onRetry,
+}: {
+  errors: Record<string, string>;
+  labelOf: (serverId: string) => string;
+  onRetry: (serverId: string) => void;
+}) {
+  return Object.entries(errors).map(([serverId, message]) => (
+    <div
+      key={serverId}
+      data-testid="server-warning"
+      title={message}
+      className="px-4 pb-1.5 text-ui text-muted-foreground"
+    >
+      {labelOf(serverId)} unavailable ·{" "}
+      <button
+        type="button"
+        className="underline-offset-2 hover:underline"
+        onClick={() => onRetry(serverId)}
+      >
+        Retry
+      </button>
+    </div>
+  ));
+}
+
+function NoTasks({
+  filtersActive,
+  onClearFilters,
+}: {
+  filtersActive: boolean;
+  onClearFilters: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1 py-12">
+      <span className="text-body font-medium">No tasks</span>
+      <span className="text-ui text-muted-foreground">
+        {filtersActive ? "Nothing matches the current filters." : "No server has tasks yet."}
+      </span>
+      {filtersActive && (
+        <button
+          type="button"
+          className="text-ui text-primary hover:underline"
+          onClick={onClearFilters}
+        >
+          Clear filters
+        </button>
       )}
     </div>
   );
