@@ -6,8 +6,8 @@ export type ReorderKind = "servers" | "groups" | "agents";
 export type DragIdentity = [ReorderKind, string, string, string?, string?];
 
 export const dragId = (...identity: DragIdentity) => JSON.stringify(identity);
-export const identityFor = (id: string | number) => JSON.parse(String(id)) as DragIdentity;
-export const sameScope = (left: DragIdentity, right: DragIdentity) =>
+const identityFor = (id: string | number) => JSON.parse(String(id)) as DragIdentity;
+const sameScope = (left: DragIdentity, right: DragIdentity) =>
   left[0] === right[0] && left[1] === right[1] && left[3] === right[3];
 
 function move(ids: string[], active: string, over: string): string[] {

@@ -46,7 +46,7 @@ function foldAgentChats(chats: ChatSummary[]): Map<string, ChatSummary> {
 
 /** Sort `items` by an explicit id order, keeping unlisted items in their
  *  current relative order after the listed ones. */
-export function ordered<T>(items: T[], ids: string[], id: (item: T) => string): T[] {
+function ordered<T>(items: T[], ids: string[], id: (item: T) => string): T[] {
   const rank = new Map(ids.map((value, index) => [value, index]));
   return items
     .map((item, index) => ({ item, index, rank: rank.get(id(item)) }))
