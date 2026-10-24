@@ -47,6 +47,7 @@ export * from "@/components/GroupWizard";
 export * from "@/components/HostStatus";
 export * from "@/components/ImageLayout";
 export * from "@/components/IterationAuditLog";
+export * from "@/components/LazyBoundary";
 export * from "@/components/MaintenanceSettings";
 export * from "@/components/PathAutocomplete";
 export * from "@/components/ProxyCallRow";

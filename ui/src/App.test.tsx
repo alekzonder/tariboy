@@ -74,7 +74,7 @@ describe("product routing", () => {
       .toBeInTheDocument();
   });
 
-  it("switches between Agents and All tasks through ?view=all on the current route", () => {
+  it("switches between Agents and All tasks through ?view=all on the current route", async () => {
     renderAt("/agents/local/builder/console?task=X-1");
 
     const titlebar = screen.getByTestId("app-titlebar");
@@ -82,11 +82,12 @@ describe("product routing", () => {
     expect(within(view).getByRole("radio", { name: "Agents" })).toHaveAttribute("aria-checked", "true");
 
     fireEvent.click(within(view).getByRole("radio", { name: "All tasks" }));
-    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/builder/console?task=X-1&view=all");
+    // The navigation commits once the lazily loaded All tasks screen is ready.
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/builder/console?task=X-1&view=all"));
     expect(within(view).getByRole("radio", { name: "All tasks" })).toHaveAttribute("aria-checked", "true");
 
     fireEvent.click(within(view).getByRole("radio", { name: "Agents" }));
-    expect(screen.getByTestId("location").textContent).toBe("/agents/local/builder/console?task=X-1");
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/agents/local/builder/console?task=X-1"));
   });
 
   it("hides the agents sidebar control in All tasks", () => {

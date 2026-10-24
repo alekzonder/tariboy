@@ -110,6 +110,8 @@ test "$(sed -n '3p' "$fixture/events")" = 'ui:npx tsc -b'
 test "$(sed -n '4p' "$fixture/events")" = 'ui:npm run lint'
 test "$(sed -n '5p' "$fixture/events")" = 'ui:npm run lint:unused'
 test "$(sed -n '6p' "$fixture/events")" = 'ui:npm test'
+test "$(sed -n '7p' "$fixture/events")" = 'ui:npm run branding:check'
+test "$(sed -n '8p' "$fixture/events")" = 'ui:npm run bundle:budget'
 echo "Check dependency preparation contract ok"
 
 # The real installer must reuse only successful installs with matching inputs.

@@ -19,6 +19,24 @@ export default defineConfig({
     license: { fileName: "THIRD-PARTY-LICENSES.md" },
     outDir: path.resolve(__dirname, "../desktop/dist"),
     emptyOutDir: true,
+    // Vendor libraries in named chunks (Vite 8's replacement for
+    // manualChunks). Each editor group is reached only through a lazily
+    // loaded screen, so it stays out of the initial download; keep a group
+    // narrow, because one module the shell needs pulls its whole group in.
+    // `npm run bundle:budget` checks the initial size.
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: "react", test: /node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/ },
+            { name: "codemirror", test: /node_modules[\\/](@codemirror|@lezer|@uiw|@marijn|crelt|style-mod|w3c-keyname)[\\/]/ },
+            { name: "tiptap", test: /node_modules[\\/](@tiptap|prosemirror-[^\\/]+|orderedmap|rope-sequence|linkifyjs|marked)[\\/]/ },
+            { name: "xterm", test: /node_modules[\\/]@xterm[\\/]/ },
+            { name: "markdown", test: /node_modules[\\/](react-markdown|remark-[^\\/]+|rehype-[^\\/]+|unified|micromark[^\\/]*|mdast-[^\\/]+|hast-[^\\/]+|unist-[^\\/]+|highlight\.js|lowlight)[\\/]/ },
+          ],
+        },
+      },
+    },
   },
   server: {
     // `cargo tauri dev` points devUrl at this address; strictPort makes a busy

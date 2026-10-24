@@ -91,7 +91,7 @@ describe("AgentWorkspace", () => {
     );
 
     await userEvent.click(await screen.findByRole("button", { name: "IMPROVE-37" }));
-    expect(screen.getByTestId("task-drawer")).toHaveTextContent("IMPROVE-37");
+    expect(await screen.findByTestId("task-drawer")).toHaveTextContent("IMPROVE-37");
     expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console");
     await userEvent.click(screen.getByRole("button", { name: "How Goal is selected" }));
     expect(await screen.findByRole("dialog")).toHaveTextContent(

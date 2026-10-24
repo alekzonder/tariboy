@@ -482,6 +482,46 @@ stay in `lib/daemons.ts` and `lib/desktop.ts`.
 Response types are still written by hand. When a module's types are generated
 from the daemon's OpenAPI description, they replace that one module's types.
 
+## Code splitting
+
+The first download contains only the shell: the titlebar, the agent list, the
+providers, server selection, and the agent workspace frame. Everything else
+loads with `React.lazy` when it first renders:
+
+- the server pages in `TerminalsPage` (Tasks, All tasks, Activity, Images,
+  Workflows, Stores, and Settings) and the nested image and settings routes of
+  `App.tsx`;
+- every agent workspace tab and the Goal task drawer in `AgentWorkspace`;
+- the TipTap editor (`tasks/TaskMarkdownEditor.tsx`): `MarkdownEditor` in
+  `TaskMarkdown.tsx` is a lazy wrapper, so `MarkdownContent` never loads TipTap;
+- the file viewer of `FileBrowser`, with CodeMirror, its languages, and the
+  highlighted preview.
+
+`components/LazyBoundary` wraps each place that renders a lazy component. It
+sits inside the layout that stays mounted, so the titlebar, the agent list,
+and the server or settings navigation stay visible. While a chunk downloads,
+the content area shows a `role="status"` text, **Loading…**. A later open uses
+the loaded module. A navigation inside the router is a transition, so the
+previous screen stays until the next one is ready. If a chunk fails to load,
+for example after an update or when the server is unreachable, the boundary
+shows **This screen failed to load.** and **Reloading discards unsaved input.**
+with a **Reload** button. It never retries by itself. A new route path, tab,
+or file clears the error.
+
+`vite.desktop.config.ts` puts vendor libraries in named chunks with
+`build.rolldownOptions.output.codeSplitting.groups`, the Vite 8 replacement for
+`manualChunks`: `react` (React, React DOM, and the router), `codemirror`,
+`tiptap` (TipTap and ProseMirror), `xterm`, and `markdown` (react-markdown,
+remark, rehype, and highlight.js). Only `react` is part of the first download;
+each other group loads with the first screen that needs it. Keep a group
+narrow: if the shell imports one module of a group, the whole group becomes
+part of the first download.
+
+`npm run bundle:budget`, a step of `make frontend-check`, fails when the entry
+chunk, or the entry chunk plus its static imports, is larger than 800,000
+bytes before compression. The budget does not measure CSS, the total size of
+all chunks, or the start time on a device.
+
 ## Component boundaries
 
 The public screen components keep their existing imports and properties.

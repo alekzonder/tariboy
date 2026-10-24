@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { lazy, useState } from "react";
 import type { FileContent, FileListing } from "@/lib/api";
 import { useFileTree } from "./file-browser/useFileTree";
 import { useFileActions } from "./file-browser/useFileActions";
 import { FileTree } from "./file-browser/FileTree";
 import { FileToolbar } from "./file-browser/FileToolbar";
-import { FileViewer } from "./file-browser/FileViewer";
 import { FileBrowserDialogs } from "./file-browser/FileBrowserDialogs";
+import { LazyBoundary } from "./LazyBoundary";
+
+// CodeMirror, its languages and the highlighted preview load with the viewer.
+const FileViewer = lazy(() => import("./file-browser/FileViewer").then((m) => ({ default: m.FileViewer })));
 
 // ---- Injected data source ---------------------------------------------------
 // FileBrowser is source-agnostic: the caller supplies the read (and optionally
@@ -55,13 +58,15 @@ function FileBrowserInner(props: FileBrowserProps) {
         />
       </aside>
       <div className="min-w-0 flex-1 overflow-hidden">
-        <FileViewer
-          key={selected ?? "__none"}
-          path={selected}
-          readFile={readFile}
-          writeFile={canEdit ? writeFile : undefined}
-          onSaved={actions.refreshParent}
-        />
+        <LazyBoundary resetKey={selected ?? ""}>
+          <FileViewer
+            key={selected ?? "__none"}
+            path={selected}
+            readFile={readFile}
+            writeFile={canEdit ? writeFile : undefined}
+            onSaved={actions.refreshParent}
+          />
+        </LazyBoundary>
       </div>
       <FileBrowserDialogs actions={actions} canCreate={canCreate} canRename={canRename} />
     </div>

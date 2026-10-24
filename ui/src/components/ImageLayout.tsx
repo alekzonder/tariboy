@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Link, NavLink, Outlet, useNavigate, useOutletContext, useParams,
+  Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams,
 } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -8,6 +8,7 @@ import {
 } from "@/lib/api";
 import { resolveDaemon } from "@/lib/daemons";
 import { ApiProvider } from "@/components/ApiProvider";
+import { LazyBoundary } from "@/components/LazyBoundary";
 import { openHostPathInVSCode } from "@/lib/desktop";
 import { canOpenAgentCwdInVSCode } from "@/pages/agents/agentCwdVSCode";
 import { useOptionalDaemons } from "@/components/DaemonProvider";
@@ -55,6 +56,7 @@ export function ImageLayout({ hostId, basePath = "/images" }: {
 function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: string; tag: string; basePath: string }) {
   const ref = `${name}:${tag}`;
   const navigate = useNavigate();
+  const location = useLocation();
   const daemonContext = useOptionalDaemons();
   const [detail, setDetail] = useState<{ manifest: ImageManifest; provenance: ImageProvenance; api: ApiClient } | null>(null);
   const [error, setError] = useState("");
@@ -185,7 +187,7 @@ function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: 
           <div className="space-y-2"><p role="alert" className="text-sm text-destructive">{error}</p>
             <Button variant="outline" onClick={() => { refreshes.current = 0; setError(""); setRevision((value) => value + 1); }}>Refresh image</Button></div>
         ) : (
-          detail ? <ApiProvider client={detail.api}><Outlet key={detail.manifest.digest} context={{ ref, manifest: detail.manifest, hostKey, provenance: detail.provenance, onReadError } satisfies ImageOutletContext} /></ApiProvider> : <p className="text-sm text-muted-foreground">Loading…</p>
+          detail ? <ApiProvider client={detail.api}><LazyBoundary resetKey={location.pathname}><Outlet key={detail.manifest.digest} context={{ ref, manifest: detail.manifest, hostKey, provenance: detail.provenance, onReadError } satisfies ImageOutletContext} /></LazyBoundary></ApiProvider> : <p className="text-sm text-muted-foreground">Loading…</p>
         )}
       </div>
     </div>

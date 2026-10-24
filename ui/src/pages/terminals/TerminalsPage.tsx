@@ -1,6 +1,6 @@
-import { useCallback, useContext, useMemo, useRef, useState, type ComponentProps } from "react";
+import { lazy, useCallback, useContext, useMemo, useRef, useState, type ComponentProps } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { usePolling } from "@/hooks/usePolling";
 import { fetchAllAgents, type HostAgents } from "@/lib/aggregate";
 import { paramToHost, hostToParam, serverPath } from "@/lib/terminalsHost";
@@ -17,22 +17,26 @@ import { hasLocalDaemon, hostConnect, hostConnected, hostUpdate } from "@/lib/de
 import AgentWorkspace from "@/pages/agents/AgentWorkspace";
 import { ServerContextBar } from "./ServerContextBar";
 import { RouteHostBoundary } from "./RouteHostBoundary";
-import TasksWorkspace from "@/pages/tasks/TasksWorkspace";
-import AllTasksWorkspace from "@/pages/tasks/AllTasksWorkspace";
-import ServerActivityPage from "@/pages/activity/ServerActivityPage";
-import ImagesPage from "@/pages/ImagesPage";
-import ImageTags from "@/pages/images/ImageTags";
-import StoresPage from "@/pages/StoresPage";
-import WorkflowImagesPage from "@/pages/workflows/WorkflowImagesPage";
-import WorkflowImageDetail from "@/pages/workflows/WorkflowImageDetail";
-import { ImageLayout } from "@/components/ImageLayout";
-import SettingsPage from "@/pages/settings/SettingsPage";
+import { LazyBoundary } from "@/components/LazyBoundary";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import { MessagesLiveRefresh } from "./MessagesLiveRefresh";
 import { TitlebarSlotContext } from "./titlebarSlotContext";
 import { WorkspaceManager, WorkspaceSwitcher, type WorkspaceHost } from "./HostWorkspaces";
 import { useWorkspaces, workspaceOf } from "@/lib/workspaces";
 import { defaultAgentTab } from "@/lib/uiMode";
+
+// Server pages load on first open, so the initial bundle carries only the
+// shell, the agent list and the agent workspace.
+const TasksWorkspace = lazy(() => import("@/pages/tasks/TasksWorkspace"));
+const AllTasksWorkspace = lazy(() => import("@/pages/tasks/AllTasksWorkspace"));
+const ServerActivityPage = lazy(() => import("@/pages/activity/ServerActivityPage"));
+const ImagesPage = lazy(() => import("@/pages/ImagesPage"));
+const ImageTags = lazy(() => import("@/pages/images/ImageTags"));
+const StoresPage = lazy(() => import("@/pages/StoresPage"));
+const WorkflowImagesPage = lazy(() => import("@/pages/workflows/WorkflowImagesPage"));
+const WorkflowImageDetail = lazy(() => import("@/pages/workflows/WorkflowImageDetail"));
+const ImageLayout = lazy(() => import("@/components/ImageLayout").then((m) => ({ default: m.ImageLayout })));
+const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
 
 type ServerDialogState = { mode: "add" } | { mode: "edit"; server: DaemonMeta };
 type CreateDialogState = {
@@ -45,6 +49,7 @@ export type ServerView = "tasks" | "activity" | "images" | "image-tags" | "image
 export default function TerminalsPage({ serverView }: { serverView?: ServerView }) {
   const { hostId: hostParam, agent: agentName, tab: agentTab, team: teamName, name: storeName, tag: routeTag } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const allTasks = searchParams.get("view") === "all";
   const [lastSuccessfulHostsById, setLastSuccessfulHostsById] = useState<Map<string, HostAgents>>(
@@ -388,6 +393,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
           <p role="alert" className="mb-2 text-sm text-destructive">{hostError}</p>
         )}
         <section className="min-h-0 flex-1">
+        <LazyBoundary resetKey={location.pathname}>
         {allTasks ? (
           <AllTasksWorkspace hosts={hosts} />
         ) : serverView === "tasks" && hostId !== undefined ? (
@@ -483,6 +489,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
             <Button onClick={() => setCreateFor({ hostId: createHosts[0].id })}>New agent</Button>
           </div>
         )}
+        </LazyBoundary>
         </section>
         </div>
       </main>

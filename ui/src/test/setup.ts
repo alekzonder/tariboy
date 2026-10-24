@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom"
+import { configure } from "@testing-library/react"
 import { TransformStream as NodeTransformStream } from "node:stream/web"
 
 if (typeof globalThis.TransformStream === "undefined") {
@@ -95,3 +96,8 @@ if (typeof globalThis.EventSource === "undefined") {
   }
   globalThis.EventSource = FakeEventSource as unknown as typeof EventSource
 }
+
+// Screens and editors load lazily: the first findBy in a test file may wait
+// for a cold dynamic import, which under the parallel suite can take longer
+// than the 1 s default.
+configure({ asyncUtilTimeout: 5000 })

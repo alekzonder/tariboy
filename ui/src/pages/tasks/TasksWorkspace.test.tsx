@@ -251,7 +251,7 @@ describe("TasksWorkspace", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockReturnValue(upload.promise)
     render(onHost(target, <TasksWorkspace />))
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    const description = screen.getByLabelText("Description").closest(".task-description")!
+    const description = (await screen.findByLabelText("Description")).closest(".task-description")!
     const comments = screen.getByText("Comments").closest("section")!
     expect(within(description as HTMLElement).getByRole("button", { name: "Send files" })).toBeEnabled()
     expect(within(comments).getByRole("button", { name: "Send files" })).toBeEnabled()

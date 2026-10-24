@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import type { PluginContribution } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { cn } from "@/lib/utils";
+import { LazyBoundary } from "@/components/LazyBoundary";
 import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
 import { ShellScriptEditor } from "@/components/ShellScriptEditor";
 import { SupportBundle } from "@/components/SupportBundle";
@@ -92,7 +93,7 @@ export default function SettingsPage({ basePath = "/settings" }: {
         )}
       </aside>
       <section className="min-w-0 flex-1 overflow-auto p-5 max-sm:p-3">
-        <Outlet />
+        <LazyBoundary resetKey={location.pathname}><Outlet /></LazyBoundary>
       </section>
     </div>
   );
