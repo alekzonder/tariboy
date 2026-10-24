@@ -557,8 +557,9 @@ describe("useTerminalSocket host", () => {
   it("re-dials when the provider's token changes", () => {
     let client: ApiClient = createApi(remote)
     const { rerender } = rtlRenderHook(() => useTerminalSocket("bob", true), {
-      // oxlint-disable-next-line react/no-children-prop -- ApiProvider types children as a required prop, so createElement passes it there
-      wrapper: ({ children }: PropsWithChildren) => createElement(ApiProvider, { client, children }),
+      wrapper: ({ children }: PropsWithChildren) =>
+        // oxlint-disable-next-line react/no-children-prop -- ApiProvider types children as a required prop, so createElement passes it there
+        createElement(ApiProvider, { client, children }),
     })
     expect(FakeWebSocket.instances).toHaveLength(1)
     client = createApi({ ...remote, token: "two" })

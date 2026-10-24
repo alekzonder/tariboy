@@ -122,8 +122,9 @@ describe("socket host", () => {
   it("watches the provider's host and survives ordinary re-renders", () => {
     let client: ApiClient = createApi(remote)
     const { rerender } = renderHook(() => useMessagesSocket({ onHint: vi.fn() }), {
-      // oxlint-disable-next-line react/no-children-prop -- ApiProvider types children as a required prop, so createElement passes it there
-      wrapper: ({ children }: PropsWithChildren) => createElement(ApiProvider, { client, children }),
+      wrapper: ({ children }: PropsWithChildren) =>
+        // oxlint-disable-next-line react/no-children-prop -- ApiProvider types children as a required prop, so createElement passes it there
+        createElement(ApiProvider, { client, children }),
     })
     expect(FakeWebSocket.instances).toHaveLength(1)
     expect(FakeWebSocket.instances[0].url).toBe("wss://r.example/api/messages/ws?token=one")
