@@ -2,28 +2,16 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ApiProvider } from "@/components/ApiProvider";
 import { useDaemons } from "@/components/daemonContext";
 import { getActiveDaemon } from "@/lib/api";
-import { hostConnected } from "@/lib/desktop";
 import type { Daemon } from "@/lib/daemons";
+import { routeHostState } from "./routeHostState";
 
-export function RouteHostBoundary({
-  hostId,
-  unavailable = false,
-  children,
-}: {
-  hostId: string;
-  unavailable?: boolean;
-  children: ReactNode | ((target: Daemon | null) => ReactNode);
-}) {
-  const { activeId, daemons, select } = useDaemons();
+/** Selects the route's host as the active daemon and reports how that went;
+ *  a host change reads "connecting" until its own selection settles. */
+function useRouteHostSelection(hostId: string, select: (id: string) => Promise<boolean>) {
   const [selection, setSelection] = useState<{
     hostId: string;
     status: "connecting" | "ready" | "unavailable";
   }>(() => ({ hostId, status: "connecting" }));
-  const status = selection.hostId === hostId ? selection.status : "connecting";
-  const host = daemons.find((entry) => entry.id === hostId);
-  const knownHost = hostId === "" || host !== undefined;
-  const hostReady =
-    hostId === "" || (!!host?.baseURL && (host.kind !== "ssh" || hostConnected(host.state)));
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +24,22 @@ export function RouteHostBoundary({
       cancelled = true;
     };
   }, [hostId, select]);
+
+  return selection.hostId === hostId ? selection.status : "connecting";
+}
+
+export function RouteHostBoundary({
+  hostId,
+  unavailable = false,
+  children,
+}: {
+  hostId: string;
+  unavailable?: boolean;
+  children: ReactNode | ((target: Daemon | null) => ReactNode);
+}) {
+  const { activeId, daemons, select } = useDaemons();
+  const status = useRouteHostSelection(hostId, select);
+  const { knownHost, hostReady } = routeHostState(hostId, daemons);
 
   if (!knownHost || status === "unavailable") {
     return (
