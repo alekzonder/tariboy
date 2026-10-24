@@ -53,6 +53,74 @@
         "DisposableStack": "readonly",
         "SuppressedError": "readonly"
       }
+    },
+    {
+      "files": [
+        "src/**/*.{ts,tsx}",
+        "store/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "localStorage",
+            "message": "Use the registry in src/lib/storage.ts."
+          },
+          {
+            "name": "sessionStorage",
+            "message": "Use the registry in src/lib/storage.ts."
+          }
+        ],
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "window",
+            "property": "localStorage",
+            "message": "Use the registry in src/lib/storage.ts."
+          },
+          {
+            "object": "window",
+            "property": "sessionStorage",
+            "message": "Use the registry in src/lib/storage.ts."
+          },
+          {
+            "object": "globalThis",
+            "property": "localStorage",
+            "message": "Use the registry in src/lib/storage.ts."
+          },
+          {
+            "object": "globalThis",
+            "property": "sessionStorage",
+            "message": "Use the registry in src/lib/storage.ts."
+          },
+          {
+            "object": "self",
+            "property": "localStorage",
+            "message": "Use the registry in src/lib/storage.ts."
+          },
+          {
+            "object": "self",
+            "property": "sessionStorage",
+            "message": "Use the registry in src/lib/storage.ts."
+          },
+          {
+            "object": "window",
+            "property": "dispatchEvent",
+            "message": "Use an imported channel such as src/lib/imageEvents.ts."
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/lib/storage.ts",
+        "**/*.test.{ts,tsx}",
+        "src/test/**"
+      ],
+      "rules": {
+        "no-restricted-globals": "off",
+        "no-restricted-properties": "off"
+      }
     }
   ]
 }
