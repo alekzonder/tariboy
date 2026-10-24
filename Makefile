@@ -32,7 +32,7 @@ TAURI_BUNDLE_VERBOSITY = $(if $(filter 1,$(DESKTOP_BUNDLE_VERBOSE)),--verbose,)
 
 export CGO_ENABLED=0
 
-.PHONY: build install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+.PHONY: build install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev ui-fmt-check store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build:
 	$(GO) build -trimpath -o $(BINDIR)/tariboyd ./cmd/tariboyd
@@ -218,6 +218,11 @@ ui:
 ui-dev:
 	@test -d ui/node_modules || { echo "ui/node_modules is missing, run: cd ui && npm ci" >&2; exit 1; }
 	@bash -lc 'set -euo pipefail; cd ui; cleanup() { trap - EXIT INT TERM; kill "$${daemon_pid:-}" "$${ui_pid:-}" 2>/dev/null || true; wait "$${daemon_pid:-}" "$${ui_pid:-}" 2>/dev/null || true; }; trap cleanup EXIT INT TERM; node tests/tasks-e2e-daemon.mjs & daemon_pid=$$!; npx vite --config vite.tasks-test.config.ts & ui_pid=$$!; echo "UI: http://127.0.0.1:4175/tests/tasks-fixture.html#/servers/local/tasks"; echo "Isolated API: http://127.0.0.1:4176"; while kill -0 "$$daemon_pid" 2>/dev/null && kill -0 "$$ui_pid" 2>/dev/null; do sleep 1; done'
+
+# Read-only oxfmt drift report for ui/; `cd ui && npm run fmt` rewrites files.
+ui-fmt-check:
+	@test -d ui/node_modules || { echo "ui/node_modules is missing, run: cd ui && npm ci" >&2; exit 1; }
+	cd ui && npm run fmt:check
 
 store-ui:
 	cd ui && npm ci && npm run build:store
@@ -605,6 +610,7 @@ frontend-check:
 	./scripts/npm-ci-locked.sh ui
 	./scripts/npm-ci-locked.sh docs
 	@$(STEP_RUNNER); \
+	run_step "ui-fmt-check" 'cd ui && npm run fmt:check'; \
 	run_step "ui-typecheck" 'cd ui && npx tsc -b'; \
 	run_step "ui-lint"      'cd ui && npm run lint'; \
 	run_step "ui-unused"    'cd ui && npm run lint:unused'; \

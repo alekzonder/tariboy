@@ -165,7 +165,7 @@ Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
 `staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. The
-frontend target runs UI typecheck, lint, the unused-code check, unit tests,
+frontend target runs the UI format check, UI typecheck, lint, the unused-code check, unit tests,
 branding, the initial bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
 `scripts/npm-ci-locked.sh` for locked installs under both `ui/` and `docs/`.
@@ -359,7 +359,7 @@ cd ui
 npm ci
 ```
 
-`make check` then covers `npx tsc -b`, `npm run lint`, `npm run lint:unused`,
+`make check` then covers `npm run fmt:check`, `npx tsc -b`, `npm run lint`, `npm run lint:unused`,
 `npm test`, `npm run branding:check`, and `npm run bundle:budget`. `make full-check` adds `npm run test:tasks-browser`
 and `npm run test:images-browser`, and builds the desktop bundle through its
 desktop step. Run any of them directly under `ui/` while iterating:
@@ -367,6 +367,8 @@ desktop step. Run any of them directly under `ui/` while iterating:
 ```bash
 cd ui
 npm test
+npm run fmt
+npm run fmt:check
 npm run lint
 npm run lint:unused
 npm run bundle:budget
@@ -386,6 +388,26 @@ failure message gives both sizes, the limit, and every counted file. A missing
 entry, manifest import, or output file is also a failure. To fix a failure,
 load the new code with `React.lazy`, or keep the library out of the groups that
 the shell imports (see [Code splitting](/docs/architecture/web-ui#code-splitting)).
+
+`npm run fmt` formats `ui/src`, `ui/store`, `ui/tests`, and `ui/.design-sync`
+in place with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) and
+`ui/.oxfmtrc.json`: double quotes, semicolons, and two-space indentation
+without tabs. Import sorting and Tailwind class sorting are off. oxfmt skips
+files that it does not support, such as shell scripts, and the paths in
+`ui/.gitignore`. `npm run fmt:check`, also available as `make ui-fmt-check`, checks
+the same paths without writing files. It is the `ui-fmt-check` step of
+`make frontend-check`, so formatting drift fails `make check`. Run
+`npm run fmt` when it reports drift. Configure your editor to use oxfmt with
+the same configuration, so that a save does not reformat other code.
+
+The commit that first formatted these paths is listed in
+`.git-blame-ignore-revs` at the repository root. Use
+`git blame --ignore-revs-file .git-blame-ignore-revs FILE` to skip it, or set
+it once for your clone:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
 
 `npm run lint` runs oxlint with `ui/.oxlintrc.json` and `--deny-warnings`.
 A warning therefore fails `make frontend-check` in the same way as an error.
