@@ -145,7 +145,6 @@ export default function TaskRow({
     <div
       ref={setNodeRef}
       data-testid={`task-row-${row.task.key}`}
-      style={{ opacity: isDragging ? 0.45 : undefined }}
       // A mouse or finger opens the task anywhere on the row; the keyboard keeps
       // the title button. The row's own buttons, and clicks React bubbles up
       // from the priority menu's portal, keep their own action.
@@ -159,6 +158,8 @@ export default function TaskRow({
         selected ? "bg-accent" : "hover:bg-muted",
         overInside && "ring-1 ring-primary ring-inset",
         row.task.access === "context" && "opacity-60",
+        // Last, so a dragged context row still dims to the drag opacity.
+        isDragging && "opacity-45",
       )}
     >
       <span
