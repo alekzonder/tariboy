@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { WorkflowView } from "@/lib/api"
 import { canReturnToAgent, counterText, currentVisit, defaultReturnTarget, inCurrentVisit, requiredBy, returnTargets, stepArtifacts, stepMarks, stepOf } from "./workflowGraph"
-import { customerView, poolView } from "./workflowFixtures"
+import { customerView, poolView } from "@/test/fixtures/workflowFixtures"
 
 describe("stepOf and stepMarks", () => {
   it("counts the current status from 1 in manifest order", () => {

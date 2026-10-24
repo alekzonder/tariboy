@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render as renderWith, screen, within } from "@
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
 import WorkflowRuns from "./WorkflowRuns"
-import { checkRun, watchRun, remoteTarget } from "./workflowFixtures"
+import { checkRun, watchRun, remoteTarget } from "@/test/fixtures/workflowFixtures"
 import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ getTaskScriptRunLog: vi.fn() }))

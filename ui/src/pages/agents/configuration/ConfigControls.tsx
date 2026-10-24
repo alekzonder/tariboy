@@ -14,7 +14,7 @@ import type { ConfigDraft } from "./useConfigDraft";
 
 // Mirror the shadcn Input look (rounded-lg, same border + focus ring) so
 // selects and text inputs line up as one visual family, in light and dark.
-export const selectClass =
+const selectClass =
   "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none " +
   "transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 " +
   "dark:bg-input/30";

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react"
 
 export const TASK_PANEL_WIDTHS_KEY = "tasks:workspace:v1"
-export const TASK_PANEL_WIDTHS_SCHEMA_VERSION = 1 as const
+const TASK_PANEL_WIDTHS_SCHEMA_VERSION = 1 as const
 
 export const MIN_TASK_DETAIL_WIDTH = 320
 

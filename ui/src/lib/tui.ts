@@ -3,7 +3,7 @@ import { useCallback, useState } from "react"
 /** localStorage key holding the retained inject-modal draft for one agent's
  * section. Keyed by agent name AND section so the manager and worker drafts
  * never clobber each other. */
-export function tuiDraftKey(name: string, section: string): string {
+function tuiDraftKey(name: string, section: string): string {
   return `tui:draft:${name}:${section}`
 }
 

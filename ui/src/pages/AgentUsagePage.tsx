@@ -5,8 +5,10 @@ import { closestBucket } from "@/lib/activityPeriod";
 import { useAgentName } from "@/lib/agent";
 import { fmtTokens } from "@/lib/audit";
 import { fmtDateTime } from "@/lib/time";
+import { fmtCost } from "@/lib/usage";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/components/apiContext";
+import UsageSummaryCard from "@/components/usage/UsageSummaryCard";
 import TaskDrawer from "@/pages/tasks/TaskDrawer";
 
 // Window presets: label → (span in ms, series bucket). The bucket widens with
@@ -26,10 +28,6 @@ const GROUPINGS: { key: "iteration" | "task" | "epic" | "model"; label: string }
   { key: "epic", label: "Epics" },
   { key: "model", label: "Models" },
 ];
-
-function fmtCost(usd: number): string {
-  return `$${usd.toFixed(4)}`;
-}
 
 // period, when given, is the Activity tab's shared window: it replaces the
 // page's own window presets.
@@ -125,16 +123,16 @@ export default function AgentUsagePage({ period }: { period?: { since: string; u
       </div>}
 
       {/* (2) Totals cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <TotalCard label="Requests" value={totals ? String(totals.requests) : "—"} />
-        <TotalCard label="Tokens in" value={totals ? fmtTokens(totals.input_tokens) : "—"} />
-        <TotalCard label="Tokens out" value={totals ? fmtTokens(totals.output_tokens) : "—"} />
-        <TotalCard
+      <dl aria-label="Usage totals" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <UsageSummaryCard label="Requests" value={totals ? String(totals.requests) : "—"} />
+        <UsageSummaryCard label="Tokens in" value={totals ? fmtTokens(totals.input_tokens) : "—"} />
+        <UsageSummaryCard label="Tokens out" value={totals ? fmtTokens(totals.output_tokens) : "—"} />
+        <UsageSummaryCard
           label="Cache w/r"
           value={totals ? `${fmtTokens(totals.cache_write_tokens)} / ${fmtTokens(totals.cache_read_tokens)}` : "—"}
         />
-        <TotalCard label="Cost" value={totals ? fmtCost(totals.cost_usd) : "—"} />
-      </div>
+        <UsageSummaryCard label="Cost" value={totals ? fmtCost(totals.cost_usd) : "—"} />
+      </dl>
 
       {/* (3) Cost-over-time chart */}
       <CostChart series={series} />
@@ -199,15 +197,6 @@ export default function AgentUsagePage({ period }: { period?: { since: string; u
           onClose={() => setTaskKey("")}
         />
       )}
-    </div>
-  );
-}
-
-function TotalCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded border p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 font-mono text-lg">{value}</div>
     </div>
   );
 }

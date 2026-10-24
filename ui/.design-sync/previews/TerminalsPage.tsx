@@ -10,7 +10,7 @@ import {
 } from "tariboy-ui";
 
 // Hermetic: the render check reuses ONE browser page across every card, so a
-// preview that seeds the daemon registry (HostSwitcher does) leaves it behind in
+// preview that seeds the daemon registry leaves it behind in
 // localStorage. This page would then resolve those unreachable SSH hosts and
 // poll all of them, which both slows the first commit and keeps the network
 // from ever going idle. Reset to "local daemon only" at module scope.

@@ -15,10 +15,10 @@ exceptions, all exported from the bundle:
 - Dark mode is a **class**, not a media query: put `class="dark"` on an ancestor
   (`<html>` in the app). `ThemeProvider` does this for you and persists the
   choice; `ThemeToggle` is the titlebar control that drives it.
-- `AliasEditor`, `NotesEditor` and `AgentLayout` read `AgentNameContext` /
-  `AgentStatusContext` (both exported); everything else takes plain props.
+- `AgentNameContext` and `AgentStatusContext` are exported so previews wrap the
+  same context instances the bundled pages read.
   Router-linked components need a router in scope — `MemoryRouter`, `Routes` and
-  `Route` are exported for isolated use, and `AgentLayout` / `ImageLayout` derive
+  `Route` are exported for isolated use, and `AgentWorkspace` / `ImageLayout` derive
   their identity from `useParams()`, so they need a *matched* route, not just a
   router. `toast` is exported for driving `Toaster`.
 

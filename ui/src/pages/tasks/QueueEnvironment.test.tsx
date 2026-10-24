@@ -3,7 +3,7 @@ import { fireEvent, render as renderWith, screen, waitFor, within } from "@/test
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
 import QueueEnvironment from "./QueueEnvironment"
-import { remoteTarget } from "./workflowFixtures"
+import { remoteTarget } from "@/test/fixtures/workflowFixtures"
 import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({

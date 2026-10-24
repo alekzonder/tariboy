@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { ImageCombobox, Label } from "tariboy-ui";
 
 // ImageCombobox is the required image picker on the agent-create surfaces
-// (AgentCreate, CreateAgentDialog, and each row of the group wizard). The value
+// (CreateAgentDialog and each row of the group wizard). The value
 // is the full `name:tag` ref; the option list is a plain filtered listbox that
 // opens on focus. Fixtures follow ImageRow in src/lib/api.ts.
 

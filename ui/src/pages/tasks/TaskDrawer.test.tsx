@@ -7,7 +7,7 @@ import { ApiError, type ApiClient, type Task, type TaskDetail as Detail } from "
 import type { Daemon } from "@/lib/daemons"
 import { fakeApi } from "@/test/api"
 import TaskDrawer from "./TaskDrawer"
-import { customerView, workflowTask } from "./workflowFixtures"
+import { customerView, workflowTask } from "@/test/fixtures/workflowFixtures"
 
 const api = vi.hoisted(() => ({
   addTaskComment: vi.fn(),

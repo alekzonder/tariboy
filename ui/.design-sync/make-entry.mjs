@@ -86,7 +86,7 @@ const lines = [
   '',
   '// Router context for previews of components that use react-router links.',
   '// Excluded from the component list via cfg.componentSrcMap.',
-  '// MemoryRouter alone matches no pattern: AgentLayout and ImageLayout read',
+  '// MemoryRouter alone matches no pattern: AgentWorkspace and ImageLayout read',
   '// useParams(), so a preview must mount them inside a matched Route.',
   'export { MemoryRouter, Routes, Route } from "react-router-dom";',
   '',
@@ -97,5 +97,8 @@ const lines = [
   'export { toast } from "sonner";',
   '',
 ];
-writeFileSync(join(here, 'entry.tsx'), lines.join('\n'));
+// --out PATH writes elsewhere, so a check can compare against the committed entry.
+const outFlag = process.argv.indexOf('--out');
+const out = outFlag === -1 ? join(here, 'entry.tsx') : process.argv[outFlag + 1];
+writeFileSync(out, lines.join('\n'));
 console.log(`entry.tsx: ${ui.length} ui + ${applied.length} app modules`);

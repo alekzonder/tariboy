@@ -3,7 +3,7 @@ import { fireEvent, render as renderWith, screen, waitFor } from "@/test/queryRe
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
 import QueueSecrets from "./QueueSecrets"
-import { remoteTarget } from "./workflowFixtures"
+import { remoteTarget } from "@/test/fixtures/workflowFixtures"
 import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ listQueueSecrets: vi.fn(), setQueueSecret: vi.fn(), removeQueueSecret: vi.fn() }))

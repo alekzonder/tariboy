@@ -23,33 +23,6 @@ export const EFFORT_PRESETS = [
   "max",
   "ultracode",
 ] as const;
-export const MODEL_PRESETS_BY_HARNESS: Readonly<
-  Record<string, readonly string[]>
-> = {
-  claude: [
-    "claude-opus-4-8",
-    "claude-sonnet-5",
-    "claude-haiku-4-5",
-    "claude-fable-5",
-  ],
-  codex: ["gpt-5"],
-  opencode: [],
-  cursor: [
-    "auto",
-    "gpt-5.3-codex-high",
-    "gpt-5.2",
-    "composer-2.5",
-    "claude-opus-5-thinking-high",
-    "gpt-5.6-sol-high",
-    "claude-fable-5-thinking-high",
-    "cursor-grok-4.5-high",
-    "gemini-3.7-flash-high",
-    "claude-sonnet-5-thinking-high",
-    "gpt-5.6-luna-high",
-    "grok-4.7-high",
-  ],
-  stub: [],
-};
 
 const LEARNED_PRESET_LIMIT = 20;
 

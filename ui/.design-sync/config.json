@@ -9,16 +9,12 @@
   "cssEntry": ".design-sync/.cache/css/styles.css",
   "tokensPkg": "tariboy-ui",
   "componentSrcMap": {
-    "AgentColorSwatch": "src/components/AgentColorSwatch.tsx",
     "AgentControls": "src/components/AgentControls.tsx",
-    "AgentLayout": "src/components/AgentLayout.tsx",
     "AgentRow": "src/components/AgentRow.tsx",
     "AgentSubscriptions": "src/components/AgentSubscriptions.tsx",
     "AgentWorkspace": "src/pages/agents/AgentWorkspace.tsx",
     "AlertDialog": "src/components/ui/alert-dialog.tsx",
-    "AliasEditor": "src/components/AliasEditor.tsx",
     "AppSettings": "src/components/DesktopUpdates.tsx",
-    "AttachButton": "src/components/AttachButton.tsx",
     "AuditExportActions": "src/components/AuditExportActions.tsx",
     "AuditRow": "src/components/AuditRow.tsx",
     "Badge": "src/components/ui/badge.tsx",
@@ -27,7 +23,6 @@
     "Collapsible": "src/components/ui/collapsible.tsx",
     "ComboField": "src/components/ComboField.tsx",
     "Command": "src/components/ui/command.tsx",
-    "ConfirmButton": "src/components/LoopControls.tsx",
     "ContextMenu": "src/components/ui/context-menu.tsx",
     "CustomerQuestionNotifications": "src/components/CustomerQuestionNotifications.tsx",
     "DaemonBanner": "src/components/DaemonBanner.tsx",
@@ -39,25 +34,18 @@
     "GoalHelp": "src/components/GoalHelp.tsx",
     "GroupWizard": "src/components/GroupWizard.tsx",
     "HostStatus": "src/components/HostStatus.tsx",
-    "HostSwitcher": "src/components/HostSwitcher.tsx",
     "ImageCombobox": "src/components/AgentFormFields.tsx",
     "ImageLayout": "src/components/ImageLayout.tsx",
     "ImagesPage": "src/pages/ImagesPage.tsx",
-    "InboxComposer": "src/components/InboxComposer.tsx",
     "Input": "src/components/ui/input.tsx",
     "IterationAuditLog": "src/components/IterationAuditLog.tsx",
-    "IterationTimeoutControl": "src/components/IterationTimeoutControl.tsx",
     "Label": "src/components/ui/label.tsx",
-    "LoopToggle": "src/components/LoopControls.tsx",
     "MemoryRouter": null,
-    "NotesEditor": "src/components/NotesEditor.tsx",
     "PathAutocomplete": "src/components/PathAutocomplete.tsx",
     "PriorityTag": "src/components/ui/status.tsx",
     "ProxyCallRow": "src/components/ProxyCallRow.tsx",
-    "RetentionPanel": "src/components/RetentionPanel.tsx",
     "RunStateActions": "src/components/AgentControls.tsx",
     "ScrollArea": "src/components/ui/scroll-area.tsx",
-    "SecretsPanel": "src/components/SecretsPanel.tsx",
     "Segmented": "src/components/ui/segmented.tsx",
     "Select": "src/components/ui/select.tsx",
     "SendFilesButton": "src/components/SendFilesButton.tsx",
@@ -65,7 +53,6 @@
     "SettingsPage": "src/pages/settings/SettingsPage.tsx",
     "Sheet": "src/components/ui/sheet.tsx",
     "ShellScriptEditor": "src/components/ShellScriptEditor.tsx",
-    "StatusChatHistory": "src/components/StatusChatHistory.tsx",
     "StatusDot": "src/components/ui/status.tsx",
     "StatusPill": "src/components/ui/status.tsx",
     "StoresPage": "src/pages/StoresPage.tsx",
@@ -83,13 +70,7 @@
     "UpdateBanner": "src/components/DesktopUpdates.tsx"
   },
   "overrides": {
-    "AgentColorSwatch": {
-      "cardMode": "column"
-    },
     "AgentControls": {
-      "cardMode": "column"
-    },
-    "AgentLayout": {
       "cardMode": "column"
     },
     "AgentSubscriptions": {
@@ -103,13 +84,7 @@
       "cardMode": "single",
       "primaryStory": "DeleteAgent"
     },
-    "AliasEditor": {
-      "cardMode": "column"
-    },
     "AppSettings": {
-      "cardMode": "column"
-    },
-    "AttachButton": {
       "cardMode": "column"
     },
     "AuditExportActions": {
@@ -126,10 +101,6 @@
     },
     "Command": {
       "cardMode": "column"
-    },
-    "ConfirmButton": {
-      "cardMode": "single",
-      "primaryStory": "ConfirmOpen"
     },
     "ContextMenu": {
       "cardMode": "single",
@@ -155,10 +126,6 @@
     "GroupWizard": {
       "cardMode": "column"
     },
-    "HostSwitcher": {
-      "cardMode": "single",
-      "primaryStory": "HostListOpen"
-    },
     "ImageCombobox": {
       "cardMode": "column"
     },
@@ -168,31 +135,17 @@
     "ImagesPage": {
       "cardMode": "column"
     },
-    "InboxComposer": {
-      "cardMode": "column"
-    },
     "Input": {
-      "cardMode": "column"
-    },
-    "IterationTimeoutControl": {
       "cardMode": "column"
     },
     "Label": {
       "cardMode": "column"
-    },
-    "LoopToggle": {
-      "cardMode": "single",
-      "primaryStory": "Running"
     },
     "PathAutocomplete": {
       "cardMode": "column"
     },
     "PriorityTag": {
       "cardMode": "column"
-    },
-    "RetentionPanel": {
-      "cardMode": "single",
-      "primaryStory": "Policy"
     },
     "RunStateActions": {
       "cardMode": "column"
@@ -219,10 +172,6 @@
     "Sheet": {
       "cardMode": "single",
       "primaryStory": "StatusHistory"
-    },
-    "StatusChatHistory": {
-      "cardMode": "single",
-      "primaryStory": "HistoryOpen"
     },
     "StatusPill": {
       "cardMode": "column"

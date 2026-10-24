@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { WorkflowScriptRun, TransitionRequest, WorkflowView } from "@/lib/api"
-import { customerView, poolView } from "./workflowFixtures"
+import { customerView, poolView } from "@/test/fixtures/workflowFixtures"
 import { explainProblem } from "./explainWorkflowProblem"
 
 const request = (state: TransitionRequest["state"], extra: Partial<TransitionRequest> = {}): TransitionRequest => ({

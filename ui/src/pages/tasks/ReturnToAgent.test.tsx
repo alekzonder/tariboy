@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError, type TransitionRequest, type WorkflowView } from "@/lib/api"
 import ReturnToAgent from "./ReturnToAgent"
-import { customerView, poolView, remoteTarget, workflowTask } from "./workflowFixtures"
+import { customerView, poolView, remoteTarget, workflowTask } from "@/test/fixtures/workflowFixtures"
 import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ advanceTask: vi.fn(), moveTaskWorkflow: vi.fn(), getTransitionRequest: vi.fn() }))

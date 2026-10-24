@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { expect, it, vi } from "vitest"
 import WorkflowStepper from "./WorkflowStepper"
-import { customerView } from "./workflowFixtures"
+import { customerView } from "@/test/fixtures/workflowFixtures"
 
 it("lists the statuses in manifest order with the current one marked", () => {
   render(<WorkflowStepper view={customerView} />)

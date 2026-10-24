@@ -3,7 +3,7 @@ import { act, fireEvent, render as renderWith, screen, within } from "@/test/que
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError, type QueueSource, type SourceRun } from "@/lib/api"
 import QueueSources from "./QueueSources"
-import { remoteTarget } from "./workflowFixtures"
+import { remoteTarget } from "@/test/fixtures/workflowFixtures"
 import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ listQueueSources: vi.fn(), getQueueSourceRunLog: vi.fn() }))
