@@ -9,6 +9,7 @@ import { ImageLayout } from "@/components/ImageLayout";
 import AgentConfigurationTab from "@/pages/agents/AgentConfigurationTab";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import type { AgentView } from "@/lib/types";
+import { ApiProvider } from "@/components/ApiProvider";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import { Toaster } from "@/components/ui/sonner";
 import "@/index.css";
@@ -177,7 +178,7 @@ export function AgentFixture() {
   return <AgentNameContext.Provider value="worker">
     <AgentStatusContext.Provider value={{ status: null, refresh: async () => {} }}>
       <button type="button" onClick={() => { activated = true; pendingRef = ""; setGeneration((value) => value + 1); }}>Simulate next iteration</button>
-      <div key={generation}><AgentConfigurationTab target={null} refresh={() => {}} /></div>
+      <div key={generation}><AgentConfigurationTab refresh={() => {}} /></div>
     </AgentStatusContext.Provider>
   </AgentNameContext.Provider>;
 }
@@ -195,7 +196,10 @@ if (mode === "agent") content = <AgentFixture />;
 if (mode === "transfer" || mode === "transfer-cancel") content = <DaemonProvider><BuiltImages hostId="source" basePath="/servers/source/images" /></DaemonProvider>;
 createRoot(document.getElementById("root")!).render(
   <MemoryRouter initialEntries={mode === "detail" ? ["/servers/local/images/reviewer/v3"] : ["/"]}>
-    <main className={mode === "build" ? "h-screen overflow-hidden" : "p-4"}>{content}</main>
+    {/* The local daemon serves every mode; the DaemonProvider modes mount their own. */}
+    <ApiProvider target={null}>
+      <main className={mode === "build" ? "h-screen overflow-hidden" : "p-4"}>{content}</main>
+    </ApiProvider>
     <Toaster richColors />
   </MemoryRouter>,
 );
