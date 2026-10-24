@@ -9,7 +9,7 @@ import WorkflowImageDetail from "./WorkflowImageDetail"
 const api = {
   getWorkflowImage: vi.fn(), removeWorkflowImage: vi.fn(), listTaskQueues: vi.fn(), getQueueWorkflow: vi.fn(),
 }
-vi.mock("@/components/DaemonProvider", () => ({ useOptionalDaemons: () => ({ daemons: [] }) }))
+vi.mock("@/components/daemonContext", () => ({ useOptionalDaemons: () => ({ daemons: [] }) }))
 
 const remote = { id: "remote", label: "Remote", baseURL: "https://remote", token: "t" }
 // The detail page reads the route host through its ApiProvider.

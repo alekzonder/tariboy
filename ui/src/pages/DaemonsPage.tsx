@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useDaemons } from "@/components/DaemonProvider";
+import { useDaemons } from "@/components/daemonContext";
 import { HostStatus } from "@/components/HostStatus";
 import { removeDaemon, type DaemonMeta } from "@/lib/daemons";
 import { hostConnect } from "@/lib/desktop";

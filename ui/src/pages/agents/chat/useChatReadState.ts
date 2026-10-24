@@ -15,24 +15,27 @@ export function useChatReadState({
 }) {
   const api = useApi();
   // Capture the opening mark once so arrivals cannot move the unread divider.
-  const [anchor, setAnchor] = useState<string | null>(null);
+  // The mark carries its conversation, so a switch starts without a divider.
+  const scope = [name, hostId, selected].join("\u0000");
+  const scopeRef = useRef(scope);
+  const [anchorState, setAnchorState] = useState<{ scope: string; ts: string } | null>(null);
+  const anchor = anchorState?.scope === scope ? anchorState.ts : null;
   const anchorRef = useRef<string | null>(null);
   const keepUnread = useRef(false);
+  const setAnchor = useCallback((ts: string) => setAnchorState({ scope: scopeRef.current, ts }), []);
 
   useEffect(() => {
+    scopeRef.current = scope;
     anchorRef.current = null;
     keepUnread.current = false;
-    // Preserve the existing scope reset alongside the conversation's message reset.
-    // eslint-disable-next-line react/set-state-in-effect
-    setAnchor(null);
-  }, [name, hostId, selected]);
+  }, [scope]);
 
   const captureAnchor = useCallback((readTS: string) => {
     if (anchorRef.current === null) {
       anchorRef.current = readTS;
       setAnchor(readTS);
     }
-  }, []);
+  }, [setAnchor]);
 
   const markShownRead = useCallback(async (newest?: ChatMessage) => {
     // A hidden tab and an explicit Mark unread must never advance the mark.

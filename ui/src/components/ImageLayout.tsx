@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams,
+  Link, NavLink, Outlet, useLocation, useNavigate, useParams,
 } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -11,7 +11,7 @@ import { ApiProvider } from "@/components/ApiProvider";
 import { LazyBoundary } from "@/components/LazyBoundary";
 import { openHostPathInVSCode } from "@/lib/desktop";
 import { canOpenAgentCwdInVSCode } from "@/pages/agents/agentCwdVSCode";
-import { useOptionalDaemons } from "@/components/DaemonProvider";
+import { useOptionalDaemons } from "@/components/daemonContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,18 +20,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-
-export interface ImageOutletContext {
-  ref: string;
-  manifest: ImageManifest | null;
-  hostKey: string;
-  provenance: ImageProvenance | null;
-  onReadError: (error: unknown) => void;
-}
-
-export function useImageContext() {
-  return useOutletContext<ImageOutletContext>();
-}
+import type { ImageOutletContext } from "./imageContext";
 
 const TABS = [
   { to: ".", label: "Overview", end: true },

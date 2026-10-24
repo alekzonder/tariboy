@@ -1,21 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   listDaemons, getActiveId, peekActiveId, setActiveId, resolveDaemon,
   unresolvedDaemon, type Daemon, type DaemonMeta,
 } from "@/lib/daemons";
 import { getActiveDaemon, setActiveDaemon } from "@/lib/api";
 import { ApiProvider } from "./ApiProvider";
+import { DaemonContext } from "./daemonContext";
 import { daemonState, onHostState } from "@/lib/desktop";
-
-interface DaemonCtx {
-  daemons: DaemonMeta[];
-  appVersion: string;
-  activeId: string;
-  select: (id: string) => Promise<boolean>;
-  refresh: () => Promise<void>;
-}
-
-const Ctx = createContext<DaemonCtx | null>(null);
 
 // DaemonProvider owns the registry state and is the single place that pushes the
 // active daemon into the API layer (setActiveDaemon). It also mounts the
@@ -153,26 +144,13 @@ export function DaemonProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ daemons, appVersion, activeId, select, refresh }}>
+    <DaemonContext.Provider value={{ daemons, appVersion, activeId, select, refresh }}>
       {registryError && (
         <div role="alert" className="border-b border-destructive/40 bg-destructive/10 px-3 py-2 text-sm">
           Host registry: {registryError}
         </div>
       )}
       <ApiProvider target={active}>{children}</ApiProvider>
-    </Ctx.Provider>
+    </DaemonContext.Provider>
   );
-}
-
-export function useDaemons(): DaemonCtx {
-  const v = useContext(Ctx);
-  if (!v) throw new Error("useDaemons must be used within a DaemonProvider");
-  return v;
-}
-
-// Detail components are also rendered in focused unit tests and embeddable
-// shells. In the full app this returns the provider selection; without a
-// provider it gives callers a stable local-host fallback.
-export function useOptionalDaemons(): DaemonCtx | null {
-  return useContext(Ctx);
 }

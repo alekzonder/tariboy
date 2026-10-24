@@ -7,7 +7,7 @@ import { ImageLayout } from "./ImageLayout";
 import ImageTemplate from "@/pages/images/ImageTemplate";
 import ImageFiles from "@/pages/ImageFiles";
 
-vi.mock("@/components/DaemonProvider", () => ({ useOptionalDaemons: () => null }));
+vi.mock("@/components/daemonContext", () => ({ useOptionalDaemons: () => null }));
 afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); setActiveDaemon(null); });
 const result = (value: unknown) => new Response(JSON.stringify({ ok: true, result: value }));
 const changed = () => new Response(JSON.stringify({ ok: false, error: { code: "image_changed", message: "Image changed" } }), { status: 409 });

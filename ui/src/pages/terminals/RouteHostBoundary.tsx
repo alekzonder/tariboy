@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ApiProvider } from "@/components/ApiProvider";
-import { useDaemons } from "@/components/DaemonProvider";
+import { useDaemons } from "@/components/daemonContext";
 import { getActiveDaemon } from "@/lib/api";
 import { hostConnected } from "@/lib/desktop";
 import type { Daemon } from "@/lib/daemons";

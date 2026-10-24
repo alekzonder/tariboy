@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useOptionalDaemons } from "@/components/DaemonProvider"
+import { useOptionalDaemons } from "@/components/daemonContext"
 import { useApi } from "@/components/apiContext"
 import type {
   WorkflowDefinition, WorkflowDefinitionStatus, WorkflowImage, WorkflowLimits,

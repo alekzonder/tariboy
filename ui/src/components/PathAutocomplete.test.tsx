@@ -7,7 +7,8 @@ import { render as renderWithApi } from "@/test/queryRender"
 import { fakeApi } from "@/test/api"
 import type { FilesApi } from "@/lib/api"
 
-import { PathAutocomplete, splitPath } from "./PathAutocomplete"
+import { PathAutocomplete } from "./PathAutocomplete"
+import { splitPath } from "./splitPath"
 
 // Replace the client's fsList so the component's calls hit our fixture instead
 // of the network. Each prefix returns a distinct listing so we can assert the

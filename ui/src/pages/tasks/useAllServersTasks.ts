@@ -57,7 +57,7 @@ export function useAllServersTasks(
   // The sidebar poll hands over a fresh array every few seconds; only a change
   // of servers or of their reachability is a reason to read again.
   const serversKey = servers.map((server) => `${server.id}\u0001${server.label}\u0001${server.error ?? ""}`).join("\u0000")
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // oxlint-disable-next-line react/exhaustive-deps -- keyed by serversKey on purpose: an equal list keeps the same array
   const stableServers = useMemo(() => servers, [serversKey])
   const { text, statusView } = filters
 

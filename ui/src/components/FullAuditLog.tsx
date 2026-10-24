@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApi } from "@/components/apiContext";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,12 @@ export function FullAuditLog({ name }: { name: string }) {
   const [filtered, setFiltered] = useState<AuditEvent[] | null>(null);
   const [capped, setCapped] = useState(false);
   const filtering = type.trim() !== "" || query.trim() !== "";
+  // Leaving filtered mode drops the old matches, so the next filter starts at "Searching…".
+  const setFilter = (nextType: string, nextQuery: string) => {
+    setType(nextType);
+    setQuery(nextQuery);
+    if (nextType.trim() === "" && nextQuery.trim() === "") { setFiltered(null); setCapped(false); }
+  };
   const rootRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const hasMore = useRef(true);
@@ -40,7 +46,7 @@ export function FullAuditLog({ name }: { name: string }) {
   // eventsRef mirrors events so the tail/scroll closures read the latest seqs
   // without re-subscribing the SSE stream on every append.
   const eventsRef = useRef<AuditEvent[]>([]);
-  eventsRef.current = events;
+  useEffect(() => { eventsRef.current = events; }, [events]);
   const newestSeq = () => (eventsRef.current.length ? eventsRef.current[eventsRef.current.length - 1].seq : 0);
   const oldestSeq = () => (eventsRef.current.length ? eventsRef.current[0].seq : 0);
 
@@ -74,7 +80,7 @@ export function FullAuditLog({ name }: { name: string }) {
   // matches. Runs only while a filter is active; clearing it drops back to the
   // live paged view.
   useEffect(() => {
-    if (!name || !filtering) { setFiltered(null); setCapped(false); return; }
+    if (!name || !filtering) return;
     let live = true;
     const t = window.setTimeout(() => {
       const qs = new URLSearchParams();
@@ -108,7 +114,7 @@ export function FullAuditLog({ name }: { name: string }) {
     return () => { window.clearInterval(t); off(); };
   }, [api, name, filtering]);
 
-  const loadOlder = () => {
+  const loadOlder = useCallback(() => {
     if (!name || loadingOlder.current || !hasMore.current || eventsRef.current.length === 0) return;
     loadingOlder.current = true;
     const v = viewport();
@@ -122,7 +128,7 @@ export function FullAuditLog({ name }: { name: string }) {
       })
       .catch(() => { anchor.current = null; })
       .finally(() => { loadingOlder.current = false; });
-  };
+  }, [api, name]);
 
   // Scroll: track stick-to-bottom, and page older when near the top. Inactive
   // while filtering (the query view is a flat, non-paged list).
@@ -136,8 +142,7 @@ export function FullAuditLog({ name }: { name: string }) {
     };
     v.addEventListener("scroll", onScroll);
     return () => v.removeEventListener("scroll", onScroll);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, filtering]);
+  }, [filtering, loadOlder]);
 
   // After a render: restore the scroll anchor on a prepend, else stick to
   // bottom. Skipped while filtering — the query view manages its own scroll.
@@ -171,7 +176,7 @@ export function FullAuditLog({ name }: { name: string }) {
           placeholder="type… (pick or type any)"
           list={FILTER_DATALIST}
           value={type}
-          onChange={(e) => setType(e.target.value)}
+          onChange={(e) => setFilter(e.target.value, query)}
           className="h-8 w-56"
         />
         <datalist id={FILTER_DATALIST}>
@@ -181,12 +186,12 @@ export function FullAuditLog({ name }: { name: string }) {
           aria-label="Search text"
           placeholder="search all fields…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => setFilter(type, e.target.value)}
           className="h-8 flex-1"
         />
         {filtering && (
           <button
-            onClick={() => { setType(""); setQuery(""); }}
+            onClick={() => setFilter("", "")}
             className="shrink-0 rounded border px-2 py-1 text-xs hover:bg-accent"
           >
             Clear

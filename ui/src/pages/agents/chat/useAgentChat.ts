@@ -11,11 +11,11 @@ import { isKind } from "./chatKinds";
 import { useChatReadState } from "./useChatReadState";
 
 const QUESTION_TYPE = "task.question";
+const NO_MESSAGES: ChatMessage[] = [];
 
 export function useAgentChat(hostId: string) {
   const name = useAgentName();
   const api = useApi();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [customer, setCustomer] = useState("user:customer");
   const [types, setTypes] = useState<string[]>(() => loadChatTypes());
   const [draft, setDraft] = useState("");
@@ -23,11 +23,16 @@ export function useAgentChat(hostId: string) {
   const [sending, setSending] = useState(false);
   // The message being published, shown with a `sent` receipt until the refetch
   // brings back the stored one.
-  const [pending, setPending] = useState<ChatMessage | null>(null);
+  const [pendingState, setPending] = useState<{ scope: string; message: ChatMessage } | null>(null);
   // Either one of the agent's three kinds or the id of a shared chat it is in.
   const [selected, setSelected] = useState<string>("dm");
   const [shared, setShared] = useState<ChatSummary[]>([]);
-  const typesKey = types.join(",");
+  // Loaded and pending messages carry the conversation they belong to, so a
+  // switch of agent, host or chat never shows the previous one.
+  const scope = [name, hostId, selected].join("\u0000");
+  const [loaded, setLoaded] = useState<{ scope: string; messages: ChatMessage[] } | null>(null);
+  const messages = loaded?.scope === scope ? loaded.messages : NO_MESSAGES;
+  const pending = pendingState?.scope === scope ? pendingState.message : null;
   // The chat id the endpoints are addressed by. An agent name still resolves to
   // the personal chat, so the sidebar keeps working with what it knows.
   const chatId = !name ? "" : isKind(selected) ? `${selected}:${name}` : selected;
@@ -51,7 +56,7 @@ export function useAgentChat(hostId: string) {
     try {
       const page = await api.messages.chatMessages(chatId, { types });
       captureAnchor(page.read_ts ?? "");
-      setMessages(page.messages ?? []);
+      setLoaded({ scope, messages: page.messages ?? [] });
       setCustomer(page.customer || "user:customer");
       const newest = page.messages?.[page.messages.length - 1];
       // The mark is the timestamp of a message actually shown, never "now", so
@@ -63,16 +68,9 @@ export function useAgentChat(hostId: string) {
     } catch {
       // Keep the last conversation on a transient failure.
     }
-    // typesKey stands for the type list, which changes identity every render.
     // The client keeps its identity until the host's endpoint moves, and a
     // moved endpoint (a reconnect) must re-read the conversation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, api, typesKey, selected]);
-
-  useEffect(() => {
-    setMessages([]);
-    setPending(null);
-  }, [name, hostId, selected]);
+  }, [name, api, chatId, types, scope, captureAnchor, markShownRead]);
 
   // The shared chats are read from the same list the sidebar reads, so a chat
   // created in another window appears here without its own endpoint.
@@ -86,7 +84,9 @@ export function useAgentChat(hostId: string) {
     }
   }, [name, api]);
 
+  // oxlint-disable-next-line react/set-state-in-effect -- load sets state only after its awaited request
   useEffect(() => { void load(); }, [load]);
+  // oxlint-disable-next-line react/set-state-in-effect -- loadShared sets state only after its awaited request
   useEffect(() => { void loadShared(); }, [loadShared]);
   useMessagesSocket({
     enabled: api.ready && Boolean(name),
@@ -133,10 +133,10 @@ export function useAgentChat(hostId: string) {
     if (!text || sending) return;
     setSending(true);
     const chatChannel = `chat:${chatId}`;
-    setPending({
+    setPending({ scope, message: {
       id: `pending:${Date.now()}`, channel: chatChannel, ts: new Date().toISOString(),
       from: customer, source: customer, type: "message", text,
-    });
+    } });
     try {
       // The chat owns this channel, so the agent reply lands here without the
       // client having to name a reply target.

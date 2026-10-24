@@ -91,4 +91,9 @@ it("opens the team named by the workspace management link", async () => {
   vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string) => Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: path === "/api/groups/team" ? { name: "team", lead: "boss", members: ["boss"], shared_dir: "/shared" } : { groups: [{ name: "team", lead: "boss", members: 1 }] } }) } as Response)));
   render(<MemoryRouter initialEntries={["/settings/advanced/groups?team=team"]}><GroupsPage /></MemoryRouter>);
   expect(await screen.findByLabelText("team name")).toHaveValue("team");
+  // Each read happens once: the effects do not loop on their own results.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const paths = vi.mocked(fetch).mock.calls.map(([path]) => path);
+  expect(paths.filter((path) => path === "/api/groups")).toHaveLength(1);
+  expect(paths.filter((path) => path === "/api/groups/team")).toHaveLength(1);
 });

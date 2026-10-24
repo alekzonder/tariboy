@@ -83,8 +83,8 @@ vi.mock("@/hooks/useTasksSocket", () => ({
   }),
 }))
 vi.mock("sonner", () => ({ toast }))
-vi.mock("@/components/DaemonProvider", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/components/DaemonProvider")>(),
+vi.mock("@/components/daemonContext", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/components/daemonContext")>(),
   useOptionalDaemons: () => ({ activeId: daemonContext.activeId }),
 }))
 

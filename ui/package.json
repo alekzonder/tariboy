@@ -11,7 +11,7 @@
     "build:store": "tsc -b && vite build -c vite.store.config.ts",
     "branding:check": "node scripts/generate-desktop-branding.mjs --check",
     "bundle:budget": "node scripts/bundle-budget.mjs",
-    "lint": "oxlint .",
+    "lint": "oxlint . --deny-warnings",
     "lint:unused": "knip --production --include files && knip --include exports",
     "preview": "vite preview",
     "test": "vitest run",

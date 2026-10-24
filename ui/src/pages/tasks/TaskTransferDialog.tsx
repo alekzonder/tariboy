@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useOptionalDaemons } from "@/components/DaemonProvider"
+import { useOptionalDaemons } from "@/components/daemonContext"
 import { cn } from "@/lib/utils"
 import { LABEL, MONO, SelectShell } from "./panelStyles"
 

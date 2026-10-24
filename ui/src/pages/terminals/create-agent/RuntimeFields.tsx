@@ -1,5 +1,5 @@
 import { Field } from "./formControls";
-import { HARNESSES } from "@/components/AgentFormFields";
+import { HARNESSES } from "@/components/agentFormValues";
 import { EditablePresetCombobox } from "@/components/EditablePresetCombobox";
 import { PathAutocomplete } from "@/components/PathAutocomplete";
 import { ApiProvider } from "@/components/ApiProvider";

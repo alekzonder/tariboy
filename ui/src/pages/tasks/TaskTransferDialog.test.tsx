@@ -11,7 +11,7 @@ const registry = vi.hoisted(() => ({
   activeId: "local",
 }))
 
-vi.mock("@/components/DaemonProvider", () => ({
+vi.mock("@/components/daemonContext", () => ({
   useOptionalDaemons: () => ({ ...registry, appVersion: "", select: vi.fn(), refresh: vi.fn() }),
 }))
 

@@ -1,7 +1,8 @@
 import { it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@/test/queryRender";
 import userEvent from "@testing-library/user-event";
-import { AgentSubscriptions, validChannel } from "./AgentSubscriptions";
+import { AgentSubscriptions } from "./AgentSubscriptions";
+import { validChannel } from "./channelName";
 
 afterEach(() => vi.restoreAllMocks());
 

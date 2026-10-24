@@ -7,7 +7,7 @@ import { fakeApi } from "@/test/api"
 import WorkflowImagesPage from "./WorkflowImagesPage"
 
 const api = { listWorkflowImages: vi.fn(), listTaskQueues: vi.fn(), getQueueWorkflow: vi.fn() }
-vi.mock("@/components/DaemonProvider", () => ({ useOptionalDaemons: () => ({ daemons: [] }) }))
+vi.mock("@/components/daemonContext", () => ({ useOptionalDaemons: () => ({ daemons: [] }) }))
 
 // A client for `target` whose registry calls go to `mocks`.
 const clientFor = (target: Daemon, mocks: typeof api) => fakeApi({

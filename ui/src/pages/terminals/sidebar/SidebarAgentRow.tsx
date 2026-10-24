@@ -15,9 +15,6 @@ export interface AgentRowActions {
   onTogglePin: (key: string) => void;
 }
 
-/* @dnd-kit exposes callback refs and live attributes from its hooks for
- * render-time spreading. */
-/* eslint-disable react-hooks/refs */
 function DraggableRow({ dragKey, ...props }: React.ComponentProps<typeof AgentRow> & {
   dragKey: string;
 }) {

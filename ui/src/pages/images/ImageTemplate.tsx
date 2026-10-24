@@ -1,6 +1,6 @@
 import { useEffect,useState } from "react";
 import type { ImagePromptTemplate } from "@/lib/api";
-import { useImageContext } from "@/components/ImageLayout";
+import { useImageContext } from "@/components/imageContext";
 import { useApi } from "@/components/apiContext";
 
 export default function ImageTemplate(){

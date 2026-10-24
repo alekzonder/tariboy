@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
-import { DaemonProvider, useDaemons } from "@/components/DaemonProvider";
+import { DaemonProvider } from "@/components/DaemonProvider";
+import { useDaemons } from "@/components/daemonContext";
 import { addDaemon, updateDaemon } from "@/lib/daemons";
 import { RouteHostBoundary } from "./RouteHostBoundary";
 

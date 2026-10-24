@@ -46,7 +46,8 @@ vi.mock("@/lib/desktop", () => ({
   },
 }));
 
-import { DaemonProvider, useDaemons } from "./DaemonProvider";
+import { DaemonProvider } from "./DaemonProvider";
+import { useDaemons } from "./daemonContext";
 
 beforeEach(() => {
   model.host = {

@@ -19,16 +19,13 @@ function preferSpecificDropTarget(args: Parameters<typeof pointerWithin>[0]) {
   return specific.length > 0 ? specific : collisions
 }
 
-/* @dnd-kit exposes callback refs and live `isOver` render state from hooks;
- * these are its documented component integration, not user-managed refs. */
-/* eslint-disable react-hooks/refs */
 function RootDrop({ children }: { children: React.ReactNode }) {
-  const root = useDroppable({ id: "__root__" })
+  const { setNodeRef, isOver } = useDroppable({ id: "__root__" })
   return (
     <div
-      ref={root.setNodeRef}
+      ref={setNodeRef}
       data-testid="tasks-tree-root"
-      className={`task-tree-list ${root.isOver ? "is-drop-target" : ""}`}
+      className={`task-tree-list ${isOver ? "is-drop-target" : ""}`}
     >
       {children}
     </div>

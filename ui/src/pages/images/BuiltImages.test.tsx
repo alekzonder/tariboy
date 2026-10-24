@@ -16,7 +16,7 @@ const routeHost = async (id: string) => on(await daemonsApi.resolveDaemon(id));
 
 const daemonContext = vi.hoisted(() => ({ daemons: [] as DaemonMeta[] }));
 
-vi.mock("@/components/DaemonProvider", () => ({
+vi.mock("@/components/daemonContext", () => ({
   useOptionalDaemons: () => ({ daemons: daemonContext.daemons }),
 }));
 

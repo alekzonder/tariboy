@@ -16,6 +16,9 @@ interface Msg { id: string; ts: string; type: string; source: string; text: stri
 // its params, and the agents subscribed under it. Read-only view.
 interface Watch { watch: string; params?: Record<string, unknown> | null; subscribers?: string[] }
 
+const NO_MSGS: Msg[] = [];
+const NO_WATCHES: Watch[] = [];
+
 export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) {
   // Under /agent/:name/channels the left column is the agent's manageable
   // subscriptions (AgentSubscriptions); the global mount (no :name) keeps the
@@ -27,15 +30,18 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
   const name = routeName || contextName || undefined;
   const [channels, setChannels] = useState<Channel[]>([]);
   const [sel, setSel] = useState<string | null>(null);
-  const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [watches, setWatches] = useState<Watch[]>([]);
+  // Loaded data carries its channel; another channel's data never renders.
+  const [tail, setTail] = useState<{ ch: string; messages: Msg[] } | null>(null);
+  const [watchList, setWatchList] = useState<{ ch: string; watches: Watch[] } | null>(null);
+  const msgs = tail && tail.ch === sel ? tail.messages : NO_MSGS;
+  const watches = watchList && watchList.ch === sel ? watchList.watches : NO_WATCHES;
   const [text, setText] = useState("");
   const [type, setType] = useState("note");
 
-  const loadTail = useCallback((ch: string) =>
-    api.get<{ messages: Msg[] }>(`/api/channels/${encodeURIComponent(ch)}/messages`).then((r) => setMsgs(r.messages)).catch(() => setMsgs([])), [api]);
-  const loadWatches = useCallback((ch: string) =>
-    api.get<{ watches: Watch[] }>(`/api/channels/${encodeURIComponent(ch)}/watches`).then((r) => setWatches(r.watches ?? [])).catch(() => setWatches([])), [api]);
+  const fetchTail = useCallback((ch: string) =>
+    api.get<{ messages: Msg[] }>(`/api/channels/${encodeURIComponent(ch)}/messages`).then((r) => r.messages, () => NO_MSGS), [api]);
+  const fetchWatches = useCallback((ch: string) =>
+    api.get<{ watches: Watch[] }>(`/api/channels/${encodeURIComponent(ch)}/watches`).then((r) => r.watches ?? NO_WATCHES, () => NO_WATCHES), [api]);
 
   // The global channel list backs the browse panel; under an agent the left
   // column is AgentSubscriptions, so we only fetch here when unscoped.
@@ -46,12 +52,14 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
       .catch(() => setChannels([]));
   }, [api, name]);
   useEffect(() => {
-    if (!sel) { setWatches([]); return; }
-    void loadTail(sel);
-    void loadWatches(sel);
-    const t = window.setInterval(() => void loadTail(sel), 2000);
-    return () => window.clearInterval(t);
-  }, [loadTail, loadWatches, sel]);
+    if (!sel) return;
+    let live = true;
+    const loadTail = () => void fetchTail(sel).then((messages) => { if (live) setTail({ ch: sel, messages }); });
+    loadTail();
+    void fetchWatches(sel).then((list) => { if (live) setWatchList({ ch: sel, watches: list }); });
+    const t = window.setInterval(loadTail, 2000);
+    return () => { live = false; window.clearInterval(t); };
+  }, [fetchTail, fetchWatches, sel]);
 
   const send = async () => {
     if (!sel) return;
@@ -59,7 +67,7 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
       await api.post("/api/messages", { channel: sel, type, text });
       setText("");
       toast.success("sent");
-      void loadTail(sel);
+      void fetchTail(sel).then((messages) => setTail({ ch: sel, messages }));
     } catch (e) {
       toast.error(`send failed: ${e instanceof ApiError ? e.message : String(e)}`);
     }

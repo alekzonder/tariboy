@@ -15,9 +15,6 @@ import {
 import { SidebarAgentRow, type AgentRowActions } from "./SidebarAgentRow";
 import { hostAgents, ordered } from "./sidebarModel";
 
-/* @dnd-kit exposes callback refs and live attributes from its hooks for
- * render-time spreading. */
-/* eslint-disable react-hooks/refs */
 function SortableButton({ dragKey, disabled, style, className, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & {
   dragKey: string;
 }) {

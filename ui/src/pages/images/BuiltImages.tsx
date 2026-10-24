@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { ApiError, type ApiClient, type ImageRow } from "@/lib/api";
-import { useOptionalDaemons } from "@/components/DaemonProvider";
+import { useOptionalDaemons } from "@/components/daemonContext";
 import { useApi } from "@/components/apiContext";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import { Badge } from "@/components/ui/badge";
