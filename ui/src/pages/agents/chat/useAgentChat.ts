@@ -84,10 +84,14 @@ export function useAgentChat(hostId: string) {
     }
   }, [name, api]);
 
-  // oxlint-disable-next-line react/set-state-in-effect -- load sets state only after its awaited request
-  useEffect(() => { void load(); }, [load]);
-  // oxlint-disable-next-line react/set-state-in-effect -- loadShared sets state only after its awaited request
-  useEffect(() => { void loadShared(); }, [loadShared]);
+  useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- load sets state only after its awaited request
+    void load();
+  }, [load]);
+  useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- loadShared sets state only after its awaited request
+    void loadShared();
+  }, [loadShared]);
   useMessagesSocket({
     enabled: api.ready && Boolean(name),
     // A frame that names its chat refetches only that one; a publication on a
