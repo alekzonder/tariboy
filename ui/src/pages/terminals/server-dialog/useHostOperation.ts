@@ -7,13 +7,15 @@ import {
   type DesktopHostView,
   type HostOutputEvent,
 } from "@/lib/desktop";
+import { formatHostOperationError, type HostOperationKind } from "@/lib/hostProgress";
 import {
-  formatHostOperationError,
-  hostStepForPhase,
-  isTerminalHostOutput,
-  type HostOperationKind,
-} from "@/lib/hostProgress";
-import { hostMeta, idleOperation, preflightView, type HostOperation } from "./hostOperation";
+  hostMeta,
+  idleOperation,
+  operationAfterHostState,
+  operationAfterOutput,
+  preflightView,
+  type HostOperation,
+} from "./hostOperation";
 
 export function useHostOperation(
   open: boolean,
@@ -58,46 +60,8 @@ export function useHostOperation(
         prerequisites:
           next.prerequisites.length > 0 ? next.prerequisites : (current?.prerequisites ?? []),
       }));
-      const phaseStep = hostStepForPhase(next.phase);
-      const existingUnavailable =
-        operationRef.current.kind === "connect" &&
-        next.state === "connecting" &&
-        next.message.startsWith("remote daemon health timed out:");
-      const existingNeedsAuth =
-        operationRef.current.kind === "connect" && next.state === "needs_auth";
-      if (
-        (next.state === "failed" || existingNeedsAuth || existingUnavailable) &&
-        operationRef.current.status !== "idle"
-      ) {
-        updateOperation((current) => ({
-          ...current,
-          status: "failed",
-          currentStep: existingUnavailable
-            ? "reconnect"
-            : current.kind === "connect"
-              ? "connect"
-              : (phaseStep ?? current.currentStep ?? "connect"),
-          error: existingUnavailable
-            ? "Existing Tariboy is unavailable at 127.0.0.1:9990."
-            : formatHostOperationError(next.message),
-        }));
-      } else if (
-        hostConnected(next.state) &&
-        (operationRef.current.status === "running" ||
-          (operationRef.current.kind === "connect" && operationRef.current.status === "failed"))
-      ) {
-        updateOperation((current) => ({
-          ...current,
-          status: "succeeded",
-          currentStep: "reconnect",
-          error: null,
-        }));
-      } else if (phaseStep && operationRef.current.status === "running") {
-        updateOperation((current) => ({
-          ...current,
-          currentStep: phaseStep,
-        }));
-      }
+      const after = operationAfterHostState(operationRef.current, next);
+      if (after !== operationRef.current) updateOperation(after);
       onSavedRef.current();
     });
     const offOutput = onHostProvisionOutput((event) => {
@@ -110,30 +74,14 @@ export function useHostOperation(
         operationIdRef.current = event.operation_id;
         setOperationId(event.operation_id);
       }
-      if (event.stream === "phase") {
-        const step = hostStepForPhase(event.text);
-        if (step) {
-          updateOperation((current) => ({
-            ...current,
-            currentStep: step,
-          }));
-        }
-      } else {
-        setOutput((current) => [...current, event].slice(-200));
-      }
+      if (event.stream !== "phase") setOutput((current) => [...current, event].slice(-200));
       if (event.prompt) setPrompt(event);
       const preflight = preflightView(event);
       if (preflight) {
         setHost((current) => (current ? { ...current, ...preflight } : current));
       }
-      if (isTerminalHostOutput(event.stream)) {
-        updateOperation((current) => ({
-          ...current,
-          status: "failed",
-          currentStep: current.currentStep ?? "connect",
-          error: formatHostOperationError(event.text),
-        }));
-      }
+      const after = operationAfterOutput(operationRef.current, event);
+      if (after !== operationRef.current) updateOperation(after);
     });
     return () => {
       offState();

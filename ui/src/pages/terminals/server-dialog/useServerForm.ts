@@ -1,38 +1,23 @@
-import { useEffect, useState } from "react";
+import { addDaemon, clearDaemonToken, setDaemonToken, updateDaemon } from "@/lib/daemons";
 import {
-  addDaemon,
-  clearDaemonToken,
-  hasDaemonToken,
-  setDaemonToken,
-  updateDaemon,
-} from "@/lib/daemons";
-import {
-  androidBaseURLError,
   hostConnect,
   hostPromptReply,
   hostProvision,
   hostSaveSsh,
   hostUpdate,
   isAndroidShell,
-  isDesktop,
 } from "@/lib/desktop";
 import type { HostOperationKind } from "@/lib/hostProgress";
 import type { ServerDialogProps } from "../ServerDialog";
 import { useHostOperation } from "./useHostOperation";
+import { useServerFields, useServerFormReset } from "./useServerFields";
+import { validateHttps, validateSsh } from "./serverFormValidation";
 
 export function useServerForm({ open, server, onOpenChange, onSaved }: ServerDialogProps) {
   const editing = server !== undefined;
-  const [transport, setTransport] = useState<"ssh" | "https">(
-    server?.kind ?? (isDesktop() ? "ssh" : "https"),
-  );
-  const [label, setLabel] = useState(server?.label ?? "");
-  const [sshAlias, setSshAlias] = useState(server?.sshAlias ?? "");
-  const [sshSetup, setSshSetup] = useState<"install" | "connect">("install");
-  const [baseURL, setBaseURL] = useState(server?.baseURL ?? "");
-  const [token, setToken] = useState("");
-  const [tokenStored, setTokenStored] = useState(false);
-  const [reply, setReply] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
+  const { resetFields, setTokenStored, ...fields } = useServerFields(server);
+  const { transport, label, sshAlias, sshSetup, setSshSetup, baseURL, token, setToken } = fields;
+  const { reply, setReply, setFormError } = fields;
   const hostOperation = useHostOperation(open, transport, server, onSaved);
   const {
     hostIdRef,
@@ -49,33 +34,7 @@ export function useServerForm({ open, server, onOpenChange, onSaved }: ServerDia
     setReply("");
     setFormError(null);
   };
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    void (async () => {
-      const nextTransport = server?.kind ?? (isDesktop() ? "ssh" : "https");
-      try {
-        const stored =
-          server && nextTransport === "https" ? await hasDaemonToken(server.id) : false;
-        if (cancelled) return;
-        setTransport(nextTransport);
-        setLabel(server?.label ?? "");
-        setSshAlias(server?.sshAlias ?? "");
-        setSshSetup("install");
-        setBaseURL(server?.baseURL ?? "");
-        setToken("");
-        setTokenStored(stored);
-        resetOperation();
-        setReply("");
-        setFormError(null);
-      } catch (cause) {
-        if (!cancelled) setFormError(String(cause));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, server, resetOperation]);
+  useServerFormReset(open, server, resetFields, resetOperation, setFormError);
 
   const dirtySsh =
     editing &&
@@ -84,13 +43,8 @@ export function useServerForm({ open, server, onOpenChange, onSaved }: ServerDia
     const cleanLabel = label.trim();
     const cleanURL = baseURL.trim();
     const cleanToken = token.trim();
-    if (!cleanLabel) return setFormError("label is required");
-    if (isAndroidShell()) {
-      const urlError = androidBaseURLError(cleanURL);
-      if (urlError) return setFormError(urlError);
-    } else if (!cleanURL || !cleanURL.startsWith("http")) {
-      return setFormError("base URL must start with http");
-    }
+    const invalid = validateHttps(cleanLabel, cleanURL, isAndroidShell());
+    if (invalid) return setFormError(invalid);
     try {
       if (server) {
         await updateDaemon(server.id, { label: cleanLabel, baseURL: cleanURL });
@@ -108,8 +62,8 @@ export function useServerForm({ open, server, onOpenChange, onSaved }: ServerDia
   const submitSsh = async (setup = sshSetup) => {
     const cleanLabel = label.trim();
     const cleanAlias = sshAlias.trim();
-    if (!cleanLabel) return setFormError("label is required");
-    if (!cleanAlias) return setFormError("SSH alias is required");
+    const invalid = validateSsh(cleanLabel, cleanAlias);
+    if (invalid) return setFormError(invalid);
     setSshSetup(setup);
     beginOperation(setup === "connect" ? "connect" : "provision");
     try {
@@ -172,23 +126,8 @@ export function useServerForm({ open, server, onOpenChange, onSaved }: ServerDia
 
   return {
     ...hostOperation,
+    ...fields,
     editing,
-    transport,
-    setTransport,
-    label,
-    setLabel,
-    sshAlias,
-    setSshAlias,
-    sshSetup,
-    setSshSetup,
-    baseURL,
-    setBaseURL,
-    token,
-    setToken,
-    tokenStored,
-    reply,
-    setReply,
-    formError,
     dirtySsh,
     submitHttps,
     submitSsh,
