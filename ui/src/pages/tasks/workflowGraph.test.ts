@@ -8,6 +8,7 @@ import {
   inCurrentVisit,
   requiredBy,
   returnTargets,
+  selectedStep,
   stepArtifacts,
   stepMarks,
   stepOf,
@@ -181,6 +182,31 @@ describe("stepArtifacts", () => {
     ]);
   });
 
+  it.each([
+    ["an open task's current status", "in_progress", "draft", [["summary", true]]],
+    [
+      "a closed task's last status",
+      "done",
+      "draft",
+      [
+        ["notes", false],
+        ["summary", true],
+      ],
+    ],
+    ["another status of an open task", "in_progress", "review", [["notes", false]]],
+  ] as const)("reads the way out of %s", (_name, category, statusId, expected) => {
+    const view: WorkflowView = {
+      ...poolView,
+      category,
+      outcomes: [{ on: "drafted", to: "review", requires: ["summary"], missing: ["summary"] }],
+    };
+    const leave = [...stepArtifacts(view, statusId).leave].map(([name, list]) => [
+      name,
+      list[0].missing,
+    ]);
+    expect(leave).toEqual(expected);
+  });
+
   it("is empty for a step that requires nothing, or one the manifest does not declare", () => {
     for (const id of ["done", "gone"]) {
       const step = stepArtifacts(customerView, id);
@@ -219,6 +245,7 @@ describe("counterText", () => {
     };
     expect(counterText(view, "rejected_requests")).toBe("2 of 5 rejections");
     expect(counterText(view, "idle_iterations")).toBe("0 of 3 idle iterations");
+    expect(counterText(view, "script_failures")).toBe("0 of 3 script failures");
     const noLimits = {
       ...poolView,
       statuses: poolView.statuses.map((status) => ({ ...status, limits: undefined })),
@@ -335,5 +362,19 @@ describe("returnTargets", () => {
     const targets = returnTargets(view);
     expect(targets.map((target) => target.status)).toEqual(["plan", "draft"]);
     expect(defaultReturnTarget(view, targets)?.status).toBe("draft");
+  });
+});
+
+describe("selectedStep", () => {
+  const away = { ...customerView, status: "gone" };
+  it.each([
+    ["the chosen declared status", customerView, "draft", "draft"],
+    ["the current status before a choice", customerView, undefined, "review"],
+    ["the current status for an undeclared choice", customerView, "gone", "review"],
+    ["nothing after Show all", customerView, null, null],
+    ["nothing when neither is declared", away, "gone", null],
+    ["the choice even when the current status is undeclared", away, "draft", "draft"],
+  ] as const)("selects %s", (_name, view, chosen, selected) => {
+    expect(selectedStep(view, chosen)).toBe(selected);
   });
 });

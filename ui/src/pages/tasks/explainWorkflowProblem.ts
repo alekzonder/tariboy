@@ -75,79 +75,100 @@ function failureDetail(
 export function explainProblem(view: WorkflowView): Problem | null {
   if (isClosed(view) || view.waiting_on === "pause") return null;
   const pool = view.owner.startsWith("pool:");
+  return (
+    requestProblem(view, pool) ??
+    watchProblem(view) ??
+    noAgentProblem(view, pool) ??
+    idleProblem(view, pool)
+  );
+}
+
+/** The last request of the open visit: failed, rejected, or still checking. */
+function requestProblem(view: WorkflowView, pool: boolean): Problem | null {
   const last = view.last_request;
-  if (last && inCurrentVisit(view, last.created_at)) {
-    if (last.state === "failed") {
-      const run = runOfRequest(view, last);
-      return {
-        kind: "failed",
-        tone: "danger",
-        request: last,
-        run,
-        title: `A check could not run: ${last.outcome}`,
-        detail: failureDetail(view, last, run),
-        advice:
-          "Repeating the request unchanged will not help. Read the log, fix the cause (the script, a secret, or the environment), then Retry.",
-        counter: counterText(view, "script_failures"),
-      };
-    }
-    if (last.state === "rejected") {
-      return {
-        kind: "rejected",
-        tone: "attention",
-        request: last,
-        run: runOfRequest(view, last),
-        title: `A check rejected the request: ${last.outcome}`,
-        detail: last.result_message || "The check's condition does not hold.",
-        advice: pool
-          ? "The agent sees this in its goal and should fix what the check names, then advance again."
-          : "Fix the artifact the check names, or send the task back to the agent with what to change.",
-        counter: counterText(view, "rejected_requests"),
-      };
-    }
-    if (last.state === "pending") {
-      return {
-        kind: "checking",
-        tone: "quiet",
-        title: "Checking…",
-        request: last,
-        advice: "The checks of the request are running; the result appears here when they finish.",
-      };
-    }
-  }
-  const run = latestFinishedRun(view);
-  if (run?.kind === "watch" && run.verdict === "failure") {
+  if (!last || !inCurrentVisit(view, last.created_at)) return null;
+  if (last.state === "failed") return failedProblem(view, last);
+  if (last.state === "rejected") return rejectedProblem(view, last, pool);
+  if (last.state === "pending") {
     return {
-      kind: "watch_failed",
-      tone: "danger",
-      run,
-      title: "The watch script failed",
-      detail: firstLine(run.message),
-      advice:
-        "The script keeps trying every run. Read the log and check the queue's secrets and environment; the task pauses when the failures reach the limit.",
-      counter: counterText(view, "script_failures"),
-    };
-  }
-  if (pool && !view.holder && view.category === "open") {
-    const status = currentStatus(view);
-    const name = status?.owner.replace(/^pool:/, "") ?? "the pool";
-    return {
-      kind: "no_agent",
-      tone: "attention",
-      title: "Waiting for an agent",
-      advice: `No agent of pool ${name} can take the task: each needs to be enabled with its loop and Goal on and no other current goal. Add agents in the queue's Pools tab.`,
-    };
-  }
-  const idle = currentVisit(view)?.idle_iterations ?? 0;
-  if (pool && idle > 0) {
-    return {
-      kind: "idle",
+      kind: "checking",
       tone: "quiet",
-      title: "No transition requested yet",
-      advice:
-        "The holder ended iterations without setting an outcome. The task pauses when the idle iterations reach the limit.",
-      counter: counterText(view, "idle_iterations"),
+      title: "Checking…",
+      request: last,
+      advice: "The checks of the request are running; the result appears here when they finish.",
     };
   }
   return null;
+}
+
+function failedProblem(view: WorkflowView, last: TransitionRequest): Problem {
+  const run = runOfRequest(view, last);
+  return {
+    kind: "failed",
+    tone: "danger",
+    request: last,
+    run,
+    title: `A check could not run: ${last.outcome}`,
+    detail: failureDetail(view, last, run),
+    advice:
+      "Repeating the request unchanged will not help. Read the log, fix the cause (the script, a secret, or the environment), then Retry.",
+    counter: counterText(view, "script_failures"),
+  };
+}
+
+function rejectedProblem(view: WorkflowView, last: TransitionRequest, pool: boolean): Problem {
+  return {
+    kind: "rejected",
+    tone: "attention",
+    request: last,
+    run: runOfRequest(view, last),
+    title: `A check rejected the request: ${last.outcome}`,
+    detail: last.result_message || "The check's condition does not hold.",
+    advice: pool
+      ? "The agent sees this in its goal and should fix what the check names, then advance again."
+      : "Fix the artifact the check names, or send the task back to the agent with what to change.",
+    counter: counterText(view, "rejected_requests"),
+  };
+}
+
+/** The latest finished run of the open visit, when it is a failed watch. */
+function watchProblem(view: WorkflowView): Problem | null {
+  const run = latestFinishedRun(view);
+  if (run?.kind !== "watch" || run.verdict !== "failure") return null;
+  return {
+    kind: "watch_failed",
+    tone: "danger",
+    run,
+    title: "The watch script failed",
+    detail: firstLine(run.message),
+    advice:
+      "The script keeps trying every run. Read the log and check the queue's secrets and environment; the task pauses when the failures reach the limit.",
+    counter: counterText(view, "script_failures"),
+  };
+}
+
+/** An open pool status that no agent holds. */
+function noAgentProblem(view: WorkflowView, pool: boolean): Problem | null {
+  if (!pool || view.holder || view.category !== "open") return null;
+  const name = currentStatus(view)?.owner.replace(/^pool:/, "") ?? "the pool";
+  return {
+    kind: "no_agent",
+    tone: "attention",
+    title: "Waiting for an agent",
+    advice: `No agent of pool ${name} can take the task: each needs to be enabled with its loop and Goal on and no other current goal. Add agents in the queue's Pools tab.`,
+  };
+}
+
+/** A pool status whose holder ended iterations without an outcome. */
+function idleProblem(view: WorkflowView, pool: boolean): Problem | null {
+  const idle = currentVisit(view)?.idle_iterations ?? 0;
+  if (!pool || idle <= 0) return null;
+  return {
+    kind: "idle",
+    tone: "quiet",
+    title: "No transition requested yet",
+    advice:
+      "The holder ended iterations without setting an outcome. The task pauses when the idle iterations reach the limit.",
+    counter: counterText(view, "idle_iterations"),
+  };
 }

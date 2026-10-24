@@ -56,6 +56,19 @@ export function stepOf(view: WorkflowView): { index: number; total: number } | n
   return index < 0 ? null : { index: index + 1, total: view.statuses.length };
 }
 
+/**
+ * The step the panel shows: the one the customer chose while the manifest
+ * declares it, otherwise the current status. `null` is the choice to show
+ * every artifact; `undefined` is no choice yet.
+ */
+export function selectedStep(view: WorkflowView, chosen: string | null | undefined): string | null {
+  if (chosen === null) return null;
+  const declares = (id: string | undefined) =>
+    !!id && view.statuses.some((status) => status.id === id);
+  if (declares(chosen)) return chosen!;
+  return declares(view.status) ? view.status : null;
+}
+
 export interface StepMark {
   status: WorkflowStatusInfo;
   /** `current` is where the task is; `visited` was entered before; `ahead` not yet. */
@@ -117,15 +130,34 @@ export interface StepArtifacts {
  * artifact is missing there when it has no value.
  */
 export function stepArtifacts(view: WorkflowView, statusId: string): StepArtifacts {
-  const set = new Set(view.artifacts.map((artifact) => artifact.name));
-  const add = (map: Map<string, Requirement[]>, name: string, requirement: Requirement) =>
-    map.set(name, [...(map.get(name) ?? []), requirement]);
+  const leave =
+    statusId === view.status && !isClosed(view)
+      ? leaveFromOutcomes(view, statusId)
+      : leaveFromManifest(view, statusId);
+  return { enter: enterRequirements(view, statusId), leave };
+}
+
+function addRequirement(
+  map: Map<string, Requirement[]>,
+  name: string,
+  requirement: Requirement,
+): void {
+  map.set(name, [...(map.get(name) ?? []), requirement]);
+}
+
+function artifactNames(view: WorkflowView): Set<string> {
+  return new Set(view.artifacts.map((artifact) => artifact.name));
+}
+
+/** The artifacts each manifest transition into `statusId` requires. */
+function enterRequirements(view: WorkflowView, statusId: string): Map<string, Requirement[]> {
+  const set = artifactNames(view);
   const enter = new Map<string, Requirement[]>();
   for (const status of view.statuses) {
     for (const transition of status.transitions ?? []) {
       if (transition.to !== statusId) continue;
       for (const name of transition.requires ?? []) {
-        add(enter, name, {
+        addRequirement(enter, name, {
           from: status.id,
           on: transition.on,
           to: transition.to,
@@ -134,33 +166,42 @@ export function stepArtifacts(view: WorkflowView, statusId: string): StepArtifac
       }
     }
   }
+  return enter;
+}
+
+/** The way out of the current status, as the daemon checks its outcomes. */
+function leaveFromOutcomes(view: WorkflowView, statusId: string): Map<string, Requirement[]> {
   const leave = new Map<string, Requirement[]>();
-  if (statusId === view.status && !isClosed(view)) {
-    for (const outcome of view.outcomes) {
-      const missing = new Set(outcome.missing ?? []);
-      for (const name of outcome.requires ?? []) {
-        add(leave, name, {
-          from: statusId,
-          on: outcome.on,
-          to: outcome.to,
-          missing: missing.has(name),
-        });
-      }
-    }
-  } else {
-    for (const transition of view.statuses.find((status) => status.id === statusId)?.transitions ??
-      []) {
-      for (const name of transition.requires ?? []) {
-        add(leave, name, {
-          from: statusId,
-          on: transition.on,
-          to: transition.to,
-          missing: !set.has(name),
-        });
-      }
+  for (const outcome of view.outcomes) {
+    const missing = new Set(outcome.missing ?? []);
+    for (const name of outcome.requires ?? []) {
+      addRequirement(leave, name, {
+        from: statusId,
+        on: outcome.on,
+        to: outcome.to,
+        missing: missing.has(name),
+      });
     }
   }
-  return { enter, leave };
+  return leave;
+}
+
+/** The way out of any other step, from the manifest's transitions. */
+function leaveFromManifest(view: WorkflowView, statusId: string): Map<string, Requirement[]> {
+  const set = artifactNames(view);
+  const leave = new Map<string, Requirement[]>();
+  const transitions = view.statuses.find((status) => status.id === statusId)?.transitions ?? [];
+  for (const transition of transitions) {
+    for (const name of transition.requires ?? []) {
+      addRequirement(leave, name, {
+        from: statusId,
+        on: transition.on,
+        to: transition.to,
+        missing: !set.has(name),
+      });
+    }
+  }
+  return leave;
 }
 
 /** For each artifact name, the outcomes of the current status that require it. */
@@ -177,6 +218,12 @@ export function requiredBy(view: WorkflowView): Map<string, Requirement[]> {
   return out;
 }
 
+const COUNTER_NOUN: Record<"rejected_requests" | "script_failures" | "idle_iterations", string> = {
+  rejected_requests: "rejections",
+  script_failures: "script failures",
+  idle_iterations: "idle iterations",
+};
+
 /** `used of limit noun`, or "" when the view does not carry the counter or limit. */
 export function counterText(
   view: WorkflowView,
@@ -185,13 +232,7 @@ export function counterText(
   const used = currentVisit(view)?.[counter] ?? 0;
   const limit = currentStatus(view)?.limits?.[counter];
   if (!limit) return "";
-  const noun =
-    counter === "rejected_requests"
-      ? "rejections"
-      : counter === "script_failures"
-        ? "script failures"
-        : "idle iterations";
-  return `${used} of ${limit} ${noun}`;
+  return `${used} of ${limit} ${COUNTER_NOUN[counter]}`;
 }
 
 export interface ReturnTarget {

@@ -183,22 +183,15 @@ function ArtifactItem({
       .then(setHistory)
       .catch((failure) => setHistoryError(errorText(failure)));
   };
+  const discard = () => {
+    setDraft(null);
+    setError("");
+  };
   return (
     <li className="flex min-w-0 flex-col gap-1">
       <div className="flex min-w-0 items-center gap-2">
         <span className={cn(MONO, "font-medium")}>{name}</span>
-        {artifact ? (
-          <>
-            <span className={cn(MONO, "min-w-0 break-all text-muted-foreground")}>
-              {artifact.author}
-            </span>
-            <time dateTime={artifact.created_at} className={cn(MONO, "text-muted-foreground")}>
-              {formatTaskTime(artifact.created_at)}
-            </time>
-          </>
-        ) : (
-          <span className={EMPTY}>no value</span>
-        )}
+        <ArtifactByline artifact={artifact} />
         <span className="ml-auto flex items-center gap-1">
           {artifact && draft === null && (
             <MarkdownModeSegment
@@ -231,87 +224,147 @@ function ArtifactItem({
           )}
         </span>
       </div>
-      {(description || (requirements ?? []).length > 0) && (
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          {description && (
-            <span className="min-w-0 text-ui break-words text-muted-foreground">{description}</span>
-          )}
-          {(requirements ?? []).map((requirement) => (
-            <span
-              key={`${requirement.from}:${requirement.on}`}
-              data-requirement={requirement.missing ? "missing" : "set"}
-              className={cn(
-                MONO,
-                "rounded-chip px-1.5",
-                requirement.missing ? DANGER_FILL : "bg-muted text-muted-foreground",
-              )}
-            >
-              required by {requirement.from && `${requirement.from} · `}
-              {requirement.on} → {requirement.to}
-            </span>
-          ))}
-        </div>
-      )}
+      <RequirementChips description={description} requirements={requirements ?? []} />
       {draft !== null ? (
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <Textarea
-            aria-label={`Value of ${name}`}
-            value={draft}
-            disabled={saving}
-            onChange={(event) => setDraft(event.target.value)}
-            className="min-h-20 rounded-md border-0 bg-muted font-mono text-meta md:text-meta"
-          />
-          <div className="flex gap-1.5">
-            <Button
-              type="button"
-              size="sm"
-              className="h-7"
-              disabled={saving || !draft}
-              onClick={save}
-            >
-              Save
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7"
-              disabled={saving}
-              onClick={() => {
-                setDraft(null);
-                setError("");
-              }}
-            >
-              Discard
-            </Button>
-          </div>
-        </div>
+        <ArtifactEditor
+          name={name}
+          draft={draft}
+          saving={saving}
+          onDraft={setDraft}
+          onSave={save}
+          onDiscard={discard}
+        />
       ) : (
         artifact && <ArtifactValue value={artifact.value} markdown={mode === "rich"} />
       )}
-      {error && (
-        <p role="alert" className="text-ui text-status-failed">
-          {error}
-        </p>
-      )}
-      {historyError && (
-        <p role="alert" className="text-ui text-status-failed">
-          {historyError}
-        </p>
-      )}
-      {history && (
-        <ol className="flex min-w-0 flex-col gap-1.5 border-l border-border pl-2.5">
-          {history.map((entry) => (
-            <li key={entry.id} className="flex min-w-0 flex-col gap-0.5">
-              <span className={cn(MONO, "text-muted-foreground")}>
-                {entry.author} · {formatTaskTime(entry.created_at)}
-              </span>
-              <ArtifactValue value={entry.value} markdown={mode === "rich"} />
-            </li>
-          ))}
-        </ol>
-      )}
+      <ErrorLine text={error} />
+      <ErrorLine text={historyError} />
+      {history && <ArtifactHistory history={history} markdown={mode === "rich"} />}
     </li>
+  );
+}
+
+/** Who set the value and when, or that there is none. */
+function ArtifactByline({ artifact }: { artifact?: WorkflowArtifact }) {
+  if (!artifact) return <span className={EMPTY}>no value</span>;
+  return (
+    <>
+      <span className={cn(MONO, "min-w-0 break-all text-muted-foreground")}>{artifact.author}</span>
+      <time dateTime={artifact.created_at} className={cn(MONO, "text-muted-foreground")}>
+        {formatTaskTime(artifact.created_at)}
+      </time>
+    </>
+  );
+}
+
+/** The manifest's description and the transitions that require the artifact. */
+function RequirementChips({
+  description,
+  requirements,
+}: {
+  description?: string;
+  requirements: Requirement[];
+}) {
+  if (!description && requirements.length === 0) return null;
+  return (
+    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+      {description && (
+        <span className="min-w-0 text-ui break-words text-muted-foreground">{description}</span>
+      )}
+      {requirements.map((requirement) => (
+        <span
+          key={`${requirement.from}:${requirement.on}`}
+          data-requirement={requirement.missing ? "missing" : "set"}
+          className={cn(
+            MONO,
+            "rounded-chip px-1.5",
+            requirement.missing ? DANGER_FILL : "bg-muted text-muted-foreground",
+          )}
+        >
+          required by {requirement.from && `${requirement.from} · `}
+          {requirement.on} → {requirement.to}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ArtifactEditor({
+  name,
+  draft,
+  saving,
+  onDraft,
+  onSave,
+  onDiscard,
+}: {
+  name: string;
+  draft: string;
+  saving: boolean;
+  onDraft: (value: string) => void;
+  onSave: () => void;
+  onDiscard: () => void;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <Textarea
+        aria-label={`Value of ${name}`}
+        value={draft}
+        disabled={saving}
+        onChange={(event) => onDraft(event.target.value)}
+        className="min-h-20 rounded-md border-0 bg-muted font-mono text-meta md:text-meta"
+      />
+      <div className="flex gap-1.5">
+        <Button
+          type="button"
+          size="sm"
+          className="h-7"
+          disabled={saving || !draft}
+          onClick={onSave}
+        >
+          Save
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7"
+          disabled={saving}
+          onClick={onDiscard}
+        >
+          Discard
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ErrorLine({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <p role="alert" className="text-ui text-status-failed">
+      {text}
+    </p>
+  );
+}
+
+function ArtifactHistory({
+  history,
+  markdown,
+}: {
+  history: WorkflowArtifact[];
+  markdown: boolean;
+}) {
+  return (
+    <ol className="flex min-w-0 flex-col gap-1.5 border-l border-border pl-2.5">
+      {history.map((entry) => (
+        <li key={entry.id} className="flex min-w-0 flex-col gap-0.5">
+          <span className={cn(MONO, "text-muted-foreground")}>
+            {entry.author} · {formatTaskTime(entry.created_at)}
+          </span>
+          <ArtifactValue value={entry.value} markdown={markdown} />
+        </li>
+      ))}
+    </ol>
   );
 }
 
