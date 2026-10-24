@@ -397,7 +397,10 @@ files that it does not support, such as shell scripts, and the paths in
 `ui/.gitignore`. `npm run fmt:check`, also available as `make ui-fmt-check`, checks
 the same paths without writing files. It is the `ui-fmt-check` step of
 `make frontend-check`, so formatting drift fails `make check`. Run
-`npm run fmt` when it reports drift. Configure your editor to use oxfmt with
+`npm run fmt` when it reports drift. oxfmt 0.73.0 formats some chained calls,
+such as `vi.fn().mockImplementation(...)` inside a call, in two passes. If
+`npm run fmt:check` still reports a file right after `npm run fmt`, run
+`npm run fmt` again. Configure your editor to use oxfmt with
 the same configuration, so that a save does not reformat other code.
 
 The commit that first formatted these paths is listed in
