@@ -1,30 +1,18 @@
-import { lazy, useCallback, useEffect, useState } from "react";
-import { NavLink, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Container } from "lucide-react";
-import { toast } from "sonner";
-import { useDaemons } from "@/components/daemonContext";
-import { Button } from "@/components/ui/button";
-import { StatusDot, StatusPill } from "@/components/ui/status";
-import { AgentControls } from "@/components/AgentControls";
-import { agentTone } from "@/lib/statusTone";
+import { lazy, useState, type ReactNode } from "react";
+import { Navigate } from "react-router-dom";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
-import { isConnectionError } from "@/lib/api";
 import { ApiProvider } from "@/components/ApiProvider";
-import { useApi } from "@/components/apiContext";
-import { useAgentStatesSocket } from "@/hooks/useMessagesSocket";
-import { useCoalesced } from "@/hooks/useCoalesced";
 import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
-import { openHostPathInVSCode } from "@/lib/desktop";
-import { cn } from "@/lib/utils";
-import { hostToParam, targetFor } from "@/lib/terminalsHost";
-import type { AgentStatus, AgentSummary, AgentView } from "@/lib/types";
+import { targetFor } from "@/lib/terminalsHost";
+import type { AgentSummary } from "@/lib/types";
 import { LazyBoundary } from "@/components/LazyBoundary";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
-import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
-import { GoalHelp } from "@/components/GoalHelp";
 import { useChatUnread } from "./chat/useChatUnread";
-import { useUiMode } from "@/lib/uiMode";
+import type { AgentTab } from "./agentWorkspaceModel";
+import { AgentWorkspaceHeader } from "./AgentWorkspaceHeader";
+import { useAgentWorkspaceRoute } from "./useAgentWorkspaceRoute";
+import { useAgentWorkspaceStatus } from "./useAgentWorkspaceStatus";
 
 // Each tab loads on first open: the terminal brings xterm, the chat Markdown
 // and highlighting, Tasks the rich text editor.
@@ -36,23 +24,38 @@ const AgentChatTab = lazy(() => import("./AgentChatTab"));
 const TasksWorkspace = lazy(() => import("@/pages/tasks/TasksWorkspace"));
 const TaskDrawer = lazy(() => import("@/pages/tasks/TaskDrawer"));
 
-const TABS = [
-  ["chat", "Chat"],
-  ["tasks", "Tasks"],
-  ["console", "Terminal"],
-  ["activity", "Activity"],
-  ["configuration", "Configuration"],
-  ["advanced", "Advanced"],
-] as const;
-// The tabs Simple mode keeps; the header, Start/Stop included, is the same in both.
-const SIMPLE_TABS: ReadonlySet<string> = new Set(["chat", "tasks", "console", "configuration"]);
-
 type AgentWorkspaceProps = {
   hostId: string;
   hostLabel?: string;
   agent: AgentSummary;
   refresh: () => void;
   unavailable?: boolean;
+};
+
+type TabContext = {
+  hostId: string;
+  agent: AgentSummary;
+  refresh: () => void;
+  execCount: number;
+  initialTaskKey?: string;
+  onNotificationsChanged: () => void;
+};
+
+const TAB_CONTENT: Record<AgentTab, (ctx: TabContext) => ReactNode> = {
+  console: ({ hostId, agent, refresh, execCount }) => (
+    <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} execCount={execCount} />
+  ),
+  activity: () => <AgentActivityTab />,
+  tasks: ({ agent, initialTaskKey, onNotificationsChanged }) => (
+    <TasksWorkspace
+      scopeAgent={agent.name}
+      initialTaskKey={initialTaskKey}
+      onNotificationsChanged={onNotificationsChanged}
+    />
+  ),
+  chat: ({ hostId }) => <AgentChatTab hostId={hostId} />,
+  configuration: ({ refresh }) => <AgentConfigurationTab refresh={refresh} />,
+  advanced: () => <AgentAdvancedTab />,
 };
 
 // The workspace is a server-selection boundary: the agent lives on the host the
@@ -67,6 +70,26 @@ export default function AgentWorkspace(props: AgentWorkspaceProps) {
   );
 }
 
+function ConnectionNotice({
+  connection,
+}: {
+  connection: "selecting" | "unavailable" | "restoring";
+}) {
+  if (connection === "unavailable") {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+        <p>Host unavailable.</p>
+        <p>The route was not reassigned to the local daemon.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      {connection === "selecting" ? "Connecting to host…" : "Restoring route host…"}
+    </div>
+  );
+}
+
 function AgentWorkspaceContent({
   hostId,
   hostLabel,
@@ -74,27 +97,9 @@ function AgentWorkspaceContent({
   refresh,
   unavailable = false,
 }: AgentWorkspaceProps) {
-  const simple = useUiMode() === "simple";
-  const tabs = simple ? TABS.filter(([key]) => SIMPLE_TABS.has(key)) : TABS;
-  const { tab = "console" } = useParams();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { activeId, daemons, select } = useDaemons();
-  const [connection, setConnection] = useState<"selecting" | "ready" | "unavailable">("selecting");
-  const [status, setStatus] = useState<AgentStatus | null>(null);
-  const [view, setView] = useState<{ key: string; view: AgentView | null }>({
-    key: "",
-    view: null,
-  });
-  const agentKey = `${hostId}\0${agent.name}`;
-  const currentView = view.key === agentKey ? view.view : null;
-  const effectiveCwd = agent.cwd || currentView?.cwd || "";
-  // Configured runtime, compactly: whatever the harness actually reports.
-  // Codex has no model until one is chosen; only Codex reports an effort.
-  const runtime = [currentView?.harness || agent.harness, currentView?.model, currentView?.effort]
-    .filter(Boolean)
-    .join(" · ");
-  const api = useApi();
+  const route = useAgentWorkspaceRoute({ hostId, agentName: agent.name });
+  const { activeId, daemons, connection, status, currentView, refreshStatus } =
+    useAgentWorkspaceStatus({ hostId, agentName: agent.name, unavailable });
   const [execCount, setExecCount] = useState(0);
   // The Goal task opens over whichever tab is showing, not in Tasks.
   const [goalTask, setGoalTask] = useState("");
@@ -104,293 +109,41 @@ function AgentWorkspaceContent({
   const unreadChat = useChatUnread(agent.name, connection === "ready" && !unavailable);
   const tabStrip = useActiveLinkIntoView<HTMLElement>();
 
-  useEffect(() => {
-    let cancelled = false;
-    void select(hostId).then((ok) => {
-      if (!cancelled) setConnection(ok ? "ready" : "unavailable");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [hostId, select]);
+  if ("redirect" in route) return <Navigate to={route.redirect} replace />;
+  if (connection !== "ready") return <ConnectionNotice connection={connection} />;
+  if (activeId !== hostId) return <ConnectionNotice connection="restoring" />;
 
-  // The URL is authoritative inside an agent workspace. A global host change
-  // must never retarget legacy tab components to a same-named agent elsewhere.
-  // Hide the tabs immediately and restore the host named by the route.
-  useEffect(() => {
-    if (connection !== "ready" || activeId === hostId) return;
-    let cancelled = false;
-    void select(hostId).then((ok) => {
-      if (!cancelled && !ok) setConnection("unavailable");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeId, connection, hostId, select]);
-
-  const refreshStatus = useCallback(async () => {
-    if (connection !== "ready" || unavailable) return;
-    try {
-      setStatus(await api.agents.getAgentStatus(agent.name));
-    } catch (error) {
-      // An unreachable host keeps the last status in the header.
-      if (!isConnectionError(error)) setStatus(null);
-    }
-    try {
-      setView({ key: agentKey, view: await api.agents.getAgent(agent.name) });
-    } catch {
-      // Preserve the last successful value and retry with the next status poll.
-    }
-  }, [agent.name, agentKey, api, connection, unavailable]);
-
-  // A state hint for this agent refetches at once; the poll is then only a
-  // fallback. A host without the socket keeps the short poll.
-  const refreshOnHint = useCoalesced(() => void refreshStatus(), 500);
-  const statesSocket = useAgentStatesSocket({
-    enabled: connection === "ready" && !unavailable,
-    onHint: (hint) => {
-      if (hint.agent === agent.name) refreshOnHint();
-    },
+  const tab = route.tab;
+  const content = TAB_CONTENT[tab]({
+    hostId,
+    agent,
+    refresh,
+    execCount,
+    initialTaskKey: route.initialTaskKey,
+    onNotificationsChanged: () => void refreshHost(hostId),
   });
-  const statusPollMs = statesSocket === "open" ? 15000 : 3000;
-  useEffect(() => {
-    if (connection !== "ready" || unavailable) return;
-    void Promise.resolve().then(refreshStatus);
-    const timer = window.setInterval(() => void refreshStatus(), statusPollMs);
-    return () => window.clearInterval(timer);
-  }, [connection, refreshStatus, unavailable, statusPollMs]);
-
-  // An unknown or hidden tab opens the default one: Terminal, or Chat in Simple.
-  if (!tabs.some(([key]) => key === tab)) {
-    return (
-      <Navigate
-        to={`/agents/${hostToParam(hostId)}/${encodeURIComponent(agent.name)}/${simple ? "chat" : "console"}`}
-        replace
-      />
-    );
-  }
-  if (connection === "unavailable") {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-        <p>Host unavailable.</p>
-        <p>The route was not reassigned to the local daemon.</p>
-      </div>
-    );
-  }
-  if (connection === "selecting") {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        Connecting to host…
-      </div>
-    );
-  }
-  if (activeId !== hostId) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        Restoring route host…
-      </div>
-    );
-  }
-
-  const base = `/agents/${hostToParam(hostId)}/${encodeURIComponent(agent.name)}`;
-  const exhaustedPeriods = status?.budget?.exhausted ?? agent.budget?.exhausted ?? [];
-  const outOfBudget = exhaustedPeriods.length > 0;
-  const tone = agentTone(agent.state, outOfBudget);
-  const alive = agent.enabled ?? agent.state !== "stopped";
-  const questionTasks = attention.get(customerQuestionAttentionKey(hostId, agent.name)) ?? 0;
-  const content =
-    tab === "console" ? (
-      <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} execCount={execCount} />
-    ) : tab === "activity" ? (
-      <AgentActivityTab />
-    ) : tab === "tasks" ? (
-      <TasksWorkspace
-        scopeAgent={agent.name}
-        initialTaskKey={searchParams.get("task") ?? undefined}
-        onNotificationsChanged={() => void refreshHost(hostId)}
-      />
-    ) : tab === "chat" ? (
-      <AgentChatTab hostId={hostId} />
-    ) : tab === "configuration" ? (
-      <AgentConfigurationTab refresh={refresh} />
-    ) : (
-      <AgentAdvancedTab />
-    );
 
   return (
     <AgentNameContext.Provider value={agent.name}>
       <AgentStatusContext.Provider value={{ status, refresh: refreshStatus }}>
         <div className="flex h-full min-h-0 flex-col">
-          {/* Agent header: one line of identity (who, how it is doing, where it
-              runs, what it is working toward), one line of location, and the
-              lifecycle cluster — visible on every tab. */}
-          <header className="shrink-0">
-            {/* Below lg the identity wraps and the lifecycle cluster takes a
-                row of its own, so neither ever covers the other. */}
-            <div className="flex flex-wrap items-start gap-2.5 px-4 pt-3.5 pb-2.75 lg:flex-nowrap">
-              <div className="flex min-w-0 flex-1 flex-col gap-1.25 max-lg:basis-full">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2.25 gap-y-1 lg:flex-nowrap">
-                  <StatusDot tone={tone} size={8} />
-                  <h1 className="min-w-0 truncate text-title font-semibold tracking-[-.01em] lg:shrink-0">
-                    {agent.name}
-                  </h1>
-                  <StatusPill tone={tone}>{outOfBudget ? "no budget" : agent.state}</StatusPill>
-                  <span className="shrink-0 text-body-sm whitespace-nowrap text-muted-foreground">
-                    {hostLabel || (hostId ? hostId : "Local")}
-                  </span>
-                  <span
-                    title={agent.image}
-                    data-testid="agent-image"
-                    className="inline-flex h-5 max-w-full min-w-0 items-center gap-1.25 rounded-sm bg-muted px-1.75 font-mono text-meta whitespace-nowrap text-muted-foreground lg:shrink-0"
-                  >
-                    <Container className="size-2.5 shrink-0" aria-hidden="true" />
-                    <span className="truncate">{agent.image}</span>
-                  </span>
-                  {runtime && (
-                    <span
-                      data-testid="agent-runtime"
-                      title={`Harness · model · effort: ${runtime}`}
-                      className="inline-flex h-5 max-w-full min-w-0 items-center rounded-sm bg-muted px-1.75 font-mono text-meta whitespace-nowrap text-muted-foreground lg:shrink-0"
-                    >
-                      <span className="truncate">{runtime}</span>
-                    </span>
-                  )}
-                  <span className="flex min-w-0 flex-1 items-center gap-1.25 overflow-hidden text-body-sm whitespace-nowrap text-muted-foreground max-lg:flex-none">
-                    <span className="shrink-0">Goal:</span>
-                    {agent.current_goal_task_key ? (
-                      <button
-                        type="button"
-                        className="shrink-0 border-b border-dotted border-border font-mono text-meta font-medium text-foreground tabular-nums hover:border-foreground"
-                        onClick={() => setGoalTask(agent.current_goal_task_key ?? "")}
-                      >
-                        {agent.current_goal_task_key}
-                      </button>
-                    ) : (
-                      <span className="shrink-0">No current goal</span>
-                    )}
-                    <GoalHelp />
-                  </span>
-                </div>
-                {/* The reference ellipsises the path to hold the header to one
-                    line; this app shows it whole on purpose (a wrapped cwd is
-                    better than a path the operator cannot read), so it wraps. */}
-                <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1 text-ui">
-                  <span className="flex min-w-0 items-baseline gap-1.5">
-                    <span className="shrink-0 text-muted-foreground">cwd:</span>
-                    <span data-testid="agent-cwd" className="min-w-0 break-all font-mono text-meta">
-                      {effectiveCwd || "…"}
-                    </span>
-                  </span>
-                  {effectiveCwd && canOpenAgentCwdInVSCode(hostId, daemons) && (
-                    <Button
-                      type="button"
-                      data-testid="open-agent-cwd-vscode"
-                      variant="link"
-                      size="xs"
-                      className="h-auto shrink-0 px-0 py-0 text-ui font-medium text-foreground"
-                      disabled={unavailable}
-                      onClick={() =>
-                        void openHostPathInVSCode(hostId, effectiveCwd).catch((error) =>
-                          toast.error(String(error)),
-                        )
-                      }
-                    >
-                      Open in VS Code
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <AgentControls
-                name={agent.name}
-                alive={alive}
-                image={agent.image}
-                disabled={unavailable}
-                configurationPath={`${base}/configuration`}
-                refresh={refresh}
-                onExec={() => setExecCount((n) => n + 1)}
-                onDeleted={() => navigate("/")}
-              />
-            </div>
-            {/* Why the loop is off: a halted loop (including a failed iteration
-                launch, which never creates an iteration row). */}
-            {(status?.halt_reason || status?.error_reason) && (
-              <p
-                data-testid="agent-halt-reason"
-                className={cn(
-                  "px-4 pb-2 text-caption font-medium",
-                  status.halt_kind === "idle_limit" ? "text-muted-foreground" : "text-destructive",
-                )}
-              >
-                {status.halt_reason || status.error_reason}
-              </p>
-            )}
-            {status?.messages_queue_full && (
-              <p className="px-4 pb-2 text-caption font-medium text-destructive">
-                Message queue full: {status.messages_pending} / {status.messages_max_queue}
-              </p>
-            )}
-            {status?.budget &&
-              (status.budget.hour_usd > 0 ||
-                status.budget.day_usd > 0 ||
-                status.budget.week_usd > 0 ||
-                status.budget.month_usd > 0) && (
-                <div className="px-4 pb-2 text-caption" data-testid="agent-budget-header">
-                  {exhaustedPeriods.length > 0 && (
-                    <p className="font-medium text-destructive">
-                      Out of budget: {exhaustedPeriods.join(", ")}
-                    </p>
-                  )}
-                  <p className="text-muted-foreground tabular-nums">
-                    Hour {status.budget.hour_spent_usd.toFixed(2)} /{" "}
-                    {status.budget.hour_usd || "Unlimited"} · Day{" "}
-                    {status.budget.day_spent_usd.toFixed(2)} /{" "}
-                    {status.budget.day_usd || "Unlimited"} · Week{" "}
-                    {status.budget.week_spent_usd.toFixed(2)} /{" "}
-                    {status.budget.week_usd || "Unlimited"} · Month{" "}
-                    {status.budget.month_spent_usd.toFixed(2)} /{" "}
-                    {status.budget.month_usd || "Unlimited"}
-                  </p>
-                </div>
-              )}
-            <nav
-              ref={tabStrip}
-              aria-label="Agent workspace"
-              className="scrollbar-none flex items-center gap-0.5 overflow-x-auto border-b px-3"
-            >
-              {tabs.map(([key, label]) => (
-                <NavLink
-                  key={key}
-                  to={`${base}/${key}`}
-                  className={({ isActive }) =>
-                    cn(
-                      "flex h-8.5 shrink-0 items-center border-b-2 border-transparent px-2.5 text-body whitespace-nowrap text-muted-foreground hover:text-foreground",
-                      isActive && "border-primary font-medium text-foreground",
-                    )
-                  }
-                >
-                  {label}
-                  {key === "chat" && unreadChat > 0 && (
-                    <span
-                      role="img"
-                      aria-label={`${unreadChat} unread message${unreadChat === 1 ? "" : "s"} from ${agent.name}`}
-                      title={`${unreadChat} unread message${unreadChat === 1 ? "" : "s"}`}
-                      className="ml-1.5 size-1.25 rounded-full bg-primary"
-                    />
-                  )}
-                  {key === "tasks" && questionTasks > 0 && (
-                    <span
-                      role="img"
-                      aria-label={`${questionTasks} task${questionTasks === 1 ? "" : "s"} with unread agent questions`}
-                      title={`${questionTasks} task${questionTasks === 1 ? "" : "s"} with unread agent questions`}
-                      className="ml-1.5 rounded-full bg-primary px-1.5 text-caption font-medium leading-4 text-primary-foreground"
-                    >
-                      {questionTasks}
-                    </span>
-                  )}
-                </NavLink>
-              ))}
-            </nav>
-          </header>
+          <AgentWorkspaceHeader
+            hostId={hostId}
+            hostLabel={hostLabel}
+            agent={agent}
+            status={status}
+            view={currentView}
+            daemons={daemons}
+            unavailable={unavailable}
+            base={route.base}
+            tabs={route.tabs}
+            stripRef={tabStrip}
+            unreadChat={unreadChat}
+            questionTasks={attention.get(customerQuestionAttentionKey(hostId, agent.name)) ?? 0}
+            refresh={refresh}
+            onExec={() => setExecCount((n) => n + 1)}
+            onOpenGoal={setGoalTask}
+          />
           {unavailable && (
             <p role="status" className="mb-2 text-sm text-muted-foreground">
               This host is temporarily unavailable; actions are disabled until it reconnects.
