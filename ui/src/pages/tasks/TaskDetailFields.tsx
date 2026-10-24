@@ -51,38 +51,14 @@ export function TaskDetailFields({
         <span className={LABEL}>Title</span>
         <Input className={FIELD} value={title} onChange={(event) => setTitle(event.target.value)} />
       </label>
-      <div className="task-description grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.75">
-        <div className="flex items-center gap-2">
-          <label htmlFor="task-description" className={LABEL}>
-            Description
-          </label>
-          <MarkdownModeSegment
-            label="Description editing mode"
-            mode={descriptionMode}
-            onModeChange={setDescriptionMode}
-            disabled={saving}
-          />
-          <SendFilesButton
-            disabled={saving}
-            onUploadingChange={setUploadingDescription}
-            className={cn(QUIET_ACTION, "ml-auto border-0 bg-transparent")}
-            onUploaded={(paths) =>
-              setDescription(
-                (current) =>
-                  current + (current && !current.endsWith("\n") ? "\n" : "") + paths.join("\n"),
-              )
-            }
-          />
-        </div>
-        <MarkdownEditor
-          id="task-description"
-          placeholder="Description"
-          value={description}
-          onChange={setDescription}
-          disabled={saving}
-          mode={descriptionMode}
-        />
-      </div>
+      <TaskDescriptionField
+        saving={saving}
+        description={description}
+        setDescription={setDescription}
+        descriptionMode={descriptionMode}
+        setDescriptionMode={setDescriptionMode}
+        setUploadingDescription={setUploadingDescription}
+      />
       <div className="task-properties grid min-w-0 grid-cols-2 gap-x-4 gap-y-2.5">
         {!workflow && (
           <SelectField
@@ -166,5 +142,53 @@ export function TaskDetailFields({
         </label>
       </div>
     </fieldset>
+  );
+}
+
+function TaskDescriptionField({
+  saving,
+  description,
+  setDescription,
+  descriptionMode,
+  setDescriptionMode,
+  setUploadingDescription,
+}: Pick<ReturnType<typeof useTaskDetailDraft>, "saving" | "description" | "setDescription"> & {
+  descriptionMode: MarkdownMode;
+  setDescriptionMode: (mode: MarkdownMode) => void;
+  setUploadingDescription: Dispatch<SetStateAction<boolean>>;
+}) {
+  return (
+    <div className="task-description grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.75">
+      <div className="flex items-center gap-2">
+        <label htmlFor="task-description" className={LABEL}>
+          Description
+        </label>
+        <MarkdownModeSegment
+          label="Description editing mode"
+          mode={descriptionMode}
+          onModeChange={setDescriptionMode}
+          disabled={saving}
+        />
+        <SendFilesButton
+          disabled={saving}
+          onUploadingChange={setUploadingDescription}
+          className={cn(QUIET_ACTION, "ml-auto border-0 bg-transparent")}
+          onUploaded={(paths) =>
+            setDescription(
+              (current) =>
+                current + (current && !current.endsWith("\n") ? "\n" : "") + paths.join("\n"),
+            )
+          }
+        />
+      </div>
+      <MarkdownEditor
+        id="task-description"
+        placeholder="Description"
+        value={description}
+        onChange={setDescription}
+        disabled={saving}
+        mode={descriptionMode}
+      />
+    </div>
   );
 }
