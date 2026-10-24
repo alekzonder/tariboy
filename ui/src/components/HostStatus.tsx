@@ -1,6 +1,8 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { hostInstallBlocked, hostUpdateAvailable, type DaemonMeta } from "@/lib/daemons";
+import type { DaemonMeta } from "@/lib/daemons";
+import { HostStatusNotes } from "./HostStatusNotes";
+import { hostStatusView } from "./hostStatusModel";
 
 export function HostStatus({
   host,
@@ -22,68 +24,36 @@ export function HostStatus({
   showState?: boolean;
 }) {
   if (host.kind !== "ssh") return null;
-  const state = host.state ?? "disconnected";
-  const unsupported = hostInstallBlocked(host.platform, host.arch, host.prerequisites);
-  const keyMismatch = host.message?.includes("host_key_mismatch");
-  const canConnect = ["disconnected", "degraded", "failed"].includes(state);
-  const updateAvailable = showUpdate && hostUpdateAvailable(host, appVersion);
+  const { state, unsupported, badgeVariant, actions } = hostStatusView(
+    host,
+    appVersion,
+    showUpdate,
+  );
+  const handlers = { onUpdate, onConnect };
 
   return (
     <div className="space-y-1 text-xs">
       <div className="flex items-center gap-1">
-        {showState && (
-          <Badge
-            variant={
-              state === "ready" ? "default" : state === "error" ? "destructive" : "secondary"
-            }
-          >
-            {state.replace("_", " ")}
-          </Badge>
-        )}
-        {updateAvailable && onUpdate && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-xs"
-            aria-label={`Update ${host.label}`}
-            onClick={onUpdate}
-          >
-            Update
-          </Button>
-        )}
-        {state === "needs_auth" && onUpdate && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-xs"
-            aria-label={`Authenticate ${host.label}`}
-            onClick={onUpdate}
-          >
-            Authenticate
-          </Button>
-        )}
-        {canConnect && !unsupported && !keyMismatch && onConnect && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-xs"
-            aria-label={`Connect ${host.label}`}
-            onClick={onConnect}
-          >
-            Connect
-          </Button>
-        )}
+        {showState && <Badge variant={badgeVariant}>{state.replace("_", " ")}</Badge>}
+        {actions.map(({ label, handler }) => {
+          const onClick = handlers[handler];
+          return (
+            onClick && (
+              <Button
+                key={label}
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                aria-label={`${label} ${host.label}`}
+                onClick={onClick}
+              >
+                {label}
+              </Button>
+            )
+          );
+        })}
       </div>
-      {host.platform && host.arch && unsupported && (
-        <div className="text-destructive">
-          Unsupported host: {host.platform}/{host.arch}
-        </div>
-      )}
-      {unsupported && <div className="font-medium text-destructive">Install blocked</div>}
-      {(host.prerequisites?.length ?? 0) > 0 && (
-        <div className="text-muted-foreground">Missing: {host.prerequisites!.join(", ")}</div>
-      )}
-      {host.message && <div className="break-words text-destructive">{host.message}</div>}
+      <HostStatusNotes host={host} unsupported={unsupported} />
     </div>
   );
 }
