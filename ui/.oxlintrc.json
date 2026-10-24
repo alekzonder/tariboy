@@ -152,7 +152,6 @@
     },
     {
       "files": [
-        "src/components/AgentLayout.tsx",
         "src/components/FullAuditLog.tsx",
         "src/hooks/usePolling.ts",
         "src/pages/terminals/TerminalWorkspace.tsx"
@@ -173,7 +172,6 @@
         "src/components/IterationAuditLog.tsx",
         "src/pages/AuditLogPage.tsx",
         "src/pages/ChannelsPage.tsx",
-        "src/pages/ImagePrompt.tsx",
         "store/App.tsx"
       ],
       "rules": {
@@ -181,17 +179,6 @@
       },
       "plugins": [
         "react"
-      ]
-    },
-    {
-      "files": [
-        "src/components/InboxComposer.test.tsx"
-      ],
-      "rules": {
-        "typescript/no-explicit-any": "off"
-      },
-      "plugins": [
-        "typescript"
       ]
     }
   ]

@@ -131,19 +131,17 @@ usage — re-ground them if real usage lands later.
   event. Nothing is stubbed at the network layer. Typing into a field your own
   click just revealed needs two timer ticks (~120ms click, ~260ms type).
 - **A component that tints itself from data needs that data seeded, or the card
-  teaches the wrong palette.** `AgentLayout`'s tab strip is `.agent-header`,
+  teaches the wrong palette.** The agent tab strip is `.agent-header`,
   which colours itself from `--agent-hue` (fed from the agent's stored colour).
   With no daemon behind the capture server the colour never arrives, the hue
   falls back to 0, and the strip renders PINK — a colour that appears nowhere
-  in this DS and reads as an error state. `useCachedColor` falls back to
-  `localStorage`, so the preview seeds `agent:color:builder` at module scope
-  (the same per-cell technique `HostSwitcher` uses). Check any other component
+  in this DS and reads as an error state. Check any component
   that derives colour from fetched data before trusting its card.
 
 - **Each cell is captured on its own page load** (`?story=<Cell>`), so per-cell
-  `localStorage` seeding is safe — that is how `HostSwitcher` gets a populated
-  daemon registry (seed `tariboy_daemons` / `tariboy_active_daemon` while
-  rendering a wrapper ABOVE `DaemonProvider`).
+  `localStorage` seeding is safe — a preview gets a populated daemon registry
+  by seeding `tariboy_daemons` / `tariboy_active_daemon` while rendering a
+  wrapper ABOVE `DaemonProvider`.
 - `make-entry.mjs` does `export *` over every mapped module, so non-component
   exports (providers, helpers) are already importable from `"tariboy-ui"` —
   check that before concluding something must be added to the entry.
@@ -176,8 +174,6 @@ Documented limits, not defects — they ship importable with types and docs:
 - **`IterationAuditLog`**'s event stream comes from `agentGet(..."logs")` +
   `fetchTranscript` with no prop seam; its cells show the real frame in the
   genuine "No events." state. An optional `events` prop would make it previewable.
-- A *populated* `StatusChatHistory` needs `/api/agents/<name>/status/history`;
-  the sheet renders its real "No status events." empty state instead.
 
 ## Product findings (logged here, NOT changed)
 
@@ -193,7 +189,7 @@ Documented limits, not defects — they ship importable with types and docs:
   or the comment should say what it actually does. Worth a ticket.
 - Components exported but never used anywhere in `src/`: `Separator`,
   `SheetFooter`, `AlertDialogMedia`, `DropdownMenuLabel`, `DropdownMenuSeparator`,
-  `AttachButton`, and `AlertDialogContent size="sm"`. Their previews are
+  and `AlertDialogContent size="sm"`. Their previews are
   plausible compositions rather than lifted usage.
 
 ## Theme reconcile (metal neutrals + blue accent)
@@ -436,8 +432,8 @@ preview):
   `cardMode: "column"` (or `single` for `TaskDetail`, whose drawer portals to
   body and would stack all stories at one fixed position).
 - Clear `tariboy_daemons` / `tariboy_active_daemon` at module scope. The render
-  check reuses ONE browser page for every card, so `HostSwitcher`'s preview
-  leaves a seeded registry behind; a page that inherits it resolves three
+  check reuses ONE browser page for every card, so a preview that seeds the
+  registry leaves it behind; a page that inherits it resolves three
   unreachable SSH hosts and polls all of them.
 
 **`--no-render-check` is now part of the final validate, by the repo owner's

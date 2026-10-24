@@ -5,13 +5,11 @@ import { useApi } from "@/components/apiContext";
 import { fmtTokens } from "@/lib/audit";
 import { fmtDateTime } from "@/lib/time";
 import type { UsagePoint, UsageReport } from "@/lib/types";
+import { fmtCost } from "@/lib/usage";
+import UsageSummaryCard from "@/components/usage/UsageSummaryCard";
 
 const UNGROUPED_FILTER = "__ungrouped__";
 type TaggedUsage = { group: string; report: UsageReport };
-
-function fmtCost(cost: number) {
-  return `$${cost.toFixed(4)}`;
-}
 
 export default function UsagePage() {
   const api = useApi();
@@ -61,10 +59,10 @@ export default function UsagePage() {
       </div>
 
       <dl aria-label="Usage summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryCard label="Requests" value={data ? String(data.total_requests) : "—"} />
-        <SummaryCard label="Input tokens" value={data ? fmtTokens(data.total_input_tokens) : "—"} />
-        <SummaryCard label="Output tokens" value={data ? fmtTokens(data.total_output_tokens) : "—"} />
-        <SummaryCard label="Historical cost" value={data ? fmtCost(data.total_cost_usd) : "—"} />
+        <UsageSummaryCard label="Requests" value={data ? String(data.total_requests) : "—"} />
+        <UsageSummaryCard label="Input tokens" value={data ? fmtTokens(data.total_input_tokens) : "—"} />
+        <UsageSummaryCard label="Output tokens" value={data ? fmtTokens(data.total_output_tokens) : "—"} />
+        <UsageSummaryCard label="Historical cost" value={data ? fmtCost(data.total_cost_usd) : "—"} />
       </dl>
 
       <DailyUsage series={data?.series ?? []} />
@@ -93,7 +91,7 @@ export default function UsagePage() {
                 <td className="px-3 py-1.5 text-right font-mono">{r.output_tokens}</td>
                 <td className="px-3 py-1.5 text-right font-mono">{r.cache_write_tokens}</td>
                 <td className="px-3 py-1.5 text-right font-mono">{r.cache_read_tokens}</td>
-                <td className="px-3 py-1.5 text-right font-mono">${r.cost_usd.toFixed(4)}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{fmtCost(r.cost_usd)}</td>
               </tr>
             ))}
             {rows.length === 0 && (
@@ -138,15 +136,6 @@ export default function UsagePage() {
           </table>
         </div>
       </section>
-    </div>
-  );
-}
-
-function SummaryCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded border p-3">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 font-mono text-lg">{value}</dd>
     </div>
   );
 }

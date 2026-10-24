@@ -58,9 +58,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return { ...actual, createApi };
 });
 
-// Selecting an agent mounts TerminalPane, which dials a websocket and renders
-// xterm.js — neither works in jsdom. Stub both, same approach as
-// TerminalPane.test.tsx.
+// Selecting an agent mounts the terminal, which dials a websocket and renders
+// xterm.js — neither works in jsdom. Stub both.
 vi.mock("@/hooks/useTerminalSocket", () => ({
   useTerminalSocket: vi.fn(() => ({
     status: "open",

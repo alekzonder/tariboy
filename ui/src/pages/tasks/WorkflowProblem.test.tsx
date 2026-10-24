@@ -3,7 +3,7 @@ import { act, fireEvent, render as renderWith, screen, within } from "@/test/que
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import type { WorkflowScriptRun, TransitionRequest, WorkflowView } from "@/lib/api"
 import WorkflowProblem from "./WorkflowProblem"
-import { customerView, poolView, remoteTarget } from "./workflowFixtures"
+import { customerView, poolView, remoteTarget } from "@/test/fixtures/workflowFixtures"
 import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ getTransitionRequest: vi.fn(), retryTransitionRequest: vi.fn(), getTaskScriptRunLog: vi.fn() }))

@@ -5,7 +5,7 @@ export type { AuditEvent };
 
 // parseData turns the JSON-string data field back into an object. On any parse
 // failure it returns {} so callers never throw on a malformed record.
-export function parseData(data: string): Record<string, unknown> {
+function parseData(data: string): Record<string, unknown> {
   try {
     const v = JSON.parse(data);
     return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
@@ -14,7 +14,7 @@ export function parseData(data: string): Record<string, unknown> {
   }
 }
 
-export function truncate(s: string, n = 120): string {
+function truncate(s: string, n = 120): string {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
@@ -42,7 +42,7 @@ export const TONE_BAR: Record<Tone, string> = {
 // object/array (e.g. harness_output's data.line) with the parsed value, so the
 // pretty view shows real nested JSON instead of an escaped string. Non-JSON
 // strings, numbers, and plain scalars are left untouched.
-export function decodeJSONStrings(v: unknown): unknown {
+function decodeJSONStrings(v: unknown): unknown {
   if (typeof v === "string") {
     const t = v.trim();
     if (t.startsWith("{") || t.startsWith("[")) {

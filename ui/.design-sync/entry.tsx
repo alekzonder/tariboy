@@ -26,14 +26,11 @@ export * from "@/components/ui/textarea";
 export * from "@/components/ui/tooltip";
 
 // application components (src/components)
-export * from "@/components/AgentColorSwatch";
 export * from "@/components/AgentControls";
 export * from "@/components/AgentFormFields";
-export * from "@/components/AgentLayout";
 export * from "@/components/AgentRow";
 export * from "@/components/AgentSubscriptions";
-export * from "@/components/AliasEditor";
-export * from "@/components/AttachButton";
+export * from "@/components/ApiProvider";
 export * from "@/components/AuditExportActions";
 export * from "@/components/AuditRow";
 export * from "@/components/CodexApprovalSettings";
@@ -48,17 +45,13 @@ export * from "@/components/FullAuditLog";
 export * from "@/components/GoalHelp";
 export * from "@/components/GroupWizard";
 export * from "@/components/HostStatus";
-export * from "@/components/HostSwitcher";
 export * from "@/components/ImageLayout";
-export * from "@/components/InboxComposer";
 export * from "@/components/IterationAuditLog";
 export * from "@/components/MaintenanceSettings";
-export * from "@/components/NotesEditor";
 export * from "@/components/PathAutocomplete";
 export * from "@/components/ProxyCallRow";
 export * from "@/components/SendFilesButton";
 export * from "@/components/ShellScriptEditor";
-export * from "@/components/StatusChatHistory";
 export * from "@/components/SupportBundle";
 export * from "@/components/TabPage";
 export * from "@/components/ThemeToggle";
@@ -102,7 +95,7 @@ export { createQueryClient } from "@/lib/queryClient";
 
 // Router context for previews of components that use react-router links.
 // Excluded from the component list via cfg.componentSrcMap.
-// MemoryRouter alone matches no pattern: AgentLayout and ImageLayout read
+// MemoryRouter alone matches no pattern: AgentWorkspace and ImageLayout read
 // useParams(), so a preview must mount them inside a matched Route.
 export { MemoryRouter, Routes, Route } from "react-router-dom";
 

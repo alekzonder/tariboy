@@ -28,7 +28,7 @@ export interface Problem {
 }
 
 /** The first line of a message, without the `log: ...` line a failure appends. */
-export function firstLine(message: string | undefined): string {
+function firstLine(message: string | undefined): string {
   return (message ?? "").trim().split("\n")[0]?.trim() ?? ""
 }
 
@@ -40,7 +40,7 @@ function latestFinishedRun(view: WorkflowView): WorkflowScriptRun | undefined {
 }
 
 /** The run that served a request: the check that failed or rejected it. */
-export function runOfRequest(view: WorkflowView, request: TransitionRequest): WorkflowScriptRun | undefined {
+function runOfRequest(view: WorkflowView, request: TransitionRequest): WorkflowScriptRun | undefined {
   return [...(view.runs ?? [])]
     .filter((run) => run.kind === "check" && run.request_id === request.id)
     .sort((a, b) => b.id - a.id)[0]

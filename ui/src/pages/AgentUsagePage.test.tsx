@@ -120,3 +120,13 @@ it("sends a since bound for the default preset window", async () => {
   renderPage();
   await waitFor(() => expect(paths.some((p) => p.includes("since="))).toBe(true));
 });
+
+it("lists the totals as labelled usage metrics", async () => {
+  stubFetch();
+  renderPage();
+  const totals = screen.getByLabelText("Usage totals");
+  await waitFor(() => expect(totals).toHaveTextContent("$0.3500"));
+  expect(screen.getAllByRole("term").map((term) => term.textContent)).toEqual([
+    "Requests", "Tokens in", "Tokens out", "Cache w/r", "Cost",
+  ]);
+});

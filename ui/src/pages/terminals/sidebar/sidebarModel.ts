@@ -27,7 +27,7 @@ export interface SidebarAgent {
  * shows whichever of them moved last and counts every one of them as unread,
  * so a task the customer has not read cannot hide behind a quiet conversation.
  */
-export function foldAgentChats(chats: ChatSummary[]): Map<string, ChatSummary> {
+function foldAgentChats(chats: ChatSummary[]): Map<string, ChatSummary> {
   const byAgent = new Map<string, ChatSummary>();
   for (const chat of chats) {
     if (!chat.agent) continue;

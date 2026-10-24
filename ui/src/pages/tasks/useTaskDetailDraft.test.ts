@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react"
 import { expect, it, vi } from "vitest"
-import { workflowTask } from "./workflowFixtures"
+import { workflowTask } from "@/test/fixtures/workflowFixtures"
 import { useTaskDetailDraft } from "./useTaskDetailDraft"
 
 const task = { ...workflowTask, workflow_digest: undefined, workflow_name: undefined }

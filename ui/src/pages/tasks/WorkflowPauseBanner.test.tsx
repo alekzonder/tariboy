@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render as renderWith, screen, within } from "@
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
 import WorkflowPauseBanner from "./WorkflowPauseBanner"
-import { remoteTarget } from "./workflowFixtures"
+import { remoteTarget } from "@/test/fixtures/workflowFixtures"
 import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({ resumeTaskWorkflow: vi.fn(), cancelWorkflowTask: vi.fn() }))

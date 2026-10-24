@@ -1,4 +1,4 @@
-import { AgentNameContext, AliasEditor, CustomerQuestionNotifications, DaemonProvider, MemoryRouter } from "tariboy-ui";
+import { Badge, CustomerQuestionNotifications, DaemonProvider, MemoryRouter } from "tariboy-ui";
 
 // CustomerQuestionNotifications is HEADLESS. It mounts one HostQuestionWatcher
 // per registered daemon (each returns null), polls every host's task-notification
@@ -20,9 +20,7 @@ export const HeadlessPassthrough = () => (
   <MemoryRouter>
     <DaemonProvider>
       <CustomerQuestionNotifications>
-        <AgentNameContext.Provider value="builder">
-          <AliasEditor />
-        </AgentNameContext.Provider>
+        <Badge variant="secondary">builder</Badge>
       </CustomerQuestionNotifications>
     </DaemonProvider>
   </MemoryRouter>

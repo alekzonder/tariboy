@@ -165,8 +165,8 @@ Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
 `staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. The
-frontend target runs UI typecheck, lint, unit tests, branding, and the
-documentation checks. Before checking, `backend-check` runs `go mod download`
+frontend target runs UI typecheck, lint, the unused-code check, unit tests,
+branding, and the documentation checks. Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
 `scripts/npm-ci-locked.sh` for locked installs under both `ui/` and `docs/`.
 They do not write into
@@ -359,8 +359,8 @@ cd ui
 npm ci
 ```
 
-`make check` then covers `npx tsc -b`, `npm run lint`, `npm test`, and
-`npm run branding:check`. `make full-check` adds `npm run test:tasks-browser`
+`make check` then covers `npx tsc -b`, `npm run lint`, `npm run lint:unused`,
+`npm test`, and `npm run branding:check`. `make full-check` adds `npm run test:tasks-browser`
 and `npm run test:images-browser`, and builds the desktop bundle through its
 desktop step. Run any of them directly under `ui/` while iterating:
 
@@ -368,11 +368,35 @@ desktop step. Run any of them directly under `ui/` while iterating:
 cd ui
 npm test
 npm run lint
+npm run lint:unused
 npm run build:desktop
 npm run test:tasks-browser
 npm run test:images-browser
 npm run build:store
 ```
+
+`npm run lint:unused` runs [Knip](https://knip.dev) from `ui/knip.json` and
+fails when it finds an unused file or an unused export. It does not delete
+code. It runs two passes:
+
+1. `knip --production --include files` follows imports from the Desktop and
+   Android app (`src/main.tsx`, found through `index.html`) and from the Store
+   app (`store/main.tsx`). Tests and `.design-sync/entry.tsx` are not entry
+   points in this pass. A file that only a test or the design-sync bundle
+   imports is reported as unused.
+2. `knip --include exports` also counts tests as users. An export that a test
+   imports is not reported, but an export that no file imports is.
+
+If Knip reports a file or an export, delete it, or remove the `export` keyword
+when only its own file uses it. Shared test helpers live under `src/test/`,
+which the first pass does not check. Add an exception to `ignoreIssues` in
+`ui/knip.json` only for code that the app does not use on purpose. Name each
+file, list only the issue types it needs, and give the reason in the pull
+request. Do not add a pattern that covers all of `src/` or all components.
+The current exceptions are the shadcn primitives under `src/components/ui/`.
+The repository keeps that kit complete for the design-sync catalog, so its
+unused exports and the unused `separator.tsx` and `tooltip.tsx` files are
+allowed.
 
 For interactive visual checks of React-only changes, start the production UI
 and its real API together:

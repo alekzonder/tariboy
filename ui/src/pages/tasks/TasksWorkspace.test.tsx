@@ -6,7 +6,7 @@ import { ApiProvider } from "@/components/ApiProvider"
 import { ApiError, setActiveDaemon, type Task, type TaskDetail, type TaskNotification, type TaskQueue } from "@/lib/api"
 import { taskKeys } from "./taskQueries"
 import TasksWorkspace from "./TasksWorkspace"
-import { customerView } from "./workflowFixtures"
+import { customerView } from "@/test/fixtures/workflowFixtures"
 import type { Daemon } from "@/lib/daemons"
 
 /** The workspace below a server-selection boundary for `target`. */

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
 import { WorkflowPanel } from "./WorkflowPanel"
-import { customerView, poolView, workflowTask, remoteTarget } from "./workflowFixtures"
+import { customerView, poolView, workflowTask, remoteTarget } from "@/test/fixtures/workflowFixtures"
 import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({

@@ -180,7 +180,6 @@ export async function invokeDesktop<T>(
 export const daemonState = () => invokeDesktop<DesktopDaemonState>("daemon_status");
 export const daemonStart = () => invokeDesktop<DesktopDaemonState>("daemon_start");
 export const daemonRestart = () => invokeDesktop<DesktopDaemonState>("daemon_restart");
-export const daemonStop = () => invokeDesktop<DesktopDaemonState>("daemon_stop");
 export const daemonLogTail = (lines = 40) => invokeDesktop<string>("daemon_log", { lines });
 export const openDaemonLog = () => invokeDesktop<null>("open_daemon_log");
 export const openHostPathInVSCode = (hostId: string, path: string) =>

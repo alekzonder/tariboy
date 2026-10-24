@@ -11,7 +11,7 @@ export function isClosed(view: WorkflowView): boolean {
   return view.category === "done" || view.category === "cancelled"
 }
 
-export function isPoolStatus(status: WorkflowStatusInfo | undefined): boolean {
+function isPoolStatus(status: WorkflowStatusInfo | undefined): boolean {
   return !!status && status.owner.startsWith("pool:")
 }
 
@@ -37,7 +37,7 @@ export function inCurrentVisit(view: WorkflowView, at: string): boolean {
  * task under a new digest; the visits before it stay as history only. A visit
  * without a digest predates the record and counts as current.
  */
-export function runVisits(view: WorkflowView): WorkflowVisit[] {
+function runVisits(view: WorkflowView): WorkflowVisit[] {
   return view.visits.filter((visit) => !visit.workflow_digest || visit.workflow_digest === view.digest)
 }
 

@@ -3,7 +3,7 @@ import { cachedDaemon, unresolvedDaemon, type Daemon } from "@/lib/daemons";
 // URL param mapping for /terminals/:hostId/:agent. The same-origin local
 // daemon has registry id "" which cannot appear in a path segment, so it is
 // spelled "local" in URLs.
-export const LOCAL_PARAM = "local";
+const LOCAL_PARAM = "local";
 export const hostToParam = (id: string): string => (id === "" ? LOCAL_PARAM : id);
 export const paramToHost = (p: string): string => (p === LOCAL_PARAM ? "" : p);
 export type ServerSection = "tasks" | "activity" | "images" | "workflows" | "stores" | "settings";

@@ -3,11 +3,11 @@ import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { TASK_COLUMNS, type TaskRowMode } from "./taskColumns"
 
 export const TASK_COLUMN_LAYOUT_KEY = "tasks:columns:v1"
-export const TASK_COLUMN_LAYOUT_SCHEMA_VERSION = 1 as const
+const TASK_COLUMN_LAYOUT_SCHEMA_VERSION = 1 as const
 
 /** Every column a task table can show, in the default order. `task` takes the
  *  rest of the row, so it can move but has no width of its own. */
-export const TASK_COLUMN_IDS = ["priority", "key", "task", "agent", "server", "status", "duration", "updated"] as const
+const TASK_COLUMN_IDS = ["priority", "key", "task", "agent", "server", "status", "duration", "updated"] as const
 export type TaskColumnId = typeof TASK_COLUMN_IDS[number]
 export type SizedTaskColumnId = Exclude<TaskColumnId, "task">
 
@@ -139,13 +139,13 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
-export function columnsOf(layout: TaskColumnLayout, mode: TaskRowMode): TaskColumn[] {
+function columnsOf(layout: TaskColumnLayout, mode: TaskRowMode): TaskColumn[] {
   return layout.order
     .filter((id) => MODE_COLUMNS[mode].has(id))
     .map((id) => ({ id, width: id === "task" ? undefined : layout.widths[id] }))
 }
 
-export function useTaskColumnLayout(): TaskColumnLayout {
+function useTaskColumnLayout(): TaskColumnLayout {
   return useSyncExternalStore(subscribe, snapshot)
 }
 
@@ -156,7 +156,7 @@ const PHONE_WIDTHS: Partial<Record<TaskColumnId, number>> = { key: 96, status: 8
 
 /** The phone's columns at narrow fixed widths, in the saved order. The saved
  *  layout itself stays for wider screens. */
-export function phoneColumns(columns: TaskColumn[]): TaskColumn[] {
+function phoneColumns(columns: TaskColumn[]): TaskColumn[] {
   return columns
     .filter((column) => column.id === "task" || column.id in PHONE_WIDTHS)
     .map((column) => ({ id: column.id, width: PHONE_WIDTHS[column.id] }))

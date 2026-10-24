@@ -36,7 +36,7 @@ export function isConnectionError(error: unknown): boolean {
 // resolveUrl prepends a daemon's baseURL (absolute cross-origin) or, for the
 // local daemon, the configured local origin — which is "" in a browser, leaving
 // the path relative.
-export function resolveUrl(daemon: Daemon | null, path: string): string {
+function resolveUrl(daemon: Daemon | null, path: string): string {
   if (!daemon) return getLocalBaseURL() + path;
   if (!daemon.baseURL) {
     throw new ApiError(
@@ -55,7 +55,7 @@ function authHeaders(daemon: Daemon | null): Record<string, string> {
 
 // request is the JSON transport against an EXPLICIT daemon descriptor (null =
 // same-origin no-auth). Unwraps the {ok,result}|{ok,error} envelope.
-export async function request<T>(
+async function request<T>(
   daemon: Daemon | null,
   method: string,
   path: string,
@@ -104,7 +104,7 @@ export async function request<T>(
 
 // requestRaw returns the successful Response itself, for archives, uploads and
 // text exports; a failure still becomes an ApiError.
-export async function requestRaw(
+async function requestRaw(
   daemon: Daemon | null,
   method: string,
   path: string,

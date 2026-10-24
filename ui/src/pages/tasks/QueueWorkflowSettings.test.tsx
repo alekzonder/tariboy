@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError, type AgentPool } from "@/lib/api"
 import QueueWorkflowSettings from "./QueueWorkflowSettings"
-import { agentPool, developmentManifest, remoteTarget } from "./workflowFixtures"
+import { agentPool, developmentManifest, remoteTarget } from "@/test/fixtures/workflowFixtures"
 import { fakeApi } from "@/test/api"
 
 const api = vi.hoisted(() => ({

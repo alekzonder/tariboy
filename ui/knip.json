@@ -1,0 +1,10 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["store/main.tsx!"],
+  "project": ["src/**/*.{ts,tsx}!", "store/**/*.{ts,tsx}!", "!src/test/**!"],
+  "ignoreIssues": {
+    "src/components/ui/*.tsx": ["exports"],
+    "src/components/ui/separator.tsx": ["files"],
+    "src/components/ui/tooltip.tsx": ["files"]
+  }
+}
