@@ -2,22 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
-import {
-  ApiError,
-  type AgentPool,
-  type QueueWorkflow,
-  type WorkflowDefinition,
-  type WorkflowImage,
-} from "@/lib/api";
+import type { AgentPool, QueueWorkflow, WorkflowDefinition, WorkflowImage } from "@/lib/api";
 import { EMPTY, LABEL, MONO, SelectShell } from "./panelStyles";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
 import WorkflowStatusMap from "./WorkflowStatusMap";
 import { errorText } from "@/lib/errors";
-
-function detailList(error: ApiError, name: string): string[] {
-  const list = error.details?.[name];
-  return Array.isArray(list) ? list.map(String) : [];
-}
+import { classifyBindError, stillEmptyPools } from "./queueSettingsModel";
 
 /** Images by name, then tag with `latest` first. */
 function sortImages(images: WorkflowImage[]): WorkflowImage[] {
@@ -73,11 +63,6 @@ export default function QueueWorkflowSettings({
   const [missingSecrets, setMissingSecrets] = useState<{ names: string[]; message: string } | null>(
     null,
   );
-  const [definition, setDefinition] = useState<{
-    key: string;
-    value: WorkflowDefinition | null;
-    error: string;
-  }>({ key: "", value: null, error: "" });
   const [busy, setBusy] = useState(false);
   const { confirm, dialog } = useWorkflowConfirm();
 
@@ -100,17 +85,23 @@ export default function QueueWorkflowSettings({
   const sorted = useMemo(() => sortImages(images), [images]);
 
   const refused = async (err: unknown) => {
-    if (err instanceof ApiError && err.code === "revision_conflict") {
-      await loadBinding();
-      setNotice("The binding changed elsewhere. It was reloaded; review and retry.");
-    } else if (err instanceof ApiError && err.code === "workflow_pool_empty") {
-      setEmptyPools({ names: detailList(err, "pools"), message: err.message });
-      onPoolsMissing(detailList(err, "pools"));
-    } else if (err instanceof ApiError && err.code === "workflow_secret_missing") {
-      const missing = { names: detailList(err, "secrets"), message: err.message };
-      setMissingSecrets(missing);
-      onSecretsMissing(missing);
-    } else setError(errorText(err));
+    const refusal = classifyBindError(err);
+    switch (refusal.kind) {
+      case "conflict":
+        await loadBinding();
+        setNotice("The binding changed elsewhere. It was reloaded; review and retry.");
+        return;
+      case "pools":
+        setEmptyPools({ names: refusal.names, message: refusal.message });
+        onPoolsMissing(refusal.names);
+        return;
+      case "secrets":
+        setMissingSecrets({ names: refusal.names, message: refusal.message });
+        onSecretsMissing({ names: refusal.names, message: refusal.message });
+        return;
+      case "other":
+        setError(refusal.message);
+    }
   };
 
   const reset = () => {
@@ -121,28 +112,11 @@ export default function QueueWorkflowSettings({
     onPoolsMissing(null);
     onSecretsMissing(null);
   };
-  const stillEmpty =
-    emptyPools?.names.filter((name) => !pools.find((pool) => pool.name === name)?.agents.length) ??
-    [];
+  const stillEmpty = stillEmptyPools(emptyPools?.names ?? [], pools);
 
   // The chosen image previews its statuses; otherwise the bound one shows, as NAME:DIGEST.
   const shownKey = ref || (binding ? `${binding.name}:${binding.digest}` : "");
-  useEffect(() => {
-    if (!shownKey) return;
-    let alive = true;
-    const colon = shownKey.lastIndexOf(":");
-    api.workflows.getWorkflowImage(shownKey.slice(0, colon), shownKey.slice(colon + 1)).then(
-      (manifest) => {
-        if (alive) setDefinition({ key: shownKey, value: manifest.definition, error: "" });
-      },
-      (err) => {
-        if (alive) setDefinition({ key: shownKey, value: null, error: errorText(err) });
-      },
-    );
-    return () => {
-      alive = false;
-    };
-  }, [shownKey, api]);
+  const definition = useShownDefinition(shownKey);
 
   const bind = async () => {
     reset();
@@ -182,79 +156,183 @@ export default function QueueWorkflowSettings({
   return (
     <section className="flex min-w-0 flex-col gap-2.5" aria-label={`Workflow ${queue}`}>
       <span className={LABEL}>Workflow</span>
-      {loaded &&
-        (binding ? (
-          <p data-testid="binding" className="text-body-sm">
-            {/* The queue settings live at /servers/:hostId/tasks; the image page is a sibling section. */}
-            <Link
-              relative="path"
-              className="font-semibold text-primary hover:underline"
-              to={`../workflows/${encodeURIComponent(binding.name)}/${encodeURIComponent(bindingRef(binding, images))}`}
-            >
-              {binding.name}
-            </Link>{" "}
-            {binding.version}{" "}
-            <span className={MONO} title={binding.digest}>
-              {binding.digest.slice(0, 12)}
-            </span>
-            {binding.tag && (
-              <>
-                {" "}
-                follows <span className={MONO}>{binding.tag}</span>
-              </>
-            )}
-          </p>
-        ) : (
-          <span className={EMPTY}>No workflow</span>
-        ))}
-      {loadError && (
-        <div role="alert" className="flex items-center gap-2 text-ui text-destructive">
-          <span>{loadError}</span>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="h-6.5"
-            onClick={() => void loadBinding()}
-          >
-            Retry
-          </Button>
-        </div>
+      {loaded && <BindingSummary binding={binding} images={images} />}
+      {loadError && <LoadError error={loadError} onRetry={() => void loadBinding()} />}
+      <BindControls
+        images={sorted}
+        value={ref}
+        onChoose={setRef}
+        canBind={!busy && !!ref && loaded}
+        canClear={!busy && loaded && !!binding}
+        onBind={() => void bind()}
+        onClear={clear}
+      />
+      <BindFeedback
+        notice={notice}
+        error={error}
+        emptyPools={emptyPools && { message: emptyPools.message, names: stillEmpty }}
+        missingSecrets={missingSecrets}
+        onOpenTab={onOpenTab}
+      />
+      {shownKey && (
+        <StatusPreview
+          title={ref ? `Statuses of ${ref}` : "Statuses"}
+          definition={definition.key === shownKey ? definition : null}
+          pools={pools}
+          onPool={() => onOpenTab("pools")}
+        />
       )}
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <SelectShell
-          aria-label="Workflow image"
-          value={ref}
-          className="h-6.5 w-auto text-ui md:text-ui"
-          onChange={(event) => setRef(event.target.value)}
-        >
-          <option value="">Choose an image</option>
-          {sorted.map((image) => (
-            <option key={`${image.name}:${image.tag}`} value={`${image.name}:${image.tag}`}>
-              {image.name}:{image.tag}
-            </option>
-          ))}
-        </SelectShell>
-        <Button
-          type="button"
-          size="sm"
-          className="h-6.5"
-          disabled={busy || !ref || !loaded}
-          onClick={() => void bind()}
-        >
-          Bind
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          className="h-6.5"
-          disabled={busy || !loaded || !binding}
-          onClick={clear}
-        >
-          Clear
-        </Button>
-      </div>
+      {dialog}
+    </section>
+  );
+}
+
+interface ShownDefinition {
+  key: string;
+  value: WorkflowDefinition | null;
+  error: string;
+}
+
+/** The statuses of the image named NAME:REF, loaded as the key changes. */
+function useShownDefinition(shownKey: string): ShownDefinition {
+  const api = useApi();
+  const [definition, setDefinition] = useState<ShownDefinition>({
+    key: "",
+    value: null,
+    error: "",
+  });
+  useEffect(() => {
+    if (!shownKey) return;
+    let alive = true;
+    const colon = shownKey.lastIndexOf(":");
+    api.workflows.getWorkflowImage(shownKey.slice(0, colon), shownKey.slice(colon + 1)).then(
+      (manifest) => {
+        if (alive) setDefinition({ key: shownKey, value: manifest.definition, error: "" });
+      },
+      (err) => {
+        if (alive) setDefinition({ key: shownKey, value: null, error: errorText(err) });
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, [shownKey, api]);
+  return definition;
+}
+
+/** The bound image with its version, digest, and followed tag. */
+function BindingSummary({
+  binding,
+  images,
+}: {
+  binding: QueueWorkflow | null;
+  images: WorkflowImage[];
+}) {
+  if (!binding) return <span className={EMPTY}>No workflow</span>;
+  return (
+    <p data-testid="binding" className="text-body-sm">
+      {/* The queue settings live at /servers/:hostId/tasks; the image page is a sibling section. */}
+      <Link
+        relative="path"
+        className="font-semibold text-primary hover:underline"
+        to={`../workflows/${encodeURIComponent(binding.name)}/${encodeURIComponent(bindingRef(binding, images))}`}
+      >
+        {binding.name}
+      </Link>{" "}
+      {binding.version}{" "}
+      <span className={MONO} title={binding.digest}>
+        {binding.digest.slice(0, 12)}
+      </span>
+      {binding.tag && (
+        <>
+          {" "}
+          follows <span className={MONO}>{binding.tag}</span>
+        </>
+      )}
+    </p>
+  );
+}
+
+function LoadError({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="flex items-center gap-2 text-ui text-destructive">
+      <span>{error}</span>
+      <Button type="button" size="sm" variant="secondary" className="h-6.5" onClick={onRetry}>
+        Retry
+      </Button>
+    </div>
+  );
+}
+
+/** The image select with Bind and Clear. */
+function BindControls({
+  images,
+  value,
+  onChoose,
+  canBind,
+  canClear,
+  onBind,
+  onClear,
+}: {
+  images: WorkflowImage[];
+  value: string;
+  onChoose: (ref: string) => void;
+  canBind: boolean;
+  canClear: boolean;
+  onBind: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <SelectShell
+        aria-label="Workflow image"
+        value={value}
+        className="h-6.5 w-auto text-ui md:text-ui"
+        onChange={(event) => onChoose(event.target.value)}
+      >
+        <option value="">Choose an image</option>
+        {images.map((image) => (
+          <option key={`${image.name}:${image.tag}`} value={`${image.name}:${image.tag}`}>
+            {image.name}:{image.tag}
+          </option>
+        ))}
+      </SelectShell>
+      <Button type="button" size="sm" className="h-6.5" disabled={!canBind} onClick={onBind}>
+        Bind
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        className="h-6.5"
+        disabled={!canClear}
+        onClick={onClear}
+      >
+        Clear
+      </Button>
+    </div>
+  );
+}
+
+type Missing = { names: string[]; message: string } | null;
+
+/** What the last bind or clear said: a notice, an error, or what it lacks. */
+function BindFeedback({
+  notice,
+  error,
+  emptyPools,
+  missingSecrets,
+  onOpenTab,
+}: {
+  notice: string;
+  error: string;
+  /** The pools a refused bind named that still have no agents. */
+  emptyPools: Missing;
+  missingSecrets: Missing;
+  onOpenTab: (tab: "pools" | "environment") => void;
+}) {
+  return (
+    <>
       {notice && (
         <p role="status" className="text-ui text-muted-foreground">
           {notice}
@@ -265,63 +343,83 @@ export default function QueueWorkflowSettings({
           {error}
         </p>
       )}
-      {emptyPools && stillEmpty.length > 0 && (
-        <div
-          role="alert"
-          aria-label="Pools needed"
-          className="flex flex-col gap-1 text-ui text-destructive"
-        >
-          <p>{emptyPools.message}</p>
-          <p className="font-mono">{stillEmpty.join(", ")}</p>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="h-6.5 self-start"
-            onClick={() => onOpenTab("pools")}
-          >
-            Open Pools
-          </Button>
-        </div>
+      {emptyPools && emptyPools.names.length > 0 && (
+        <MissingNotice
+          label="Pools needed"
+          message={emptyPools.message}
+          names={emptyPools.names}
+          action="Open Pools"
+          onOpen={() => onOpenTab("pools")}
+        />
       )}
       {missingSecrets && (
-        <div
-          role="alert"
-          aria-label="Secrets needed"
-          className="flex flex-col gap-1 text-ui text-destructive"
-        >
-          <p>{missingSecrets.message}</p>
-          <p className="font-mono">{missingSecrets.names.join(", ")}</p>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="h-6.5 self-start"
-            onClick={() => onOpenTab("environment")}
-          >
-            Open Environment
-          </Button>
-        </div>
+        <MissingNotice
+          label="Secrets needed"
+          message={missingSecrets.message}
+          names={missingSecrets.names}
+          action="Open Environment"
+          onOpen={() => onOpenTab("environment")}
+        />
       )}
-      {shownKey && (
-        <section className="flex min-w-0 flex-col gap-1.5">
-          <span className={LABEL}>{ref ? `Statuses of ${ref}` : "Statuses"}</span>
-          {definition.key !== shownKey ? (
-            <span className={EMPTY}>Loading statuses…</span>
-          ) : definition.value ? (
-            <WorkflowStatusMap
-              definition={definition.value}
-              pools={pools}
-              onPool={() => onOpenTab("pools")}
-            />
-          ) : (
-            <p role="alert" className="text-ui text-destructive">
-              {definition.error}
-            </p>
-          )}
-        </section>
+    </>
+  );
+}
+
+/** What a refused bind still lacks, with a way to the tab that fixes it. */
+function MissingNotice({
+  label,
+  message,
+  names,
+  action,
+  onOpen,
+}: {
+  label: string;
+  message: string;
+  names: string[];
+  action: string;
+  onOpen: () => void;
+}) {
+  return (
+    <div role="alert" aria-label={label} className="flex flex-col gap-1 text-ui text-destructive">
+      <p>{message}</p>
+      <p className="font-mono">{names.join(", ")}</p>
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        className="h-6.5 self-start"
+        onClick={onOpen}
+      >
+        {action}
+      </Button>
+    </div>
+  );
+}
+
+/** The statuses of the shown image; `null` while they load. */
+function StatusPreview({
+  title,
+  definition,
+  pools,
+  onPool,
+}: {
+  title: string;
+  definition: ShownDefinition | null;
+  pools: AgentPool[];
+  onPool: () => void;
+}) {
+  return (
+    <section className="flex min-w-0 flex-col gap-1.5">
+      <span className={LABEL}>{title}</span>
+      {!definition ? (
+        <span className={EMPTY}>Loading statuses…</span>
+      ) : definition.value ? (
+        <WorkflowStatusMap definition={definition.value} pools={pools} onPool={onPool} />
+      ) : (
+        <p role="alert" className="text-ui text-destructive">
+          {definition.error}
+        </p>
       )}
-      {dialog}
     </section>
   );
 }
