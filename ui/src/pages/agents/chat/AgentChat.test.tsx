@@ -236,6 +236,32 @@ it("keeps a chosen message-type filter and refetches with it", async () => {
   );
 });
 
+it("keeps the conversation shown when the read with a new type filter fails", async () => {
+  const calls = stubChat();
+  const fetchChat = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation((...args) => {
+    if (String(args[0]).includes(encodeURIComponent("task.goal"))) {
+      calls.push({ path: String(args[0]), method: "GET", body: undefined });
+      return Promise.resolve({
+        ok: false,
+        status: 500,
+        text: async () =>
+          JSON.stringify({ ok: false, error: { code: "failed", message: "offline" } }),
+      } as Response);
+    }
+    return fetchChat(...args);
+  });
+  renderChat();
+  await screen.findByText("please look at this");
+  await userEvent.click(screen.getByRole("button", { name: "Chat menu" }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: "task.goal" }));
+  await waitFor(() => {
+    expect(calls.some((call) => call.path.includes(encodeURIComponent("task.goal")))).toBe(true);
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(screen.getByText("please look at this")).toBeInTheDocument();
+});
+
 it("draws the unread rule once against the mark the chat was opened at", async () => {
   stubChat(feed, "2026-09-15T10:00:00.000000000Z");
   renderChat();

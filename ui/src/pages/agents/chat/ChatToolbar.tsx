@@ -1,28 +1,9 @@
 import type { ReactNode } from "react";
-import { Check, Download, Mail, MoreHorizontal, Plus, Search } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuCheckItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import type { ChatMessage } from "@/lib/api";
-import { DEFAULT_CHAT_TYPES, EXTRA_CHAT_TYPES } from "./chatTypes";
+import { Check, Mail, Plus, Search } from "lucide-react";
 import { KINDS } from "./chatKinds";
+import { ChatExportButton } from "./ChatExportButton";
+import { ChatTypesMenu } from "./ChatTypesMenu";
 import type { AgentChatState } from "./useAgentChat";
-
-const ALL_TYPES = [...DEFAULT_CHAT_TYPES, ...EXTRA_CHAT_TYPES];
-
-function transcript(messages: ChatMessage[], agent: string): string {
-  return [
-    `# Chat with ${agent}`,
-    "",
-    ...messages.map((message) => `## ${message.from} · ${message.ts}\n\n${message.text}\n`),
-  ].join("\n");
-}
 
 type ToolbarChat = Pick<
   AgentChatState,
@@ -69,17 +50,6 @@ export function ChatToolbar({
     toggleType,
     resetTypes,
   } = chat;
-
-  function exportTranscript() {
-    const url = URL.createObjectURL(
-      new Blob([transcript(messages, name)], { type: "text/markdown" }),
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `chat-${name}.md`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">
@@ -162,42 +132,8 @@ export function ChatToolbar({
             Mark unread
           </button>
         )}
-        <button
-          type="button"
-          aria-label="Export transcript"
-          title="Export transcript"
-          onClick={exportTranscript}
-          disabled={messages.length === 0}
-          className="grid size-6.5 place-items-center rounded-control text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
-        >
-          <Download className="size-3.5" />
-        </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            aria-label="Chat menu"
-            className="grid size-6.5 place-items-center rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <MoreHorizontal className="size-3.5" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>Message types</DropdownMenuLabel>
-            {ALL_TYPES.map((type) => (
-              <DropdownMenuCheckItem
-                key={type}
-                checked={types.includes(type)}
-                onSelect={(event: Event) => {
-                  event.preventDefault();
-                  toggleType(type);
-                }}
-                className="font-mono text-xs"
-              >
-                {type}
-              </DropdownMenuCheckItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={resetTypes}>Reset to the default types</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ChatExportButton messages={messages} name={name} />
+        <ChatTypesMenu types={types} toggleType={toggleType} resetTypes={resetTypes} />
       </div>
     </div>
   );
