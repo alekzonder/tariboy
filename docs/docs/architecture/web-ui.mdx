@@ -547,10 +547,12 @@ Their internal modules separate form state, requests, and presentation:
 `ui/src/lib/storage.ts` owns all access to `localStorage` and `sessionStorage`
 in the Desktop UI and the Store UI. It declares every key in one registry with
 its area, name, version, parser, and fallback value. Other modules call
-`readKey`, `writeKey`, and `removeKey` with a key from that registry. oxlint
-rejects a direct `localStorage`, `sessionStorage`, or `window.dispatchEvent` in
-production code under `ui/src` and `ui/store`. Tests and fixtures still seed
-raw values, so they detect a change of a stored format.
+`readKey`, `writeKey`, and `removeKey` with a key from that registry. The unit
+test `ui/src/test/webStoragePolicy.test.ts` fails when production code under
+`ui/src` or `ui/store` uses `localStorage`, `sessionStorage`, or
+`window.dispatchEvent` directly. It scans the sources because the lint policy
+allows no per-file oxlint overrides. Tests and fixtures still seed raw values,
+so they detect a change of a stored format.
 
 Storage access is best effort. A missing value, a value the parser rejects,
 broken JSON, and storage that throws (blocked, private mode) all read as the

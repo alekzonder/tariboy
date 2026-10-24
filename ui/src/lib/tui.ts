@@ -12,8 +12,8 @@ export function appendDraft(prev: string, extra: string): string {
 
 /** An inject-modal draft for one agent's section. Persistent callers keep the
  * body in Web Storage across modal closes and page reloads, keyed by agent name
- * AND section so the manager and worker drafts never clobber each other. Workspace callers opt out, keeping the body only in component
- * memory. Cleared on explicit Cancel or a successful Send. */
+ * AND section so the manager and worker drafts never clobber each other.
+ * Workspace callers opt out, keeping the body only in component memory. Cleared on explicit Cancel or a successful Send. */
 export function useTuiDraft(name: string, section: string, persistent = true) {
   const key = useMemo(() => storageKeyFamilies.tuiDraft.key(name, section), [name, section]);
   const [text, setTextState] = useState<string>(() => (persistent ? readKey(key) : ""));
