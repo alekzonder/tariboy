@@ -164,7 +164,9 @@ make full-check      # heavy, tens of minutes, includes check
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
-`staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. The
+`staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. Its
+`test` and `tariboy-tasks-e2e` steps also check the HTTP API against the
+committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
 frontend target runs the UI format check, UI typecheck, lint with the
 complexity and size thresholds, the unused-code check, unit tests,
 branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
@@ -291,6 +293,25 @@ command contracts in the separate `tariboy-store` repository's `make check`.
 Changes to queue-trigger delivery also exercise bus/daemon recovery; Compose
 changes exercise `internal/compose`. The isolated Tasks mode path is
 `scripts/tariboy-tasks-e2e.sh`, which runs inside `backend-check`.
+
+The HTTP API contract is checked inside `backend-check`; see
+[Command registry](/docs/architecture#command-registry) for the rules. The
+`test` step fails for a new HTTP command without a result schema, for a
+response that does not match its schema, and for a spec change without an
+updated snapshot. The `tariboy-tasks-e2e` step fails when the isolated daemon
+serves a spec other than the snapshot or answers a typed `GET` route outside
+its schema. The snapshot is `internal/commands/testdata/openapi.json`. A change
+to a command's arguments, summary, route or result type changes the spec, so
+update the snapshot in the same change:
+
+```bash
+go test ./internal/commands -run TestOpenAPISnapshot -update-openapi
+```
+
+Do not add entries to `commandsWithoutResultSchema` in
+`internal/commands/openapi_contract_test.go`. Give a new HTTP command a typed
+result with `registry.WithResult`, and add a call for it to
+`TestTypedResponsesMatchOpenAPI`.
 
 Workflow changes span `internal/workflowfile` and `internal/workflowimage`
 (the image), `internal/tasks` (the engine, run records, queue secrets, and the
