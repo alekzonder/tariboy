@@ -33,3 +33,11 @@ it("passes an awaited response through unchanged", async () => {
   const fetch = routeFetch({ "GET /slow": () => pending }, () => text("fallback"));
   expect(await (await fetch("/slow")).text()).toBe("later");
 });
+
+it("rejects instead of throwing when a handler throws", async () => {
+  const fetch = routeFetch({}, () => {
+    throw new Error("unexpected request");
+  });
+  const result = fetch("/missing");
+  await expect(result).rejects.toThrow("unexpected request");
+});

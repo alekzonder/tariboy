@@ -22,7 +22,7 @@ function matches(route: string, req: FetchRequest) {
 }
 
 export function routeFetch(routes: Record<string, Handler>, fallback: Handler) {
-  return (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
+  return async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
     const url = String(input);
     const parsed = new URL(url, "http://local");
     const req: FetchRequest = {
@@ -34,6 +34,6 @@ export function routeFetch(routes: Record<string, Handler>, fallback: Handler) {
       init,
     };
     const route = Object.keys(routes).find((key) => matches(key, req));
-    return Promise.resolve((route ? routes[route] : fallback)(req));
+    return (route ? routes[route] : fallback)(req);
   };
 }
