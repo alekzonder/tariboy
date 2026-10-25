@@ -1,3 +1,40 @@
+## [0.94.0] - 2026-10-25
+
+### Added
+
+- `ttasks workflow reassign KEY --agent NAME` (operator only,
+  `POST /api/tasks/{key}/workflow/reassign`) gives a workflow task in an open,
+  unpaused pool status to another member of that pool that can work. It
+  resolves the previous holder's open questions to the customer, resets the
+  visit's idle and rejected counters, makes the new agent the sticky holder of
+  the pool and records `workflow.reassigned`. It is refused with
+  `invalid_status_owner`, `workflow_paused`, `transition_pending`,
+  `agent_unavailable` (with `data.cause`) or `invalid_agent`. In the Desktop
+  task sheet the Assignee of such a task is a select of the pool's members that
+  reassigns at once.
+
+### Changed
+
+- Every HTTP command now declares a typed result in the served OpenAPI spec.
+  Response bodies are unchanged; the spec is committed as a snapshot and
+  checked against live responses.
+- The Desktop UI types its daemon responses from types generated from that
+  OpenAPI spec, and loads its pages and editors as separate bundles.
+- All Desktop UI preferences go through one Web Storage registry. Key names and
+  formats are unchanged; blocked, full or corrupt storage now falls back to
+  defaults instead of breaking a page.
+
+### Fixed
+
+- A headless iteration with `hard_timeout_s` and `timeout_s` both `0` is no
+  longer killed after 60 seconds; `0` means no deadline, as on the interactive
+  path.
+- A manual run (`agent exec`, **Run now**) started while the loop was idle now
+  uses agent settings saved in the meantime, such as a new user prompt, from
+  its first iteration.
+
+[0.94.0]: https://github.com/alekzonder/tariboy/compare/v0.93.0...v0.94.0
+
 ## [0.93.0] - 2026-10-23
 
 ### Added
