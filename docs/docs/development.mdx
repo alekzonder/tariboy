@@ -145,6 +145,7 @@ not need to read unrelated subsystems.
 | Images and groups | [Images](/docs/images) and [Images and groups](/docs/images-and-groups) |
 | Plugins and agent tools | [Plugins](/docs/plugins) and [Binaries](/docs/binaries) |
 | Release, support, diagnostics | [Support](/docs/support), [Security and controls](/docs/security-controls), and `docs/internal-alpha-release-runbook.md` |
+| HTTP commands, response types, OpenAPI, generated UI types | [Command registry](/docs/architecture#command-registry), [API layer](/docs/architecture/web-ui#api-layer), and [API types](/docs/architecture/web-ui#api-types) |
 
 If behavior crosses rows, follow all matching routes. For example, a terminal
 change in the Desktop app requires the loop/shim, Web UI, and Desktop/SSH rows.
@@ -341,6 +342,29 @@ The generator, `openapi-typescript`, runs from its own package in
 compiler API, and `ui/` uses TypeScript 7, so the two cannot share one
 `package.json`. `frontend-check` installs the package with
 `scripts/npm-ci-locked.sh` like `ui/` and `docs/`.
+
+#### Changing an API response end to end
+
+One pull request carries an API change from the Go type to the UI. For
+example, to add a field to an agent response:
+
+1. Add the field to the result struct in the domain's `*_types.go` file under
+   `internal/commands`. If the change replaces the result type, first pin the
+   current JSON in the domain's golden test, as described above.
+2. Update the snapshot:
+   `go test ./internal/commands -run TestOpenAPISnapshot -update-openapi`.
+3. Regenerate the UI types: `cd ui && npm run api-types`.
+4. Run `npx tsc -b` in `ui/` and fix every place it names. Add the new field
+   to the factory in `ui/src/test/fixtures/apiFixtures.ts`, so test data stays
+   a complete response.
+5. Use the field in the UI through the domain module's re-exported type.
+6. Run `make check`.
+7. Commit the Go change, `internal/commands/testdata/openapi.json`,
+   `ui/src/lib/api-types.generated.ts`, and the UI change together.
+
+When you rebase such a branch and the snapshot or the generated file
+conflicts, resolve the conflicts in the code, then run steps 2 and 3 again
+instead of merging the generated lines.
 
 Workflow changes span `internal/workflowfile` and `internal/workflowimage`
 (the image), `internal/tasks` (the engine, run records, queue secrets, and the
@@ -1054,6 +1078,12 @@ The two UI targets have different Git contracts:
   After a store UI or relevant shared UI change, run `make store-ui` in an
   isolated worktree at the target commit and commit only the intended generated
   store bundle with its source change.
+- `internal/commands/testdata/openapi.json` and
+  `ui/src/lib/api-types.generated.ts` are committed and never edited by hand.
+  Update the snapshot with
+  `go test ./internal/commands -run TestOpenAPISnapshot -update-openapi` and
+  the UI types with `npm run api-types` from `ui/`; see
+  [Changing an API response end to end](#changing-an-api-response-end-to-end).
 `tariboyd` is API/WebSocket only. It does not embed a Desktop UI, and there is
 no `internal/webui` tree.
 
