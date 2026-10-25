@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { createApi } from "@/lib/api";
 import type { Daemon } from "@/lib/daemons";
 import { useApi } from "@/components/apiContext";
@@ -49,6 +49,69 @@ export function WorkflowTransferDialog({ open, ...props }: Props) {
   return <TransferSession {...props} />;
 }
 
+/** The destination checkboxes and each chosen server's transfer progress. */
+function TargetList({
+  targets,
+  selected,
+  setSelected,
+  rows,
+  disabled,
+}: {
+  targets: { id: string; label: string }[];
+  selected: Set<string>;
+  setSelected: Dispatch<SetStateAction<Set<string>>>;
+  rows: Record<string, Row>;
+  disabled: boolean;
+}) {
+  const allSelected = targets.length > 0 && selected.size === targets.length;
+  const toggle = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  return (
+    <div className="space-y-3">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={disabled}
+        onClick={() =>
+          setSelected(allSelected ? new Set() : new Set(targets.map((target) => target.id)))
+        }
+      >
+        {allSelected ? "Clear all servers" : "All servers"}
+      </Button>
+      <ul className="space-y-2" aria-label="Eligible transfer targets">
+        {targets.map((target) => (
+          <li key={target.id}>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                aria-label={`Transfer to ${target.label}`}
+                checked={selected.has(target.id)}
+                disabled={disabled}
+                onChange={() => toggle(target.id)}
+              />
+              {target.label}
+            </label>
+          </li>
+        ))}
+      </ul>
+      <ul className="space-y-1" aria-label="Transfer progress">
+        {targets
+          .filter((target) => rows[target.id])
+          .map((target) => (
+            <li key={target.id} className="text-sm">
+              {target.label}: {statusLabel(rows[target.id].status)}
+              {rows[target.id].error ? ` — ${rows[target.id].error}` : ""}
+            </li>
+          ))}
+      </ul>
+    </div>
+  );
+}
+
 function TransferSession({ onOpenChange, name, tag, daemons, onComplete }: Omit<Props, "open">) {
   // The source is the host the dialog was opened on; it and one client per
   // destination are fixed for the open dialog.
@@ -75,15 +138,6 @@ function TransferSession({ onOpenChange, name, tag, daemons, onComplete }: Omit<
   const setRow = (id: string, row: Row) => {
     if (mounted.current) setRows((current) => ({ ...current, [id]: row }));
   };
-  const allSelected = targets.length > 0 && selected.size === targets.length;
-
-  const toggle = (id: string) =>
-    setSelected((current) => {
-      const next = new Set(current);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-
   const start = async () => {
     const chosen = targets.filter((target) => selected.has(target.id));
     cancelled.current = false;
@@ -146,44 +200,13 @@ function TransferSession({ onOpenChange, name, tag, daemons, onComplete }: Omit<
             No ready servers are available for transfer.
           </p>
         ) : (
-          <div className="space-y-3">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={phase !== "idle"}
-              onClick={() =>
-                setSelected(allSelected ? new Set() : new Set(targets.map((target) => target.id)))
-              }
-            >
-              {allSelected ? "Clear all servers" : "All servers"}
-            </Button>
-            <ul className="space-y-2" aria-label="Eligible transfer targets">
-              {targets.map((target) => (
-                <li key={target.id}>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      aria-label={`Transfer to ${target.label}`}
-                      checked={selected.has(target.id)}
-                      disabled={phase !== "idle"}
-                      onChange={() => toggle(target.id)}
-                    />
-                    {target.label}
-                  </label>
-                </li>
-              ))}
-            </ul>
-            <ul className="space-y-1" aria-label="Transfer progress">
-              {targets
-                .filter((target) => rows[target.id])
-                .map((target) => (
-                  <li key={target.id} className="text-sm">
-                    {target.label}: {statusLabel(rows[target.id].status)}
-                    {rows[target.id].error ? ` — ${rows[target.id].error}` : ""}
-                  </li>
-                ))}
-            </ul>
-          </div>
+          <TargetList
+            targets={targets}
+            selected={selected}
+            setSelected={setSelected}
+            rows={rows}
+            disabled={phase !== "idle"}
+          />
         )}
         <DialogFooter>
           {phase === "transferring" ? (

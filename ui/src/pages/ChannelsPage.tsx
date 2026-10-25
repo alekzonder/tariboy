@@ -153,28 +153,7 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
         )}
         {sel && (
           <div className="flex min-w-0 flex-1 flex-col border-l">
-            <div className="min-h-0 flex-1 overflow-auto py-1">
-              {msgs.map((m) => (
-                <div
-                  key={m.id}
-                  className="grid grid-cols-[4.5rem_minmax(0,10rem)_minmax(0,1fr)] gap-2.5 px-4 py-1.5 text-body-sm"
-                >
-                  <span
-                    className="font-mono text-meta text-muted-foreground tabular-nums"
-                    title={m.ts}
-                  >
-                    {m.ts ? fmtTime(m.ts) : ""}
-                  </span>
-                  <span className="truncate font-mono text-meta text-muted-foreground">
-                    {m.source} · {m.type}
-                  </span>
-                  <span className="break-words whitespace-pre-wrap">{m.text}</span>
-                </div>
-              ))}
-              {msgs.length === 0 && (
-                <p className="px-4 py-2 text-sm text-muted-foreground">No messages.</p>
-              )}
-            </div>
+            <ChannelTail msgs={msgs} />
             <Watches watches={watches} />
             <div className="flex gap-2 border-t px-3 py-2.5">
               <Input
@@ -199,6 +178,29 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ChannelTail is the selected channel's recent messages, oldest first.
+function ChannelTail({ msgs }: { msgs: Msg[] }) {
+  return (
+    <div className="min-h-0 flex-1 overflow-auto py-1">
+      {msgs.map((m) => (
+        <div
+          key={m.id}
+          className="grid grid-cols-[4.5rem_minmax(0,10rem)_minmax(0,1fr)] gap-2.5 px-4 py-1.5 text-body-sm"
+        >
+          <span className="font-mono text-meta text-muted-foreground tabular-nums" title={m.ts}>
+            {m.ts ? fmtTime(m.ts) : ""}
+          </span>
+          <span className="truncate font-mono text-meta text-muted-foreground">
+            {m.source} · {m.type}
+          </span>
+          <span className="break-words whitespace-pre-wrap">{m.text}</span>
+        </div>
+      ))}
+      {msgs.length === 0 && <p className="px-4 py-2 text-sm text-muted-foreground">No messages.</p>}
     </div>
   );
 }

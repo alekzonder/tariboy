@@ -76,6 +76,102 @@ export function RunStateActions({ name, refresh }: { name: string; refresh?: () 
   );
 }
 
+function ExecDialog({
+  open,
+  pending,
+  disabled,
+  prompt,
+  setPrompt,
+  setOpen,
+  onExec,
+}: {
+  open: boolean;
+  pending: boolean;
+  disabled: boolean;
+  prompt: string;
+  setPrompt: (prompt: string) => void;
+  setOpen: (open: boolean) => void;
+  onExec: () => void;
+}) {
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!pending) setOpen(next);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Exec one-shot iteration</DialogTitle>
+          <DialogDescription>
+            Runs one iteration now; the optional text applies only to it.
+          </DialogDescription>
+        </DialogHeader>
+        <Textarea
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          placeholder="one-shot prompt (optional)"
+          disabled={pending}
+        />
+        <DialogFooter>
+          <Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button disabled={pending || disabled} onClick={onExec}>
+            Exec
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteAgentDialog({
+  name,
+  open,
+  pending,
+  setOpen,
+  onDelete,
+}: {
+  name: string;
+  open: boolean;
+  pending: boolean;
+  setOpen: (open: boolean) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!pending) setOpen(next);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete agent {name}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This permanently deletes the agent and all of its durable data. This action cannot be
+            undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={pending}
+            onClick={(event) => {
+              event.preventDefault();
+              onDelete();
+            }}
+          >
+            {pending ? "Deleting…" : "Delete agent"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 /**
  * The action cluster on the right of the agent header: the run-state toggle,
  * Kill, and an overflow menu for everything that is not a per-second decision.
@@ -224,65 +320,22 @@ export function AgentControls({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog
+      <ExecDialog
         open={execOpen}
-        onOpenChange={(open) => {
-          if (!execPending) setExecOpen(open);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Exec one-shot iteration</DialogTitle>
-            <DialogDescription>
-              Runs one iteration now; the optional text applies only to it.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder="one-shot prompt (optional)"
-            disabled={execPending}
-          />
-          <DialogFooter>
-            <Button variant="outline" disabled={execPending} onClick={() => setExecOpen(false)}>
-              Cancel
-            </Button>
-            <Button disabled={execPending || disabled} onClick={() => void exec()}>
-              Exec
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog
+        pending={execPending}
+        disabled={disabled}
+        prompt={prompt}
+        setPrompt={setPrompt}
+        setOpen={setExecOpen}
+        onExec={() => void exec()}
+      />
+      <DeleteAgentDialog
+        name={name}
         open={deleteOpen}
-        onOpenChange={(open) => {
-          if (!deletePending) setDeleteOpen(open);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete agent {name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This permanently deletes the agent and all of its durable data. This action cannot be
-              undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletePending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={deletePending}
-              onClick={(event) => {
-                event.preventDefault();
-                void remove();
-              }}
-            >
-              {deletePending ? "Deleting…" : "Delete agent"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        pending={deletePending}
+        setOpen={setDeleteOpen}
+        onDelete={() => void remove()}
+      />
     </div>
   );
 }

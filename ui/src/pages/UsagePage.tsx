@@ -80,96 +80,108 @@ export default function UsagePage() {
 
       <DailyUsage series={data?.series ?? []} />
 
-      <section aria-labelledby="usage-aggregates-heading">
-        <h2 id="usage-aggregates-heading" className="mb-2 text-base font-semibold">
-          Usage by agent
-        </h2>
-        <div className="overflow-x-auto rounded border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Agent</th>
-                <th className="px-3 py-2">Image</th>
-                <th className="px-3 py-2">Group</th>
-                <th className="px-3 py-2 text-right">Requests</th>
-                <th className="px-3 py-2 text-right">In</th>
-                <th className="px-3 py-2 text-right">Out</th>
-                <th className="px-3 py-2 text-right">Cache W</th>
-                <th className="px-3 py-2 text-right">Cache R</th>
-                <th className="px-3 py-2 text-right">Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={`${r.agent}:${r.image}:${r.group_id ?? ""}:${i}`} className="border-t">
-                  <td className="px-3 py-1.5">{r.agent}</td>
-                  <td className="px-3 py-1.5 text-muted-foreground">{r.image}</td>
-                  <td className="px-3 py-1.5">{r.group_name || "Ungrouped"}</td>
-                  <td className="px-3 py-1.5 text-right">{r.requests}</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{r.input_tokens}</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{r.output_tokens}</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{r.cache_write_tokens}</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{r.cache_read_tokens}</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{fmtCost(r.cost_usd)}</td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="px-3 py-4 text-center text-muted-foreground">
-                    No usage yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <UsageByAgent rows={rows} />
 
-      <section aria-labelledby="recent-requests-heading">
-        <h2 id="recent-requests-heading" className="mb-2 text-base font-semibold">
-          Recent requests
-        </h2>
-        <div className="overflow-x-auto rounded border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Timestamp</th>
-                <th className="px-3 py-2">Agent</th>
-                <th className="px-3 py-2">Model</th>
-                <th className="px-3 py-2">Group</th>
-                <th className="px-3 py-2 text-right">Input</th>
-                <th className="px-3 py-2 text-right">Output</th>
-                <th className="px-3 py-2 text-right">Cache W</th>
-                <th className="px-3 py-2 text-right">Cache R</th>
-                <th className="px-3 py-2 text-right">Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {requests.map((request) => (
-                <tr key={request.id} className="border-t">
-                  <td className="px-3 py-1.5 whitespace-nowrap">{fmtDateTime(request.ts)}</td>
-                  <td className="px-3 py-1.5">{request.agent}</td>
-                  <td className="px-3 py-1.5 font-mono">{request.model}</td>
-                  <td className="px-3 py-1.5">{request.group_name || "Ungrouped"}</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{request.input_tokens}</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{request.output_tokens}</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{request.cache_write_tokens}</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{request.cache_read_tokens}</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{fmtCost(request.cost_usd)}</td>
-                </tr>
-              ))}
-              {requests.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="px-3 py-4 text-center text-muted-foreground">
-                    No recent requests.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <RecentRequests requests={requests} />
     </div>
+  );
+}
+
+function UsageByAgent({ rows }: { rows: UsageReport["rows"] }) {
+  return (
+    <section aria-labelledby="usage-aggregates-heading">
+      <h2 id="usage-aggregates-heading" className="mb-2 text-base font-semibold">
+        Usage by agent
+      </h2>
+      <div className="overflow-x-auto rounded border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+            <tr>
+              <th className="px-3 py-2">Agent</th>
+              <th className="px-3 py-2">Image</th>
+              <th className="px-3 py-2">Group</th>
+              <th className="px-3 py-2 text-right">Requests</th>
+              <th className="px-3 py-2 text-right">In</th>
+              <th className="px-3 py-2 text-right">Out</th>
+              <th className="px-3 py-2 text-right">Cache W</th>
+              <th className="px-3 py-2 text-right">Cache R</th>
+              <th className="px-3 py-2 text-right">Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={`${r.agent}:${r.image}:${r.group_id ?? ""}:${i}`} className="border-t">
+                <td className="px-3 py-1.5">{r.agent}</td>
+                <td className="px-3 py-1.5 text-muted-foreground">{r.image}</td>
+                <td className="px-3 py-1.5">{r.group_name || "Ungrouped"}</td>
+                <td className="px-3 py-1.5 text-right">{r.requests}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{r.input_tokens}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{r.output_tokens}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{r.cache_write_tokens}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{r.cache_read_tokens}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{fmtCost(r.cost_usd)}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={9} className="px-3 py-4 text-center text-muted-foreground">
+                  No usage yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function RecentRequests({ requests }: { requests: UsageReport["requests"] }) {
+  return (
+    <section aria-labelledby="recent-requests-heading">
+      <h2 id="recent-requests-heading" className="mb-2 text-base font-semibold">
+        Recent requests
+      </h2>
+      <div className="overflow-x-auto rounded border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+            <tr>
+              <th className="px-3 py-2">Timestamp</th>
+              <th className="px-3 py-2">Agent</th>
+              <th className="px-3 py-2">Model</th>
+              <th className="px-3 py-2">Group</th>
+              <th className="px-3 py-2 text-right">Input</th>
+              <th className="px-3 py-2 text-right">Output</th>
+              <th className="px-3 py-2 text-right">Cache W</th>
+              <th className="px-3 py-2 text-right">Cache R</th>
+              <th className="px-3 py-2 text-right">Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {requests.map((request) => (
+              <tr key={request.id} className="border-t">
+                <td className="px-3 py-1.5 whitespace-nowrap">{fmtDateTime(request.ts)}</td>
+                <td className="px-3 py-1.5">{request.agent}</td>
+                <td className="px-3 py-1.5 font-mono">{request.model}</td>
+                <td className="px-3 py-1.5">{request.group_name || "Ungrouped"}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{request.input_tokens}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{request.output_tokens}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{request.cache_write_tokens}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{request.cache_read_tokens}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{fmtCost(request.cost_usd)}</td>
+              </tr>
+            ))}
+            {requests.length === 0 && (
+              <tr>
+                <td colSpan={9} className="px-3 py-4 text-center text-muted-foreground">
+                  No recent requests.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

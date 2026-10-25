@@ -13,6 +13,49 @@ import { useFollowRequest, useMounted } from "./workflowShared";
 /** The transition message limit of the daemon, in characters. */
 const MAX_MESSAGE = 4096;
 
+/** The pool statuses to return to: those an outcome reaches, then those only a move reaches. */
+function ReturnTargetSelect({
+  targets,
+  value,
+  onChange,
+}: {
+  targets: ReturnTarget[];
+  value: string;
+  onChange: (status: string) => void;
+}) {
+  const byOutcome = targets.filter((candidate) => candidate.via === "advance");
+  const byMove = targets.filter((candidate) => candidate.via === "move");
+  return (
+    <SelectShell
+      autoFocus
+      aria-label="Return to status"
+      value={value}
+      className="h-6.5 w-auto max-w-full text-ui md:text-ui"
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {byOutcome.length > 0 && (
+        <optgroup label="By outcome">
+          {byOutcome.map((candidate) => (
+            <option key={candidate.status} value={candidate.status}>
+              {candidate.status} ({candidate.outcome})
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {byMove.length > 0 && (
+        <optgroup label="By move">
+          {byMove.map((candidate) => (
+            <option key={candidate.status} value={candidate.status}>
+              {candidate.status}
+              {candidate.reason === "restart" ? " (restart this step)" : ""}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </SelectShell>
+  );
+}
+
 /**
  * Sends the task back to an agent with what to change. Where the current
  * status declares an outcome to a pool status and the customer may declare
@@ -43,8 +86,6 @@ export default function ReturnToAgent({
   const { confirm, dialog } = useWorkflowConfirm();
   const mountedRef = useMounted();
   const chosen = targets.find((candidate) => candidate.status === status);
-  const byOutcome = targets.filter((candidate) => candidate.via === "advance");
-  const byMove = targets.filter((candidate) => candidate.via === "move");
 
   const send = (candidate: ReturnTarget) => {
     const text = message.trim();
@@ -106,33 +147,7 @@ export default function ReturnToAgent({
       <span className={LABEL}>Return to agent</span>
       {targets.length === 0 && <span className={EMPTY}>No pool status to return to.</span>}
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <SelectShell
-          autoFocus
-          aria-label="Return to status"
-          value={status}
-          className="h-6.5 w-auto max-w-full text-ui md:text-ui"
-          onChange={(event) => setStatus(event.target.value)}
-        >
-          {byOutcome.length > 0 && (
-            <optgroup label="By outcome">
-              {byOutcome.map((candidate) => (
-                <option key={candidate.status} value={candidate.status}>
-                  {candidate.status} ({candidate.outcome})
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {byMove.length > 0 && (
-            <optgroup label="By move">
-              {byMove.map((candidate) => (
-                <option key={candidate.status} value={candidate.status}>
-                  {candidate.status}
-                  {candidate.reason === "restart" ? " (restart this step)" : ""}
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </SelectShell>
+        <ReturnTargetSelect targets={targets} value={status} onChange={setStatus} />
         {chosen && (
           <span className={EMPTY}>
             {chosen.via === "advance" ? `declares ${chosen.outcome}` : "operator move"}

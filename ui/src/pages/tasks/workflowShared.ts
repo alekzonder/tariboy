@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useApi } from "@/components/apiContext";
-import { ApiError, type TransitionRequest } from "@/lib/api";
+import { ApiError, type Task, type TransitionRequest, type WorkflowView } from "@/lib/api";
 import type { StatusTone } from "@/lib/statusTone";
 
 /** Helpers shared by the workflow panel and the queue workflow settings. */
@@ -15,6 +15,18 @@ export function keyProblem(key: string): string {
     return "A key starts with a letter or underscore and holds letters, digits, and underscores.";
   if (key.startsWith("TARIBOY_")) return "A key must not start with TARIBOY_.";
   return "";
+}
+
+/**
+ * The pool whose members may take the task's current status: set only in an
+ * open, unpaused pool status the viewer may edit, and empty anywhere else.
+ */
+export function assignablePool(task: Task, view: WorkflowView | undefined): string {
+  if (task.access === "context" || task.access === "respond") return "";
+  if (!view || view.paused_reason || view.waiting_on === "pause") return "";
+  if (!view.owner.startsWith("pool:")) return "";
+  if (task.category === "done" || task.category === "cancelled") return "";
+  return view.owner.slice("pool:".length);
 }
 
 /** A ref that is true while the component is mounted, for async callbacks. */
