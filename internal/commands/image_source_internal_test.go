@@ -24,8 +24,8 @@ func TestImageSourceValidateAcceptsNewV2Source(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response := result.(map[string]any)
-	if response["valid"] != true || len(response["diagnostics"].([]any)) != 0 {
+	response := result.(ImageSourceValidateResult)
+	if !response.Valid || response.Diagnostics == nil || len(response.Diagnostics) != 0 {
 		t.Fatalf("validation response = %#v", response)
 	}
 }
@@ -48,7 +48,7 @@ func TestImageSourceBuildCopiesGitProvenanceIntoSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	digest := result.(map[string]any)["digest"].(string)
+	digest := result.(ImageSourceBuildResult).Digest
 	snapshot, ok, err := imageSnapshotStore(c).LookupDigest(context.Background(), digest)
 	if err != nil || !ok {
 		t.Fatalf("LookupDigest = ok %v, err %v", ok, err)

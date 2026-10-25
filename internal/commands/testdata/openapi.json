@@ -1261,6 +1261,791 @@
         ],
         "type": "object"
       },
+      "ImageBuildResult": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "type": "string"
+          },
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/ImageBuilt"
+            },
+            "type": "array"
+          },
+          "layers": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ImageBuilt": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "type": "string"
+          },
+          "layers": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tag",
+          "digest",
+          "layers"
+        ],
+        "type": "object"
+      },
+      "ImageDiagnostic": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "message"
+        ],
+        "type": "object"
+      },
+      "ImageFileContent": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "type": "object"
+      },
+      "ImageFileEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "is_dir": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "is_dir",
+          "size"
+        ],
+        "type": "object"
+      },
+      "ImageFilesResult": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/ImageFileEntry"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "files",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ImageLayer": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "ImageListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/ImageSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "images",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ImageManifest": {
+        "additionalProperties": false,
+        "properties": {
+          "bare": {
+            "type": "boolean"
+          },
+          "built_at": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "object"
+          },
+          "harness": {
+            "$ref": "#/components/schemas/ImageManifestHarness"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image_version": {
+            "type": "string"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/ImageLayer"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parents": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "plugins": {
+            "items": {
+              "$ref": "#/components/schemas/ImageManifestPlugin"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/ImageManifestPolicy"
+          },
+          "prompt_template_sha256": {
+            "type": "string"
+          },
+          "requires_secrets": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "skills": {
+            "items": {
+              "$ref": "#/components/schemas/ImageSkill"
+            },
+            "type": "array"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "name",
+          "built_at",
+          "parents",
+          "plugins",
+          "requires_secrets",
+          "harness",
+          "env",
+          "policy",
+          "layers"
+        ],
+        "type": "object"
+      },
+      "ImageManifestHarness": {
+        "additionalProperties": false,
+        "properties": {
+          "effort": {
+            "type": "string"
+          },
+          "interactive": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "interactive"
+        ],
+        "type": "object"
+      },
+      "ImageManifestPlugin": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ImageManifestPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "tools_allow": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tools_deny": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ImageNullableString": {
+        "nullable": true,
+        "type": "string"
+      },
+      "ImagePromptResult": {
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      },
+      "ImagePromptTemplate": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ImageTemplateEntry"
+            },
+            "type": "array"
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "entries",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "ImageProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "built_at": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "git_commit": {
+            "type": "string"
+          },
+          "lock_digest": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "repository_id": {
+            "type": "string"
+          },
+          "source_available": {
+            "type": "boolean"
+          },
+          "source_cwd": {
+            "$ref": "#/components/schemas/ImageNullableString"
+          },
+          "source_digest": {
+            "type": "string"
+          },
+          "source_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "source_cwd",
+          "source_available"
+        ],
+        "type": "object"
+      },
+      "ImageRemoveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "removed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "type": "object"
+      },
+      "ImageSkill": {
+        "additionalProperties": false,
+        "properties": {
+          "archive_root": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "client_version": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "file_count": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "tree_sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "source",
+          "category",
+          "archive_root",
+          "file_count",
+          "size",
+          "tree_sha256"
+        ],
+        "type": "object"
+      },
+      "ImageSource": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "last_build": {
+            "$ref": "#/components/schemas/ImageSourceBuildRecord"
+          },
+          "name": {
+            "type": "string"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ImageSourceProvenance"
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "name",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "ImageSourceBuildRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "built_at": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "digest",
+          "built_at"
+        ],
+        "type": "object"
+      },
+      "ImageSourceBuildResult": {
+        "additionalProperties": false,
+        "properties": {
+          "built_at": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "layers": {
+            "type": "integer"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "digest",
+          "built_at",
+          "layers"
+        ],
+        "type": "object"
+      },
+      "ImageSourceFileEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "size"
+        ],
+        "type": "object"
+      },
+      "ImageSourceFilesResult": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/ImageSourceFileEntry"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "files",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ImageSourceListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ImageSource"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ImageSourceProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "git_commit": {
+            "type": "string"
+          },
+          "lock_digest": {
+            "type": "string"
+          },
+          "repository_id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ImageSourceSaveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "saved": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "saved"
+        ],
+        "type": "object"
+      },
+      "ImageSourceValidateResult": {
+        "additionalProperties": false,
+        "properties": {
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/ImageDiagnostic"
+            },
+            "type": "array"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid",
+          "diagnostics"
+        ],
+        "type": "object"
+      },
+      "ImageSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "bare": {
+            "type": "boolean"
+          },
+          "built_at": {
+            "type": "string"
+          },
+          "current_agents": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "exportable": {
+            "type": "boolean"
+          },
+          "image_version": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pending_agents": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "source_available": {
+            "type": "boolean"
+          },
+          "source_cwd": {
+            "type": "string"
+          },
+          "source_digest": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "name",
+          "tag",
+          "digest",
+          "built_at",
+          "bare",
+          "current_agents",
+          "pending_agents",
+          "exportable"
+        ],
+        "type": "object"
+      },
+      "ImageTemplateEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "archive_path": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "runtime": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "ImageValidateResult": {
+        "additionalProperties": false,
+        "properties": {
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/ImageDiagnostic"
+            },
+            "type": "array"
+          },
+          "plugins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "skills": {
+            "items": {
+              "$ref": "#/components/schemas/ImageSkill"
+            },
+            "type": "array"
+          },
+          "template": {
+            "$ref": "#/components/schemas/ImageValidateTemplate"
+          },
+          "valid": {
+            "type": "boolean"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ImageDiagnostic"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "valid",
+          "schema_version",
+          "plugins",
+          "skills",
+          "template",
+          "diagnostics",
+          "warnings"
+        ],
+        "type": "object"
+      },
+      "ImageValidateTemplate": {
+        "additionalProperties": false,
+        "nullable": true,
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ImageTemplateEntry"
+            },
+            "type": "array"
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "entries",
+          "sha256"
+        ],
+        "type": "object"
+      },
       "InboxClearResult": {
         "additionalProperties": false,
         "properties": {
@@ -1916,6 +2701,148 @@
           "status",
           "entered_at",
           "entered_by"
+        ],
+        "type": "object"
+      },
+      "StoreAutoBuild": {
+        "additionalProperties": false,
+        "properties": {
+          "images": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "interval_minutes": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "interval_minutes",
+          "images"
+        ],
+        "type": "object"
+      },
+      "StoreDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "auto": {
+            "$ref": "#/components/schemas/StoreAutoBuild"
+          },
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/StoreImageView"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "workflows": {
+            "items": {
+              "$ref": "#/components/schemas/StoreWorkflowView"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "source",
+          "path",
+          "images",
+          "workflows",
+          "auto"
+        ],
+        "type": "object"
+      },
+      "StoreImageView": {
+        "additionalProperties": false,
+        "properties": {
+          "built_version": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "latest_error": {
+            "type": "string"
+          },
+          "latest_status": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "update_needed": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "built_version",
+          "update_needed",
+          "latest_status"
+        ],
+        "type": "object"
+      },
+      "StoreRemoveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "removed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "type": "object"
+      },
+      "StoreView": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "source",
+          "path"
+        ],
+        "type": "object"
+      },
+      "StoreWorkflowView": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
         ],
         "type": "object"
       },
@@ -13908,7 +14835,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageSourceListResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -13995,7 +14924,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageSource"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14072,7 +15003,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageRemoveResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14147,7 +15080,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageSource"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14240,7 +15175,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageSourceBuildResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14317,7 +15254,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageSourceFilesResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14403,7 +15342,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageFileContent"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14506,7 +15447,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageSourceSaveResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14594,7 +15537,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageSourceValidateResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14660,7 +15605,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageListResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14765,7 +15712,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageBuildResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14859,7 +15808,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageValidateResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14936,7 +15887,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageRemoveResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15020,7 +15973,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageManifest"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15106,7 +16061,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageFilesResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15201,7 +16158,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageFileContent"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15287,7 +16246,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImagePromptResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15373,7 +16334,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImageProvenance"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15459,7 +16422,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ImagePromptTemplate"
+                    }
                   },
                   "required": [
                     "ok",
@@ -16699,7 +17664,12 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "items": {
+                        "$ref": "#/components/schemas/StoreView"
+                      },
+                      "type": "array"
+                    }
                   },
                   "required": [
                     "ok",
@@ -16787,7 +17757,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/StoreView"
+                    }
                   },
                   "required": [
                     "ok",
@@ -16864,7 +17836,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/StoreRemoveResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -16939,7 +17913,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/StoreDetail"
+                    }
                   },
                   "required": [
                     "ok",
@@ -17039,7 +18015,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/StoreDetail"
+                    }
                   },
                   "required": [
                     "ok",
@@ -17127,7 +18105,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/StoreDetail"
+                    }
                   },
                   "required": [
                     "ok",

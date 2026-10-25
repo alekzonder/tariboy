@@ -40,7 +40,7 @@ func imagePluginResolver(c *registry.Ctx, pluginsDir string) plugincaps.External
 }
 
 func imageBuild() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ImageBuildResult](registry.Command{
 		Path:        "image.build",
 		AbsPathArgs: []string{"path"},
 		Summary:     "Build an agent image from a Tariboyfile.yaml",
@@ -91,7 +91,7 @@ func imageBuild() registry.Command {
 			defer cleanup()
 			return publishImage(c, params, source)
 		},
-	}
+	})
 }
 
 // imageBuildParams holds the checked request parameters of image.build.
@@ -224,13 +224,13 @@ func freezeImageSource(c *registry.Ctx, params imageBuildParams, locks imageBuil
 // publishImage builds the image from source, moves every requested tag onto
 // it and records its provenance in one transaction. A failure restores the
 // previous images.
-func publishImage(c *registry.Ctx, params imageBuildParams, source imageBuildSource) (any, error) {
+func publishImage(c *registry.Ctx, params imageBuildParams, source imageBuildSource) (ImageBuildResult, error) {
 	refs := source.refs
 	pluginsDir := paths.Paths{Base: c.BaseDir}.PluginsDir()
 	resolver := imagePluginResolver(c, pluginsDir)
 	builtAt := time.Now()
 	clock := func() time.Time { return builtAt }
-	var result any
+	var result ImageBuildResult
 	// Every ref of one build shares the image name. freezeImageSource has
 	// already migrated the store.
 	err := image.WithRefLock(refs[0].Name, func() error {
@@ -256,7 +256,7 @@ func publishImage(c *registry.Ctx, params imageBuildParams, source imageBuildSou
 				return restore("build_failed", err)
 			}
 		}
-		results := make([]map[string]any, 0, len(refs))
+		results := make([]ImageBuilt, 0, len(refs))
 		tx, err := c.Store.DB.BeginTx(context.Background(), nil)
 		if err != nil {
 			return restore("provenance_failed", err)
@@ -270,20 +270,21 @@ func publishImage(c *registry.Ctx, params imageBuildParams, source imageBuildSou
 			if err := provenanceStore.UpsertTx(tx, imageprovenance.Record{Ref: ref.String(), Digest: man.Digest, SourceCWD: source.sourceCWD, BuiltAt: man.BuiltAt}); err != nil {
 				return restore("provenance_failed", err)
 			}
-			results = append(results, map[string]any{"name": man.Name, "tag": ref.Tag, "digest": man.Digest, "layers": len(man.Layers)})
+			results = append(results, ImageBuilt{Name: man.Name, Tag: ref.Tag, Digest: man.Digest, Layers: len(man.Layers)})
 		}
 		if err := tx.Commit(); err != nil {
 			return restore("provenance_failed", err)
 		}
 		if len(results) == 1 || source.defaultTags {
-			result = results[0]
+			first := results[0]
+			result = ImageBuildResult{Name: first.Name, Tag: first.Tag, Digest: first.Digest, Layers: &first.Layers}
 		} else {
-			result = map[string]any{"images": results}
+			result = ImageBuildResult{Images: results}
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return ImageBuildResult{}, err
 	}
 	return result, nil
 }
@@ -328,7 +329,7 @@ func canonicalSourceDir(input string) (string, error) {
 }
 
 func imageValidate() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ImageValidateResult](registry.Command{
 		Path: "image.validate", Summary: "Validate an image source directory",
 		AbsPathArgs:  []string{"path"},
 		ExitCodeFrom: invalidExitCode,
@@ -354,7 +355,7 @@ func imageValidate() registry.Command {
 				diagnostic = "image " + ref.String() + " is managed by tariboyd"
 			}
 			if diagnostic != "" {
-				return map[string]any{"valid": false, "schema_version": 0, "plugins": []string{}, "skills": []agentskills.Metadata{}, "template": nil, "diagnostics": []map[string]string{{"path": "name/tag", "message": diagnostic}}, "warnings": []any{}}, nil
+				return imageValidateFailure(0, []string{}, "name/tag", diagnostic), nil
 			}
 			parsed, err := imagefile.ParseV2(p.String("path"))
 			if err == nil && len(parsed.Extends) > 0 {
@@ -367,7 +368,7 @@ func imageValidate() registry.Command {
 				}
 			}
 			if err != nil {
-				return map[string]any{"valid": false, "schema_version": 0, "plugins": []string{}, "skills": []agentskills.Metadata{}, "template": nil, "diagnostics": []map[string]string{{"path": "Tariboyfile.yaml", "message": err.Error()}}, "warnings": []any{}}, nil
+				return imageValidateFailure(0, []string{}, "Tariboyfile.yaml", err.Error()), nil
 			}
 			layout := paths.Paths{Base: c.BaseDir}
 			var pluginStore *plugins.Store
@@ -380,15 +381,29 @@ func imageValidate() registry.Command {
 				pluginNames = append(pluginNames, plugin.Name)
 			}
 			if validateErr != nil {
-				return map[string]any{"valid": false, "schema_version": 2, "plugins": pluginNames, "skills": []agentskills.Metadata{}, "template": nil, "diagnostics": []map[string]string{{"path": "Tariboyfile.yaml", "message": validateErr.Error()}}, "warnings": []any{}}, nil
+				return imageValidateFailure(2, pluginNames, "Tariboyfile.yaml", validateErr.Error()), nil
 			}
-			return map[string]any{"valid": true, "schema_version": 2, "plugins": pluginNames, "skills": validated.Skills, "template": validated.Template, "diagnostics": []any{}, "warnings": v2ValidationWarnings(parsed, validated, pluginStore)}, nil
+			template := imagePromptTemplate(validated.Template)
+			return ImageValidateResult{
+				Valid: true, SchemaVersion: 2, Plugins: pluginNames, Skills: imageSkills(validated.Skills),
+				Template:    ImageValidateTemplate{ImagePromptTemplate: &template},
+				Diagnostics: []ImageDiagnostic{}, Warnings: v2ValidationWarnings(parsed, validated, pluginStore),
+			}, nil
 		},
+	})
+}
+
+// imageValidateFailure is the image.validate result of an invalid source: one
+// diagnostic, no skills and a null template.
+func imageValidateFailure(schemaVersion int, plugins []string, path, message string) ImageValidateResult {
+	return ImageValidateResult{
+		SchemaVersion: schemaVersion, Plugins: plugins, Skills: []ImageSkill{},
+		Diagnostics: []ImageDiagnostic{{Path: path, Message: message}}, Warnings: []ImageDiagnostic{},
 	}
 }
 
-func v2ValidationWarnings(source *imagefile.V2, validated image.ValidationV2, pluginStore *plugins.Store) []map[string]string {
-	warnings := []map[string]string{}
+func v2ValidationWarnings(source *imagefile.V2, validated image.ValidationV2, pluginStore *plugins.Store) []ImageDiagnostic {
+	warnings := []ImageDiagnostic{}
 	hasIdentity, hasFinish := false, false
 	staticForPlugin := map[string]bool{}
 	for i, entry := range validated.Template.Entries {
@@ -399,10 +414,10 @@ func v2ValidationWarnings(source *imagefile.V2, validated image.ValidationV2, pl
 			continue
 		}
 		if filepath.IsAbs(entry.Source) {
-			warnings = append(warnings, map[string]string{"path": fmt.Sprintf("prompts[%d]", i), "message": "absolute prompt path makes the original source host-bound"})
+			warnings = append(warnings, ImageDiagnostic{Path: fmt.Sprintf("prompts[%d]", i), Message: "absolute prompt path makes the original source host-bound"})
 		}
 		if entry.Size >= 128<<10 {
-			warnings = append(warnings, map[string]string{"path": fmt.Sprintf("prompts[%d]", i), "message": "large static prompt may exceed an interactive harness argument limit"})
+			warnings = append(warnings, ImageDiagnostic{Path: fmt.Sprintf("prompts[%d]", i), Message: "large static prompt may exceed an interactive harness argument limit"})
 		}
 		if strings.HasSuffix(filepath.ToSlash(entry.Source), "/loop/finish.md") {
 			hasFinish = true
@@ -417,7 +432,7 @@ func v2ValidationWarnings(source *imagefile.V2, validated image.ValidationV2, pl
 			parts := strings.Split(strings.TrimPrefix(entry.Source, "$PLUGINS/"), "/")
 			if len(parts) >= 3 {
 				if active, ok, err := pluginStore.ActiveVersion(parts[0]); err == nil && ok && active != parts[1] {
-					warnings = append(warnings, map[string]string{"path": fmt.Sprintf("prompts[%d]", i), "message": fmt.Sprintf("static plugin version %s/%s differs from active runtime version %s", parts[0], parts[1], active)})
+					warnings = append(warnings, ImageDiagnostic{Path: fmt.Sprintf("prompts[%d]", i), Message: fmt.Sprintf("static plugin version %s/%s differs from active runtime version %s", parts[0], parts[1], active)})
 				}
 			}
 		}
@@ -428,33 +443,33 @@ func v2ValidationWarnings(source *imagefile.V2, validated image.ValidationV2, pl
 		skillIndex[skill.Name] = i
 		skillNames = append(skillNames, skill.Name)
 		if filepath.IsAbs(skill.Source) {
-			warnings = append(warnings, map[string]string{"path": fmt.Sprintf("skills[%d]", i), "message": "absolute skill path makes the original source host-bound"})
+			warnings = append(warnings, ImageDiagnostic{Path: fmt.Sprintf("skills[%d]", i), Message: "absolute skill path makes the original source host-bound"})
 		}
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		for _, duplicate := range agentskills.FindScopeDuplicates(skillNames, source.Dir, home) {
-			warnings = append(warnings, map[string]string{
-				"path":    fmt.Sprintf("skills[%d]", skillIndex[duplicate.Name]),
-				"message": fmt.Sprintf("skill %s is also visible in %s scope; native harness precedence applies", duplicate.Name, duplicate.Scope),
+			warnings = append(warnings, ImageDiagnostic{
+				Path:    fmt.Sprintf("skills[%d]", skillIndex[duplicate.Name]),
+				Message: fmt.Sprintf("skill %s is also visible in %s scope; native harness precedence applies", duplicate.Name, duplicate.Scope),
 			})
 		}
 	}
 	if !hasIdentity {
-		warnings = append(warnings, map[string]string{"path": "prompts", "message": "identity placeholder is omitted"})
+		warnings = append(warnings, ImageDiagnostic{Path: "prompts", Message: "identity placeholder is omitted"})
 	}
 	for _, plugin := range source.Plugins {
 		if plugin.Name == "loop" && !hasFinish {
-			warnings = append(warnings, map[string]string{"path": "prompts", "message": "loop capability has no visible finishing instruction layer"})
+			warnings = append(warnings, ImageDiagnostic{Path: "prompts", Message: "loop capability has no visible finishing instruction layer"})
 		}
 		if !staticForPlugin[plugin.Name] {
-			warnings = append(warnings, map[string]string{"path": "plugins", "message": fmt.Sprintf("plugin %s has no obvious static instruction layer", plugin.Name)})
+			warnings = append(warnings, ImageDiagnostic{Path: "plugins", Message: fmt.Sprintf("plugin %s has no obvious static instruction layer", plugin.Name)})
 		}
 	}
 	return warnings
 }
 
 func imageTemplate() registry.Command {
-	return imageReadCommand(registry.Command{
+	return registry.WithResult[ImagePromptTemplate](imageReadCommand(registry.Command{
 		Path: "image.template", Summary: "Show an image prompt template",
 		Args: []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
 		HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/images/{ref}/template"},
@@ -467,13 +482,13 @@ func imageTemplate() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: err.Error()}
 			}
-			return template, nil
+			return imagePromptTemplate(template), nil
 		},
-	})
+	}))
 }
 
 func imageProvenance() registry.Command {
-	return imageReadCommand(registry.Command{
+	return registry.WithResult[ImageProvenance](imageReadCommand(registry.Command{
 		Path: "image.provenance", Summary: "Show local image source provenance",
 		Args: []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
 		HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/images/{ref}/provenance"},
@@ -482,40 +497,41 @@ func imageProvenance() registry.Command {
 			if err != nil {
 				return nil, err
 			}
+			absent := ImageProvenance{Ref: ref.String()}
 			if c.Store == nil {
-				return map[string]any{"ref": ref.String(), "source_cwd": nil, "source_available": false}, nil
+				return absent, nil
 			}
 			record, ok, err := (imageprovenance.Store{DB: c.Store.DB}).Get(ref.String())
 			if err != nil {
 				return nil, err
 			}
 			if !ok {
-				return map[string]any{"ref": ref.String(), "source_cwd": nil, "source_available": false}, nil
+				return absent, nil
 			}
 			current, err := imageStore(c).Inspect(ref)
 			if err != nil {
 				return nil, err
 			}
 			if record.Digest != current.Digest {
-				return map[string]any{"ref": ref.String(), "source_cwd": nil, "source_available": false}, nil
+				return absent, nil
 			}
-			result := map[string]any{
-				"ref": record.Ref, "digest": record.Digest, "source_cwd": record.SourceCWD,
-				"built_at": record.BuiltAt, "source_available": record.SourceAvailable,
+			result := ImageProvenance{
+				Ref: record.Ref, Digest: &record.Digest, SourceCWD: ImageNullableString{Value: record.SourceCWD, Valid: true},
+				BuiltAt: &record.BuiltAt, SourceAvailable: record.SourceAvailable,
 			}
 			if snapshot, found, lookupErr := imageSnapshotStore(c).Lookup(context.Background(), ref.String()); lookupErr != nil {
 				return nil, lookupErr
 			} else if found && snapshot.ImageDigest == record.Digest {
-				result["source_name"], result["source_digest"] = snapshot.SourceName, snapshot.SourceDigest
-				result["repository_id"], result["git_commit"], result["lock_digest"] = snapshot.RepositoryID, snapshot.GitCommit, snapshot.LockDigest
+				result.SourceName, result.SourceDigest = &snapshot.SourceName, &snapshot.SourceDigest
+				result.RepositoryID, result.GitCommit, result.LockDigest = &snapshot.RepositoryID, &snapshot.GitCommit, &snapshot.LockDigest
 			}
 			return result, nil
 		},
-	})
+	}))
 }
 
 func imageLs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ImageListResult](registry.Command{
 		Path:    "image.ls",
 		Summary: "List built agent images",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/images"},
@@ -563,49 +579,45 @@ func imageLs() registry.Command {
 					}
 				}
 			}
-			images := make([]map[string]any, 0, len(mans))
+			images := make([]ImageSummary, 0, len(mans))
 			for _, m := range mans {
 				ref := m.Name + ":" + m.Tag
-				item := map[string]any{
-					"schema_version": m.SchemaVersion,
-					"name":           m.Name,
-					"tag":            m.Tag,
-					"digest":         m.Digest,
-					"built_at":       m.BuiltAt,
-					"bare":           m.Bare,
-					"current_agents": currentAgents[ref],
-					"pending_agents": pendingAgents[ref],
-				}
-				if m.ImageVersion != "" {
-					item["image_version"] = m.ImageVersion
-				}
-				if source := sourceByDigest[m.Digest]; source != "" {
-					item["source"] = source
+				item := ImageSummary{
+					SchemaVersion: m.SchemaVersion,
+					Name:          m.Name,
+					Tag:           m.Tag,
+					Digest:        m.Digest,
+					BuiltAt:       m.BuiltAt,
+					Bare:          m.Bare,
+					CurrentAgents: currentAgents[ref],
+					PendingAgents: pendingAgents[ref],
+					ImageVersion:  m.ImageVersion,
+					Source:        sourceByDigest[m.Digest],
 				}
 				if c.Store != nil {
 					if provenance, ok, lookupErr := (imageprovenance.Store{DB: c.Store.DB}).Get(ref); lookupErr == nil && ok && provenance.Digest == m.Digest {
-						item["source_cwd"] = provenance.SourceCWD
-						item["source_available"] = provenance.SourceAvailable
+						item.SourceCWD = &provenance.SourceCWD
+						item.SourceAvailable = &provenance.SourceAvailable
 					}
 				}
-				item["exportable"] = !image.IsReserved(image.Ref{Name: m.Name, Tag: m.Tag})
+				item.Exportable = !image.IsReserved(image.Ref{Name: m.Name, Tag: m.Tag})
 				if snapshot, ok, lookupErr := imageSnapshotStore(c).Lookup(context.Background(), ref); lookupErr != nil {
 					if c.Log != nil {
 						c.Log.Warn("image source snapshot unavailable while listing images", "err", lookupErr)
 					}
 					// Legacy snapshot metadata remains readable but no longer controls artifact export.
 				} else if ok && snapshot.ImageDigest == m.Digest {
-					item["source_digest"] = snapshot.SourceDigest
+					item.SourceDigest = &snapshot.SourceDigest
 				}
 				images = append(images, item)
 			}
-			return map[string]any{"images": images, "count": len(images)}, nil
+			return ImageListResult{Images: images, Count: len(images)}, nil
 		},
-	}
+	})
 }
 
 func imageInspect() registry.Command {
-	return imageReadCommand(registry.Command{
+	return registry.WithResult[ImageManifest](imageReadCommand(registry.Command{
 		Path:    "image.inspect",
 		Summary: "Show an image manifest",
 		Args:    []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
@@ -619,13 +631,13 @@ func imageInspect() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: err.Error()}
 			}
-			return man, nil
+			return imageManifest(man), nil
 		},
-	})
+	}))
 }
 
 func imagePrompt() registry.Command {
-	return imageReadCommand(registry.Command{
+	return registry.WithResult[ImagePromptResult](imageReadCommand(registry.Command{
 		Path:    "image.prompt",
 		Summary: "Print an image's assembled prompt",
 		Args:    []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
@@ -639,13 +651,13 @@ func imagePrompt() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: err.Error()}
 			}
-			return map[string]any{"prompt": s}, nil
+			return ImagePromptResult{Prompt: s}, nil
 		},
-	})
+	}))
 }
 
 func imageFiles() registry.Command {
-	return imageReadCommand(registry.Command{
+	return registry.WithResult[ImageFilesResult](imageReadCommand(registry.Command{
 		Path:    "image.files",
 		Summary: "List the files packed into an image",
 		Args:    []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
@@ -659,13 +671,13 @@ func imageFiles() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: err.Error()}
 			}
-			return map[string]any{"files": entries, "count": len(entries)}, nil
+			return ImageFilesResult{Files: convertSlice(entries, func(e image.FileEntry) ImageFileEntry { return ImageFileEntry(e) }), Count: len(entries)}, nil
 		},
-	})
+	}))
 }
 
 func imageFileRead() registry.Command {
-	return imageReadCommand(registry.Command{
+	return registry.WithResult[ImageFileContent](imageReadCommand(registry.Command{
 		Path:    "image.file",
 		Summary: "Read a single file packed into an image",
 		Args: []registry.Arg{
@@ -683,13 +695,13 @@ func imageFileRead() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: err.Error()}
 			}
-			return map[string]any{"path": name, "content": string(data)}, nil
+			return ImageFileContent{Path: name, Content: string(data)}, nil
 		},
-	})
+	}))
 }
 
 func imageRm() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ImageRemoveResult](registry.Command{
 		Path:    "image.rm",
 		Summary: "Remove a built image",
 		Args:    []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
@@ -724,12 +736,12 @@ func imageRm() registry.Command {
 				if err := imageStore(c).Remove(ref); err != nil {
 					return api.UserError{Code: "not_found", Msg: err.Error()}
 				}
-				result = map[string]any{"removed": ref.String()}
+				result = ImageRemoveResult{Removed: ref.String()}
 				return nil
 			})
 			return result, err
 		},
-	}
+	})
 }
 
 func parseImageRef(p registry.Params) (image.Ref, error) {

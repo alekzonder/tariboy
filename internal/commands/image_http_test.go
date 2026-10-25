@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/registry"
 )
 
@@ -68,12 +67,12 @@ func TestImageLsInspectRmViaHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ls.(map[string]any)["count"].(int) != 1 {
+	if ls.(ImageListResult).Count != 1 {
 		t.Fatalf("ls: %v", ls)
 	}
-	images := ls.(map[string]any)["images"].([]map[string]any)
-	if images[0]["schema_version"] != 2 {
-		t.Fatalf("ls image schema_version = %v, want 2", images[0]["schema_version"])
+	images := ls.(ImageListResult).Images
+	if images[0].SchemaVersion != 2 {
+		t.Fatalf("ls image schema_version = %v, want 2", images[0].SchemaVersion)
 	}
 
 	if _, err := routed(t, "image.inspect")(c, registry.Params{"ref": "demo:latest"}); err != nil {
@@ -84,7 +83,7 @@ func TestImageLsInspectRmViaHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	ls, _ = routed(t, "image.ls")(c, registry.Params{})
-	if ls.(map[string]any)["count"].(int) != 0 {
+	if ls.(ImageListResult).Count != 0 {
 		t.Fatalf("image not removed: %v", ls)
 	}
 }
@@ -102,7 +101,7 @@ func TestImagePromptFilesReadViaHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s, _ := pr.(map[string]any)["prompt"].(string); !strings.Contains(s, "BE A TEST AGENT") {
+	if s := pr.(ImagePromptResult).Prompt; !strings.Contains(s, "BE A TEST AGENT") {
 		t.Fatalf("prompt route body: %v", pr)
 	}
 
@@ -111,11 +110,11 @@ func TestImagePromptFilesReadViaHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := fl.(map[string]any)
-	if m["count"].(int) < 3 {
+	m := fl.(ImageFilesResult)
+	if m.Count < 3 {
 		t.Fatalf("files count too low: %v", m)
 	}
-	files := m["files"].([]image.FileEntry)
+	files := m.Files
 	var haveManifest bool
 	for _, e := range files {
 		if e.Path == "manifest.json" {
@@ -131,7 +130,7 @@ func TestImagePromptFilesReadViaHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if content, _ := rd.(map[string]any)["content"].(string); !strings.Contains(content, "\"name\"") {
+	if content := rd.(ImageFileContent).Content; !strings.Contains(content, "\"name\"") {
 		t.Fatalf("file read content: %v", rd)
 	}
 

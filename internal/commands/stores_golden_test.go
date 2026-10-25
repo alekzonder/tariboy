@@ -52,3 +52,22 @@ func TestStoresResponsesMatchGolden(t *testing.T) {
 	}
 	recorder.check("stores_responses.golden.json", *updateStoresGolden)
 }
+
+func init() { typedCallSets["stores"] = storesTypedCalls }
+
+// storesTypedCalls drives every typed stores operation over HTTP, including
+// an empty list, a Store image and workflow with an error, and an automatic
+// build policy that is set and then disabled.
+func storesTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
+	c, dirs := storesFixture(t)
+	return c, []typedCall{
+		{"GET", "/api/stores", "/api/stores", nil},
+		{"POST", "/api/stores", "/api/stores", map[string]any{"name": "team", "source": dirs.store}},
+		{"GET", "/api/stores", "/api/stores", nil},
+		{"GET", "/api/stores/{name}", "/api/stores/team", nil},
+		{"POST", "/api/stores/{name}/refresh", "/api/stores/team/refresh", nil},
+		{"POST", "/api/stores/{name}/auto", "/api/stores/team/auto", map[string]any{"interval": 45, "image": []string{"reviewer"}}},
+		{"POST", "/api/stores/{name}/auto", "/api/stores/team/auto", map[string]any{"interval": 0}},
+		{"DELETE", "/api/stores/{name}", "/api/stores/team", nil},
+	}
+}

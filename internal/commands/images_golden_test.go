@@ -179,3 +179,42 @@ func TestImagesResponsesMatchGolden(t *testing.T) {
 	}
 	recorder.check("images_responses.golden.json", *updateImagesGolden)
 }
+
+func init() { typedCallSets["images"] = imagesTypedCalls }
+
+// imagesTypedCalls drives every typed images operation over HTTP, including
+// both image.build shapes, an invalid validation with a null template, and a
+// provenance with a null source_cwd.
+func imagesTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
+	c, dirs := imagesFixture(t)
+	imagesSetupAgents(t, c)
+	return c, []typedCall{
+		{"POST", "/api/images/build", "/api/images/build", map[string]any{"name": "reviewer", "path": dirs.versioned}},
+		{"POST", "/api/images/build", "/api/images/build", map[string]any{"name": "demo", "tag": []string{"v1", "v2"}, "path": dirs.plain, "repository-id": "tariboy", "git-commit": imagesGoldenCommit}},
+		{"POST", "/api/images/build", "/api/images/build", map[string]any{"name": "solo", "tag": []string{"latest"}, "path": dirs.plain}},
+		{"POST", "/api/images/validate", "/api/images/validate", map[string]any{"name": "reviewer", "path": dirs.versioned}},
+		{"POST", "/api/images/validate", "/api/images/validate", map[string]any{"name": "reviewer", "path": filepath.Join(dirs.root, "missing")}},
+		{"POST", "/api/image-sources", "/api/image-sources", map[string]any{"name": "drafter", "prompt": "Draft the reply."}},
+		{"POST", "/api/image-sources", "/api/image-sources", map[string]any{"name": "broken"}},
+		{"PUT", "/api/image-sources/{name}/files/{path...}", "/api/image-sources/broken/files/Tariboyfile.yaml", map[string]any{"content": "schema_version: ["}},
+		{"POST", "/api/image-sources/{name}/validate", "/api/image-sources/drafter/validate", nil},
+		{"POST", "/api/image-sources/{name}/validate", "/api/image-sources/broken/validate", nil},
+		{"POST", "/api/image-sources/{name}/build", "/api/image-sources/drafter/build", nil},
+		{"GET", "/api/image-sources", "/api/image-sources", nil},
+		{"GET", "/api/image-sources/{name}", "/api/image-sources/drafter", nil},
+		{"GET", "/api/image-sources/{name}", "/api/image-sources/broken", nil},
+		{"GET", "/api/image-sources/{name}/files", "/api/image-sources/drafter/files", nil},
+		{"GET", "/api/image-sources/{name}/files/{path...}", "/api/image-sources/drafter/files/PROMPT.md", nil},
+		{"GET", "/api/images", "/api/images", nil},
+		{"GET", "/api/images/{ref}", "/api/images/reviewer:latest", nil},
+		{"GET", "/api/images/{ref}", "/api/images/demo:v1", nil},
+		{"GET", "/api/images/{ref}/template", "/api/images/reviewer:latest/template", nil},
+		{"GET", "/api/images/{ref}/prompt", "/api/images/reviewer:latest/prompt", nil},
+		{"GET", "/api/images/{ref}/files", "/api/images/reviewer:latest/files", nil},
+		{"GET", "/api/images/{ref}/files/{path...}", "/api/images/reviewer:latest/files/prompt/layers/000-task.md", nil},
+		{"GET", "/api/images/{ref}/provenance", "/api/images/demo:v1/provenance", nil},
+		{"GET", "/api/images/{ref}/provenance", "/api/images/drafter:latest/provenance", nil},
+		{"DELETE", "/api/images/{ref}", "/api/images/solo:latest", nil},
+		{"DELETE", "/api/image-sources/{name}", "/api/image-sources/broken", nil},
+	}
+}

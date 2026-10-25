@@ -144,8 +144,8 @@ func TestImageBuildStoreSelectorInstallsLocksAndDefaultsIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := result.(map[string]any)
-	if got["name"] != "reviewer" || got["tag"] != "1.2.4" {
+	got := result.(ImageBuildResult)
+	if got.Name != "reviewer" || got.Tag != "1.2.4" {
 		t.Fatalf("build result = %#v", got)
 	}
 	raw, err := os.ReadFile(logPath)
@@ -212,7 +212,7 @@ func TestImageBuildStoreSelectorUpdatesExistingVersionTag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated := result.(map[string]any)["digest"].(string)
+	updated := result.(ImageBuildResult).Digest
 	if updated == "" {
 		t.Fatalf("build result = %#v", result)
 	}
@@ -280,7 +280,7 @@ func TestImageBuildPathCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := result.(map[string]any); got["name"] != "legacy" || got["tag"] != "4.5.6" {
+	if got := result.(ImageBuildResult); got.Name != "legacy" || got.Tag != "4.5.6" {
 		t.Fatalf("path build = %#v", got)
 	}
 	if _, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "missing-path"}); err == nil || !strings.Contains(err.Error(), "path") {
