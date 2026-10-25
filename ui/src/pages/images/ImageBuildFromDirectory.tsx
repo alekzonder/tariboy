@@ -6,6 +6,8 @@ import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorText } from "@/lib/errors";
+import { directoryRequest } from "./directoryRequest";
+import { ValidatedTemplate } from "./ValidatedTemplate";
 
 export default function ImageBuildFromDirectory() {
   const api = useApi();
@@ -25,11 +27,7 @@ export default function ImageBuildFromDirectory() {
   const validate = async () => {
     setBusy(true);
     try {
-      const result = await api.images.validateImageDirectory({
-        path: path.trim(),
-        name: name.trim(),
-        ...(tag.trim() && tag.trim() !== "latest" ? { tag: tag.trim() } : {}),
-      });
+      const result = await api.images.validateImageDirectory(directoryRequest(path, name, tag));
       setValidation(result);
       setDiagnostics(result.diagnostics ?? []);
       if (result.valid) toast.success("Tariboyfile is valid");
@@ -47,11 +45,7 @@ export default function ImageBuildFromDirectory() {
     }
     setBusy(true);
     try {
-      const result = await api.images.buildImageDirectory({
-        path: path.trim(),
-        name: name.trim(),
-        ...(tag.trim() && tag.trim() !== "latest" ? { tag: tag.trim() } : {}),
-      });
+      const result = await api.images.buildImageDirectory(directoryRequest(path, name, tag));
       setDiagnostics([]);
       toast.success(`built ${result.name}:${result.tag}`);
       notifyImagesChanged();
@@ -121,66 +115,7 @@ export default function ImageBuildFromDirectory() {
           <span className="font-mono">{item.path}</span>: {item.message}
         </p>
       ))}
-      {validation?.valid && (
-        <div
-          className="space-y-2 rounded border bg-muted/20 p-3"
-          aria-label="Validated image template"
-        >
-          <div className="text-xs text-muted-foreground">
-            schema v{validation.schema_version} · template sha256{" "}
-            <span className="font-mono">{validation.template?.sha256 ?? "legacy"}</span>
-          </div>
-          <div className="text-sm">
-            Plugins:{" "}
-            {(validation.plugins ?? []).length === 0
-              ? "none"
-              : validation.plugins!.map((plugin) => (
-                  <code key={plugin} className="ml-2">
-                    {plugin}
-                  </code>
-                ))}
-          </div>
-          <div className="space-y-1" aria-label="Validated image skills">
-            <div className="text-sm">
-              Skills: {(validation.skills ?? []).length === 0 ? "none" : null}
-            </div>
-            {(validation.skills ?? []).map((skill) => (
-              <div key={skill.name} className="rounded border bg-background p-2 text-sm">
-                <strong>{skill.name}</strong>
-                <p>{skill.description}</p>
-                <div className="break-all font-mono text-xs">
-                  {skill.category} · {skill.source}
-                </div>
-                <div className="break-all text-xs text-muted-foreground">
-                  {skill.file_count} files · {skill.size} bytes · {skill.tree_sha256}
-                </div>
-              </div>
-            ))}
-          </div>
-          {validation.template && (
-            <ol className="space-y-1">
-              {validation.template.entries.map((entry, index) => (
-                <li
-                  key={`${index}-${entry.archive_path ?? entry.runtime}`}
-                  className="rounded border bg-background p-2 text-sm"
-                >
-                  <span className="mr-3 font-mono text-muted-foreground">{index}</span>
-                  <strong className="mr-2">{entry.kind}</strong>
-                  {entry.runtime && <code>{entry.runtime}</code>}
-                  {entry.source && (
-                    <div className="break-all font-mono text-xs">{entry.source}</div>
-                  )}
-                  {entry.category && (
-                    <div className="text-xs text-muted-foreground">
-                      {entry.category} · {entry.size ?? 0} bytes · {entry.sha256}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-      )}
+      {validation?.valid && <ValidatedTemplate validation={validation} />}
     </section>
   );
 }

@@ -1,44 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { type ApiClient, type ImageRow } from "@/lib/api";
-import { useOptionalDaemons } from "@/components/daemonContext";
 import { useApi } from "@/components/apiContext";
-import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import { subscribeImagesChanged } from "@/lib/imageEvents";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { ImageTransferDialog } from "./ImageTransferDialog";
 import { errorText } from "@/lib/errors";
-
-function buildTime(image: ImageRow): number {
-  const value = Date.parse(image.built_at ?? "");
-  return Number.isFinite(value) ? value : -Infinity;
-}
-
-function compareBuiltImages(a: ImageRow, b: ImageRow): number {
-  const time = buildTime(b) - buildTime(a);
-  if (time && !Number.isNaN(time)) return time;
-  const rank = (image: ImageRow) =>
-    image.image_version && image.tag === image.image_version ? 0 : 1;
-  return rank(a) - rank(b) || (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0);
-}
-
-function builtDate(image?: ImageRow): string {
-  return image && Number.isFinite(buildTime(image)) ? image.built_at! : "—";
-}
+import { archiveFilename } from "./built/builtImages";
+import { BuiltImageGroupsTable } from "./built/BuiltImageGroupsTable";
+import { BuiltImageTagsTable } from "./built/BuiltImageTagsTable";
+import { ImageArchiveImport } from "./built/ImageArchiveImport";
+import { useBuiltImageGroups } from "./built/useBuiltImageGroups";
+import { useTransferDaemons } from "./built/useTransferDaemons";
 
 export default function BuiltImages({
   hostId,
@@ -50,39 +22,14 @@ export default function BuiltImages({
   imageName?: string;
 }) {
   const api = useApi();
-  const daemonContext = useOptionalDaemons();
   // Images are kept with the client that listed them: rows of a previous
   // route host are never shown (or acted on) for the current one.
   const [listed, setListed] = useState<{ api: ApiClient; images: ImageRow[] } | null>(null);
   const images = useMemo(() => (listed?.api === api ? listed.images : []), [api, listed]);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
-  const registryDaemons = useMemo(() => daemonContext?.daemons ?? [], [daemonContext?.daemons]);
-  const registryGeneration = useMemo(
-    () =>
-      JSON.stringify(
-        registryDaemons.map((daemon) => ({
-          id: daemon.id,
-          label: daemon.label,
-          baseURL: daemon.baseURL,
-          state: daemon.state,
-        })),
-      ),
-    [registryDaemons],
-  );
-  const [resolvedTransferDaemons, setResolvedTransferDaemons] = useState<{
-    generation: string;
-    daemons: Daemon[];
-  }>({ generation: "", daemons: [] });
+  const transferDaemons = useTransferDaemons();
   const [transfer, setTransfer] = useState<{ ref: string; hostId: string } | null>(null);
-  const [imageImport, setImageImport] = useState<{
-    id: string;
-    ref: string;
-    name: string;
-    tag: string;
-    api: ApiClient;
-    hostId: string;
-  } | null>(null);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -91,26 +38,6 @@ export default function BuiltImages({
       mounted.current = false;
     };
   }, []);
-
-  useEffect(() => {
-    let alive = true;
-    void Promise.allSettled(registryDaemons.map((daemon) => resolveDaemon(daemon.id))).then(
-      (results) => {
-        if (!alive) return;
-        setResolvedTransferDaemons({
-          generation: registryGeneration,
-          daemons: results.flatMap((result, index) =>
-            result.status === "fulfilled" && result.value
-              ? [{ ...registryDaemons[index], ...result.value }]
-              : [],
-          ),
-        });
-      },
-    );
-    return () => {
-      alive = false;
-    };
-  }, [registryDaemons, registryGeneration]);
 
   useEffect(() => subscribeImagesChanged(() => setRevision((value) => value + 1)), []);
 
@@ -132,24 +59,7 @@ export default function BuiltImages({
     };
   }, [api, revision]);
 
-  const groups = useMemo(() => {
-    const byName = new Map<string, ImageRow[]>();
-    for (const image of images) {
-      const tags = byName.get(image.name) ?? [];
-      tags.push(image);
-      byName.set(image.name, tags);
-    }
-    return [...byName]
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([name, tags]) => ({
-        name,
-        tags: tags.sort(compareBuiltImages),
-        latest: tags.find((tag) => tag.tag === "latest"),
-      }));
-  }, [images]);
-  const tags = groups.find((group) => group.name === imageName)?.tags ?? [];
-
-  const transferDaemonsReady = resolvedTransferDaemons.generation === registryGeneration;
+  const { groups, tags } = useBuiltImageGroups(images, imageName);
 
   const remove = async (ref: string) => {
     const source = api;
@@ -174,10 +84,7 @@ export default function BuiltImages({
       const blob = await api.images.downloadImageArchive(ref);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const separator = ref.lastIndexOf(":");
-      const name = ref.slice(0, separator).replaceAll("/", "_");
-      const tag = ref.slice(separator + 1);
-      const filename = `${name}-${tag}.tariboy-image.tar.gz`;
+      const filename = archiveFilename(ref);
       link.href = url;
       link.download = filename;
       link.click();
@@ -192,269 +99,22 @@ export default function BuiltImages({
   return (
     <div className="space-y-3">
       {imageName === undefined && (
-        <div className="rounded border p-3">
-          <label htmlFor="image-archive" className="text-sm font-medium">
-            Import runnable image
-          </label>
-          <Input
-            id="image-archive"
-            aria-label="Import image archive"
-            type="file"
-            accept=".gz,.tgz,application/gzip"
-            className="mt-1"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (!file) return;
-              const source = api;
-              void source.images
-                .uploadImageArchive(file)
-                .then((preview) => {
-                  const separator = preview.ref.lastIndexOf(":");
-                  setImageImport({
-                    id: preview.import_id,
-                    ref: preview.ref,
-                    name: preview.ref.slice(0, separator),
-                    tag: preview.ref.slice(separator + 1),
-                    api: source,
-                    hostId,
-                  });
-                })
-                .catch((error) => toast.error(`import failed: ${errorText(error)}`));
-            }}
-          />
-          {imageImport?.hostId === hostId && (
-            <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
-              <label className="text-xs">
-                Import name
-                <Input
-                  aria-label="Import name"
-                  value={imageImport.name}
-                  onChange={(event) => setImageImport({ ...imageImport, name: event.target.value })}
-                />
-              </label>
-              <label className="text-xs">
-                Import tag
-                <Input
-                  aria-label="Import tag"
-                  value={imageImport.tag}
-                  onChange={(event) => setImageImport({ ...imageImport, tag: event.target.value })}
-                />
-              </label>
-              <Button
-                size="sm"
-                disabled={!imageImport.name.trim() || !imageImport.tag.trim()}
-                onClick={() =>
-                  void imageImport.api.images
-                    .applyImageArchive(
-                      imageImport.id,
-                      `${imageImport.name.trim()}:${imageImport.tag.trim()}`,
-                    )
-                    .then(() => {
-                      toast.success("image imported");
-                      setImageImport(null);
-                      setRevision((value) => value + 1);
-                    })
-                    .catch((error) => toast.error(`import failed: ${errorText(error)}`))
-                }
-              >
-                Import image
-              </Button>
-            </div>
-          )}
-        </div>
+        <ImageArchiveImport hostId={hostId} onImported={() => setRevision((value) => value + 1)} />
       )}
       {imageName === undefined ? (
-        <div className="overflow-x-auto rounded border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-              <tr>
-                {[
-                  "Image",
-                  "Latest image_version",
-                  "Latest built at",
-                  "Newest built tag",
-                  "Tag built at",
-                ].map((label) => (
-                  <th key={label} className="px-3 py-2">
-                    {label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map(({ name, tags, latest }) => (
-                <tr key={name} className="border-t">
-                  <td className="px-3 py-2">
-                    <Link
-                      className="font-mono text-primary hover:underline"
-                      to={`${basePath}/${encodeURIComponent(name)}`}
-                    >
-                      {name}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2">
-                    {latest ? latest.image_version || "Version not specified" : "No latest"}
-                  </td>
-                  <td className="px-3 py-2 text-xs">{builtDate(latest)}</td>
-                  <td className="px-3 py-2">
-                    <Link
-                      className="font-mono text-primary hover:underline"
-                      to={`${basePath}/${encodeURIComponent(name)}/${encodeURIComponent(tags[0].tag)}`}
-                    >
-                      {tags[0].tag}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 text-xs">{builtDate(tags[0])}</td>
-                </tr>
-              ))}
-              {groups.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
-                    No built images on this host.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <BuiltImageGroupsTable groups={groups} basePath={basePath} />
       ) : (
-        <div className="overflow-x-auto rounded border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Tag</th>
-                <th className="px-3 py-2">image_version</th>
-                <th className="px-3 py-2">Digest</th>
-                <th className="px-3 py-2">Built</th>
-                <th className="px-3 py-2">Source</th>
-                <th className="px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {tags.map((image) => {
-                const ref = `${image.name}:${image.tag}`;
-                return (
-                  <tr key={ref} data-testid={`built-image-${ref}`} className="border-t">
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <Link
-                          className="font-mono text-primary hover:underline"
-                          to={`${basePath}/${encodeURIComponent(image.name)}/${encodeURIComponent(image.tag)}`}
-                        >
-                          {image.tag}
-                        </Link>
-                        {image.tag === "latest" && <Badge variant="secondary">Latest</Badge>}
-                        {image === tags[0] && <Badge variant="secondary">Newest</Badge>}
-                        {image.bare && <Badge variant="secondary">Terminal-only</Badge>}
-                      </div>
-                      {(image.current_agents?.length ?? 0) > 0 && (
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          Current: {image.current_agents!.join(", ")}
-                        </div>
-                      )}
-                      {(image.pending_agents?.length ?? 0) > 0 && (
-                        <div className="text-xs text-muted-foreground">
-                          Pending: {image.pending_agents!.join(", ")}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{image.image_version || "Version not specified"}</td>
-                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                      {image.digest ?? "—"}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{builtDate(image)}</td>
-                    <td className="px-3 py-2 font-mono text-xs break-all">
-                      {!image.source_cwd
-                        ? "Source CWD unavailable — imported artifact"
-                        : image.source_available === false
-                          ? `Source CWD unavailable — ${image.source_cwd}`
-                          : image.source_cwd}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex justify-end gap-1">
-                        <Button size="sm" variant="outline" asChild>
-                          <Link
-                            to={`/?new=1&host=${encodeURIComponent(hostId)}&image=${encodeURIComponent(ref)}`}
-                          >
-                            Run Agent
-                          </Link>
-                        </Button>
-                        {!image.bare && (
-                          <span title="Export runnable image artifact (original sources are not included)">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={!image.exportable}
-                              aria-label={`Export ${ref}`}
-                              onClick={() => void saveArchive(ref)}
-                            >
-                              Export
-                            </Button>
-                          </span>
-                        )}
-                        {!image.bare && image.exportable && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            aria-label={`Upload to servers ${ref}`}
-                            disabled={!transferDaemonsReady}
-                            title={transferDaemonsReady ? undefined : "Loading transfer servers"}
-                            onClick={() => {
-                              if (transferDaemonsReady) setTransfer({ ref, hostId });
-                            }}
-                          >
-                            Upload to servers
-                          </Button>
-                        )}
-                        {!image.bare && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                aria-label={`Remove ${ref}`}
-                                disabled={
-                                  !!image.current_agents?.length || !!image.pending_agents?.length
-                                }
-                              >
-                                Remove
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Remove image {ref}?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Deletes this runnable image tag. Original build files are not
-                                  managed by Tariboy.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  variant="destructive"
-                                  onClick={() => void remove(ref)}
-                                >
-                                  Remove image
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {tags.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
-                    No tags for this image on this host.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <BuiltImageTagsTable
+          tags={tags}
+          basePath={basePath}
+          actions={{
+            hostId,
+            transferReady: transferDaemons.ready,
+            onExport: (ref) => void saveArchive(ref),
+            onTransfer: (ref) => setTransfer({ ref, hostId }),
+            onRemove: (ref) => void remove(ref),
+          }}
+        />
       )}
       {transfer && transfer.hostId === hostId && (
         <ImageTransferDialog
@@ -463,7 +123,7 @@ export default function BuiltImages({
             if (!open) setTransfer(null);
           }}
           imageRef={transfer.ref}
-          daemons={resolvedTransferDaemons.daemons}
+          daemons={transferDaemons.daemons}
           onComplete={() => {
             if (mounted.current) setRevision((value) => value + 1);
           }}
