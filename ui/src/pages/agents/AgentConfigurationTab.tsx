@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { RunStateActions } from "@/components/AgentControls";
 import { useAgentName, useAgentStatus } from "@/lib/agent";
 import { useApi } from "@/components/apiContext";
 import type { AgentStatus } from "@/lib/types";
-import { BLOCKS, blockOfKey, filterBlocks } from "./configuration/registry";
+import { BLOCKS, filterBlocks } from "./configuration/registry";
+import { countDirtyByBlock, isStopped } from "./configuration/configurationPageModel";
+import { ConfigEmptyState } from "./configuration/ConfigEmptyState";
 import { useConfigDraft } from "./configuration/useConfigDraft";
 import { useConfigSources } from "./configuration/useConfigSources";
 import { buildUnits, readBaseline } from "./configuration/commits";
@@ -82,18 +83,12 @@ function ConfigurationPage({
   }, [sources, refresh]);
   const draft = useConfigDraft({ baseline, units, reload, onFocus });
 
-  const dirtyByBlock = new Map<string, number>();
-  for (const key of draft.dirtyKeys) {
-    const id = blockOfKey(key);
-    dirtyByBlock.set(id, (dirtyByBlock.get(id) ?? 0) + 1);
-  }
+  const dirtyByBlock = countDirtyByBlock(draft.dirtyKeys);
   const filtered = filterBlocks(query, available);
   const visible = filtered.blocks.filter((block) => !changedOnly || dirtyByBlock.has(block.id));
   const filtering = query.trim() !== "" || changedOnly;
 
-  const stopped = status
-    ? status.state === "stopped"
-    : view?.enabled === false || (view?.enabled === undefined && view?.state === "stopped");
+  const stopped = isStopped(status, view);
 
   return (
     <TabPage narrow>
@@ -130,27 +125,13 @@ function ConfigurationPage({
       {!view ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : visible.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-6 text-center">
-          <p className="text-sm font-medium">
-            {query.trim()
-              ? `No settings match “${query.trim()}”`
-              : "No blocks have unsaved changes"}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Unsaved changes in hidden blocks are kept.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-3"
-            onClick={() => {
-              setQuery("");
-              setChangedOnly(false);
-            }}
-          >
-            Clear search
-          </Button>
-        </div>
+        <ConfigEmptyState
+          query={query}
+          onClear={() => {
+            setQuery("");
+            setChangedOnly(false);
+          }}
+        />
       ) : (
         visible.map((block) => (
           <ConfigurationBlocks

@@ -1,0 +1,49 @@
+// The pure half of the General block's image section: links, labels and the
+// update notice. GeneralImage renders them.
+import type { AgentImageStatus } from "@/lib/api";
+import { serverPath } from "@/lib/terminalsHost";
+
+type NextImage = NonNullable<AgentImageStatus["next"]>;
+
+// A digest is a 64-hex-character hash: shown whole it dominates the identity
+// row and wraps across lines. Keep enough of both ends to compare against a
+// registry listing by eye; the untruncated value stays in the a11y tree.
+export function shortDigest(digest: string): string {
+  return digest.length > 24 ? `${digest.slice(0, 14)}…${digest.slice(-8)}` : digest;
+}
+
+// imageHref links an image ref ("name:tag") to its page on the target host; a
+// ref without a tag links to the image list.
+export function imageHref(targetId: string, ref: string): string {
+  const split = ref.lastIndexOf(":");
+  const base = serverPath(targetId, "images");
+  return split < 0
+    ? base
+    : `${base}/${encodeURIComponent(ref.slice(0, split))}/${encodeURIComponent(ref.slice(split + 1))}`;
+}
+
+const NEXT_REASONS: Record<NextImage["reason"], string> = {
+  pending: "Explicit pending assignment",
+  ref_moved: "Content the active ref points at now",
+  current: "Current pinned image",
+};
+
+// nextReasonText says why the next iteration resolves to its image.
+export const nextReasonText = (reason: NextImage["reason"]) =>
+  NEXT_REASONS[reason] ?? NEXT_REASONS.current;
+
+// updatesOnNext is true when the next iteration resolves to known content
+// that differs from the current image.
+export function updatesOnNext(imageStatus: AgentImageStatus): boolean {
+  const next = imageStatus.next;
+  return Boolean(next && !next.error && next.digest && next.digest !== imageStatus.current.digest);
+}
+
+// imageSides lists the current and next images under their labels; a stopped
+// agent's current image is the version it activated.
+export function imageSides(imageStatus: AgentImageStatus, stopped: boolean) {
+  return [
+    { label: stopped ? "Activated version" : "Current", value: imageStatus.current },
+    { label: "Next iteration", value: imageStatus.next },
+  ] as const;
+}

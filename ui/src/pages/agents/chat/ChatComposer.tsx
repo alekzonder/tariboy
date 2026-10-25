@@ -5,18 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import ChatMarkdown from "./ChatMarkdown";
-
-/** The glyph toolbar: mono marks rather than icons, because each one is the
- *  Markdown it inserts. `wrap` is what goes on each side of the selection;
- *  `prefix` is for the line-leading marks. */
-const MARKS = [
-  { label: "B", title: "Bold", wrap: "**" },
-  { label: "i", title: "Italic", wrap: "*" },
-  { label: "</>", title: "Inline code", wrap: "`" },
-  { label: "“", title: "Quote", prefix: "> " },
-  { label: "•", title: "Bullet list", prefix: "- " },
-  { label: "↗", title: "Link", wrap: "", link: true },
-] as const;
+import { ChatComposerMarks } from "./ChatComposerMarks";
 
 export default function ChatComposer({
   agent,
@@ -68,32 +57,6 @@ export default function ChatComposer({
     area.style.height = `${Math.min(area.scrollHeight, 6 * 19 + 16)}px`;
   }, [value]);
 
-  function apply(mark: (typeof MARKS)[number]) {
-    const area = box.current;
-    if (!area) return;
-    const start = area.selectionStart ?? value.length;
-    const end = area.selectionEnd ?? start;
-    const selected = value.slice(start, end);
-    let next: string;
-    let caret: number;
-    if ("prefix" in mark && mark.prefix) {
-      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-      next = `${value.slice(0, lineStart)}${mark.prefix}${value.slice(lineStart)}`;
-      caret = end + mark.prefix.length;
-    } else if ("link" in mark && mark.link) {
-      next = `${value.slice(0, start)}[${selected || "text"}](url)${value.slice(end)}`;
-      caret = start + (selected || "text").length + 3;
-    } else {
-      next = `${value.slice(0, start)}${mark.wrap}${selected}${mark.wrap}${value.slice(end)}`;
-      caret = end + mark.wrap.length * 2;
-    }
-    onChange(next);
-    requestAnimationFrame(() => {
-      area.focus();
-      area.setSelectionRange(caret, caret);
-    });
-  }
-
   return (
     <div className="shrink-0 px-3.5 pt-2 pb-3">
       <div className="overflow-hidden rounded-lg border border-input bg-card focus-within:ring-1 focus-within:ring-ring">
@@ -102,18 +65,7 @@ export default function ChatComposer({
           role="group"
           aria-label="Markdown marks"
         >
-          {MARKS.map((mark) => (
-            <button
-              key={mark.title}
-              type="button"
-              aria-label={mark.title}
-              title={mark.title}
-              onClick={() => apply(mark)}
-              className="grid h-5.5 min-w-5.5 place-items-center rounded-sm px-1.5 font-mono text-meta font-semibold text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              {mark.label}
-            </button>
-          ))}
+          <ChatComposerMarks box={box} value={value} onChange={onChange} />
           <span className="mx-1.5 h-3.5 w-px bg-border" />
           <input
             ref={file}

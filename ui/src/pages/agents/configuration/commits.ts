@@ -8,6 +8,57 @@ import type { CommitUnit } from "./useConfigDraft";
 
 const text = (value: unknown) => (value === undefined || value === null ? "" : String(value));
 
+// viewBaseline reads the agent view's settings as raw text. The budget keys
+// exist only when the daemon projects a budget.
+export function viewBaseline(view: AgentView): Values {
+  return {
+    cwd: text(view.cwd),
+    "cwd-create": "false",
+    harness: text(view.harness),
+    model: text(view.model),
+    effort: text(view.effort),
+    interactive: String(Boolean(view.interactive)),
+    interval: text(view.interval_s),
+    schedule: text(view.schedule),
+    timeout: text(view.timeout_s),
+    "hard-timeout": text(view.hard_timeout_s),
+    "on-timeout": view.on_timeout || "restart",
+    "on-error": view.on_error || "restart",
+    "max-idle": text(view.max_idle_iterations ?? 0),
+    "ai-stall-timeout": text(view.ai_stall_timeout_s ?? 1800),
+    "goal-enabled": String(Boolean(view.goal_enabled)),
+    "goal-wait-customer-timeout": text(view.goal_wait_customer_timeout_s),
+    "goal-delivery-cooldown": text(view.goal_delivery_cooldown_s),
+    "messages-batch": text(view.messages_batch),
+    "messages-max-queue": text(view.messages_max_queue),
+    ...(view.budget
+      ? {
+          "budget-hour": text(view.budget.hour_usd),
+          "budget-day": text(view.budget.day_usd),
+          "budget-week": text(view.budget.week_usd),
+          "budget-month": text(view.budget.month_usd),
+        }
+      : {}),
+  };
+}
+
+const imageBaseline = (imageStatus: AgentImageStatus | null): Values =>
+  imageStatus ? { image: imageStatus.pending.ref || imageStatus.current.ref } : {};
+
+const scriptBaseline = (script: string | null): Values =>
+  script === null ? {} : { "shell-script": script };
+
+const retentionBaseline = (retention: RetentionPolicy | null): Values =>
+  retention
+    ? {
+        "keep-iterations": text(retention.override?.keep_iterations ?? 0),
+        "keep-days": text(retention.override?.keep_days ?? 0),
+      }
+    : {};
+
+const secretsBaseline = (secrets: string[] | null): Values =>
+  secrets ? { "secrets-remove": "", "secret-key": "", "secret-value": "" } : {};
+
 // readBaseline turns the loaded sources into the page's flat, normalized
 // values. A source that has not loaded contributes no keys, so its fields can
 // be neither dirty nor saved.
@@ -18,46 +69,14 @@ export function readBaseline(sources: {
   retention: RetentionPolicy | null;
   secrets: string[] | null;
 }): Values {
-  const raw: Values = {};
   const { view, imageStatus, script, retention, secrets } = sources;
-  if (view) {
-    Object.assign(raw, {
-      cwd: text(view.cwd),
-      "cwd-create": "false",
-      harness: text(view.harness),
-      model: text(view.model),
-      effort: text(view.effort),
-      interactive: String(Boolean(view.interactive)),
-      interval: text(view.interval_s),
-      schedule: text(view.schedule),
-      timeout: text(view.timeout_s),
-      "hard-timeout": text(view.hard_timeout_s),
-      "on-timeout": view.on_timeout || "restart",
-      "on-error": view.on_error || "restart",
-      "max-idle": text(view.max_idle_iterations ?? 0),
-      "ai-stall-timeout": text(view.ai_stall_timeout_s ?? 1800),
-      "goal-enabled": String(Boolean(view.goal_enabled)),
-      "goal-wait-customer-timeout": text(view.goal_wait_customer_timeout_s),
-      "goal-delivery-cooldown": text(view.goal_delivery_cooldown_s),
-      "messages-batch": text(view.messages_batch),
-      "messages-max-queue": text(view.messages_max_queue),
-    });
-    if (view.budget) {
-      Object.assign(raw, {
-        "budget-hour": text(view.budget.hour_usd),
-        "budget-day": text(view.budget.day_usd),
-        "budget-week": text(view.budget.week_usd),
-        "budget-month": text(view.budget.month_usd),
-      });
-    }
-  }
-  if (imageStatus) raw.image = imageStatus.pending.ref || imageStatus.current.ref;
-  if (script !== null) raw["shell-script"] = script;
-  if (retention) {
-    raw["keep-iterations"] = text(retention.override?.keep_iterations ?? 0);
-    raw["keep-days"] = text(retention.override?.keep_days ?? 0);
-  }
-  if (secrets) Object.assign(raw, { "secrets-remove": "", "secret-key": "", "secret-value": "" });
+  const raw: Values = {
+    ...(view ? viewBaseline(view) : {}),
+    ...imageBaseline(imageStatus),
+    ...scriptBaseline(script),
+    ...retentionBaseline(retention),
+    ...secretsBaseline(secrets),
+  };
   return Object.fromEntries(
     Object.entries(raw).map(([key, value]) => [key, normalizeField(key, value)]),
   );

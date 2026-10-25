@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ApiError, type ChatMessage } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
@@ -32,7 +32,9 @@ export function useChatReadState({
     [],
   );
 
-  useEffect(() => {
+  // A layout effect, so the switch is recorded before the first page of the
+  // new conversation captures its mark.
+  useLayoutEffect(() => {
     scopeRef.current = scope;
     anchorRef.current = null;
     keepUnread.current = false;

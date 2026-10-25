@@ -56,10 +56,12 @@ export * from "@/components/PathAutocomplete";
 export * from "@/components/ProxyCallRow";
 export * from "@/components/SendFilesButton";
 export * from "@/components/ShellScriptEditor";
+export * from "@/components/SidebarToggle";
 export * from "@/components/SupportBundle";
 export * from "@/components/TabPage";
 export * from "@/components/ThemeToggle";
 export * from "@/components/TuiScreen";
+export * from "@/components/ViewSwitch";
 export * from "@/components/theme-provider";
 
 // page-level surfaces (src/pages)

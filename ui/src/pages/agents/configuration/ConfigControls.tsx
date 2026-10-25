@@ -12,19 +12,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { EditablePresetCombobox } from "@/components/EditablePresetCombobox";
 import { cn } from "@/lib/utils";
 import type { PresetGroup } from "@/lib/runtimePresets";
+import { DraftControl } from "./DraftControls";
 import { fieldOfKey, type ConfigBlock, type ConfigField } from "./registry";
 import type { ConfigDraft } from "./useConfigDraft";
-
-// Mirror the shadcn Input look (rounded-lg, same border + focus ring) so
-// selects and text inputs line up as one visual family, in light and dark.
-const selectClass =
-  "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none " +
-  "transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 " +
-  "dark:bg-input/30";
 
 const unsaved = (count: number) => `${count} unsaved ${count === 1 ? "change" : "changes"}`;
 
@@ -167,71 +159,17 @@ export function DraftField({
       </FieldFrame>
     );
   }
-  let control: ReactNode;
-  if (field.kind === "preset") {
-    control = (
-      <EditablePresetCombobox
-        id={field.key}
-        ariaLabel={field.label}
-        value={value}
-        groups={presets ?? []}
-        describedBy={common["aria-describedby"]}
-        invalid={Boolean(invalid)}
-        onChange={set}
-        placeholder="image default"
-      />
-    );
-  } else if (field.kind === "select") {
-    const choices = options ?? field.options ?? [];
-    control = (
-      <select
-        {...common}
-        value={value}
-        disabled={unloaded}
-        className={selectClass}
-        onChange={(e) => set(e.target.value)}
-      >
-        {choices.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-    );
-  } else if (field.kind === "textarea") {
-    control = (
-      <Textarea
-        {...common}
-        value={value}
-        disabled={unloaded}
-        className="min-h-40 font-mono"
-        onChange={(e) => set(e.target.value)}
-      />
-    );
-  } else {
-    control = (
-      <Input
-        {...common}
-        value={value}
-        disabled={unloaded}
-        className="h-9"
-        type={
-          field.kind === "number"
-            ? "number"
-            : field.kind === "secret-value"
-              ? "password"
-              : undefined
-        }
-        autoComplete={field.kind === "secret-value" ? "new-password" : undefined}
-        min={field.kind === "number" ? (field.minimum ?? 0) : undefined}
-        step={field.key.startsWith("budget-") ? "0.01" : undefined}
-        onChange={(e) => set(e.target.value)}
-      />
-    );
-  }
   return (
     <FieldFrame field={field} draft={draft} matched={matched}>
-      {control}
+      <DraftControl
+        field={field}
+        value={value}
+        set={set}
+        common={common}
+        unloaded={unloaded}
+        options={options}
+        presets={presets}
+      />
     </FieldFrame>
   );
 }
