@@ -9,6 +9,63 @@ import { useWorkflowConfirm } from "./WorkflowConfirm";
 import { errorText } from "@/lib/errors";
 import { keyProblem } from "./workflowShared";
 
+/** The required secrets the global env holds, and whether a queue secret overrides each. */
+function GlobalEnvList({
+  globalEnv,
+  secrets,
+}: {
+  globalEnv: string[];
+  secrets: QueueSecretInfo[];
+}) {
+  if (globalEnv.length === 0) return null;
+  return (
+    <ul
+      aria-label="Global env"
+      className="flex min-w-0 flex-col gap-1 text-ui text-muted-foreground"
+    >
+      {globalEnv.map((name) => (
+        <li key={name}>
+          <span className="font-mono">{name}</span> present in global env
+          {secrets.some((secret) => secret.key === name) && ", overridden by the queue secret"}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function SecretList({
+  secrets,
+  loaded,
+  busy,
+  onRemove,
+}: {
+  secrets: QueueSecretInfo[];
+  loaded: boolean;
+  busy: boolean;
+  onRemove: (name: string) => void;
+}) {
+  if (secrets.length === 0) return loaded && <span className={EMPTY}>No secrets.</span>;
+  return (
+    <ul className="flex min-w-0 flex-col gap-1">
+      {secrets.map((secret) => (
+        <li key={secret.key} className="flex min-w-0 items-center gap-2 text-ui">
+          <span className="min-w-0 flex-1 truncate font-mono">{secret.key}</span>
+          <span className="text-muted-foreground">{formatTaskTime(secret.updated_at)}</span>
+          <button
+            type="button"
+            className={QUIET_ACTION}
+            aria-label={`Remove ${secret.key}`}
+            disabled={busy}
+            onClick={() => onRemove(secret.key)}
+          >
+            Remove
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /**
  * A queue's secrets: keys with their time, Set and Remove, and the required
  * secrets the global env holds, which a queue secret of that name overrides. A value is
@@ -129,40 +186,8 @@ export default function QueueSecrets({
           <p className="font-mono">{stillMissing.join(", ")}</p>
         </div>
       )}
-      {globalEnv.length > 0 && (
-        <ul
-          aria-label="Global env"
-          className="flex min-w-0 flex-col gap-1 text-ui text-muted-foreground"
-        >
-          {globalEnv.map((name) => (
-            <li key={name}>
-              <span className="font-mono">{name}</span> present in global env
-              {secrets.some((secret) => secret.key === name) && ", overridden by the queue secret"}
-            </li>
-          ))}
-        </ul>
-      )}
-      {secrets.length === 0 ? (
-        loaded && <span className={EMPTY}>No secrets.</span>
-      ) : (
-        <ul className="flex min-w-0 flex-col gap-1">
-          {secrets.map((secret) => (
-            <li key={secret.key} className="flex min-w-0 items-center gap-2 text-ui">
-              <span className="min-w-0 flex-1 truncate font-mono">{secret.key}</span>
-              <span className="text-muted-foreground">{formatTaskTime(secret.updated_at)}</span>
-              <button
-                type="button"
-                className={QUIET_ACTION}
-                aria-label={`Remove ${secret.key}`}
-                disabled={busy}
-                onClick={() => remove(secret.key)}
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <GlobalEnvList globalEnv={globalEnv} secrets={secrets} />
+      <SecretList secrets={secrets} loaded={loaded} busy={busy} onRemove={(name) => remove(name)} />
       <form
         className="flex min-w-0 flex-wrap items-center gap-1.5"
         autoComplete="off"
