@@ -2,6 +2,7 @@ package compose
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -145,5 +146,49 @@ func TestStatusDisclosesUncheckedFields(t *testing.T) {
 	out := buf.String()
 	if strings.Count(out, "note: model/env/plugins drift not checked") != 1 {
 		t.Fatalf("expected exactly one disclaimer line, got:\n%s", out)
+	}
+}
+
+// TestLifecycleStopSkipsAbsent pins that stop and kill treat an absent member
+// as already stopped: no call is sent for it and the present member is still
+// stopped.
+func TestLifecycleStopSkipsAbsent(t *testing.T) {
+	for _, verb := range []string{"stop", "kill"} {
+		fc := newFake()
+		fc.agents["writer"] = map[string]any{"name": "writer", "state": "running", "group": "research-team"}
+		fc.fail = map[string]error{"POST /api/agents/scout/" + verb: errors.New(verb + "_failed: not found")}
+		var buf bytes.Buffer
+		r := NewRunner(fc, "", &buf)
+		f, _ := Parse([]byte(goodYAML))
+		if err := r.Lifecycle(f, verb, nil); err != nil {
+			t.Fatalf("%s with an absent member: %v", verb, err)
+		}
+		if countCalls(fc, "POST /api/agents/scout/"+verb) != 0 || countCalls(fc, "POST /api/agents/writer/"+verb) != 1 {
+			t.Fatalf("%s scoping wrong: %v", verb, fc.calls)
+		}
+		if !strings.Contains(buf.String(), verb+" scout: absent, skipping") {
+			t.Fatalf("expected a skip line for scout, got:\n%s", buf.String())
+		}
+	}
+}
+
+func TestLifecycleStartAbsentFails(t *testing.T) {
+	fc := newFake()
+	fc.fail = map[string]error{"POST /api/agents/scout/start": errors.New("start_failed: not found")}
+	r := NewRunner(fc, "", io.Discard)
+	f, _ := Parse([]byte(goodYAML))
+	if err := r.Lifecycle(f, "start", []string{"scout"}); err == nil {
+		t.Fatal("start of an absent member must fail")
+	}
+}
+
+func TestLifecycleStopStillFailsOnOtherErrors(t *testing.T) {
+	fc := newFake()
+	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team"}
+	fc.fail = map[string]error{"POST /api/agents/scout/stop": errors.New("stop_failed: busy")}
+	r := NewRunner(fc, "", io.Discard)
+	f, _ := Parse([]byte(goodYAML))
+	if err := r.Lifecycle(f, "stop", []string{"scout"}); err == nil {
+		t.Fatal("stop must fail on a present member error")
 	}
 }
