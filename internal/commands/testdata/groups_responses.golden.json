@@ -1,0 +1,260 @@
+{
+  "group.assign dev1": {
+    "agent": "dev1",
+    "group": "core"
+  },
+  "group.assign dev2": {
+    "agent": "dev2",
+    "group": "core"
+  },
+  "group.assign lead1": {
+    "agent": "lead1",
+    "group": "core"
+  },
+  "group.create core": {
+    "broadcast": "group:core:broadcast",
+    "inbox": "group:core:inbox",
+    "lead": "",
+    "members": [],
+    "name": "core",
+    "shared_dir": "$BASE/groups/core/shared"
+  },
+  "group.create core lead": {
+    "broadcast": "group:core:broadcast",
+    "inbox": "group:core:inbox",
+    "lead": "lead1",
+    "members": [
+      "dev1",
+      "dev2",
+      "lead1"
+    ],
+    "name": "core",
+    "shared_dir": "$BASE/groups/core/shared"
+  },
+  "group.create empty": {
+    "broadcast": "group:empty:broadcast",
+    "inbox": "group:empty:inbox",
+    "lead": "",
+    "members": [],
+    "name": "empty",
+    "shared_dir": "$BASE/groups/empty/shared"
+  },
+  "group.inspect core": {
+    "broadcast": "group:core:broadcast",
+    "inbox": "group:core:inbox",
+    "lead": "lead1",
+    "members": [
+      "dev1",
+      "dev2",
+      "lead1"
+    ],
+    "name": "core",
+    "shared_dir": "$BASE/groups/core/shared"
+  },
+  "group.inspect empty": {
+    "broadcast": "group:empty:broadcast",
+    "inbox": "group:empty:inbox",
+    "lead": "",
+    "members": [],
+    "name": "empty",
+    "shared_dir": "$BASE/groups/empty/shared"
+  },
+  "group.lead.set core": {
+    "broadcast": "group:core:broadcast",
+    "inbox": "group:core:inbox",
+    "lead": "dev1",
+    "members": [
+      "dev1",
+      "dev2",
+      "lead1"
+    ],
+    "name": "core",
+    "shared_dir": "$BASE/groups/core/shared"
+  },
+  "group.ls": {
+    "count": 2,
+    "groups": [
+      {
+        "lead": "lead1",
+        "members": 3,
+        "name": "core"
+      },
+      {
+        "lead": "",
+        "members": 0,
+        "name": "empty"
+      }
+    ]
+  },
+  "group.member.rm core dev2": {
+    "agent": "dev2",
+    "group": ""
+  },
+  "group.rename core": {
+    "broadcast": "group:crew:broadcast",
+    "inbox": "group:crew:inbox",
+    "lead": "dev1",
+    "members": [
+      "dev1",
+      "lead1"
+    ],
+    "name": "crew",
+    "shared_dir": "$BASE/groups/crew/shared"
+  },
+  "group.rm crew volumes": {
+    "removed": "crew",
+    "volumes": true
+  },
+  "group.rm empty": {
+    "removed": "empty",
+    "volumes": false
+  },
+  "team.compose core": {
+    "name": "core",
+    "yaml": "version: 1\nimages:\n    worker:\n        context: ./images/worker\ngroups:\n    core:\n        lead: dev1\n        budget: null\nagents:\n    dev1:\n        image: worker:latest\n        group: core\n        cwd: /srv/dev1\n        harness:\n            type: stub\n            model: m1\n            effort: high\n            interactive: true\n        env: {}\n        plugins:\n            - context\n        budget: null\n        goal: null\n        timeout: 1m30s\n        loop:\n            enabled: true\n            interval: \"\"\n            timeout: \"\"\n            on_timeout: \"\"\n            on_error: \"\"\n            max_idle_iterations: null\n        subscribe: []\n    lead1:\n        image: worker:latest\n        group: core\n        cwd: /srv/lead1\n        harness:\n            type: stub\n            model: m1\n            effort: high\n            interactive: true\n        env: {}\n        plugins:\n            - context\n        budget: null\n        goal: null\n        timeout: 1m30s\n        loop:\n            enabled: true\n            interval: \"\"\n            timeout: \"\"\n            on_timeout: \"\"\n            on_error: \"\"\n            max_idle_iterations: null\n        subscribe: []\ntask_queues: {}\n"
+  },
+  "team.import.archive.apply refs": {
+    "agents": [
+      {
+        "name": "newbie",
+        "status": "created"
+      }
+    ],
+    "complete": true,
+    "groups": 1,
+    "import_id": "$IMPORTA",
+    "operation": {
+      "compose_yaml": "version: 1\nimages: {}\ngroups:\n    fresh:\n        lead: newbie\n        budget: null\nagents:\n    newbie:\n        image: worker:latest\n        group: fresh\n        cwd: \"\"\n        harness: null\n        env: {}\n        plugins: []\n        budget: null\n        goal: null\n        timeout: \"\"\n        loop: null\n        subscribe: []\ntask_queues: {}\n",
+      "import_id": "$IMPORTA",
+      "resolved_refs": {
+        "ghost:1": "worker:latest"
+      },
+      "status": "complete",
+      "steps": [
+        {
+          "kind": "agent",
+          "name": "newbie",
+          "status": "created"
+        }
+      ],
+      "team": "fresh",
+      "updated_at": "$VOLATILE"
+    }
+  },
+  "team.import.archive.apply update existing": {
+    "agents": [
+      {
+        "name": "lead1",
+        "status": "reused"
+      }
+    ],
+    "complete": true,
+    "groups": 1,
+    "import_id": "$IMPORTB",
+    "operation": {
+      "compose_yaml": "version: 1\ngroups:\n  crew: {}\nagents:\n  lead1:\n    image: worker:latest\n    group: crew\n",
+      "import_id": "$IMPORTB",
+      "status": "complete",
+      "steps": [
+        {
+          "kind": "agent",
+          "name": "lead1",
+          "status": "reused"
+        }
+      ],
+      "team": "crew",
+      "update_existing": true,
+      "updated_at": "$VOLATILE"
+    }
+  },
+  "team.import.archive.status complete": {
+    "compose_yaml": "version: 1\nimages: {}\ngroups:\n    fresh:\n        lead: newbie\n        budget: null\nagents:\n    newbie:\n        image: worker:latest\n        group: fresh\n        cwd: \"\"\n        harness: null\n        env: {}\n        plugins: []\n        budget: null\n        goal: null\n        timeout: \"\"\n        loop: null\n        subscribe: []\ntask_queues: {}\n",
+    "import_id": "$IMPORTA",
+    "resolved_refs": {
+      "ghost:1": "worker:latest"
+    },
+    "status": "complete",
+    "steps": [
+      {
+        "kind": "agent",
+        "name": "newbie",
+        "status": "created"
+      }
+    ],
+    "team": "fresh",
+    "updated_at": "$VOLATILE"
+  },
+  "team.import.archive.status pending": {
+    "import_id": "$IMPORTA",
+    "status": "pending",
+    "steps": [],
+    "team": "fresh",
+    "updated_at": "$VOLATILE"
+  },
+  "team.import.yaml blocked": {
+    "agents": [
+      {
+        "action": "blocked",
+        "conflict": true,
+        "message": "required image is unavailable; import/build it or edit YAML",
+        "name": "newbie"
+      }
+    ],
+    "groups": [
+      {
+        "action": "create",
+        "conflict": false,
+        "message": "",
+        "name": "fresh"
+      }
+    ],
+    "images": [],
+    "import_id": "$IMPORTA",
+    "team": "fresh",
+    "yaml": "version: 1\ngroups:\n  fresh: {lead: newbie}\nagents:\n  newbie:\n    image: ghost:1\n    group: fresh\n"
+  },
+  "team.import.yaml rename": {
+    "agents": [
+      {
+        "action": "rename",
+        "conflict": true,
+        "message": "destination agent has different group or image",
+        "name": "dev2"
+      }
+    ],
+    "groups": [
+      {
+        "action": "create",
+        "conflict": false,
+        "message": "",
+        "name": "other"
+      }
+    ],
+    "images": [],
+    "import_id": "$IMPORTC",
+    "team": "other",
+    "yaml": "version: 1\ngroups:\n  other: {}\nagents:\n  dev2:\n    image: worker:latest\n    group: other\n"
+  },
+  "team.import.yaml reuse": {
+    "agents": [
+      {
+        "action": "reuse",
+        "conflict": false,
+        "message": "",
+        "name": "lead1"
+      }
+    ],
+    "groups": [
+      {
+        "action": "choose",
+        "conflict": true,
+        "message": "destination team exists; rename it in YAML or explicitly update it",
+        "name": "crew"
+      }
+    ],
+    "images": [],
+    "import_id": "$IMPORTB",
+    "team": "crew",
+    "yaml": "version: 1\ngroups:\n  crew: {}\nagents:\n  lead1:\n    image: worker:latest\n    group: crew\n"
+  }
+}
