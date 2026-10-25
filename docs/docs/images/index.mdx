@@ -547,7 +547,12 @@ for this operation, not source backup or persistent state.
 ## Built-in images and compatibility
 
 - `bare:latest` is daemon-synthesized with no plugins and an empty prompt. Its
-  terminal-only behavior is runtime policy.
+  terminal-only behavior is runtime policy. The daemon rebuilds it on every
+  start, with `image_version` set to the daemon version, so the image always
+  matches the current release. A restart of the same release keeps the same
+  ref id; a new release moves the tag to a new id. Archives from earlier
+  releases, including legacy schema-v1 ones, stay in the store, so agents
+  pinned to them continue to resolve.
 - The official Store's `basic` source explicitly declares every plugin,
   packaged skill, runtime placeholder, and mandatory finish prompt it uses.
   Add the `tariboy` Store, then build `tariboy/basic`; daemon
