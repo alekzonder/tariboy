@@ -361,7 +361,16 @@ if (mode === "transfer" || mode === "transfer-cancel") {
   for (const host of fixtureTransferHosts)
     sessionStorage.setItem(`tariboy_daemon_token_${host.id}`, `${host.id}-token`);
 }
-let content = <BuiltImages hostId="" basePath="/servers/local/images" />;
+// The registry lists images and each image page lists its tags, so the
+// fixture renders both views of the images the browser test inspects.
+let content = (
+  <>
+    <BuiltImages hostId="" basePath="/servers/local/images" />
+    {["reviewer", "imported", "missing"].map((name) => (
+      <BuiltImages key={name} hostId="" basePath="/servers/local/images" imageName={name} />
+    ))}
+  </>
+);
 if (mode === "build")
   content = (
     <DaemonProvider>
@@ -384,7 +393,7 @@ if (mode === "agent") content = <AgentFixture />;
 if (mode === "transfer" || mode === "transfer-cancel")
   content = (
     <DaemonProvider>
-      <BuiltImages hostId="source" basePath="/servers/source/images" />
+      <BuiltImages hostId="source" basePath="/servers/source/images" imageName="reviewer" />
     </DaemonProvider>
   );
 createRoot(document.getElementById("root")!).render(
