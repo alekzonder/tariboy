@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"errors"
 	"math"
 	"testing"
@@ -26,8 +27,8 @@ func TestUsageAndBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := res.(map[string]any)["rows"].([]map[string]any)
-	if len(rows) != 1 || rows[0]["agent"] != "alice" || rows[0]["cost_usd"].(float64) != 0.10 {
+	rows := res.(UsageReport).Rows
+	if len(rows) != 1 || rows[0].Agent != "alice" || rows[0].CostUSD != 0.10 {
 		t.Fatalf("usage rows = %+v", rows)
 	}
 
@@ -37,15 +38,15 @@ func TestUsageAndBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	ls, _ := h(t, "budget.ls")(c, registry.Params{})
-	if ls.(map[string]any)["count"].(int) != 1 {
+	if ls.(BudgetList).Count != 1 {
 		t.Fatalf("budget ls = %v", ls)
 	}
 	st, err := h(t, "budget.status")(c, registry.Params{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	srows := st.(map[string]any)["budgets"].([]map[string]any)
-	if len(srows) != 1 || srows[0]["over"].(bool) != true {
+	srows := st.(BudgetStatusList).Budgets
+	if len(srows) != 1 || srows[0].Over != true {
 		t.Fatalf("budget status = %+v", srows)
 	}
 }
@@ -96,37 +97,45 @@ func TestUsageGroupFilterKeepsResponseProjectionsConsistent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			report := res.(map[string]any)
-			rows := report["rows"].([]map[string]any)
-			series := report["series"].([]map[string]any)
-			requests := report["requests"].([]map[string]any)
-			if len(rows) != tt.wantRows || report["count"].(int) != tt.wantRows {
-				t.Fatalf("rows = %+v count=%v", rows, report["count"])
+			report := res.(UsageReport)
+			rows := report.Rows
+			series := report.Series
+			requests := report.Requests
+			if len(rows) != tt.wantRows || report.Count != tt.wantRows {
+				t.Fatalf("rows = %+v count=%v", rows, report.Count)
 			}
-			if report["total_requests"].(int) != tt.wantRequests || report["total_cost_usd"].(float64) != tt.wantCost ||
-				report["total_input_tokens"].(int) != 100*tt.wantRequests || report["total_output_tokens"].(int) != 50*tt.wantRequests ||
-				report["total_cache_write_tokens"].(int) != 10*tt.wantRequests || report["total_cache_read_tokens"].(int) != 5*tt.wantRequests {
+			if report.TotalRequests != tt.wantRequests || report.TotalCostUSD != tt.wantCost ||
+				report.TotalInputTokens != 100*tt.wantRequests || report.TotalOutputTokens != 50*tt.wantRequests ||
+				report.TotalCacheWriteTokens != 10*tt.wantRequests || report.TotalCacheReadTokens != 5*tt.wantRequests {
 				t.Fatalf("totals = %+v", report)
 			}
 
 			seriesRequests, seriesCost := 0, 0.0
 			for _, row := range series {
-				seriesRequests += row["requests"].(int)
-				seriesCost += row["cost_usd"].(float64)
+				seriesRequests += row.Requests
+				seriesCost += row.CostUSD
 			}
 			requestCost := 0.0
 			for _, row := range requests {
-				requestCost += row["cost_usd"].(float64)
-				if _, ok := row["group_id"]; !ok {
-					t.Fatalf("request missing group_id: %+v", row)
+				requestCost += row.CostUSD
+				data, err := json.Marshal(row)
+				if err != nil {
+					t.Fatal(err)
 				}
-				if _, ok := row["group_name"]; !ok {
-					t.Fatalf("request missing group_name: %+v", row)
+				var keys map[string]any
+				if err := json.Unmarshal(data, &keys); err != nil {
+					t.Fatal(err)
 				}
-				if tt.group == "alpha" && row["group_id"] != "alpha" {
+				if _, ok := keys["group_id"]; !ok {
+					t.Fatalf("request missing group_id: %s", data)
+				}
+				if _, ok := keys["group_name"]; !ok {
+					t.Fatalf("request missing group_name: %s", data)
+				}
+				if tt.group == "alpha" && row.GroupID != "alpha" {
 					t.Fatalf("alpha response leaked request: %+v", row)
 				}
-				if tt.group == aiproxy.UngroupedFilter && row["group_id"] != "" {
+				if tt.group == aiproxy.UngroupedFilter && row.GroupID != "" {
 					t.Fatalf("ungrouped response leaked request: %+v", row)
 				}
 			}
@@ -174,11 +183,11 @@ func TestBudgetStatusShowsGroupScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := st.(map[string]any)["budgets"].([]map[string]any)
-	var got map[string]any
-	for _, r := range rows {
-		if r["scope"] == "group:research-team" {
-			got = r
+	rows := st.(BudgetStatusList).Budgets
+	var got *BudgetSpend
+	for i, r := range rows {
+		if r.Scope == "group:research-team" {
+			got = &rows[i]
 		}
 	}
 	// Before the fix the group scope is skipped entirely -> absent (RED).
@@ -186,10 +195,10 @@ func TestBudgetStatusShowsGroupScope(t *testing.T) {
 		t.Fatalf("group:research-team scope absent from budget status: %+v", rows)
 	}
 	// Member-aggregate spend, NOT a global sum that would include outsider's 100.
-	if spent := got["spent_usd"].(float64); spent != 7 {
+	if spent := got.SpentUSD; spent != 7 {
 		t.Fatalf("group spend = %v, want 7 (members scout+writer only, excludes outsider's 100)", spent)
 	}
-	if got["over"].(bool) {
+	if got.Over {
 		t.Fatalf("group spend 7 under 10 limit must not be over: %+v", got)
 	}
 }
@@ -203,7 +212,7 @@ func TestBudgetSetValidation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return ls.(map[string]any)["count"].(int)
+		return ls.(BudgetList).Count
 	}
 
 	// Bogus scope is rejected and nothing is stored.
@@ -276,15 +285,14 @@ func TestUsageTimeBoundsValidateAndAcceptOffsets(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			report := res.(map[string]any)
 			requests := 0
 			if path == "usage" {
-				requests = report["total_requests"].(int)
+				requests = res.(UsageReport).TotalRequests
 			} else {
-				requests = report["totals"].(map[string]any)["requests"].(int)
+				requests = res.(AgentUsage).Totals.Requests
 			}
 			if requests != 1 {
-				t.Fatalf("requests in +03:00 window = %d, want 1: %+v", requests, report)
+				t.Fatalf("requests in +03:00 window = %d, want 1: %+v", requests, res)
 			}
 			for _, bad := range []registry.Params{{"name": "alice", "since": "yesterday"}, {"name": "alice", "until": "2026-07-06 10:00"}} {
 				_, err := h(t, path)(c, bad)

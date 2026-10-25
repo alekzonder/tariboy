@@ -20,15 +20,15 @@ func TestIterationLsInspectLogs(t *testing.T) {
 		Status: "done", StartedAt: time.Now().Format(time.RFC3339), ImageVersion: "1.2.3"})
 
 	ls, err := h(t, "iteration.ls")(c, registry.Params{"name": "smoke"})
-	if err != nil || ls.(map[string]any)["count"].(int) != 1 {
+	if err != nil || ls.(IterationList).Count != 1 {
 		t.Fatalf("ls: %v err=%v", ls, err)
 	}
 	insp, err := h(t, "iteration.inspect")(c, registry.Params{"name": "smoke", "id": id})
-	if err != nil || insp.(map[string]any)["status"] != "done" {
+	if err != nil || insp.(IterationView).Status != "done" {
 		t.Fatalf("inspect: %v err=%v", insp, err)
 	}
-	if insp.(map[string]any)["image_version"] != "1.2.3" {
-		t.Fatalf("inspect image_version = %v", insp.(map[string]any)["image_version"])
+	if insp.(IterationView).ImageVersion != "1.2.3" {
+		t.Fatalf("inspect image_version = %v", insp.(IterationView).ImageVersion)
 	}
 
 	// write logs on disk
@@ -40,8 +40,8 @@ func TestIterationLsInspectLogs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := logs.(map[string]any)
-	if m["stdout"] != "out-line" || m["stderr"] != "err-line" {
+	m := logs.(IterationLogs)
+	if m.Stdout != "out-line" || m.Stderr != "err-line" {
 		t.Fatalf("logs: %v", m)
 	}
 }
@@ -80,12 +80,8 @@ func TestIterationProductiveInViews(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := map[string]bool{}
-	for _, r := range ls.(map[string]any)["iterations"].([]map[string]any) {
-		p, ok := r["productive"].(bool)
-		if !ok {
-			t.Fatalf("ls row %v missing productive bool", r["id"])
-		}
-		got[r["id"].(string)] = p
+	for _, r := range ls.(IterationList).Iterations {
+		got[r.ID] = r.Productive
 	}
 	if !got[prodID] {
 		t.Fatalf("ls: plain done productive=%v, want true", got[prodID])
@@ -104,11 +100,7 @@ func TestIterationProductiveInViews(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		p, ok := insp.(map[string]any)["productive"].(bool)
-		if !ok {
-			t.Fatalf("inspect %s missing productive bool", id)
-		}
-		if p != want {
+		if p := insp.(IterationView).Productive; p != want {
 			t.Fatalf("inspect %s productive=%v, want %v", id, p, want)
 		}
 	}

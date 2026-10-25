@@ -22,22 +22,10 @@ import (
 // free-form result. The list only shrinks: a command that gains a result
 // schema leaves it in the same change, and review refuses new entries.
 var commandsWithoutResultSchema = []string{
-	"agent.usage",
-	"budget.ls",
-	"budget.set",
-	"budget.status",
 	"daemon.config.get",
 	"harness.codex-approval.get",
 	"harness.codex-approval.set",
 	"harness.models",
-	"iteration.extend-timeout",
-	"iteration.inspect",
-	"iteration.logs",
-	"iteration.ls",
-	"iteration.tag.add",
-	"iteration.tag.rm",
-	"iteration.tag.set",
-	"logs",
 	"plugin.action",
 	"plugin.contributions",
 	"plugin.inspect",
@@ -52,7 +40,6 @@ var commandsWithoutResultSchema = []string{
 	"secret.store",
 	"tasks.activity",
 	"transcript",
-	"usage",
 }
 
 // Catches an HTTP command without a result schema outside the allowlist, and

@@ -165,3 +165,39 @@ func TestUsageResponsesMatchGolden(t *testing.T) {
 	}
 	recorder.check("usage_responses.golden.json", *updateUsageGolden)
 }
+
+func init() { typedCallSets["usage"] = usageTypedCalls }
+
+// usageTypedCalls covers every typed usage, budget, logs and iteration
+// operation, with the optional keys of a filtered log page, task titles, an
+// inspected iteration with and without resource use, and empty lists.
+func usageTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
+	c := usageFixture(t)
+	window := "since=2026-07-06T00:00:00Z&until=2026-07-07T00:00:00Z"
+	return c, []typedCall{
+		{"GET", "/api/usage", "/api/usage?" + window, nil},
+		{"GET", "/api/usage", "/api/usage?since=2030-01-01T00:00:00Z", nil},
+		{"GET", "/api/agents/{name}/usage", "/api/agents/alice/usage?" + window, nil},
+		{"GET", "/api/agents/{name}/usage", "/api/agents/alice/usage?group_by=task&bucket=1d&" + window, nil},
+		{"POST", "/api/budgets", "/api/budgets", map[string]any{"scope": "agent:alice", "limit-usd": "1.5", "period": "12h", "mode": "block"}},
+		{"GET", "/api/budgets", "/api/budgets", nil},
+		{"GET", "/api/budgets/status", "/api/budgets/status", nil},
+		{"GET", "/api/agents/{name}/logs", "/api/agents/alice/logs", nil},
+		{"GET", "/api/agents/{name}/logs", "/api/agents/alice/logs?since=2", nil},
+		{"GET", "/api/agents/{name}/logs", "/api/agents/alice/logs?before=3&limit=1", nil},
+		{"GET", "/api/agents/{name}/logs", "/api/agents/alice/logs?iteration=alice-1", nil},
+		{"GET", "/api/agents/{name}/logs", "/api/agents/alice/logs?type=status", nil},
+		{"GET", "/api/agents/{name}/logs", "/api/agents/alice/logs?distinct=types", nil},
+		{"GET", "/api/agents/{name}/logs", "/api/agents/bob/logs?distinct=types", nil},
+		{"GET", "/api/agents/{name}/logs", "/api/agents/bob/logs", nil},
+		{"POST", "/api/agents/{name}/iterations/{id}/extend-timeout", "/api/agents/alice/iterations/alice-2/extend-timeout", nil},
+		{"POST", "/api/agents/{name}/iterations/tags/add", "/api/agents/alice/iterations/tags/add", map[string]any{"id": []string{"alice-1", "alice-2"}, "tag": []string{"keep"}}},
+		{"POST", "/api/agents/{name}/iterations/tags/remove", "/api/agents/alice/iterations/tags/remove", map[string]any{"id": []string{"alice-2"}, "tag": []string{"keep"}}},
+		{"POST", "/api/agents/{name}/iterations/tags/set", "/api/agents/alice/iterations/tags/set", map[string]any{"id": []string{"alice-2"}}},
+		{"GET", "/api/agents/{name}/iterations", "/api/agents/alice/iterations", nil},
+		{"GET", "/api/agents/{name}/iterations", "/api/agents/bob/iterations", nil},
+		{"GET", "/api/agents/{name}/iterations/{id}", "/api/agents/alice/iterations/alice-1", nil},
+		{"GET", "/api/agents/{name}/iterations/{id}", "/api/agents/alice/iterations/alice-2", nil},
+		{"GET", "/api/agents/{name}/iterations/{id}/logs", "/api/agents/alice/iterations/alice-1/logs", nil},
+	}
+}

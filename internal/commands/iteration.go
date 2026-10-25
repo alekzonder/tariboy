@@ -13,7 +13,7 @@ import (
 )
 
 func iterationExtendTimeout() registry.Command {
-	return registry.Command{
+	return registry.WithResult[IterationTimeoutResult](registry.Command{
 		Path: "iteration.extend-timeout", Summary: "Extend a running iteration timeout",
 		Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "id", Type: registry.String, Required: true}},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/iterations/{id}/extend-timeout"},
@@ -35,17 +35,17 @@ func iterationExtendTimeout() registry.Command {
 				}
 				return nil, err
 			}
-			return map[string]any{"id": id, "timeout_deadline": result.TimeoutDeadline,
-				"hard_timeout_deadline": result.HardTimeoutDeadline, "timeout_extensions": result.TimeoutExtensions,
-				"shim_sync": result.ShimSync}, nil
+			return IterationTimeoutResult{ID: id, TimeoutDeadline: result.TimeoutDeadline,
+				HardTimeoutDeadline: result.HardTimeoutDeadline, TimeoutExtensions: result.TimeoutExtensions,
+				ShimSync: result.ShimSync}, nil
 		},
-	}
+	})
 }
 
 func agentsDir(c *registry.Ctx) string { return paths.Paths{Base: c.BaseDir}.AgentsDir() }
 
 func iterationLs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[IterationList](registry.Command{
 		Path:    "iteration.ls",
 		Summary: "List an agent's iterations",
 		Args: []registry.Arg{
@@ -73,17 +73,17 @@ func iterationLs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			rows := make([]map[string]any, 0, len(its))
+			rows := make([]IterationRow, 0, len(its))
 			for _, it := range its {
-				rows = append(rows, map[string]any{
-					"id": it.ID, "trigger": it.Trigger, "status": string(it.Status),
-					"started_at": it.StartedAt, "done": it.DoneFlag,
-					"productive": it.Productive, "tags": tags[it.ID],
+				rows = append(rows, IterationRow{
+					ID: it.ID, Trigger: it.Trigger, Status: string(it.Status),
+					StartedAt: it.StartedAt, Done: it.DoneFlag,
+					Productive: it.Productive, Tags: tags[it.ID],
 				})
 			}
-			return map[string]any{"iterations": rows, "count": len(rows)}, nil
+			return IterationList{Iterations: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
 // iterationTagError maps the tag/filter validation errors onto the HTTP surface.
@@ -103,7 +103,7 @@ func iterationTagError(err error) error {
 // differ only in op, so a batch of ids and tags travels in one request and one
 // transaction: the whole batch applies or none of it does.
 func iterationTag(op agent.TagOp, summary string) registry.Command {
-	return registry.Command{
+	return registry.WithResult[IterationTagResult](registry.Command{
 		Path:    "iteration.tag." + map[agent.TagOp]string{agent.TagOpAdd: "add", agent.TagOpRemove: "rm", agent.TagOpSet: "set"}[op],
 		Summary: summary,
 		Args: []registry.Arg{
@@ -125,13 +125,13 @@ func iterationTag(op agent.TagOp, summary string) registry.Command {
 			if err != nil {
 				return nil, iterationTagError(err)
 			}
-			return map[string]any{"tags": tags, "count": len(tags)}, nil
+			return IterationTagResult{Tags: tags, Count: len(tags)}, nil
 		},
-	}
+	})
 }
 
 func iterationInspect() registry.Command {
-	return registry.Command{
+	return registry.WithResult[IterationView](registry.Command{
 		Path:    "iteration.inspect",
 		Summary: "Show one iteration",
 		Args: []registry.Arg{
@@ -148,31 +148,20 @@ func iterationInspect() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			out := map[string]any{
-				"id": it.ID, "agent": it.Agent, "trigger": it.Trigger, "status": string(it.Status),
-				"started_at": it.StartedAt, "ended_at": it.EndedAt, "done": it.DoneFlag,
-				"productive":  it.Productive,
-				"prompt_path": it.PromptPath,
-				"image_ref":   it.ImageRef, "image_version": it.ImageVersion, "image_digest": it.ImageDigest,
-				"prompt_template_sha256": it.PromptTemplateSHA256,
-				"tags":                   tags[it.ID],
-			}
-			if it.ExitCode != nil {
-				out["exit_code"] = *it.ExitCode
-			}
-			if it.CPUMs != nil {
-				out["cpu_ms"] = *it.CPUMs
-			}
-			if it.MemPeakKB != nil {
-				out["mem_peak_kb"] = *it.MemPeakKB
-			}
-			return out, nil
+			return IterationView{
+				ID: it.ID, Agent: it.Agent, Trigger: it.Trigger, Status: string(it.Status),
+				StartedAt: it.StartedAt, EndedAt: it.EndedAt, Done: it.DoneFlag,
+				Productive: it.Productive, PromptPath: it.PromptPath,
+				ImageRef: it.ImageRef, ImageVersion: it.ImageVersion, ImageDigest: it.ImageDigest,
+				PromptTemplateSHA256: it.PromptTemplateSHA256, Tags: tags[it.ID],
+				ExitCode: it.ExitCode, CPUMs: it.CPUMs, MemPeakKB: it.MemPeakKB,
+			}, nil
 		},
-	}
+	})
 }
 
 func iterationLogs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[IterationLogs](registry.Command{
 		Path:    "iteration.logs",
 		Summary: "Print an iteration's harness logs",
 		Args: []registry.Arg{
@@ -191,7 +180,7 @@ func iterationLogs() registry.Command {
 			l := agentdir.New(agentsDir(c), p.String("name"))
 			stdout, _ := os.ReadFile(l.HarnessStdout(id))
 			stderr, _ := os.ReadFile(l.HarnessStderr(id))
-			return map[string]any{"stdout": string(stdout), "stderr": string(stderr)}, nil
+			return IterationLogs{Stdout: string(stdout), Stderr: string(stderr)}, nil
 		},
-	}
+	})
 }

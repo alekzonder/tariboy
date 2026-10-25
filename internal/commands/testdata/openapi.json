@@ -1245,6 +1245,115 @@
         ],
         "type": "object"
       },
+      "AgentUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "bucket": {
+            "type": "string"
+          },
+          "group_by": {
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/AgentUsageRow"
+            },
+            "type": "array"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/UsageSeriesPoint"
+            },
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/AgentUsageTotals"
+          }
+        },
+        "required": [
+          "agent",
+          "group_by",
+          "bucket",
+          "totals",
+          "rows",
+          "series"
+        ],
+        "type": "object"
+      },
+      "AgentUsageRow": {
+        "additionalProperties": false,
+        "properties": {
+          "cache_read_tokens": {
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "type": "integer"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "input_tokens": {
+            "type": "integer"
+          },
+          "key": {
+            "type": "string"
+          },
+          "output_tokens": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "requests",
+          "input_tokens",
+          "output_tokens",
+          "cache_write_tokens",
+          "cache_read_tokens",
+          "cost_usd"
+        ],
+        "type": "object"
+      },
+      "AgentUsageTotals": {
+        "additionalProperties": false,
+        "properties": {
+          "cache_read_tokens": {
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "type": "integer"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "input_tokens": {
+            "type": "integer"
+          },
+          "output_tokens": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "requests",
+          "input_tokens",
+          "output_tokens",
+          "cache_write_tokens",
+          "cache_read_tokens",
+          "cost_usd"
+        ],
+        "type": "object"
+      },
       "AgentUserPromptResult": {
         "additionalProperties": false,
         "properties": {
@@ -1447,6 +1556,62 @@
         ],
         "type": "object"
       },
+      "AuditLogEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "data": {
+            "type": "string"
+          },
+          "iteration_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "kind",
+          "source",
+          "iteration_id",
+          "data",
+          "at"
+        ],
+        "type": "object"
+      },
+      "AuditLogResult": {
+        "additionalProperties": false,
+        "properties": {
+          "capped": {
+            "type": "boolean"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/AuditLogEvent"
+            },
+            "type": "array"
+          },
+          "types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "BackupArchive": {
         "additionalProperties": false,
         "properties": {
@@ -1510,6 +1675,96 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "BudgetLimit": {
+        "additionalProperties": false,
+        "properties": {
+          "limit_usd": {
+            "type": "number"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "period_s": {
+            "type": "integer"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "limit_usd",
+          "period_s",
+          "mode"
+        ],
+        "type": "object"
+      },
+      "BudgetList": {
+        "additionalProperties": false,
+        "properties": {
+          "budgets": {
+            "items": {
+              "$ref": "#/components/schemas/BudgetLimit"
+            },
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "budgets",
+          "count"
+        ],
+        "type": "object"
+      },
+      "BudgetSpend": {
+        "additionalProperties": false,
+        "properties": {
+          "limit_usd": {
+            "type": "number"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "over": {
+            "type": "boolean"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "spent_usd": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "scope",
+          "limit_usd",
+          "spent_usd",
+          "mode",
+          "over"
+        ],
+        "type": "object"
+      },
+      "BudgetStatusList": {
+        "additionalProperties": false,
+        "properties": {
+          "budgets": {
+            "items": {
+              "$ref": "#/components/schemas/BudgetSpend"
+            },
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "budgets",
+          "count"
+        ],
         "type": "object"
       },
       "ChannelInspectView": {
@@ -3301,6 +3556,206 @@
         ],
         "type": "object"
       },
+      "IterationList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "iterations": {
+            "items": {
+              "$ref": "#/components/schemas/IterationRow"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "iterations",
+          "count"
+        ],
+        "type": "object"
+      },
+      "IterationLogs": {
+        "additionalProperties": false,
+        "properties": {
+          "stderr": {
+            "type": "string"
+          },
+          "stdout": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "stdout",
+          "stderr"
+        ],
+        "type": "object"
+      },
+      "IterationRow": {
+        "additionalProperties": false,
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "productive": {
+            "type": "boolean"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "trigger": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "trigger",
+          "status",
+          "started_at",
+          "done",
+          "productive",
+          "tags"
+        ],
+        "type": "object"
+      },
+      "IterationTagResult": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "tags": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "tags",
+          "count"
+        ],
+        "type": "object"
+      },
+      "IterationTimeoutResult": {
+        "additionalProperties": false,
+        "properties": {
+          "hard_timeout_deadline": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "shim_sync": {
+            "type": "string"
+          },
+          "timeout_deadline": {
+            "type": "string"
+          },
+          "timeout_extensions": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "timeout_deadline",
+          "hard_timeout_deadline",
+          "timeout_extensions",
+          "shim_sync"
+        ],
+        "type": "object"
+      },
+      "IterationView": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "cpu_ms": {
+            "type": "integer"
+          },
+          "done": {
+            "type": "boolean"
+          },
+          "ended_at": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image_digest": {
+            "type": "string"
+          },
+          "image_ref": {
+            "type": "string"
+          },
+          "image_version": {
+            "type": "string"
+          },
+          "mem_peak_kb": {
+            "type": "integer"
+          },
+          "productive": {
+            "type": "boolean"
+          },
+          "prompt_path": {
+            "type": "string"
+          },
+          "prompt_template_sha256": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "trigger": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "agent",
+          "trigger",
+          "status",
+          "started_at",
+          "ended_at",
+          "done",
+          "productive",
+          "prompt_path",
+          "image_ref",
+          "image_version",
+          "image_digest",
+          "prompt_template_sha256",
+          "tags"
+        ],
+        "type": "object"
+      },
       "LimitsView": {
         "properties": {
           "idle_iterations": {
@@ -4899,6 +5354,199 @@
           "name",
           "channel",
           "removed"
+        ],
+        "type": "object"
+      },
+      "UsageReport": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/UsageRequest"
+            },
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/UsageRow"
+            },
+            "type": "array"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/UsageSeriesPoint"
+            },
+            "type": "array"
+          },
+          "total_cache_read_tokens": {
+            "type": "integer"
+          },
+          "total_cache_write_tokens": {
+            "type": "integer"
+          },
+          "total_cost_usd": {
+            "type": "number"
+          },
+          "total_input_tokens": {
+            "type": "integer"
+          },
+          "total_output_tokens": {
+            "type": "integer"
+          },
+          "total_requests": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rows",
+          "count",
+          "total_requests",
+          "total_cost_usd",
+          "total_input_tokens",
+          "total_output_tokens",
+          "total_cache_write_tokens",
+          "total_cache_read_tokens",
+          "series",
+          "requests"
+        ],
+        "type": "object"
+      },
+      "UsageRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "cache_read_tokens": {
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "type": "integer"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "group_id": {
+            "type": "string"
+          },
+          "group_name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "input_tokens": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "output_tokens": {
+            "type": "integer"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ts",
+          "agent",
+          "image",
+          "provider",
+          "model",
+          "input_tokens",
+          "output_tokens",
+          "cache_write_tokens",
+          "cache_read_tokens",
+          "cost_usd",
+          "status",
+          "group_id",
+          "group_name"
+        ],
+        "type": "object"
+      },
+      "UsageRow": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "cache_read_tokens": {
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "type": "integer"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "group_id": {
+            "type": "string"
+          },
+          "group_name": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "input_tokens": {
+            "type": "integer"
+          },
+          "output_tokens": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agent",
+          "image",
+          "group_id",
+          "group_name",
+          "requests",
+          "input_tokens",
+          "output_tokens",
+          "cache_write_tokens",
+          "cache_read_tokens",
+          "cost_usd"
+        ],
+        "type": "object"
+      },
+      "UsageSeriesPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "bucket_start": {
+            "type": "string"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bucket_start",
+          "requests",
+          "tokens",
+          "cost_usd"
         ],
         "type": "object"
       },
@@ -9224,7 +9872,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/IterationList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -9330,7 +9980,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/IterationTagResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -9436,7 +10088,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/IterationTagResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -9542,7 +10196,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/IterationTagResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -9628,7 +10284,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/IterationView"
+                    }
                   },
                   "required": [
                     "ok",
@@ -9725,7 +10383,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/IterationTimeoutResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -9811,7 +10471,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/IterationLogs"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10154,7 +10816,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AuditLogResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -13929,7 +14593,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentUsage"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14269,7 +14935,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/BudgetList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14365,7 +15033,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/BudgetLimit"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14431,7 +15101,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/BudgetStatusList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -26500,7 +27172,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/UsageReport"
+                    }
                   },
                   "required": [
                     "ok",

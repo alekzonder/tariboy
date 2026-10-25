@@ -27,7 +27,7 @@ func usageWindow(p registry.Params) (since, until string, err error) {
 }
 
 func usageCommand() registry.Command {
-	return registry.Command{
+	return registry.WithResult[UsageReport](registry.Command{
 		Path:    "usage",
 		Summary: "Aggregate AI usage and cost from ai_requests",
 		Args: []registry.Arg{
@@ -52,52 +52,52 @@ func usageCommand() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			out := make([]map[string]any, 0, len(rows))
-			outSeries := make([]map[string]any, 0, len(series))
-			outRequests := make([]map[string]any, 0, len(requests))
+			out := UsageReport{Rows: make([]UsageRow, 0, len(rows)),
+				Series: usageSeries(series), Requests: make([]UsageRequest, 0, len(requests))}
 			var totCost float64
-			var totReq, totIn, totOut, totCW, totCR int
 			for _, r := range rows {
-				out = append(out, map[string]any{"agent": r.Agent, "image": r.ImageName,
-					"group_id": r.GroupID, "group_name": r.GroupName,
-					"requests": r.Requests, "input_tokens": r.InputTokens, "output_tokens": r.OutputTokens,
-					"cache_write_tokens": r.CacheWriteTokens, "cache_read_tokens": r.CacheReadTokens,
-					"cost_usd": r.CostUSD})
+				out.Rows = append(out.Rows, UsageRow{Agent: r.Agent, Image: r.ImageName,
+					GroupID: r.GroupID, GroupName: r.GroupName,
+					Requests: r.Requests, InputTokens: r.InputTokens, OutputTokens: r.OutputTokens,
+					CacheWriteTokens: r.CacheWriteTokens, CacheReadTokens: r.CacheReadTokens,
+					CostUSD: r.CostUSD})
 				totCost += r.CostUSD
-				totReq += r.Requests
-				totIn += r.InputTokens
-				totOut += r.OutputTokens
-				totCW += r.CacheWriteTokens
-				totCR += r.CacheReadTokens
-			}
-			for _, r := range series {
-				outSeries = append(outSeries, map[string]any{
-					"bucket_start": r.BucketStart, "requests": r.Requests, "tokens": r.Tokens, "cost_usd": r.CostUSD,
-				})
+				out.TotalRequests += r.Requests
+				out.TotalInputTokens += r.InputTokens
+				out.TotalOutputTokens += r.OutputTokens
+				out.TotalCacheWriteTokens += r.CacheWriteTokens
+				out.TotalCacheReadTokens += r.CacheReadTokens
 			}
 			for _, r := range requests {
-				outRequests = append(outRequests, map[string]any{
-					"id": r.ID, "ts": r.TS, "agent": r.Agent, "image": r.ImageName,
-					"provider": r.Provider, "model": r.Model, "input_tokens": r.InputTokens,
-					"output_tokens": r.OutputTokens, "cache_write_tokens": r.CacheWriteTokens,
-					"cache_read_tokens": r.CacheReadTokens, "cost_usd": r.CostUSD, "status": r.Status,
-					"group_id": r.GroupID, "group_name": r.GroupName,
+				out.Requests = append(out.Requests, UsageRequest{
+					ID: r.ID, TS: r.TS, Agent: r.Agent, Image: r.ImageName,
+					Provider: r.Provider, Model: r.Model, InputTokens: r.InputTokens,
+					OutputTokens: r.OutputTokens, CacheWriteTokens: r.CacheWriteTokens,
+					CacheReadTokens: r.CacheReadTokens, CostUSD: r.CostUSD, Status: r.Status,
+					GroupID: r.GroupID, GroupName: r.GroupName,
 				})
 			}
-			return map[string]any{"rows": out, "count": len(out),
-				"total_requests": totReq, "total_cost_usd": math.Round(totCost*1e6) / 1e6,
-				"total_input_tokens": totIn, "total_output_tokens": totOut,
-				"total_cache_write_tokens": totCW, "total_cache_read_tokens": totCR,
-				"series": outSeries, "requests": outRequests}, nil
+			out.Count = len(out.Rows)
+			out.TotalCostUSD = math.Round(totCost*1e6) / 1e6
+			return out, nil
 		},
+	})
+}
+
+// usageSeries converts the stored time buckets into response points.
+func usageSeries(series []aiproxy.SeriesRow) []UsageSeriesPoint {
+	out := make([]UsageSeriesPoint, 0, len(series))
+	for _, r := range series {
+		out = append(out, UsageSeriesPoint{BucketStart: r.BucketStart, Requests: r.Requests, Tokens: r.Tokens, CostUSD: r.CostUSD})
 	}
+	return out
 }
 
 // agentUsage is the per-agent Usage tab's backend (epic dev-t-3e1 §3): grouped
 // rows + a time-bucketed series over one agent's ai_requests, scoped by an
 // optional RFC 3339 window.
 func agentUsage() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentUsage](registry.Command{
 		Path:    "agent.usage",
 		Summary: "Per-agent AI usage: grouped rows + time-bucketed series",
 		Args: []registry.Arg{
@@ -162,56 +162,40 @@ func agentUsage() registry.Command {
 				}
 			}
 
-			outRows := make([]map[string]any, 0, len(rows))
-			var totReq, totIn, totOut, totCW, totCR int
+			out := AgentUsage{Agent: a.Name, GroupBy: groupBy, Bucket: bucket,
+				Rows: make([]AgentUsageRow, 0, len(rows)), Series: usageSeries(series)}
 			var totCost float64
 			for _, r := range rows {
 				key := r.Key
 				if key == "" {
 					key = "untagged"
 				}
-				row := map[string]any{
-					"key": key, "requests": r.Requests,
-					"input_tokens": r.InputTokens, "output_tokens": r.OutputTokens,
-					"cache_write_tokens": r.CacheWriteTokens, "cache_read_tokens": r.CacheReadTokens,
-					"cost_usd": r.CostUSD,
+				row := AgentUsageRow{
+					Key: key, Requests: r.Requests,
+					InputTokens: r.InputTokens, OutputTokens: r.OutputTokens,
+					CacheWriteTokens: r.CacheWriteTokens, CacheReadTokens: r.CacheReadTokens,
+					CostUSD: r.CostUSD,
 				}
 				if groupBy == "task" || groupBy == "epic" {
 					switch {
 					case r.Key == "":
-						row["title"] = "untagged"
+						row.Title = "untagged"
 					case titles[r.Key] != "":
-						row["title"] = titles[r.Key]
+						row.Title = titles[r.Key]
 					default:
-						row["title"] = r.Key // unknown/failed → bare id
+						row.Title = r.Key // unknown/failed → bare id
 					}
 				}
-				outRows = append(outRows, row)
-				totReq += r.Requests
-				totIn += r.InputTokens
-				totOut += r.OutputTokens
-				totCW += r.CacheWriteTokens
-				totCR += r.CacheReadTokens
+				out.Rows = append(out.Rows, row)
+				out.Totals.Requests += r.Requests
+				out.Totals.InputTokens += r.InputTokens
+				out.Totals.OutputTokens += r.OutputTokens
+				out.Totals.CacheWriteTokens += r.CacheWriteTokens
+				out.Totals.CacheReadTokens += r.CacheReadTokens
 				totCost += r.CostUSD
 			}
-
-			outSeries := make([]map[string]any, 0, len(series))
-			for _, sr := range series {
-				outSeries = append(outSeries, map[string]any{
-					"bucket_start": sr.BucketStart, "requests": sr.Requests,
-					"tokens": sr.Tokens, "cost_usd": sr.CostUSD,
-				})
-			}
-
-			return map[string]any{
-				"agent": a.Name, "group_by": groupBy, "bucket": bucket,
-				"totals": map[string]any{
-					"requests": totReq, "input_tokens": totIn, "output_tokens": totOut,
-					"cache_write_tokens": totCW, "cache_read_tokens": totCR,
-					"cost_usd": math.Round(totCost*1e6) / 1e6,
-				},
-				"rows": outRows, "series": outSeries,
-			}, nil
+			out.Totals.CostUSD = math.Round(totCost*1e6) / 1e6
+			return out, nil
 		},
-	}
+	})
 }

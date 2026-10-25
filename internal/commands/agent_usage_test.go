@@ -63,33 +63,29 @@ func TestAgentUsageGroupingAndTotals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := res.(map[string]any)
+	m := res.(AgentUsage)
 
 	// totals fold every row regardless of grouping.
-	tot := m["totals"].(map[string]any)
-	if tot["requests"].(int) != 5 || tot["cost_usd"].(float64) != 0.38 {
+	tot := m.Totals
+	if tot.Requests != 5 || tot.CostUSD != 0.38 {
 		t.Fatalf("totals = %+v", tot)
 	}
-	if tot["input_tokens"].(int) != 500 || tot["output_tokens"].(int) != 250 {
+	if tot.InputTokens != 500 || tot.OutputTokens != 250 {
 		t.Fatalf("totals tokens = %+v", tot)
 	}
 
-	rows := m["rows"].([]map[string]any)
-	byKey := map[string]map[string]any{}
-	for _, r := range rows {
-		byKey[r["key"].(string)] = r
-	}
-	if got := byKey[task.Key]; got == nil || got["requests"].(int) != 2 || got["title"].(string) != "Native task title" {
+	byKey := agentUsageRowsByKey(m.Rows)
+	if got := byKey[task.Key]; got == nil || got.Requests != 2 || got.Title != "Native task title" {
 		t.Fatalf("task row = %+v", got)
 	}
 	// NULL task_id surfaces as the 'untagged' key + title.
-	if u := byKey["untagged"]; u == nil || u["requests"].(int) != 1 || u["title"].(string) != "untagged" {
+	if u := byKey["untagged"]; u == nil || u.Requests != 1 || u.Title != "untagged" {
 		t.Fatalf("untagged row = %+v", u)
 	}
-	if missing := byKey["MISSING-1"]; missing == nil || missing["title"].(string) != "MISSING-1" {
+	if missing := byKey["MISSING-1"]; missing == nil || missing.Title != "MISSING-1" {
 		t.Fatalf("unknown task row = %+v", missing)
 	}
-	if inaccessible := byKey[hidden.Key]; inaccessible == nil || inaccessible["title"].(string) != hidden.Key {
+	if inaccessible := byKey[hidden.Key]; inaccessible == nil || inaccessible.Title != hidden.Key {
 		t.Fatalf("inaccessible task row = %+v", inaccessible)
 	}
 
@@ -97,20 +93,25 @@ func TestAgentUsageGroupingAndTotals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows = res.(map[string]any)["rows"].([]map[string]any)
-	byKey = map[string]map[string]any{}
-	for _, r := range rows {
-		byKey[r["key"].(string)] = r
-	}
-	if got := byKey[root.Key]; got == nil || got["title"].(string) != "Native epic title" {
+	byKey = agentUsageRowsByKey(res.(AgentUsage).Rows)
+	if got := byKey[root.Key]; got == nil || got.Title != "Native epic title" {
 		t.Fatalf("epic row = %+v", got)
 	}
-	if hidden := byKey["HIDDEN-1"]; hidden == nil || hidden["title"].(string) != "HIDDEN-1" {
+	if hidden := byKey["HIDDEN-1"]; hidden == nil || hidden.Title != "HIDDEN-1" {
 		t.Fatalf("unknown epic row = %+v", hidden)
 	}
-	if inaccessible := byKey[hidden.Key]; inaccessible == nil || inaccessible["title"].(string) != hidden.Key {
+	if inaccessible := byKey[hidden.Key]; inaccessible == nil || inaccessible.Title != hidden.Key {
 		t.Fatalf("inaccessible epic row = %+v", inaccessible)
 	}
+}
+
+// agentUsageRowsByKey indexes agent.usage rows by their key.
+func agentUsageRowsByKey(rows []AgentUsageRow) map[string]*AgentUsageRow {
+	out := map[string]*AgentUsageRow{}
+	for i := range rows {
+		out[rows[i].Key] = &rows[i]
+	}
+	return out
 }
 
 func TestAgentUsageSeriesAndDefaults(t *testing.T) {
@@ -132,20 +133,20 @@ func TestAgentUsageSeriesAndDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := res.(map[string]any)
-	if m["group_by"].(string) != "iteration" || m["bucket"].(string) != "1h" {
-		t.Fatalf("defaults = %v/%v", m["group_by"], m["bucket"])
+	m := res.(AgentUsage)
+	if m.GroupBy != "iteration" || m.Bucket != "1h" {
+		t.Fatalf("defaults = %v/%v", m.GroupBy, m.Bucket)
 	}
-	series := m["series"].([]map[string]any)
+	series := m.Series
 	// 1h buckets: 09:00 (2 reqs) and 10:00 (1 req).
 	if len(series) != 2 {
 		t.Fatalf("series buckets = %+v", series)
 	}
-	if series[0]["bucket_start"].(string) != "2026-07-06T09:00:00Z" || series[0]["requests"].(int) != 2 {
+	if series[0].BucketStart != "2026-07-06T09:00:00Z" || series[0].Requests != 2 {
 		t.Fatalf("first bucket = %+v", series[0])
 	}
-	if series[0]["tokens"].(int) != 30 { // 2 reqs * (10+5)
-		t.Fatalf("first bucket tokens = %v", series[0]["tokens"])
+	if series[0].Tokens != 30 { // 2 reqs * (10+5)
+		t.Fatalf("first bucket tokens = %v", series[0].Tokens)
 	}
 }
 
