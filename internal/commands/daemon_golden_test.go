@@ -125,3 +125,47 @@ func TestDaemonResponsesMatchGolden(t *testing.T) {
 	}
 	recorder.check("daemon_responses.golden.json", *updateDaemonGolden)
 }
+
+func init() {
+	typedCallSets["daemon"] = daemonTypedCalls
+	typedCallSets["daemon-empty"] = daemonEmptyTypedCalls
+}
+
+// daemonTypedCalls covers every typed daemon, maintenance, retention, backup
+// and restore operation, with a maintenance view before and after a run and
+// a retention view of the default and of an agent.
+func daemonTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
+	c := daemonFixture(t)
+	out := filepath.Join(c.BaseDir, "out")
+	return c, []typedCall{
+		{"GET", "/api/daemon/status", "/api/daemon/status", nil},
+		{"POST", "/api/daemon/config", "/api/daemon/config", map[string]any{"key": "log_level", "value": "debug"}},
+		{"POST", "/api/daemon/reindex", "/api/daemon/reindex", nil},
+		{"GET", "/api/daemon/agent-shell-script", "/api/daemon/agent-shell-script", nil},
+		{"POST", "/api/daemon/agent-shell-script", "/api/daemon/agent-shell-script", map[string]any{"script": "export A=1\n"}},
+		{"GET", "/api/maintenance", "/api/maintenance", nil},
+		{"POST", "/api/maintenance", "/api/maintenance", map[string]any{"time": "04:30"}},
+		{"POST", "/api/maintenance/run", "/api/maintenance/run", nil},
+		{"GET", "/api/maintenance", "/api/maintenance", nil},
+		{"GET", "/api/agents/{agent}/retention", "/api/agents/default/retention", nil},
+		{"POST", "/api/agents/{agent}/retention", "/api/agents/old/retention", map[string]any{"keep-iterations": 1}},
+		{"GET", "/api/agents/{agent}/retention", "/api/agents/old/retention", nil},
+		{"POST", "/api/agents/{agent}/prune", "/api/agents/old/prune", map[string]any{"dry-run": true}},
+		{"POST", "/api/agents/{agent}/prune", "/api/agents/all/prune", map[string]any{"dry-run": true}},
+		{"POST", "/api/backup", "/api/backup", map[string]any{"target": "bot", "output": filepath.Join(out, "bot.tar.gz")}},
+		{"POST", "/api/backup", "/api/backup", map[string]any{"target": "bot", "output": filepath.Join(out, "secrets.tar.gz"), "include-secrets": true}},
+		{"POST", "/api/backup", "/api/backup", map[string]any{"target": "all", "output": filepath.Join(out, "all")}},
+		{"POST", "/api/restore", "/api/restore", map[string]any{"file": filepath.Join(out, "bot.tar.gz"), "name": "clone"}},
+	}
+}
+
+// daemonEmptyTypedCalls covers the null lists of a daemon without agents.
+func daemonEmptyTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
+	c, as, _ := ctxWithStore(t)
+	pol := retention.NewStore(c.Store)
+	c.Retention = &retention.RetentionAPI{Policies: pol, Pruner: retention.NewPruner(c.Store, as, pol, agentsDir(c), nil, nil)}
+	return c, []typedCall{
+		{"POST", "/api/agents/{agent}/prune", "/api/agents/all/prune", nil},
+		{"POST", "/api/backup", "/api/backup", map[string]any{"target": "all", "output": filepath.Join(c.BaseDir, "out")}},
+	}
+}

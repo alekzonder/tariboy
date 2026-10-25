@@ -29,35 +29,34 @@ func sha256File(path string) (string, int64, error) {
 	return hex.EncodeToString(h.Sum(nil)), n, nil
 }
 
-func backupOne(c *registry.Ctx, name, out string, opts backup.Options) (map[string]any, error) {
+func backupOne(c *registry.Ctx, name, out string, opts backup.Options) (BackupArchive, error) {
 	if err := os.MkdirAll(filepath.Dir(out), 0o700); err != nil {
-		return nil, err
+		return BackupArchive{}, err
 	}
 	f, err := os.OpenFile(out, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
-		return nil, err
+		return BackupArchive{}, err
 	}
 	man, err := backup.Build(f, c.Store, agentsDir(c), name, opts, time.Now)
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
 	if err != nil {
-		return nil, err
+		return BackupArchive{}, err
 	}
 	sum, size, err := sha256File(out)
 	if err != nil {
-		return nil, err
+		return BackupArchive{}, err
 	}
-	res := map[string]any{"agent": man.Agent, "path": out, "bytes": size, "sha256": sum,
-		"schema_version": man.SchemaVersion}
+	res := BackupArchive{Agent: man.Agent, Path: out, Bytes: size, SHA256: sum, SchemaVersion: man.SchemaVersion}
 	if opts.IncludeSecrets {
-		res["warning"] = "secret values are included in this archive; store it securely"
+		res.Warning = "secret values are included in this archive; store it securely"
 	}
 	return res, nil
 }
 
 func backupCommand() registry.Command {
-	return registry.Command{
+	return registry.WithResult[BackupResult](registry.Command{
 		Path:    "backup",
 		Summary: "Back up an agent (or 'all') to a portable tar.gz",
 		Args: []registry.Arg{
@@ -86,7 +85,7 @@ func backupCommand() registry.Command {
 				if dir == "" {
 					dir = backupsDir
 				}
-				var archives []map[string]any
+				var archives []BackupArchive
 				for _, a := range ags {
 					res, err := backupOne(c, a.Name, filepath.Join(dir, fmt.Sprintf("%s-%s.tar.gz", a.Name, ts)), opts)
 					if err != nil {
@@ -94,7 +93,8 @@ func backupCommand() registry.Command {
 					}
 					archives = append(archives, res)
 				}
-				return map[string]any{"archives": archives, "count": len(archives)}, nil
+				count := len(archives)
+				return BackupResult{Archives: &archives, Count: &count}, nil
 			}
 			out := p.String("output")
 			if out == "" {
@@ -104,13 +104,14 @@ func backupCommand() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "backup_failed", Msg: err.Error()}
 			}
-			return res, nil
+			return BackupResult{Agent: res.Agent, Path: res.Path, Bytes: res.Bytes, SHA256: res.SHA256,
+				SchemaVersion: res.SchemaVersion, Warning: res.Warning}, nil
 		},
-	}
+	})
 }
 
 func restoreCommand() registry.Command {
-	return registry.Command{
+	return registry.WithResult[RestoreResult](registry.Command{
 		Path:    "restore",
 		Summary: "Restore an agent from a backup tar.gz (optionally under a new name)",
 		Args: []registry.Arg{
@@ -138,7 +139,7 @@ func restoreCommand() registry.Command {
 			if nn := p.String("name"); nn != "" {
 				name = nn
 			}
-			return map[string]any{"agent": name, "source_agent": man.Agent, "schema_version": man.SchemaVersion}, nil
+			return RestoreResult{Agent: name, SourceAgent: man.Agent, SchemaVersion: man.SchemaVersion}, nil
 		},
-	}
+	})
 }

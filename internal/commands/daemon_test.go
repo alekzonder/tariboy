@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"strings"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
-	"github.com/alekzonder/tariboy/internal/toolcheck"
 )
 
 func ctx(t *testing.T) *registry.Ctx {
@@ -25,6 +25,12 @@ func ctx(t *testing.T) *registry.Ctx {
 
 func call(t *testing.T, c *registry.Ctx, path string, p registry.Params) map[string]any {
 	t.Helper()
+	return callAs[map[string]any](t, c, path, p)
+}
+
+// callAs runs the command at path and returns its result as T.
+func callAs[T any](t *testing.T, c *registry.Ctx, path string, p registry.Params) T {
+	t.Helper()
 	reg := BuildRegistry()
 	cmd, ok := reg.Get(path)
 	if !ok {
@@ -34,29 +40,29 @@ func call(t *testing.T, c *registry.Ctx, path string, p registry.Params) map[str
 	if err != nil {
 		t.Fatalf("%s: %v", path, err)
 	}
-	m, ok := res.(map[string]any)
+	v, ok := res.(T)
 	if !ok {
 		t.Fatalf("%s returned %T", path, res)
 	}
-	return m
+	return v
 }
 
 func TestDaemonStatus(t *testing.T) {
 	t.Parallel()
 	c := ctx(t)
-	m := call(t, c, "daemon.status", registry.Params{})
-	if m["version"] != "v-test" || m["base_dir"] != "/base" {
+	m := callAs[DaemonStatus](t, c, "daemon.status", registry.Params{})
+	if m.Version != "v-test" || m.BaseDir != "/base" {
 		t.Fatalf("bad status %v", m)
 	}
-	if m["uptime_seconds"].(int64) < 3 {
-		t.Fatalf("uptime %v", m["uptime_seconds"])
+	if m.UptimeSeconds < 3 {
+		t.Fatalf("uptime %v", m.UptimeSeconds)
 	}
 }
 
 func TestDaemonConfigRoundTrip(t *testing.T) {
 	t.Parallel()
 	c := ctx(t)
-	call(t, c, "daemon.config.set", registry.Params{"key": "log_level", "value": "debug"})
+	callAs[DaemonConfigEntry](t, c, "daemon.config.set", registry.Params{"key": "log_level", "value": "debug"})
 	got := call(t, c, "daemon.config.get", registry.Params{"key": "log_level"})
 	if got["log_level"] != "debug" {
 		t.Fatalf("get after set: %v", got)
@@ -86,9 +92,9 @@ func TestDaemonConfigSetValidates(t *testing.T) {
 func TestDaemonConfigSetKeepsGenericStringBehaviorForUnrelatedKeys(t *testing.T) {
 	t.Parallel()
 	c := ctx(t)
-	got := call(t, c, "daemon.config.set", registry.Params{"key": "arbitrary", "value": "not json"})
-	if got["value"] != "not json" {
-		t.Fatalf("value = %v, want generic string preserved", got["value"])
+	got := callAs[DaemonConfigEntry](t, c, "daemon.config.set", registry.Params{"key": "arbitrary", "value": "not json"})
+	if got.Value != "not json" {
+		t.Fatalf("value = %v, want generic string preserved", got.Value)
 	}
 }
 
@@ -96,9 +102,9 @@ func TestDaemonStatusIncludesHTTPAddr(t *testing.T) {
 	t.Parallel()
 	c := ctx(t)
 	c.HTTPAddr = "127.0.0.1:9990"
-	m := call(t, c, "daemon.status", registry.Params{})
-	if m["http_addr"] != "127.0.0.1:9990" {
-		t.Fatalf("http_addr = %v, want 127.0.0.1:9990", m["http_addr"])
+	m := callAs[DaemonStatus](t, c, "daemon.status", registry.Params{})
+	if m.HTTPAddr != "127.0.0.1:9990" {
+		t.Fatalf("http_addr = %v, want 127.0.0.1:9990", m.HTTPAddr)
 	}
 }
 
@@ -108,7 +114,14 @@ func TestDaemonStatusIncludesHTTPAddr(t *testing.T) {
 func TestDaemonStatusHTTPAddrEmptyWhenDisabled(t *testing.T) {
 	t.Parallel()
 	c := ctx(t)
-	m := call(t, c, "daemon.status", registry.Params{})
+	data, err := json.Marshal(callAs[DaemonStatus](t, c, "daemon.status", registry.Params{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatal(err)
+	}
 	v, ok := m["http_addr"]
 	if !ok || v != "" {
 		t.Fatalf("http_addr = %v (present=%v), want present and empty", v, ok)
@@ -158,11 +171,11 @@ func TestDaemonStatusReportsMissingTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	status := out.(map[string]any)
-	if status["state"] != "error" || status["message"] == "" {
+	status := out.(DaemonStatus)
+	if status.State != "error" || status.Message == "" {
 		t.Fatalf("status = %+v, want error state with message", status)
 	}
-	if missing, _ := status["missing_tools"].([]toolcheck.Tool); len(missing) == 0 || missing[0].Name != "tmux" {
-		t.Fatalf("missing_tools = %#v, want tmux first", status["missing_tools"])
+	if missing := status.MissingTools; len(missing) == 0 || missing[0].Name != "tmux" {
+		t.Fatalf("missing_tools = %#v, want tmux first", status.MissingTools)
 	}
 }

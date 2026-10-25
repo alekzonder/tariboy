@@ -64,11 +64,11 @@ func agentShellScriptPath(c *registry.Ctx, p registry.Params) (string, error) {
 }
 
 func globalShellScriptGet() registry.Command {
-	return registry.Command{Path: "daemon.agent-shell-script.get", Summary: "Read the global agent shell script", HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/daemon/agent-shell-script"}, Handler: shellScriptGet(globalShellScriptPath)}
+	return registry.WithResult[ShellScriptResult](registry.Command{Path: "daemon.agent-shell-script.get", Summary: "Read the global agent shell script", HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/daemon/agent-shell-script"}, Handler: shellScriptGet(globalShellScriptPath)})
 }
 
 func globalShellScriptSet() registry.Command {
-	return registry.Command{Path: "daemon.agent-shell-script.set", Summary: "Set the global agent shell script", Args: []registry.Arg{{Name: "script", Type: registry.String, Help: "Bash script"}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/daemon/agent-shell-script"}, Handler: shellScriptSet(globalShellScriptPath)}
+	return registry.WithResult[ShellScriptSaveResult](registry.Command{Path: "daemon.agent-shell-script.set", Summary: "Set the global agent shell script", Args: []registry.Arg{{Name: "script", Type: registry.String, Help: "Bash script"}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/daemon/agent-shell-script"}, Handler: shellScriptSet(globalShellScriptPath)})
 }
 
 func agentShellScriptGet() registry.Command {

@@ -1447,6 +1447,71 @@
         ],
         "type": "object"
       },
+      "BackupArchive": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "warning": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent",
+          "path",
+          "bytes",
+          "sha256",
+          "schema_version"
+        ],
+        "type": "object"
+      },
+      "BackupResult": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "archives": {
+            "items": {
+              "$ref": "#/components/schemas/BackupArchive"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "warning": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ChannelInspectView": {
         "additionalProperties": false,
         "properties": {
@@ -1972,6 +2037,105 @@
           "script",
           "run_as",
           "timeout"
+        ],
+        "type": "object"
+      },
+      "DaemonConfigEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "type": "object"
+      },
+      "DaemonMissingTool": {
+        "additionalProperties": false,
+        "properties": {
+          "install": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "purpose",
+          "install"
+        ],
+        "type": "object"
+      },
+      "DaemonReindexResult": {
+        "additionalProperties": false,
+        "properties": {
+          "reindexed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reindexed"
+        ],
+        "type": "object"
+      },
+      "DaemonStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "base_dir": {
+            "type": "string"
+          },
+          "http_addr": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "missing_tools": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonMissingTool"
+            },
+            "type": "array"
+          },
+          "pid": {
+            "type": "integer"
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "uptime_seconds": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "missing_tools",
+          "message",
+          "version",
+          "pid",
+          "started_at",
+          "uptime_seconds",
+          "base_dir",
+          "http_addr",
+          "schema_version"
         ],
         "type": "object"
       },
@@ -3293,6 +3457,153 @@
         ],
         "type": "object"
       },
+      "MaintenanceLastRun": {
+        "additionalProperties": false,
+        "nullable": true,
+        "properties": {
+          "backup": {
+            "type": "string"
+          },
+          "compacted": {
+            "type": "boolean"
+          },
+          "deleted": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "nullable": true,
+            "type": "object"
+          },
+          "error": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "size_after": {
+            "type": "integer"
+          },
+          "size_before": {
+            "type": "integer"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "finished_at",
+          "trigger",
+          "backup",
+          "deleted",
+          "size_before",
+          "size_after",
+          "compacted"
+        ],
+        "type": "object"
+      },
+      "MaintenanceRun": {
+        "additionalProperties": false,
+        "properties": {
+          "backup": {
+            "type": "string"
+          },
+          "compacted": {
+            "type": "boolean"
+          },
+          "deleted": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "nullable": true,
+            "type": "object"
+          },
+          "error": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "size_after": {
+            "type": "integer"
+          },
+          "size_before": {
+            "type": "integer"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "finished_at",
+          "trigger",
+          "backup",
+          "deleted",
+          "size_before",
+          "size_after",
+          "compacted"
+        ],
+        "type": "object"
+      },
+      "MaintenanceSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "chat_retention_days": {
+            "type": "integer"
+          },
+          "compact": {
+            "type": "boolean"
+          },
+          "compact_threshold_pct": {
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "keep_backups": {
+            "type": "integer"
+          },
+          "retention_days": {
+            "type": "integer"
+          },
+          "time": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "time",
+          "keep_backups",
+          "retention_days",
+          "chat_retention_days",
+          "compact",
+          "compact_threshold_pct"
+        ],
+        "type": "object"
+      },
+      "MaintenanceView": {
+        "additionalProperties": false,
+        "properties": {
+          "last_run": {
+            "$ref": "#/components/schemas/MaintenanceLastRun"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/MaintenanceSettings"
+          }
+        },
+        "required": [
+          "settings",
+          "last_run"
+        ],
+        "type": "object"
+      },
       "MessageSendResult": {
         "additionalProperties": false,
         "properties": {
@@ -3350,6 +3661,77 @@
         "required": [
           "on",
           "to"
+        ],
+        "type": "object"
+      },
+      "PruneReport": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "archived": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "freed_bytes": {
+            "type": "integer"
+          },
+          "pruned": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "agent",
+          "pruned",
+          "archived",
+          "freed_bytes",
+          "dry_run"
+        ],
+        "type": "object"
+      },
+      "PruneResult": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "archived": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "freed_bytes": {
+            "type": "integer"
+          },
+          "pruned": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/PruneReport"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "dry_run"
         ],
         "type": "object"
       },
@@ -3510,6 +3892,96 @@
           "created_by",
           "created_at",
           "updated_at"
+        ],
+        "type": "object"
+      },
+      "RestoreResult": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "source_agent": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent",
+          "source_agent",
+          "schema_version"
+        ],
+        "type": "object"
+      },
+      "RetentionPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "keep_days": {
+            "type": "integer"
+          },
+          "keep_iterations": {
+            "type": "integer"
+          },
+          "max_bytes": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "keep_iterations",
+          "keep_days",
+          "max_bytes"
+        ],
+        "type": "object"
+      },
+      "RetentionSetResult": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "keep_days": {
+            "type": "integer"
+          },
+          "keep_iterations": {
+            "type": "integer"
+          },
+          "max_bytes": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "keep_iterations",
+          "keep_days",
+          "max_bytes",
+          "agent"
+        ],
+        "type": "object"
+      },
+      "RetentionView": {
+        "additionalProperties": false,
+        "properties": {
+          "default": {
+            "$ref": "#/components/schemas/RetentionPolicy"
+          },
+          "keep_days": {
+            "type": "integer"
+          },
+          "keep_iterations": {
+            "type": "integer"
+          },
+          "max_bytes": {
+            "type": "integer"
+          },
+          "override": {
+            "$ref": "#/components/schemas/RetentionPolicy"
+          }
+        },
+        "required": [
+          "keep_iterations",
+          "keep_days",
+          "max_bytes"
         ],
         "type": "object"
       },
@@ -5401,7 +5873,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/PruneResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -5478,7 +5952,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/RetentionView"
+                    }
                   },
                   "required": [
                     "ok",
@@ -5577,7 +6053,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/RetentionSetResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -13723,7 +14201,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/BackupResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15075,7 +15555,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ShellScriptResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15155,7 +15637,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ShellScriptSaveResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15320,7 +15804,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/DaemonConfigEntry"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15397,7 +15883,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/DaemonReindexResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15463,7 +15951,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/DaemonStatus"
+                    }
                   },
                   "required": [
                     "ok",
@@ -18373,7 +18863,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/MaintenanceView"
+                    }
                   },
                   "required": [
                     "ok",
@@ -18477,7 +18969,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/MaintenanceSettings"
+                    }
                   },
                   "required": [
                     "ok",
@@ -18554,7 +19048,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/MaintenanceRun"
+                    }
                   },
                   "required": [
                     "ok",
@@ -19481,7 +19977,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/RestoreResult"
+                    }
                   },
                   "required": [
                     "ok",

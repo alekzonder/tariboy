@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/agent"
@@ -28,8 +29,8 @@ func TestRetentionCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := got.(map[string]any)
-	if m["keep_iterations"].(int) != 3 || m["keep_days"].(int) != 7 {
+	m := got.(RetentionView)
+	if m.KeepIterations != 3 || m.KeepDays != 7 {
 		t.Fatalf("get = %+v", m)
 	}
 	// set the daemon default
@@ -43,25 +44,33 @@ func TestRetentionCommands(t *testing.T) {
 	// The agent's non-zero fields override the default; its zero max_bytes
 	// inherits. The agent's own record and the default are reported too.
 	got, _ = h(t, "retention.get")(c, registry.Params{"agent": "bot"})
-	m = got.(map[string]any)
-	if m["keep_iterations"].(int) != 3 || m["max_bytes"].(int64) != 500 {
+	m = got.(RetentionView)
+	if m.KeepIterations != 3 || m.MaxBytes != 500 {
 		t.Fatalf("effective = %+v", m)
 	}
-	if o := m["override"].(map[string]any); o["keep_iterations"].(int) != 3 || o["max_bytes"].(int64) != 0 {
+	if o := m.Override; o == nil || o.KeepIterations != 3 || o.MaxBytes != 0 {
 		t.Fatalf("override = %+v", o)
 	}
-	if d := m["default"].(map[string]any); d["keep_iterations"].(int) != 10 {
+	if d := m.Default; d == nil || d.KeepIterations != 10 {
 		t.Fatalf("default = %+v", d)
 	}
-	if _, ok := m["archive"]; ok {
-		t.Fatalf("archive flag still reported: %+v", m)
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys map[string]any
+	if err := json.Unmarshal(data, &keys); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := keys["archive"]; ok {
+		t.Fatalf("archive flag still reported: %s", data)
 	}
 	// prune (empty agent tree -> zero victims, no error)
 	pr, err := h(t, "prune")(c, registry.Params{"agent": "bot", "dry-run": true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pr.(map[string]any)["dry_run"] != true {
+	if !pr.(PruneResult).DryRun {
 		t.Fatalf("prune = %+v", pr)
 	}
 }

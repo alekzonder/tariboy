@@ -41,15 +41,8 @@ func checkAgentOrKeyword(name string, extra ...string) error {
 	return nil
 }
 
-func policyToMap(p retention.Policy) map[string]any {
-	return map[string]any{
-		"keep_iterations": p.KeepIterations, "keep_days": p.KeepDays,
-		"max_bytes": p.MaxBytes,
-	}
-}
-
 func retentionGet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[RetentionView](registry.Command{
 		Path:    "retention.get",
 		Summary: "Show the effective retention policy for an agent, with its own override and the default (or 'default')",
 		Args:    []registry.Arg{{Name: "agent", Type: registry.String, Required: true, Help: "agent name, or 'default'"}},
@@ -68,7 +61,7 @@ func retentionGet() registry.Command {
 				if err != nil {
 					return nil, err
 				}
-				return policyToMap(pol), nil
+				return RetentionView{RetentionPolicy: newRetentionPolicy(pol)}, nil
 			}
 			pol, err := r.Policies.Effective(name)
 			if err != nil {
@@ -82,16 +75,14 @@ func retentionGet() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			out := policyToMap(pol)
-			out["override"] = policyToMap(own)
-			out["default"] = policyToMap(def)
-			return out, nil
+			override, defaults := newRetentionPolicy(own), newRetentionPolicy(def)
+			return RetentionView{RetentionPolicy: newRetentionPolicy(pol), Override: &override, Default: &defaults}, nil
 		},
-	}
+	})
 }
 
 func retentionSet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[RetentionSetResult](registry.Command{
 		Path:    "retention.set",
 		Summary: "Set the retention policy for an agent (0 = use the default) or 'default' (0 = unlimited)",
 		Args: []registry.Arg{
@@ -142,15 +133,13 @@ func retentionSet() registry.Command {
 			} else if err := r.Policies.Set(name, cur); err != nil {
 				return nil, err
 			}
-			out := policyToMap(cur)
-			out["agent"] = name
-			return out, nil
+			return RetentionSetResult{RetentionPolicy: newRetentionPolicy(cur), Agent: name}, nil
 		},
-	}
+	})
 }
 
 func pruneCommand() registry.Command {
-	return registry.Command{
+	return registry.WithResult[PruneResult](registry.Command{
 		Path:    "prune",
 		Summary: "Prune old iterations for an agent now (or 'all'); --dry-run lists victims",
 		Args: []registry.Arg{
@@ -173,16 +162,20 @@ func pruneCommand() registry.Command {
 				if err != nil {
 					return nil, err
 				}
-				return map[string]any{"reports": reps, "dry_run": dry}, nil
+				var reports []PruneReport
+				for _, rep := range reps {
+					reports = append(reports, PruneReport(rep))
+				}
+				return PruneResult{Reports: &reports, DryRun: dry}, nil
 			}
 			rep, err := r.Pruner.PruneAgent(name, dry)
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{
-				"agent": rep.Agent, "pruned": rep.Pruned, "archived": rep.Archived,
-				"freed_bytes": rep.FreedBytes, "dry_run": rep.DryRun,
+			return PruneResult{
+				Agent: rep.Agent, Pruned: rep.Pruned, Archived: rep.Archived,
+				FreedBytes: &rep.FreedBytes, DryRun: rep.DryRun,
 			}, nil
 		},
-	}
+	})
 }

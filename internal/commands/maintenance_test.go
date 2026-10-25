@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -17,12 +18,12 @@ func TestMaintenanceCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := got.(map[string]any)
-	if s := m["settings"].(maintenance.Settings); s != maintenance.DefaultSettings() {
+	m := got.(MaintenanceView)
+	if s := maintenance.Settings(m.Settings); s != maintenance.DefaultSettings() {
 		t.Fatalf("settings = %+v", s)
 	}
-	if m["last_run"] != nil {
-		t.Fatalf("last_run = %+v, want nil before any run", m["last_run"])
+	if data, err := json.Marshal(m.LastRun); err != nil || string(data) != "null" {
+		t.Fatalf("last_run = %s %v, want null before any run", data, err)
 	}
 
 	// Unset flags keep their current value.
@@ -52,11 +53,11 @@ func TestMaintenanceCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r := run.(maintenance.Result); r.Backup == "" || r.Error != "" {
+	if r := run.(MaintenanceRun); r.Backup == "" || r.Error != "" {
 		t.Fatalf("run = %+v", r)
 	}
 	got, _ = h(t, "maintenance.get")(c, registry.Params{})
-	if got.(map[string]any)["last_run"] == nil {
+	if data, err := json.Marshal(got.(MaintenanceView).LastRun); err != nil || string(data) == "null" {
 		t.Fatal("last_run missing after run")
 	}
 }
