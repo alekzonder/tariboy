@@ -32,25 +32,40 @@ export function useApiQuery<T, K extends QueryKey>(options: UseQueryOptions<T, E
   });
 
   useEffect(() => {
-    let hosts = connections.get(client);
-    if (!hosts) {
-      hosts = new Map();
-      connections.set(client, hosts);
-    }
+    const hosts = hostsOf(client);
     const old = hosts.get(server);
     hosts.set(server, { endpoint, token: ready ? token : (old?.token ?? token), ready });
     if (!old || (old.endpoint === endpoint && (!ready || old.token === token))) return;
-    const queryKey = apiServerKey(target);
-    if (old.ready) void client.cancelQueries({ queryKey });
-    if (ready && old.token !== token) {
-      for (const query of client.getQueryCache().findAll({ queryKey })) query.reset();
-    }
-    // All observers first receive the new explicit endpoint, then reads resume.
-    if (ready && (old.ready || old.token !== token))
-      queueMicrotask(() => {
-        void client.invalidateQueries({ queryKey }, { cancelRefetch: false });
-      });
+    resumeQueries(client, apiServerKey(target), old, ready, token);
   }, [client, endpoint, ready, server, target, token]);
 
   return changedAccount ? { ...result, data: undefined } : result;
+}
+
+function hostsOf(client: QueryClient): Map<string, Connection> {
+  let hosts = connections.get(client);
+  if (!hosts) {
+    hosts = new Map();
+    connections.set(client, hosts);
+  }
+  return hosts;
+}
+
+/** Drops the reads of the old connection and resumes them on the new one. */
+function resumeQueries(
+  client: QueryClient,
+  queryKey: QueryKey,
+  old: Connection,
+  ready: boolean,
+  token: string,
+) {
+  if (old.ready) void client.cancelQueries({ queryKey });
+  if (ready && old.token !== token) {
+    for (const query of client.getQueryCache().findAll({ queryKey })) query.reset();
+  }
+  // All observers first receive the new explicit endpoint, then reads resume.
+  if (ready && (old.ready || old.token !== token))
+    queueMicrotask(() => {
+      void client.invalidateQueries({ queryKey }, { cancelRefetch: false });
+    });
 }
