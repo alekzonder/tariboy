@@ -1,0 +1,256 @@
+{
+  "files.upload": {
+    "abs": "$BASE/files/$UPLOAD/notes.txt",
+    "bytes": 5,
+    "path": "files/$UPLOAD/notes.txt"
+  },
+  "fs.list proj": {
+    "entries": [
+      {
+        "dir": true,
+        "name": "sub"
+      }
+    ],
+    "parent": "$FSROOT",
+    "path": "$FSROOT/proj"
+  },
+  "fs.list root": {
+    "entries": [
+      {
+        "dir": true,
+        "name": "docs"
+      },
+      {
+        "dir": true,
+        "name": "proj"
+      }
+    ],
+    "parent": "",
+    "path": "$FSROOT"
+  },
+  "harness.codex-approval.get default": {
+    "mode": "yolo"
+  },
+  "harness.codex-approval.get stored": {
+    "mode": "approve-for-me"
+  },
+  "harness.codex-approval.set": {
+    "mode": "approve-for-me"
+  },
+  "harness.models claude": {
+    "efforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "error": "",
+    "harness": "claude",
+    "models": [
+      {
+        "id": "fable"
+      },
+      {
+        "id": "opus"
+      },
+      {
+        "id": "opus[1m]"
+      },
+      {
+        "id": "sonnet"
+      },
+      {
+        "id": "haiku"
+      }
+    ]
+  },
+  "harness.models stub": {
+    "efforts": [],
+    "error": "",
+    "harness": "stub",
+    "models": []
+  },
+  "plugin.contributions": {
+    "count": 1,
+    "plugins": [
+      {
+        "description": "Echo bridge",
+        "name": "echo",
+        "operator_commands": [
+          {
+            "action": "status",
+            "path": "status",
+            "summary": "Show status"
+          },
+          {
+            "action": "bind",
+            "args": [
+              {
+                "flag": "chat",
+                "help": "chat id",
+                "name": "chat",
+                "required": true,
+                "type": "string"
+              }
+            ],
+            "path": "bind",
+            "summary": "Bind a chat"
+          }
+        ],
+        "settings": {
+          "sections": [
+            {
+              "actions": [
+                {
+                  "action": "configure",
+                  "fields": [
+                    "token"
+                  ],
+                  "label": "Save"
+                }
+              ],
+              "fields": [
+                {
+                  "help": "bot token",
+                  "label": "Token",
+                  "name": "token",
+                  "required": true,
+                  "type": "password"
+                }
+              ],
+              "title": "Token"
+            }
+          ],
+          "status": [
+            {
+              "label": "Connected",
+              "name": "connected"
+            }
+          ],
+          "title": "Echo"
+        }
+      }
+    ]
+  },
+  "plugin.inspect echo": {
+    "channels": {
+      "provide": [
+        {
+          "channel": "echo:feed",
+          "help": "feed",
+          "params_schema": {
+            "type": "object"
+          }
+        }
+      ],
+      "publish": [
+        "echo:*"
+      ],
+      "subscribe": [
+        "chat:in"
+      ]
+    },
+    "enabled": true,
+    "exec": "run.sh",
+    "installed_at": "2026-07-14T10:00:00.000000000Z",
+    "name": "echo",
+    "protocol_version": 1,
+    "socket": "$BASE/plugins/echo/plugin.sock",
+    "source_path": "/src/echo",
+    "state": "installed",
+    "types": [
+      "channel-source",
+      "channel-sink"
+    ],
+    "version": "1.0.0"
+  },
+  "plugin.inspect quiet": {
+    "channels": {
+      "publish": null,
+      "subscribe": null
+    },
+    "enabled": false,
+    "exec": "run.sh",
+    "installed_at": "2026-07-14T10:00:00.000000000Z",
+    "name": "quiet",
+    "protocol_version": 1,
+    "socket": "$BASE/plugins/quiet/plugin.sock",
+    "source_path": "/src/quiet",
+    "state": "installed",
+    "types": null,
+    "version": "0.1.0"
+  },
+  "plugin.install widget": {
+    "installed": true,
+    "name": "widget",
+    "types": [
+      "channel-sink"
+    ],
+    "version": "2.0.0"
+  },
+  "plugin.logs echo": {
+    "count": 2,
+    "lines": [
+      "second line",
+      "third line"
+    ]
+  },
+  "plugin.logs ghost missing": {
+    "count": 0,
+    "lines": []
+  },
+  "plugin.logs quiet empty": {
+    "count": 0,
+    "lines": null
+  },
+  "plugin.ls": {
+    "count": 2,
+    "plugins": [
+      {
+        "enabled": true,
+        "health": {},
+        "name": "echo",
+        "state": "installed",
+        "types": [
+          "channel-source",
+          "channel-sink"
+        ],
+        "version": "1.0.0"
+      },
+      {
+        "enabled": false,
+        "health": {},
+        "name": "quiet",
+        "state": "installed",
+        "types": null,
+        "version": "0.1.0"
+      }
+    ]
+  },
+  "plugin.restart echo": {
+    "restarted": "echo"
+  },
+  "plugin.rm quiet": {
+    "removed": "quiet"
+  },
+  "secret.ls bare": {
+    "count": 0,
+    "keys": []
+  },
+  "secret.ls smoke": {
+    "count": 2,
+    "keys": [
+      "API_KEY",
+      "TOKEN"
+    ]
+  },
+  "secret.rm": {
+    "removed": "TOKEN"
+  },
+  "secret.store": {
+    "key": "TOKEN",
+    "name": "smoke",
+    "stored": true
+  }
+}
