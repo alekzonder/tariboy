@@ -440,9 +440,10 @@ modules; it holds no requests of its own.
 - One module per domain: `agents`, `iterations`, `usage`, `daemon`,
   `harnesses`, `plugins`, `scripts`, `files`, `images`, `imageSources`,
   `groups`, `stores`, `messages`, `audit`, `tasks`, and `workflows`. Each
-  module keeps the hand-written types of its responses and exports a factory
-  that receives a transport bound to one host. Domain methods never take a
-  target. `lib/tasks.ts` and `lib/audit.ts` keep only presentation helpers.
+  module re-exports the types of its responses (see [API types](#api-types))
+  and exports a factory that receives a transport bound to one host. Domain
+  methods never take a target. `lib/tasks.ts` and `lib/audit.ts` keep only
+  presentation helpers.
 
 `createApi(target)` returns an `ApiClient`: the bound transport plus one
 section per domain, such as `api.tasks.getTask(key)` or
@@ -479,8 +480,40 @@ a workflow image) holds one source client and one destination client for the
 whole operation. The native host registry, SSH tunnels, and Keychain tokens
 stay in `lib/daemons.ts` and `lib/desktop.ts`.
 
-Response types are still written by hand. When a module's types are generated
-from the daemon's OpenAPI description, they replace that one module's types.
+### API types
+
+`ui/src/lib/api-types.generated.ts` holds the TypeScript types of every
+response that `/api/openapi.json` describes. `npm run api-types` in `ui/`
+generates it from the committed snapshot
+`internal/commands/testdata/openapi.json`, and the `ui-api-types` step of
+`make frontend-check` fails when the file is out of date. Do not edit it; see
+[Go control plane and plugins](/docs/development#go-control-plane-and-plugins)
+for the workflow after an API change.
+
+Each schema is a top-level type with the Go type's name, such as `AgentRow`
+or `TaskDetail`. A domain module re-exports the types that its callers need,
+for example `export type { AgentRow, AgentView } from "../api-types.generated"`,
+and components import them from `@/lib/api`. `Comment`, `Event`, and
+`Notification` would shadow DOM globals, so `tasks.ts` re-exports them as
+`TaskComment`, `TaskEvent`, and `TaskNotification`. Where the spec has a plain
+string and the UI needs a union, the module narrows it at one place, such as
+`taskPriority(task)`.
+
+The types follow the spec exactly. A list that Go can return as `null` is
+`T[] | null`, and an optional field is optional, so the code handles both.
+Test data is a complete response, not a partial literal; the factories in
+`ui/src/test/fixtures/apiFixtures.ts` fill the fields a test does not check.
+
+These types stay hand-written. Each response type among them has a comment
+that says why the spec does not cover it:
+
+- Responses that `internal/api/server.go` serves outside the command
+  registry: the agent event stream (`AgentEvent`), the tasks WebSocket frame
+  (`TaskEventHint`), and the image, team, and workflow image archive imports.
+- The transcript calls of `audit.ts`, which the spec describes only as
+  objects.
+- Request bodies and filters, such as `CreateAgentSpec` and `TaskFilters`, and
+  types that the UI derives, such as `AgentPromptLayer`.
 
 ## Code splitting
 

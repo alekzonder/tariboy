@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ApiError, createApi, type ApiClient, type WorkflowBuildResult } from "@/lib/api";
+import { ApiError, createApi, type ApiClient, type WorkflowImageBuildResult } from "@/lib/api";
 import type { Daemon } from "@/lib/daemons";
 import { apiWrapper } from "@/test/api";
 import { WorkflowTransferDialog } from "./WorkflowTransferDialog";
@@ -13,7 +13,7 @@ const actualApi = await vi.importActual<typeof import("@/lib/api")>("@/lib/api")
 
 // Each archive call records the host of the client that made it.
 const download = vi.fn<(target: Daemon | null, name: string, tag: string) => Promise<Blob>>();
-const upload = vi.fn<(target: Daemon | null, archive: Blob) => Promise<WorkflowBuildResult>>();
+const upload = vi.fn<(target: Daemon | null, archive: Blob) => Promise<WorkflowImageBuildResult>>();
 function archiveClient(target: Daemon | null): ApiClient {
   const client = actualApi.createApi(target);
   return {

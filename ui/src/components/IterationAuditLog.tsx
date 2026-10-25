@@ -3,7 +3,12 @@ import type { Call } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AuditRow } from "@/components/AuditRow";
-import { collapseThinking, hasHarnessOutput, mergeProxyCalls, type AuditEvent } from "@/lib/audit";
+import {
+  collapseThinking,
+  hasHarnessOutput,
+  mergeProxyCalls,
+  type AuditLogEvent,
+} from "@/lib/audit";
 import { AuditExportActions } from "@/components/AuditExportActions";
 
 // shortIter condenses an iteration id (<agent>-<timestamp>-<n>) to a readable
@@ -19,7 +24,7 @@ function shortIter(id: string): string {
   return `${ts}-${n}`;
 }
 
-const NONE: AuditEvent[] = [];
+const NONE: AuditLogEvent[] = [];
 const NO_CALLS: Call[] = [];
 
 // IterationAuditLog shows the audit events of a single iteration — the running
@@ -44,7 +49,7 @@ export function IterationAuditLog({
   // Loaded data carries the iteration it belongs to, so a switch shows nothing
   // from the previous iteration while the next one loads.
   const key = name && iterationId ? `${name}/${iterationId}` : "";
-  const [loaded, setLoaded] = useState<{ key: string; events: AuditEvent[]; calls: Call[] }>({
+  const [loaded, setLoaded] = useState<{ key: string; events: AuditLogEvent[]; calls: Call[] }>({
     key: "",
     events: [],
     calls: [],

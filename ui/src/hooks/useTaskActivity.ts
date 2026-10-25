@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
 import type { ActivityWindow } from "@/lib/activityPeriod";
-import type { TaskActivityReport } from "@/lib/types";
+import type { TaskActivityReport } from "@/lib/api";
 
 const POLL_MS = 10000;
 

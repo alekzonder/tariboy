@@ -1,5 +1,5 @@
 import { useTheme, type Theme } from "@/components/themeContext";
-import type { FileContent } from "@/lib/api";
+import type { AgentFileContent } from "@/lib/api";
 import { isMarkdown } from "./paths";
 import { FileViewerToolbar } from "./FileViewerToolbar";
 import { FileViewerStatus } from "./FileViewerStatus";
@@ -23,7 +23,7 @@ export function FileViewer({
   onSaved,
 }: {
   path: string | null;
-  readFile: (path: string) => Promise<FileContent>;
+  readFile: (path: string) => Promise<AgentFileContent>;
   // When omitted the viewer is read-only.
   writeFile?: (path: string, content: string) => Promise<void>;
   onSaved: (path: string) => void;
@@ -58,7 +58,7 @@ export function FileViewer({
       {md ? (
         <MarkdownBody
           path={path}
-          content={file.content}
+          content={file.content ?? ""}
           preview={d.preview}
           editing={editing}
           draft={draft}
@@ -68,7 +68,7 @@ export function FileViewer({
       ) : (
         <CodeBody
           path={path}
-          value={editing ? draft : file.content}
+          value={editing ? draft : (file.content ?? "")}
           editing={editing}
           setDraft={setDraft}
           cmTheme={cmTheme}

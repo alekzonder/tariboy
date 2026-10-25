@@ -1,8 +1,15 @@
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@/test/queryRender";
-import type { CreateAgentResult, CreateAgentSpec, ImageManifest, ImageRow } from "@/lib/api";
-import type { AgentLifecycleResult, AgentView, HarnessCatalog } from "@/lib/types";
+import type {
+  AgentActionResult,
+  AgentRunResult,
+  AgentView,
+  CreateAgentSpec,
+  HarnessModelCatalog,
+  ImageManifest,
+  ImageSummary,
+} from "@/lib/api";
 import type { Daemon } from "@/lib/daemons";
 import { RUNTIME_PRESETS_STORAGE_KEY } from "@/lib/runtimePresets";
 import { targetFor } from "@/lib/terminalsHost";
@@ -20,12 +27,13 @@ import {
 // it, so a test can assert which host a request was pinned to.
 const calls = vi.hoisted(() => ({
   agentGetOn: vi.fn<(target: Daemon | null, name: string, action: string) => Promise<AgentView>>(),
-  createAgent:
-    vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<CreateAgentResult>>(),
-  getHarnessModelsOn: vi.fn<(target: Daemon | null, harness: string) => Promise<HarnessCatalog>>(),
+  createAgent: vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<AgentRunResult>>(),
+  getHarnessModelsOn:
+    vi.fn<(target: Daemon | null, harness: string) => Promise<HarnessModelCatalog>>(),
   imageManifestGet: vi.fn<(ref: string, target: Daemon | null) => Promise<ImageManifest>>(),
-  listImages: vi.fn<(target: Daemon | null) => Promise<{ images: ImageRow[]; count: number }>>(),
-  startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentLifecycleResult>>(),
+  listImages:
+    vi.fn<(target: Daemon | null) => Promise<{ images: ImageSummary[]; count: number }>>(),
+  startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentActionResult>>(),
 }));
 const { createAgent, imageManifestGet, startAgent } = calls;
 

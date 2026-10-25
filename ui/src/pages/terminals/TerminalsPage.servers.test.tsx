@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { screen, waitFor, fireEvent } from "@/test/queryRender";
 import { fetchAllAgents } from "@/lib/aggregate";
-import type { CreateAgentResult, CreateAgentSpec, ImageManifest, ImageRow } from "@/lib/api";
-import type { AgentLifecycleResult, AgentView } from "@/lib/types";
+import type {
+  AgentActionResult,
+  AgentRunResult,
+  AgentView,
+  CreateAgentSpec,
+  ImageManifest,
+  ImageSummary,
+} from "@/lib/api";
 import { addDaemon, listDaemons, getDaemonToken, type Daemon } from "@/lib/daemons";
 import * as desktop from "@/lib/desktop";
 import {
@@ -13,6 +19,7 @@ import {
   openManageMenu,
   serversTab,
 } from "@/test/terminals/terminalsPage";
+import { agentRow } from "@/test/fixtures/apiFixtures";
 
 vi.mock("@/lib/aggregate", () => ({
   fetchAllAgents: vi.fn(),
@@ -26,11 +33,11 @@ const calls = vi.hoisted(() => ({
     vi.fn<
       (target: Daemon | null, method: string, path: string, body?: unknown) => Promise<unknown>
     >(),
-  createAgent:
-    vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<CreateAgentResult>>(),
+  createAgent: vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<AgentRunResult>>(),
   imageManifestGet: vi.fn<(ref: string, target: Daemon | null) => Promise<ImageManifest>>(),
-  listImages: vi.fn<(target: Daemon | null) => Promise<{ images: ImageRow[]; count: number }>>(),
-  startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentLifecycleResult>>(),
+  listImages:
+    vi.fn<(target: Daemon | null) => Promise<{ images: ImageSummary[]; count: number }>>(),
+  startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentActionResult>>(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -334,14 +341,13 @@ describe("TerminalsPage server management", () => {
       {
         host: { id, label: "prod" },
         agents: [
-          {
+          agentRow({
             name: "a1",
             image: "bare:latest",
             state: "running",
             harness: "claude",
-            group: null,
             interactive: true,
-          },
+          }),
         ],
       },
     ]);

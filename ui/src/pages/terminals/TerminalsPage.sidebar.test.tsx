@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { screen, waitFor, fireEvent, within } from "@/test/queryRender";
 import { fetchAllAgents } from "@/lib/aggregate";
-import type { CreateAgentResult, CreateAgentSpec, ImageManifest, ImageRow } from "@/lib/api";
-import type { AgentLifecycleResult, AgentView } from "@/lib/types";
+import type {
+  AgentActionResult,
+  AgentRunResult,
+  AgentView,
+  CreateAgentSpec,
+  ImageManifest,
+  ImageSummary,
+} from "@/lib/api";
 import { type Daemon } from "@/lib/daemons";
 import { createWorkspace, moveHost } from "@/lib/workspaces";
 import userEvent from "@testing-library/user-event";
@@ -13,6 +19,7 @@ import {
   agentsTab,
   pickSidebarTab,
 } from "@/test/terminals/terminalsPage";
+import { agentRow } from "@/test/fixtures/apiFixtures";
 
 vi.mock("@/lib/aggregate", () => ({
   fetchAllAgents: vi.fn(),
@@ -26,11 +33,11 @@ const calls = vi.hoisted(() => ({
     vi.fn<
       (target: Daemon | null, method: string, path: string, body?: unknown) => Promise<unknown>
     >(),
-  createAgent:
-    vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<CreateAgentResult>>(),
+  createAgent: vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<AgentRunResult>>(),
   imageManifestGet: vi.fn<(ref: string, target: Daemon | null) => Promise<ImageManifest>>(),
-  listImages: vi.fn<(target: Daemon | null) => Promise<{ images: ImageRow[]; count: number }>>(),
-  startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentLifecycleResult>>(),
+  listImages:
+    vi.fn<(target: Daemon | null) => Promise<{ images: ImageSummary[]; count: number }>>(),
+  startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentActionResult>>(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -86,27 +93,25 @@ describe("host workspaces", () => {
       {
         host: { id: "", label: "This daemon (local)" },
         agents: [
-          {
+          agentRow({
             name: "a1",
             image: "img",
             state: "running",
             harness: "claude",
-            group: null,
             interactive: true,
-          },
+          }),
         ],
       },
       {
         host: { id: "d1", label: "prod" },
         agents: [
-          {
+          agentRow({
             name: "b1",
             image: "img",
             state: "running",
             harness: "claude",
-            group: null,
             interactive: true,
-          },
+          }),
         ],
       },
     ]);
@@ -233,35 +238,34 @@ describe("sidebar tabs", () => {
       host: { id: "", label: "This daemon (local)" },
       groups: [{ name: "release", lead: "alpha", members: 1 }],
       agents: [
-        {
+        agentRow({
           name: "alpha",
           image: "img",
           state: "running",
           harness: "claude",
           group: "release",
           interactive: true,
-        },
-        {
+        }),
+        agentRow({
           name: "beta",
           image: "img",
           state: "stopped",
           harness: "claude",
-          group: null,
           interactive: true,
-        },
+        }),
       ],
     },
     {
       host: { id: "prod", label: "prod" },
       agents: [
-        {
+        agentRow({
           name: "gamma",
           image: "img",
           state: "running",
           harness: "claude",
           group: "release",
           interactive: true,
-        },
+        }),
       ],
     },
   ];

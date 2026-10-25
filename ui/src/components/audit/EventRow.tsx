@@ -5,7 +5,7 @@ import {
   pretty,
   isBoundary,
   TONE_BAR,
-  type AuditEvent,
+  type AuditLogEvent,
   type Descriptor,
   type DisplayRow,
 } from "@/lib/audit";
@@ -17,7 +17,7 @@ import { CodexDetails } from "./CodexDetails";
 // eventAriaLabel names the row toggle: time, label, optional status and the
 // expand/collapse action.
 function eventAriaLabel(
-  e: AuditEvent,
+  e: AuditLogEvent,
   d: Descriptor,
   codex: CodexHarnessPresentation | undefined,
   open: boolean,

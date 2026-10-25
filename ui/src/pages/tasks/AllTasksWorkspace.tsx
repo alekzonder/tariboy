@@ -4,7 +4,7 @@ import { ApiProvider } from "@/components/ApiProvider";
 import { Input } from "@/components/ui/input";
 import { useTasksSocket } from "@/hooks/useTasksSocket";
 import type { HostAgents } from "@/lib/aggregate";
-import { createApi, type TaskPriority, type TaskQueue } from "@/lib/api";
+import { createApi, type TaskPriority, type Queue } from "@/lib/api";
 import { countTasksByQueue } from "@/lib/tasks";
 import { hostToParam, targetFor } from "@/lib/terminalsHost";
 import {
@@ -272,7 +272,7 @@ function NewTaskForm({
     );
   const [choice, setChoice] = useState("");
   const picked = choices.find((item) => item.id === choice);
-  const [queues, setQueues] = useState<TaskQueue[]>([]);
+  const [queues, setQueues] = useState<Queue[]>([]);
   const [queue, setQueue] = useState("");
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);

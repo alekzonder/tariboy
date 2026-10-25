@@ -3,7 +3,7 @@ import { AuditRow } from "tariboy-ui";
 
 // AuditRow renders one chat-style transcript line — time · icon · label ·
 // preview — with a semantic tone bar, expanding to the pretty-printed record.
-// Fixtures follow AuditEvent / DisplayRow in src/lib/audit.ts: `event` rows,
+// Fixtures follow AuditLogEvent / DisplayRow in src/lib/audit.ts: `event` rows,
 // the collapsed `thinking` run, and `proxycall` rows (which delegate to
 // ProxyCallRow). Iteration boundaries get the accented, bolder row.
 

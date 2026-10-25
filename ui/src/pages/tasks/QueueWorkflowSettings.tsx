@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
-import type { AgentPool, QueueWorkflow, WorkflowDefinition, WorkflowImage } from "@/lib/api";
+import type {
+  AgentPool,
+  QueueWorkflow,
+  WorkflowImageDefinition,
+  WorkflowImageListing,
+} from "@/lib/api";
 import { EMPTY, LABEL, MONO, SelectShell } from "./panelStyles";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
 import WorkflowStatusMap from "./WorkflowStatusMap";
@@ -10,15 +15,15 @@ import { errorText } from "@/lib/errors";
 import { classifyBindError, stillEmptyPools } from "./queueSettingsModel";
 
 /** Images by name, then tag with `latest` first. */
-function sortImages(images: WorkflowImage[]): WorkflowImage[] {
-  const rank = (image: WorkflowImage) => (image.tag === "latest" ? 0 : 1);
+function sortImages(images: WorkflowImageListing[]): WorkflowImageListing[] {
+  const rank = (image: WorkflowImageListing) => (image.tag === "latest" ? 0 : 1);
   return [...images].sort(
     (a, b) => a.name.localeCompare(b.name) || rank(a) - rank(b) || a.tag.localeCompare(b.tag),
   );
 }
 
 /** The tag of the bound content, the one equal to its version first; the digest when no tag names it. */
-function bindingRef(binding: QueueWorkflow, images: WorkflowImage[]): string {
+function bindingRef(binding: QueueWorkflow, images: WorkflowImageListing[]): string {
   const tags = images.filter(
     (image) => image.name === binding.name && image.digest === binding.digest,
   );
@@ -55,7 +60,7 @@ export default function QueueWorkflowSettings({
   // True only after a load succeeded: until then the binding is unknown.
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const [images, setImages] = useState<WorkflowImage[]>([]);
+  const [images, setImages] = useState<WorkflowImageListing[]>([]);
   const [ref, setRef] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -189,7 +194,7 @@ export default function QueueWorkflowSettings({
 
 interface ShownDefinition {
   key: string;
-  value: WorkflowDefinition | null;
+  value: WorkflowImageDefinition | null;
   error: string;
 }
 
@@ -226,7 +231,7 @@ function BindingSummary({
   images,
 }: {
   binding: QueueWorkflow | null;
-  images: WorkflowImage[];
+  images: WorkflowImageListing[];
 }) {
   if (!binding) return <span className={EMPTY}>No workflow</span>;
   return (
@@ -274,7 +279,7 @@ function BindControls({
   onBind,
   onClear,
 }: {
-  images: WorkflowImage[];
+  images: WorkflowImageListing[];
   value: string;
   onChoose: (ref: string) => void;
   canBind: boolean;

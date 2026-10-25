@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { InboxItem } from "@/lib/api";
+import type { InboxMessage } from "@/lib/api";
 import { dialogCopy, messageRowFlags } from "./agentMessagesModel";
 
-const item: InboxItem = {
+const item: InboxMessage = {
   id: "m1",
   channel: "agent.alice",
   ts: "2026-07-12T10:00:00Z",
@@ -11,6 +11,8 @@ const item: InboxItem = {
   text: "hi",
   attempts: 1,
   dlq: false,
+  produced_by_agent: "",
+  produced_in_iteration: "",
 };
 
 describe("messageRowFlags", () => {

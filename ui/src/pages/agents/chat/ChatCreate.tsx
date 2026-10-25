@@ -10,9 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/api";
+import { ApiError, type AgentListResult, type AgentRow } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
-import type { AgentSummary } from "@/lib/types";
 import { chatIdFromTitle } from "./chatModel";
 
 /**
@@ -33,14 +32,14 @@ export default function ChatCreate({
 }) {
   const api = useApi();
   const [title, setTitle] = useState("");
-  const [others, setOthers] = useState<AgentSummary[]>([]);
+  const [others, setOthers] = useState<AgentRow[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const id = chatIdFromTitle(title);
 
   useEffect(() => {
     void api
-      .get<{ agents: AgentSummary[] }>("/api/agents")
+      .get<AgentListResult>("/api/agents")
       .then((page) => setOthers((page.agents ?? []).filter((row) => row.name !== agent)))
       .catch(() => setOthers([]));
   }, [agent, api]);

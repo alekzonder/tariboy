@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAgentName } from "@/lib/agent";
-import type { InboxItem } from "@/lib/api";
+import type { InboxMessage } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { VIEW_STATUS, type View } from "./agentMessagesModel";
 
@@ -11,7 +11,7 @@ import { VIEW_STATUS, type View } from "./agentMessagesModel";
 export function useAgentMessages(view: View) {
   const api = useApi();
   const name = useAgentName();
-  const [page, setPage] = useState<{ view: View; items: InboxItem[] }>({
+  const [page, setPage] = useState<{ view: View; items: InboxMessage[] }>({
     view: "queue",
     items: [],
   });

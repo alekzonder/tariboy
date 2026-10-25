@@ -1,30 +1,30 @@
-import type { ImageRow } from "@/lib/api";
+import type { ImageSummary } from "@/lib/api";
 
-function buildTime(image: ImageRow): number {
+function buildTime(image: ImageSummary): number {
   const value = Date.parse(image.built_at ?? "");
   return Number.isFinite(value) ? value : -Infinity;
 }
 
-function compareBuiltImages(a: ImageRow, b: ImageRow): number {
+function compareBuiltImages(a: ImageSummary, b: ImageSummary): number {
   const time = buildTime(b) - buildTime(a);
   if (time && !Number.isNaN(time)) return time;
-  const rank = (image: ImageRow) =>
+  const rank = (image: ImageSummary) =>
     image.image_version && image.tag === image.image_version ? 0 : 1;
   return rank(a) - rank(b) || (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0);
 }
 
-export function builtDate(image?: ImageRow): string {
+export function builtDate(image?: ImageSummary): string {
   return image && Number.isFinite(buildTime(image)) ? image.built_at! : "—";
 }
 
 export interface BuiltImageGroup {
   name: string;
-  tags: ImageRow[];
-  latest?: ImageRow;
+  tags: ImageSummary[];
+  latest?: ImageSummary;
 }
 
-export function groupBuiltImages(images: ImageRow[]): BuiltImageGroup[] {
-  const byName = new Map<string, ImageRow[]>();
+export function groupBuiltImages(images: ImageSummary[]): BuiltImageGroup[] {
+  const byName = new Map<string, ImageSummary[]>();
   for (const image of images) {
     const tags = byName.get(image.name) ?? [];
     tags.push(image);
@@ -39,7 +39,7 @@ export function groupBuiltImages(images: ImageRow[]): BuiltImageGroup[] {
     }));
 }
 
-export function sourceLabel(image: ImageRow): string {
+export function sourceLabel(image: ImageSummary): string {
   if (!image.source_cwd) return "Source CWD unavailable — imported artifact";
   if (image.source_available === false) return `Source CWD unavailable — ${image.source_cwd}`;
   return image.source_cwd;

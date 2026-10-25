@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { ImageRow } from "@/lib/api";
+import type { ImageSummary } from "@/lib/api";
 import { archiveFilename, groupBuiltImages, sourceLabel, splitImageRef } from "./builtImages";
 
-const image = (overrides: Partial<ImageRow>) =>
-  ({ name: "demo", tag: "1", ...overrides }) as ImageRow;
+const image = (overrides: Partial<ImageSummary>) =>
+  ({ name: "demo", tag: "1", ...overrides }) as ImageSummary;
 
 describe("sourceLabel", () => {
   it("names an imported artifact without a source directory", () => {

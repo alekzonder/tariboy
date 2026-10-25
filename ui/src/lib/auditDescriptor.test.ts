@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { descriptor, type AuditEvent } from "./audit";
+import { descriptor, type AuditLogEvent } from "./audit";
 
-const ev = (over: Partial<AuditEvent>): AuditEvent => ({
+const ev = (over: Partial<AuditLogEvent>): AuditLogEvent => ({
   seq: 1,
   kind: "iteration_started",
   source: "system",

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { type ImageDiagnostic, type ImageValidationResult } from "@/lib/api";
+import { type ImageDiagnostic, type ImageValidateResult } from "@/lib/api";
 import { notifyImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ export default function ImageBuildFromDirectory() {
   const [name, setName] = useState("");
   const [tag, setTag] = useState("latest");
   const [diagnostics, setDiagnostics] = useState<ImageDiagnostic[]>([]);
-  const [validation, setValidation] = useState<ImageValidationResult | null>(null);
+  const [validation, setValidation] = useState<ImageValidateResult | null>(null);
   const [busy, setBusy] = useState(false);
   const hasOutput = diagnostics.length > 0 || validation !== null;
 

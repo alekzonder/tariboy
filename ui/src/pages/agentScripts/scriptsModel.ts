@@ -1,4 +1,4 @@
-import type { ScriptDefinition, ScriptRun } from "@/lib/api";
+import type { AgentScript, AgentScriptRun } from "@/lib/api";
 import { fmtDateTime } from "@/lib/time";
 
 const activeRunStatuses = new Set(["pending", "running"]);
@@ -8,14 +8,14 @@ export function isRunActive(status?: string) {
 }
 
 // scriptsNeedPolling is true while any script or its latest run can still change.
-export function scriptsNeedPolling(scripts: ScriptDefinition[]) {
+export function scriptsNeedPolling(scripts: AgentScript[]) {
   return scripts.some(
     (definition) => definition.state === "active" || isRunActive(definition.latest_run?.status),
   );
 }
 
 // canRerun allows Exec on a completed script or on an idle active schedule.
-export function canRerun(definition: ScriptDefinition) {
+export function canRerun(definition: AgentScript) {
   if (definition.state === "completed") return true;
   return (
     definition.mode === "every" &&
@@ -31,7 +31,7 @@ export function logNeedsRefresh({
   forceLogs,
   previousStatus,
 }: {
-  run: ScriptRun;
+  run: AgentScriptRun;
   expanded: Set<string>;
   forceLogs: boolean;
   previousStatus?: string;
@@ -57,7 +57,7 @@ export function when(value?: string) {
   return value ? fmtDateTime(value) : "—";
 }
 
-export function runDuration(run: ScriptRun) {
+export function runDuration(run: AgentScriptRun) {
   if (!run.started_at || !run.finished_at) return "—";
   const milliseconds = Date.parse(run.finished_at) - Date.parse(run.started_at);
   return milliseconds >= 0 ? `${(milliseconds / 1000).toFixed(1)}s` : "—";

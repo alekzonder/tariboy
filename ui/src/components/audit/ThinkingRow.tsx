@@ -1,8 +1,8 @@
-import { fmtTokens, type AuditEvent, type DisplayRow } from "@/lib/audit";
+import { fmtTokens, type AuditLogEvent, type DisplayRow } from "@/lib/audit";
 
 // prettyEvents renders the collapsed thinking run as a JSON array so the marker
 // still expands to the raw events behind it.
-function prettyEvents(events: AuditEvent[]): string {
+function prettyEvents(events: AuditLogEvent[]): string {
   return JSON.stringify(
     events.map((e) => ({ seq: e.seq, at: e.at, kind: e.kind, source: e.source })),
     null,

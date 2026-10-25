@@ -4,7 +4,7 @@ import { useApiQuery } from "@/hooks/useApiQuery";
 import { taskKeys, taskQueries, refreshTasks, writeTask } from "./taskQueries";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { Task, WorkflowView, WorkflowVisit } from "@/lib/api";
+import type { Task, WorkflowView, StatusVisit } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EMPTY, LABEL, MONO, QUIET_ACTION, ROW } from "./panelStyles";
 import ReturnToAgent from "./ReturnToAgent";
@@ -408,7 +408,7 @@ function VisitList({ view }: { view: WorkflowView }) {
 }
 
 /** One stay in a status: when, by whom, how it ended, and its message. */
-function VisitRow({ visit, digest }: { visit: WorkflowVisit; digest: string }) {
+function VisitRow({ visit, digest }: { visit: StatusVisit; digest: string }) {
   return (
     <li className={cn(ROW, "flex-wrap py-1")}>
       <span className={cn(MONO_ID, "font-medium")}>{visit.status}</span>
@@ -432,7 +432,7 @@ function VisitRow({ visit, digest }: { visit: WorkflowVisit; digest: string }) {
   );
 }
 
-function VisitEnd({ visit }: { visit: WorkflowVisit }) {
+function VisitEnd({ visit }: { visit: StatusVisit }) {
   if (!visit.left_at) return "current";
   if (!visit.outcome) return "left";
   return (

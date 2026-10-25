@@ -4,8 +4,8 @@ import {
   agentTabs,
   hasBudgetLimits,
   resolveAgentTab,
-  type AgentBudget,
 } from "./agentWorkspaceModel";
+import type { AgentBudget } from "@/lib/api";
 
 const base = "/agents/local/dev";
 
@@ -79,6 +79,7 @@ describe("hasBudgetLimits", () => {
     day_spent_usd: 1,
     week_spent_usd: 1,
     month_spent_usd: 1,
+    exhausted: null,
   };
 
   it("is false without a budget or with no limits", () => {

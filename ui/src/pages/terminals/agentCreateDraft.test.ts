@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { AgentView } from "@/lib/types";
+import type { AgentView } from "@/lib/api";
 import { cloneAgentDraft, newAgentDraft } from "./agentCreateDraft";
+import { agentBudget } from "@/test/fixtures/apiFixtures";
 
 const source = {
   name: "source",
@@ -34,6 +35,9 @@ const source = {
   goal_wait_customer_timeout_s: 120,
   goal_delivery_cooldown_s: 60,
   current_goal_task_key: "TARI-43",
+  schedule: "",
+  schedule_next_at: "",
+  budget: agentBudget(),
 } satisfies AgentView;
 
 describe("newAgentDraft", () => {

@@ -1,17 +1,11 @@
+import type { AuditLogResult, TranscriptResult } from "../api-types.generated";
 import type { Transport } from "./client";
 
-// One audit record as GET /api/agents/<name>/logs returns it. `data` is a JSON
-// string; lib/audit.ts parses and presents it.
-export interface AuditEvent {
-  seq: number;
-  kind: string;
-  source: string;
-  data: string;
-  at: string;
-  iteration_id: string;
-}
+export type { AuditLogEvent } from "../api-types.generated";
 
 // ---- Iteration transcript (AI proxy calls) ----
+// /api/openapi.json describes a transcript call only as an object; these types
+// are the UI's reading of internal/commands transcript projection.
 export interface Block {
   type: "text" | "thinking" | "tool_use" | "tool_result";
   text?: string;
@@ -70,13 +64,8 @@ export function auditApi(t: Transport) {
     // `query` is the logs route's own query string (iteration, since, before,
     // limit, kind filters) without the leading "?".
     listAuditEvents: (name: string, query = "", signal?: AbortSignal) =>
-      t.agentGet<{ events: AuditEvent[]; capped?: boolean }>(
-        name,
-        `logs${query ? `?${query}` : ""}`,
-        signal,
-      ),
-    listAuditEventTypes: (name: string) =>
-      t.agentGet<{ types: string[] }>(name, "logs?distinct=types"),
+      t.agentGet<AuditLogResult>(name, `logs${query ? `?${query}` : ""}`, signal),
+    listAuditEventTypes: (name: string) => t.agentGet<AuditLogResult>(name, "logs?distinct=types"),
     fetchAuditMarkdown: async (name: string, iteration?: string): Promise<string> =>
       (await t.raw("GET", exportPath(name, iteration, "markdown"))).text(),
     fetchAuditArchive: async (name: string, iteration?: string): Promise<Blob> =>
@@ -86,19 +75,19 @@ export function auditApi(t: Transport) {
       iteration: string,
       signal?: AbortSignal,
     ): Promise<Call[]> => {
-      const r = await t.agentGet<{ calls: Call[] }>(
+      const r = await t.agentGet<TranscriptResult>(
         name,
         `iterations/${encodeURIComponent(iteration)}/transcript`,
         signal,
       );
-      return r.calls ?? [];
+      return (r.calls ?? []) as unknown as Call[];
     },
     fetchTranscriptRaw: async (name: string, iteration: string): Promise<RawCall[]> => {
-      const r = await t.agentGet<{ calls: RawCall[] }>(
+      const r = await t.agentGet<TranscriptResult>(
         name,
         `iterations/${encodeURIComponent(iteration)}/transcript?raw=1`,
       );
-      return r.calls ?? [];
+      return (r.calls ?? []) as unknown as RawCall[];
     },
   };
 }

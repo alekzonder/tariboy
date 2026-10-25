@@ -1,6 +1,5 @@
 import type { HostAgents } from "@/lib/aggregate";
-import type { ChatSummary } from "@/lib/api";
-import type { AgentSummary } from "@/lib/types";
+import type { AgentRow, ChatSummaryRow } from "@/lib/api";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
 
 /** Identity of one agent across the whole sidebar. The same encoding the
@@ -16,9 +15,9 @@ export interface SidebarAgent {
   hostLabel: string;
   hostError?: string;
   group: string;
-  agent: AgentSummary;
+  agent: AgentRow;
   /** This agent's chats folded into one row, when it has any. */
-  chat?: ChatSummary;
+  chat?: ChatSummaryRow;
 }
 
 /**
@@ -27,8 +26,8 @@ export interface SidebarAgent {
  * shows whichever of them moved last and counts every one of them as unread,
  * so a task the customer has not read cannot hide behind a quiet conversation.
  */
-function foldAgentChats(chats: ChatSummary[]): Map<string, ChatSummary> {
-  const byAgent = new Map<string, ChatSummary>();
+function foldAgentChats(chats: ChatSummaryRow[]): Map<string, ChatSummaryRow> {
+  const byAgent = new Map<string, ChatSummaryRow>();
   for (const chat of chats) {
     if (!chat.agent) continue;
     const seen = byAgent.get(chat.agent);

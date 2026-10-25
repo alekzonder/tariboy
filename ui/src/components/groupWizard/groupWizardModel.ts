@@ -1,4 +1,4 @@
-import type { CreateAgentSpec, ImageRow } from "@/lib/api";
+import type { CreateAgentSpec, ImageSummary } from "@/lib/api";
 import { serializeEnv, type EnvRow } from "@/components/agentFormValues";
 
 // One draft agent row in the wizard. `id` is a stable key so per-row result
@@ -109,7 +109,7 @@ export function canCreate(name: string, agents: AgentDraft[], leaderIdx: number)
   );
 }
 
-export function allowsPluginOverrides(images: ImageRow[], ref: string): boolean {
+export function allowsPluginOverrides(images: ImageSummary[], ref: string): boolean {
   const selected = images.find((candidate) => `${candidate.name}:${candidate.tag}` === ref);
   return selected?.schema_version === 1;
 }

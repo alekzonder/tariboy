@@ -9,7 +9,7 @@ import {
 import { PriorityTag, StatusPill } from "@/components/ui/status";
 import { cn } from "@/lib/utils";
 import { TONE_TEXT, taskTone } from "@/lib/statusTone";
-import type { TaskPriority, WorkflowAttention } from "@/lib/api";
+import { taskPriority, type TaskPriority, type WorkflowAttention } from "@/lib/api";
 import {
   isWorkflowTask,
   taskStatusLabel,
@@ -84,10 +84,10 @@ function PriorityCell({ row, style, readOnly, onPriorityChange }: TaskRowCellPro
         <PriorityTag
           className="task-priority"
           priority={row.task.priority}
-          aria-label={priorityName(row.task.priority)}
+          aria-label={priorityName(taskPriority(row.task))}
         />
       ) : (
-        <PriorityMenu priority={row.task.priority} onChange={onPriorityChange} />
+        <PriorityMenu priority={taskPriority(row.task)} onChange={onPriorityChange} />
       )}
     </span>
   );

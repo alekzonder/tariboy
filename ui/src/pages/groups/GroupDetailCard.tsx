@@ -1,4 +1,4 @@
-import type { ApiClient, TeamDetail } from "@/lib/api";
+import type { ApiClient, GroupView } from "@/lib/api";
 import { guard } from "@/lib/toast-guard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import {
 
 interface Props {
   api: ApiClient;
-  group: TeamDetail;
+  group: GroupView;
   rename: string;
   onRenameChange: (name: string) => void;
   assignAgent: string;

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type { AgentPool, CreateQueueInput, TaskQueue, UpdateQueueInput } from "@/lib/api";
+import type { AgentPool, CreateQueueInput, Queue, UpdateQueueInput } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EMPTY, LABEL, MONO } from "./panelStyles";
 import QueuePools from "./QueuePools";
@@ -29,7 +29,7 @@ const TAB_LABELS: Record<QueueTab, string> = {
 
 /** What the selected queue's tabs read and report back to the dialog. */
 export interface QueueDetailProps {
-  queue: TaskQueue;
+  queue: Queue;
   entry: QueueEntry | undefined;
   tab: QueueTab;
   onTab: (tab: QueueTab) => void;
@@ -220,7 +220,7 @@ function GeneralForm({
   agentList,
   onUpdate,
 }: {
-  queue: TaskQueue;
+  queue: Queue;
   agentList: string;
   onUpdate: (prefix: string, input: UpdateQueueInput) => Promise<void>;
 }) {

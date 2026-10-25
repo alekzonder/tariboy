@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import AgentChat from "./AgentChat";
 import { chatIdFromTitle, sharedChats } from "./chatModel";
 import { AgentNameContext } from "@/lib/agent";
-import type { ChatSummary } from "@/lib/api";
+import type { ChatSummaryRow } from "@/lib/api";
+import { chatSummaryRow } from "@/test/fixtures/apiFixtures";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -12,19 +13,8 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function summary(over: Partial<ChatSummary>): ChatSummary {
-  return {
-    id: "x",
-    kind: "direct",
-    title: "x",
-    agent: "worker",
-    last_ts: "",
-    last_from: "",
-    last_type: "",
-    last_text: "",
-    unread: 0,
-    ...over,
-  };
+function summary(over: Partial<ChatSummaryRow>): ChatSummaryRow {
+  return chatSummaryRow({ id: "x", title: "x", ...over });
 }
 
 // A shared chat belongs to no single agent, so the agent it concerns can only

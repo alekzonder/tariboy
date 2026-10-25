@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ApiError } from "@/lib/api";
+import {
+  ApiError,
+  type ChannelList,
+  type ChannelMessage,
+  type ChannelRow,
+  type ChannelTail,
+  type ChannelWatch,
+  type ChannelWatchList,
+} from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,27 +18,8 @@ import { cn } from "@/lib/utils";
 import { AgentSubscriptions } from "@/components/AgentSubscriptions";
 import { useAgentName } from "@/lib/agent";
 
-interface Channel {
-  name: string;
-  kind: string;
-}
-interface Msg {
-  id: string;
-  ts: string;
-  type: string;
-  source: string;
-  text: string;
-}
-// A distinct unit of provider demand on a channel (§8.1): the watch identity,
-// its params, and the agents subscribed under it. Read-only view.
-interface Watch {
-  watch: string;
-  params?: Record<string, unknown> | null;
-  subscribers?: string[];
-}
-
-const NO_MSGS: Msg[] = [];
-const NO_WATCHES: Watch[] = [];
+const NO_MSGS: ChannelMessage[] = [];
+const NO_WATCHES: ChannelWatch[] = [];
 
 export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) {
   // Under /agent/:name/channels the left column is the agent's manageable
@@ -41,11 +30,11 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
   const { name: routeName } = useParams<{ name?: string }>();
   const contextName = useAgentName();
   const name = routeName || contextName || undefined;
-  const [channels, setChannels] = useState<Channel[]>([]);
+  const [channels, setChannels] = useState<ChannelRow[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   // Loaded data carries its channel; another channel's data never renders.
-  const [tail, setTail] = useState<{ ch: string; messages: Msg[] } | null>(null);
-  const [watchList, setWatchList] = useState<{ ch: string; watches: Watch[] } | null>(null);
+  const [tail, setTail] = useState<{ ch: string; messages: ChannelMessage[] } | null>(null);
+  const [watchList, setWatchList] = useState<{ ch: string; watches: ChannelWatch[] } | null>(null);
   const msgs = tail && tail.ch === sel ? tail.messages : NO_MSGS;
   const watches = watchList && watchList.ch === sel ? watchList.watches : NO_WATCHES;
   const [text, setText] = useState("");
@@ -53,7 +42,7 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
 
   const fetchTail = useCallback(
     (ch: string) =>
-      api.get<{ messages: Msg[] }>(`/api/channels/${encodeURIComponent(ch)}/messages`).then(
+      api.get<ChannelTail>(`/api/channels/${encodeURIComponent(ch)}/messages`).then(
         (r) => r.messages,
         () => NO_MSGS,
       ),
@@ -61,7 +50,7 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
   );
   const fetchWatches = useCallback(
     (ch: string) =>
-      api.get<{ watches: Watch[] }>(`/api/channels/${encodeURIComponent(ch)}/watches`).then(
+      api.get<ChannelWatchList>(`/api/channels/${encodeURIComponent(ch)}/watches`).then(
         (r) => r.watches ?? NO_WATCHES,
         () => NO_WATCHES,
       ),
@@ -73,7 +62,7 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
   useEffect(() => {
     if (name) return;
     api
-      .get<{ channels: Channel[] }>("/api/channels")
+      .get<ChannelList>("/api/channels")
       .then((r) => {
         setChannels(r.channels);
         setSel(null);
@@ -153,7 +142,7 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
         )}
         {sel && (
           <div className="flex min-w-0 flex-1 flex-col border-l">
-            <ChannelTail msgs={msgs} />
+            <TailMessages msgs={msgs} />
             <Watches watches={watches} />
             <div className="flex gap-2 border-t px-3 py-2.5">
               <Input
@@ -182,8 +171,8 @@ export default function ChannelsPage({ leading }: { leading?: ReactNode } = {}) 
   );
 }
 
-// ChannelTail is the selected channel's recent messages, oldest first.
-function ChannelTail({ msgs }: { msgs: Msg[] }) {
+// TailMessages is the selected channel's recent messages, oldest first.
+function TailMessages({ msgs }: { msgs: ChannelMessage[] }) {
   return (
     <div className="min-h-0 flex-1 overflow-auto py-1">
       {msgs.map((m) => (
@@ -215,7 +204,7 @@ function fmtTime(iso: string): string {
 // each watch's identity, its params pretty-printed, and the subscribed agents.
 // Read-only — this is an inspect view, not an editor — and collapsible so the
 // tail keeps the height when a channel has many watches.
-function Watches({ watches }: { watches: Watch[] }) {
+function Watches({ watches }: { watches: ChannelWatch[] }) {
   const [open, setOpen] = useState(true);
   return (
     <div className="shrink-0 border-t px-4 py-2 text-sm">

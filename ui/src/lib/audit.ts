@@ -1,6 +1,6 @@
-import type { AuditEvent, Call } from "@/lib/api";
+import type { AuditLogEvent, Call } from "@/lib/api";
 
-export type { AuditEvent };
+export type { AuditLogEvent };
 
 // parseData turns the JSON-string data field back into an object. On any parse
 // failure it returns {} so callers never throw on a malformed record.
@@ -67,7 +67,7 @@ function decodeJSONStrings(v: unknown): unknown {
 // pretty renders the full record as indented JSON, with data parsed back into a
 // nested object and any JSON-string fields (data.line) decoded recursively so
 // harness JSON shows as real nested JSON, not an escaped string.
-export function pretty(e: AuditEvent): string {
+export function pretty(e: AuditLogEvent): string {
   const record = {
     seq: e.seq,
     at: e.at,
@@ -239,7 +239,7 @@ function harnessDescriptor(inner: Inner): Descriptor {
 
 // EventFields is the parsed data of one audit event plus a string-field reader.
 interface EventFields {
-  e: AuditEvent;
+  e: AuditLogEvent;
   d: Record<string, unknown>;
   s: (k: string) => string;
 }
@@ -294,7 +294,7 @@ const EVENT_DESCRIPTORS: Record<string, (f: EventFields) => Descriptor> = {
 };
 
 // descriptor maps one audit event to its chat-line display form. Never throws.
-export function descriptor(e: AuditEvent): Descriptor {
+export function descriptor(e: AuditLogEvent): Descriptor {
   const d = parseData(e.data);
   const s = (k: string) => (typeof d[k] === "string" ? (d[k] as string) : "");
   const handler = lookup(EVENT_DESCRIPTORS, e.kind);
@@ -308,14 +308,14 @@ export function descriptor(e: AuditEvent): Descriptor {
 }
 
 export type DisplayRow =
-  | { kind: "event"; key: number; event: AuditEvent }
-  | { kind: "thinking"; key: number; events: AuditEvent[]; tokens: number }
+  | { kind: "event"; key: number; event: AuditLogEvent }
+  | { kind: "thinking"; key: number; events: AuditLogEvent[]; tokens: number }
   | { kind: "proxycall"; key: number; call: Call; mode: "enrich" | "full" };
 
 // isThinking marks the low-signal reasoning events collapseThinking folds:
 // thinking_tokens counters and the redacted (empty-text) assistant thinking
 // blocks this harness emits.
-function isThinking(e: AuditEvent): boolean {
+function isThinking(e: AuditLogEvent): boolean {
   if (e.kind !== "harness_output") return false;
   const line = parseData(e.data).line;
   if (typeof line !== "string") return false;
@@ -329,7 +329,7 @@ function isThinking(e: AuditEvent): boolean {
   return false;
 }
 
-function thinkingTokens(e: AuditEvent): number {
+function thinkingTokens(e: AuditLogEvent): number {
   try {
     const inner = JSON.parse(String(parseData(e.data).line)) as Record<string, unknown>;
     const n = inner.estimated_tokens;
@@ -342,9 +342,9 @@ function thinkingTokens(e: AuditEvent): number {
 // collapseThinking folds each maximal run of consecutive thinking events into a
 // single marker row (keyed by the run's first seq, tokens summed). Order is
 // preserved; non-thinking events pass through as event rows.
-export function collapseThinking(events: AuditEvent[]): DisplayRow[] {
+export function collapseThinking(events: AuditLogEvent[]): DisplayRow[] {
   const out: DisplayRow[] = [];
-  let run: AuditEvent[] = [];
+  let run: AuditLogEvent[] = [];
   const flush = () => {
     if (run.length) {
       out.push({
@@ -374,7 +374,7 @@ export function fmtTokens(n: number): string {
 
 // hasHarnessOutput reports whether the iteration produced harness stream-json
 // (batch agents). Absent for interactive agents, which decides render mode.
-export function hasHarnessOutput(events: AuditEvent[]): boolean {
+export function hasHarnessOutput(events: AuditLogEvent[]): boolean {
   return events.some((e) => e.kind === "harness_output");
 }
 

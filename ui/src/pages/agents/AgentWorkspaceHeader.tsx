@@ -10,20 +10,15 @@ import type { DaemonCtx } from "@/components/daemonContext";
 import { agentTone } from "@/lib/statusTone";
 import { openHostPathInVSCode } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
-import type { AgentStatus, AgentSummary, AgentView } from "@/lib/types";
+import type { AgentBudget, AgentRow, AgentStatus, AgentView } from "@/lib/api";
 import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
-import {
-  agentRuntimeLabel,
-  hasBudgetLimits,
-  type AgentBudget,
-  type AgentTabEntry,
-} from "./agentWorkspaceModel";
+import { agentRuntimeLabel, hasBudgetLimits, type AgentTabEntry } from "./agentWorkspaceModel";
 import { AgentWorkspaceTabs } from "./AgentWorkspaceTabs";
 
 type AgentWorkspaceHeaderProps = {
   hostId: string;
   hostLabel?: string;
-  agent: AgentSummary;
+  agent: AgentRow;
   status: AgentStatus | null;
   view: AgentView | null;
   daemons: DaemonCtx["daemons"];
@@ -72,7 +67,7 @@ function AgentIdentityRow({
   runtime,
   onOpenGoal,
 }: {
-  agent: AgentSummary;
+  agent: AgentRow;
   hostId: string;
   hostLabel?: string;
   outOfBudget: boolean;

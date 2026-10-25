@@ -34,6 +34,7 @@ const task: Task = {
   started_at: "2026-09-20T10:00:00Z",
   updated_at: "2026-09-20T10:18:00Z",
   completed_at: "2026-09-20T10:18:00Z",
+  pull_request: "",
 };
 
 function widths(scope: HTMLElement): (string | null)[] {

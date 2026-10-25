@@ -1,12 +1,12 @@
 import { Button } from "@/components/ui/button";
-import type { ScriptRun } from "@/lib/api";
+import type { AgentScriptRun } from "@/lib/api";
 import { isRunActive, runDuration, when } from "./scriptsModel";
 
 type RunActions = {
-  onToggle: (run: ScriptRun) => Promise<void>;
+  onToggle: (run: AgentScriptRun) => Promise<void>;
   onCancel: (id: string) => Promise<void>;
   onCopy: (path: string) => Promise<void>;
-  onDownload: (run: ScriptRun) => Promise<void>;
+  onDownload: (run: AgentScriptRun) => Promise<void>;
 };
 
 function RunDetails({
@@ -14,7 +14,7 @@ function RunDetails({
   log,
   onCopy,
   onDownload,
-}: { run: ScriptRun; log?: string } & RunActions) {
+}: { run: AgentScriptRun; log?: string } & RunActions) {
   return (
     <div id={`run-${run.id}`} className="grid gap-3 border-t p-3">
       <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs">
@@ -67,7 +67,7 @@ function RunItem({
   log,
   actions,
 }: {
-  run: ScriptRun;
+  run: AgentScriptRun;
   open: boolean;
   log?: string;
   actions: RunActions;
@@ -114,7 +114,7 @@ export function ScriptRunList({
   ...actions
 }: {
   id: string;
-  runs?: ScriptRun[];
+  runs?: AgentScriptRun[];
   expanded: Set<string>;
   logs: Record<string, string>;
 } & RunActions) {

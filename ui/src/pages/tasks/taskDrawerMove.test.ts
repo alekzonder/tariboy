@@ -37,6 +37,7 @@ const task: Task = {
   created_at: "2026-07-31T10:00:00Z",
   updated_at: "2026-07-31T10:00:00Z",
   completed_at: "",
+  started_at: "",
 };
 const remote = { value: "far:agent:dev", label: "dev", assignee: "agent:dev", hostId: "far" };
 const source = {

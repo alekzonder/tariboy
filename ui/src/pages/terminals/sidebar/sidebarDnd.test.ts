@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { HostAgents } from "@/lib/aggregate";
-import type { AgentSummary } from "@/lib/types";
+import type { AgentRow } from "@/lib/api";
 import { dragId, reorderFromDrag, rowCollision, sidebarAnnouncements } from "./sidebarDnd";
+import { agentRow } from "@/test/fixtures/apiFixtures";
 
 const rect = (top: number) => ({
   left: 0,
@@ -55,13 +56,8 @@ describe("sidebar row collision", () => {
   });
 });
 
-const agent = (name: string, group: string | null = null): AgentSummary => ({
-  name,
-  image: "img:latest",
-  state: "running",
-  harness: "claude",
-  group,
-});
+const agent = (name: string, group = ""): AgentRow =>
+  agentRow({ name, image: "img:latest", state: "running", harness: "claude", group });
 
 const hosts: HostAgents[] = [
   {

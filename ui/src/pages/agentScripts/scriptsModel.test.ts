@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ScriptDefinition, ScriptRun } from "@/lib/api";
+import type { AgentScript, AgentScriptRun } from "@/lib/api";
 import {
   canRerun,
   isRunActive,
@@ -13,14 +13,18 @@ import {
 
 vi.mock("@/lib/time", () => ({ fmtDateTime: (value: string) => `fmt:${value}` }));
 
-const run: ScriptRun = {
+const run: AgentScriptRun = {
   id: "r1",
   script_id: "s1",
   agent: "alpha",
   status: "succeeded",
   created_at: "2026-08-20T10:00:00Z",
+  started_at: "",
+  finished_at: "",
+  log_path: "",
+  cancel_requested: false,
 };
-const definition: ScriptDefinition = {
+const definition: AgentScript = {
   id: "s1",
   agent: "alpha",
   name: "n",
@@ -30,6 +34,7 @@ const definition: ScriptDefinition = {
   interval_seconds: 0,
   state: "completed",
   created_at: "2026-08-20T10:00:00Z",
+  next_run_at: "",
 };
 
 describe("isRunActive", () => {
@@ -55,7 +60,7 @@ describe("scriptsNeedPolling", () => {
 });
 
 describe("canRerun", () => {
-  it.each<[string, Partial<ScriptDefinition>, boolean]>([
+  it.each<[string, Partial<AgentScript>, boolean]>([
     ["a completed script", {}, true],
     ["a cancelled script", { state: "cancelled" }, false],
     ["an active one-shot", { state: "active" }, false],
@@ -113,7 +118,7 @@ describe("when", () => {
 });
 
 describe("runDuration", () => {
-  it.each<[Partial<ScriptRun>, string]>([
+  it.each<[Partial<AgentScriptRun>, string]>([
     [{}, "—"],
     [{ started_at: "2026-08-20T10:00:00Z" }, "—"],
     [{ started_at: "2026-08-20T10:00:00Z", finished_at: "2026-08-20T10:00:02.5Z" }, "2.5s"],

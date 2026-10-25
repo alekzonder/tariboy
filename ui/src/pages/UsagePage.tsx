@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { usePolling } from "@/hooks/usePolling";
-import type { GroupRow } from "@/lib/api";
+import type { GroupRow, UsageReport, UsageSeriesPoint } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { fmtTokens } from "@/lib/audit";
 import { fmtDateTime } from "@/lib/time";
-import type { UsagePoint, UsageReport } from "@/lib/types";
 import { fmtCost } from "@/lib/usage";
 import UsageSummaryCard from "@/components/usage/UsageSummaryCard";
 
@@ -185,7 +184,7 @@ function RecentRequests({ requests }: { requests: UsageReport["requests"] }) {
   );
 }
 
-function DailyUsage({ series }: { series: UsagePoint[] }) {
+function DailyUsage({ series }: { series: UsageSeriesPoint[] }) {
   const max = series.reduce((highest, point) => Math.max(highest, point.cost_usd), 0);
   return (
     <section aria-label="Daily usage" className="rounded border p-3">

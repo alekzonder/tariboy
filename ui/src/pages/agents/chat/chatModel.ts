@@ -1,11 +1,11 @@
-import type { ChatMessage, ChatSummary } from "@/lib/api";
+import type { ChatMessage, ChatSummaryRow } from "@/lib/api";
 import type { FeedItem } from "./chatFeed";
 import { isKind } from "./chatKinds";
 
 /** The shared chats one agent takes part in: chats no single agent owns, which
  *  is what a multi-agent conversation is. They sit beside the agent's own three
  *  because from its workspace they are another thread it is in. */
-export function sharedChats(chats: ChatSummary[], agent: string): ChatSummary[] {
+export function sharedChats(chats: ChatSummaryRow[], agent: string): ChatSummaryRow[] {
   return chats.filter(
     (chat) => !chat.agent && (chat.participants ?? []).includes(`agent:${agent}`),
   );
@@ -46,7 +46,7 @@ export function chatParticipants({
   selected: string;
   customer: string;
   name: string;
-  current: ChatSummary | undefined;
+  current: ChatSummaryRow | undefined;
 }): string[] {
   return isKind(selected) ? [customer, `agent:${name}`] : (current?.participants ?? []);
 }
@@ -81,6 +81,8 @@ export function pendingChatMessage({
     source: customer,
     type: "message",
     text,
+    produced_by_agent: "",
+    produced_in_iteration: "",
   };
 }
 

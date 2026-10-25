@@ -1,4 +1,4 @@
-import type { IterationSummary } from "@/lib/types";
+import type { IterationRow } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { fmtDateTime } from "@/lib/time";
@@ -17,7 +17,7 @@ export function IterationList({
   showDates,
   setFilter,
 }: {
-  items: IterationSummary[];
+  items: IterationRow[];
   selected: string | null;
   select: (iteration: string | null) => void;
   tagFilter: string;

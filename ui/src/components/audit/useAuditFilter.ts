@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
-import type { AuditEvent } from "@/lib/audit";
+import type { AuditLogEvent } from "@/lib/audit";
 
 // useAuditFilter owns FullAuditLog's type/text filter. Either non-empty puts
 // the pane in filtered mode: the whole log is scanned server-side
@@ -12,7 +12,7 @@ export function useAuditFilter(name: string) {
   const [type, setType] = useState("");
   const [query, setQuery] = useState("");
   const [presets, setPresets] = useState<string[]>([]);
-  const [filtered, setFiltered] = useState<AuditEvent[] | null>(null);
+  const [filtered, setFiltered] = useState<AuditLogEvent[] | null>(null);
   const [capped, setCapped] = useState(false);
   const filtering = type.trim() !== "" || query.trim() !== "";
   // Leaving filtered mode drops the old matches, so the next filter starts at "Searching…".

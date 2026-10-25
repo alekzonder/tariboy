@@ -2,9 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AuditRow } from "./AuditRow";
-import type { AuditEvent, DisplayRow } from "@/lib/audit";
+import type { AuditLogEvent, DisplayRow } from "@/lib/audit";
 
-const ev = (over: Partial<AuditEvent>): AuditEvent => ({
+const ev = (over: Partial<AuditLogEvent>): AuditLogEvent => ({
   seq: 1,
   kind: "harness_output",
   source: "harness",
@@ -13,7 +13,7 @@ const ev = (over: Partial<AuditEvent>): AuditEvent => ({
   iteration_id: "it-1",
   ...over,
 });
-const eventRow = (e: AuditEvent): DisplayRow => ({ kind: "event", key: e.seq, event: e });
+const eventRow = (e: AuditLogEvent): DisplayRow => ({ kind: "event", key: e.seq, event: e });
 
 describe("AuditRow", () => {
   it("renders a chat-style line: time, icon, label, preview", () => {

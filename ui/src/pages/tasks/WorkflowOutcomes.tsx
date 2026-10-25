@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { WorkflowOutcome, WorkflowView } from "@/lib/api";
+import type { OutcomeView, WorkflowView } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { DANGER_FILL, EMPTY, LABEL, MONO } from "./panelStyles";
 import { useFollowRequest, visibleNotice, type Notice } from "./workflowShared";
@@ -151,7 +151,7 @@ function OutcomeRow({
   onAdvance,
   disabled,
 }: {
-  outcome: WorkflowOutcome;
+  outcome: OutcomeView;
   /** Declares the outcome; absent where the customer does not decide. */
   onAdvance?: () => void;
   disabled: boolean;
@@ -234,7 +234,7 @@ function CheckingStatus({ onRefresh }: { onRefresh?: () => void }) {
 }
 
 /** The checks of an outcome: each script with what it verifies, when the image says. */
-function Checks({ outcome }: { outcome: WorkflowOutcome }) {
+function Checks({ outcome }: { outcome: OutcomeView }) {
   const checks = outcome.checks ?? [];
   if (checks.length === 0) return null;
   return (

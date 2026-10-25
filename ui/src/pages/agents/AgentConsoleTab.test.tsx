@@ -4,9 +4,9 @@ import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
 import { ApiProvider } from "@/components/ApiProvider";
 import { useApi } from "@/components/apiContext";
-import type { ApiClient } from "@/lib/api";
+import type { AgentRow, ApiClient } from "@/lib/api";
 import { fakeApi } from "@/test/api";
-import type { AgentSummary } from "@/lib/types";
+import { agentRow } from "@/test/fixtures/apiFixtures";
 import AgentConsoleTab from "./AgentConsoleTab";
 
 const reconnect = vi.fn();
@@ -46,16 +46,8 @@ const serverUploadFile = vi.fn();
 const startAgent = vi.fn();
 let client: ApiClient;
 
-function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
-  return {
-    name: "worker",
-    image: "basic:latest",
-    state: "stopped",
-    harness: "stub",
-    group: null,
-    interactive: false,
-    ...overrides,
-  };
+function agent(overrides: Partial<AgentRow> = {}): AgentRow {
+  return agentRow({ name: "worker", image: "basic:latest", harness: "stub", ...overrides });
 }
 
 function renderTab(value = agent()) {

@@ -1,4 +1,4 @@
-import { parseData, salientArg, type AuditEvent } from "@/lib/audit";
+import { parseData, salientArg, type AuditLogEvent } from "@/lib/audit";
 
 // CodexHarnessPresentation is the small, user-facing subset of a Codex JSONL
 // item. The original event stays available through pretty(); this only avoids
@@ -140,7 +140,7 @@ const CODEX_ITEM_HANDLERS: Record<string, CodexItemHandler> = {
 // codexHarnessPresentation recognizes the item.started/item.completed events
 // emitted by the Codex harness. It deliberately returns undefined for every
 // other line so generic harness and audit rendering remains unchanged.
-export function codexHarnessPresentation(e: AuditEvent): CodexHarnessPresentation | undefined {
+export function codexHarnessPresentation(e: AuditLogEvent): CodexHarnessPresentation | undefined {
   if (e.kind !== "harness_output") return undefined;
   const line = parseData(e.data).line;
   if (typeof line !== "string") return undefined;

@@ -1,5 +1,17 @@
-import type { AgentUsageReport, TaskActivityReport, UsageReport } from "../types";
+import type { AgentUsage, TaskActivityReport, UsageReport } from "../api-types.generated";
 import type { Transport } from "./client";
+
+export type {
+  AgentUsage,
+  BudgetSpend,
+  BudgetStatusList,
+  TaskActivityAgent,
+  TaskActivityReport,
+  TaskActivityRow,
+  TaskActivityTotals,
+  UsageReport,
+  UsageSeriesPoint,
+} from "../api-types.generated";
 
 export interface UsageParams {
   group?: string;
@@ -20,7 +32,7 @@ export function usageApi(t: Transport) {
       const q = new URLSearchParams();
       for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
       const s = q.toString();
-      return t.agentGet<AgentUsageReport>(name, `usage${s ? `?${s}` : ""}`);
+      return t.agentGet<AgentUsage>(name, `usage${s ? `?${s}` : ""}`);
     },
     // Work on tasks in a window; without agent, server-wide.
     getTaskActivity: (

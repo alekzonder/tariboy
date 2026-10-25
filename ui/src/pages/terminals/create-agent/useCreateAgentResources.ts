@@ -7,7 +7,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { createApi, type ImageManifest, type ImageRow } from "@/lib/api";
+import { createApi, type ImageManifest, type ImageSummary } from "@/lib/api";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import type { CreateAgentDialogProps } from "../CreateAgentDialog";
 import type { AgentCreateDraft } from "../agentCreateDraft";
@@ -21,7 +21,7 @@ const LOCAL_HOST_VALUE = "__local__";
 function useTargetImages(host: string, selectedHostRevision: string) {
   const [target, setTarget] = useState<Daemon | null>(null);
   const [resolvedRevision, setResolvedRevision] = useState("");
-  const [images, setImages] = useState<ImageRow[]>([]);
+  const [images, setImages] = useState<ImageSummary[]>([]);
   const [imagesError, setImagesError] = useState("");
 
   useEffect(() => {

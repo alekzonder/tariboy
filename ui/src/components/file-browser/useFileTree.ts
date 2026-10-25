@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, type FileEntry, type FileListing } from "@/lib/api";
+import { ApiError, type AgentFileEntry, type AgentFileList } from "@/lib/api";
 import { baseName, dirName } from "./paths";
 import { errorText } from "@/lib/errors";
 
 interface DirState {
-  entries: FileEntry[] | null;
+  entries: AgentFileEntry[] | null;
   loading: boolean;
   error: string | null;
 }
@@ -22,7 +22,7 @@ export interface FileTreeApi {
   resolveExists: (path: string) => Promise<"exists" | "absent" | "unknown">;
 }
 
-export function useFileTree(listDir: (path: string) => Promise<FileListing>): FileTreeApi {
+export function useFileTree(listDir: (path: string) => Promise<AgentFileList>): FileTreeApi {
   const [dirs, setDirs] = useState<Record<string, DirState>>({
     "": { entries: null, loading: false, error: null },
   });

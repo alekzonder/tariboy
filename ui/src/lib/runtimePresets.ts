@@ -1,5 +1,5 @@
 import { readKey, storageKeys, writeKey } from "./storage";
-import type { HarnessCatalog } from "./types";
+import type { HarnessModelCatalog } from "@/lib/api";
 
 export type RuntimePresetField = "models" | "efforts";
 
@@ -11,7 +11,7 @@ export interface PresetGroup {
 
 export interface HarnessCatalogState {
   loading: boolean;
-  catalog: HarnessCatalog | null;
+  catalog: HarnessModelCatalog | null;
   error: string;
 }
 
@@ -91,13 +91,14 @@ export function rememberRuntimePreset(
 }
 
 function catalogValues(
-  catalog: HarnessCatalog,
+  catalog: HarnessModelCatalog,
   field: RuntimePresetField,
   model: string,
 ): string[] {
-  if (field === "models") return catalog.models.map((entry) => entry.id);
-  const selected = catalog.models.find((entry) => entry.id === model.trim());
-  return selected?.efforts?.length ? selected.efforts : catalog.efforts;
+  const models = catalog.models ?? [];
+  if (field === "models") return models.map((entry) => entry.id);
+  const selected = models.find((entry) => entry.id === model.trim());
+  return selected?.efforts?.length ? selected.efforts : (catalog.efforts ?? []);
 }
 
 // Suggestions for the model and effort fields, split into what the harness CLI

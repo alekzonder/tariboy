@@ -1,7 +1,7 @@
 import { Plus, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
-import type { TaskQueue, TaskStatusView } from "@/lib/api";
+import type { Queue, TaskStatusView } from "@/lib/api";
 import TaskColumnsMenu from "./TaskColumnsMenu";
 import {
   TaskPrincipalChips,
@@ -56,7 +56,7 @@ export function TaskFilterBar({
   onStatusView: (value: TaskStatusView) => void;
   principalFilter?: TaskPrincipalFilter;
   onPrincipalFilter?: (value: TaskPrincipalFilter) => void;
-  queues: ReadonlyArray<Pick<TaskQueue, "prefix">>;
+  queues: ReadonlyArray<Pick<Queue, "prefix">>;
   /** Empty means every queue. */
   queue: string;
   onQueue: (prefix: string) => void;

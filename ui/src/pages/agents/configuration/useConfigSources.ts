@@ -1,20 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isConnectionError, type AgentImageStatus, type ImageRow } from "@/lib/api";
+import {
+  isConnectionError,
+  type AgentImageStatus,
+  type ImageSummary,
+  type AgentStatus,
+  type AgentView,
+  type RetentionView,
+  type SecretKeyList,
+} from "@/lib/api";
 import { subscribeImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
-import type { AgentStatus, AgentView } from "@/lib/types";
 import { errorText } from "@/lib/errors";
-
-interface RetentionLimits {
-  keep_iterations: number;
-  keep_days: number;
-  max_bytes: number;
-}
-// The effective limits, the agent's own override (0 inherits) and the server default.
-export interface RetentionPolicy extends RetentionLimits {
-  override: RetentionLimits;
-  default: RetentionLimits;
-}
 
 // A loaded value, or the reason it is missing. A failed reload keeps the last
 // value: a failed read is not an empty one.
@@ -27,11 +23,11 @@ export interface ConfigSources {
   view: AgentView | null;
   imageStatus: AgentImageStatus | null;
   imageError: string;
-  images: ImageRow[];
+  images: ImageSummary[];
   inventoryLoading: boolean;
   inventoryError: string;
   script: Loaded<string>;
-  retention: Loaded<RetentionPolicy>;
+  retention: Loaded<RetentionView>;
   secrets: Loaded<string[]>;
   loadImages: () => Promise<void>;
   reloadAll: () => Promise<void>;
@@ -49,11 +45,11 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
   const [view, setView] = useState<AgentView | null>(null);
   const [imageStatus, setImageStatus] = useState<AgentImageStatus | null>(null);
   const [imageError, setImageError] = useState("");
-  const [images, setImages] = useState<ImageRow[]>([]);
+  const [images, setImages] = useState<ImageSummary[]>([]);
   const [inventoryLoading, setInventoryLoading] = useState(true);
   const [inventoryError, setInventoryError] = useState("");
   const [script, setScript] = useState<Loaded<string>>(empty);
-  const [retention, setRetention] = useState<Loaded<RetentionPolicy>>(empty);
+  const [retention, setRetention] = useState<Loaded<RetentionView>>(empty);
   const [secrets, setSecrets] = useState<Loaded<string[]>>(empty);
   const targetId = api.target?.id;
 
@@ -106,10 +102,10 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
         if (current())
           setScript({ value: typeof next?.script === "string" ? next.script : "", error: "" });
       }, keep(setScript)),
-      api.agentGet<RetentionPolicy>(name, "retention").then((next) => {
+      api.agentGet<RetentionView>(name, "retention").then((next) => {
         if (current()) setRetention({ value: next, error: "" });
       }, keep(setRetention)),
-      api.agentGet<{ keys: string[] | null }>(name, "secrets").then((next) => {
+      api.agentGet<SecretKeyList>(name, "secrets").then((next) => {
         if (current()) setSecrets({ value: Array.isArray(next?.keys) ? next.keys : [], error: "" });
       }, keep(setSecrets)),
     ]);

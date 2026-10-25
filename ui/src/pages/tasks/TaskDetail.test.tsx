@@ -9,7 +9,7 @@ import {
   type TaskComment,
   type TaskDetail as Detail,
   type TaskEvent,
-  type TaskWait,
+  type WaitingFor,
 } from "@/lib/api";
 import { agentPool, customerView, poolView, workflowTask } from "@/test/fixtures/workflowFixtures";
 import { fakeApi } from "@/test/api";
@@ -49,8 +49,15 @@ beforeEach(() => {
   api.getTaskWorkflow.mockResolvedValue(customerView);
 });
 
-function renderDetail(task: Task, waiting_for: TaskWait[] = [], comments: TaskComment[] = []) {
-  const detail: Detail = { task, comments, waiting_for, relations: [] };
+function renderDetail(task: Task, waiting_for: WaitingFor[] = [], comments: TaskComment[] = []) {
+  const detail: Detail = {
+    task,
+    comments,
+    waiting_for,
+    relations: [],
+    descendants: 0,
+    active_descendants: 0,
+  };
   const onSave = vi.fn().mockResolvedValue(task);
   const onTaskChanged = vi.fn();
   const onClose = vi.fn();
@@ -225,7 +232,7 @@ it("confirms a pause decision inside the open sheet without closing it", async (
   expect(screen.getByText("Release notes")).toBeInTheDocument();
 });
 
-const wait = (requesting_principal: string): TaskWait => ({
+const wait = (requesting_principal: string): WaitingFor => ({
   id: 1,
   task_key: "REL-1",
   expected_principal: "user:owner",

@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDaemons } from "@/components/daemonContext";
 import { useApi } from "@/components/apiContext";
-import { isConnectionError } from "@/lib/api";
+import { isConnectionError, type AgentStatus, type AgentView } from "@/lib/api";
 import { useAgentStatesSocket } from "@/hooks/useMessagesSocket";
 import { useCoalesced } from "@/hooks/useCoalesced";
-import type { AgentStatus, AgentView } from "@/lib/types";
 
 type Connection = "selecting" | "ready" | "unavailable";
 

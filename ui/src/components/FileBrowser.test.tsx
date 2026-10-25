@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import FileBrowser, { type FileBrowserProps } from "./FileBrowser";
-import type { FileContent, FileEntry } from "@/lib/api";
+import type { AgentFileContent, AgentFileEntry } from "@/lib/api";
 import { toast } from "sonner";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
@@ -31,8 +31,8 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const entry = (name: string, isDir = false): FileEntry => ({ name, isDir, size: 1, mtime: 0 });
-const content = (path: string, text = path): FileContent => ({
+const entry = (name: string, isDir = false): AgentFileEntry => ({ name, isDir, size: 1, mtime: 0 });
+const content = (path: string, text = path): AgentFileContent => ({
   path,
   kind: "text",
   content: text,
@@ -80,7 +80,7 @@ describe("FileBrowser public integration: navigation", () => {
   });
 
   it("resets selection on source changes and ignores a late previous read", async () => {
-    const late = deferred<FileContent>();
+    const late = deferred<AgentFileContent>();
     const first = source({ readFile: vi.fn(() => late.promise) });
     const view = render(<FileBrowser {...first} />);
     await select();
@@ -95,7 +95,7 @@ describe("FileBrowser public integration: navigation", () => {
   });
 
   it("ignores late reads after choosing a different path", async () => {
-    const late = deferred<FileContent>();
+    const late = deferred<AgentFileContent>();
     render(
       <FileBrowser
         {...source({

@@ -1,7 +1,7 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { toast } from "sonner";
-import type { FileContent } from "@/lib/api";
+import type { AgentFileContent } from "@/lib/api";
 import { useFileDraft } from "./useFileDraft";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
@@ -11,7 +11,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const file: FileContent = { path: "a.md", kind: "text", content: "old", size: 3 };
+const file: AgentFileContent = { path: "a.md", kind: "text", content: "old", size: 3 };
 
 it("loads the file, tracks the draft and folds a save into the file", async () => {
   const writeFile = vi.fn().mockResolvedValue(undefined);

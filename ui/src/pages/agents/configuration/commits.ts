@@ -1,9 +1,7 @@
 import { agentApiPath, type ApiClient } from "@/lib/api";
 import { rememberRuntimePreset } from "@/lib/runtimePresets";
-import type { AgentImageStatus } from "@/lib/api";
-import type { AgentView } from "@/lib/types";
+import type { AgentImageStatus, AgentView, RetentionView } from "@/lib/api";
 import { normalizeField, type Values } from "./registry";
-import type { RetentionPolicy } from "./useConfigSources";
 import type { CommitUnit } from "./useConfigDraft";
 
 const text = (value: unknown) => (value === undefined || value === null ? "" : String(value));
@@ -48,7 +46,7 @@ const imageBaseline = (imageStatus: AgentImageStatus | null): Values =>
 const scriptBaseline = (script: string | null): Values =>
   script === null ? {} : { "shell-script": script };
 
-const retentionBaseline = (retention: RetentionPolicy | null): Values =>
+const retentionBaseline = (retention: RetentionView | null): Values =>
   retention
     ? {
         "keep-iterations": text(retention.override?.keep_iterations ?? 0),
@@ -66,7 +64,7 @@ export function readBaseline(sources: {
   view: AgentView | null;
   imageStatus: AgentImageStatus | null;
   script: string | null;
-  retention: RetentionPolicy | null;
+  retention: RetentionView | null;
   secrets: string[] | null;
 }): Values {
   const { view, imageStatus, script, retention, secrets } = sources;

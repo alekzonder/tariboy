@@ -1,17 +1,17 @@
 import {
-  type Store,
-  type StoreImage,
-  type StoreWorkflow,
+  type StoreView,
+  type StoreImageView,
+  type StoreWorkflowView,
   TARIBOY_STORE,
-  type WorkflowImage,
+  type WorkflowImageListing,
 } from "@/lib/api";
 
-const builtComparison = (image: StoreImage) => {
+const builtComparison = (image: StoreImageView) => {
   if (!image.version) return "Source image_version missing; comparison unavailable";
   return image.update_needed ? "Update needed" : "Up to date";
 };
 
-const comparisonStatus = (image: StoreImage) => {
+const comparisonStatus = (image: StoreImageView) => {
   if (
     image.latest_status === "unversioned" ||
     (image.latest_status === "built" && !image.built_version)
@@ -23,7 +23,7 @@ const comparisonStatus = (image: StoreImage) => {
   return "";
 };
 
-export const imageStatuses = (image: StoreImage) => {
+export const imageStatuses = (image: StoreImageView) => {
   const statuses: string[] = [];
   if (image.error) statuses.push(`Source error: ${image.error}`);
   if (image.latest_status === "error")
@@ -34,7 +34,7 @@ export const imageStatuses = (image: StoreImage) => {
   return statuses;
 };
 
-export const latestImageVersionLabel = (image: StoreImage) => {
+export const latestImageVersionLabel = (image: StoreImageView) => {
   if (image.latest_status === "missing") return "Not built";
   if (image.latest_status === "error") return "Inspection failed";
   return image.built_version || "Not specified";
@@ -42,7 +42,7 @@ export const latestImageVersionLabel = (image: StoreImage) => {
 
 // latest is the built latest workflow_version: undefined when not built, null
 // when the registry could not be read.
-export const workflowStatus = (workflow: StoreWorkflow, latest: string | null | undefined) => {
+export const workflowStatus = (workflow: StoreWorkflowView, latest: string | null | undefined) => {
   if (workflow.error) return `Source error: ${workflow.error}`;
   if (latest === null) return "Comparison unavailable";
   if (latest === undefined) return "Latest not built";
@@ -50,14 +50,14 @@ export const workflowStatus = (workflow: StoreWorkflow, latest: string | null | 
 };
 
 export const latestWorkflowVersion = (
-  workflowImages: WorkflowImage[] | null,
+  workflowImages: WorkflowImageListing[] | null,
   workflowName: string,
 ) =>
   workflowImages
     ? workflowImages.find((image) => image.name === workflowName && image.tag === "latest")?.version
     : null;
 
-export const hasTariboyStore = (stores: Store[]) =>
+export const hasTariboyStore = (stores: StoreView[]) =>
   stores.some(
     (store) => store.name === TARIBOY_STORE.name || store.source === TARIBOY_STORE.source,
   );

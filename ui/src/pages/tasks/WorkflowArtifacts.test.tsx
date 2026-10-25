@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { act, fireEvent, render as renderWith, screen, within } from "@/test/queryRender";
 import { beforeEach, expect, it, vi } from "vitest";
-import { ApiError, type WorkflowArtifact } from "@/lib/api";
+import { ApiError, type Artifact } from "@/lib/api";
 import WorkflowArtifacts from "./WorkflowArtifacts";
 import { remoteTarget } from "@/test/fixtures/workflowFixtures";
 import { fakeApi } from "@/test/api";
@@ -20,7 +20,7 @@ const remoteApi = fakeApi(
 );
 const render = (ui: ReactElement) => renderWith(ui, { api: remoteApi });
 
-const notes: WorkflowArtifact = {
+const notes: Artifact = {
   id: 3,
   name: "notes",
   value: "<i>one</i>\n2\n3\n4\n5\n6\n7\n8",

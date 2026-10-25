@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import type { ImageRow } from "@/lib/api";
+import type { ImageSummary } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { builtDate, sourceLabel } from "./builtImages";
 import { BuiltImageTagActions, type TagActionHandlers } from "./BuiltImageTagActions";
@@ -9,7 +9,7 @@ function TagCell({
   newest,
   basePath,
 }: {
-  image: ImageRow;
+  image: ImageSummary;
   newest: boolean;
   basePath: string;
 }) {
@@ -46,7 +46,7 @@ export function BuiltImageTagRow({
   basePath,
   actions,
 }: {
-  image: ImageRow;
+  image: ImageSummary;
   newest: boolean;
   basePath: string;
   actions: TagActionHandlers;

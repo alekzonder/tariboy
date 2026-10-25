@@ -2,11 +2,18 @@ import type { ComponentProps } from "react";
 import type { Mock } from "vitest";
 import { expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@/test/queryRender";
-import type { CreateAgentResult, ImageManifest, ImageRow } from "@/lib/api";
+import type {
+  AgentActionResult,
+  AgentRunResult,
+  AgentView,
+  HarnessModelCatalog,
+  ImageManifest,
+  ImageSummary,
+} from "@/lib/api";
 import { resolveDaemon } from "@/lib/daemons";
 import { targetFor } from "@/lib/terminalsHost";
-import type { AgentLifecycleResult, AgentView, HarnessCatalog } from "@/lib/types";
 import { clearHarnessCatalogCache } from "@/hooks/useHarnessCatalog";
+import { agentBudget, imageSummary } from "@/test/fixtures/apiFixtures";
 import { CreateAgentDialog } from "@/pages/terminals/CreateAgentDialog";
 
 /** The mocked api calls every CreateAgentDialog test file records; each file
@@ -14,11 +21,11 @@ import { CreateAgentDialog } from "@/pages/terminals/CreateAgentDialog";
  *  within the test file itself. */
 export interface CreateAgentDialogCalls {
   agentGetOn: Mock<(...args: never[]) => Promise<AgentView>>;
-  createAgent: Mock<(...args: never[]) => Promise<CreateAgentResult>>;
-  getHarnessModelsOn: Mock<(target: never, harness: string) => Promise<HarnessCatalog>>;
+  createAgent: Mock<(...args: never[]) => Promise<AgentRunResult>>;
+  getHarnessModelsOn: Mock<(target: never, harness: string) => Promise<HarnessModelCatalog>>;
   imageManifestGet: Mock<(...args: never[]) => Promise<ImageManifest>>;
-  listImages: Mock<(...args: never[]) => Promise<{ images: ImageRow[]; count: number }>>;
-  startAgent: Mock<(...args: never[]) => Promise<AgentLifecycleResult>>;
+  listImages: Mock<(...args: never[]) => Promise<{ images: ImageSummary[]; count: number }>>;
+  startAgent: Mock<(...args: never[]) => Promise<AgentActionResult>>;
 }
 
 export const hosts = [
@@ -44,7 +51,7 @@ export const manifest = (overrides: Partial<ImageManifest> = {}): ImageManifest 
   policy: {},
   layers: null,
   ...overrides,
-  skills: overrides.skills ?? null,
+  skills: overrides.skills ?? [],
 });
 
 export const cloneSource: AgentView = {
@@ -79,6 +86,9 @@ export const cloneSource: AgentView = {
   goal_wait_customer_timeout_s: 120,
   goal_delivery_cooldown_s: 60,
   current_goal_task_key: "TARI-43",
+  schedule: "",
+  schedule_next_at: "",
+  budget: agentBudget(),
 };
 
 export const completeOrdinarySpec = (overrides: Record<string, unknown> = {}) => ({
@@ -139,7 +149,7 @@ export async function selectHarness(value: string) {
   expect(control).toHaveValue(value);
 }
 
-const harnessCatalogs: Record<string, HarnessCatalog> = {
+const harnessCatalogs: Record<string, HarnessModelCatalog> = {
   codex: {
     harness: "codex",
     models: [
@@ -180,8 +190,8 @@ export function setupCreateAgentDialog({
   vi.mocked(resolveDaemon).mockImplementation(async (id) => targetFor(id));
   listImages.mockResolvedValue({
     images: [
-      { name: "worker", tag: "v1", bare: false },
-      { name: "bare", tag: "latest", bare: true },
+      imageSummary({ name: "worker", tag: "v1", bare: false }),
+      imageSummary({ name: "bare", tag: "latest", bare: true }),
     ],
     count: 2,
   });

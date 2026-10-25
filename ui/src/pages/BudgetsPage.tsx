@@ -1,23 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ApiError } from "@/lib/api";
+import { ApiError, type BudgetSpend, type BudgetStatusList } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
-interface StatusRow {
-  scope: string;
-  limit_usd: number;
-  spent_usd: number;
-  mode: string;
-  over: boolean;
-}
-
 export default function BudgetsPage() {
   const api = useApi();
-  const [rows, setRows] = useState<StatusRow[]>([]);
+  const [rows, setRows] = useState<BudgetSpend[]>([]);
   const [scope, setScope] = useState("global");
   const [limit, setLimit] = useState("");
   const [period, setPeriod] = useState("24h");
@@ -26,7 +18,7 @@ export default function BudgetsPage() {
   const load = useCallback(
     () =>
       api
-        .get<{ budgets: StatusRow[] }>("/api/budgets/status")
+        .get<BudgetStatusList>("/api/budgets/status")
         .then((r) => setRows(r.budgets))
         .catch(() => setRows([])),
     [api],

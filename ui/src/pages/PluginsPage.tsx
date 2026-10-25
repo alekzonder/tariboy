@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
 import { guard } from "@/lib/toast-guard";
+import type { PluginList, PluginLogs, PluginSummary } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,20 +19,12 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-interface Plugin {
-  name: string;
-  version: string;
-  types: string[];
-  enabled: boolean;
-  state: string;
-}
-
 function PluginRow({
   plugin: pl,
   onLogs,
   onChanged,
 }: {
-  plugin: Plugin;
+  plugin: PluginSummary;
   onLogs: () => void;
   onChanged: () => void;
 }) {
@@ -99,22 +92,22 @@ function PluginRow({
 
 export default function PluginsPage() {
   const api = useApi();
-  const [plugins, setPlugins] = useState<Plugin[]>([]);
+  const [plugins, setPlugins] = useState<PluginSummary[]>([]);
   const [logs, setLogs] = useState<{ name: string; lines: string[] } | null>(null);
   const [path, setPath] = useState("");
 
   const load = useCallback(
     () =>
       api
-        .get<{ plugins: Plugin[] }>("/api/plugins")
+        .get<PluginList>("/api/plugins")
         .then((r) => setPlugins(r.plugins))
         .catch(() => setPlugins([])),
     [api],
   );
   const showLogs = (name: string) =>
     api
-      .get<{ lines: string[] }>(`/api/plugins/${encodeURIComponent(name)}/logs`)
-      .then((r) => setLogs({ name, lines: r.lines }))
+      .get<PluginLogs>(`/api/plugins/${encodeURIComponent(name)}/logs`)
+      .then((r) => setLogs({ name, lines: r.lines ?? [] }))
       .catch(() => setLogs({ name, lines: [] }));
   useEffect(() => {
     void load();

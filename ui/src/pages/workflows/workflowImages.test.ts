@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import type { WorkflowDefinition, WorkflowImage } from "@/lib/api";
+import type { WorkflowImageDefinition, WorkflowImageListing } from "@/lib/api";
 import type { Daemon } from "@/lib/daemons";
 import { apiWrapper, fakeApi } from "@/test/api";
 import {
@@ -26,7 +26,7 @@ const on = (target: Daemon | null) => ({
 });
 
 const remote = { id: "remote", label: "Remote", baseURL: "https://remote", token: "t" };
-const image = (name: string, tag: string, digest = "d"): WorkflowImage => ({
+const image = (name: string, tag: string, digest = "d"): WorkflowImageListing => ({
   name,
   tag,
   version: tag,
@@ -113,7 +113,7 @@ it("resolves limits status over workflow over default", () => {
       },
       { id: "done", owner: { kind: "" }, terminal: true },
     ],
-  } as unknown as WorkflowDefinition;
+  } as unknown as WorkflowImageDefinition;
   expect(effectiveLimits(definition)).toEqual([
     {
       scope: "workflow",

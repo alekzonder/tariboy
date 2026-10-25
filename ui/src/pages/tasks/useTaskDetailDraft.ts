@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Task, TaskStatus, TaskPriority } from "@/lib/api";
+import { taskPriority, type Task, type TaskStatus, type TaskPriority } from "@/lib/api";
 import { isWorkflowTask } from "@/lib/tasks";
 import type { TaskDetailProps } from "./TaskDetailTypes";
 
@@ -10,7 +10,7 @@ export function useTaskDetailDraft(task: Task, onSave: TaskDetailProps["onSave"]
   const [description, setDescription] = useState(task.description);
   const [status, setStatus] = useState<TaskStatus>(task.category);
   const [pullRequest, setPullRequest] = useState(task.pull_request ?? "");
-  const [priority, setPriority] = useState<TaskPriority>(task.priority);
+  const [priority, setPriority] = useState<TaskPriority>(taskPriority(task));
   const [assignee, setAssignee] = useState(task.assignee);
   const [blockReason, setBlockReason] = useState(task.manual_block_reason);
   const [saving, setSaving] = useState(false);
@@ -28,7 +28,7 @@ export function useTaskDetailDraft(task: Task, onSave: TaskDetailProps["onSave"]
     setDescription(next.description);
     setStatus(next.category);
     setPullRequest(next.pull_request ?? "");
-    setPriority(next.priority);
+    setPriority(taskPriority(next));
     setAssignee(next.assignee);
     setBlockReason(next.manual_block_reason);
   };

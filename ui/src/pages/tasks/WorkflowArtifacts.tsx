@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { WorkflowArtifact, WorkflowDeclaredArtifact } from "@/lib/api";
+import type { Artifact, DeclaredArtifact } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { COUNT, DANGER_FILL, EMPTY, LABEL, MONO, QUIET_ACTION } from "./panelStyles";
 import { MarkdownContent, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown";
@@ -36,9 +36,9 @@ export default function WorkflowArtifacts({
   onChanged,
 }: {
   taskKey: string;
-  artifacts: WorkflowArtifact[];
+  artifacts: Artifact[];
   /** Every artifact the manifest declares, so one with no value can be set. */
-  declared: WorkflowDeclaredArtifact[];
+  declared: DeclaredArtifact[];
   editable: boolean;
   /** The outcomes of the current status that require each artifact, by name. */
   required?: Map<string, Requirement[]>;
@@ -143,7 +143,7 @@ function ArtifactItem({
 }: {
   taskKey: string;
   name: string;
-  artifact?: WorkflowArtifact;
+  artifact?: Artifact;
   /** The manifest's description. */
   description?: string;
   /** The transitions that require the artifact. */
@@ -155,7 +155,7 @@ function ArtifactItem({
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [history, setHistory] = useState<WorkflowArtifact[] | null>(null);
+  const [history, setHistory] = useState<Artifact[] | null>(null);
   const [historyError, setHistoryError] = useState("");
   const [mode, setMode] = useState<MarkdownMode>("rich");
   const save = () => {
@@ -245,7 +245,7 @@ function ArtifactItem({
 }
 
 /** Who set the value and when, or that there is none. */
-function ArtifactByline({ artifact }: { artifact?: WorkflowArtifact }) {
+function ArtifactByline({ artifact }: { artifact?: Artifact }) {
   if (!artifact) return <span className={EMPTY}>no value</span>;
   return (
     <>
@@ -347,13 +347,7 @@ function ErrorLine({ text }: { text: string }) {
   );
 }
 
-function ArtifactHistory({
-  history,
-  markdown,
-}: {
-  history: WorkflowArtifact[];
-  markdown: boolean;
-}) {
+function ArtifactHistory({ history, markdown }: { history: Artifact[]; markdown: boolean }) {
   return (
     <ol className="flex min-w-0 flex-col gap-1.5 border-l border-border pl-2.5">
       {history.map((entry) => (

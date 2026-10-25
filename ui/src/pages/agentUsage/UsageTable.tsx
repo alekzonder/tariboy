@@ -1,12 +1,12 @@
 import { Link } from "react-router-dom";
 import { fmtTokens } from "@/lib/audit";
-import type { AgentUsageReport } from "@/lib/types";
+import type { AgentUsage } from "@/lib/api";
 import { fmtCost } from "@/lib/usage";
 import { cn } from "@/lib/utils";
 import UsageSummaryCard from "@/components/usage/UsageSummaryCard";
 import { GROUPINGS, type GroupBy } from "./usageParams";
 
-export function UsageTotals({ totals }: { totals?: AgentUsageReport["totals"] }) {
+export function UsageTotals({ totals }: { totals?: AgentUsage["totals"] }) {
   return (
     <dl aria-label="Usage totals" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       <UsageSummaryCard label="Requests" value={totals ? String(totals.requests) : "—"} />
@@ -33,7 +33,7 @@ export function UsageTable({
 }: {
   name: string;
   groupBy: GroupBy;
-  rows: AgentUsageReport["rows"];
+  rows: AgentUsage["rows"];
   onOpenTask: (key: string) => void;
 }) {
   return (

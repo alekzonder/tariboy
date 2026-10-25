@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { act, fireEvent, render as renderWith, screen, within } from "@/test/queryRender";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { WorkflowScriptRun, TransitionRequest, WorkflowView } from "@/lib/api";
+import type { ScriptRun, TransitionRequest, WorkflowView } from "@/lib/api";
 import WorkflowProblem from "./WorkflowProblem";
 import { customerView, poolView, remoteTarget } from "@/test/fixtures/workflowFixtures";
 import { fakeApi } from "@/test/api";
@@ -37,7 +37,7 @@ const request = (
   created_at: "2026-10-01T10:06:00Z",
   ...extra,
 });
-const failedRun: WorkflowScriptRun = {
+const failedRun: ScriptRun = {
   id: 8,
   task_key: "REL-1",
   kind: "check",
@@ -191,7 +191,7 @@ it("says nothing on a closed or paused task, or while a request is checking", ()
 });
 
 it("explains a failed watch with its log open and the failures counted", async () => {
-  const watch: WorkflowScriptRun = {
+  const watch: ScriptRun = {
     ...failedRun,
     id: 9,
     kind: "watch",

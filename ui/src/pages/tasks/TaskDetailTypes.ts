@@ -3,7 +3,7 @@ import type {
   TaskDetail as Detail,
   Task,
   TaskEvent,
-  TaskPrincipals,
+  PrincipalInfo,
   TaskPriority,
   TaskRelationType,
   TaskStatus,
@@ -17,7 +17,7 @@ export interface TaskDetailProps {
    * whose `events` may not include the newest ones.
    */
   liveSequence?: number;
-  principals: TaskPrincipals | null;
+  principals: PrincipalInfo | null;
   width: number;
   resizeHandle: ReactNode;
   onClose: () => void;

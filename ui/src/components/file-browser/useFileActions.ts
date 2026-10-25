@@ -1,6 +1,6 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
-import type { FileEntry } from "@/lib/api";
+import type { AgentFileEntry } from "@/lib/api";
 import type { FileBrowserApi } from "../FileBrowser";
 import type { FileTreeApi } from "./useFileTree";
 import { dirName } from "./paths";
@@ -135,7 +135,7 @@ export function useFileActions(
   );
 
   const onDelete = useCallback(
-    (entry: FileEntry, path: string) => {
+    (entry: AgentFileEntry, path: string) => {
       setConfirm({
         title: `Delete ${entry.isDir ? "folder" : "file"}?`,
         body: entry.isDir
@@ -148,7 +148,7 @@ export function useFileActions(
     [doDelete],
   );
 
-  const onRename = useCallback((entry: FileEntry, path: string) => {
+  const onRename = useCallback((entry: AgentFileEntry, path: string) => {
     setPromptValue(path);
     setRename({ path, isDir: entry.isDir });
   }, []);

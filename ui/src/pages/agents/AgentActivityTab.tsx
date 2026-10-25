@@ -5,7 +5,7 @@ import AgentUsagePage from "@/pages/AgentUsagePage";
 import { useApi } from "@/components/apiContext";
 import { useAgentName } from "@/lib/agent";
 import { useActivityWindow } from "@/lib/activityPeriod";
-import type { StatusHistoryEvent } from "@/lib/types";
+import type { AgentStatusEvent } from "@/lib/api";
 import { fmtDateTime } from "@/lib/time";
 import { useTaskActivity } from "@/hooks/useTaskActivity";
 import TaskDrawer from "@/pages/tasks/TaskDrawer";
@@ -44,7 +44,7 @@ export default function AgentActivityTab() {
   // An invalid custom range shows its error and leaves the views unbounded.
   const bounds = { since: window.since, until: window.until };
 
-  const [history, setHistory] = useState<StatusHistoryEvent[]>([]);
+  const [history, setHistory] = useState<AgentStatusEvent[]>([]);
   useEffect(() => {
     if (view !== "status") return;
     void api.agents

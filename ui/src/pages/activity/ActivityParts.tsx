@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { ACTIVITY_PERIODS, type ActivityPeriod, type ActivityWindow } from "@/lib/activityPeriod";
-import type { TaskActivityAgent, TaskActivityRow, TaskActivityTotals } from "@/lib/types";
+import type { TaskActivityAgent, TaskActivityRow, TaskActivityTotals } from "@/lib/api";
 import { fmtDateTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 

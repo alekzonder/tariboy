@@ -614,9 +614,11 @@ backend-check:
 
 frontend-check:
 	./scripts/npm-ci-locked.sh ui
+	./scripts/npm-ci-locked.sh ui/tools/api-types
 	./scripts/npm-ci-locked.sh docs
 	@$(STEP_RUNNER); \
 	run_step "ui-fmt-check" 'cd ui && npm run fmt:check'; \
+	run_step "ui-api-types" 'cd ui && npm run api-types:check'; \
 	run_step "ui-typecheck" 'cd ui && npx tsc -b'; \
 	run_step "ui-lint"      'cd ui && npm run lint'; \
 	run_step "ui-dead-code" 'cd ui && npm run knip'; \

@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { Button } from "@/components/ui/button";
-import type { ScriptDefinition } from "@/lib/api";
+import type { AgentScript } from "@/lib/api";
 import { canRerun, when } from "./scriptsModel";
 import { ScriptRunList } from "./ScriptRunList";
 import type { AgentScriptsState } from "./useAgentScripts";
@@ -9,7 +9,7 @@ function ScriptActions({
   definition,
   state,
 }: {
-  definition: ScriptDefinition;
+  definition: AgentScript;
   state: AgentScriptsState;
 }) {
   return (
@@ -33,13 +33,7 @@ function ScriptActions({
   );
 }
 
-function ScriptRow({
-  definition,
-  state,
-}: {
-  definition: ScriptDefinition;
-  state: AgentScriptsState;
-}) {
+function ScriptRow({ definition, state }: { definition: AgentScript; state: AgentScriptsState }) {
   const open = state.expandedScripts.has(definition.id);
   return (
     <Fragment>

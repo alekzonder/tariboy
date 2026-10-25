@@ -1,12 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
 import { AgentNameContext } from "@/lib/agent";
-import type { ScriptDefinition, ScriptRun } from "@/lib/api";
+import type { AgentScript, AgentScriptRun } from "@/lib/api";
 import AgentScripts from "./AgentScripts";
 
 afterEach(() => vi.restoreAllMocks());
 
-const latestRun: ScriptRun = {
+const latestRun: AgentScriptRun = {
   id: "srun-alpha-2",
   script_id: "scr-alpha-1",
   agent: "alpha",
@@ -16,8 +16,9 @@ const latestRun: ScriptRun = {
   started_at: "2026-08-20T10:01:01Z",
   finished_at: "2026-08-20T10:01:03Z",
   log_path: "/data/agents/alpha/scripts/srun-alpha-2.log",
+  cancel_requested: false,
 };
-const definition: ScriptDefinition = {
+const definition: AgentScript = {
   id: "scr-alpha-1",
   agent: "alpha",
   name: "nightly",
@@ -40,7 +41,7 @@ const olderRun = {
 
 function stubFetch(
   calls: Array<{ path: string; method: string; body?: unknown }>,
-  definitions: ScriptDefinition[] = [definition],
+  definitions: AgentScript[] = [definition],
 ) {
   vi.stubGlobal(
     "fetch",
@@ -155,7 +156,7 @@ it("executes an idle recurring script immediately", async () => {
 it.each([
   [
     "a completed one-shot",
-    { ...definition, mode: "once", state: "completed", next_run_at: undefined },
+    { ...definition, mode: "once", state: "completed", next_run_at: "" },
     true,
   ],
   [
@@ -163,16 +164,8 @@ it.each([
     { ...definition, latest_run: { ...latestRun, status: "pending" } },
     false,
   ],
-  [
-    "a cancelled recurring script",
-    { ...definition, state: "cancelled", next_run_at: undefined },
-    false,
-  ],
-  [
-    "a stopped recurring script",
-    { ...definition, state: "completed", next_run_at: undefined },
-    true,
-  ],
+  ["a cancelled recurring script", { ...definition, state: "cancelled", next_run_at: "" }, false],
+  ["a stopped recurring script", { ...definition, state: "completed", next_run_at: "" }, true],
 ] as const)("shows Exec eligibility for %s", async (_label, candidate, expected) => {
   const calls: Array<{ path: string; method: string; body?: unknown }> = [];
   stubFetch(calls, [candidate]);

@@ -2,22 +2,22 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useOptionalDaemons } from "@/components/daemonContext";
 import { useApi } from "@/components/apiContext";
 import type {
-  WorkflowDefinition,
-  WorkflowDefinitionStatus,
-  WorkflowImage,
-  WorkflowLimits,
+  WorkflowImageDefinition,
+  WorkflowImageStatus,
+  WorkflowImageListing,
+  WorkflowImageLimits,
 } from "@/lib/api";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import { errorText } from "@/lib/errors";
 
 /** `latest` first, then the other tags newest version first. */
-function compareWorkflowTags(a: WorkflowImage, b: WorkflowImage): number {
+function compareWorkflowTags(a: WorkflowImageListing, b: WorkflowImageListing): number {
   if (a.tag === "latest" || b.tag === "latest") return a.tag === "latest" ? -1 : 1;
   return b.tag.localeCompare(a.tag, undefined, { numeric: true });
 }
 
-export function groupWorkflowImages(images: WorkflowImage[]) {
-  const byName = new Map<string, WorkflowImage[]>();
+export function groupWorkflowImages(images: WorkflowImageListing[]) {
+  const byName = new Map<string, WorkflowImageListing[]>();
   for (const image of images) byName.set(image.name, [...(byName.get(image.name) ?? []), image]);
   return [...byName]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -100,22 +100,22 @@ export function boundTo(
   };
 }
 
-export function ownerLabel(status: Pick<WorkflowDefinitionStatus, "owner" | "terminal">): string {
+export function ownerLabel(status: Pick<WorkflowImageStatus, "owner" | "terminal">): string {
   if (status.terminal) return "terminal";
   return status.owner.kind === "pool" ? `pool:${status.owner.pool}` : status.owner.kind;
 }
 
-const LIMIT_DEFAULTS: Required<WorkflowLimits> = {
+const LIMIT_DEFAULTS: Required<WorkflowImageLimits> = {
   idle_iterations: 3,
   rejected_requests: 5,
   script_failures: 3,
   unavailable_grace: "5m",
 };
-const LIMIT_KEYS = Object.keys(LIMIT_DEFAULTS) as (keyof WorkflowLimits)[];
+const LIMIT_KEYS = Object.keys(LIMIT_DEFAULTS) as (keyof WorkflowImageLimits)[];
 
 /** Each limit of the workflow and of every non-terminal status, with where its value comes from. */
-export function effectiveLimits(definition: WorkflowDefinition) {
-  const resolve = (status?: WorkflowLimits) =>
+export function effectiveLimits(definition: WorkflowImageDefinition) {
+  const resolve = (status?: WorkflowImageLimits) =>
     LIMIT_KEYS.map((key) => {
       const [value, source] =
         status?.[key] !== undefined

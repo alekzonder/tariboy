@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { type ApiClient, type ImageRow } from "@/lib/api";
+import { type ApiClient, type ImageSummary } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { subscribeImagesChanged } from "@/lib/imageEvents";
 import { ImageTransferDialog } from "./ImageTransferDialog";
@@ -24,7 +24,7 @@ export default function BuiltImages({
   const api = useApi();
   // Images are kept with the client that listed them: rows of a previous
   // route host are never shown (or acted on) for the current one.
-  const [listed, setListed] = useState<{ api: ApiClient; images: ImageRow[] } | null>(null);
+  const [listed, setListed] = useState<{ api: ApiClient; images: ImageSummary[] } | null>(null);
   const images = useMemo(() => (listed?.api === api ? listed.images : []), [api, listed]);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);

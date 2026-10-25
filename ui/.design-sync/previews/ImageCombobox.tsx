@@ -4,19 +4,25 @@ import { ImageCombobox, Label } from "tariboy-ui";
 // ImageCombobox is the required image picker on the agent-create surfaces
 // (CreateAgentDialog and each row of the group wizard). The value
 // is the full `name:tag` ref; the option list is a plain filtered listbox that
-// opens on focus. Fixtures follow ImageRow in src/lib/api.ts.
+// opens on focus. Fixtures follow ImageSummary in src/lib/api-types.generated.ts.
+
+const image = (name: string, tag: string, built_at: string, current_agents: string[] = []) => ({
+  name,
+  tag,
+  bare: name === "bare",
+  built_at,
+  digest: "",
+  exportable: false,
+  schema_version: 2,
+  current_agents,
+  pending_agents: [],
+});
 
 const images = [
-  {
-    name: "worker",
-    tag: "v2",
-    bare: false,
-    built_at: "2026-09-11T09:14:00Z",
-    current_agents: ["builder", "reviewer"],
-  },
-  { name: "worker", tag: "v1", bare: false, built_at: "2026-08-28T17:02:00Z" },
-  { name: "bare", tag: "latest", bare: true, built_at: "2026-09-02T11:40:00Z" },
-  { name: "packager", tag: "v3", bare: false, built_at: "2026-09-10T20:31:00Z" },
+  image("worker", "v2", "2026-09-11T09:14:00Z", ["builder", "reviewer"]),
+  image("worker", "v1", "2026-08-28T17:02:00Z"),
+  image("bare", "latest", "2026-09-02T11:40:00Z"),
+  image("packager", "v3", "2026-09-10T20:31:00Z"),
 ];
 
 const field = { width: 320, display: "flex", flexDirection: "column", gap: 6 } as const;

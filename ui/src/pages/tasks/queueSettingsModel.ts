@@ -4,7 +4,7 @@ import {
   type CreateQueueInput,
   type QueueWorkflow,
   type UpdateQueueInput,
-  type WorkflowDefinition,
+  type WorkflowImageDefinition,
 } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 import { emptyPools, requiredPools } from "./workflowPools";
@@ -48,7 +48,7 @@ export function stillEmptyPools(names: string[], pools: AgentPool[]): string[] {
 /** What the dialog loaded for a queue: its binding, the bound definition, its pools. */
 export interface QueueState {
   binding: QueueWorkflow | null;
-  definition: WorkflowDefinition | null;
+  definition: WorkflowImageDefinition | null;
   pools: AgentPool[];
 }
 
@@ -78,7 +78,7 @@ export function queueWarns(entry: QueueEntry | undefined): boolean {
  * own, and those a refused bind named.
  */
 export function requiredWithMissing(
-  definition: WorkflowDefinition | null | undefined,
+  definition: WorkflowImageDefinition | null | undefined,
   missing: string[],
 ): Map<string, string[]> {
   const required = new Map(definition ? requiredPools(definition) : []);

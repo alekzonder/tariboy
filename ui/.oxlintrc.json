@@ -11,7 +11,8 @@
     "builtin": true
   },
   "ignorePatterns": [
-    "dist"
+    "dist",
+    "src/lib/api-types.generated.ts"
   ],
   "rules": {
     "no-array-constructor": "error",
