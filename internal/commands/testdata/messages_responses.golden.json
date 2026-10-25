@@ -1,0 +1,610 @@
+{
+  "agent.inbox.clear": {
+    "deleted_deliveries": 3,
+    "deleted_messages": 3
+  },
+  "agent.inbox.ls all": {
+    "count": 6,
+    "messages": [
+      {
+        "attempts": 0,
+        "channel": "chat:room",
+        "data": {
+          "k": "v"
+        },
+        "dlq": false,
+        "id": "chat:room-20260714100024-000000001",
+        "kind": "event",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "reply_to": "user:customer",
+        "source": "user:customer",
+        "subject": {
+          "pr": "9"
+        },
+        "text": "hi",
+        "ts": "2026-07-14T10:00:24.000000000Z",
+        "type": "note"
+      },
+      {
+        "attempts": 0,
+        "channel": "chat:dm:worker",
+        "dlq": false,
+        "id": "chat:dm:worker-20260714100021-000000001",
+        "kind": "event",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "source": "user:customer",
+        "subject": {
+          "topic": "deploy"
+        },
+        "text": "please answer",
+        "ts": "2026-07-14T10:00:21.000000000Z",
+        "type": "message"
+      },
+      {
+        "attempts": 3,
+        "channel": "chat:room",
+        "delivered_at": "2026-07-14T10:30:00Z",
+        "dlq": true,
+        "id": "chat:room-20260714100018-000000001",
+        "kind": "event",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "source": "operator",
+        "text": "four",
+        "ts": "2026-07-14T10:00:18.000000000Z",
+        "type": "note"
+      },
+      {
+        "attempts": 0,
+        "channel": "chat:room",
+        "dlq": false,
+        "id": "chat:room-20260714100016-000000001",
+        "kind": "event",
+        "processed_at": "2026-07-14T10:00:17.000000000Z",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "result": "done",
+        "source": "operator",
+        "text": "three",
+        "ts": "2026-07-14T10:00:16.000000000Z",
+        "type": "note"
+      },
+      {
+        "attempts": 0,
+        "channel": "chat:room",
+        "data": {
+          "n": 1
+        },
+        "deadline": "2026-07-15T00:00:00Z",
+        "dlq": false,
+        "id": "chat:room-20260714100015-000000001",
+        "kind": "request",
+        "produced_by_agent": "other",
+        "produced_in_iteration": "other-1",
+        "reply_to": "agent:other:inbox",
+        "source": "agent:other",
+        "subject": {
+          "pr": "7"
+        },
+        "text": "two",
+        "ts": "2026-07-14T10:00:15.000000000Z",
+        "type": "request.review"
+      },
+      {
+        "attempts": 0,
+        "channel": "chat:room",
+        "dlq": false,
+        "id": "chat:room-20260714100014-000000001",
+        "kind": "event",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "source": "operator",
+        "text": "one",
+        "ts": "2026-07-14T10:00:14.000000000Z",
+        "type": "note"
+      }
+    ]
+  },
+  "agent.inbox.ls dlq empty": {
+    "count": 0,
+    "messages": []
+  },
+  "agent.inbox.ls processed": {
+    "count": 3,
+    "messages": [
+      {
+        "attempts": 0,
+        "channel": "chat:room",
+        "dlq": false,
+        "id": "chat:room-20260714100016-000000001",
+        "kind": "event",
+        "processed_at": "2026-07-14T10:00:17.000000000Z",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "result": "done",
+        "source": "operator",
+        "text": "three",
+        "ts": "2026-07-14T10:00:16.000000000Z",
+        "type": "note"
+      },
+      {
+        "attempts": 0,
+        "channel": "chat:room",
+        "data": {
+          "n": 1
+        },
+        "deadline": "2026-07-15T00:00:00Z",
+        "dlq": false,
+        "id": "chat:room-20260714100015-000000001",
+        "kind": "request",
+        "processed_at": "2026-07-14T10:00:27.000000000Z",
+        "produced_by_agent": "other",
+        "produced_in_iteration": "other-1",
+        "reply_to": "agent:other:inbox",
+        "result": "operator replied: agent:other:inbox-20260714100026-000000001",
+        "source": "agent:other",
+        "subject": {
+          "pr": "7"
+        },
+        "text": "two",
+        "ts": "2026-07-14T10:00:15.000000000Z",
+        "type": "request.review"
+      },
+      {
+        "attempts": 0,
+        "channel": "chat:room",
+        "dlq": false,
+        "id": "chat:room-20260714100014-000000001",
+        "kind": "event",
+        "processed_at": "2026-07-14T10:00:25.000000000Z",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "result": "operator: looked",
+        "source": "operator",
+        "text": "one",
+        "ts": "2026-07-14T10:00:14.000000000Z",
+        "type": "note"
+      }
+    ]
+  },
+  "agent.inbox.processed": {
+    "id": "chat:room-20260714100014-000000001",
+    "processed_at": "2026-07-14T10:00:25.000000000Z",
+    "result": "operator: looked"
+  },
+  "agent.inbox.reply": {
+    "channel": "agent:other:inbox",
+    "correlation_id": "chat:room-20260714100015-000000001",
+    "id": "agent:other:inbox-20260714100026-000000001",
+    "in_reply_to": "chat:room-20260714100015-000000001",
+    "replied": true
+  },
+  "agent.inbox.requeue": {
+    "id": "chat:room-20260714100018-000000001",
+    "requeued": true
+  },
+  "agent.messages.batch": {
+    "messages_batch": 7,
+    "name": "worker"
+  },
+  "agent.messages.max-queue": {
+    "messages_max_queue": 70,
+    "name": "worker"
+  },
+  "agent.subscribe params": {
+    "changed": true,
+    "channel": "plugin:issue-provider",
+    "id": "sub-worker-20260714100023.000000000",
+    "kind": "chat",
+    "name": "worker",
+    "params": {
+      "query": "Q1"
+    },
+    "watch": "ea49117c382019ce"
+  },
+  "agent.subscribe plain": {
+    "changed": true,
+    "channel": "chat:extra",
+    "id": "sub-worker-20260714100022-000000001",
+    "kind": "chat",
+    "name": "worker"
+  },
+  "agent.subscriptions": {
+    "channels": [
+      {
+        "kind": "chat",
+        "name": "chat:dm:worker",
+        "protected": true
+      },
+      {
+        "kind": "chat",
+        "name": "chat:tasks:worker",
+        "protected": true
+      },
+      {
+        "kind": "chat",
+        "name": "chat:service:worker",
+        "protected": true
+      },
+      {
+        "kind": "chat",
+        "name": "chat:room",
+        "protected": false
+      },
+      {
+        "kind": "group_inbox",
+        "name": "group:dev:inbox",
+        "protected": true
+      },
+      {
+        "kind": "chat",
+        "name": "issue-provider:issues",
+        "protected": false
+      }
+    ],
+    "count": 6
+  },
+  "agent.unsubscribe": {
+    "channel": "chat:extra",
+    "name": "worker",
+    "removed": 1
+  },
+  "channel.inspect": {
+    "kind": "chat",
+    "messages": 4,
+    "name": "chat:room"
+  },
+  "channel.ls": {
+    "channels": [
+      {
+        "kind": "agent_inbox",
+        "name": "agent:worker:inbox"
+      },
+      {
+        "kind": "chat",
+        "name": "chat:dm:worker"
+      },
+      {
+        "kind": "chat",
+        "name": "chat:room"
+      },
+      {
+        "kind": "chat",
+        "name": "chat:service:worker"
+      },
+      {
+        "kind": "chat",
+        "name": "chat:tasks:worker"
+      },
+      {
+        "kind": "group_inbox",
+        "name": "group:dev:inbox"
+      },
+      {
+        "kind": "chat",
+        "name": "issue-provider:issues"
+      },
+      {
+        "kind": "user",
+        "name": "user:customer"
+      }
+    ],
+    "count": 8
+  },
+  "channel.tail": {
+    "count": 4,
+    "messages": [
+      {
+        "id": "chat:room-20260714100014-000000001",
+        "kind": "event",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "source": "operator",
+        "text": "one",
+        "ts": "2026-07-14T10:00:14.000000000Z",
+        "type": "note"
+      },
+      {
+        "data": {
+          "n": 1
+        },
+        "deadline": "2026-07-15T00:00:00Z",
+        "id": "chat:room-20260714100015-000000001",
+        "kind": "request",
+        "produced_by_agent": "other",
+        "produced_in_iteration": "other-1",
+        "reply_to": "agent:other:inbox",
+        "source": "agent:other",
+        "subject": {
+          "pr": "7"
+        },
+        "text": "two",
+        "ts": "2026-07-14T10:00:15.000000000Z",
+        "type": "request.review"
+      },
+      {
+        "id": "chat:room-20260714100016-000000001",
+        "kind": "event",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "source": "operator",
+        "text": "three",
+        "ts": "2026-07-14T10:00:16.000000000Z",
+        "type": "note"
+      },
+      {
+        "id": "chat:room-20260714100018-000000001",
+        "kind": "event",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "source": "operator",
+        "text": "four",
+        "ts": "2026-07-14T10:00:18.000000000Z",
+        "type": "note"
+      }
+    ]
+  },
+  "channel.tail since": {
+    "count": 3,
+    "messages": [
+      {
+        "data": {
+          "n": 1
+        },
+        "deadline": "2026-07-15T00:00:00Z",
+        "id": "chat:room-20260714100015-000000001",
+        "kind": "request",
+        "produced_by_agent": "other",
+        "produced_in_iteration": "other-1",
+        "reply_to": "agent:other:inbox",
+        "source": "agent:other",
+        "subject": {
+          "pr": "7"
+        },
+        "text": "two",
+        "ts": "2026-07-14T10:00:15.000000000Z",
+        "type": "request.review"
+      },
+      {
+        "id": "chat:room-20260714100016-000000001",
+        "kind": "event",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "source": "operator",
+        "text": "three",
+        "ts": "2026-07-14T10:00:16.000000000Z",
+        "type": "note"
+      },
+      {
+        "id": "chat:room-20260714100018-000000001",
+        "kind": "event",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "source": "operator",
+        "text": "four",
+        "ts": "2026-07-14T10:00:18.000000000Z",
+        "type": "note"
+      }
+    ]
+  },
+  "channel.watches": {
+    "count": 2,
+    "watches": [
+      {
+        "params": null,
+        "subscribers": [
+          "other"
+        ],
+        "watch": "61ef7aa4732e8224"
+      },
+      {
+        "params": {
+          "q": "status:open"
+        },
+        "subscribers": [
+          "worker"
+        ],
+        "watch": "d4d7a8f3e7e37ff4"
+      }
+    ]
+  },
+  "chat.create": {
+    "agent": "",
+    "channel": "chat:team-alpha",
+    "chat": "team-alpha",
+    "kind": "group",
+    "participants": [
+      "agent:worker",
+      "user:customer"
+    ],
+    "title": "Team Alpha"
+  },
+  "chat.join": {
+    "agent": "",
+    "channel": "chat:team-alpha",
+    "chat": "team-alpha",
+    "kind": "group",
+    "participants": [
+      "agent:other",
+      "agent:worker",
+      "user:customer"
+    ],
+    "title": "Team Alpha"
+  },
+  "chat.leave": {
+    "agent": "",
+    "channel": "chat:team-alpha",
+    "chat": "team-alpha",
+    "kind": "group",
+    "participants": [
+      "agent:worker",
+      "user:customer"
+    ],
+    "title": "Team Alpha"
+  },
+  "chat.ls": {
+    "chats": [
+      {
+        "agent": "worker",
+        "channel": "chat:dm:worker",
+        "id": "dm:worker",
+        "kind": "direct",
+        "last_from": "user:customer",
+        "last_text": "please answer",
+        "last_ts": "2026-07-14T10:00:21.000000000Z",
+        "last_type": "message",
+        "participants": [
+          "agent:worker",
+          "user:customer"
+        ],
+        "read_ts": "",
+        "title": "worker",
+        "unread": 1
+      },
+      {
+        "agent": "worker",
+        "channel": "chat:service:worker",
+        "id": "service:worker",
+        "kind": "service",
+        "last_from": "",
+        "last_text": "",
+        "last_ts": "",
+        "last_type": "",
+        "participants": [
+          "agent:worker",
+          "user:customer"
+        ],
+        "read_ts": "",
+        "title": "worker service",
+        "unread": 0
+      },
+      {
+        "agent": "worker",
+        "channel": "chat:tasks:worker",
+        "id": "tasks:worker",
+        "kind": "tasks",
+        "last_from": "",
+        "last_text": "",
+        "last_ts": "",
+        "last_type": "",
+        "participants": [
+          "agent:worker",
+          "user:customer"
+        ],
+        "read_ts": "",
+        "title": "worker tasks",
+        "unread": 0
+      }
+    ],
+    "count": 3,
+    "customer": "user:customer"
+  },
+  "chat.messages": {
+    "agent": "worker",
+    "channel": "chat:dm:worker",
+    "chat": "dm:worker",
+    "count": 3,
+    "customer": "user:customer",
+    "kind": "direct",
+    "messages": [
+      {
+        "channel": "agent:worker:inbox",
+        "from": "user:customer",
+        "id": "agent:worker:inbox-20260714100019-000000001",
+        "kind": "event",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "source": "user:customer",
+        "text": "customer says hi",
+        "ts": "2026-07-14T10:00:19.000000000Z",
+        "type": "message"
+      },
+      {
+        "channel": "user:customer",
+        "data": {
+          "from": "agent:worker"
+        },
+        "from": "agent:worker",
+        "id": "user:customer-20260714100020-000000001",
+        "kind": "event",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "source": "system:tasks",
+        "text": "worker asks",
+        "ts": "2026-07-14T10:00:20.000000000Z",
+        "type": "task.question"
+      },
+      {
+        "channel": "chat:dm:worker",
+        "from": "user:customer",
+        "id": "chat:dm:worker-20260714100021-000000001",
+        "kind": "event",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "source": "user:customer",
+        "subject": {
+          "topic": "deploy"
+        },
+        "text": "please answer",
+        "ts": "2026-07-14T10:00:21.000000000Z",
+        "type": "message"
+      }
+    ],
+    "read_ts": "",
+    "title": "worker"
+  },
+  "chat.participants": {
+    "chat": "dm:worker",
+    "count": 2,
+    "participants": [
+      {
+        "joined_at": "2026-07-14T10:00:01.000000000Z",
+        "muted": false,
+        "principal": "agent:worker",
+        "read_ts": "",
+        "role": "member"
+      },
+      {
+        "joined_at": "2026-07-14T10:00:03.000000000Z",
+        "muted": false,
+        "principal": "user:customer",
+        "read_ts": "2026-07-14T10:00:19.000000000Z",
+        "role": "member"
+      }
+    ]
+  },
+  "chat.read": {
+    "agent": "worker",
+    "chat": "dm:worker",
+    "read_ts": "2026-07-14T10:00:19.000000000Z"
+  },
+  "chat.unanswered": {
+    "chat": "dm:worker",
+    "count": 1,
+    "messages": [
+      {
+        "channel": "chat:dm:worker",
+        "from": "user:customer",
+        "id": "chat:dm:worker-20260714100021-000000001",
+        "kind": "event",
+        "produced_by_agent": "",
+        "produced_in_iteration": "",
+        "source": "user:customer",
+        "subject": {
+          "topic": "deploy"
+        },
+        "text": "please answer",
+        "ts": "2026-07-14T10:00:21.000000000Z",
+        "type": "message"
+      }
+    ],
+    "principal": "agent:worker"
+  },
+  "message.send": {
+    "channel": "chat:room",
+    "id": "chat:room-20260714100024-000000001",
+    "sent": true
+  }
+}
