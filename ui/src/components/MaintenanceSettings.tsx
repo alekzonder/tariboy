@@ -22,6 +22,142 @@ function describeRun(run: MaintenanceRun) {
   ].join(" · ");
 }
 
+const num = (v: string) => Number.parseInt(v, 10) || 0;
+
+/** A labelled whole-number input; its help text, if any, describes it. */
+function NumberField({
+  id,
+  label,
+  value,
+  help,
+  describedBy,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  help?: string;
+  describedBy?: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        inputMode="numeric"
+        className="h-9"
+        value={String(value)}
+        aria-describedby={help ? `${id}-help` : describedBy}
+        onChange={(e) => onChange(num(e.target.value))}
+      />
+      {help && (
+        <p id={`${id}-help`} className="text-xs text-muted-foreground">
+          {help}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The nightly schedule and the retention periods of the maintenance settings. */
+function MaintenanceFields({
+  form,
+  patch,
+}: {
+  form: MaintenanceSettings;
+  patch: (p: Partial<MaintenanceSettings>) => void;
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <Switch
+          id="maint-enabled"
+          checked={form.enabled}
+          onCheckedChange={(v) => patch({ enabled: v })}
+        />
+        <Label htmlFor="maint-enabled">Nightly backup and cleanup</Label>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="maint-time">Nightly run time</Label>
+          <Input
+            id="maint-time"
+            type="time"
+            className="h-9"
+            value={form.time}
+            onChange={(e) => patch({ time: e.target.value })}
+          />
+        </div>
+        <NumberField
+          id="maint-days"
+          label="Keep data for (days)"
+          value={form.retention_days}
+          help="0 keeps everything; otherwise at least 31."
+          onChange={(n) => patch({ retention_days: n })}
+        />
+        <NumberField
+          id="maint-chat-days"
+          label="Keep chat history for (days)"
+          value={form.chat_retention_days}
+          help="0 keeps chat history for the data period."
+          onChange={(n) => patch({ chat_retention_days: n })}
+        />
+        <NumberField
+          id="maint-backups"
+          label="Backups to keep"
+          value={form.keep_backups}
+          onChange={(n) => patch({ keep_backups: n })}
+        />
+        <NumberField
+          id="maint-threshold"
+          label="Compact when free space reaches (%)"
+          value={form.compact_threshold_pct}
+          onChange={(n) => patch({ compact_threshold_pct: n })}
+        />
+      </div>
+    </>
+  );
+}
+
+/** The daemon-wide iteration retention that agents without their own limits use. */
+function RetentionDefaults({
+  ret,
+  patchRet,
+}: {
+  ret: IterationRetention;
+  patchRet: (p: Partial<IterationRetention>) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <NumberField
+        id="ret-keep-it"
+        label="Keep iterations per agent"
+        value={ret.keep_iterations}
+        describedBy="ret-help"
+        onChange={(n) => patchRet({ keep_iterations: n })}
+      />
+      <NumberField
+        id="ret-keep-days"
+        label="Keep iterations for (days)"
+        value={ret.keep_days}
+        describedBy="ret-help"
+        onChange={(n) => patchRet({ keep_days: n })}
+      />
+      <NumberField
+        id="ret-max-bytes"
+        label="Max iteration bytes per agent"
+        value={ret.max_bytes}
+        describedBy="ret-help"
+        onChange={(n) => patchRet({ max_bytes: n })}
+      />
+      <p id="ret-help" className="text-xs text-muted-foreground sm:col-span-3">
+        0 is unlimited. A non-zero value in an agent&apos;s retention settings overrides these.
+      </p>
+    </div>
+  );
+}
+
 // Mount with a per-host key (and inside that host's ApiProvider) so a draft for
 // one host is never saved to another.
 export function MaintenanceSettingsCard() {
@@ -97,7 +233,6 @@ export function MaintenanceSettingsCard() {
     });
   const patch = (p: Partial<MaintenanceSettings>) => setForm((f) => (f ? { ...f, ...p } : f));
   const patchRet = (p: Partial<IterationRetention>) => setRet((r) => (r ? { ...r, ...p } : r));
-  const num = (v: string) => Number.parseInt(v, 10) || 0;
   const dirty =
     JSON.stringify(form) !== JSON.stringify(saved) ||
     JSON.stringify(ret) !== JSON.stringify(savedRet);
@@ -117,115 +252,8 @@ export function MaintenanceSettingsCard() {
       <CardContent className="space-y-4">
         {form && (
           <>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="maint-enabled"
-                checked={form.enabled}
-                onCheckedChange={(v) => patch({ enabled: v })}
-              />
-              <Label htmlFor="maint-enabled">Nightly backup and cleanup</Label>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="maint-time">Nightly run time</Label>
-                <Input
-                  id="maint-time"
-                  type="time"
-                  className="h-9"
-                  value={form.time}
-                  onChange={(e) => patch({ time: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="maint-days">Keep data for (days)</Label>
-                <Input
-                  id="maint-days"
-                  inputMode="numeric"
-                  className="h-9"
-                  value={String(form.retention_days)}
-                  aria-describedby="maint-days-help"
-                  onChange={(e) => patch({ retention_days: num(e.target.value) })}
-                />
-                <p id="maint-days-help" className="text-xs text-muted-foreground">
-                  0 keeps everything; otherwise at least 31.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="maint-chat-days">Keep chat history for (days)</Label>
-                <Input
-                  id="maint-chat-days"
-                  inputMode="numeric"
-                  className="h-9"
-                  value={String(form.chat_retention_days)}
-                  aria-describedby="maint-chat-days-help"
-                  onChange={(e) => patch({ chat_retention_days: num(e.target.value) })}
-                />
-                <p id="maint-chat-days-help" className="text-xs text-muted-foreground">
-                  0 keeps chat history for the data period.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="maint-backups">Backups to keep</Label>
-                <Input
-                  id="maint-backups"
-                  inputMode="numeric"
-                  className="h-9"
-                  value={String(form.keep_backups)}
-                  onChange={(e) => patch({ keep_backups: num(e.target.value) })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="maint-threshold">Compact when free space reaches (%)</Label>
-                <Input
-                  id="maint-threshold"
-                  inputMode="numeric"
-                  className="h-9"
-                  value={String(form.compact_threshold_pct)}
-                  onChange={(e) => patch({ compact_threshold_pct: num(e.target.value) })}
-                />
-              </div>
-            </div>
-            {ret && (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="ret-keep-it">Keep iterations per agent</Label>
-                  <Input
-                    id="ret-keep-it"
-                    inputMode="numeric"
-                    className="h-9"
-                    value={String(ret.keep_iterations)}
-                    aria-describedby="ret-help"
-                    onChange={(e) => patchRet({ keep_iterations: num(e.target.value) })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="ret-keep-days">Keep iterations for (days)</Label>
-                  <Input
-                    id="ret-keep-days"
-                    inputMode="numeric"
-                    className="h-9"
-                    value={String(ret.keep_days)}
-                    aria-describedby="ret-help"
-                    onChange={(e) => patchRet({ keep_days: num(e.target.value) })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="ret-max-bytes">Max iteration bytes per agent</Label>
-                  <Input
-                    id="ret-max-bytes"
-                    inputMode="numeric"
-                    className="h-9"
-                    value={String(ret.max_bytes)}
-                    aria-describedby="ret-help"
-                    onChange={(e) => patchRet({ max_bytes: num(e.target.value) })}
-                  />
-                </div>
-                <p id="ret-help" className="text-xs text-muted-foreground sm:col-span-3">
-                  0 is unlimited. A non-zero value in an agent&apos;s retention settings overrides
-                  these.
-                </p>
-              </div>
-            )}
+            <MaintenanceFields form={form} patch={patch} />
+            {ret && <RetentionDefaults ret={ret} patchRet={patchRet} />}
             <div className="flex items-center gap-2">
               <Switch
                 id="maint-compact"
