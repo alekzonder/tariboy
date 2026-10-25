@@ -23,7 +23,6 @@ import (
 // schema leaves it in the same change, and review refuses new entries.
 var commandsWithoutResultSchema = []string{
 	"daemon.config.get",
-	"tasks.activity",
 	"transcript",
 }
 

@@ -396,10 +396,12 @@ all derived from it.
 
   Two different schemas under one component name in one command also panic at
   registration. The agents commands in `internal/commands/agents.go` use this
-  form; their types are in `agents_types.go`. A hand-written `ResultSchema`,
-  as in `internal/commands/tasks_openapi.go`, is allowed only until its domain
-  moves to `WithResult`. A command without either publishes a free-form
-  result.
+  form; their types are in `agents_types.go`. The task commands in `tasks.go`
+  name their result types in the `taskResultTypes` table. The field
+  descriptions and enums of the `internal/tasks` types come from
+  `jsonschema:"description=..."` tags and `JSONSchemaExtend` methods. A
+  hand-written `ResultSchema` is allowed only until its domain moves to
+  `WithResult`. A command without either publishes a free-form result.
 - **The spec is a checked contract.** Four tests in `internal/commands` keep
   `/api/openapi.json` and the code together:
   - `TestHTTPCommandsDeclareResultSchema` fails for an HTTP command without a

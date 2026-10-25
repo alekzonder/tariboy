@@ -19,15 +19,15 @@ type OutcomeView struct {
 	Checks   []string `json:"checks,omitempty"`  // script paths
 	// CheckDetails describe the same checks, in the same order, with the
 	// manifest's description and the resolved run mode and timeout.
-	CheckDetails []CheckView `json:"check_details,omitempty"`
+	CheckDetails []CheckView `json:"check_details,omitempty" jsonschema:"description=The checks in order\\, with their description and resolved run mode and timeout"`
 }
 
 // CheckView is one check script of a transition with its defaults resolved.
 type CheckView struct {
 	Script      string `json:"script"`
 	Description string `json:"description,omitempty"`
-	RunAs       string `json:"run_as"`  // queue or agent
-	Timeout     string `json:"timeout"` // the effective timeout, as a duration
+	RunAs       string `json:"run_as"` // queue or agent
+	Timeout     string `json:"timeout" jsonschema:"description=The effective timeout as a duration\\, for example 1m0s"`
 }
 
 // checkView resolves a manifest check into the view's shape.
@@ -48,12 +48,12 @@ type DeclaredArtifact struct {
 // none of them.
 type StatusView struct {
 	ID       string `json:"id"`
-	Owner    string `json:"owner"` // "pool:<name>", "customer", "script", or "" for terminal
+	Owner    string `json:"owner" jsonschema:"description=pool:NAME\\, customer\\, script\\, or empty for a terminal status"`
 	Terminal bool   `json:"terminal"`
 	// Initial marks the status a new task enters; Cancelled marks a terminal
 	// status whose result counts as cancelled.
-	Initial          bool             `json:"initial,omitempty"`
-	Cancelled        bool             `json:"cancelled,omitempty"`
+	Initial          bool             `json:"initial,omitempty" jsonschema:"description=The status a new task enters"`
+	Cancelled        bool             `json:"cancelled,omitempty" jsonschema:"description=A terminal status whose result counts as cancelled"`
 	InstructionsPath string           `json:"instructions_path,omitempty"` // source-relative path inside the image
 	Watch            *WatchView       `json:"watch,omitempty"`
 	Transitions      []TransitionView `json:"transitions,omitempty"`
@@ -74,7 +74,7 @@ type WatchView struct {
 	Script      string `json:"script"`
 	Description string `json:"description,omitempty"`
 	Every       string `json:"every"`
-	Timeout     string `json:"timeout"` // the effective timeout, as a duration
+	Timeout     string `json:"timeout" jsonschema:"description=The effective timeout as a duration\\, for example 1m0s"`
 }
 
 // LimitsView is the effective limits of one status, defaults and overrides
@@ -84,7 +84,7 @@ type LimitsView struct {
 	IdleIterations   int    `json:"idle_iterations"`
 	RejectedRequests int    `json:"rejected_requests"`
 	ScriptFailures   int    `json:"script_failures"`
-	UnavailableGrace string `json:"unavailable_grace"`
+	UnavailableGrace string `json:"unavailable_grace" jsonschema:"description=A duration\\, for example 5m0s"`
 }
 
 // statusView renders one manifest status with its graph.
@@ -122,7 +122,7 @@ type WorkflowView struct {
 	// to now; empty for an unbound queue. A digest other than Digest means the
 	// task can be upgraded.
 	QueueVersion     string             `json:"queue_version,omitempty"`
-	QueueDigest      string             `json:"queue_digest,omitempty"`
+	QueueDigest      string             `json:"queue_digest,omitempty" jsonschema:"description=The digest the task's queue is bound to now; another digest than digest means the task can be upgraded"`
 	Status           string             `json:"status"`
 	Category         string             `json:"category"`
 	WaitingOn        string             `json:"waiting_on,omitempty"`

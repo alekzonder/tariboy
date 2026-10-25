@@ -94,13 +94,13 @@ type QueueSource struct {
 	Description string `json:"description,omitempty"`
 	// NextRunAt is when the source runs next; "" while it runs, and the
 	// current time when it has never run.
-	NextRunAt string `json:"next_run_at,omitempty"`
+	NextRunAt string `json:"next_run_at,omitempty" jsonschema:"description=When the source runs next; absent while it runs"`
 	// Failures counts the failed and interrupted runs since the last good one.
-	Failures int        `json:"failures"`
+	Failures int        `json:"failures" jsonschema:"description=Failed or interrupted runs since the last good one"`
 	LastRun  *SourceRun `json:"last_run,omitempty"`
 	// Runs are the newest runs of the source, newest first; their ids read
 	// the logs.
-	Runs []SourceRun `json:"runs"`
+	Runs []SourceRun `json:"runs" jsonschema:"description=The newest runs\\, at most 20\\, newest first"`
 }
 
 // SourceRunDir is the directory of one source run, which holds its log and

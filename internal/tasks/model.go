@@ -154,7 +154,7 @@ type Task struct {
 	Priority          Priority `json:"priority"`
 	Title             string   `json:"title"`
 	Description       string   `json:"description"`
-	Status            string   `json:"status"`
+	Status            string   `json:"status" jsonschema:"description=The flexible status\\, or the workflow status for a workflow task"`
 	PullRequest       string   `json:"pull_request"`
 	Author            string   `json:"author"`
 	Customer          string   `json:"customer"`

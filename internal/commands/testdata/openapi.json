@@ -533,6 +533,7 @@
         "type": "object"
       },
       "AgentPool": {
+        "additionalProperties": false,
         "properties": {
           "agents": {
             "items": {
@@ -1530,6 +1531,7 @@
         "type": "object"
       },
       "Artifact": {
+        "additionalProperties": false,
         "properties": {
           "author": {
             "type": "string"
@@ -2269,6 +2271,7 @@
         "type": "object"
       },
       "CheckView": {
+        "additionalProperties": false,
         "properties": {
           "description": {
             "type": "string"
@@ -2292,6 +2295,68 @@
           "script",
           "run_as",
           "timeout"
+        ],
+        "type": "object"
+      },
+      "Comment": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "task_key": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "task_key",
+          "author",
+          "body",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "CommentResult": {
+        "additionalProperties": false,
+        "properties": {
+          "comment": {
+            "$ref": "#/components/schemas/Comment"
+          },
+          "created_waits": {
+            "items": {
+              "$ref": "#/components/schemas/WaitingFor"
+            },
+            "type": "array"
+          },
+          "resolved_waits": {
+            "items": {
+              "$ref": "#/components/schemas/WaitingFor"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "comment",
+          "created_waits",
+          "resolved_waits"
         ],
         "type": "object"
       },
@@ -2395,6 +2460,7 @@
         "type": "object"
       },
       "DeclaredArtifact": {
+        "additionalProperties": false,
         "properties": {
           "description": {
             "type": "string"
@@ -2406,6 +2472,50 @@
         "required": [
           "name",
           "description"
+        ],
+        "type": "object"
+      },
+      "Event": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "queue": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer"
+          },
+          "task_key": {
+            "type": "string"
+          },
+          "task_revision": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence",
+          "event_id",
+          "queue",
+          "kind",
+          "actor",
+          "task_revision",
+          "payload",
+          "created_at"
         ],
         "type": "object"
       },
@@ -3826,6 +3936,7 @@
         "type": "object"
       },
       "LimitsView": {
+        "additionalProperties": false,
         "properties": {
           "idle_iterations": {
             "type": "integer"
@@ -4148,6 +4259,58 @@
         ],
         "type": "object"
       },
+      "Notification": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "dismissed_at": {
+            "type": "string"
+          },
+          "event_sequence": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "published_at": {
+            "type": "string"
+          },
+          "read_at": {
+            "type": "string"
+          },
+          "requesting_principal": {
+            "type": "string"
+          },
+          "task_key": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "channel",
+          "type",
+          "text",
+          "requesting_principal",
+          "task_key",
+          "event_sequence",
+          "created_at",
+          "published_at",
+          "read_at",
+          "dismissed_at"
+        ],
+        "type": "object"
+      },
       "OperatorArg": {
         "additionalProperties": false,
         "properties": {
@@ -4200,6 +4363,7 @@
         "type": "object"
       },
       "OutcomeView": {
+        "additionalProperties": false,
         "properties": {
           "check_details": {
             "description": "The checks in order, with their description and resolved run mode and timeout",
@@ -4517,6 +4681,32 @@
         ],
         "type": "object"
       },
+      "PrincipalInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "customer": {
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "customer",
+          "agents",
+          "groups"
+        ],
+        "type": "object"
+      },
       "PruneReport": {
         "additionalProperties": false,
         "properties": {
@@ -4588,7 +4778,51 @@
         ],
         "type": "object"
       },
+      "Queue": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owners": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "responsible_agent": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prefix",
+          "name",
+          "description",
+          "owners",
+          "responsible_agent",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
       "QueueEnvVar": {
+        "additionalProperties": false,
         "properties": {
           "key": {
             "type": "string"
@@ -4607,7 +4841,8 @@
         ],
         "type": "object"
       },
-      "QueueSecret": {
+      "QueueSecretInfo": {
+        "additionalProperties": false,
         "properties": {
           "key": {
             "type": "string"
@@ -4623,6 +4858,7 @@
         "type": "object"
       },
       "QueueSource": {
+        "additionalProperties": false,
         "properties": {
           "description": {
             "type": "string"
@@ -4672,6 +4908,7 @@
         "type": "object"
       },
       "QueueWorkflow": {
+        "additionalProperties": false,
         "properties": {
           "digest": {
             "type": "string"
@@ -4707,6 +4944,7 @@
         "type": "object"
       },
       "QueueWorkflowTrigger": {
+        "additionalProperties": false,
         "properties": {
           "action": {
             "type": "string"
@@ -4745,6 +4983,54 @@
           "created_by",
           "created_at",
           "updated_at"
+        ],
+        "type": "object"
+      },
+      "Relation": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "source_key": {
+            "type": "string"
+          },
+          "source_status": {
+            "type": "string"
+          },
+          "source_title": {
+            "type": "string"
+          },
+          "target_key": {
+            "type": "string"
+          },
+          "target_status": {
+            "type": "string"
+          },
+          "target_title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_key",
+          "source_title",
+          "source_status",
+          "target_key",
+          "target_title",
+          "target_status",
+          "type",
+          "created_by",
+          "created_at"
         ],
         "type": "object"
       },
@@ -4839,6 +5125,7 @@
         "type": "object"
       },
       "ScriptRun": {
+        "additionalProperties": false,
         "properties": {
           "created_at": {
             "type": "string"
@@ -5108,6 +5395,7 @@
         "type": "object"
       },
       "SourceRun": {
+        "additionalProperties": false,
         "properties": {
           "exit_code": {
             "type": "integer"
@@ -5169,6 +5457,7 @@
         "type": "object"
       },
       "StatusView": {
+        "additionalProperties": false,
         "properties": {
           "cancelled": {
             "description": "A terminal status whose result counts as cancelled",
@@ -5212,6 +5501,7 @@
         "type": "object"
       },
       "StatusVisit": {
+        "additionalProperties": false,
         "properties": {
           "entered_at": {
             "type": "string"
@@ -5478,7 +5768,20 @@
         "type": "object"
       },
       "Task": {
+        "additionalProperties": false,
         "properties": {
+          "access": {
+            "type": "string"
+          },
+          "assignee": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "blocked": {
+            "type": "boolean"
+          },
           "category": {
             "enum": [
               "open",
@@ -5489,10 +5792,37 @@
             ],
             "type": "string"
           },
+          "completed_at": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "customer": {
+            "type": "string"
+          },
           "description": {
             "type": "string"
           },
+          "filed": {
+            "type": "boolean"
+          },
+          "group": {
+            "type": "string"
+          },
           "key": {
+            "type": "string"
+          },
+          "manual_block_reason": {
+            "type": "string"
+          },
+          "parent_key": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "priority": {
             "type": "string"
           },
           "pull_request": {
@@ -5504,11 +5834,17 @@
           "revision": {
             "type": "integer"
           },
+          "started_at": {
+            "type": "string"
+          },
           "status": {
             "description": "The flexible status, or the workflow status for a workflow task",
             "type": "string"
           },
           "title": {
+            "type": "string"
+          },
+          "updated_at": {
             "type": "string"
           },
           "waiting_on": {
@@ -5541,53 +5877,671 @@
         "required": [
           "key",
           "queue",
+          "parent_key",
+          "position",
+          "priority",
           "title",
+          "description",
           "status",
-          "category",
-          "revision"
+          "pull_request",
+          "author",
+          "customer",
+          "group",
+          "assignee",
+          "manual_block_reason",
+          "blocked",
+          "revision",
+          "created_at",
+          "started_at",
+          "updated_at",
+          "completed_at",
+          "category"
         ],
         "type": "object"
       },
-      "TaskEvent": {
+      "TaskActivityAgent": {
+        "additionalProperties": false,
         "properties": {
-          "actor": {
+          "agent": {
             "type": "string"
           },
-          "created_at": {
+          "completed": {
+            "type": "integer"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "iterations": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "tasks": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agent",
+          "tasks",
+          "completed",
+          "iterations",
+          "requests",
+          "cost_usd"
+        ],
+        "type": "object"
+      },
+      "TaskActivityReport": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
             "type": "string"
           },
-          "event_id": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/TaskActivityAgent"
+            },
+            "type": "array"
+          },
+          "since": {
             "type": "string"
           },
-          "kind": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskActivityRow"
+            },
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/TaskActivityTotals"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "until": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "until",
+          "truncated",
+          "totals",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "TaskActivityRow": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "assignee": {
             "type": "string"
           },
-          "payload": {
-            "additionalProperties": true,
-            "type": "object"
+          "category": {
+            "type": "string"
+          },
+          "comments": {
+            "type": "integer"
+          },
+          "completed": {
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "entered_statuses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "first_at": {
+            "type": "string"
+          },
+          "iterations": {
+            "type": "integer"
+          },
+          "key": {
+            "type": "string"
+          },
+          "last_at": {
+            "type": "string"
+          },
+          "outcomes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "queue": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "queue",
+          "status",
+          "category",
+          "assignee",
+          "completed",
+          "iterations",
+          "requests",
+          "tokens",
+          "cost_usd",
+          "comments",
+          "outcomes",
+          "entered_statuses",
+          "agents",
+          "first_at",
+          "last_at"
+        ],
+        "type": "object"
+      },
+      "TaskActivityTotals": {
+        "additionalProperties": false,
+        "properties": {
+          "comments": {
+            "type": "integer"
+          },
+          "completed": {
+            "type": "integer"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "iterations": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "tasks": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          },
+          "transitions": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tasks",
+          "completed",
+          "transitions",
+          "comments",
+          "iterations",
+          "requests",
+          "tokens",
+          "cost_usd"
+        ],
+        "type": "object"
+      },
+      "TaskAgentPoolList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AgentPool"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "items"
+        ],
+        "type": "object"
+      },
+      "TaskArtifactHistory": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact": {
+            "$ref": "#/components/schemas/Artifact"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/Artifact"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "artifact",
+          "history"
+        ],
+        "type": "object"
+      },
+      "TaskArtifactList": {
+        "additionalProperties": false,
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/Artifact"
+            },
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifacts",
+          "count"
+        ],
+        "type": "object"
+      },
+      "TaskCommentList": {
+        "additionalProperties": false,
+        "properties": {
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/Comment"
+            },
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "comments",
+          "count"
+        ],
+        "type": "object"
+      },
+      "TaskDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "active_descendants": {
+            "type": "integer"
+          },
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/Comment"
+            },
+            "type": "array"
+          },
+          "descendants": {
+            "type": "integer"
+          },
+          "relations": {
+            "items": {
+              "$ref": "#/components/schemas/Relation"
+            },
+            "type": "array"
+          },
+          "task": {
+            "$ref": "#/components/schemas/Task"
+          },
+          "waiting_for": {
+            "items": {
+              "$ref": "#/components/schemas/WaitingFor"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "task",
+          "comments",
+          "descendants",
+          "active_descendants",
+          "waiting_for",
+          "relations"
+        ],
+        "type": "object"
+      },
+      "TaskEventList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "events"
+        ],
+        "type": "object"
+      },
+      "TaskNotificationList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "notifications": {
+            "items": {
+              "$ref": "#/components/schemas/Notification"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "notifications"
+        ],
+        "type": "object"
+      },
+      "TaskPage": {
+        "additionalProperties": false,
+        "properties": {
+          "next_cursor": {
             "type": "string"
           },
           "sequence": {
             "type": "integer"
           },
-          "task_key": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "tasks",
+          "sequence"
+        ],
+        "type": "object"
+      },
+      "TaskQueueEnvList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "env": {
+            "items": {
+              "$ref": "#/components/schemas/QueueEnvVar"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "env"
+        ],
+        "type": "object"
+      },
+      "TaskQueueEnvSet": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
             "type": "string"
           },
-          "task_revision": {
+          "queue": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "queue",
+          "updated_at",
+          "value"
+        ],
+        "type": "object"
+      },
+      "TaskQueueList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "queues": {
+            "items": {
+              "$ref": "#/components/schemas/Queue"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "queues"
+        ],
+        "type": "object"
+      },
+      "TaskQueueSecretList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "global_env": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "secrets": {
+            "items": {
+              "$ref": "#/components/schemas/QueueSecretInfo"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "global_env",
+          "secrets"
+        ],
+        "type": "object"
+      },
+      "TaskQueueSecretSet": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "queue": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "queue",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "TaskQueueSourceList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/QueueSource"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "TaskQueueValueRemoved": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "queue": {
+            "type": "string"
+          },
+          "removed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "queue",
+          "removed"
+        ],
+        "type": "object"
+      },
+      "TaskQueueWorkflowCleared": {
+        "additionalProperties": false,
+        "properties": {
+          "cleared": {
+            "type": "boolean"
+          },
+          "queue": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cleared",
+          "queue"
+        ],
+        "type": "object"
+      },
+      "TaskRelationDeleted": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "relation_id": {
             "type": "integer"
           }
         },
         "required": [
-          "sequence",
-          "event_id",
-          "queue",
-          "kind",
-          "actor",
-          "task_revision",
-          "payload",
-          "created_at"
+          "deleted",
+          "relation_id"
+        ],
+        "type": "object"
+      },
+      "TaskRelationList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "relations": {
+            "items": {
+              "$ref": "#/components/schemas/Relation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "relations"
+        ],
+        "type": "object"
+      },
+      "TaskRunLog": {
+        "additionalProperties": false,
+        "properties": {
+          "run_id": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "run_id",
+          "text",
+          "truncated"
+        ],
+        "type": "object"
+      },
+      "TaskScriptRunList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptRun"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "runs"
+        ],
+        "type": "object"
+      },
+      "TaskTriggerDeleted": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted",
+          "id"
+        ],
+        "type": "object"
+      },
+      "TaskTriggerList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QueueWorkflowTrigger"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "items"
         ],
         "type": "object"
       },
@@ -5819,7 +6773,169 @@
         ],
         "type": "object"
       },
+      "TransferBundle": {
+        "additionalProperties": false,
+        "properties": {
+          "queue": {
+            "type": "string"
+          },
+          "relations": {
+            "items": {
+              "$ref": "#/components/schemas/TransferRelation"
+            },
+            "type": "array"
+          },
+          "root_key": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TransferTask"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "root_key",
+          "queue",
+          "tasks",
+          "relations"
+        ],
+        "type": "object"
+      },
+      "TransferComment": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "author",
+          "body",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "TransferRelation": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "source_key": {
+            "type": "string"
+          },
+          "target_key": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_key",
+          "target_key",
+          "type",
+          "created_by",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "TransferTask": {
+        "additionalProperties": false,
+        "properties": {
+          "assignee": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/TransferComment"
+            },
+            "type": "array"
+          },
+          "completed_at": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "customer": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "manual_block_reason": {
+            "type": "string"
+          },
+          "parent_key": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "pull_request": {
+            "type": "string"
+          },
+          "queue": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "parent_key",
+          "queue",
+          "priority",
+          "title",
+          "description",
+          "status",
+          "pull_request",
+          "author",
+          "customer",
+          "group",
+          "assignee",
+          "manual_block_reason",
+          "created_at",
+          "started_at",
+          "updated_at",
+          "completed_at",
+          "comments"
+        ],
+        "type": "object"
+      },
       "TransitionRequest": {
+        "additionalProperties": false,
         "properties": {
           "actor": {
             "type": "string"
@@ -5872,6 +6988,7 @@
         "type": "object"
       },
       "TransitionView": {
+        "additionalProperties": false,
         "properties": {
           "checks": {
             "items": {
@@ -6111,7 +7228,46 @@
         ],
         "type": "object"
       },
+      "WaitingFor": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_principal": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "requested_at": {
+            "type": "string"
+          },
+          "requesting_comment_id": {
+            "type": "integer"
+          },
+          "requesting_principal": {
+            "type": "string"
+          },
+          "resolved_at": {
+            "type": "string"
+          },
+          "resolving_comment_id": {
+            "type": "integer"
+          },
+          "task_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "task_key",
+          "expected_principal",
+          "requesting_principal",
+          "requesting_comment_id",
+          "requested_at"
+        ],
+        "type": "object"
+      },
       "WatchView": {
+        "additionalProperties": false,
         "properties": {
           "description": {
             "type": "string"
@@ -6135,6 +7291,7 @@
         "type": "object"
       },
       "WorkflowAttention": {
+        "additionalProperties": false,
         "properties": {
           "count": {
             "description": "The visit counter behind the kind: rejected requests, script failures, or idle iterations",
@@ -6639,6 +7796,7 @@
         "type": "object"
       },
       "WorkflowStep": {
+        "additionalProperties": false,
         "properties": {
           "index": {
             "description": "The position of the current status in the manifest, from 1",
@@ -6656,6 +7814,7 @@
         "type": "object"
       },
       "WorkflowView": {
+        "additionalProperties": false,
         "properties": {
           "artifacts": {
             "items": {
@@ -6751,6 +7910,7 @@
           "outcomes",
           "artifacts",
           "visits",
+          "runs",
           "declared_artifacts",
           "statuses"
         ],
@@ -21846,7 +23006,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/TaskActivityReport"
+                    }
                   },
                   "required": [
                     "ok",
@@ -21924,7 +23086,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskNotificationList"
                     }
                   },
                   "required": [
@@ -22014,7 +23176,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Notification"
                     }
                   },
                   "required": [
@@ -22104,7 +23266,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Notification"
                     }
                   },
                   "required": [
@@ -22172,7 +23334,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/PrincipalInfo"
                     }
                   },
                   "required": [
@@ -22240,7 +23402,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskQueueList"
                     }
                   },
                   "required": [
@@ -22351,7 +23513,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Queue"
                     }
                   },
                   "required": [
@@ -22430,7 +23592,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Queue"
                     }
                   },
                   "required": [
@@ -22551,7 +23713,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Queue"
                     }
                   },
                   "required": [
@@ -22630,22 +23792,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "count": {
-                          "type": "integer"
-                        },
-                        "env": {
-                          "items": {
-                            "$ref": "#/components/schemas/QueueEnvVar"
-                          },
-                          "type": "array"
-                        }
-                      },
-                      "required": [
-                        "env",
-                        "count"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskQueueEnvList"
                     }
                   },
                   "required": [
@@ -22733,23 +23880,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "key": {
-                          "type": "string"
-                        },
-                        "queue": {
-                          "type": "string"
-                        },
-                        "removed": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "queue",
-                        "key",
-                        "removed"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskQueueValueRemoved"
                     }
                   },
                   "required": [
@@ -22851,27 +23982,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "key": {
-                          "type": "string"
-                        },
-                        "queue": {
-                          "type": "string"
-                        },
-                        "updated_at": {
-                          "type": "string"
-                        },
-                        "value": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "queue",
-                        "key",
-                        "value",
-                        "updated_at"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskQueueEnvSet"
                     }
                   },
                   "required": [
@@ -22950,22 +24061,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "count": {
-                          "type": "integer"
-                        },
-                        "items": {
-                          "items": {
-                            "$ref": "#/components/schemas/AgentPool"
-                          },
-                          "type": "array"
-                        }
-                      },
-                      "required": [
-                        "items",
-                        "count"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskAgentPoolList"
                     }
                   },
                   "required": [
@@ -23249,22 +24345,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "count": {
-                          "type": "integer"
-                        },
-                        "secrets": {
-                          "items": {
-                            "$ref": "#/components/schemas/QueueSecret"
-                          },
-                          "type": "array"
-                        }
-                      },
-                      "required": [
-                        "secrets",
-                        "count"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskQueueSecretList"
                     }
                   },
                   "required": [
@@ -23352,23 +24433,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "key": {
-                          "type": "string"
-                        },
-                        "queue": {
-                          "type": "string"
-                        },
-                        "removed": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "queue",
-                        "key",
-                        "removed"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskQueueValueRemoved"
                     }
                   },
                   "required": [
@@ -23470,23 +24535,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "key": {
-                          "type": "string"
-                        },
-                        "queue": {
-                          "type": "string"
-                        },
-                        "updated_at": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "queue",
-                        "key",
-                        "updated_at"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskQueueSecretSet"
                     }
                   },
                   "required": [
@@ -23583,23 +24632,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "run_id": {
-                          "type": "integer"
-                        },
-                        "text": {
-                          "type": "string"
-                        },
-                        "truncated": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "run_id",
-                        "text",
-                        "truncated"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskRunLog"
                     }
                   },
                   "required": [
@@ -23678,22 +24711,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "count": {
-                          "type": "integer"
-                        },
-                        "sources": {
-                          "items": {
-                            "$ref": "#/components/schemas/QueueSource"
-                          },
-                          "type": "array"
-                        }
-                      },
-                      "required": [
-                        "sources",
-                        "count"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskQueueSourceList"
                     }
                   },
                   "required": [
@@ -23781,19 +24799,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "cleared": {
-                          "type": "boolean"
-                        },
-                        "queue": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "queue",
-                        "cleared"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskQueueWorkflowCleared"
                     }
                   },
                   "required": [
@@ -24049,22 +25055,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "count": {
-                          "type": "integer"
-                        },
-                        "items": {
-                          "items": {
-                            "$ref": "#/components/schemas/QueueWorkflowTrigger"
-                          },
-                          "type": "array"
-                        }
-                      },
-                      "required": [
-                        "items",
-                        "count"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskTriggerList"
                     }
                   },
                   "required": [
@@ -24257,7 +25248,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskTriggerDeleted"
                     }
                   },
                   "required": [
@@ -24516,7 +25507,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskPage"
                     }
                   },
                   "required": [
@@ -24638,7 +25629,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Task"
                     }
                   },
                   "required": [
@@ -24724,7 +25715,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Task"
                     }
                   },
                   "required": [
@@ -24803,7 +25794,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskDetail"
                     }
                   },
                   "required": [
@@ -24933,7 +25924,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Task"
                     }
                   },
                   "required": [
@@ -25118,22 +26109,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "artifacts": {
-                          "items": {
-                            "$ref": "#/components/schemas/Artifact"
-                          },
-                          "type": "array"
-                        },
-                        "count": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "artifacts",
-                        "count"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskArtifactList"
                     }
                   },
                   "required": [
@@ -25221,22 +26197,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "artifact": {
-                          "$ref": "#/components/schemas/Artifact"
-                        },
-                        "history": {
-                          "items": {
-                            "$ref": "#/components/schemas/Artifact"
-                          },
-                          "type": "array"
-                        }
-                      },
-                      "required": [
-                        "artifact",
-                        "history"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskArtifactHistory"
                     }
                   },
                   "required": [
@@ -25518,7 +26479,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Task"
                     }
                   },
                   "required": [
@@ -25597,7 +26558,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskCommentList"
                     }
                   },
                   "required": [
@@ -25694,7 +26655,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/CommentResult"
                     }
                   },
                   "required": [
@@ -25793,7 +26754,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Task"
                     }
                   },
                   "required": [
@@ -25890,7 +26851,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskEventList"
                     }
                   },
                   "required": [
@@ -25969,7 +26930,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/TransferBundle"
                     }
                   },
                   "required": [
@@ -26072,7 +27033,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Task"
                     }
                   },
                   "required": [
@@ -26151,7 +27112,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskRelationDeleted"
                     }
                   },
                   "required": [
@@ -26228,7 +27189,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskRelationList"
                     }
                   },
                   "required": [
@@ -26333,7 +27294,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Relation"
                     }
                   },
                   "required": [
@@ -26715,7 +27676,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Task"
                     }
                   },
                   "required": [
@@ -27082,22 +28043,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "count": {
-                          "type": "integer"
-                        },
-                        "runs": {
-                          "items": {
-                            "$ref": "#/components/schemas/ScriptRun"
-                          },
-                          "type": "array"
-                        }
-                      },
-                      "required": [
-                        "runs",
-                        "count"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskScriptRunList"
                     }
                   },
                   "required": [
@@ -27282,23 +28228,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "properties": {
-                        "run_id": {
-                          "type": "integer"
-                        },
-                        "text": {
-                          "type": "string"
-                        },
-                        "truncated": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "run_id",
-                        "text",
-                        "truncated"
-                      ],
-                      "type": "object"
+                      "$ref": "#/components/schemas/TaskRunLog"
                     }
                   },
                   "required": [
@@ -27393,7 +28323,7 @@
                       "type": "boolean"
                     },
                     "result": {
-                      "type": "object"
+                      "$ref": "#/components/schemas/Task"
                     }
                   },
                   "required": [

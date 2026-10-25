@@ -16,7 +16,8 @@ import (
 // maxActivityTasks bounds one response; totals still cover every task.
 const maxActivityTasks = 500
 
-type taskActivityRow struct {
+// TaskActivityRow is the work done on one task in the window.
+type TaskActivityRow struct {
 	Key             string   `json:"key"`
 	Title           string   `json:"title"`
 	Queue           string   `json:"queue"`
@@ -36,7 +37,9 @@ type taskActivityRow struct {
 	LastAt          string   `json:"last_at"`
 }
 
-type taskActivityTotals struct {
+// TaskActivityTotals sums the work on every task in the window, including
+// the rows a truncated report leaves out.
+type TaskActivityTotals struct {
 	Tasks       int     `json:"tasks"`
 	Completed   int     `json:"completed"`
 	Transitions int     `json:"transitions"`
@@ -47,7 +50,8 @@ type taskActivityTotals struct {
 	CostUSD     float64 `json:"cost_usd"`
 }
 
-type taskActivityAgent struct {
+// TaskActivityAgent is one agent's share of the work in the window.
+type TaskActivityAgent struct {
 	Agent      string  `json:"agent"`
 	Tasks      int     `json:"tasks"`
 	Completed  int     `json:"completed"`
@@ -56,14 +60,16 @@ type taskActivityAgent struct {
 	CostUSD    float64 `json:"cost_usd"`
 }
 
-type taskActivityReport struct {
+// TaskActivityReport is the work on tasks in a time window (tasks.activity);
+// Agents is present only without an agent filter.
+type TaskActivityReport struct {
 	Since     string              `json:"since"`
 	Until     string              `json:"until"`
 	Agent     string              `json:"agent,omitempty"`
 	Truncated bool                `json:"truncated"`
-	Totals    taskActivityTotals  `json:"totals"`
-	Tasks     []taskActivityRow   `json:"tasks"`
-	Agents    []taskActivityAgent `json:"agents,omitempty"`
+	Totals    TaskActivityTotals  `json:"totals"`
+	Tasks     []TaskActivityRow   `json:"tasks"`
+	Agents    []TaskActivityAgent `json:"agents,omitempty"`
 }
 
 func roundUSD(v float64) float64 { return math.Round(v*1e6) / 1e6 }
@@ -71,7 +77,7 @@ func roundUSD(v float64) float64 { return math.Round(v*1e6) / 1e6 }
 // taskActivity summarizes the work done on tasks in a time window: AI requests
 // tagged with a task plus the task events, per task and, server-wide, per agent.
 func taskActivity() registry.Command {
-	return registry.Command{
+	return registry.WithResult[TaskActivityReport](registry.Command{
 		Path: "tasks.activity",
 		// tariboy tasks runs taskcli; this registry entry is only its HTTP route.
 		CLIHidden: true,
@@ -113,14 +119,14 @@ func taskActivity() registry.Command {
 				return nil, err
 			}
 
-			byKey := map[string]*taskActivityRow{}
-			rows := make([]*taskActivityRow, 0, len(activity))
+			byKey := map[string]*TaskActivityRow{}
+			rows := make([]*TaskActivityRow, 0, len(activity))
 			for _, a := range activity {
 				status := a.Task.Status
 				if a.Task.WorkflowStatus != "" {
 					status = a.Task.WorkflowStatus
 				}
-				row := &taskActivityRow{
+				row := &TaskActivityRow{
 					Key: a.Task.Key, Title: a.Task.Title, Queue: a.Task.Queue, Status: status,
 					Category: a.Task.Category, Assignee: a.Task.Assignee, Completed: a.Completed,
 					Comments: a.Comments, Outcomes: a.Outcomes, EnteredStatuses: a.EnteredStatuses,
@@ -129,7 +135,7 @@ func taskActivity() registry.Command {
 				byKey[row.Key] = row
 				rows = append(rows, row)
 			}
-			perAgent := map[string]*taskActivityAgent{}
+			perAgent := map[string]*TaskActivityAgent{}
 			for _, u := range usage {
 				row := byKey[u.TaskKey]
 				if row == nil {
@@ -150,7 +156,7 @@ func taskActivity() registry.Command {
 					row.LastAt = u.LastTS
 				}
 				if perAgent[u.Agent] == nil {
-					perAgent[u.Agent] = &taskActivityAgent{Agent: u.Agent}
+					perAgent[u.Agent] = &TaskActivityAgent{Agent: u.Agent}
 				}
 				a := perAgent[u.Agent]
 				a.Iterations += u.Iterations
@@ -164,7 +170,7 @@ func taskActivity() registry.Command {
 				return rows[i].Key < rows[j].Key
 			})
 
-			report := taskActivityReport{Since: since, Until: until, Agent: agentName, Tasks: []taskActivityRow{}}
+			report := TaskActivityReport{Since: since, Until: until, Agent: agentName, Tasks: []TaskActivityRow{}}
 			for _, row := range rows {
 				report.Totals.Tasks++
 				if row.Completed {
@@ -178,7 +184,7 @@ func taskActivity() registry.Command {
 				report.Totals.CostUSD = roundUSD(report.Totals.CostUSD + row.CostUSD)
 				for _, name := range row.Agents {
 					if perAgent[name] == nil {
-						perAgent[name] = &taskActivityAgent{Agent: name}
+						perAgent[name] = &TaskActivityAgent{Agent: name}
 					}
 					perAgent[name].Tasks++
 					if row.Completed {
@@ -192,7 +198,7 @@ func taskActivity() registry.Command {
 				}
 			}
 			if agentName == "" {
-				report.Agents = []taskActivityAgent{}
+				report.Agents = []TaskActivityAgent{}
 				for _, a := range perAgent {
 					report.Agents = append(report.Agents, *a)
 				}
@@ -200,7 +206,7 @@ func taskActivity() registry.Command {
 			}
 			return report, nil
 		},
-	}
+	})
 }
 
 // activityBound validates an optional RFC 3339 bound with any offset and
