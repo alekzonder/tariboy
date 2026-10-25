@@ -390,7 +390,7 @@ func runTmux(ctx context.Context, o Options, fallback time.Duration) error {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	watchdog := newDeadlineWatchdog(tmuxDeadline(o), func() {
+	watchdog := newDeadlineWatchdog(initialDeadline(o), func() {
 		s.mu.Lock()
 		s.terminationReason = "hard_timeout"
 		s.mu.Unlock()
@@ -541,26 +541,11 @@ type deadlineWatchdog struct {
 	once    sync.Once
 }
 
+// initialDeadline returns the hard deadline the watchdog starts with: the
+// persisted absolute deadline, else now + HardTimeoutS. A hard timeout of 0 or
+// less means no hard timeout, in both the headless and the interactive path:
+// it returns the zero time, which newDeadlineWatchdog treats as "never fire".
 func initialDeadline(o Options) time.Time {
-	if o.HardDeadline != "" {
-		if d, err := parseInputTime(o.HardDeadline); err == nil {
-			return d
-		}
-	}
-	hard := o.HardTimeoutS
-	if hard <= 0 {
-		hard = 60
-	}
-	return time.Now().Add(time.Duration(hard) * time.Second)
-}
-
-// tmuxDeadline is initialDeadline for the interactive (tmux) path, WITHOUT the
-// 60s default. An interactive agent is a live TUI a human sits in; a headless
-// iteration's hard-timeout watchdog must not kill it mid-use. So only an
-// explicitly configured deadline/timeout arms the watchdog — otherwise the
-// session runs until it exits or is stopped (returns the zero time = no
-// deadline, which newDeadlineWatchdog treats as "never fire").
-func tmuxDeadline(o Options) time.Time {
 	if o.HardDeadline != "" {
 		if d, err := parseInputTime(o.HardDeadline); err == nil {
 			return d
@@ -578,7 +563,7 @@ func newDeadlineWatchdog(deadline time.Time, fire func()) *deadlineWatchdog {
 		// arm (re)sets the timer to fire at d. A zero d means "no deadline":
 		// the timer is left stopped so it never fires, but the goroutine keeps
 		// listening so a later Set() can still arm a real deadline. This is how
-		// an interactive session opts out of the hard-timeout watchdog.
+		// a hard timeout of 0 opts out of the hard-timeout watchdog.
 		arm := func(t *time.Timer, d time.Time) {
 			if !t.Stop() {
 				select {

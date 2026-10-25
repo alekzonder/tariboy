@@ -33,9 +33,6 @@ func TestShimDeadlineAcceptsAnyRFC3339(t *testing.T) {
 		if got := initialDeadline(Options{HardDeadline: in}); !got.Equal(want) {
 			t.Errorf("initialDeadline(%q) = %s", in, got)
 		}
-		if got := tmuxDeadline(Options{HardDeadline: in}); !got.Equal(want) {
-			t.Errorf("tmuxDeadline(%q) = %s", in, got)
-		}
 		w := newDeadlineWatchdog(time.Time{}, func() {})
 		if err := w.Set(in); err != nil {
 			t.Errorf("Set(%q): %v", in, err)

@@ -1985,6 +1985,56 @@ func TestEnforceSoftTimeoutDoesNotKillAfterConcurrentExtension(t *testing.T) {
 	}
 }
 
+// A timeout of 0 means no deadline. Only a set soft timeout derives a hard
+// one, with a 60s grace after the soft deadline.
+func TestHardTimeoutZeroMeansNoHardDeadline(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ hard, soft, want int }{
+		{0, 0, 0},
+		{0, 600, 660},
+		{900, 600, 900},
+		{900, 0, 900},
+	} {
+		if got := hardTimeout(agent.Agent{HardTimeoutS: tc.hard, TimeoutS: tc.soft}); got != tc.want {
+			t.Errorf("hardTimeout(hard=%d, soft=%d) = %d, want %d", tc.hard, tc.soft, got, tc.want)
+		}
+	}
+}
+
+func TestEnforceSoftTimeoutZeroTimeoutNeverTriggers(t *testing.T) {
+	t.Parallel()
+	db := storetest.Open(t)
+	as := agent.NewStore(db)
+	if err := as.Create(agent.Agent{Name: "smoke", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 7, 14, 10, 0, 0, 0, time.UTC)
+	if err := as.CreateIteration(agent.Iteration{ID: "live", Agent: "smoke", Status: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.InitializeIterationTimeout("live", 0, 0, now); err != nil {
+		t.Fatal(err)
+	}
+	it, err := as.GetIteration("smoke", "live")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.TimeoutDeadline != nil || it.HardTimeoutDeadline != nil {
+		t.Fatalf("zero timeouts stored deadlines: soft=%v hard=%v", it.TimeoutDeadline, it.HardTimeoutDeadline)
+	}
+	var kills atomic.Int32
+	triggered, err := enforceSoftTimeout(as, it, now.Add(24*time.Hour), func() error {
+		kills.Add(1)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if triggered || kills.Load() != 0 {
+		t.Fatalf("zero soft timeout triggered=%v kills=%d", triggered, kills.Load())
+	}
+}
+
 type failingHarnessSpawner struct{ l agentdir.Layout }
 
 func (s failingHarnessSpawner) Start(_, _ []string, _ string) error {
