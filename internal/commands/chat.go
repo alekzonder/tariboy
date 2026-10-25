@@ -84,7 +84,7 @@ func participantReadTS(b *bus.Bus, chatID, principal string) (string, error) {
 }
 
 func chatLs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ChatList](registry.Command{
 		Path:    "chat.ls",
 		Summary: "List the customer's chats, most recently active first",
 		Args: []registry.Arg{
@@ -101,24 +101,24 @@ func chatLs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			rows := make([]map[string]any, 0, len(summaries))
+			rows := make([]ChatSummaryRow, 0, len(summaries))
 			for _, summary := range summaries {
-				rows = append(rows, map[string]any{
-					"id": summary.ID, "kind": summary.Kind, "title": summary.Title,
-					"channel": summary.Channel,
-					"agent":   summary.Agent, "last_ts": summary.LastTS, "last_from": summary.LastFrom,
-					"last_type": summary.LastType, "last_text": summary.LastText,
-					"unread": summary.Unread, "read_ts": summary.ReadTS,
-					"participants": summary.Participants,
+				rows = append(rows, ChatSummaryRow{
+					ID: summary.ID, Kind: summary.Kind, Title: summary.Title,
+					Channel: summary.Channel,
+					Agent:   summary.Agent, LastTS: summary.LastTS, LastFrom: summary.LastFrom,
+					LastType: summary.LastType, LastText: summary.LastText,
+					Unread: summary.Unread, ReadTS: summary.ReadTS,
+					Participants: summary.Participants,
 				})
 			}
-			return map[string]any{"customer": customer, "chats": rows, "count": len(rows)}, nil
+			return ChatList{Customer: customer, Chats: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
 func chatMessages() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ChatFeed](registry.Command{
 		Path:    "chat.messages",
 		Summary: "Read one chat, oldest first, by chat id or agent name",
 		Args: []registry.Arg{
@@ -155,20 +155,16 @@ func chatMessages() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			rows := messageViews(msgs)
-			for i, msg := range msgs {
-				rows[i]["channel"] = msg.Channel
-				rows[i]["from"] = bus.MessageFrom(msg)
-			}
-			return map[string]any{"customer": customer, "agent": bus.ChatAgent(chat),
-				"chat": chat.ID, "channel": chat.Channel, "kind": chat.Kind, "title": chat.Title,
-				"messages": rows, "count": len(rows), "read_ts": readTS}, nil
+			rows := chatMessageViews(msgs)
+			return ChatFeed{Customer: customer, Agent: bus.ChatAgent(chat),
+				Chat: chat.ID, Channel: chat.Channel, Kind: chat.Kind, Title: chat.Title,
+				Messages: rows, Count: len(rows), ReadTS: readTS}, nil
 		},
-	}
+	})
 }
 
 func chatRead() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ChatReadResult](registry.Command{
 		Path:    "chat.read",
 		Summary: "Mark a chat read up to a message timestamp, by chat id or agent name",
 		Args: []registry.Arg{
@@ -202,16 +198,16 @@ func chatRead() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"agent": bus.ChatAgent(chat), "chat": chat.ID, "read_ts": readTS}, nil
+			return ChatReadResult{Agent: bus.ChatAgent(chat), Chat: chat.ID, ReadTS: readTS}, nil
 		},
-	}
+	})
 }
 
 // chatUnanswered is the answering obligation as a queue: the chat messages one
 // principal has not replied to yet. It is not the delivery queue — processing a
 // delivery satisfies the transport, a reply satisfies the conversation.
 func chatUnanswered() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ChatUnansweredList](registry.Command{
 		Path:    "chat.unanswered",
 		Summary: "List the chat messages a principal has not answered yet",
 		Args: []registry.Arg{
@@ -233,19 +229,15 @@ func chatUnanswered() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			rows := messageViews(msgs)
-			for i, msg := range msgs {
-				rows[i]["channel"] = msg.Channel
-				rows[i]["from"] = bus.MessageFrom(msg)
-			}
-			return map[string]any{"chat": chat, "principal": principal,
-				"messages": rows, "count": len(rows)}, nil
+			rows := chatMessageViews(msgs)
+			return ChatUnansweredList{Chat: chat, Principal: principal,
+				Messages: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
 func chatParticipants() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ChatParticipantList](registry.Command{
 		Path:    "chat.participants",
 		Summary: "List the principals taking part in a chat",
 		Args: []registry.Arg{
@@ -262,29 +254,29 @@ func chatParticipants() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			rows := make([]map[string]any, 0, len(parts))
+			rows := make([]ChatParticipantRow, 0, len(parts))
 			for _, part := range parts {
-				rows = append(rows, map[string]any{"principal": part.Principal, "role": part.Role,
-					"joined_at": part.JoinedAt, "read_ts": part.ReadTS, "muted": part.Muted})
+				rows = append(rows, ChatParticipantRow{Principal: part.Principal, Role: part.Role,
+					JoinedAt: part.JoinedAt, ReadTS: part.ReadTS, Muted: part.Muted})
 			}
-			return map[string]any{"chat": chat, "participants": rows, "count": len(rows)}, nil
+			return ChatParticipantList{Chat: chat, Participants: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
 // chatView is the one shape a chat write answers with, so create, add and
 // remove all describe the chat the caller now has.
-func chatView(b *bus.Bus, chat bus.Chat) (map[string]any, error) {
+func chatView(b *bus.Bus, chat bus.Chat) (ChatView, error) {
 	parts, err := b.Participants(chat.ID)
 	if err != nil {
-		return nil, err
+		return ChatView{}, err
 	}
 	principals := make([]string, 0, len(parts))
 	for _, part := range parts {
 		principals = append(principals, part.Principal)
 	}
-	return map[string]any{"chat": chat.ID, "kind": chat.Kind, "title": chat.Title,
-		"channel": chat.Channel, "agent": bus.ChatAgent(chat), "participants": principals}, nil
+	return ChatView{Chat: chat.ID, Kind: chat.Kind, Title: chat.Title,
+		Channel: chat.Channel, Agent: bus.ChatAgent(chat), Participants: principals}, nil
 }
 
 // chatCreate makes a chat nobody provisions: the customer names it and says who
@@ -292,7 +284,7 @@ func chatView(b *bus.Bus, chat bus.Chat) (map[string]any, error) {
 // namespaces reconciliation owns are refused here rather than quietly taken
 // over — two chats on one channel would merge two conversations into one feed.
 func chatCreate() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ChatView](registry.Command{
 		Path:    "chat.create",
 		Summary: "Create a chat and put the customer and the named principals in it",
 		Args: []registry.Arg{
@@ -349,7 +341,7 @@ func chatCreate() registry.Command {
 			}
 			return chatView(b, chat)
 		},
-	}
+	})
 }
 
 // chatJoin puts one principal in an existing chat. For an agent that is also
@@ -359,7 +351,7 @@ func chatCreate() registry.Command {
 // `chat.participants` is already the command that lists them, and a command
 // path cannot also be a group.
 func chatJoin() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ChatView](registry.Command{
 		Path:    "chat.join",
 		Summary: "Add a principal to a chat",
 		Args: []registry.Arg{
@@ -382,14 +374,14 @@ func chatJoin() registry.Command {
 			}
 			return chatView(b, chat)
 		},
-	}
+	})
 }
 
 // chatLeave takes a principal out of a chat. An agent's outstanding deliveries
 // stay in its queue: leaving a chat ends membership, not the work it was
 // already asked to handle.
 func chatLeave() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ChatView](registry.Command{
 		Path:    "chat.leave",
 		Summary: "Remove a principal from a chat, keeping its outstanding deliveries",
 		Args: []registry.Arg{
@@ -407,7 +399,7 @@ func chatLeave() registry.Command {
 			}
 			return chatView(b, chat)
 		},
-	}
+	})
 }
 
 // chatAndPrincipal resolves the two arguments both participant commands take.

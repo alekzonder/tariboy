@@ -27,7 +27,7 @@ func TestChannelLsAndMessageSend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["channel"] != "chat:room" {
+	if res.(MessageSendResult).Channel != "chat:room" {
 		t.Fatalf("send = %v", res)
 	}
 	// the published message speaks as the customer (see chat_test.go).
@@ -37,12 +37,12 @@ func TestChannelLsAndMessageSend(t *testing.T) {
 	}
 	// channel ls shows it.
 	ls, err := h(t, "channel.ls")(c, registry.Params{})
-	if err != nil || ls.(map[string]any)["count"].(int) != 1 {
+	if err != nil || ls.(ChannelList).Count != 1 {
 		t.Fatalf("ls = %v err=%v", ls, err)
 	}
 	// channel tail (non-follow) returns the message.
 	tl, err := h(t, "channel.tail")(c, registry.Params{"channel": "chat:room"})
-	if err != nil || tl.(map[string]any)["count"].(int) != 1 {
+	if err != nil || tl.(ChannelTail).Count != 1 {
 		t.Fatalf("tail cmd = %v err=%v", tl, err)
 	}
 }
@@ -66,13 +66,13 @@ func TestAgentSubscriptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := res.(map[string]any)
-	if m["count"].(int) != 2 {
+	m := res.(SubscriptionChannelList)
+	if m.Count != 2 {
 		t.Fatalf("count = %v", m)
 	}
 	got := map[string]string{}
-	for _, ch := range m["channels"].([]map[string]any) {
-		got[ch["name"].(string)] = ch["kind"].(string)
+	for _, ch := range m.Channels {
+		got[ch.Name] = ch.Kind
 	}
 	if got["group:dev:broadcast"] != "group_broadcast" {
 		t.Fatalf("broadcast kind = %q (%v)", got["group:dev:broadcast"], got)
@@ -95,8 +95,8 @@ func TestAgentSubscriptionsProtectedFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := map[string]bool{}
-	for _, r := range res.(map[string]any)["channels"].([]map[string]any) {
-		got[r["name"].(string)] = r["protected"].(bool)
+	for _, r := range res.(SubscriptionChannelList).Channels {
+		got[r.Name] = r.Protected
 	}
 	want := map[string]bool{"agent:worker:inbox": true, "group:dev:inbox": true, "chat:messenger:x": false}
 	for name, w := range want {
@@ -116,7 +116,7 @@ func TestAgentSubscribeUnsubscribe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["channel"] != "chat:messenger:x" {
+	if res.(SubscribeResult).Channel != "chat:messenger:x" {
 		t.Fatalf("subscribe = %v", res)
 	}
 	subs, _ := b.ListSubscriptions("worker")
@@ -170,8 +170,8 @@ func TestAgentSubscribeParams(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := res.(map[string]any)
-	if m["watch"] == nil || m["watch"] == "" {
+	m := res.(SubscribeResult)
+	if m.Watch == "" {
 		t.Fatalf("parameterized subscribe returned no watch: %v", m)
 	}
 
@@ -222,7 +222,7 @@ func TestAgentSubscribeReportsChanged(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := res.(map[string]any)["changed"]; got != want {
+			if got := res.(SubscribeResult).Changed; got != want {
 				t.Fatalf("%v call %d: changed = %v, want %v", params["channel"], i, got, want)
 			}
 		}
@@ -235,7 +235,7 @@ func TestAgentSubscribeReportsChanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := res.(map[string]any)["changed"]; got != true {
+	if got := res.(SubscribeResult).Changed; !got {
 		t.Fatalf("resumed subscription: changed = %v, want true", got)
 	}
 }
@@ -265,12 +265,12 @@ func TestChannelLsListsBoundIdleChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := ls.(map[string]any)
-	if m["count"].(int) != 1 {
-		t.Fatalf("ls count = %v, want 1 (bound-but-idle channel missing)", m["count"])
+	m := ls.(ChannelList)
+	if m.Count != 1 {
+		t.Fatalf("ls count = %v, want 1 (bound-but-idle channel missing)", m.Count)
 	}
-	row := m["channels"].([]map[string]any)[0]
-	if row["name"] != "chat:messenger:idle" || row["kind"] != "chat" {
+	row := m.Channels[0]
+	if row.Name != "chat:messenger:idle" || row.Kind != "chat" {
 		t.Fatalf("listed channel = %v, want chat:messenger:idle of kind chat", row)
 	}
 }
@@ -280,7 +280,7 @@ func TestChannelInspect(t *testing.T) {
 	c, b := ctxWithBus(t)
 	b.Publish(bus.Message{Channel: "chat:room", Type: "x", Text: "a"})
 	insp, err := h(t, "channel.inspect")(c, registry.Params{"channel": "chat:room"})
-	if err != nil || insp.(map[string]any)["messages"].(int) != 1 {
+	if err != nil || insp.(ChannelInspectView).Messages != 1 {
 		t.Fatalf("inspect = %v err=%v", insp, err)
 	}
 }

@@ -159,7 +159,7 @@ func agentEffort() registry.Command {
 }
 
 func agentMessageSetting(path, field string) registry.Command {
-	return registry.Command{
+	cmd := registry.Command{
 		Path:    path,
 		Summary: "Set the agent " + strings.ReplaceAll(field, "_", " "),
 		Args: []registry.Arg{
@@ -176,8 +176,10 @@ func agentMessageSetting(path, field string) registry.Command {
 			if err != nil {
 				return nil, err
 			}
+			var result any = AgentMessagesMaxQueue{Name: a.Name, MessagesMaxQueue: value}
 			if field == "messages_batch" {
 				a.MessagesBatch = value
+				result = AgentMessagesBatch{Name: a.Name, MessagesBatch: value}
 			} else {
 				a.MessagesMaxQueue = value
 			}
@@ -187,9 +189,13 @@ func agentMessageSetting(path, field string) registry.Command {
 			if control, ok := c.Control.(registry.LoopConfigControl); ok {
 				control.RefreshLoopConfig(a.Name)
 			}
-			return map[string]any{"name": a.Name, field: value}, nil
+			return result, nil
 		},
 	}
+	if field == "messages_batch" {
+		return registry.WithResult[AgentMessagesBatch](cmd)
+	}
+	return registry.WithResult[AgentMessagesMaxQueue](cmd)
 }
 
 // agentAlias sets (POST) the agent's display alias. Omit value to read; empty

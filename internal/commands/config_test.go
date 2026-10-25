@@ -162,7 +162,18 @@ func TestAgentMessageSettingsValidateAndPersist(t *testing.T) {
 		"agent.messages.max-queue": "messages_max_queue",
 	} {
 		res, err := h(t, path)(c, registry.Params{"name": "a1", "value": float64(23)})
-		if err != nil || res.(map[string]any)[field] != 23 {
+		got := -1
+		switch v := res.(type) {
+		case AgentMessagesBatch:
+			if field == "messages_batch" {
+				got = v.MessagesBatch
+			}
+		case AgentMessagesMaxQueue:
+			if field == "messages_max_queue" {
+				got = v.MessagesMaxQueue
+			}
+		}
+		if err != nil || got != 23 {
 			t.Fatalf("%s result=%#v err=%v", path, res, err)
 		}
 		if _, err := h(t, path)(c, registry.Params{"name": "a1", "value": float64(0)}); err == nil {

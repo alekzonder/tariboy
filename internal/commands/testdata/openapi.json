@@ -201,6 +201,38 @@
         ],
         "type": "object"
       },
+      "AgentMessagesBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "messages_batch": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "messages_batch"
+        ],
+        "type": "object"
+      },
+      "AgentMessagesMaxQueue": {
+        "additionalProperties": false,
+        "properties": {
+          "messages_max_queue": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "messages_max_queue"
+        ],
+        "type": "object"
+      },
       "AgentPool": {
         "properties": {
           "agents": {
@@ -666,6 +698,507 @@
         ],
         "type": "object"
       },
+      "ChannelInspectView": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "ChannelList": {
+        "additionalProperties": false,
+        "properties": {
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelRow"
+            },
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "channels",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ChannelMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "correlation_id": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          },
+          "deadline": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "in_reply_to": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "produced_by_agent": {
+            "type": "string"
+          },
+          "produced_in_iteration": {
+            "type": "string"
+          },
+          "reply_to": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "object"
+          },
+          "text": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ts",
+          "type",
+          "source",
+          "text",
+          "produced_by_agent",
+          "produced_in_iteration"
+        ],
+        "type": "object"
+      },
+      "ChannelRow": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "ChannelTail": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelMessage"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "messages",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ChannelWatch": {
+        "additionalProperties": false,
+        "properties": {
+          "params": {
+            "nullable": true,
+            "type": "object"
+          },
+          "subscribers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "watch": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "watch",
+          "params",
+          "subscribers"
+        ],
+        "type": "object"
+      },
+      "ChannelWatchList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "watches": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelWatch"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "watches",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ChatFeed": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "chat": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "customer": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "type": "array"
+          },
+          "read_ts": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer",
+          "agent",
+          "chat",
+          "channel",
+          "kind",
+          "title",
+          "messages",
+          "count",
+          "read_ts"
+        ],
+        "type": "object"
+      },
+      "ChatList": {
+        "additionalProperties": false,
+        "properties": {
+          "chats": {
+            "items": {
+              "$ref": "#/components/schemas/ChatSummaryRow"
+            },
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "customer": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer",
+          "chats",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ChatMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "correlation_id": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          },
+          "deadline": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "in_reply_to": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "produced_by_agent": {
+            "type": "string"
+          },
+          "produced_in_iteration": {
+            "type": "string"
+          },
+          "reply_to": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "object"
+          },
+          "text": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ts",
+          "type",
+          "source",
+          "text",
+          "produced_by_agent",
+          "produced_in_iteration",
+          "channel",
+          "from"
+        ],
+        "type": "object"
+      },
+      "ChatParticipantList": {
+        "additionalProperties": false,
+        "properties": {
+          "chat": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/ChatParticipantRow"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "chat",
+          "participants",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ChatParticipantRow": {
+        "additionalProperties": false,
+        "properties": {
+          "joined_at": {
+            "type": "string"
+          },
+          "muted": {
+            "type": "boolean"
+          },
+          "principal": {
+            "type": "string"
+          },
+          "read_ts": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "principal",
+          "role",
+          "joined_at",
+          "read_ts",
+          "muted"
+        ],
+        "type": "object"
+      },
+      "ChatReadResult": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "chat": {
+            "type": "string"
+          },
+          "read_ts": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent",
+          "chat",
+          "read_ts"
+        ],
+        "type": "object"
+      },
+      "ChatSummaryRow": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "last_from": {
+            "type": "string"
+          },
+          "last_text": {
+            "type": "string"
+          },
+          "last_ts": {
+            "type": "string"
+          },
+          "last_type": {
+            "type": "string"
+          },
+          "participants": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "read_ts": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unread": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "channel",
+          "agent",
+          "last_ts",
+          "last_from",
+          "last_type",
+          "last_text",
+          "unread",
+          "read_ts",
+          "participants"
+        ],
+        "type": "object"
+      },
+      "ChatUnansweredList": {
+        "additionalProperties": false,
+        "properties": {
+          "chat": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "type": "array"
+          },
+          "principal": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "chat",
+          "principal",
+          "messages",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ChatView": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "chat": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "participants": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "chat",
+          "kind",
+          "title",
+          "channel",
+          "agent",
+          "participants"
+        ],
+        "type": "object"
+      },
       "CheckView": {
         "properties": {
           "description": {
@@ -728,6 +1261,183 @@
         ],
         "type": "object"
       },
+      "InboxClearResult": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted_deliveries": {
+            "type": "integer"
+          },
+          "deleted_messages": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted_deliveries",
+          "deleted_messages"
+        ],
+        "type": "object"
+      },
+      "InboxList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/InboxMessage"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "messages",
+          "count"
+        ],
+        "type": "object"
+      },
+      "InboxMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "correlation_id": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          },
+          "deadline": {
+            "type": "string"
+          },
+          "delivered_at": {
+            "type": "string"
+          },
+          "dlq": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "in_reply_to": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "processed_at": {
+            "type": "string"
+          },
+          "produced_by_agent": {
+            "type": "string"
+          },
+          "produced_in_iteration": {
+            "type": "string"
+          },
+          "reply_to": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "object"
+          },
+          "text": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "channel",
+          "ts",
+          "source",
+          "type",
+          "text",
+          "attempts",
+          "dlq",
+          "produced_by_agent",
+          "produced_in_iteration"
+        ],
+        "type": "object"
+      },
+      "InboxProcessedResult": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "processed_at": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "processed_at",
+          "result"
+        ],
+        "type": "object"
+      },
+      "InboxReplyResult": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "correlation_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "in_reply_to": {
+            "type": "string"
+          },
+          "replied": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "channel",
+          "in_reply_to",
+          "correlation_id",
+          "replied"
+        ],
+        "type": "object"
+      },
+      "InboxRequeueResult": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "requeued": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "requeued"
+        ],
+        "type": "object"
+      },
       "LimitsView": {
         "properties": {
           "idle_iterations": {
@@ -749,6 +1459,26 @@
           "rejected_requests",
           "script_failures",
           "unavailable_grace"
+        ],
+        "type": "object"
+      },
+      "MessageSendResult": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "sent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "channel",
+          "sent"
         ],
         "type": "object"
       },
@@ -1189,6 +1919,79 @@
         ],
         "type": "object"
       },
+      "SubscribeResult": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "type": "boolean"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "params": {
+            "type": "object"
+          },
+          "watch": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "channel",
+          "kind",
+          "id",
+          "changed"
+        ],
+        "type": "object"
+      },
+      "SubscriptionChannel": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "protected": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "protected"
+        ],
+        "type": "object"
+      },
+      "SubscriptionChannelList": {
+        "additionalProperties": false,
+        "properties": {
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionChannel"
+            },
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "channels",
+          "count"
+        ],
+        "type": "object"
+      },
       "Task": {
         "properties": {
           "category": {
@@ -1379,6 +2182,26 @@
         "required": [
           "on",
           "to"
+        ],
+        "type": "object"
+      },
+      "UnsubscribeResult": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "removed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "channel",
+          "removed"
         ],
         "type": "object"
       },
@@ -4594,7 +5417,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/InboxList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -4682,7 +5507,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/InboxClearResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -4787,7 +5614,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/InboxProcessedResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -4889,7 +5718,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/InboxReplyResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -4986,7 +5817,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/InboxRequeueResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -6957,7 +7790,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentMessagesBatch"
+                    }
                   },
                   "required": [
                     "ok",
@@ -7053,7 +7888,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentMessagesMaxQueue"
+                    }
                   },
                   "required": [
                     "ok",
@@ -9518,7 +10355,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/UnsubscribeResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -9593,7 +10432,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/SubscriptionChannelList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -9711,7 +10552,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/SubscribeResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10386,7 +11229,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ChannelList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10463,7 +11308,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ChannelInspectView"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10558,7 +11405,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ChannelTail"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10635,7 +11484,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ChannelWatchList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10712,7 +11563,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ChatList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10803,7 +11656,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ChatView"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10907,7 +11762,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ChatFeed"
+                    }
                   },
                   "required": [
                     "ok",
@@ -11007,7 +11864,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ChatReadResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -11084,7 +11943,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ChatParticipantList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -11182,7 +12043,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ChatView"
+                    }
                   },
                   "required": [
                     "ok",
@@ -11268,7 +12131,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ChatView"
+                    }
                   },
                   "required": [
                     "ok",
@@ -11354,7 +12219,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ChatUnansweredList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14944,7 +15811,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/MessageSendResult"
+                    }
                   },
                   "required": [
                     "ok",

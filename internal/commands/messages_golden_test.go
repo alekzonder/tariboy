@@ -153,3 +153,44 @@ func TestMessagesResponsesMatchGolden(t *testing.T) {
 	}
 	recorder.check("messages_responses.golden.json", *updateMessagesGolden)
 }
+
+func init() { typedCallSets["messages"] = messagesTypedCalls }
+
+// messagesTypedCalls drives every typed channel, inbox, subscription, chat and
+// message-setting operation over HTTP against the messages fixture, including
+// the threaded, processed and dead-lettered inbox rows and the watch without
+// params.
+func messagesTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
+	c, _, ids := messagesFixture(t)
+	inbox := "/api/agents/worker/inbox/"
+	return c, []typedCall{
+		{"GET", "/api/channels", "/api/channels", nil},
+		{"GET", "/api/channels/{channel}", "/api/channels/chat:room", nil},
+		{"GET", "/api/channels/{channel}/messages", "/api/channels/chat:room/messages", nil},
+		{"GET", "/api/channels/{channel}/messages", "/api/channels/chat:room/messages?since=" + ids.plain, nil},
+		{"GET", "/api/channels/{channel}/watches", "/api/channels/issue-provider:issues/watches", nil},
+		{"GET", "/api/agents/{name}/subscriptions", "/api/agents/worker/subscriptions", nil},
+		{"POST", "/api/agents/{name}/subscriptions", "/api/agents/worker/subscriptions", map[string]any{"channel": "chat:extra"}},
+		{"POST", "/api/agents/{name}/subscriptions", "/api/agents/worker/subscriptions", map[string]any{"channel": "plugin:issue-provider",
+			"type": "run.finished", "matcher": map[string]any{"data.status": "failed"}, "params": map[string]any{"query": "Q1"}}},
+		{"DELETE", "/api/agents/{name}/subscriptions", "/api/agents/worker/subscriptions?channel=chat:extra", nil},
+		{"POST", "/api/messages", "/api/messages", map[string]any{"channel": "chat:room", "type": "note", "text": "hi",
+			"subject": "pr=9", "data": `{"k":"v"}`, "reply_to": "user:customer"}},
+		{"GET", "/api/agents/{name}/inbox", "/api/agents/worker/inbox", nil},
+		{"POST", "/api/agents/{name}/inbox/{id}/processed", inbox + ids.plain + "/processed", map[string]any{"result": "looked"}},
+		{"POST", "/api/agents/{name}/inbox/{id}/reply", inbox + ids.threaded + "/reply", map[string]any{"text": "here"}},
+		{"POST", "/api/agents/{name}/inbox/{id}/requeue", inbox + ids.dead + "/requeue", nil},
+		{"GET", "/api/agents/{name}/inbox", "/api/agents/worker/inbox?status=processed", nil},
+		{"GET", "/api/chats", "/api/chats", nil},
+		{"GET", "/api/chats/{agent}", "/api/chats/worker", nil},
+		{"POST", "/api/chats/{agent}/read", "/api/chats/worker/read", map[string]any{"ts": ids.customerTS}},
+		{"GET", "/api/chats/{chat}/unanswered", "/api/chats/dm:worker/unanswered?principal=agent:worker", nil},
+		{"GET", "/api/chats/{chat}/participants", "/api/chats/dm:worker/participants", nil},
+		{"POST", "/api/chats", "/api/chats", map[string]any{"id": "team-alpha", "title": "Team Alpha", "participants": "agent:worker"}},
+		{"POST", "/api/chats/{chat}/participants", "/api/chats/team-alpha/participants", map[string]any{"principal": "agent:other", "role": "observer"}},
+		{"DELETE", "/api/chats/{chat}/participants/{principal}", "/api/chats/team-alpha/participants/agent:other", nil},
+		{"POST", "/api/agents/{name}/messages/batch", "/api/agents/worker/messages/batch", map[string]any{"value": 7}},
+		{"POST", "/api/agents/{name}/messages/max-queue", "/api/agents/worker/messages/max-queue", map[string]any{"value": 70}},
+		{"POST", "/api/agents/{name}/inbox/clear", "/api/agents/worker/inbox/clear", nil},
+	}
+}
