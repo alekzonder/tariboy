@@ -541,7 +541,7 @@ func channelWatches() registry.Command {
 }
 
 func scheduleLs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentScheduleList](registry.Command{
 		Path:    "schedule.ls",
 		Summary: "List an agent's schedules (read-only)",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -551,14 +551,13 @@ func scheduleLs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			rows := make([]map[string]any, 0, len(list))
+			rows := make([]AgentSchedule, 0, len(list))
 			for _, s := range list {
-				rows = append(rows, map[string]any{"id": s.ID, "kind": s.Kind, "spec": s.Spec,
-					"channel": s.Channel, "next_fire_at": s.NextFireAt, "enabled": s.Enabled})
+				rows = append(rows, agentScheduleFrom(s))
 			}
-			return map[string]any{"schedules": rows, "count": len(rows)}, nil
+			return AgentScheduleList{Schedules: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
 func messageViews(msgs []bus.Message) []ChannelMessage {

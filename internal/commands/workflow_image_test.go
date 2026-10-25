@@ -14,7 +14,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
-	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
 
 const workflowTestManifest = `schema_version: 1
@@ -269,7 +268,7 @@ func TestWorkflowBuildLsInspectRm(t *testing.T) {
 		if err != nil {
 			t.Fatalf("inspect %q: %v", tag, err)
 		}
-		if m, ok := got.(workflowimage.Manifest); !ok || m.Digest != digest {
+		if m, ok := got.(WorkflowImageManifest); !ok || m.Digest != digest {
 			t.Fatalf("inspect %q = %#v", tag, got)
 		}
 	}

@@ -829,6 +829,57 @@
         ],
         "type": "object"
       },
+      "AgentSchedule": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "next_fire_at": {
+            "type": "string"
+          },
+          "spec": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "spec",
+          "channel",
+          "next_fire_at",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "AgentScheduleList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "schedules": {
+            "items": {
+              "$ref": "#/components/schemas/AgentSchedule"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "schedules",
+          "count"
+        ],
+        "type": "object"
+      },
       "AgentScreenResult": {
         "additionalProperties": false,
         "properties": {
@@ -838,6 +889,209 @@
         },
         "required": [
           "screen"
+        ],
+        "type": "object"
+      },
+      "AgentScript": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "interval_seconds": {
+            "type": "integer"
+          },
+          "latest_run": {
+            "$ref": "#/components/schemas/AgentScriptRun"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "next_run_at": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "agent",
+          "name",
+          "description",
+          "command",
+          "mode",
+          "interval_seconds",
+          "state",
+          "created_at",
+          "next_run_at"
+        ],
+        "type": "object"
+      },
+      "AgentScriptCancelResult": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "cancelled"
+        ],
+        "type": "object"
+      },
+      "AgentScriptList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "scripts": {
+            "items": {
+              "$ref": "#/components/schemas/AgentScript"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scripts",
+          "count"
+        ],
+        "type": "object"
+      },
+      "AgentScriptRemoveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "removed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "removed"
+        ],
+        "type": "object"
+      },
+      "AgentScriptRun": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "cancel_requested": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": "integer"
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "log_path": {
+            "type": "string"
+          },
+          "pid": {
+            "type": "integer"
+          },
+          "script_id": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "script_id",
+          "agent",
+          "status",
+          "cancel_requested",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "log_path"
+        ],
+        "type": "object"
+      },
+      "AgentScriptRunList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/AgentScriptRun"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs",
+          "count"
+        ],
+        "type": "object"
+      },
+      "AgentScriptRunLog": {
+        "additionalProperties": false,
+        "properties": {
+          "log": {
+            "type": "string"
+          },
+          "run": {
+            "$ref": "#/components/schemas/AgentScriptRun"
+          }
+        },
+        "required": [
+          "run",
+          "log"
+        ],
+        "type": "object"
+      },
+      "AgentScriptStarted": {
+        "additionalProperties": false,
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/AgentScriptRun"
+          },
+          "script": {
+            "$ref": "#/components/schemas/AgentScript"
+          }
+        },
+        "required": [
+          "script",
+          "run"
         ],
         "type": "object"
       },
@@ -4231,6 +4485,475 @@
         },
         "required": [
           "kind"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageArtifact": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageBuildResult": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "type": "boolean"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "digest",
+          "tags",
+          "created"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "run_as": {
+            "type": "string"
+          },
+          "script": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "script"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowImageArtifact"
+            },
+            "type": "array"
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "initial_status": {
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/WorkflowImageLimits"
+          },
+          "name": {
+            "type": "string"
+          },
+          "requires_secrets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowImageSource"
+            },
+            "type": "array"
+          },
+          "statuses": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowImageStatus"
+            },
+            "type": "array"
+          },
+          "watch_spacing": {
+            "type": "string"
+          },
+          "workflow_version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "name",
+          "workflow_version",
+          "initial_status",
+          "statuses"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageFile": {
+        "additionalProperties": false,
+        "properties": {
+          "executable": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "sha256",
+          "executable",
+          "size"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "idle_iterations": {
+            "type": "integer"
+          },
+          "rejected_requests": {
+            "type": "integer"
+          },
+          "script_failures": {
+            "type": "integer"
+          },
+          "unavailable_grace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "WorkflowImageList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "workflows": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowImageListing"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "workflows",
+          "count"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageListing": {
+        "additionalProperties": false,
+        "properties": {
+          "built_at": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tag",
+          "version",
+          "digest",
+          "built_at"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageManifest": {
+        "additionalProperties": false,
+        "properties": {
+          "built_at": {
+            "type": "string"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/WorkflowImageDefinition"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowImageFile"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "name",
+          "version",
+          "digest",
+          "built_at",
+          "definition",
+          "files"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageOwner": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "pool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageRemoveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "content_removed": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "removed": {
+            "type": "boolean"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tag",
+          "removed",
+          "content_removed"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageSource": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "every": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "script": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "script",
+          "every"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/WorkflowImageLimits"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/WorkflowImageOwner"
+          },
+          "terminal": {
+            "type": "boolean"
+          },
+          "transitions": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowImageTransition"
+            },
+            "type": "array"
+          },
+          "watch": {
+            "$ref": "#/components/schemas/WorkflowImageWatch"
+          }
+        },
+        "required": [
+          "id",
+          "owner"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageTransition": {
+        "additionalProperties": false,
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowImageCheck"
+            },
+            "type": "array"
+          },
+          "on": {
+            "type": "string"
+          },
+          "requires": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "on",
+          "to"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageValidation": {
+        "additionalProperties": false,
+        "properties": {
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowImageValidationError"
+            },
+            "type": "array"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "valid": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "valid",
+          "name",
+          "version",
+          "pools",
+          "files",
+          "errors"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageValidationError": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "path",
+          "message"
+        ],
+        "type": "object"
+      },
+      "WorkflowImageWatch": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "every": {
+            "type": "string"
+          },
+          "script": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "script",
+          "every"
         ],
         "type": "object"
       },
@@ -10521,7 +11244,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentScheduleList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10686,7 +11411,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentScriptRun"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10772,7 +11499,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentScriptRunLog"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10869,7 +11598,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentScriptCancelResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10946,7 +11677,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentScriptList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -11052,7 +11785,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentScriptStarted"
+                    }
                   },
                   "required": [
                     "ok",
@@ -11167,7 +11902,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentScriptStarted"
+                    }
                   },
                   "required": [
                     "ok",
@@ -11253,7 +11990,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentScriptRemoveResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -11350,7 +12089,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentScriptRun"
+                    }
                   },
                   "required": [
                     "ok",
@@ -11436,7 +12177,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentScriptRunList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -25325,7 +26068,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/WorkflowImageList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -25411,7 +26156,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/WorkflowImageBuildResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -25497,7 +26244,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/WorkflowImageValidation"
+                    }
                   },
                   "required": [
                     "ok",
@@ -25583,7 +26332,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/WorkflowImageRemoveResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -25667,7 +26418,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/WorkflowImageManifest"
+                    }
                   },
                   "required": [
                     "ok",

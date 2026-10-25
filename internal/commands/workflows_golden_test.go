@@ -195,3 +195,55 @@ func TestWorkflowsResponsesMatchGolden(t *testing.T) {
 	call(sc, "schedule.ls", "schedule.ls", registry.Params{"name": "alice"})
 	recorder.check("workflows_responses.golden.json", *updateWorkflowsGolden)
 }
+
+func init() { typedCallSets["workflows"] = workflowsTypedCalls }
+
+// workflowsTypedCalls serves two workflow sources, the fake script control
+// for alice with a finished run of an inactive script scr-1, and one cron
+// schedule.
+func workflowsTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
+	c := workflowCtx(t)
+	if err := agent.NewStore(c.Store).Create(agent.Agent{Name: "alice", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	fake := &fakeScriptControl{definitions: map[string]script.Definition{}, runs: map[string][]script.Run{}}
+	c.Scripts = fake
+	if _, err := h(t, "script.run")(c, registry.Params{"name": "alice", "script_name": "check", "description": "check repo", "command": "make check"}); err != nil {
+		t.Fatal(err)
+	}
+	addFinishedRun(fake, "scr-1")
+	definition := fake.definitions["scr-1"]
+	definition.State = script.StateCancelled
+	fake.definitions["scr-1"] = definition
+	addGoldenSchedule(t, c)
+	demo := writeWorkflowSource(t, t.TempDir(), "1.0.0")
+	rich := writeRichWorkflowSource(t)
+	broken := writeWorkflowSource(t, t.TempDir(), "1.0.0")
+	if err := os.Remove(filepath.Join(broken, "statuses", "work.md")); err != nil {
+		t.Fatal(err)
+	}
+	return c, []typedCall{
+		{"POST", "/api/workflow-images/validate", "/api/workflow-images/validate", map[string]any{"path": rich}},
+		{"POST", "/api/workflow-images/validate", "/api/workflow-images/validate", map[string]any{"path": broken}},
+		{"GET", "/api/workflow-images", "/api/workflow-images", nil},
+		{"POST", "/api/workflow-images/build", "/api/workflow-images/build", map[string]any{"path": demo}},
+		{"POST", "/api/workflow-images/build", "/api/workflow-images/build", map[string]any{"path": rich}},
+		{"GET", "/api/workflow-images", "/api/workflow-images", nil},
+		{"GET", "/api/workflow-images/{name}/{tag}", "/api/workflow-images/demo/latest", nil},
+		{"GET", "/api/workflow-images/{name}/{tag}", "/api/workflow-images/rich/0.1.0", nil},
+		{"DELETE", "/api/workflow-images/{name}/{tag}", "/api/workflow-images/demo/latest", nil},
+		{"DELETE", "/api/workflow-images/{name}/{tag}", "/api/workflow-images/demo/1.0.0", nil},
+		{"GET", "/api/agents/{name}/scripts", "/api/agents/alice/scripts", nil},
+		{"GET", "/api/agents/{name}/scripts/{id}/runs", "/api/agents/alice/scripts/scr-1/runs", nil},
+		{"GET", "/api/agents/{name}/script-runs/{id}", "/api/agents/alice/script-runs/srun-done", nil},
+		{"GET", "/api/agents/{name}/script-runs/{id}", "/api/agents/alice/script-runs/srun-1", nil},
+		{"GET", "/api/agents/{name}/script-runs/{id}/logs", "/api/agents/alice/script-runs/srun-done/logs", nil},
+		{"POST", "/api/agents/{name}/scripts/{id}/rerun", "/api/agents/alice/scripts/scr-1/rerun", nil},
+		{"POST", "/api/agents/{name}/script-targets/{id}/cancel", "/api/agents/alice/script-targets/scr-1/cancel", nil},
+		{"DELETE", "/api/agents/{name}/scripts/{id}", "/api/agents/alice/scripts/scr-1", nil},
+		{"POST", "/api/agents/{name}/scripts/run", "/api/agents/alice/scripts/run", map[string]any{"script_name": "once", "description": "once", "command": "true"}},
+		{"POST", "/api/agents/{name}/scripts/schedule", "/api/agents/alice/scripts/schedule", map[string]any{"script_name": "poll", "description": "poll repo", "command": "make poll", "interval_seconds": 60}},
+		{"GET", "/api/agents/{name}/schedules", "/api/agents/alice/schedules", nil},
+		{"GET", "/api/agents/{name}/schedules", "/api/agents/nobody-else/schedules", nil},
+	}
+}
