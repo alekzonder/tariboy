@@ -9,6 +9,7 @@ import { clearHarnessCatalogCache } from "@/hooks/useHarnessCatalog";
 import { RUNTIME_PRESETS_STORAGE_KEY } from "@/lib/runtimePresets";
 import { notifyImagesChanged } from "@/lib/imageEvents";
 import { ApiProvider } from "@/components/ApiProvider";
+import { routeFetch, type FetchRequest } from "@/test/fetchRoutes";
 import AgentConfigurationTab from "./AgentConfigurationTab";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -106,18 +107,12 @@ const VIEW_FIELD: Record<string, [keyof AgentView, string]> = {
   "messages/max-queue": ["messages_max_queue", "value"],
 };
 
-// fakeServer answers every request the page makes from one mutable state.
-// `fail` rejects a write by "METHOD rest" with the given message.
-function fakeServer(
-  opts: {
-    view?: Partial<AgentView>;
-    image?: () => unknown;
-    images?: () => Promise<Response>;
-    fail?: Record<string, string>;
-  } = {},
-) {
-  const state = {
-    view: { ...stopped, ...opts.view } as AgentView,
+type FakeState = ReturnType<typeof initialState>;
+type Body = FetchRequest["body"];
+
+function initialState(view?: Partial<AgentView>) {
+  return {
+    view: { ...stopped, ...view } as AgentView,
     pending: { ref: "", digest: "", error: "" },
     script: "echo hi\n",
     retention: {
@@ -129,61 +124,50 @@ function fakeServer(
     },
     secrets: ["API_KEY"],
   };
-  const calls: Call[] = [];
-  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-    const parsed = new URL(url, "http://local");
-    const method = init?.method ?? "GET";
-    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-    calls.push({
-      method,
-      path: parsed.pathname + parsed.search,
-      url,
-      body,
-      headers: init?.headers,
-    });
-    const agentPrefix = /^\/api\/agents\/[^/]+/.exec(parsed.pathname)?.[0];
-    const agentRest = agentPrefix
-      ? parsed.pathname.slice(agentPrefix.length).replace(/^\//, "")
-      : null;
-    const failure = agentRest !== null ? opts.fail?.[`${method} ${agentRest}`] : undefined;
-    if (failure) return response({ code: "invalid", message: failure }, false, 400);
-    if (parsed.pathname.startsWith("/api/fs/list"))
-      return response({ path: "/srv", parent: "/", entries: [{ name: "new", dir: true }] });
-    if (parsed.pathname === "/api/images") {
-      return (
-        opts.images?.() ??
-        response({
-          images: [
-            { name: "worker", tag: "latest" },
-            { name: "reviewer", tag: "v2" },
-          ],
-        })
-      );
-    }
-    if (parsed.pathname.startsWith("/api/harnesses/")) {
-      return response({
-        harness: "codex",
-        models: [{ id: "gpt-x" }],
-        efforts: ["low", "high"],
-        error: "",
-      });
-    }
-    if (agentRest === null)
-      return response({ code: "unexpected", message: `${method} ${url}` }, false, 500);
-    if (agentRest === "") return response(state.view);
-    if (agentRest === "image") {
+}
+
+// How an accepted POST to an agent setting changes the view a reload reads.
+function writeView(view: AgentView, rest: string, body: Body): AgentView {
+  if (rest === "loop/schedule")
+    return {
+      ...view,
+      schedule: body.clear ? "" : body.value,
+      schedule_next_at: body.clear ? "" : "2026-10-26T08:00:00Z",
+    };
+  if (rest === "budget")
+    return {
+      ...view,
+      budget: {
+        ...view.budget!,
+        hour_usd: Number(body.hour_usd),
+        day_usd: Number(body.day_usd),
+        week_usd: Number(body.week_usd),
+        month_usd: Number(body.month_usd),
+      },
+    };
+  if (!VIEW_FIELD[rest]) return view;
+  const [field, key] = VIEW_FIELD[rest];
+  return { ...view, [field]: body[key] };
+}
+
+// The agent endpoints with their own state, by the path after /api/agents/NAME/.
+function agentRoutes(
+  state: FakeState,
+  image?: () => unknown,
+): Record<string, (req: FetchRequest) => Promise<Response>> {
+  return {
+    "": () => response(state.view),
+    image: ({ method, body }) => {
       if (method === "POST") state.pending = { ref: body.image, digest: "sha256:v2", error: "" };
       if (method === "DELETE") state.pending = { ref: "", digest: "", error: "" };
-      return response(opts.image?.() ?? { ...projection, pending: state.pending });
-    }
-    if (agentRest === "shell-script") {
-      if (method === "POST") {
-        state.script = body.script;
-        return response({ saved: true });
-      }
-      return response({ script: state.script });
-    }
-    if (agentRest === "retention") {
+      return response(image?.() ?? { ...projection, pending: state.pending });
+    },
+    "shell-script": ({ method, body }) => {
+      if (method !== "POST") return response({ script: state.script });
+      state.script = body.script;
+      return response({ saved: true });
+    },
+    retention: ({ method, body }) => {
       if (method === "POST")
         state.retention = {
           ...state.retention,
@@ -194,38 +178,73 @@ function fakeServer(
           },
         };
       return response(state.retention);
-    }
-    if (agentRest === "secrets") {
+    },
+    secrets: ({ method, body, search }) => {
       if (method === "POST") state.secrets = [...state.secrets, body.key];
       if (method === "DELETE")
-        state.secrets = state.secrets.filter((key) => key !== parsed.searchParams.get("key"));
+        state.secrets = state.secrets.filter((key) => key !== search.get("key"));
       return response({ keys: state.secrets, count: state.secrets.length });
-    }
-    if (method === "POST") {
-      if (agentRest === "loop/schedule")
-        state.view = {
-          ...state.view,
-          schedule: body.clear ? "" : body.value,
-          schedule_next_at: body.clear ? "" : "2026-10-26T08:00:00Z",
-        };
-      else if (agentRest === "budget")
-        state.view = {
-          ...state.view,
-          budget: {
-            ...state.view.budget!,
-            hour_usd: Number(body.hour_usd),
-            day_usd: Number(body.day_usd),
-            week_usd: Number(body.week_usd),
-            month_usd: Number(body.month_usd),
-          },
-        };
-      else if (VIEW_FIELD[agentRest]) {
-        const [field, key] = VIEW_FIELD[agentRest];
-        state.view = { ...state.view, [field]: body[key] };
-      }
-      return response({});
-    }
-    return response({ code: "unexpected", message: `${method} ${url}` }, false, 500);
+    },
+  };
+}
+
+const unexpected = ({ method, url }: FetchRequest) =>
+  response({ code: "unexpected", message: `${method} ${url}` }, false, 500);
+
+// fakeServer answers every request the page makes from one mutable state.
+// `fail` rejects a write by "METHOD rest" with the given message.
+function fakeServer(
+  opts: {
+    view?: Partial<AgentView>;
+    image?: () => unknown;
+    images?: () => Promise<Response>;
+    fail?: Record<string, string>;
+  } = {},
+) {
+  const state = initialState(opts.view);
+  const agent = agentRoutes(state, opts.image);
+  const route = routeFetch(
+    {
+      "* /api/fs/list*": () =>
+        response({ path: "/srv", parent: "/", entries: [{ name: "new", dir: true }] }),
+      "* /api/images": () =>
+        opts.images?.() ??
+        response({
+          images: [
+            { name: "worker", tag: "latest" },
+            { name: "reviewer", tag: "v2" },
+          ],
+        }),
+      "* /api/harnesses/*": () =>
+        response({
+          harness: "codex",
+          models: [{ id: "gpt-x" }],
+          efforts: ["low", "high"],
+          error: "",
+        }),
+      "* /api/agents/*": (req) => {
+        const rest = req.path.replace(/^\/api\/agents\/[^/]+\/?/, "");
+        const failure = opts.fail?.[`${req.method} ${rest}`];
+        if (failure) return response({ code: "invalid", message: failure }, false, 400);
+        if (agent[rest]) return agent[rest](req);
+        if (req.method !== "POST") return unexpected(req);
+        state.view = writeView(state.view, rest, req.body);
+        return response({});
+      },
+    },
+    unexpected,
+  );
+  const calls: Call[] = [];
+  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+    const parsed = new URL(url, "http://local");
+    calls.push({
+      method: init?.method ?? "GET",
+      path: parsed.pathname + parsed.search,
+      url,
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      headers: init?.headers,
+    });
+    return route(url, init);
   });
   vi.stubGlobal("fetch", fetchMock);
   const writes = () =>

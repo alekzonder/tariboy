@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import AgentMessages from "./AgentMessages";
 import { AgentNameContext } from "@/lib/agent";
+import { routeFetch, type FetchRequest } from "@/test/fetchRoutes";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -19,51 +20,54 @@ interface StubOptions {
   clearError?: boolean;
 }
 
+const answer = (result: unknown, gate?: Promise<void>) =>
+  (gate ?? Promise.resolve()).then(
+    () =>
+      ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result }),
+      }) as Response,
+  );
+
+// The rows one inbox page returns: the view by status, after `before`, up to `limit`.
+function inboxRows(req: FetchRequest, queue: unknown[], opts: StubOptions) {
+  const status = req.search.get("status");
+  let rows =
+    status === "processed" ? (opts.archive ?? []) : status === "dlq" ? (opts.dlq ?? []) : queue;
+  const before = req.search.get("before");
+  if (before)
+    rows = rows.slice(rows.findIndex((item) => (item as { id?: string }).id === before) + 1);
+  return rows.slice(0, Number(req.search.get("limit") ?? 100));
+}
+
 // Stub fetch for the P5 inbox endpoints. `queue` rows back the pending view;
 // POSTs are recorded so the tests can assert the operator actions fired.
 function stubInbox(queue: unknown[], opts: StubOptions = {}) {
   const posts: Post[] = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      let result: unknown = {};
-      let gate: Promise<void> | undefined;
-      if (init?.method === "POST") {
-        posts.push({ path, body: init?.body ? JSON.parse(init.body as string) : undefined });
-        if (opts.clearError && path.endsWith("/inbox/clear")) {
-          return Promise.resolve({
+  const route = routeFetch(
+    {
+      "POST *": ({ url, body }) => {
+        posts.push({ path: url, body });
+        if (opts.clearError && url.endsWith("/inbox/clear")) {
+          return {
             ok: false,
             status: 500,
             text: async () =>
               JSON.stringify({ ok: false, error: { code: "internal", message: "clear failed" } }),
-          } as Response);
+          } as Response;
         }
-        result = { ok: true };
-        gate = opts.postGate;
-      } else if (path.includes("/inbox")) {
-        let rows = path.includes("status=processed")
-          ? (opts.archive ?? [])
-          : path.includes("status=dlq")
-            ? (opts.dlq ?? [])
-            : queue;
-        const url = new URL(path, "http://localhost");
-        const before = url.searchParams.get("before");
-        if (before)
-          rows = rows.slice(rows.findIndex((item) => (item as { id?: string }).id === before) + 1);
-        rows = rows.slice(0, Number(url.searchParams.get("limit") ?? 100));
-        result = { messages: rows, count: rows.length };
-        if (url.searchParams.get("status") === "pending") gate = opts.pendingGate;
-      }
-      return (gate ?? Promise.resolve()).then(
-        () =>
-          ({
-            ok: true,
-            status: 200,
-            text: async () => JSON.stringify({ ok: true, result }),
-          }) as Response,
-      );
-    }),
+        return answer({ ok: true }, opts.postGate);
+      },
+    },
+    (req) => {
+      if (!req.url.includes("/inbox")) return answer({});
+      const rows = inboxRows(req, queue, opts);
+      const gate = req.search.get("status") === "pending" ? opts.pendingGate : undefined;
+      return answer({ messages: rows, count: rows.length }, gate);
+    },
   );
+  vi.stubGlobal("fetch", vi.fn().mockImplementation(route));
   return posts;
 }
 

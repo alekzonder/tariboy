@@ -3,17 +3,37 @@ import { act, fireEvent, render, screen, waitFor } from "@/test/queryRender";
 import { MemoryRouter } from "react-router-dom";
 import UsagePage from "./UsagePage";
 
+// The values the main row and request carry for each group filter; any other
+// group reads like the unfiltered report.
+const REPORT_VALUES: Record<
+  string,
+  { label: string; agent: string; model: string; requests: number; input: number; cost: number }
+> = {
+  "": { label: "alpha", agent: "alice", model: "gpt-all", requests: 3, input: 150, cost: 0.015 },
+  alpha: {
+    label: "alpha",
+    agent: "alice",
+    model: "gpt-alpha",
+    requests: 2,
+    input: 120,
+    cost: 0.012,
+  },
+  __ungrouped__: {
+    label: "",
+    agent: "legacy",
+    model: "gpt-legacy",
+    requests: 1,
+    input: 30,
+    cost: 0.003,
+  },
+};
+
 function report(group = "") {
-  const alpha = group === "alpha";
-  const ungrouped = group === "__ungrouped__";
-  const label = alpha ? "alpha" : ungrouped ? "" : "alpha";
-  const requests = alpha ? 2 : ungrouped ? 1 : 3;
-  const input = alpha ? 120 : ungrouped ? 30 : 150;
-  const cost = alpha ? 0.012 : ungrouped ? 0.003 : 0.015;
+  const { label, agent, model, requests, input, cost } = REPORT_VALUES[group] ?? REPORT_VALUES[""];
   return {
     rows: [
       {
-        agent: alpha ? "alice" : ungrouped ? "legacy" : "alice",
+        agent,
         image: "basic:latest",
         group_id: label,
         group_name: label,
@@ -39,10 +59,10 @@ function report(group = "") {
       {
         id: `request-${group || "all"}`,
         ts: "2026-08-18T12:30:00Z",
-        agent: alpha ? "alice" : ungrouped ? "legacy" : "alice",
+        agent,
         image: "basic:latest",
         provider: "openai",
-        model: alpha ? "gpt-alpha" : ungrouped ? "gpt-legacy" : "gpt-all",
+        model,
         input_tokens: input,
         output_tokens: 60,
         cache_write_tokens: 10,

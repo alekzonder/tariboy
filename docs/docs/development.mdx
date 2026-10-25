@@ -433,6 +433,50 @@ reason, and on a rule override for single files. Turn off a `correctness` rule
 for the complete project only when the rule does not apply to the project, and
 write the reason in this guide.
 
+#### Frontend complexity thresholds
+
+These are the agreed size and complexity limits for the UI code. They are not
+in `ui/.oxlintrc.json` yet. The task that adds code-quality checks to
+`make check` turns them on. At the same time, that task lets
+`lintPolicy.test.ts` accept the one test override below.
+
+| Rule | Limit |
+| --- | --- |
+| `complexity` | 15 |
+| `max-lines` | 400, without blank lines and comments |
+| `max-lines-per-function` | 150, without blank lines and comments |
+| `max-depth` | 4 |
+| `max-params` | 5 |
+| `max-nested-callbacks` | 4 |
+
+Test-only files do not have the two length limits. A long `describe` block is
+the normal shape of a test file, so a length limit only moves tests around.
+The other four limits apply to test-only files in the same way as to app code.
+A test with many branches is not reliable: put each case in its own test and
+use a route table instead of an `if` chain in a fake server. For a fake
+`fetch`, use `routeFetch` from `ui/src/test/fetchRoutes.ts`. The test-only
+files are unit tests, Playwright tests, and the shared test code in
+`ui/src/test/` and `ui/tests/`:
+
+```json
+{
+  "files": ["**/*.test.{ts,tsx}", "**/*.pw.ts", "src/test/**", "tests/**"],
+  "rules": {
+    "max-lines": "off",
+    "max-lines-per-function": "off"
+  }
+}
+```
+
+Unlike `make gocyclo`, which does not measure Go test files, these limits
+measure the complexity of the frontend tests.
+
+If a test file becomes slow, divide it into one file for each scenario, for
+example `TasksWorkspace.realtime.test.tsx`. Vitest runs the files in parallel.
+Put the shared fixtures in `ui/src/test/`. Keep the `vi.hoisted` and `vi.mock`
+calls in each test file, because Vitest hoists them only in the test file
+itself.
+
 `npm run knip` runs [Knip](https://knip.dev) from `ui/knip.json`. The
 `ui-dead-code` step of `make frontend-check` runs it. It fails when it finds
 unused code or an unused package, and it does not delete code. It runs two

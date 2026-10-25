@@ -12,6 +12,7 @@ import type { AgentView } from "@/lib/types";
 import { ApiProvider } from "@/components/ApiProvider";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import { Toaster } from "@/components/ui/sonner";
+import { routeFetch, type FetchRequest } from "@/test/fetchRoutes";
 import "@/index.css";
 
 declare global {
@@ -118,218 +119,212 @@ const agentView: AgentView = {
   notes: "",
 };
 
-window.fetch = async (input, init) => {
-  const requestURL = new URL(String(input), window.location.origin);
-  const path = requestURL.pathname;
-  const method = init?.method ?? "GET";
-  const recordTransferRequest = () => {
-    window.__imageTransferRequests ??= [];
-    window.__imageTransferRequests.push({ method, url: requestURL.toString() });
-  };
-  if (path === "/api/images/validate" && method === "POST") {
-    return envelope({
-      valid: true,
-      schema_version: 2,
-      plugins: ["loop"],
-      template: {
+// The full URL of a request, so transfer checks see which host it targets.
+const fullURL = (req: FetchRequest) => new URL(req.url, window.location.origin);
+
+const recordTransferRequest = (req: FetchRequest) => {
+  window.__imageTransferRequests ??= [];
+  window.__imageTransferRequests.push({ method: req.method, url: fullURL(req).toString() });
+};
+
+// The transfer target hosts by origin; each one starts an import of that name.
+const transferImports: Record<string, string> = {
+  "https://in-flight.tariboy.test": "in-flight",
+  "https://ready.tariboy.test": "ready",
+  "https://present.tariboy.test": "present",
+  "https://conflict.tariboy.test": "conflict",
+};
+
+function startImport(req: FetchRequest) {
+  const origin = fullURL(req).origin;
+  if (
+    (fixtureMode === "transfer" || fixtureMode === "transfer-cancel") &&
+    origin === window.location.origin
+  ) {
+    recordTransferRequest(req);
+    return envelope({ import_id: "local-import", ref: "reviewer:v3", digest: "local-digest" });
+  }
+  const target = transferImports[origin];
+  if (!target)
+    return envelope({ import_id: "browser-import", ref: "reviewer:v3", digest: "digest" });
+  recordTransferRequest(req);
+  return envelope({
+    import_id: `${target}-import`,
+    ref: "reviewer:v3",
+    digest: `${target}-digest`,
+  });
+}
+
+// An apply of a transfer import is recorded before it answers.
+const recordedApply = (answer: () => Response | Promise<Response>) => (req: FetchRequest) => {
+  recordTransferRequest(req);
+  return answer();
+};
+
+function agentImage() {
+  const current = activated
+    ? { ref: "browser-built:latest", digest: "built-digest" }
+    : { ref: "basic:latest", digest: "basic-digest" };
+  return envelope({
+    name: "worker",
+    current,
+    pending: {
+      ref: activated ? "" : pendingRef,
+      digest: activated ? "" : "built-digest",
+      error: "",
+    },
+  });
+}
+
+const agentConfig = () =>
+  envelope(
+    activated ? { ...agentView, image: "browser-built:latest", digest: "built-digest" } : agentView,
+  );
+
+window.fetch = routeFetch(
+  {
+    "POST /api/images/validate": () =>
+      envelope({
+        valid: true,
+        schema_version: 2,
+        plugins: ["loop"],
+        template: {
+          schema_version: 2,
+          sha256: "template-sha",
+          entries: [
+            { kind: "runtime", runtime: "identity" },
+            {
+              kind: "file",
+              source: "$CURRENT_VERSION_STORE/prompts/iteration-finish.md",
+              category: "current_version_store",
+              archive_path: "prompt/layers/001-iteration-finish.md",
+              size: 42,
+              sha256: "layer-sha",
+            },
+            { kind: "runtime", runtime: "context" },
+          ],
+        },
+      }),
+    "POST /api/images/build": ({ body }) => {
+      window.__imageBuild = body;
+      return envelope({ name: "browser-built", tag: "latest", digest: "built-digest", layers: 1 });
+    },
+    "* /api/images": () =>
+      envelope({
+        images: [
+          {
+            name: "reviewer",
+            tag: "v3",
+            bare: false,
+            exportable: true,
+            source_cwd: "/srv/images/reviewer",
+            source_available: true,
+          },
+          {
+            name: "browser-built",
+            tag: "latest",
+            bare: false,
+            exportable: true,
+            source_cwd: "/srv/images/browser-built",
+            source_available: true,
+          },
+          { name: "basic", tag: "latest", bare: false, exportable: false },
+          { name: "imported", tag: "v1", bare: false, exportable: true },
+          {
+            name: "missing",
+            tag: "v1",
+            bare: false,
+            exportable: true,
+            source_cwd: "/srv/images/missing",
+            source_available: false,
+          },
+        ],
+      }),
+    "* /api/images/reviewer%3Av3/template": () =>
+      envelope({
         schema_version: 2,
         sha256: "template-sha",
         entries: [
           { kind: "runtime", runtime: "identity" },
-          {
-            kind: "file",
-            source: "$CURRENT_VERSION_STORE/prompts/iteration-finish.md",
-            category: "current_version_store",
-            archive_path: "prompt/layers/001-iteration-finish.md",
-            size: 42,
-            sha256: "layer-sha",
-          },
           { kind: "runtime", runtime: "context" },
         ],
-      },
-    });
-  }
-  if (path === "/api/images/build" && method === "POST") {
-    window.__imageBuild = JSON.parse(String(init.body));
-    return envelope({ name: "browser-built", tag: "latest", digest: "built-digest", layers: 1 });
-  }
-  if (path === "/api/images") {
-    return envelope({
-      images: [
-        {
-          name: "reviewer",
-          tag: "v3",
-          bare: false,
-          exportable: true,
-          source_cwd: "/srv/images/reviewer",
-          source_available: true,
-        },
-        {
-          name: "browser-built",
-          tag: "latest",
-          bare: false,
-          exportable: true,
-          source_cwd: "/srv/images/browser-built",
-          source_available: true,
-        },
-        { name: "basic", tag: "latest", bare: false, exportable: false },
-        { name: "imported", tag: "v1", bare: false, exportable: true },
-        {
-          name: "missing",
-          tag: "v1",
-          bare: false,
-          exportable: true,
-          source_cwd: "/srv/images/missing",
-          source_available: false,
-        },
-      ],
-    });
-  }
-  if (path === "/api/images/reviewer%3Av3/template") {
-    return envelope({
-      schema_version: 2,
-      sha256: "template-sha",
-      entries: [
-        { kind: "runtime", runtime: "identity" },
-        { kind: "runtime", runtime: "context" },
-      ],
-    });
-  }
-  if (path === "/api/images/reviewer%3Av3/provenance") {
-    return envelope({
-      ref: "reviewer:v3",
-      digest: "reviewer-digest",
-      source_cwd: "/srv/images/reviewer",
-      source_available: true,
-    });
-  }
-  if (path === "/api/images/reviewer%3Av3") {
-    return envelope({
-      schema_version: 2,
-      name: "reviewer",
-      tag: "v3",
-      digest: "reviewer-digest",
-      built_at: "2026-08-17T00:00:00Z",
-      parents: [],
-      plugins: [],
-      requires_secrets: [],
-      env: {},
-      layers: [],
-      prompt_template_sha256: "template-sha",
-    });
-  }
-  if (path === "/api/images/reviewer%3Av3/export") {
-    if (requestURL.origin === "https://source.tariboy.test") recordTransferRequest();
-    return new Response(new Blob(["portable-image"]), {
-      status: 200,
-      headers: { "content-type": "application/gzip" },
-    });
-  }
-  if (path === "/api/image-imports" && method === "POST") {
-    if (
-      (fixtureMode === "transfer" || fixtureMode === "transfer-cancel") &&
-      requestURL.origin === window.location.origin
-    ) {
-      recordTransferRequest();
-      return envelope({ import_id: "local-import", ref: "reviewer:v3", digest: "local-digest" });
-    }
-    if (requestURL.origin === "https://in-flight.tariboy.test") {
-      recordTransferRequest();
-      return envelope({
-        import_id: "in-flight-import",
+      }),
+    "* /api/images/reviewer%3Av3/provenance": () =>
+      envelope({
         ref: "reviewer:v3",
-        digest: "in-flight-digest",
+        digest: "reviewer-digest",
+        source_cwd: "/srv/images/reviewer",
+        source_available: true,
+      }),
+    "* /api/images/reviewer%3Av3": () =>
+      envelope({
+        schema_version: 2,
+        name: "reviewer",
+        tag: "v3",
+        digest: "reviewer-digest",
+        built_at: "2026-08-17T00:00:00Z",
+        parents: [],
+        plugins: [],
+        requires_secrets: [],
+        env: {},
+        layers: [],
+        prompt_template_sha256: "template-sha",
+      }),
+    "* /api/images/reviewer%3Av3/export": (req) => {
+      if (fullURL(req).origin === "https://source.tariboy.test") recordTransferRequest(req);
+      return new Response(new Blob(["portable-image"]), {
+        status: 200,
+        headers: { "content-type": "application/gzip" },
       });
-    }
-    if (requestURL.origin === "https://ready.tariboy.test") {
-      recordTransferRequest();
-      return envelope({ import_id: "ready-import", ref: "reviewer:v3", digest: "ready-digest" });
-    }
-    if (requestURL.origin === "https://present.tariboy.test") {
-      recordTransferRequest();
+    },
+    "POST /api/image-imports": startImport,
+    "POST /api/image-imports/ready-import/apply": recordedApply(() =>
+      envelope({ ref: "reviewer:v3" }),
+    ),
+    "POST /api/image-imports/local-import/apply": recordedApply(() =>
+      envelope({ ref: "reviewer:v3" }),
+    ),
+    "POST /api/image-imports/in-flight-import/apply": recordedApply(
+      () =>
+        new Promise<Response>((resolve) => {
+          window.__finishImageTransfer = () => resolve(envelope({ ref: "reviewer:v3" }));
+        }),
+    ),
+    "POST /api/image-imports/present-import/apply": recordedApply(() =>
+      envelope({ ref: "reviewer:v3", reused: true }),
+    ),
+    "POST /api/image-imports/conflict-import/apply": recordedApply(() =>
+      failure(409, "target ref conflicts"),
+    ),
+    "POST /api/image-imports/browser-import/apply": ({ body }) => {
+      window.__imageApplyRef = body.ref;
+      return envelope({ ref: body.ref });
+    },
+    "POST /api/agents/worker/image": ({ body }) => {
+      pendingRef = body.image;
       return envelope({
-        import_id: "present-import",
-        ref: "reviewer:v3",
-        digest: "present-digest",
+        name: "worker",
+        current: { ref: "basic:latest", digest: "basic-digest" },
+        pending: { ref: pendingRef, digest: "built-digest", error: "" },
       });
-    }
-    if (requestURL.origin === "https://conflict.tariboy.test") {
-      recordTransferRequest();
-      return envelope({
-        import_id: "conflict-import",
-        ref: "reviewer:v3",
-        digest: "conflict-digest",
-      });
-    }
-    return envelope({ import_id: "browser-import", ref: "reviewer:v3", digest: "digest" });
-  }
-  if (path === "/api/image-imports/ready-import/apply" && method === "POST") {
-    recordTransferRequest();
-    return envelope({ ref: "reviewer:v3" });
-  }
-  if (path === "/api/image-imports/local-import/apply" && method === "POST") {
-    recordTransferRequest();
-    return envelope({ ref: "reviewer:v3" });
-  }
-  if (path === "/api/image-imports/in-flight-import/apply" && method === "POST") {
-    recordTransferRequest();
-    return new Promise<Response>((resolve) => {
-      window.__finishImageTransfer = () => resolve(envelope({ ref: "reviewer:v3" }));
-    });
-  }
-  if (path === "/api/image-imports/present-import/apply" && method === "POST") {
-    recordTransferRequest();
-    return envelope({ ref: "reviewer:v3", reused: true });
-  }
-  if (path === "/api/image-imports/conflict-import/apply" && method === "POST") {
-    recordTransferRequest();
-    return failure(409, "target ref conflicts");
-  }
-  if (path === "/api/image-imports/browser-import/apply" && method === "POST") {
-    const body = JSON.parse(String(init.body)) as { ref?: string };
-    window.__imageApplyRef = body.ref;
-    return envelope({ ref: body.ref });
-  }
-  if (path === "/api/agents/worker/image" && method === "POST") {
-    pendingRef = (JSON.parse(String(init.body)) as { image: string }).image;
-    return envelope({
-      name: "worker",
-      current: { ref: "basic:latest", digest: "basic-digest" },
-      pending: { ref: pendingRef, digest: "built-digest", error: "" },
-    });
-  }
-  if (path === "/api/agents/worker/image") {
-    const current = activated
-      ? { ref: "browser-built:latest", digest: "built-digest" }
-      : { ref: "basic:latest", digest: "basic-digest" };
-    return envelope({
-      name: "worker",
-      current,
-      pending: {
-        ref: activated ? "" : pendingRef,
-        digest: activated ? "" : "built-digest",
-        error: "",
-      },
-    });
-  }
-  if (path === "/api/agents/worker/secrets") return envelope({ keys: [] });
-  if (path === "/api/agents/worker/retention")
-    return envelope({
-      keep_iterations: 20,
-      keep_days: 30,
-      max_bytes: 0,
-      override: { keep_iterations: 20, keep_days: 30, max_bytes: 0 },
-      default: { keep_iterations: 0, keep_days: 0, max_bytes: 0 },
-    });
-  if (path === "/api/agents/worker" || path.startsWith("/api/agents/worker/")) {
-    return envelope(
-      activated
-        ? { ...agentView, image: "browser-built:latest", digest: "built-digest" }
-        : agentView,
-    );
-  }
-  throw new Error(`unexpected fixture request ${method} ${requestURL.toString()}`);
-};
+    },
+    "* /api/agents/worker/image": agentImage,
+    "* /api/agents/worker/secrets": () => envelope({ keys: [] }),
+    "* /api/agents/worker/retention": () =>
+      envelope({
+        keep_iterations: 20,
+        keep_days: 30,
+        max_bytes: 0,
+        override: { keep_iterations: 20, keep_days: 30, max_bytes: 0 },
+        default: { keep_iterations: 0, keep_days: 0, max_bytes: 0 },
+      }),
+    "* /api/agents/worker": agentConfig,
+    "* /api/agents/worker/*": agentConfig,
+  },
+  (req) => {
+    throw new Error(`unexpected fixture request ${req.method} ${fullURL(req).toString()}`);
+  },
+);
 
 export function AgentFixture() {
   const [generation, setGeneration] = useState(0);

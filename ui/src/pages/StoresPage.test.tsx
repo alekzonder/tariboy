@@ -11,6 +11,7 @@ import { setActiveDaemon } from "@/lib/api";
 import { addDaemon } from "@/lib/daemons";
 import { subscribeImagesChanged } from "@/lib/imageEvents";
 import StoresPage from "@/pages/StoresPage";
+import { routeFetch } from "@/test/fetchRoutes";
 
 vi.mock("@/lib/aggregate", () => ({ fetchAllAgents: vi.fn() }));
 
@@ -118,105 +119,98 @@ describe("Stores workspace", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((input: RequestInfo | URL, init: RequestInit = {}) => {
-        const url = String(input);
-        const method = init.method ?? "GET";
         const headers = new Headers(init.headers);
         calls.push({
-          url,
-          method,
+          url: String(input),
+          method: init.method ?? "GET",
           body: typeof init.body === "string" ? init.body : undefined,
           authorization: headers.get("Authorization") ?? undefined,
         });
-        if (url.endsWith("/api/stores") && method === "GET") {
-          return Promise.resolve(
-            envelope([{ name: "team", source: "/srv/team", path: "/srv/team" }]),
-          );
-        }
-        if (url.endsWith("/api/stores") && method === "POST") {
-          return Promise.resolve(
-            envelope({
-              name: "design",
-              source: "git@example.com:design.git",
-              path: "/stores/design",
-            }),
-          );
-        }
-        if (url.endsWith("/api/stores/design") && method === "GET") {
-          if (detailReloadFails) return Promise.resolve(envelope("reload failed", false));
-          detailReads++;
-          return Promise.resolve(
-            envelope({
-              name: "design",
-              source: "git@example.com:design.git",
-              path: "/stores/design",
-              images: [
-                {
-                  name: "reviewer",
-                  version: "1.2.3",
-                  built_version: detailReads === 1 ? "1.0.0" : "1.2.3",
-                  update_needed: detailReads === 1,
-                  latest_status: "built",
-                },
-                {
-                  name: "equal",
-                  version: "1.0.0",
-                  built_version: "1.0.0",
-                  update_needed: false,
-                  latest_status: "built",
-                },
-                {
-                  name: "missing-latest",
-                  version: "2.0.0",
-                  built_version: "",
-                  update_needed: false,
-                  latest_status: "missing",
-                },
-                {
-                  name: "source-unversioned",
-                  version: "",
-                  built_version: "1.0.0",
-                  update_needed: false,
-                  latest_status: "built",
-                },
-                {
-                  name: "latest-unversioned",
-                  version: "1.0.0",
-                  built_version: "",
-                  update_needed: false,
-                  latest_status: "unversioned",
-                },
-                {
-                  name: "latest-broken",
-                  version: "1.0.0",
-                  built_version: "",
-                  update_needed: false,
-                  latest_status: "error",
-                  latest_error: "invalid latest manifest",
-                },
-                {
-                  name: "broken",
-                  version: "",
-                  built_version: "",
-                  update_needed: false,
-                  error: "invalid Tariboyfile",
-                  latest_status: "missing",
-                },
-              ],
-            }),
-          );
-        }
-        if (url.endsWith("/api/stores/design/refresh")) {
-          return Promise.resolve(envelope("refresh failed", false));
-        }
-        if (url.endsWith("/api/images/build")) return buildResponse;
-        if (url.endsWith("/api/stores/design") && method === "DELETE") {
-          removeAttempts++;
-          return Promise.resolve(
-            removeAttempts === 1 ? envelope("remove failed", false) : envelope({ removed: true }),
-          );
-        }
-        return Promise.resolve(envelope({ agents: [], groups: [], count: 0 }));
+        return storeRoutes(input, init);
       }),
+    );
+    const storeRoutes = routeFetch(
+      {
+        "GET /api/stores": () =>
+          envelope([{ name: "team", source: "/srv/team", path: "/srv/team" }]),
+        "POST /api/stores": () =>
+          envelope({
+            name: "design",
+            source: "git@example.com:design.git",
+            path: "/stores/design",
+          }),
+        "GET /api/stores/design": () => {
+          if (detailReloadFails) return envelope("reload failed", false);
+          detailReads++;
+          return envelope({
+            name: "design",
+            source: "git@example.com:design.git",
+            path: "/stores/design",
+            images: [
+              {
+                name: "reviewer",
+                version: "1.2.3",
+                built_version: detailReads === 1 ? "1.0.0" : "1.2.3",
+                update_needed: detailReads === 1,
+                latest_status: "built",
+              },
+              {
+                name: "equal",
+                version: "1.0.0",
+                built_version: "1.0.0",
+                update_needed: false,
+                latest_status: "built",
+              },
+              {
+                name: "missing-latest",
+                version: "2.0.0",
+                built_version: "",
+                update_needed: false,
+                latest_status: "missing",
+              },
+              {
+                name: "source-unversioned",
+                version: "",
+                built_version: "1.0.0",
+                update_needed: false,
+                latest_status: "built",
+              },
+              {
+                name: "latest-unversioned",
+                version: "1.0.0",
+                built_version: "",
+                update_needed: false,
+                latest_status: "unversioned",
+              },
+              {
+                name: "latest-broken",
+                version: "1.0.0",
+                built_version: "",
+                update_needed: false,
+                latest_status: "error",
+                latest_error: "invalid latest manifest",
+              },
+              {
+                name: "broken",
+                version: "",
+                built_version: "",
+                update_needed: false,
+                error: "invalid Tariboyfile",
+                latest_status: "missing",
+              },
+            ],
+          });
+        },
+        "* /api/stores/design/refresh": () => envelope("refresh failed", false),
+        "* /api/images/build": () => buildResponse,
+        "DELETE /api/stores/design": () => {
+          removeAttempts++;
+          return removeAttempts === 1
+            ? envelope("remove failed", false)
+            : envelope({ removed: true });
+        },
+      },
+      () => envelope({ agents: [], groups: [], count: 0 }),
     );
 
     renderPage(`/servers/${encodeURIComponent(host.id)}/stores`, encodeURIComponent(host.id));
