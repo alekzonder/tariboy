@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useAgentName } from "@/lib/agent";
-import { ApiError, type InboxItem } from "@/lib/api";
+import { ApiError, type InboxMessage } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { EMPTY_TEXT, VIEWS, type View } from "@/pages/agentMessages/agentMessagesModel";
@@ -32,7 +32,7 @@ export default function AgentMessages({ leading }: { leading?: ReactNode } = {})
       return next;
     });
 
-  const requeue = async (item: InboxItem) => {
+  const requeue = async (item: InboxMessage) => {
     try {
       await api.messages.agentInboxRequeue(name, item.id);
       toast.success("requeued");

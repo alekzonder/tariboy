@@ -17,6 +17,8 @@ describe("TeamImportProgress", () => {
         onRetry={() => {}}
       />,
     );
-    expect(screen.getByLabelText("Team import progress")).toHaveTextContent("Import status: pending");
+    expect(screen.getByLabelText("Team import progress")).toHaveTextContent(
+      "Import status: pending",
+    );
   });
 });

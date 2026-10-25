@@ -1,4 +1,4 @@
-import type { InboxItem, InboxStatus } from "@/lib/api";
+import type { InboxMessage, InboxStatus } from "@/lib/api";
 
 // The three sub-views map onto the P5 inbox status filter. Queue is the default.
 export type View = "queue" | "archive" | "dlq";
@@ -20,7 +20,7 @@ export const EMPTY_TEXT: Record<View, string> = {
 
 // Which optional labels one inbox row shows: a non-event kind badge, the retry
 // count, the Archive-only processed line, and the details toggle.
-export function messageRowFlags({ item, view }: { item: InboxItem; view: View }) {
+export function messageRowFlags({ item, view }: { item: InboxMessage; view: View }) {
   return {
     kind: item.kind && item.kind !== "event" ? item.kind : "",
     showAttempts: item.attempts > 1,
@@ -34,8 +34,8 @@ export type DialogMode = "clear" | "processed" | "reply";
 // A pending Mark-processed / Reply / Clear-queue dialog.
 export type DialogState =
   | { mode: "clear" }
-  | { mode: "processed"; item: InboxItem }
-  | { mode: "reply"; item: InboxItem }
+  | { mode: "processed"; item: InboxMessage }
+  | { mode: "reply"; item: InboxMessage }
   | null;
 
 type DialogCopy = {

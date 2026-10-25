@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { type PluginContribution, type PluginSettingField } from "@/lib/api";
+import { type PluginContribution, type SettingField } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ function statusValue(value: unknown): string {
   return String(value);
 }
 
-function integerList(field: PluginSettingField, value: string): number[] {
+function integerList(field: SettingField, value: string): number[] {
   if (value.trim() === "") return [];
   return value.split(",").map((part) => {
     const trimmed = part.trim();
@@ -64,7 +64,7 @@ export default function PluginSettings({ name }: { name: string }) {
     };
   }, [name, api]);
 
-  const act = async (action: string, fieldNames: string[], fields: PluginSettingField[]) => {
+  const act = async (action: string, fieldNames: string[], fields: SettingField[]) => {
     if (saving) return;
     setError("");
     setNotice("");

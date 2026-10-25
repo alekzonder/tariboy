@@ -1,4 +1,4 @@
-import { ApiError, createApi, type ChatSummary, type AgentRow } from "@/lib/api";
+import { ApiError, createApi, type ChatSummaryRow, type AgentRow } from "@/lib/api";
 import { listDaemons, resolveDaemon } from "@/lib/daemons";
 import { hasLocalDaemon } from "@/lib/desktop";
 
@@ -9,7 +9,7 @@ export interface HostAgents {
   sidebarOrder?: { version: 1; groups: string[]; agents: string[] };
   /** One entry per agent this host holds a conversation with. Absent on a
    *  daemon too old to project chats — that host simply has no chat order. */
-  chats?: ChatSummary[];
+  chats?: ChatSummaryRow[];
   error?: string;
 }
 
@@ -40,7 +40,7 @@ export async function fetchAllAgents(): Promise<HostAgents[]> {
           api.messages
             .chatList()
             .then((r) => r.chats ?? [])
-            .catch((): ChatSummary[] => []),
+            .catch((): ChatSummaryRow[] => []),
         ]);
         let sidebarOrder: HostAgents["sidebarOrder"];
         try {

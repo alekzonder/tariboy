@@ -8,7 +8,17 @@ const PARTICIPANTS = [CUSTOMER, "agent:worker"];
 const NOW = new Date("2026-09-15T18:00:00Z");
 
 function message(id: string, from: string, ts: string, text = id): ChatMessage {
-  return { id, channel: "user:customer", ts, from, source: from, type: "message", text };
+  return {
+    id,
+    channel: "user:customer",
+    ts,
+    from,
+    source: from,
+    type: "message",
+    text,
+    produced_by_agent: "",
+    produced_in_iteration: "",
+  };
 }
 
 const kinds = (items: FeedItem[]) => items.map((item) => item.kind);

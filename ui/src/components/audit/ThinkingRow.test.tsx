@@ -2,9 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThinkingRow } from "./ThinkingRow";
-import type { AuditEvent } from "@/lib/audit";
+import type { AuditLogEvent } from "@/lib/audit";
 
-const event: AuditEvent = {
+const event: AuditLogEvent = {
   seq: 7,
   kind: "harness_output",
   source: "harness",

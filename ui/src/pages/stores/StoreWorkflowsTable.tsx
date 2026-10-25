@@ -1,9 +1,9 @@
-import type { StoreWorkflow, WorkflowImage } from "@/lib/api";
+import type { StoreWorkflowView, WorkflowImage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { latestWorkflowVersion, workflowStatus } from "./storeStatus";
 
 interface StoreWorkflowRowProps {
-  workflow: StoreWorkflow;
+  workflow: StoreWorkflowView;
   workflowImages: WorkflowImage[] | null;
   busy: string;
   buildWorkflow: (workflowName: string) => Promise<void>;
@@ -49,7 +49,7 @@ function StoreWorkflowRow({
 export default function StoreWorkflowsTable({
   workflows,
   ...row
-}: Omit<StoreWorkflowRowProps, "workflow"> & { workflows: StoreWorkflow[] | undefined }) {
+}: Omit<StoreWorkflowRowProps, "workflow"> & { workflows: StoreWorkflowView[] | undefined }) {
   return (
     <div className="overflow-x-auto rounded border">
       <table className="w-full text-sm">

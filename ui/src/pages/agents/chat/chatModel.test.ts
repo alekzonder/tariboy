@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ChatSummary } from "@/lib/api";
+import type { ChatSummaryRow } from "@/lib/api";
 import type { FeedItem } from "./chatFeed";
 import {
   chatAddress,
@@ -32,7 +32,7 @@ describe("chatParticipants", () => {
     expect(
       chatParticipants({ selected: "dm", customer: "user:c", name: "worker", current: undefined }),
     ).toEqual(["user:c", "agent:worker"]);
-    const current = { participants: ["user:c", "agent:a"] } as ChatSummary;
+    const current = { participants: ["user:c", "agent:a"] } as ChatSummaryRow;
     expect(chatParticipants({ selected: "team", customer: "user:c", name: "w", current })).toEqual(
       current.participants,
     );
@@ -65,6 +65,8 @@ describe("pendingChatMessage", () => {
       source: "user:c",
       type: "message",
       text: "hi",
+      produced_by_agent: "",
+      produced_in_iteration: "",
     });
   });
 });

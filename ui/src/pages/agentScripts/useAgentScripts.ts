@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAgentName } from "@/lib/agent";
-import type { ApiClient, ScriptDefinition, ScriptRun } from "@/lib/api";
+import type { ApiClient, AgentScript, AgentScriptRun } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { errorText } from "@/lib/errors";
 import type { ScriptRequest } from "./scriptRequest";
@@ -52,7 +52,7 @@ async function copyPath(path: string) {
   }
 }
 
-async function downloadLog(api: ApiClient, name: string, run: ScriptRun) {
+async function downloadLog(api: ApiClient, name: string, run: AgentScriptRun) {
   try {
     const blob = await api.scripts.downloadAgentScriptLog(name, run.id);
     const url = URL.createObjectURL(blob);
@@ -71,8 +71,8 @@ async function downloadLog(api: ApiClient, name: string, run: ScriptRun) {
 export function useAgentScripts() {
   const api = useApi();
   const name = useAgentName();
-  const [scripts, setScripts] = useState<ScriptDefinition[]>([]);
-  const [remove, setRemove] = useState<ScriptDefinition | null>(null);
+  const [scripts, setScripts] = useState<AgentScript[]>([]);
+  const [remove, setRemove] = useState<AgentScript | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -111,7 +111,7 @@ export function useAgentScripts() {
     }
   };
 
-  const rerun = async (definition: ScriptDefinition) => {
+  const rerun = async (definition: AgentScript) => {
     try {
       await api.scripts.rerunAgentScript(name, definition.id);
       toast.success("Run queued");
@@ -143,7 +143,7 @@ export function useAgentScripts() {
     cancel,
     rerun,
     copyPath,
-    download: (run: ScriptRun) => downloadLog(api, name, run),
+    download: (run: AgentScriptRun) => downloadLog(api, name, run),
     confirmRemove,
   };
 }

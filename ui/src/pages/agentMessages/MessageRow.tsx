@@ -1,4 +1,4 @@
-import type { InboxItem } from "@/lib/api";
+import type { InboxMessage } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fmtDateTime } from "@/lib/time";
@@ -20,7 +20,7 @@ export default function MessageRow({
   onToggle,
   ...actions
 }: {
-  item: InboxItem;
+  item: InboxMessage;
   view: View;
   expanded: boolean;
   onToggle: () => void;

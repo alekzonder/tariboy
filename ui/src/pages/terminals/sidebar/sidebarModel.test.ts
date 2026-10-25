@@ -9,20 +9,21 @@ import {
   hostAgents,
   rankAgents,
 } from "./sidebarModel";
-import type { AgentRow, ChatSummary } from "@/lib/api";
-import { agentRow } from "@/test/fixtures/apiFixtures";
+import type { AgentRow, ChatSummaryRow } from "@/lib/api";
+import { agentRow, chatSummaryRow } from "@/test/fixtures/apiFixtures";
 
-const chat = (agent: string, last_ts: string, unread = 0, kind = "direct"): ChatSummary => ({
-  id: `${kind === "direct" ? "dm" : kind}:${agent}`,
-  kind,
-  title: agent,
-  agent,
-  last_ts,
-  unread,
-  last_from: `agent:${agent}`,
-  last_type: "message",
-  last_text: "...",
-});
+const chat = (agent: string, last_ts: string, unread = 0, kind = "direct"): ChatSummaryRow =>
+  chatSummaryRow({
+    id: `${kind === "direct" ? "dm" : kind}:${agent}`,
+    kind,
+    title: agent,
+    agent,
+    last_ts,
+    unread,
+    last_from: `agent:${agent}`,
+    last_type: "message",
+    last_text: "...",
+  });
 
 const agent = (name: string, group = ""): AgentRow =>
   agentRow({ name, image: "img:latest", state: "running", harness: "claude", group });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApi } from "@/components/apiContext";
-import type { AuditEvent } from "@/lib/audit";
+import type { AuditLogEvent } from "@/lib/audit";
 
 const PAGE = 50;
 
@@ -11,7 +11,7 @@ const PAGE = 50;
 // cleared. rootRef goes on the ScrollArea whose viewport is tracked.
 export function useAuditPaging(name: string, filtering: boolean) {
   const api = useApi();
-  const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [events, setEvents] = useState<AuditLogEvent[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const hasMore = useRef(true);
@@ -22,7 +22,7 @@ export function useAuditPaging(name: string, filtering: boolean) {
 
   // eventsRef mirrors events so the tail/scroll closures read the latest seqs
   // without re-subscribing the SSE stream on every append.
-  const eventsRef = useRef<AuditEvent[]>([]);
+  const eventsRef = useRef<AuditLogEvent[]>([]);
   useEffect(() => {
     eventsRef.current = events;
   }, [events]);

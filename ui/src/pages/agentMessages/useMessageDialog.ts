@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAgentName } from "@/lib/agent";
-import { ApiError, type ApiClient, type InboxItem } from "@/lib/api";
+import { ApiError, type ApiClient, type InboxMessage } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import type { DialogMode, DialogState } from "./agentMessagesModel";
 import { dialogCopy } from "./agentMessagesModel";
@@ -33,7 +33,7 @@ export function useMessageDialog(reload: () => Promise<void>) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const openItem = (mode: "processed" | "reply", item: InboxItem) => {
+  const openItem = (mode: "processed" | "reply", item: InboxMessage) => {
     setText("");
     setDialog({ mode, item });
   };

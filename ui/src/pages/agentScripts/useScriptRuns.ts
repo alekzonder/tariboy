@@ -1,13 +1,13 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { ApiClient, ScriptDefinition, ScriptRun } from "@/lib/api";
+import type { ApiClient, AgentScript, AgentScriptRun } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 import { logNeedsRefresh, nextGeneration, toggledSet } from "./scriptsModel";
 
 // useScriptRuns owns the expanded scripts and runs, their loaded runs and logs,
 // and the generation counters that drop responses a newer request replaced.
 export function useScriptRuns(api: ApiClient, name: string) {
-  const [runs, setRuns] = useState<Record<string, ScriptRun[]>>({});
+  const [runs, setRuns] = useState<Record<string, AgentScriptRun[]>>({});
   const [expandedScripts, setExpandedScripts] = useState<Set<string>>(new Set());
   const [expandedRuns, setExpandedRuns] = useState<Set<string>>(new Set());
   const [logs, setLogs] = useState<Record<string, string>>({});
@@ -67,7 +67,7 @@ export function useScriptRuns(api: ApiClient, name: string) {
     }
   };
 
-  const loadRunLog = async (run: ScriptRun) => {
+  const loadRunLog = async (run: AgentScriptRun) => {
     const logGeneration = nextGeneration(logGenerations.current, run.id);
     const runsGeneration = nextGeneration(runsGenerations.current, run.script_id);
     try {
@@ -88,13 +88,13 @@ export function useScriptRuns(api: ApiClient, name: string) {
     }
   };
 
-  const toggleScript = async (definition: ScriptDefinition) => {
+  const toggleScript = async (definition: AgentScript) => {
     const open = expandedScripts.has(definition.id);
     setExpandedScripts((current) => toggledSet(current, definition.id, open));
     if (!open && !runs[definition.id]) await loadRuns(definition.id);
   };
 
-  const toggleRun = async (run: ScriptRun) => {
+  const toggleRun = async (run: AgentScriptRun) => {
     const open = expandedRuns.has(run.id);
     setExpandedRuns((current) => toggledSet(current, run.id, open));
     if (!open && logs[run.id] === undefined) await loadRunLog(run);

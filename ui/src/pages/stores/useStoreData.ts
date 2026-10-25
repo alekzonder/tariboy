@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { Store, StoreDetail, WorkflowImage } from "@/lib/api";
+import type { StoreView, StoreDetail, WorkflowImage } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { errorText } from "@/lib/errors";
 
 export function useStoreData(name: string | undefined) {
   const api = useApi();
-  const [stores, setStores] = useState<Store[]>([]);
+  const [stores, setStores] = useState<StoreView[]>([]);
   const [detail, setDetail] = useState<StoreDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -32,7 +32,7 @@ export function useStoreData(name: string | undefined) {
       .then((result) => {
         if (!current) return;
         if (name) showDetail(result as StoreDetail, name);
-        else setStores(result as Store[]);
+        else setStores(result as StoreView[]);
       })
       .catch((cause) => {
         if (current) setError(errorText(cause));

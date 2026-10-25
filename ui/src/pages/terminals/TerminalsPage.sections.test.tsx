@@ -18,7 +18,7 @@ import {
   serversTab,
   cloneProjection,
 } from "@/test/terminals/terminalsPage";
-import { agentRow } from "@/test/fixtures/apiFixtures";
+import { agentRow, chatSummaryRow } from "@/test/fixtures/apiFixtures";
 
 vi.mock("@/lib/aggregate", () => ({
   fetchAllAgents: vi.fn(),
@@ -226,9 +226,8 @@ describe("TerminalsPage agent rows", () => {
           }),
         ],
         chats: [
-          {
+          chatSummaryRow({
             id: "dm:alice",
-            kind: "direct",
             title: "alice",
             agent: "alice",
             last_ts: "2026-09-15T10:00:00Z",
@@ -236,7 +235,7 @@ describe("TerminalsPage agent rows", () => {
             last_type: "message",
             last_text: "hi",
             unread: 3,
-          },
+          }),
         ],
       },
     ]);

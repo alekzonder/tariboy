@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { type Store, TARIBOY_STORE } from "@/lib/api";
+import { type StoreView, TARIBOY_STORE } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { StoreActions } from "./useStoreActions";
@@ -7,7 +7,7 @@ import { hasTariboyStore } from "./storeStatus";
 
 interface StoreListProps {
   basePath: string;
-  stores: Store[];
+  stores: StoreView[];
   loading: boolean;
   actions: StoreActions;
   storeName: string;

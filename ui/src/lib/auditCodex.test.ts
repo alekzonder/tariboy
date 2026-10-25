@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { codexHarnessPresentation } from "./auditCodex";
-import type { AuditEvent } from "./audit";
+import type { AuditLogEvent } from "./audit";
 
-const codexEvent = (outer: unknown, kind = "harness_output"): AuditEvent => ({
+const codexEvent = (outer: unknown, kind = "harness_output"): AuditLogEvent => ({
   seq: 1,
   kind,
   source: "harness",

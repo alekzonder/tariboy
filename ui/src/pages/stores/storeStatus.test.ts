@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { type StoreImage, type StoreWorkflow, TARIBOY_STORE, type WorkflowImage } from "@/lib/api";
+import {
+  type StoreImageView,
+  type StoreWorkflowView,
+  TARIBOY_STORE,
+  type WorkflowImage,
+} from "@/lib/api";
 import {
   hasTariboyStore,
   imageStatuses,
@@ -8,7 +13,7 @@ import {
   workflowStatus,
 } from "./storeStatus";
 
-const image = (fields: Partial<StoreImage>): StoreImage => ({
+const image = (fields: Partial<StoreImageView>): StoreImageView => ({
   name: "agent",
   version: "1.0.0",
   built_version: "1.0.0",
@@ -18,7 +23,7 @@ const image = (fields: Partial<StoreImage>): StoreImage => ({
 });
 
 describe("imageStatuses", () => {
-  it.each<[string, Partial<StoreImage>, string[]]>([
+  it.each<[string, Partial<StoreImageView>, string[]]>([
     ["up to date", {}, ["Up to date"]],
     ["update needed", { update_needed: true }, ["Update needed"]],
     [
@@ -51,7 +56,7 @@ describe("imageStatuses", () => {
     ],
     [
       "no latest status",
-      { latest_status: undefined as unknown as StoreImage["latest_status"] },
+      { latest_status: undefined as unknown as StoreImageView["latest_status"] },
       ["Comparison unavailable"],
     ],
   ])("reports %s", (_, fields, expected) => {
@@ -60,7 +65,7 @@ describe("imageStatuses", () => {
 });
 
 describe("latestImageVersionLabel", () => {
-  it.each<[Partial<StoreImage>, string]>([
+  it.each<[Partial<StoreImageView>, string]>([
     [{ latest_status: "missing" }, "Not built"],
     [{ latest_status: "error" }, "Inspection failed"],
     [{ built_version: "2.0.0" }, "2.0.0"],
@@ -71,9 +76,9 @@ describe("latestImageVersionLabel", () => {
 });
 
 describe("workflowStatus", () => {
-  const workflow: StoreWorkflow = { name: "flow", version: "3" };
+  const workflow: StoreWorkflowView = { name: "flow", version: "3" };
 
-  it.each<[StoreWorkflow, string | null | undefined, string]>([
+  it.each<[StoreWorkflowView, string | null | undefined, string]>([
     [{ ...workflow, error: "broken" }, "3", "Source error: broken"],
     [workflow, null, "Comparison unavailable"],
     [workflow, undefined, "Latest not built"],

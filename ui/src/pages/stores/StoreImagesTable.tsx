@@ -1,10 +1,10 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { StoreImage } from "@/lib/api";
+import type { StoreImageView } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { imageStatuses, latestImageVersionLabel } from "./storeStatus";
 
 interface StoreImageRowProps {
-  image: StoreImage;
+  image: StoreImageView;
   autoImages: string[];
   setAutoImages: Dispatch<SetStateAction<string[]>>;
   busy: string;
@@ -55,7 +55,7 @@ function StoreImageRow({ image, autoImages, setAutoImages, busy, build }: StoreI
 export default function StoreImagesTable({
   images,
   ...row
-}: Omit<StoreImageRowProps, "image"> & { images: StoreImage[] }) {
+}: Omit<StoreImageRowProps, "image"> & { images: StoreImageView[] }) {
   return (
     <div className="overflow-x-auto rounded border">
       <table className="w-full text-sm">
