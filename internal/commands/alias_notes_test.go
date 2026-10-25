@@ -17,7 +17,7 @@ func TestAgentAliasSetReadClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["alias"] != "Nice" {
+	if res.(AgentAliasResult).Alias != "Nice" {
 		t.Fatalf("read=%v", res)
 	}
 	// clear with empty
@@ -56,7 +56,7 @@ func TestAgentNotesSetRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["notes"] != "scratch" {
+	if res.(AgentNotesResult).Notes != "scratch" {
 		t.Fatalf("read=%v", res)
 	}
 }

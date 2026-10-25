@@ -55,6 +55,22 @@
         ],
         "type": "object"
       },
+      "AgentAliasResult": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "alias"
+        ],
+        "type": "object"
+      },
       "AgentBudget": {
         "additionalProperties": false,
         "properties": {
@@ -103,6 +119,225 @@
         ],
         "type": "object"
       },
+      "AgentColorResult": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "color"
+        ],
+        "type": "object"
+      },
+      "AgentContextResult": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "context"
+        ],
+        "type": "object"
+      },
+      "AgentCwdResult": {
+        "additionalProperties": false,
+        "properties": {
+          "cwd": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "cwd"
+        ],
+        "type": "object"
+      },
+      "AgentEffortResult": {
+        "additionalProperties": false,
+        "properties": {
+          "effort": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "effort"
+        ],
+        "type": "object"
+      },
+      "AgentExecResult": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "type": "object"
+      },
+      "AgentFileContent": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "text",
+              "binary",
+              "too_large"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "kind",
+          "size"
+        ],
+        "type": "object"
+      },
+      "AgentFileCreated": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "created"
+        ],
+        "type": "object"
+      },
+      "AgentFileDeleted": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "deleted"
+        ],
+        "type": "object"
+      },
+      "AgentFileEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "isDir": {
+            "type": "boolean"
+          },
+          "mtime": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "isDir",
+          "size",
+          "mtime"
+        ],
+        "type": "object"
+      },
+      "AgentFileList": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/AgentFileEntry"
+            },
+            "type": "array"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "entries"
+        ],
+        "type": "object"
+      },
+      "AgentFileRenamed": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "renamed": {
+            "type": "boolean"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "renamed"
+        ],
+        "type": "object"
+      },
+      "AgentFileSaved": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "saved": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "saved"
+        ],
+        "type": "object"
+      },
       "AgentGoalSettings": {
         "additionalProperties": false,
         "properties": {
@@ -124,6 +359,22 @@
           "goal_enabled",
           "goal_wait_customer_timeout_s",
           "goal_delivery_cooldown_s"
+        ],
+        "type": "object"
+      },
+      "AgentHarnessResult": {
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "harness"
         ],
         "type": "object"
       },
@@ -182,6 +433,22 @@
         ],
         "type": "object"
       },
+      "AgentInteractiveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "interactive": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "interactive"
+        ],
+        "type": "object"
+      },
       "AgentListResult": {
         "additionalProperties": false,
         "properties": {
@@ -233,6 +500,38 @@
         ],
         "type": "object"
       },
+      "AgentModelResult": {
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "model"
+        ],
+        "type": "object"
+      },
+      "AgentNotesResult": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "notes"
+        ],
+        "type": "object"
+      },
       "AgentPool": {
         "properties": {
           "agents": {
@@ -268,6 +567,96 @@
           "revision",
           "created_at",
           "updated_at"
+        ],
+        "type": "object"
+      },
+      "AgentPromptLayers": {
+        "items": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "sha256"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "archive_path": {
+                  "type": "string"
+                },
+                "category": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "runtime": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "integer"
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "nullable": true,
+        "type": "array"
+      },
+      "AgentPromptPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "layers": {
+            "$ref": "#/components/schemas/AgentPromptLayers"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "prompt",
+          "layers"
+        ],
+        "type": "object"
+      },
+      "AgentPullResult": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
         ],
         "type": "object"
       },
@@ -424,6 +813,57 @@
         ],
         "type": "object"
       },
+      "AgentSavedResult": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "saved": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "saved"
+        ],
+        "type": "object"
+      },
+      "AgentScreenResult": {
+        "additionalProperties": false,
+        "properties": {
+          "screen": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "screen"
+        ],
+        "type": "object"
+      },
+      "AgentSendKeysResult": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sent": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "sent"
+        ],
+        "type": "object"
+      },
       "AgentStateResult": {
         "additionalProperties": false,
         "properties": {
@@ -509,6 +949,61 @@
           "messages_queue_full",
           "server_now",
           "budget"
+        ],
+        "type": "object"
+      },
+      "AgentStatusEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "iteration_id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ts",
+          "message",
+          "iteration_id"
+        ],
+        "type": "object"
+      },
+      "AgentStatusHistory": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/AgentStatusEvent"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "events",
+          "count"
+        ],
+        "type": "object"
+      },
+      "AgentUserPromptResult": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "user_prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "user_prompt"
         ],
         "type": "object"
       },
@@ -1238,6 +1733,65 @@
         "required": [
           "name",
           "description"
+        ],
+        "type": "object"
+      },
+      "FileUploadResult": {
+        "additionalProperties": false,
+        "properties": {
+          "abs": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "abs",
+          "bytes"
+        ],
+        "type": "object"
+      },
+      "FsEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "dir": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "dir"
+        ],
+        "type": "object"
+      },
+      "FsListing": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/FsEntry"
+            },
+            "type": "array"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "parent",
+          "entries"
         ],
         "type": "object"
       },
@@ -2247,6 +2801,138 @@
         ],
         "type": "object"
       },
+      "LoopAIStallTimeoutResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ai_stall_timeout_s": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "ai_stall_timeout_s"
+        ],
+        "type": "object"
+      },
+      "LoopHardTimeoutResult": {
+        "additionalProperties": false,
+        "properties": {
+          "hard_timeout_s": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "hard_timeout_s"
+        ],
+        "type": "object"
+      },
+      "LoopIntervalResult": {
+        "additionalProperties": false,
+        "properties": {
+          "interval_s": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "interval_s"
+        ],
+        "type": "object"
+      },
+      "LoopMaxIdleResult": {
+        "additionalProperties": false,
+        "properties": {
+          "max_idle_iterations": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "max_idle_iterations"
+        ],
+        "type": "object"
+      },
+      "LoopOnErrorResult": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "on_error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "on_error"
+        ],
+        "type": "object"
+      },
+      "LoopOnTimeoutResult": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "on_timeout": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "on_timeout"
+        ],
+        "type": "object"
+      },
+      "LoopScheduleResult": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "string"
+          },
+          "schedule_next_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "schedule",
+          "schedule_next_at"
+        ],
+        "type": "object"
+      },
+      "LoopTimeoutResult": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "timeout_s": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "timeout_s"
+        ],
+        "type": "object"
+      },
       "MessageSendResult": {
         "additionalProperties": false,
         "properties": {
@@ -2546,6 +3232,30 @@
           "run_as",
           "state",
           "created_at"
+        ],
+        "type": "object"
+      },
+      "ShellScriptResult": {
+        "additionalProperties": false,
+        "properties": {
+          "script": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "script"
+        ],
+        "type": "object"
+      },
+      "ShellScriptSaveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "saved": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "saved"
         ],
         "type": "object"
       },
@@ -4061,7 +4771,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentAliasResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -4152,7 +4864,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentAliasResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -4419,7 +5133,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentColorResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -4510,7 +5226,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentColorResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -4587,7 +5305,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentContextResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -4678,7 +5398,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentSavedResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -4775,7 +5497,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentCwdResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -4868,7 +5592,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentEffortResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -4961,7 +5687,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentExecResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -5047,7 +5775,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentFileDeleted"
+                    }
                   },
                   "required": [
                     "ok",
@@ -5131,7 +5861,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentFileContent"
+                    }
                   },
                   "required": [
                     "ok",
@@ -5229,7 +5961,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentFileCreated"
+                    }
                   },
                   "required": [
                     "ok",
@@ -5328,7 +6062,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentFileSaved"
+                    }
                   },
                   "required": [
                     "ok",
@@ -5414,7 +6150,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentFileList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -5515,7 +6253,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentFileRenamed"
+                    }
                   },
                   "required": [
                     "ok",
@@ -5601,7 +6341,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentPullResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -5988,7 +6730,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentHarnessResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -6839,7 +7583,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentInteractiveResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -7966,7 +8712,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/LoopAIStallTimeoutResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -8059,7 +8807,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/LoopHardTimeoutResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -8152,7 +8902,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/LoopIntervalResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -8245,7 +8997,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/LoopMaxIdleResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -8338,7 +9092,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/LoopOnErrorResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -8431,7 +9187,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/LoopOnTimeoutResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -8528,7 +9286,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/LoopScheduleResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -8621,7 +9381,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/LoopTimeoutResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -8910,7 +9672,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentModelResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -8987,7 +9751,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentNotesResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -9078,7 +9844,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentNotesResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -9155,7 +9923,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentPromptPreview"
+                    }
                   },
                   "required": [
                     "ok",
@@ -9494,7 +10264,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentScreenResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10683,7 +11455,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentSendKeysResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10760,7 +11534,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ShellScriptResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -10851,7 +11627,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/ShellScriptSaveResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -11106,7 +11884,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentStatusHistory"
+                    }
                   },
                   "required": [
                     "ok",
@@ -11671,7 +12451,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentUserPromptResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -11765,7 +12547,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/AgentSavedResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -13692,7 +14476,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/FileUploadResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -13769,7 +14555,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/FsListing"
+                    }
                   },
                   "required": [
                     "ok",

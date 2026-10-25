@@ -7,7 +7,7 @@ import (
 )
 
 func agentScreen() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentScreenResult](registry.Command{
 		Path:    "agent.screen",
 		Summary: "Capture the interactive screen (tmux capture-pane)",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -17,13 +17,13 @@ func agentScreen() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "screen_failed", Msg: err.Error()}
 			}
-			return map[string]any{"screen": out}, nil
+			return AgentScreenResult{Screen: out}, nil
 		},
-	}
+	})
 }
 
 func agentSendKeys() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentSendKeysResult](registry.Command{
 		Path:    "agent.send-keys",
 		Summary: "Send keys into the interactive session (raw items, or a line+Enter)",
 		Args: []registry.Arg{
@@ -40,14 +40,14 @@ func agentSendKeys() registry.Command {
 				if err := c.Control.SendKeysItems(name, items); err != nil {
 					return nil, api.UserError{Code: "send_keys_failed", Msg: err.Error()}
 				}
-				return map[string]any{"name": name, "sent": len(items)}, nil
+				return AgentSendKeysResult{Name: name, Sent: len(items)}, nil
 			}
 			if err := c.Control.SendKeys(name, p.String("keys")); err != nil {
 				return nil, api.UserError{Code: "send_keys_failed", Msg: err.Error()}
 			}
-			return map[string]any{"name": name, "sent": true}, nil
+			return AgentSendKeysResult{Name: name, Sent: true}, nil
 		},
-	}
+	})
 }
 
 // parseKeyItems decodes a JSON `items` array (already decoded into

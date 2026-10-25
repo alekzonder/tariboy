@@ -11,8 +11,32 @@ import (
 	"github.com/alekzonder/tariboy/internal/store"
 )
 
+// loopIntSetting builds the command of one integer loop setting; each field
+// has its own result type because its key differs.
 func loopIntSetting(path, field string) registry.Command {
-	return registry.Command{
+	switch field {
+	case "interval":
+		return loopIntCommand(path, field, func(name string, v int) LoopIntervalResult { return LoopIntervalResult{Name: name, IntervalS: v} })
+	case "timeout":
+		return loopIntCommand(path, field, func(name string, v int) LoopTimeoutResult { return LoopTimeoutResult{Name: name, TimeoutS: v} })
+	case "hard-timeout":
+		return loopIntCommand(path, field, func(name string, v int) LoopHardTimeoutResult {
+			return LoopHardTimeoutResult{Name: name, HardTimeoutS: v}
+		})
+	case "max-idle":
+		return loopIntCommand(path, field, func(name string, v int) LoopMaxIdleResult {
+			return LoopMaxIdleResult{Name: name, MaxIdleIterations: v}
+		})
+	case "ai-stall-timeout":
+		return loopIntCommand(path, field, func(name string, v int) LoopAIStallTimeoutResult {
+			return LoopAIStallTimeoutResult{Name: name, AIStallTimeoutS: v}
+		})
+	}
+	panic("unknown loop setting " + field)
+}
+
+func loopIntCommand[T any](path, field string, result func(name string, value int) T) registry.Command {
+	return registry.WithResult[T](registry.Command{
 		Path:    path,
 		Summary: "Get or set loop " + field + " (seconds); omit value to read",
 		Args: []registry.Arg{
@@ -25,7 +49,6 @@ func loopIntSetting(path, field string) registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			key := fieldKey(field)
 			if p.Has("value") {
 				v := p.Int("value")
 				min := 0
@@ -43,13 +66,25 @@ func loopIntSetting(path, field string) registry.Command {
 					control.RefreshLoopConfig(a.Name)
 				}
 			}
-			return map[string]any{"name": a.Name, key: getIntField(a, field)}, nil
+			return result(a.Name, getIntField(a, field)), nil
 		},
-	}
+	})
 }
 
+// loopStrSetting builds the command of one policy loop setting; each field
+// has its own result type because its key differs.
 func loopStrSetting(path, field string, allowed []string) registry.Command {
-	return registry.Command{
+	switch field {
+	case "on-timeout":
+		return loopStrCommand(path, field, allowed, func(name, v string) LoopOnTimeoutResult { return LoopOnTimeoutResult{Name: name, OnTimeout: v} })
+	case "on-error":
+		return loopStrCommand(path, field, allowed, func(name, v string) LoopOnErrorResult { return LoopOnErrorResult{Name: name, OnError: v} })
+	}
+	panic("unknown loop setting " + field)
+}
+
+func loopStrCommand[T any](path, field string, allowed []string, result func(name, value string) T) registry.Command {
+	return registry.WithResult[T](registry.Command{
 		Path:    path,
 		Summary: "Get or set loop " + field + " policy; omit value to read",
 		Args: []registry.Arg{
@@ -62,7 +97,6 @@ func loopStrSetting(path, field string, allowed []string) registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			key := fieldKey(field)
 			if v := p.String("value"); v != "" {
 				if !contains(allowed, v) {
 					return nil, api.UserError{Code: "bad_value", Msg: field + " must be one of restart|stop"}
@@ -75,13 +109,13 @@ func loopStrSetting(path, field string, allowed []string) registry.Command {
 					control.RefreshLoopConfig(a.Name)
 				}
 			}
-			return map[string]any{"name": a.Name, key: getStrField(a, field)}, nil
+			return result(a.Name, getStrField(a, field)), nil
 		},
-	}
+	})
 }
 
 func loopSchedule() registry.Command {
-	return registry.Command{
+	return registry.WithResult[LoopScheduleResult](registry.Command{
 		Path:    "loop.schedule",
 		Summary: "Get, set or clear the loop schedule (RFC 5545 RRULE, whole minutes); omit value to read",
 		Args: []registry.Arg{
@@ -114,9 +148,9 @@ func loopSchedule() registry.Command {
 					control.RefreshLoopConfig(a.Name)
 				}
 			}
-			return map[string]any{"name": a.Name, "schedule": a.ScheduleRRule, "schedule_next_at": scheduleNextAt(a)}, nil
+			return LoopScheduleResult{Name: a.Name, Schedule: a.ScheduleRRule, ScheduleNextAt: scheduleNextAt(a)}, nil
 		},
-	}
+	})
 }
 
 // scheduleNextAt is the next scheduled start in the stored time format, or ""
@@ -130,7 +164,7 @@ func scheduleNextAt(a agent.Agent) string {
 }
 
 func userPromptGet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentUserPromptResult](registry.Command{
 		Path:    "user-prompt.get",
 		Summary: "Read the agent's standing user-prompt",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -140,13 +174,13 @@ func userPromptGet() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"name": a.Name, "user_prompt": a.UserPrompt}, nil
+			return AgentUserPromptResult{Name: a.Name, UserPrompt: a.UserPrompt}, nil
 		},
-	}
+	})
 }
 
 func userPromptSet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentSavedResult](registry.Command{
 		Path:    "user-prompt.set",
 		Summary: "Set the agent's standing user-prompt",
 		Args: []registry.Arg{
@@ -163,13 +197,13 @@ func userPromptSet() registry.Command {
 			if err := agentStore(c).Update(a); err != nil {
 				return nil, err
 			}
-			return map[string]any{"name": a.Name, "saved": true}, nil
+			return AgentSavedResult{Name: a.Name, Saved: true}, nil
 		},
-	}
+	})
 }
 
 func agentExec() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentExecResult](registry.Command{
 		Path:    "agent.exec",
 		Summary: "Run a manual iteration now, with an optional one-shot prompt",
 		Args: []registry.Arg{
@@ -182,32 +216,12 @@ func agentExec() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "exec_failed", Msg: err.Error()}
 			}
-			return map[string]any{"name": p.String("name"), "status": note}, nil
+			return AgentExecResult{Name: p.String("name"), Status: note}, nil
 		},
-	}
+	})
 }
 
 // field helpers keep the get/set switch in one place.
-func fieldKey(field string) string {
-	switch field {
-	case "interval":
-		return "interval_s"
-	case "timeout":
-		return "timeout_s"
-	case "hard-timeout":
-		return "hard_timeout_s"
-	case "on-timeout":
-		return "on_timeout"
-	case "on-error":
-		return "on_error"
-	case "max-idle":
-		return "max_idle_iterations"
-	case "ai-stall-timeout":
-		return "ai_stall_timeout_s"
-	}
-	return field
-}
-
 func setIntField(a *agent.Agent, field string, v int) {
 	switch field {
 	case "interval":

@@ -64,3 +64,16 @@ func TestFsFilesResponsesMatchGolden(t *testing.T) {
 	}
 	recorder.check("fs_files_responses.golden.json", *updateFsFilesGolden)
 }
+
+func init() { typedCallSets["fs-files"] = fsFilesTypedCalls }
+
+// fsFilesTypedCalls covers fs.list at the root, where parent is empty, in an
+// empty directory, and one server upload.
+func fsFilesTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
+	c, _ := fsFilesFixture(t)
+	return c, []typedCall{
+		{"GET", "/api/fs/list", "/api/fs/list", nil},
+		{"GET", "/api/fs/list", "/api/fs/list?path=empty", nil},
+		{"PUT", "/api/files", "/api/files", map[string]any{"name": "notes.txt", "content": base64.StdEncoding.EncodeToString([]byte("hello"))}},
+	}
+}

@@ -23,7 +23,7 @@ func fbErr(err error) error {
 // already owned by the cp download command (agentPull).
 
 func fileList() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentFileList](registry.Command{
 		Path:    "agent.file.list",
 		Summary: "List a directory in an agent's cwd (jailed)",
 		Args: []registry.Arg{
@@ -40,13 +40,13 @@ func fileList() registry.Command {
 			if err != nil {
 				return nil, fbErr(err)
 			}
-			return map[string]any{"path": p.String("path"), "entries": entries}, nil
+			return newAgentFileList(p.String("path"), entries), nil
 		},
-	}
+	})
 }
 
 func fileRead() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentFileContent](registry.Command{
 		Path:    "agent.file.read",
 		Summary: "Read a file from an agent's cwd (text; binary/large => marker)",
 		Args: []registry.Arg{
@@ -63,13 +63,13 @@ func fileRead() registry.Command {
 			if err != nil {
 				return nil, fbErr(err)
 			}
-			return content, nil
+			return AgentFileContent{Path: content.Path, Kind: AgentFileKind(content.Kind), Data: content.Data, Size: content.Size}, nil
 		},
-	}
+	})
 }
 
 func fileWrite() registry.Command {
-	return withMaxBody(registry.Command{
+	return withMaxBody(registry.WithResult[AgentFileSaved](registry.Command{
 		Path:    "agent.file.write",
 		Summary: "Overwrite/save a file in an agent's cwd (jailed)",
 		Args: []registry.Arg{
@@ -86,13 +86,13 @@ func fileWrite() registry.Command {
 			if err := filebrowser.Write(root, p.String("path"), []byte(p.String("content"))); err != nil {
 				return nil, fbErr(err)
 			}
-			return map[string]any{"path": p.String("path"), "saved": true}, nil
+			return AgentFileSaved{Path: p.String("path"), Saved: true}, nil
 		},
-	}, jsonEscapedBodyLimit(filebrowser.MaxReadBytes))
+	}), jsonEscapedBodyLimit(filebrowser.MaxReadBytes))
 }
 
 func fileCreate() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentFileCreated](registry.Command{
 		Path:    "agent.file.create",
 		Summary: "Create a file or folder in an agent's cwd (jailed)",
 		Args: []registry.Arg{
@@ -109,13 +109,13 @@ func fileCreate() registry.Command {
 			if err := filebrowser.Create(root, p.String("path"), p.String("type")); err != nil {
 				return nil, fbErr(err)
 			}
-			return map[string]any{"path": p.String("path"), "created": true}, nil
+			return AgentFileCreated{Path: p.String("path"), Created: true}, nil
 		},
-	}
+	})
 }
 
 func fileRename() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentFileRenamed](registry.Command{
 		Path:    "agent.file.rename",
 		Summary: "Rename/move a file within an agent's cwd (jailed)",
 		Args: []registry.Arg{
@@ -132,13 +132,13 @@ func fileRename() registry.Command {
 			if err := filebrowser.Rename(root, p.String("from"), p.String("to")); err != nil {
 				return nil, fbErr(err)
 			}
-			return map[string]any{"from": p.String("from"), "to": p.String("to"), "renamed": true}, nil
+			return AgentFileRenamed{From: p.String("from"), To: p.String("to"), Renamed: true}, nil
 		},
-	}
+	})
 }
 
 func fileDelete() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentFileDeleted](registry.Command{
 		Path:    "agent.file.delete",
 		Summary: "Delete a file or folder in an agent's cwd (jailed)",
 		Args: []registry.Arg{
@@ -154,7 +154,7 @@ func fileDelete() registry.Command {
 			if err := filebrowser.Delete(root, p.String("path")); err != nil {
 				return nil, fbErr(err)
 			}
-			return map[string]any{"path": p.String("path"), "deleted": true}, nil
+			return AgentFileDeleted{Path: p.String("path"), Deleted: true}, nil
 		},
-	}
+	})
 }

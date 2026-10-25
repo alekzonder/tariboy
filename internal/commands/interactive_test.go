@@ -20,7 +20,7 @@ func TestSendKeys_ItemsRouteRaw(t *testing.T) {
 	if len(fc.itemsSent) != 2 || fc.itemsSent[0].Text != "hi" || fc.itemsSent[1].Key != "Enter" {
 		t.Fatalf("items not routed raw: %+v", fc.itemsSent)
 	}
-	if res.(map[string]any)["sent"].(int) != 2 {
+	if res.(AgentSendKeysResult).Sent.(int) != 2 {
 		t.Fatalf("sent count: %v", res)
 	}
 }

@@ -25,16 +25,16 @@ func TestAgentStatusHistoryFiltersStatusEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := res.(map[string]any)
-	if m["count"].(int) != 2 {
-		t.Fatalf("count=%v", m["count"])
+	m := res.(AgentStatusHistory)
+	if m.Count != 2 {
+		t.Fatalf("count=%v", m.Count)
 	}
-	evs := m["events"].([]map[string]any)
+	evs := m.Events
 	// newest-first
-	if evs[0]["message"] != "second" || evs[1]["message"] != "first" {
+	if evs[0].Message != "second" || evs[1].Message != "first" {
 		t.Fatalf("order/content wrong: %v", evs)
 	}
-	if evs[0]["iteration_id"] != "iteration-2" || evs[1]["iteration_id"] != "iteration-1" {
+	if evs[0].IterationID != "iteration-2" || evs[1].IterationID != "iteration-1" {
 		t.Fatalf("iteration ids wrong: %v", evs)
 	}
 }

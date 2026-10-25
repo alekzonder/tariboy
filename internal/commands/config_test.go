@@ -23,7 +23,7 @@ func TestAgentModelSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["model"] != "opus" {
+	if res.(AgentModelResult).Model != "opus" {
 		t.Fatalf("echo: %v", res)
 	}
 	a, _ := getAgent(c, "a1")
@@ -43,7 +43,7 @@ func TestAgentModelReadOnlyWhenNoValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["model"] != "sonnet" {
+	if res.(AgentModelResult).Model != "sonnet" {
 		t.Fatalf("read = %v", res)
 	}
 }
@@ -87,7 +87,7 @@ func TestAgentHarnessSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["harness"] != "codex" {
+	if res.(AgentHarnessResult).Harness != "codex" {
 		t.Fatalf("echo: %v", res)
 	}
 	a, _ := getAgent(c, "a1")
@@ -125,7 +125,7 @@ func TestAgentHarnessReadOnlyWhenNoValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["harness"] != "opencode" {
+	if res.(AgentHarnessResult).Harness != "opencode" {
 		t.Fatalf("read = %v", res)
 	}
 }
@@ -195,7 +195,7 @@ func TestAgentCwdSetReadClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["cwd"] != dir {
+	if res.(AgentCwdResult).Cwd != dir {
 		t.Fatalf("echo: %v", res)
 	}
 	if a, _ := getAgent(c, "a1"); a.Cwd != dir {
@@ -206,7 +206,7 @@ func TestAgentCwdSetReadClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["cwd"] != dir {
+	if res.(AgentCwdResult).Cwd != dir {
 		t.Fatalf("read = %v", res)
 	}
 	// relative -> bad_cwd error, value unchanged

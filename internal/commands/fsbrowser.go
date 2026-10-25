@@ -33,7 +33,7 @@ func fsErr(err error) error {
 // (TARIBOY_FS_ROOT, default $HOME). It powers the UI cwd path-autocomplete
 // and is deliberately separate from the agent-workdir-jailed /file routes.
 func fsList() registry.Command {
-	return registry.Command{
+	return registry.WithResult[FsListing](registry.Command{
 		Path:    "fs.list",
 		Summary: "List directories under the daemon filesystem root ($HOME-jailed)",
 		Args: []registry.Arg{
@@ -49,7 +49,7 @@ func fsList() registry.Command {
 			if err != nil {
 				return nil, fsErr(err)
 			}
-			return listing, nil
+			return newFsListing(listing), nil
 		},
-	}
+	})
 }

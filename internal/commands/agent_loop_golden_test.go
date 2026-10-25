@@ -179,3 +179,60 @@ func TestAgentLoopResponsesMatchGolden(t *testing.T) {
 	}
 	recorder.check("agent_loop_responses.golden.json", *updateAgentLoopGolden)
 }
+
+func init() { typedCallSets["agent-loop"] = agentLoopTypedCalls }
+
+// agentLoopTypedCalls covers every agent setting, loop, prompt, file browser,
+// interactive session and shell script route, with the states that encode a
+// null or an absent key: a binary file read, a v1 prompt without layers, a
+// bare prompt, and both send-keys result shapes.
+func agentLoopTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
+	c, _, cwd := agentLoopFixture(t)
+	return c, []typedCall{
+		{"POST", "/api/agents/{name}/cwd", "/api/agents/alpha/cwd", map[string]any{}},
+		{"POST", "/api/agents/{name}/model", "/api/agents/alpha/model", map[string]any{"value": "m2"}},
+		{"POST", "/api/agents/{name}/effort", "/api/agents/alpha/effort", map[string]any{"value": "low"}},
+		{"POST", "/api/agents/{name}/harness", "/api/agents/alpha/harness", map[string]any{"value": "codex"}},
+		{"POST", "/api/agents/{name}/interactive", "/api/agents/alpha/interactive", map[string]any{"value": false}},
+		{"GET", "/api/agents/{name}/alias", "/api/agents/alpha/alias", nil},
+		{"POST", "/api/agents/{name}/alias", "/api/agents/alpha/alias", map[string]any{"value": "A"}},
+		{"GET", "/api/agents/{name}/notes", "/api/agents/alpha/notes", nil},
+		{"POST", "/api/agents/{name}/notes", "/api/agents/alpha/notes", map[string]any{"value": "n"}},
+		{"GET", "/api/agents/{name}/color", "/api/agents/alpha/color", nil},
+		{"POST", "/api/agents/{name}/color", "/api/agents/alpha/color", map[string]any{"value": ""}},
+		{"POST", "/api/agents/{name}/loop/interval", "/api/agents/alpha/loop/interval", map[string]any{"value": 45}},
+		{"POST", "/api/agents/{name}/loop/timeout", "/api/agents/alpha/loop/timeout", map[string]any{"value": 90}},
+		{"POST", "/api/agents/{name}/loop/hard-timeout", "/api/agents/alpha/loop/hard-timeout", map[string]any{"value": 180}},
+		{"POST", "/api/agents/{name}/loop/max-idle", "/api/agents/alpha/loop/max-idle", map[string]any{"value": 4}},
+		{"POST", "/api/agents/{name}/loop/ai-stall-timeout", "/api/agents/alpha/loop/ai-stall-timeout", map[string]any{"value": 600}},
+		{"POST", "/api/agents/{name}/loop/on-timeout", "/api/agents/alpha/loop/on-timeout", map[string]any{"value": "restart"}},
+		{"POST", "/api/agents/{name}/loop/on-error", "/api/agents/alpha/loop/on-error", map[string]any{}},
+		{"POST", "/api/agents/{name}/loop/schedule", "/api/agents/alpha/loop/schedule", map[string]any{}},
+		{"POST", "/api/agents/{name}/loop/schedule", "/api/agents/beta/loop/schedule", map[string]any{"clear": true}},
+		{"GET", "/api/agents/{name}/user-prompt", "/api/agents/alpha/user-prompt", nil},
+		{"POST", "/api/agents/{name}/user-prompt", "/api/agents/alpha/user-prompt", map[string]any{"text": "p"}},
+		{"GET", "/api/agents/{name}/context", "/api/agents/alpha/context", nil},
+		{"POST", "/api/agents/{name}/context", "/api/agents/beta/context", map[string]any{"text": "c"}},
+		{"GET", "/api/agents/{name}/prompt", "/api/agents/alpha/prompt", nil},
+		{"GET", "/api/agents/{name}/prompt", "/api/agents/beta/prompt", nil},
+		{"GET", "/api/agents/{name}/prompt", "/api/agents/bare/prompt", nil},
+		{"GET", "/api/agents/{name}/prompt", "/api/agents/v2/prompt", nil},
+		{"POST", "/api/agents/{name}/exec", "/api/agents/alpha/exec", map[string]any{"prompt": "now"}},
+		{"GET", "/api/agents/{name}/screen", "/api/agents/alpha/screen", nil},
+		{"POST", "/api/agents/{name}/send-keys", "/api/agents/alpha/send-keys", map[string]any{"keys": "ls"}},
+		{"POST", "/api/agents/{name}/send-keys", "/api/agents/alpha/send-keys", map[string]any{"items": []any{map[string]any{"key": "Enter"}}}},
+		{"GET", "/api/agents/{name}/shell-script", "/api/agents/alpha/shell-script", nil},
+		{"POST", "/api/agents/{name}/shell-script", "/api/agents/alpha/shell-script", map[string]any{"script": "echo hi\n"}},
+		{"GET", "/api/agents/{name}/status/history", "/api/agents/alpha/status/history", nil},
+		{"GET", "/api/agents/{name}/status/history", "/api/agents/beta/status/history", nil},
+		{"GET", "/api/agents/{name}/files", "/api/agents/alpha/files?path=notes.txt", nil},
+		{"GET", "/api/agents/{name}/file/list", "/api/agents/alpha/file/list", nil},
+		{"GET", "/api/agents/{name}/file", "/api/agents/alpha/file?path=notes.txt", nil},
+		{"GET", "/api/agents/{name}/file", "/api/agents/alpha/file?path=blob.bin", nil},
+		{"PUT", "/api/agents/{name}/file", "/api/agents/alpha/file", map[string]any{"path": "notes.txt", "content": "changed"}},
+		{"POST", "/api/agents/{name}/file", "/api/agents/alpha/file", map[string]any{"path": "new.txt"}},
+		{"POST", "/api/agents/{name}/file/rename", "/api/agents/alpha/file/rename", map[string]any{"from": "new.txt", "to": "moved.txt"}},
+		{"DELETE", "/api/agents/{name}/file", "/api/agents/alpha/file?path=moved.txt", nil},
+		{"POST", "/api/agents/{name}/cwd", "/api/agents/alpha/cwd", map[string]any{"value": filepath.Join(cwd, "made"), "create": true}},
+	}
+}

@@ -73,7 +73,7 @@ func ensureCwd(path string, create bool) error {
 // create set ($CWD/$HOME/~ are the caller's to expand). A new value applies on
 // the next iteration.
 func agentCwd() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentCwdResult](registry.Command{
 		Path:    "agent.cwd",
 		Summary: "Get or set the agent working directory (omit value to read, empty to clear); applies next iteration",
 		Args: []registry.Arg{
@@ -100,15 +100,15 @@ func agentCwd() registry.Command {
 					return nil, err
 				}
 			}
-			return map[string]any{"name": a.Name, "cwd": a.Cwd}, nil
+			return AgentCwdResult{Name: a.Name, Cwd: a.Cwd}, nil
 		},
-	}
+	})
 }
 
 // agentModel gets or sets the agent's model. Omitting `value` reads it. A new
 // value is persisted to the agent record and picked up on the next iteration.
 func agentModel() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentModelResult](registry.Command{
 		Path:    "agent.model",
 		Summary: "Get or set the agent model (omit value to read); applies next iteration",
 		Args: []registry.Arg{
@@ -127,14 +127,14 @@ func agentModel() registry.Command {
 					return nil, err
 				}
 			}
-			return map[string]any{"name": a.Name, "model": a.Model}, nil
+			return AgentModelResult{Name: a.Name, Model: a.Model}, nil
 		},
-	}
+	})
 }
 
 // agentEffort gets or sets the agent's effort. Same semantics as agentModel.
 func agentEffort() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentEffortResult](registry.Command{
 		Path:    "agent.effort",
 		Summary: "Get or set the agent effort (omit value to read); applies next iteration",
 		Args: []registry.Arg{
@@ -153,9 +153,9 @@ func agentEffort() registry.Command {
 					return nil, err
 				}
 			}
-			return map[string]any{"name": a.Name, "effort": a.Effort}, nil
+			return AgentEffortResult{Name: a.Name, Effort: a.Effort}, nil
 		},
-	}
+	})
 }
 
 func agentMessageSetting(path, field string) registry.Command {
@@ -201,7 +201,7 @@ func agentMessageSetting(path, field string) registry.Command {
 // agentAlias sets (POST) the agent's display alias. Omit value to read; empty
 // clears it. Persisted via the owned SetAlias setter (not Store.Update).
 func agentAlias() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentAliasResult](registry.Command{
 		Path:    "agent.alias.set",
 		Summary: "Get or set the agent display alias (omit value to read, empty to clear)",
 		Args: []registry.Arg{
@@ -220,14 +220,14 @@ func agentAlias() registry.Command {
 					return nil, err
 				}
 			}
-			return map[string]any{"name": a.Name, "alias": a.Alias}, nil
+			return AgentAliasResult{Name: a.Name, Alias: a.Alias}, nil
 		},
-	}
+	})
 }
 
 // agentAliasGet is the GET half of the alias route (same path, GET method).
 func agentAliasGet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentAliasResult](registry.Command{
 		Path:    "agent.alias.get",
 		Summary: "Read the agent display alias",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -237,15 +237,15 @@ func agentAliasGet() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"name": a.Name, "alias": a.Alias}, nil
+			return AgentAliasResult{Name: a.Name, Alias: a.Alias}, nil
 		},
-	}
+	})
 }
 
 // agentNotes sets (POST) the agent's free-form notes. Omit value to read; empty
 // clears it. Persisted via the owned SetNotes setter (not Store.Update).
 func agentNotes() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentNotesResult](registry.Command{
 		Path:    "agent.notes.set",
 		Summary: "Get or set the agent notes (omit value to read, empty to clear)",
 		Args: []registry.Arg{
@@ -264,14 +264,14 @@ func agentNotes() registry.Command {
 					return nil, err
 				}
 			}
-			return map[string]any{"name": a.Name, "notes": a.Notes}, nil
+			return AgentNotesResult{Name: a.Name, Notes: a.Notes}, nil
 		},
-	}
+	})
 }
 
 // agentNotesGet is the GET half of the notes route (same path, GET method).
 func agentNotesGet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentNotesResult](registry.Command{
 		Path:    "agent.notes.get",
 		Summary: "Read the agent notes",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -281,9 +281,9 @@ func agentNotesGet() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"name": a.Name, "notes": a.Notes}, nil
+			return AgentNotesResult{Name: a.Name, Notes: a.Notes}, nil
 		},
-	}
+	})
 }
 
 // hexColorRe matches a canonical 6-digit hex color with a leading '#', e.g.
@@ -300,7 +300,7 @@ func isValidHex(s string) bool { return hexColorRe.MatchString(s) }
 // clears it. A non-empty value must be a valid #rrggbb hex string.
 // Persisted via the owned SetColor setter (not Store.Update).
 func agentColor() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentColorResult](registry.Command{
 		Path:    "agent.color.set",
 		Summary: "Get or set the agent accent color (omit value to read, empty to clear)",
 		Args: []registry.Arg{
@@ -323,14 +323,14 @@ func agentColor() registry.Command {
 					return nil, err
 				}
 			}
-			return map[string]any{"name": a.Name, "color": a.Color}, nil
+			return AgentColorResult{Name: a.Name, Color: a.Color}, nil
 		},
-	}
+	})
 }
 
 // agentColorGet is the GET half of the color route (same path, GET method).
 func agentColorGet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentColorResult](registry.Command{
 		Path:    "agent.color.get",
 		Summary: "Read the agent accent color",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -340,16 +340,16 @@ func agentColorGet() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"name": a.Name, "color": a.Color}, nil
+			return AgentColorResult{Name: a.Name, Color: a.Color}, nil
 		},
-	}
+	})
 }
 
 // agentInteractive gets or sets interactive (tmux TUI) mode. This changes the
 // harness launch mode, so it only takes effect on the next (re)launch — callers
 // restart the agent to apply it.
 func agentInteractive() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentInteractiveResult](registry.Command{
 		Path:    "agent.interactive",
 		Summary: "Get or set interactive mode (bool); restart the agent to apply",
 		Args: []registry.Arg{
@@ -368,9 +368,9 @@ func agentInteractive() registry.Command {
 					return nil, err
 				}
 			}
-			return map[string]any{"name": a.Name, "interactive": a.Interactive}, nil
+			return AgentInteractiveResult{Name: a.Name, Interactive: a.Interactive}, nil
 		},
-	}
+	})
 }
 
 // validHarnessTypes are the harness types internal/harness.Get() knows about.
@@ -387,7 +387,7 @@ var validHarnessTypes = map[string]bool{
 // like interactive it changes the launch mode, so callers restart the agent to
 // apply it. This handler does not restart the agent.
 func agentHarness() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentHarnessResult](registry.Command{
 		Path:    "agent.harness",
 		Summary: "Get or set the agent harness type (omit value to read); restart the agent to apply",
 		Args: []registry.Arg{
@@ -409,7 +409,7 @@ func agentHarness() registry.Command {
 					return nil, err
 				}
 			}
-			return map[string]any{"name": a.Name, "harness": a.HarnessType}, nil
+			return AgentHarnessResult{Name: a.Name, Harness: a.HarnessType}, nil
 		},
-	}
+	})
 }
