@@ -2,11 +2,12 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,7 +122,7 @@ func TestAgentRunAndPs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["name"] != "smoke" {
+	if res.(AgentRunResult).Name != "smoke" {
 		t.Fatalf("run result: %v", res)
 	}
 	if fc.ran.Env["A"] != "1" || len(fc.ran.Plugins) != 2 {
@@ -130,11 +131,11 @@ func TestAgentRunAndPs(t *testing.T) {
 	// seed for ps
 	as.Create(agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Interactive: true})
 	ps, err := h(t, "agent.ps")(c, registry.Params{})
-	if err != nil || ps.(map[string]any)["count"].(int) != 1 {
+	if err != nil || ps.(AgentListResult).Count != 1 {
 		t.Fatalf("ps: %v err=%v", ps, err)
 	}
-	rows := ps.(map[string]any)["agents"].([]map[string]any)
-	if len(rows) != 1 || rows[0]["interactive"] != true {
+	rows := ps.(AgentListResult).Agents
+	if len(rows) != 1 || !rows[0].Interactive {
 		t.Fatalf("ps rows missing interactive=true: %#v", rows)
 	}
 }
@@ -205,8 +206,8 @@ func TestAgentGoalSettingsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := result.(map[string]any)
-	if got["goal_enabled"] != false || got["goal_wait_customer_timeout_s"] != 120 {
+	got := result.(AgentRunResult)
+	if got.GoalEnabled || got.GoalWaitCustomerTimeoutS != 120 {
 		t.Fatalf("create result = %#v", got)
 	}
 	if fc.ran.GoalEnabled == nil || *fc.ran.GoalEnabled || fc.ran.GoalWaitCustomerTimeoutS != 120 {
@@ -245,8 +246,8 @@ func TestAgentViewReportsDerivedAIStallReason(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got["error_reason"] != "agent stalled - no AI-proxy requests for 300 seconds" {
-		t.Fatalf("derived error reason = %q", got["error_reason"])
+	if got.ErrorReason != "agent stalled - no AI-proxy requests for 300 seconds" {
+		t.Fatalf("derived error reason = %q", got.ErrorReason)
 	}
 
 	a.ErrorReason = "halted: boom"
@@ -254,8 +255,8 @@ func TestAgentViewReportsDerivedAIStallReason(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got["error_reason"] != "halted: boom" {
-		t.Fatalf("persisted error reason = %q", got["error_reason"])
+	if got.ErrorReason != "halted: boom" {
+		t.Fatalf("persisted error reason = %q", got.ErrorReason)
 	}
 }
 
@@ -275,12 +276,12 @@ func TestAgentGoalSettingsUpdateClearsCurrentKeyAndSignals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := result.(map[string]any)
-	if got["goal_enabled"] != false || got["goal_wait_customer_timeout_s"] != 300 {
+	got := result.(AgentGoalSettings)
+	if got.GoalEnabled || got.GoalWaitCustomerTimeoutS != 300 {
 		t.Fatalf("update result = %#v", got)
 	}
-	if _, editable := got["current_goal_task_key"]; editable {
-		t.Fatalf("update exposed daemon-owned key: %#v", got)
+	if data, _ := json.Marshal(got); strings.Contains(string(data), "current_goal_task_key") {
+		t.Fatalf("update exposed daemon-owned key: %s", data)
 	}
 	stored, err := agents.Get("worker")
 	if err != nil {
@@ -343,22 +344,26 @@ func TestAgentGoalSettingsInspectAndListProjection(t *testing.T) {
 		t.Fatal(err)
 	}
 	ps, err := h(t, "agent.ps")(c, registry.Params{})
-	for _, got := range []map[string]any{
-		inspect.(map[string]any),
-		mustAgentRows(t, ps, err)[0],
+	view, row := inspect.(AgentView), mustAgentRows(t, ps, err)[0]
+	for _, got := range []AgentGoalSettings{
+		{GoalEnabled: view.GoalEnabled, GoalWaitCustomerTimeoutS: view.GoalWaitCustomerTimeoutS},
+		{GoalEnabled: row.GoalEnabled, GoalWaitCustomerTimeoutS: row.GoalWaitCustomerTimeoutS},
 	} {
-		if got["goal_enabled"] != true || got["goal_wait_customer_timeout_s"] != 120 || got["current_goal_task_key"] != "TARI-43" || got["ai_stall_timeout_s"] != 1800 {
+		if !got.GoalEnabled || got.GoalWaitCustomerTimeoutS != 120 {
 			t.Fatalf("Goal projection = %#v", got)
 		}
 	}
+	if view.CurrentGoalTaskKey != "TARI-43" || row.CurrentGoalTaskKey != "TARI-43" || view.AIStallTimeoutS != 1800 || row.AIStallTimeoutS != 1800 {
+		t.Fatalf("Goal projection = %#v / %#v", view, row)
+	}
 }
 
-func mustAgentRows(t *testing.T, value any, err error) []map[string]any {
+func mustAgentRows(t *testing.T, value any, err error) []AgentRow {
 	t.Helper()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return value.(map[string]any)["agents"].([]map[string]any)
+	return value.(AgentListResult).Agents
 }
 
 // Each case catches a malformed clone request reaching provisioning or
@@ -453,9 +458,9 @@ func TestAgentStatusIncludesActiveIterationDeadlines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := res.(map[string]any)
-	active, ok := out["active_iteration"].(map[string]any)
-	if !ok || active["id"] != "smoke-1" || active["effective_deadline"] != soft || active["timeout_period_s"] != 60 || out["server_now"] == "" {
+	out := res.(AgentStatus)
+	active := out.ActiveIteration
+	if active == nil || active.ID != "smoke-1" || active.EffectiveDeadline != soft || active.TimeoutPeriodS == nil || *active.TimeoutPeriodS != 60 || out.ServerNow == "" {
 		t.Fatalf("status = %#v", out)
 	}
 }
@@ -478,8 +483,8 @@ func TestAgentStatusIncludesMessageQueueSaturation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := res.(map[string]any)
-	if got["messages_pending"] != 2 || got["messages_max_queue"] != 2 || got["messages_queue_full"] != true {
+	got := res.(AgentStatus)
+	if got.MessagesPending != 2 || got.MessagesMaxQueue != 2 || !got.MessagesQueueFull {
 		t.Fatalf("message queue status = %#v", got)
 	}
 }
@@ -562,7 +567,7 @@ func TestAgentInspectReportsEffectiveCwd(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := filepath.Join(c.BaseDir, "agents", "nocwd", "workdir")
-	if got := v.(map[string]any)["cwd"]; got != want {
+	if got := v.(AgentView).Cwd; got != want {
 		t.Fatalf("effective cwd: got %q want %q", got, want)
 	}
 
@@ -572,7 +577,7 @@ func TestAgentInspectReportsEffectiveCwd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := v.(map[string]any)["cwd"]; got != "/srv/work" {
+	if got := v.(AgentView).Cwd; got != "/srv/work" {
 		t.Fatalf("explicit cwd: got %q want %q", got, "/srv/work")
 	}
 }
@@ -592,8 +597,8 @@ func TestAgentBudgetSetIsAtomicAndProjected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	budget := value.(map[string]any)
-	if budget["hour_usd"] != 1.25 || budget["day_usd"] != 2.50 || budget["week_usd"] != 3.75 || budget["month_usd"] != 5.00 {
+	budget := value.(AgentBudget)
+	if budget.HourUSD != 1.25 || budget.DayUSD != 2.50 || budget.WeekUSD != 3.75 || budget.MonthUSD != 5.00 {
 		t.Fatalf("saved budget = %#v", budget)
 	}
 
@@ -605,8 +610,8 @@ func TestAgentBudgetSetIsAtomicAndProjected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	projected := inspect.(map[string]any)["budget"].(map[string]any)
-	if projected["hour_usd"] != 1.25 || projected["day_usd"] != 2.50 || projected["week_usd"] != 3.75 || projected["month_usd"] != 5.00 {
+	projected := inspect.(AgentView).Budget
+	if projected.HourUSD != 1.25 || projected.DayUSD != 2.50 || projected.WeekUSD != 3.75 || projected.MonthUSD != 5.00 {
 		t.Fatalf("budget changed after rejected update: %#v", projected)
 	}
 }
@@ -627,15 +632,15 @@ func TestAgentInspectReportsCompleteCloneProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := value.(map[string]any)
-	if got["configured_cwd"] != "" {
-		t.Fatalf("configured_cwd = %#v, want raw empty configured value", got["configured_cwd"])
+	got := value.(AgentView)
+	if got.ConfiguredCwd != "" {
+		t.Fatalf("configured_cwd = %#v, want raw empty configured value", got.ConfiguredCwd)
 	}
-	if got["cwd"] == "" {
+	if got.Cwd == "" {
 		t.Fatal("effective cwd is empty, want managed-workdir fallback")
 	}
-	if got["messages_batch"] != 17 || got["messages_max_queue"] != 1234 {
-		t.Fatalf("message limits = %#v/%#v, want 17/1234", got["messages_batch"], got["messages_max_queue"])
+	if got.MessagesBatch != 17 || got.MessagesMaxQueue != 1234 {
+		t.Fatalf("message limits = %#v/%#v, want 17/1234", got.MessagesBatch, got.MessagesMaxQueue)
 	}
 }
 
@@ -660,17 +665,17 @@ func TestAgentPsReadsStateAndBudgetWithoutPerAgentQueries(t *testing.T) {
 	if fc.liveByName != 0 {
 		t.Fatalf("agent.ps called LiveState %d times, want 0", fc.liveByName)
 	}
-	rows := res.(map[string]any)["agents"].([]map[string]any)
+	rows := res.(AgentListResult).Agents
 	for _, row := range rows {
-		if row["state"] != "running" {
-			t.Fatalf("row %v state = %v", row["name"], row["state"])
+		if row.State != "running" {
+			t.Fatalf("row %v state = %v", row.Name, row.State)
 		}
 		want := 0.0
-		if row["name"] == "a2" {
+		if row.Name == "a2" {
 			want = 3
 		}
-		if got := row["budget"].(map[string]any)["day_usd"]; got != want {
-			t.Fatalf("row %v day_usd = %v, want %v", row["name"], got, want)
+		if got := row.Budget.DayUSD; got != want {
+			t.Fatalf("row %v day_usd = %v, want %v", row.Name, got, want)
 		}
 	}
 }
@@ -690,12 +695,10 @@ func TestAgentScheduleInspectAndListProjection(t *testing.T) {
 		t.Fatal(err)
 	}
 	ps, err := h(t, "agent.ps")(c, registry.Params{})
-	for _, got := range []map[string]any{
-		inspect.(map[string]any),
-		mustAgentRows(t, ps, err)[0],
-	} {
-		next, perr := time.Parse(time.RFC3339, fmt.Sprint(got["schedule_next_at"]))
-		if got["schedule"] != rule || perr != nil || next.In(time.Local).Hour() != 9 {
+	view, row := inspect.(AgentView), mustAgentRows(t, ps, err)[0]
+	for _, got := range [][2]string{{view.Schedule, view.ScheduleNextAt}, {row.Schedule, row.ScheduleNextAt}} {
+		next, perr := time.Parse(time.RFC3339, got[1])
+		if got[0] != rule || perr != nil || next.In(time.Local).Hour() != 9 {
 			t.Fatalf("schedule projection = %#v", got)
 		}
 	}

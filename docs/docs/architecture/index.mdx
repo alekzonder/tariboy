@@ -376,6 +376,30 @@ all derived from it.
   `update` and the `compose` verbs. `daemon status` also keeps its HTTP route.
   `AbsPathArgs` names the path arguments the CLI makes absolute, and
   `ExitCodeFrom` derives the CLI exit code from a result.
+- **Results are typed Go structs.** A handler returns a named struct, never
+  `map[string]any`, and the command declares it with
+  `registry.WithResult[T](registry.Command{...})`. The helper derives the JSON
+  Schema of `T` with `github.com/invopop/jsonschema`, adds `T` and every named
+  struct it reaches to `Schemas` under its Go type name, and sets
+  `ResultSchema` to `{"$ref": "#/components/schemas/T"}`. `/api/openapi.json`
+  copies `Schemas` into `components.schemas` and puts `ResultSchema` under
+  `result` in the `200` envelope. The rules follow `encoding/json`:
+  - the `json` tag names a property;
+  - a field without `omitempty` is required, a field with it is optional;
+  - a pointer field must carry `omitempty`, or registration panics;
+  - every struct schema has `additionalProperties: false`;
+  - an embedded struct adds its fields to the parent;
+  - an enum is a string type whose `JSONSchemaExtend` method sets `Enum` from
+    its Go constants;
+  - a value that can be JSON `null`, such as a nil slice, carries
+    `jsonschema_extras:"nullable=true"`.
+
+  Two different schemas under one component name in one command also panic at
+  registration. The agents commands in `internal/commands/agents.go` use this
+  form; their types are in `agents_types.go`. A hand-written `ResultSchema`,
+  as in `internal/commands/tasks_openapi.go`, is allowed only until its domain
+  moves to `WithResult`. A command without either publishes a free-form
+  result.
 
 Native task commands have one more table: `internal/tasks/wire.go` declares
 each task action's request struct, CLI words, flags and operator route. The

@@ -3,6 +3,9 @@ package commands
 import (
 	"encoding/json"
 	"flag"
+	"io"
+	"log/slog"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -12,6 +15,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/aiproxy"
+	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -170,4 +174,75 @@ func maskAgentsGoldenVolatile(value any) any {
 		}
 	}
 	return value
+}
+
+// Catches an agents.go HTTP command publishing a free-form result in the
+// OpenAPI spec, or a result reference that resolves to no component.
+func TestAgentsOpenAPIResultsReferenceComponents(t *testing.T) {
+	t.Parallel()
+	server := api.NewServer(BuildRegistry(), &registry.Ctx{Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	w := httptest.NewRecorder()
+	server.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/openapi.json", nil))
+	var spec struct {
+		Result struct {
+			Paths map[string]map[string]struct {
+				Responses map[string]struct {
+					Content map[string]struct {
+						Schema struct{ Properties map[string]map[string]any }
+					}
+				}
+			}
+			Components struct{ Schemas map[string]any }
+		}
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &spec); err != nil {
+		t.Fatal(err)
+	}
+	routes := map[string][]string{
+		"/api/agents":                                   {"get", "post"},
+		"/api/agents/{name}":                            {"get", "delete"},
+		"/api/agents/{name}/image":                      {"get", "post", "delete"},
+		"/api/agents/{name}/goal-enabled":               {"post"},
+		"/api/agents/{name}/goal-wait-customer-timeout": {"post"},
+		"/api/agents/{name}/goal-delivery-cooldown":     {"post"},
+		"/api/agents/{name}/status":                     {"get"},
+		"/api/agents/{name}/budget":                     {"get", "post"},
+		"/api/agents/{name}/stop":                       {"post"},
+		"/api/agents/{name}/start":                      {"post"},
+		"/api/agents/{name}/restart":                    {"post"},
+		"/api/agents/{name}/kill":                       {"post"},
+		"/api/agents/{name}/reprovision":                {"post"},
+	}
+	for path, methods := range routes {
+		for _, method := range methods {
+			result := spec.Result.Paths[path][method].Responses["200"].Content["application/json"].Schema.Properties["result"]
+			ref, _ := result["$ref"].(string)
+			if !strings.HasPrefix(ref, "#/components/schemas/") {
+				t.Errorf("%s %s result = %#v, want a component $ref", method, path, result)
+			}
+		}
+	}
+	var walk func(any)
+	walk = func(value any) {
+		switch v := value.(type) {
+		case map[string]any:
+			if ref, ok := v["$ref"].(string); ok {
+				if _, found := spec.Result.Components.Schemas[strings.TrimPrefix(ref, "#/components/schemas/")]; !found {
+					t.Errorf("unresolved $ref %s", ref)
+				}
+			}
+			for _, item := range v {
+				walk(item)
+			}
+		case []any:
+			for _, item := range v {
+				walk(item)
+			}
+		}
+	}
+	var whole any
+	if err := json.Unmarshal(w.Body.Bytes(), &whole); err != nil {
+		t.Fatal(err)
+	}
+	walk(whole)
 }
