@@ -1,0 +1,10 @@
+{
+  "name": "tariboy-ui-api-types",
+  "private": true,
+  "description": "shortcut: openapi-typescript 7 needs the TypeScript 5 compiler API, which ui/ (TypeScript 7) lacks; merge into ui/ once openapi-typescript supports TypeScript 7.",
+  "type": "module",
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "^5.9.3"
+  }
+}

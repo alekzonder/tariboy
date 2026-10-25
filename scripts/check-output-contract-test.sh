@@ -46,7 +46,7 @@ echo "Tasks check build isolation contract ok"
 
 # Dependency preparation must finish before either fast check starts.
 unset TARIBOY_NPM_CI_FORCE
-mkdir -p "$fixture/bin" "$fixture/fake-goroot/bin" "$fixture/empty-go" "$fixture/ui" "$fixture/docs"
+mkdir -p "$fixture/bin" "$fixture/fake-goroot/bin" "$fixture/empty-go" "$fixture/ui/tools/api-types" "$fixture/docs"
 cat >"$fixture/bin/go" <<'EOF'
 #!/bin/sh
 printf 'go:%s\n' "$*" >>events
@@ -105,18 +105,22 @@ PATH="$fixture/bin:$PATH" make --no-print-directory -C "$fixture" GO=go backend-
 test "$(sed -n '1p' "$fixture/events")" = 'go:mod download'
 
 cp "$repo_root/scripts/npm-ci-locked.sh" "$fixture/scripts/"
-printf '{}\n' | tee "$fixture/ui/package-lock.json" "$fixture/docs/package-lock.json" "$fixture/ui/package.json" >"$fixture/docs/package.json"
+printf '{}\n' | tee "$fixture/ui/package-lock.json" "$fixture/docs/package-lock.json" "$fixture/ui/package.json" \
+  "$fixture/ui/tools/api-types/package-lock.json" "$fixture/ui/tools/api-types/package.json" >"$fixture/docs/package.json"
 : >"$fixture/events"
+: >"$fixture/ui/tools/events"
 PATH="$fixture/bin:$PATH" make --no-print-directory -C "$fixture" frontend-check
+test "$(cat "$fixture/ui/tools/events")" = 'api-types:npm ci --no-audit --no-fund'
 test "$(sed -n '1p' "$fixture/events")" = 'ui:npm ci --no-audit --no-fund'
 test "$(sed -n '2p' "$fixture/events")" = 'docs:npm ci --no-audit --no-fund'
 test "$(sed -n '3p' "$fixture/events")" = 'ui:npm run fmt:check'
-test "$(sed -n '4p' "$fixture/events")" = 'ui:npx tsc -b'
-test "$(sed -n '5p' "$fixture/events")" = 'ui:npm run lint'
-test "$(sed -n '6p' "$fixture/events")" = 'ui:npm run knip'
-test "$(sed -n '7p' "$fixture/events")" = 'ui:npm test'
-test "$(sed -n '8p' "$fixture/events")" = 'ui:npm run branding:check'
-test "$(sed -n '9p' "$fixture/events")" = 'ui:npm run bundle:budget'
+test "$(sed -n '4p' "$fixture/events")" = 'ui:npm run api-types:check'
+test "$(sed -n '5p' "$fixture/events")" = 'ui:npx tsc -b'
+test "$(sed -n '6p' "$fixture/events")" = 'ui:npm run lint'
+test "$(sed -n '7p' "$fixture/events")" = 'ui:npm run knip'
+test "$(sed -n '8p' "$fixture/events")" = 'ui:npm test'
+test "$(sed -n '9p' "$fixture/events")" = 'ui:npm run branding:check'
+test "$(sed -n '10p' "$fixture/events")" = 'ui:npm run bundle:budget'
 echo "Check dependency preparation contract ok"
 
 # Format drift fails the aggregate without skipping the later steps.

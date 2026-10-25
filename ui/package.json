@@ -9,6 +9,8 @@
     "build:desktop": "tsc -b && vite build -c vite.desktop.config.ts",
     "build:android": "tsc -b && VITE_TARIBOY_SHELL=android vite build -c vite.desktop.config.ts",
     "build:store": "tsc -b && vite build -c vite.store.config.ts",
+    "api-types": "node scripts/api-types.mjs",
+    "api-types:check": "node scripts/api-types.mjs --check",
     "branding:check": "node scripts/generate-desktop-branding.mjs --check",
     "bundle:budget": "node scripts/bundle-budget.mjs",
     "complexity:report": "node scripts/complexity-report.mjs",
