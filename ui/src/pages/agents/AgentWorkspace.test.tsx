@@ -7,6 +7,7 @@ import { addDaemon } from "@/lib/daemons";
 import AgentWorkspace from "./AgentWorkspace";
 import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
 import { ApiError } from "@/lib/api";
+import { agentRow } from "@/test/fixtures/apiFixtures";
 import type { Daemon } from "@/lib/daemons";
 import * as desktop from "@/lib/desktop";
 import { UI_MODE_KEY } from "@/lib/uiMode";
@@ -54,16 +55,14 @@ function Location() {
   return <output data-testid="location">{useLocation().pathname}</output>;
 }
 
-const agent = {
+const agent = agentRow({
   name: "worker",
   image: "worker:v1",
   state: "running",
   harness: "codex",
-  group: null,
-  interactive: false,
   cwd: "/srv/worker project",
   current_goal_task_key: "IMPROVE-37",
-};
+});
 
 beforeEach(() => {
   localStorage.clear();

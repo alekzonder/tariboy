@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApi } from "@/components/apiContext";
-import type { IterationSummary } from "@/lib/types";
+import type { IterationRow } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
@@ -13,7 +13,7 @@ export function IterationTagEditor({
   onApplied,
 }: {
   name: string;
-  item: IterationSummary;
+  item: IterationRow;
   onApplied: (id: string, tags: string[]) => void;
 }) {
   const api = useApi();

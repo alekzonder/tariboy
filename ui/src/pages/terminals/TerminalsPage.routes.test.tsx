@@ -2,8 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, screen, waitFor, fireEvent, within } from "@/test/queryRender";
 import { UI_MODE_KEY } from "@/lib/uiMode";
 import { fetchAllAgents } from "@/lib/aggregate";
-import type { CreateAgentResult, CreateAgentSpec, ImageManifest, ImageRow } from "@/lib/api";
-import type { AgentLifecycleResult, AgentView } from "@/lib/types";
+import type {
+  AgentActionResult,
+  AgentRunResult,
+  AgentView,
+  CreateAgentSpec,
+  ImageManifest,
+  ImageSummary,
+} from "@/lib/api";
 import { addDaemon, type Daemon } from "@/lib/daemons";
 import {
   cleanupTerminalsPage,
@@ -12,6 +18,7 @@ import {
   registerProd,
   serversTab,
 } from "@/test/terminals/terminalsPage";
+import { agentRow } from "@/test/fixtures/apiFixtures";
 
 vi.mock("@/lib/aggregate", () => ({
   fetchAllAgents: vi.fn(),
@@ -25,11 +32,11 @@ const calls = vi.hoisted(() => ({
     vi.fn<
       (target: Daemon | null, method: string, path: string, body?: unknown) => Promise<unknown>
     >(),
-  createAgent:
-    vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<CreateAgentResult>>(),
+  createAgent: vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<AgentRunResult>>(),
   imageManifestGet: vi.fn<(ref: string, target: Daemon | null) => Promise<ImageManifest>>(),
-  listImages: vi.fn<(target: Daemon | null) => Promise<{ images: ImageRow[]; count: number }>>(),
-  startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentLifecycleResult>>(),
+  listImages:
+    vi.fn<(target: Daemon | null) => Promise<{ images: ImageSummary[]; count: number }>>(),
+  startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentActionResult>>(),
 }));
 const { createAgent, imageManifestGet, listImages } = calls;
 
@@ -96,14 +103,13 @@ describe("TerminalsPage agent routes", () => {
           state === "unavailable"
             ? []
             : [
-                {
+                agentRow({
                   name: "worker",
                   image: state === "recovered" ? "worker:v2" : "worker:v1",
                   state: "running",
                   harness: "codex",
-                  group: null,
                   interactive: false,
-                },
+                }),
               ],
         error: state === "unavailable" ? "unreachable" : undefined,
       },
@@ -300,7 +306,13 @@ describe("TerminalsPage empty state and create", () => {
 
   it("re-polls immediately after creating an agent instead of waiting for the next tick", async () => {
     serversTab();
-    createAgent.mockResolvedValue({ name: "new-agent", state: "running" });
+    createAgent.mockResolvedValue({
+      name: "new-agent",
+      state: "running",
+      goal_enabled: false,
+      goal_wait_customer_timeout_s: 0,
+      goal_delivery_cooldown_s: 0,
+    });
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
     const callsBefore = vi.mocked(fetchAllAgents).mock.calls.length;

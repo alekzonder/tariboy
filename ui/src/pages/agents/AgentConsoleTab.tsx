@@ -6,10 +6,9 @@ import { TuiScreen } from "@/components/TuiScreen";
 import { useFileDropTarget } from "@/hooks/useFileDropTarget";
 import { useSendFiles } from "@/hooks/useSendFiles";
 import { useTerminalSocket } from "@/hooks/useTerminalSocket";
-import { ApiError } from "@/lib/api";
+import { ApiError, type AgentRow } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { hostToParam } from "@/lib/terminalsHost";
-import type { AgentSummary } from "@/lib/types";
 
 export default function AgentConsoleTab({
   hostId,
@@ -18,7 +17,7 @@ export default function AgentConsoleTab({
   execCount = 0,
 }: {
   hostId: string;
-  agent: AgentSummary;
+  agent: AgentRow;
   refresh: () => void;
   /** Bumped by the header after each successful Exec. */
   execCount?: number;

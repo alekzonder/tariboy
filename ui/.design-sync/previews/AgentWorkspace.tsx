@@ -5,7 +5,7 @@ import { AgentWorkspace, DaemonProvider, MemoryRouter, Route, Routes } from "tar
 // host, image, goal task key, cwd) and the six-tab strip, over whichever tab the
 // route selects — Console, Autopilot, Activity, Tasks, Configuration, Advanced.
 //
-// It takes its agent as a PROP (an AgentSummary) but reads the active tab from
+// It takes its agent as a PROP (an AgentRow) but reads the active tab from
 // useParams(), so it must be mounted inside the real matched route from App.tsx,
 // `/agents/:hostId/:agent/:tab/*`. MemoryRouter alone matches nothing and the
 // workspace would redirect to /console forever.
@@ -20,12 +20,35 @@ const BUILDER = {
   image: "worker:v2",
   state: "running",
   harness: "claude-code",
-  loop_enabled: true,
   enabled: true,
   group: "core",
+  alias: "",
+  color: "",
   interactive: true,
   cwd: "/home/agent/github/tariboy",
   current_goal_task_key: "TB-142",
+  ai_stall_timeout_s: 0,
+  goal_delivery_cooldown_s: 0,
+  goal_enabled: true,
+  goal_wait_customer_timeout_s: 0,
+  interval_s: 0,
+  max_idle_iterations: 0,
+  on_error: "restart",
+  on_timeout: "restart",
+  schedule: "",
+  schedule_next_at: "",
+  timeout_s: 0,
+  budget: {
+    hour_usd: 0,
+    day_usd: 0,
+    week_usd: 0,
+    month_usd: 0,
+    hour_spent_usd: 0,
+    day_spent_usd: 0,
+    week_spent_usd: 0,
+    month_spent_usd: 0,
+    exhausted: null,
+  },
 };
 
 // Hermetic: the render check reuses ONE browser page across every card, so a

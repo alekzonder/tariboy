@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ApiClient, TeamImportOperation, TeamImportPreview } from "@/lib/api";
+import type { ApiClient, TeamImportOperation, TeamImportPlan } from "@/lib/api";
 import { readKey, removeKey, storageKeys, writeKey } from "@/lib/storage";
 import { toast } from "sonner";
 import { changedImageRefs, previewFromImport, type ImportPreview } from "./teamImportModel";
@@ -16,7 +16,7 @@ function storedOperation(api: ApiClient): OperationRef | null {
 }
 
 function pendingOperation(
-  preview: TeamImportPreview,
+  preview: TeamImportPlan,
   steps: TeamImportOperation["steps"],
 ): TeamImportOperation {
   return {

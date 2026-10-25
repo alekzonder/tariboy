@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ApiClient, TeamImportPreview } from "@/lib/api";
+import type { ApiClient, TeamImportPlan } from "@/lib/api";
 import { changedImageRefs, previewFromImport } from "./teamImportModel";
 
 const api = {} as ApiClient;
@@ -8,13 +8,13 @@ const image = (ref: string) => ({ ref, action: "pull", conflict: false });
 
 describe("previewFromImport", () => {
   it("normalizes a YAML preview", () => {
-    const preview: TeamImportPreview = {
+    const preview: TeamImportPlan = {
       import_id: "imp-1",
       team: "team",
       yaml: "version: 1\n",
       images: [{ ...image("img:1"), message: "note" }],
-      agents: [{ name: "alice", action: "create", conflict: false }],
-      groups: undefined as unknown as TeamImportPreview["groups"],
+      agents: [{ name: "alice", action: "create", conflict: false, message: "" }],
+      groups: undefined as unknown as TeamImportPlan["groups"],
     };
     expect(previewFromImport(preview, api)).toEqual({
       import_id: "imp-1",
@@ -30,7 +30,7 @@ describe("previewFromImport", () => {
           resolved: "img:1",
         },
       ],
-      agents: [{ name: "alice", action: "create", conflict: false }],
+      agents: [{ name: "alice", action: "create", conflict: false, message: "" }],
       groups: [],
       updateExisting: false,
       api,
@@ -43,7 +43,7 @@ describe("previewFromImport", () => {
       team: "t",
       yaml: "",
       images: [image("a:1"), image("b:2")],
-    } as unknown as TeamImportPreview;
+    } as unknown as TeamImportPlan;
     const got = previewFromImport(preview, api);
     expect(got.agents).toEqual([]);
     expect(got.groups).toEqual([]);

@@ -8,7 +8,7 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-import type { FileEntry } from "@/lib/api";
+import type { AgentFileEntry } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { FileTreeApi } from "./useFileTree";
 import { joinPath } from "./paths";
@@ -25,13 +25,13 @@ export function TreeRow({
 }: {
   tree: FileTreeApi;
   path: string;
-  entry: FileEntry;
+  entry: AgentFileEntry;
   depth: number;
   selected: string | null;
   onSelect: (path: string) => void;
   // Omitted in read-only mode — the row then shows no rename/delete affordance.
-  onRename?: (entry: FileEntry, path: string) => void;
-  onDelete?: (entry: FileEntry, path: string) => void;
+  onRename?: (entry: AgentFileEntry, path: string) => void;
+  onDelete?: (entry: AgentFileEntry, path: string) => void;
 }) {
   const open = tree.expanded.has(path);
   const dir = tree.dirs[path];

@@ -9,9 +9,11 @@ const lean: ImageManifest = {
   built_at: "2026-01-01T00:00:00Z",
   parents: null,
   plugins: null,
-  skills: null,
+  skills: [],
   requires_secrets: null,
   env: null,
+  harness: { type: "", interactive: false },
+  policy: {},
   layers: null,
 };
 

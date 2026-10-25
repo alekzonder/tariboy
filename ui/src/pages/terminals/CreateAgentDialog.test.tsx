@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor } from "@/test/queryRender";
-import type { CreateAgentResult, CreateAgentSpec, ImageManifest, ImageRow } from "@/lib/api";
-import type { AgentLifecycleResult, AgentView, HarnessCatalog } from "@/lib/types";
+import type {
+  AgentActionResult,
+  AgentRunResult,
+  AgentView,
+  CreateAgentSpec,
+  HarnessModelCatalog,
+  ImageManifest,
+  ImageSummary,
+} from "@/lib/api";
 import type { Daemon } from "@/lib/daemons";
 import { targetFor } from "@/lib/terminalsHost";
 import { useApi } from "@/components/apiContext";
@@ -14,17 +21,19 @@ import {
   renderDialog,
   setSwitch,
 } from "@/test/terminals/createAgentDialog";
+import { imageSummary } from "@/test/fixtures/apiFixtures";
 
 // The dialog's requests, each recorded with the host of the client that sent
 // it, so a test can assert which host a request was pinned to.
 const calls = vi.hoisted(() => ({
   agentGetOn: vi.fn<(target: Daemon | null, name: string, action: string) => Promise<AgentView>>(),
-  createAgent:
-    vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<CreateAgentResult>>(),
-  getHarnessModelsOn: vi.fn<(target: Daemon | null, harness: string) => Promise<HarnessCatalog>>(),
+  createAgent: vi.fn<(spec: CreateAgentSpec, target: Daemon | null) => Promise<AgentRunResult>>(),
+  getHarnessModelsOn:
+    vi.fn<(target: Daemon | null, harness: string) => Promise<HarnessModelCatalog>>(),
   imageManifestGet: vi.fn<(ref: string, target: Daemon | null) => Promise<ImageManifest>>(),
-  listImages: vi.fn<(target: Daemon | null) => Promise<{ images: ImageRow[]; count: number }>>(),
-  startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentLifecycleResult>>(),
+  listImages:
+    vi.fn<(target: Daemon | null) => Promise<{ images: ImageSummary[]; count: number }>>(),
+  startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentActionResult>>(),
 }));
 const { agentGetOn, createAgent, imageManifestGet, listImages, startAgent } = calls;
 
@@ -188,9 +197,8 @@ it("retries a failed source load without allowing a partial clone", async () => 
 });
 
 it("requires a daemon with the complete clone projection", async () => {
-  const oldProjection: AgentView = { ...cloneSource };
-  delete oldProjection.configured_cwd;
-  agentGetOn.mockResolvedValueOnce(oldProjection);
+  const { configured_cwd: _, ...oldProjection } = cloneSource;
+  agentGetOn.mockResolvedValueOnce(oldProjection as AgentView);
   renderDialog({
     imageRef: undefined,
     cloneSource: { hostId: "d1", agentName: "source", hostLabel: "prod" },
@@ -250,8 +258,8 @@ it("retains clone drafts while target host and image readiness change", async ()
 it("keeps schema-v1 plugins editable and makes schema-v2 plugins image-owned", async () => {
   listImages.mockResolvedValue({
     images: [
-      { name: "worker", tag: "v1", bare: false },
-      { name: "worker", tag: "v2", bare: false },
+      imageSummary({ name: "worker", tag: "v1", bare: false }),
+      imageSummary({ name: "worker", tag: "v2", bare: false }),
     ],
     count: 2,
   });
@@ -298,8 +306,8 @@ it("keeps schema-v1 plugins editable and makes schema-v2 plugins image-owned", a
 it("keeps Interactive on for a schema-v2 image after a bare image was selected", async () => {
   listImages.mockResolvedValue({
     images: [
-      { name: "bare", tag: "latest", bare: true },
-      { name: "worker", tag: "v2", bare: false },
+      imageSummary({ name: "bare", tag: "latest", bare: true }),
+      imageSummary({ name: "worker", tag: "v2", bare: false }),
     ],
     count: 2,
   });

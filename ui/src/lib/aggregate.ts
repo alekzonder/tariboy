@@ -1,11 +1,10 @@
-import { ApiError, createApi, type ChatSummary } from "@/lib/api";
+import { ApiError, createApi, type ChatSummary, type AgentRow } from "@/lib/api";
 import { listDaemons, resolveDaemon } from "@/lib/daemons";
 import { hasLocalDaemon } from "@/lib/desktop";
-import type { AgentSummary } from "@/lib/types";
 
 export interface HostAgents {
   host: { id: string; label: string };
-  agents: AgentSummary[];
+  agents: AgentRow[];
   groups?: Array<{ name: string; lead: string; members: number }>;
   sidebarOrder?: { version: 1; groups: string[]; agents: string[] };
   /** One entry per agent this host holds a conversation with. Absent on a
@@ -28,7 +27,7 @@ export async function fetchAllAgents(): Promise<HostAgents[]> {
       try {
         const api = createApi(await resolveDaemon(t.id));
         const [res, groupResult, config, chats] = await Promise.all([
-          api.request<{ agents: AgentSummary[]; count: number }>("GET", "/api/agents"),
+          api.request<{ agents: AgentRow[]; count: number }>("GET", "/api/agents"),
           api.request<{
             groups: Array<{ name: string; lead: string; members: number }>;
             count: number;

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
-import type { ImageRow } from "@/lib/api";
+import type { ImageSummary } from "@/lib/api";
 
 // Shared building blocks for the agent-create surfaces (single-agent form V3 and
 // the group wizard V4). Kept here so both reuse one image picker and one env
@@ -21,7 +21,7 @@ export function ImageCombobox({
   invalid,
   ariaLabel = "image",
 }: {
-  images: ImageRow[];
+  images: ImageSummary[];
   value: string;
   onChange: (v: string) => void;
   id?: string;

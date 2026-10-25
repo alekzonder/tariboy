@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isConnectionError, type AgentImageStatus, type ImageRow } from "@/lib/api";
+import {
+  isConnectionError,
+  type AgentImageStatus,
+  type ImageSummary,
+  type AgentStatus,
+  type AgentView,
+} from "@/lib/api";
 import { subscribeImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
-import type { AgentStatus, AgentView } from "@/lib/types";
 import { errorText } from "@/lib/errors";
 
 interface RetentionLimits {
@@ -27,7 +32,7 @@ export interface ConfigSources {
   view: AgentView | null;
   imageStatus: AgentImageStatus | null;
   imageError: string;
-  images: ImageRow[];
+  images: ImageSummary[];
   inventoryLoading: boolean;
   inventoryError: string;
   script: Loaded<string>;
@@ -49,7 +54,7 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
   const [view, setView] = useState<AgentView | null>(null);
   const [imageStatus, setImageStatus] = useState<AgentImageStatus | null>(null);
   const [imageError, setImageError] = useState("");
-  const [images, setImages] = useState<ImageRow[]>([]);
+  const [images, setImages] = useState<ImageSummary[]>([]);
   const [inventoryLoading, setInventoryLoading] = useState(true);
   const [inventoryError, setInventoryError] = useState("");
   const [script, setScript] = useState<Loaded<string>>(empty);

@@ -1,4 +1,4 @@
-import type { AgentStatus, AgentView } from "@/lib/types";
+import type { AgentBudget, AgentView } from "@/lib/api";
 
 const TABS = [
   ["chat", "Chat"],
@@ -13,7 +13,6 @@ const SIMPLE_TABS: ReadonlySet<string> = new Set(["chat", "tasks", "console", "c
 
 export type AgentTab = (typeof TABS)[number][0];
 export type AgentTabEntry = (typeof TABS)[number];
-export type AgentBudget = NonNullable<AgentStatus["budget"]>;
 
 export function agentTabs(simple: boolean): readonly AgentTabEntry[] {
   return simple ? TABS.filter(([key]) => SIMPLE_TABS.has(key)) : TABS;

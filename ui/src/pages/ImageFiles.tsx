@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef } from "react";
 import FileBrowser from "@/components/FileBrowser";
 import { useImageContext } from "@/components/imageContext";
 import { useApi } from "@/components/apiContext";
-import { type FileContent, type FileEntry, type FileListing, type ImageFileEntry } from "@/lib/api";
+import {
+  type AgentFileContent,
+  type AgentFileEntry,
+  type AgentFileList,
+  type ImageFileEntry,
+} from "@/lib/api";
 
 // Read-only Files tab for an image. The backend serves a FLAT list of every
 // packed tar member (full slash paths) plus a single-file read; the shared
@@ -39,13 +44,13 @@ export default function ImageFiles() {
   }, [api, ref, sourceKey, digest, onReadError]);
 
   const listDir = useCallback(
-    async (dir: string): Promise<FileListing> => {
+    async (dir: string): Promise<AgentFileList> => {
       const all = await loadAll();
       const prefix = dir ? `${dir}/` : "";
       // Fold the flat list into this directory's direct children, deriving
       // intermediate directories from deeper paths when no explicit tar dir
       // entry exists.
-      const seen = new Map<string, FileEntry>();
+      const seen = new Map<string, AgentFileEntry>();
       for (const e of all) {
         if (!e.path.startsWith(prefix)) continue;
         const rest = e.path.slice(prefix.length);
@@ -68,7 +73,7 @@ export default function ImageFiles() {
   );
 
   const readFile = useCallback(
-    async (path: string): Promise<FileContent> => {
+    async (path: string): Promise<AgentFileContent> => {
       const r = await api.images.imageFileRead(ref, path, digest).catch((error) => {
         if (alive.current) onReadError(error);
         throw error;

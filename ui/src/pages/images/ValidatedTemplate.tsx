@@ -1,8 +1,8 @@
-import type { ImageValidationResult } from "@/lib/api";
+import type { ImageValidateResult } from "@/lib/api";
 
-type ImageTemplate = NonNullable<ImageValidationResult["template"]>;
+type ImageTemplate = NonNullable<ImageValidateResult["template"]>;
 
-function ValidatedSkills({ skills }: { skills: NonNullable<ImageValidationResult["skills"]> }) {
+function ValidatedSkills({ skills }: { skills: NonNullable<ImageValidateResult["skills"]> }) {
   return (
     <div className="space-y-1" aria-label="Validated image skills">
       <div className="text-sm">Skills: {skills.length === 0 ? "none" : null}</div>
@@ -45,7 +45,7 @@ function TemplateEntries({ entries }: { entries: ImageTemplate["entries"] }) {
   );
 }
 
-export function ValidatedTemplate({ validation }: { validation: ImageValidationResult }) {
+export function ValidatedTemplate({ validation }: { validation: ImageValidateResult }) {
   return (
     <div className="space-y-2 rounded border bg-muted/20 p-3" aria-label="Validated image template">
       <div className="text-xs text-muted-foreground">

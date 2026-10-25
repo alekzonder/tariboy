@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { ApiError, type ApiClient } from "@/lib/api";
+import { ApiError, type ApiClient, type HarnessModelCatalog } from "@/lib/api";
 import type { HarnessCatalogState } from "@/lib/runtimePresets";
-import type { HarnessCatalog } from "@/lib/types";
 
 // Catalogs without an error are kept for the page session, per host and
 // harness; the daemon keeps its own short cache behind this one.
-const cache = new Map<string, HarnessCatalog>();
+const cache = new Map<string, HarnessModelCatalog>();
 
 export function clearHarnessCatalogCache(): void {
   cache.clear();

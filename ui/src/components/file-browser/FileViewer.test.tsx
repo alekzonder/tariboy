@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FileContent } from "@/lib/api";
+import type { AgentFileContent } from "@/lib/api";
 import { FileViewer } from "./FileViewer";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
@@ -30,7 +30,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const text = (path: string, content: string): FileContent => ({
+const text = (path: string, content: string): AgentFileContent => ({
   path,
   kind: "text",
   content,
@@ -41,7 +41,7 @@ const editor = () => screen.getByRole("textbox", { name: "File content" });
 
 function renderViewer(
   path: string | null,
-  file: FileContent,
+  file: AgentFileContent,
   writeFile?: (path: string, content: string) => Promise<void>,
 ) {
   const readFile = vi.fn(async () => file);

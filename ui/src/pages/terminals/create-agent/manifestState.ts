@@ -1,9 +1,9 @@
-import type { ImageManifest, ImageRow } from "@/lib/api";
+import type { ImageManifest, ImageSummary } from "@/lib/api";
 import type { AgentCreateDraft } from "../agentCreateDraft";
 
 export interface ManifestInputs {
   image: string;
-  images: ImageRow[];
+  images: ImageSummary[];
   manifest: ImageManifest | null;
   manifestKey: string;
   expectedManifestKey: string;

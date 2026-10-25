@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ImageManifest, ImageRow } from "@/lib/api";
+import type { ImageManifest, ImageSummary } from "@/lib/api";
 import { newAgentDraft } from "../agentCreateDraft";
 import { draftFromManifest, manifestState, type ManifestInputs } from "./manifestState";
 
@@ -8,7 +8,7 @@ const manifest = (patch: Partial<ImageManifest>): ImageManifest =>
 
 const inputs = (patch: Partial<ManifestInputs> = {}): ManifestInputs => ({
   image: "worker:v1",
-  images: [{ name: "worker", tag: "v1" } as ImageRow],
+  images: [{ name: "worker", tag: "v1" } as ImageSummary],
   manifest: manifest({
     harness: { type: "codex", model: "gpt", effort: "high", interactive: true },
   }),

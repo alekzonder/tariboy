@@ -1,66 +1,43 @@
+import type {
+  GroupList,
+  GroupView,
+  TeamCompose,
+  TeamImportApplyResult,
+  TeamImportOperation,
+  TeamImportPlan,
+} from "../api-types.generated";
 import type { Transport } from "./client";
 
-// One group as listed by GET /api/groups. Mirrors group.ls: name/lead plus a
-// member count.
-export interface GroupRow {
-  name: string;
-  lead: string;
-  members: number;
-}
-export interface TeamDetail {
-  name: string;
-  lead: string;
-  members: string[];
-  broadcast: string;
-  inbox: string;
-  shared_dir: string;
-}
-export interface TeamImportResult {
-  groups: number;
-  agents: Array<{ name: string; status: "created" | "reused" | "failed"; error?: string }>;
-  complete: boolean;
-  import_id?: string;
-}
-export interface TeamImportOperation {
-  import_id: string;
-  team: string;
-  status: "pending" | "running" | "complete" | "failed";
-  steps: Array<{ kind: "image" | "agent"; name: string; status: string; error?: string }>;
-  error?: string;
-  updated_at: string;
-}
-export interface TeamImportPreview {
-  import_id: string;
-  team: string;
-  yaml: string;
-  images: Array<{ ref: string; action: string; conflict: boolean; message?: string }>;
-  agents: Array<{ name: string; action: string; conflict: boolean; message?: string }>;
-  groups: Array<{ name: string; action: string; conflict: boolean; message?: string }>;
-}
+export type {
+  GroupRow,
+  GroupView,
+  TeamImportApplyResult,
+  TeamImportOperation,
+  TeamImportPlan,
+} from "../api-types.generated";
 
 const groupPath = (name: string) => `/api/groups/${encodeURIComponent(name)}`;
 
 export function groupsApi(t: Transport) {
   return {
-    listGroups: () => t.get<{ groups: GroupRow[]; count: number }>("/api/groups"),
-    getTeam: (name: string) => t.get<TeamDetail>(groupPath(name)),
+    listGroups: () => t.get<GroupList>("/api/groups"),
+    getTeam: (name: string) => t.get<GroupView>(groupPath(name)),
     renameTeam: (name: string, newName: string) =>
-      t.request<TeamDetail>("PATCH", `${groupPath(name)}/name`, { new_name: newName }),
+      t.request<GroupView>("PATCH", `${groupPath(name)}/name`, { new_name: newName }),
     setTeamLead: (name: string, lead: string) =>
-      t.request<TeamDetail>("PATCH", `${groupPath(name)}/lead`, { lead }),
+      t.request<GroupView>("PATCH", `${groupPath(name)}/lead`, { lead }),
     addExistingMember: (name: string, agent: string) =>
       t.post(`${groupPath(name)}/assign`, { agent }),
     removeTeamMember: (name: string, agent: string) =>
       t.delete(`${groupPath(name)}/members/${encodeURIComponent(agent)}`),
-    getTeamCompose: (name: string) =>
-      t.get<{ name: string; yaml: string }>(`${groupPath(name)}/compose`),
+    getTeamCompose: (name: string) => t.get<TeamCompose>(`${groupPath(name)}/compose`),
     importTeamYAML: (yaml: string) =>
-      t.post<TeamImportPreview>("/api/team-imports/preview-yaml", { yaml }),
+      t.post<TeamImportPlan>("/api/team-imports/preview-yaml", { yaml }),
     applyTeamArchive: (
       importID: string,
       resolution?: { refs?: Record<string, string>; yaml?: string; update_existing?: boolean },
     ) =>
-      t.post<TeamImportResult>(
+      t.post<TeamImportApplyResult>(
         `/api/team-imports/${encodeURIComponent(importID)}/apply`,
         resolution ?? {},
       ),
@@ -70,7 +47,8 @@ export function groupsApi(t: Transport) {
       (await t.raw("GET", `${groupPath(name)}/export`)).blob(),
     uploadTeamArchive: async (archive: Blob) => {
       const response = await t.raw("POST", "/api/team-imports", archive);
-      const envelope = (await response.json()) as { result: TeamImportPreview };
+      // Not in /api/openapi.json: served by internal/api/server.go POST /api/team-imports.
+      const envelope = (await response.json()) as { result: TeamImportPlan };
       return {
         ...envelope.result,
         agents: envelope.result.agents ?? [],

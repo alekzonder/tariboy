@@ -40,9 +40,11 @@ describe("nextReasonText", () => {
 
 const status = (next?: Partial<NonNullable<AgentImageStatus["next"]>>): AgentImageStatus => ({
   name: "worker",
-  current: { ref: "base:1", digest: "sha256:a" },
+  current: { ref: "base:1", digest: "sha256:a", error: "" },
   pending: { ref: "", digest: "", error: "" },
-  next: next && { ref: "base:2", digest: "sha256:b", reason: "pending", ...next },
+  next: next
+    ? { ref: "base:2", digest: "sha256:b", error: "", reason: "pending", ...next }
+    : { ref: "", digest: "", error: "" },
 });
 
 describe("updatesOnNext", () => {

@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useState } from "react";
-import type { ImageRow } from "@/lib/api";
+import type { ImageSummary } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import {
 // created/failed state and only failed rows are retried (the group already
 // exists by then, so retry never re-creates it).
 export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
-  const [images, setImages] = useState<ImageRow[]>([]);
+  const [images, setImages] = useState<ImageSummary[]>([]);
   const [name, setName] = useState("");
   const [baseCwd, setBaseCwd] = useState("");
   const [state, dispatch] = useReducer(groupWizardReducer, undefined, initialWizardState);

@@ -1,15 +1,25 @@
 import type { Daemon } from "../daemons";
 import type {
-  AgentEvent,
-  AgentLifecycleResult,
+  AgentActionResult,
+  AgentAliasResult,
+  AgentColorResult,
+  AgentContextResult,
+  AgentCwdResult,
+  AgentImageStatus,
+  AgentListResult,
+  AgentNotesResult,
+  AgentPromptLayers,
+  AgentPromptPreview,
+  AgentRunResult,
   AgentStatus,
-  AgentSummary,
+  AgentStatusHistory,
+  AgentUserPromptResult,
   AgentView,
-  StatusHistoryEvent,
-} from "../types";
+  ShellScriptResult,
+  ShellScriptSaveResult,
+} from "../api-types.generated";
 import { agentApiPath, type Transport } from "./client";
 import { getLocalBaseURL } from "./hosts";
-import type { ImageTemplateEntry } from "./images";
 
 // ---- Agent creation (create forms; POST /api/agents = agent.run) ----
 // The daemon keeps legacy scalar env/plugins forms for CLI and older callers,
@@ -45,36 +55,27 @@ export interface CreateAgentSpec {
   notes?: string;
   color?: string;
 }
-export interface CreateAgentResult {
-  name: string;
-  state: string;
-}
-export interface AgentShellScript {
-  script: string;
-}
-export interface AgentImageStatus {
-  name: string;
-  current: { ref: string; digest: string; image_version?: string; error?: string };
-  pending: { ref: string; digest: string; error: string };
-  next?: {
-    ref: string;
-    digest: string;
-    image_version?: string;
-    reason: "pending" | "ref_moved" | "current";
-    error?: string;
-  };
-}
+export type {
+  AgentActionResult,
+  AgentBudget,
+  AgentImageStatus,
+  AgentPromptPreview,
+  AgentRow,
+  AgentRunResult,
+  AgentStatus,
+  AgentStatusEvent,
+  AgentView,
+  ShellScriptResult,
+} from "../api-types.generated";
 
-// ---- Prompt layers (user-prompt / context / assembled preview) ----
-export interface PromptLayer {
-  name: string;
-  sha256: string;
-}
-export type AgentPromptLayer = PromptLayer | ImageTemplateEntry;
-export interface AgentPrompt {
-  name: string;
-  prompt: string;
-  layers?: AgentPromptLayer[];
+export type AgentPromptLayer = NonNullable<AgentPromptLayers>[number];
+
+// Not in /api/openapi.json: served by internal/api/server.go GET /api/agents/{name}/events.
+export interface AgentEvent {
+  agent: string;
+  type: string; // message | stream | iteration | audit | proxy
+  time: string;
+  data?: Record<string, unknown>;
 }
 
 // ---- SSE live events ----
@@ -113,11 +114,11 @@ export function subscribeAgentEventsOn(
 
 export function agentsApi(t: Transport) {
   return {
-    listAgents: () => t.get<{ agents: AgentSummary[]; count: number }>("/api/agents"),
+    listAgents: () => t.get<AgentListResult>("/api/agents"),
     getAgent: (name: string) => t.agentGet<AgentView>(name, ""),
     getAgentStatus: (name: string) => t.agentGet<AgentStatus>(name, "status"),
-    createAgent: (spec: CreateAgentSpec) => t.post<CreateAgentResult>("/api/agents", spec),
-    startAgent: (name: string) => t.agentPost<AgentLifecycleResult>(name, "start"),
+    createAgent: (spec: CreateAgentSpec) => t.post<AgentRunResult>("/api/agents", spec),
+    startAgent: (name: string) => t.agentPost<AgentActionResult>(name, "start"),
     // force=true kills a live agent so it can be removed at all (a plain DELETE
     // 400s on a running/idle agent: "stop it first or use --force"). purge=true
     // hard-deletes the DB row + durable data (iterations/audit) + whole tree, so
@@ -132,11 +133,7 @@ export function agentsApi(t: Transport) {
       return t.request<T>("DELETE", agentApiPath(name, "") + (qs ? `?${qs}` : ""));
     },
     setAgentCwd: (name: string, value: string, create = false) =>
-      t.agentPost<{ name: string; cwd: string }>(
-        name,
-        "cwd",
-        create ? { value, create: true } : { value },
-      ),
+      t.agentPost<AgentCwdResult>(name, "cwd", create ? { value, create: true } : { value }),
     // ---- Live config setters (persist now; launch-mode changes apply next start) ----
     setAgentModel: (name: string, value: string) => t.agentPost(name, "model", { value }),
     setAgentEffort: (name: string, value: string) => t.agentPost(name, "effort", { value }),
@@ -144,26 +141,23 @@ export function agentsApi(t: Transport) {
       t.agentPost(name, "interactive", { value }),
     setAgentHarness: (name: string, value: string) => t.agentPost(name, "harness", { value }),
     // ---- Alias / notes / color / status-history ----
-    getAlias: (name: string) => t.agentGet<{ name: string; alias: string }>(name, "alias"),
+    getAlias: (name: string) => t.agentGet<AgentAliasResult>(name, "alias"),
     setAlias: (name: string, value: string) => t.agentPost(name, "alias", { value }),
-    getNotes: (name: string) => t.agentGet<{ name: string; notes: string }>(name, "notes"),
+    getNotes: (name: string) => t.agentGet<AgentNotesResult>(name, "notes"),
     setNotes: (name: string, value: string) => t.agentPost(name, "notes", { value }),
     // The setter's body field is `value` (matching the backend agent.color.set
     // param); an empty string clears the color.
-    getColor: (name: string) => t.agentGet<{ name: string; color: string }>(name, "color"),
+    getColor: (name: string) => t.agentGet<AgentColorResult>(name, "color"),
     setColor: (name: string, value: string) => t.agentPost(name, "color", { value }),
-    getStatusHistory: (name: string) =>
-      t.agentGet<{ events: StatusHistoryEvent[]; count: number }>(name, "status/history"),
-    agentPromptGet: (name: string) => t.agentGet<AgentPrompt>(name, "prompt"),
-    agentUserPromptGet: (name: string) =>
-      t.agentGet<{ name: string; user_prompt: string }>(name, "user-prompt"),
+    getStatusHistory: (name: string) => t.agentGet<AgentStatusHistory>(name, "status/history"),
+    agentPromptGet: (name: string) => t.agentGet<AgentPromptPreview>(name, "prompt"),
+    agentUserPromptGet: (name: string) => t.agentGet<AgentUserPromptResult>(name, "user-prompt"),
     agentUserPromptSet: (name: string, text: string) => t.agentPost(name, "user-prompt", { text }),
-    agentContextGet: (name: string) =>
-      t.agentGet<{ name: string; context: string }>(name, "context"),
+    agentContextGet: (name: string) => t.agentGet<AgentContextResult>(name, "context"),
     agentContextSet: (name: string, text: string) => t.agentPost(name, "context", { text }),
-    getAgentShellScript: (name: string) => t.agentGet<AgentShellScript>(name, "shell-script"),
+    getAgentShellScript: (name: string) => t.agentGet<ShellScriptResult>(name, "shell-script"),
     setAgentShellScript: (name: string, script: string) =>
-      t.agentPost<{ saved: true }>(name, "shell-script", { script }),
+      t.agentPost<ShellScriptSaveResult>(name, "shell-script", { script }),
     agentImageStatusGet: (name: string) => t.agentGet<AgentImageStatus>(name, "image"),
     agentImageSet: (name: string, image: string) =>
       t.agentPost<AgentImageStatus>(name, "image", { image }),

@@ -5,15 +5,15 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import { CustomerQuestionNotificationsContext } from "@/components/customerQuestionNotificationsContext";
 import { fetchAllAgents } from "@/lib/aggregate";
-import type { ImageManifest, ImageRow } from "@/lib/api";
+import type { AgentActionResult, ImageManifest, ImageSummary } from "@/lib/api";
 import { addDaemon } from "@/lib/daemons";
-import type { AgentLifecycleResult } from "@/lib/types";
 import { UI_MODE_KEY } from "@/lib/uiMode";
 import { resetWorkspacesForTest } from "@/lib/workspaces";
 import { SidebarStateProvider } from "@/pages/terminals/SidebarStateProvider";
 import TerminalsPage from "@/pages/terminals/TerminalsPage";
 import { TitlebarSlotContext } from "@/pages/terminals/titlebarSlotContext";
 import { RoutedLocation } from "./RoutedLocation";
+import { agentRow, agentView, imageSummary } from "@/test/fixtures/apiFixtures";
 
 /** The mocked api calls every TerminalsPage test file records; each file
  *  creates them in its own `vi.hoisted` block, because Vitest hoists only
@@ -23,11 +23,11 @@ export interface TerminalsPageCalls {
   agentGetOn: Mock<(...args: never[]) => Promise<unknown>>;
   apiOn: Mock<(...args: never[]) => Promise<unknown>>;
   imageManifestGet: Mock<(...args: never[]) => Promise<ImageManifest>>;
-  listImages: Mock<(...args: never[]) => Promise<{ images: ImageRow[]; count: number }>>;
-  startAgent: Mock<(...args: never[]) => Promise<AgentLifecycleResult>>;
+  listImages: Mock<(...args: never[]) => Promise<{ images: ImageSummary[]; count: number }>>;
+  startAgent: Mock<(...args: never[]) => Promise<AgentActionResult>>;
 }
 
-export const cloneProjection = {
+export const cloneProjection = agentView({
   name: "source",
   image: "worker:v1",
   digest: "sha256",
@@ -50,11 +50,10 @@ export const cloneProjection = {
   plugins: [],
   messages_batch: 10,
   messages_max_queue: 1000,
-  group: null,
   alias: "",
   notes: "",
   color: "",
-} as const;
+});
 
 export function setupTerminalsPage({
   agentGetOn,
@@ -73,28 +72,26 @@ export function setupTerminalsPage({
     {
       host: { id: "", label: "This daemon (local)" },
       agents: [
-        {
+        agentRow({
           name: "a1",
           image: "bare:latest",
           state: "running",
           harness: "claude",
-          group: null,
           interactive: true,
-        },
-        {
+        }),
+        agentRow({
           name: "a2",
           image: "img",
           state: "running",
           harness: "claude",
-          group: null,
           interactive: false,
-        },
+        }),
       ],
     },
     { host: { id: "d1", label: "prod" }, agents: [], error: "unauthorized: nope" },
   ]);
   listImages.mockResolvedValue({
-    images: [{ name: "worker", tag: "v1", bare: false }],
+    images: [imageSummary({ name: "worker", tag: "v1", bare: false })],
     count: 1,
   });
   imageManifestGet.mockResolvedValue({

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentImageStatus } from "@/lib/api";
-import type { AgentView } from "@/lib/types";
+import type { AgentImageStatus, AgentView } from "@/lib/api";
 import { readBaseline, viewBaseline } from "./commits";
 
 const view = {

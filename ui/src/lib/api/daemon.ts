@@ -1,43 +1,30 @@
-import type { DaemonStatus } from "../types";
+import type {
+  DaemonStatus,
+  MaintenanceRun,
+  MaintenanceSettings,
+  MaintenanceView,
+  RetentionPolicy,
+  RetentionSetResult,
+  RetentionView,
+  ShellScriptSaveResult,
+} from "../api-types.generated";
 import type { Transport } from "./client";
-import type { AgentShellScript } from "./agents";
+import type { ShellScriptResult } from "./agents";
 
-export interface MaintenanceSettings {
-  enabled: boolean;
-  time: string;
-  keep_backups: number;
-  retention_days: number;
-  chat_retention_days: number;
-  compact: boolean;
-  compact_threshold_pct: number;
-}
-export interface MaintenanceRun {
-  started_at: string;
-  finished_at: string;
-  trigger: string;
-  backup: string;
-  deleted: Record<string, number>;
-  size_before: number;
-  size_after: number;
-  compacted: boolean;
-  error?: string;
-}
-// Server-wide iteration retention: 0 is unlimited; an agent's non-zero field
-// overrides it.
-export interface IterationRetention {
-  keep_iterations: number;
-  keep_days: number;
-  max_bytes: number;
-}
+export type {
+  DaemonStatus,
+  MaintenanceRun,
+  MaintenanceSettings,
+  RetentionPolicy,
+} from "../api-types.generated";
 
 export function daemonApi(t: Transport) {
   return {
     getDaemonStatus: () => t.get<DaemonStatus>("/api/daemon/status"),
-    getGlobalAgentShellScript: () => t.get<AgentShellScript>("/api/daemon/agent-shell-script"),
+    getGlobalAgentShellScript: () => t.get<ShellScriptResult>("/api/daemon/agent-shell-script"),
     setGlobalAgentShellScript: (script: string) =>
-      t.post<{ saved: true }>("/api/daemon/agent-shell-script", { script }),
-    getMaintenance: () =>
-      t.get<{ settings: MaintenanceSettings; last_run: MaintenanceRun | null }>("/api/maintenance"),
+      t.post<ShellScriptSaveResult>("/api/daemon/agent-shell-script", { script }),
+    getMaintenance: () => t.get<MaintenanceView>("/api/maintenance"),
     setMaintenance: (settings: MaintenanceSettings) =>
       t.post<MaintenanceSettings>("/api/maintenance", {
         enabled: settings.enabled,
@@ -49,9 +36,9 @@ export function daemonApi(t: Transport) {
         "compact-threshold-pct": settings.compact_threshold_pct,
       }),
     runMaintenance: () => t.post<MaintenanceRun>("/api/maintenance/run"),
-    getIterationRetentionDefault: () => t.agentGet<IterationRetention>("default", "retention"),
-    setIterationRetentionDefault: async (p: IterationRetention): Promise<IterationRetention> => {
-      const r = await t.agentPost<IterationRetention>("default", "retention", {
+    getIterationRetentionDefault: () => t.agentGet<RetentionView>("default", "retention"),
+    setIterationRetentionDefault: async (p: RetentionPolicy): Promise<RetentionPolicy> => {
+      const r = await t.agentPost<RetentionSetResult>("default", "retention", {
         "keep-iterations": p.keep_iterations,
         "keep-days": p.keep_days,
         "max-bytes": p.max_bytes,

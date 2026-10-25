@@ -1,5 +1,5 @@
 import { useState, type Dispatch } from "react";
-import { ApiError, type ApiClient, type ImageRow } from "@/lib/api";
+import { ApiError, type ApiClient, type ImageSummary } from "@/lib/api";
 import { commaFieldError } from "@/components/agentFormValues";
 import {
   allowsPluginOverrides,
@@ -16,7 +16,7 @@ interface SubmitInput {
   dispatch: Dispatch<WizardAction>;
   name: string;
   baseCwd: string;
-  images: ImageRow[];
+  images: ImageSummary[];
   onCreated?: () => void;
 }
 

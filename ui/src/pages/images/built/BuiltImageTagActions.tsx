@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import type { ImageRow } from "@/lib/api";
+import type { ImageSummary } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -26,7 +26,7 @@ function RemoveImageAction({
   imageRef,
   onRemove,
 }: {
-  image: ImageRow;
+  image: ImageSummary;
   imageRef: string;
   onRemove: (ref: string) => void;
 }) {
@@ -68,7 +68,7 @@ export function BuiltImageTagActions({
   onExport,
   onTransfer,
   onRemove,
-}: TagActionHandlers & { image: ImageRow; imageRef: string }) {
+}: TagActionHandlers & { image: ImageSummary; imageRef: string }) {
   return (
     <div className="flex justify-end gap-1">
       <Button size="sm" variant="outline" asChild>

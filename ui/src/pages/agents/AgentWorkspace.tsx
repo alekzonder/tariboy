@@ -4,7 +4,7 @@ import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import { ApiProvider } from "@/components/ApiProvider";
 import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
 import { targetFor } from "@/lib/terminalsHost";
-import type { AgentSummary } from "@/lib/types";
+import type { AgentRow } from "@/lib/api";
 import { LazyBoundary } from "@/components/LazyBoundary";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
@@ -27,14 +27,14 @@ const TaskDrawer = lazy(() => import("@/pages/tasks/TaskDrawer"));
 type AgentWorkspaceProps = {
   hostId: string;
   hostLabel?: string;
-  agent: AgentSummary;
+  agent: AgentRow;
   refresh: () => void;
   unavailable?: boolean;
 };
 
 type TabContext = {
   hostId: string;
-  agent: AgentSummary;
+  agent: AgentRow;
   refresh: () => void;
   execCount: number;
   initialTaskKey?: string;

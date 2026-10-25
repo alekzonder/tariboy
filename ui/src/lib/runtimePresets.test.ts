@@ -6,7 +6,7 @@ import {
   runtimePresetOptions,
   type HarnessCatalogState,
 } from "./runtimePresets";
-import type { HarnessCatalog } from "./types";
+import type { HarnessModelCatalog } from "@/lib/api";
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -78,7 +78,7 @@ describe("runtime presets", () => {
   });
 });
 
-const codexCatalog: HarnessCatalog = {
+const codexCatalog: HarnessModelCatalog = {
   harness: "codex",
   models: [
     { id: "gpt-6-astra", label: "GPT-6-Astra", efforts: ["low", "ultra"] },
@@ -141,5 +141,14 @@ describe("runtime preset groups", () => {
     expect(group({ loading: false, catalog: null, error: "" }, "").note).toBe(
       "Choose a harness to list its values",
     );
+  });
+
+  it("treats a catalog with null lists as reporting no values", () => {
+    const empty = { harness: "codex", models: null, efforts: null, error: "" };
+    const state: HarnessCatalogState = { loading: false, catalog: empty, error: "" };
+    for (const field of ["models", "efforts"] as const) {
+      const [group] = runtimePresetGroups({ harness: "codex", field, catalog: state });
+      expect(group.note).toBe("The harness reports no values");
+    }
   });
 });

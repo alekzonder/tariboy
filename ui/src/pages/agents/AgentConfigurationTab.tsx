@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { RunStateActions } from "@/components/AgentControls";
 import { useAgentName, useAgentStatus } from "@/lib/agent";
 import { useApi } from "@/components/apiContext";
-import type { AgentStatus } from "@/lib/types";
+import type { AgentStatus } from "@/lib/api";
 import { BLOCKS, filterBlocks } from "./configuration/registry";
 import { countDirtyByBlock, isStopped } from "./configuration/configurationPageModel";
 import { ConfigEmptyState } from "./configuration/ConfigEmptyState";

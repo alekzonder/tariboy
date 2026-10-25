@@ -11,7 +11,7 @@ export function TeamImportProgress({ operation, canRetry, onRetry }: Props) {
   return (
     <div className="space-y-1 text-xs" aria-label="Team import progress">
       <div>Import status: {operation.status}</div>
-      {operation.steps.map((step, index) => (
+      {(operation.steps ?? []).map((step, index) => (
         <div key={`${step.kind}-${step.name}-${index}`}>
           {step.kind} {step.name}: {step.status}
           {step.error ? ` — ${step.error}` : ""}

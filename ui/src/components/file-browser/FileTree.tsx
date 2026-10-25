@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Loader2 } from "lucide-react";
-import type { FileEntry } from "@/lib/api";
+import type { AgentFileEntry } from "@/lib/api";
 import type { FileTreeApi } from "./useFileTree";
 import { TreeRow } from "./TreeRow";
 
@@ -14,8 +14,8 @@ export function FileTree({
   tree: FileTreeApi;
   selected: string | null;
   onSelect: (path: string) => void;
-  onRename?: (entry: FileEntry, path: string) => void;
-  onDelete?: (entry: FileEntry, path: string) => void;
+  onRename?: (entry: AgentFileEntry, path: string) => void;
+  onDelete?: (entry: AgentFileEntry, path: string) => void;
 }) {
   const root = tree.dirs[""];
   let rootBody: ReactNode;

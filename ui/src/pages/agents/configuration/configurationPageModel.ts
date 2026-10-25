@@ -1,4 +1,4 @@
-import type { AgentStatus, AgentView } from "@/lib/types";
+import type { AgentStatus, AgentView } from "@/lib/api";
 import { blockOfKey } from "./registry";
 
 // countDirtyByBlock counts the unsaved fields of each block.

@@ -1,116 +1,29 @@
 import type { Transport } from "./client";
-import type { PromptLayer } from "./agents";
+import type {
+  ImageBuildResult,
+  ImageFileContent,
+  ImageFilesResult,
+  ImageListResult,
+  ImageManifest,
+  ImagePromptResult,
+  ImagePromptTemplate,
+  ImageProvenance,
+  ImageRemoveResult,
+  ImageValidateResult,
+} from "../api-types.generated";
 
-// One image as listed by GET /api/images (the create form's image combobox).
-export interface ImageRow {
-  image_version?: string;
-  schema_version?: number;
-  name: string;
-  tag: string;
-  digest?: string;
-  built_at?: string;
-  bare: boolean;
-  source?: string;
-  exportable?: boolean;
-  source_digest?: string;
-  source_cwd?: string;
-  source_available?: boolean;
-  current_agents?: string[];
-  pending_agents?: string[];
-}
+export type {
+  ImageBuildResult,
+  ImageDiagnostic,
+  ImageFileEntry,
+  ImageManifest,
+  ImagePromptTemplate,
+  ImageProvenance,
+  ImageSummary,
+  ImageValidateResult,
+} from "../api-types.generated";
 
-// ---- Images (read-only image detail: manifest / prompt / packed files) ----
-// `ref` is name:tag; it rides in the URL path so it is percent-encoded whole.
-interface ImageManifestPlugin {
-  name: string;
-  version?: string;
-}
-interface ImageManifestSkill {
-  name: string;
-  description: string;
-  source: string;
-  category: string;
-  archive_root: string;
-  file_count: number;
-  size: number;
-  tree_sha256: string;
-}
-interface ImageManifestHarness {
-  type: string;
-  model?: string;
-  effort?: string;
-  interactive: boolean;
-}
-interface ImageManifestPolicy {
-  tools_allow?: string[];
-  tools_deny?: string[];
-}
-export interface ImageManifest {
-  image_version?: string;
-  schema_version: number;
-  name: string;
-  tag: string;
-  digest?: string;
-  built_at: string;
-  parents: string[] | null;
-  plugins: ImageManifestPlugin[] | null;
-  skills: ImageManifestSkill[] | null;
-  requires_secrets: string[] | null;
-  harness?: ImageManifestHarness;
-  env: Record<string, string> | null;
-  policy?: ImageManifestPolicy;
-  layers: PromptLayer[] | null;
-  bare?: boolean;
-  prompt_template_sha256?: string;
-}
-export interface ImageTemplateEntry {
-  kind: "file" | "runtime";
-  runtime?: string;
-  source?: string;
-  category?: string;
-  archive_path?: string;
-  size?: number;
-  sha256?: string;
-}
-export interface ImagePromptTemplate {
-  schema_version: number;
-  entries: ImageTemplateEntry[];
-  sha256: string;
-}
-export interface ImageProvenance {
-  ref: string;
-  digest?: string;
-  source_cwd: string | null;
-  built_at?: string;
-  source_available: boolean;
-}
-export interface ImageBuildResult {
-  name: string;
-  tag: string;
-  digest: string;
-  layers: number;
-}
-export interface ImageDiagnostic {
-  path: string;
-  message: string;
-}
-export interface ImageValidationResult {
-  valid: boolean;
-  schema_version: number;
-  plugins?: string[];
-  skills?: ImageManifestSkill[];
-  template?: ImagePromptTemplate | null;
-  diagnostics?: ImageDiagnostic[];
-  warnings?: ImageDiagnostic[];
-}
-// One member of an image's tar.gz. The backend returns a FLAT list of every
-// member with its full slash-separated path; the image Files tab folds this
-// into per-directory listings client-side (the FileBrowser expects listDir).
-export interface ImageFileEntry {
-  path: string;
-  is_dir: boolean;
-  size: number;
-}
+// Not in /api/openapi.json: served by internal/api/server.go POST /api/image-imports.
 export interface ImageArchiveUpload {
   import_id: string;
   ref: string;
@@ -126,9 +39,9 @@ const encImagePath = (p: string) => p.split("/").map(encodeURIComponent).join("/
 
 export function imagesApi(t: Transport) {
   return {
-    listImages: () => t.get<{ images: ImageRow[]; count: number }>("/api/images"),
+    listImages: () => t.get<ImageListResult>("/api/images"),
     validateImageDirectory: (input: { path: string; name: string; tag?: string }) =>
-      t.post<ImageValidationResult>("/api/images/validate", input),
+      t.post<ImageValidateResult>("/api/images/validate", input),
     buildImageDirectory: (input: { path: string; name: string; tag?: string }) =>
       t.post<ImageBuildResult>("/api/images/build", input),
     imageManifestGet: (ref: string, expectedDigest?: string) =>
@@ -138,16 +51,14 @@ export function imagesApi(t: Transport) {
     imageProvenanceGet: (ref: string, expectedDigest?: string) =>
       t.get<ImageProvenance>(`${imagePath(ref)}/provenance${imageDigestQuery(expectedDigest)}`),
     imagePromptGet: (ref: string, expectedDigest?: string) =>
-      t.get<{ prompt: string }>(`${imagePath(ref)}/prompt${imageDigestQuery(expectedDigest)}`),
+      t.get<ImagePromptResult>(`${imagePath(ref)}/prompt${imageDigestQuery(expectedDigest)}`),
     imageFilesList: (ref: string, expectedDigest?: string) =>
-      t.get<{ files: ImageFileEntry[] | null; count: number }>(
-        `${imagePath(ref)}/files${imageDigestQuery(expectedDigest)}`,
-      ),
+      t.get<ImageFilesResult>(`${imagePath(ref)}/files${imageDigestQuery(expectedDigest)}`),
     imageFileRead: (ref: string, path: string, expectedDigest?: string) =>
-      t.get<{ path: string; content: string }>(
+      t.get<ImageFileContent>(
         `${imagePath(ref)}/files/${encImagePath(path)}${imageDigestQuery(expectedDigest)}`,
       ),
-    removeImage: (ref: string) => t.delete<{ removed: string }>(imagePath(ref)),
+    removeImage: (ref: string) => t.delete<ImageRemoveResult>(imagePath(ref)),
     downloadImageArchive: async (ref: string) =>
       (await t.raw("GET", `${imagePath(ref)}/export`)).blob(),
     uploadImageArchive: async (archive: Blob) => {

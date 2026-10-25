@@ -1,5 +1,5 @@
 import { lazy, useState } from "react";
-import type { FileContent, FileListing } from "@/lib/api";
+import type { AgentFileContent, AgentFileList } from "@/lib/api";
 import { useFileTree } from "./file-browser/useFileTree";
 import { useFileActions } from "./file-browser/useFileActions";
 import { FileTree } from "./file-browser/FileTree";
@@ -20,8 +20,8 @@ const FileViewer = lazy(() =>
 // shared by the agent Files tab (fully editable) and the image detail Files tab
 // (read-only).
 export interface FileBrowserApi {
-  listDir: (path: string) => Promise<FileListing>;
-  readFile: (path: string) => Promise<FileContent>;
+  listDir: (path: string) => Promise<AgentFileList>;
+  readFile: (path: string) => Promise<AgentFileContent>;
   // Presence of these enables the matching affordance (unless readOnly is set).
   writeFile?: (path: string, content: string) => Promise<void>;
   createFile?: (path: string, kind: "file" | "dir") => Promise<void>;

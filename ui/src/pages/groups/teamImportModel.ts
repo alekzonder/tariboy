@@ -1,6 +1,6 @@
-import type { ApiClient, TeamImportPreview } from "@/lib/api";
+import type { ApiClient, TeamImportPlan } from "@/lib/api";
 
-type PreviewEntry = TeamImportPreview["agents"][number];
+type PreviewEntry = TeamImportPlan["agents"][number];
 
 /** A team import preview as the page edits it before confirming. */
 export interface ImportPreview {
@@ -21,7 +21,7 @@ export interface ImportPreview {
 }
 
 /** The editable preview for a YAML or archive import, bound to the host that made it. */
-export function previewFromImport(preview: TeamImportPreview, api: ApiClient): ImportPreview {
+export function previewFromImport(preview: TeamImportPlan, api: ApiClient): ImportPreview {
   return {
     ...preview,
     agents: preview.agents ?? [],

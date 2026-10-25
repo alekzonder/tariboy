@@ -1,4 +1,4 @@
-import type { ImageRow } from "@/lib/api";
+import type { ImageSummary } from "@/lib/api";
 import { PathAutocomplete } from "@/components/PathAutocomplete";
 import { ImageCombobox } from "@/components/AgentFormFields";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ interface Props {
   index: number;
   isLeader: boolean;
   status: RowStatus | undefined;
-  images: ImageRow[];
+  images: ImageSummary[];
   allowsPlugins: boolean;
   canRemove: boolean;
   onSetLeader: () => void;

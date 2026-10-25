@@ -8,7 +8,7 @@ import ImageOverview from "@/pages/ImageOverview";
 import { ImageLayout } from "@/components/ImageLayout";
 import AgentConfigurationTab from "@/pages/agents/AgentConfigurationTab";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
-import type { AgentView } from "@/lib/types";
+import type { AgentView } from "@/lib/api";
 import { ApiProvider } from "@/components/ApiProvider";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import { Toaster } from "@/components/ui/sonner";

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { IterationRetention, MaintenanceRun, MaintenanceSettings } from "@/lib/api";
+import type { RetentionPolicy, MaintenanceRun, MaintenanceSettings } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -125,8 +125,8 @@ function RetentionDefaults({
   ret,
   patchRet,
 }: {
-  ret: IterationRetention;
-  patchRet: (p: Partial<IterationRetention>) => void;
+  ret: RetentionPolicy;
+  patchRet: (p: Partial<RetentionPolicy>) => void;
 }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -164,8 +164,8 @@ export function MaintenanceSettingsCard() {
   const api = useApi();
   const [form, setForm] = useState<MaintenanceSettings | null>(null);
   const [saved, setSaved] = useState<MaintenanceSettings | null>(null);
-  const [ret, setRet] = useState<IterationRetention | null>(null);
-  const [savedRet, setSavedRet] = useState<IterationRetention | null>(null);
+  const [ret, setRet] = useState<RetentionPolicy | null>(null);
+  const [savedRet, setSavedRet] = useState<RetentionPolicy | null>(null);
   const [lastRun, setLastRun] = useState<MaintenanceRun | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -232,7 +232,7 @@ export function MaintenanceSettingsCard() {
       if (r.error) setError(r.error);
     });
   const patch = (p: Partial<MaintenanceSettings>) => setForm((f) => (f ? { ...f, ...p } : f));
-  const patchRet = (p: Partial<IterationRetention>) => setRet((r) => (r ? { ...r, ...p } : r));
+  const patchRet = (p: Partial<RetentionPolicy>) => setRet((r) => (r ? { ...r, ...p } : r));
   const dirty =
     JSON.stringify(form) !== JSON.stringify(saved) ||
     JSON.stringify(ret) !== JSON.stringify(savedRet);

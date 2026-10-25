@@ -1,4 +1,4 @@
-import type { ImageRow } from "@/lib/api";
+import type { ImageSummary } from "@/lib/api";
 import { BuiltImageTagRow } from "./BuiltImageTagRow";
 import type { TagActionHandlers } from "./BuiltImageTagActions";
 
@@ -7,7 +7,7 @@ export function BuiltImageTagsTable({
   basePath,
   actions,
 }: {
-  tags: ImageRow[];
+  tags: ImageSummary[];
   basePath: string;
   actions: TagActionHandlers;
 }) {

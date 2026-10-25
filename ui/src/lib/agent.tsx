@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { AgentStatus } from "@/lib/types";
+import type { AgentStatus } from "@/lib/api";
 
 export const AgentNameContext = createContext<string>("");
 export const useAgentName = () => useContext(AgentNameContext);

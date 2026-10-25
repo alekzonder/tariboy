@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { FileContent } from "@/lib/api";
+import type { AgentFileContent } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 
 // Loads one file and owns its edit draft, save state and Preview/Source choice.
 export function useFileDraft(
   path: string | null,
-  readFile: (path: string) => Promise<FileContent>,
+  readFile: (path: string) => Promise<AgentFileContent>,
   writeFile: ((path: string, content: string) => Promise<void>) | undefined,
   onSaved: (path: string) => void,
 ) {
-  const [file, setFile] = useState<FileContent | null>(null);
+  const [file, setFile] = useState<AgentFileContent | null>(null);
   // The viewer is remounted per selected path (keyed in the parent), so `file`
   // starts null and `loading` starts true whenever there is a path — no
   // synchronous reset in the effect body is needed.
@@ -38,11 +38,11 @@ export function useFileDraft(
     };
   }, [readFile, path]);
 
-  const dirty = editing && file != null && draft !== file.content;
+  const dirty = editing && file != null && draft !== (file.content ?? "");
 
   const startEdit = useCallback(() => {
     if (!file) return;
-    setDraft(file.content);
+    setDraft(file.content ?? "");
     setEditing(true);
     // For markdown the editable CodeMirror only mounts in Source view; entering
     // Edit from Preview would otherwise show Save/Cancel over no editable

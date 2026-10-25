@@ -23,7 +23,7 @@ const SECTIONS: ImageSection[] = [
   },
   {
     title: "Harness",
-    visible: (manifest) => manifest.schema_version === 1 && !!manifest.harness,
+    visible: (manifest) => manifest.schema_version === 1 && !!manifest.harness?.type,
     render: ({ harness }) => (
       <>
         <Row label="type" value={harness!.type} />

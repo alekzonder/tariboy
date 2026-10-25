@@ -3,8 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { MemoryRouter } from "react-router-dom";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import type { Daemon } from "@/lib/daemons";
-import type { AgentImageStatus } from "@/lib/api";
-import type { AgentStatus, AgentView } from "@/lib/types";
+import type { AgentImageStatus, AgentStatus, AgentView } from "@/lib/api";
 import { clearHarnessCatalogCache } from "@/hooks/useHarnessCatalog";
 import { RUNTIME_PRESETS_STORAGE_KEY } from "@/lib/runtimePresets";
 import { notifyImagesChanged } from "@/lib/imageEvents";
@@ -55,9 +54,13 @@ const stopped: AgentView = {
   goal_wait_customer_timeout_s: 300,
   goal_delivery_cooldown_s: 60,
   current_goal_task_key: "",
-  group: null,
+  group: "",
   alias: "",
   notes: "",
+  configured_cwd: "",
+  color: "",
+  schedule: "",
+  schedule_next_at: "",
   budget: {
     hour_usd: 1,
     day_usd: 0,
@@ -73,9 +76,15 @@ const stopped: AgentView = {
 
 const projection = {
   name: "worker",
-  current: { ref: "worker:latest", digest: "old-digest", image_version: "1.0.0" },
+  current: { ref: "worker:latest", digest: "old-digest", image_version: "1.0.0", error: "" },
   pending: { ref: "", digest: "", error: "" },
-  next: { ref: "worker:latest", digest: "new-digest", image_version: "1.1.0", reason: "ref_moved" },
+  next: {
+    ref: "worker:latest",
+    digest: "new-digest",
+    image_version: "1.1.0",
+    reason: "ref_moved",
+    error: "",
+  },
 } satisfies AgentImageStatus;
 
 function response(result: unknown, ok = true, status = 200) {
@@ -542,6 +551,7 @@ it("cancels an explicit pending image at once, outside Save", async () => {
       digest: "explicit-digest",
       image_version: "2.0.0",
       reason: "pending",
+      error: "",
     },
   };
   const server = fakeServer({ image: () => state });
@@ -791,9 +801,8 @@ it("shows spend beside each budget and exhausted periods", async () => {
 });
 
 it("renders a budget projection from an older daemon without exhausted periods", async () => {
-  const legacy = { ...stopped.budget! };
-  delete legacy.exhausted;
-  fakeServer({ view: { budget: legacy } });
+  const { exhausted: _, ...legacy } = stopped.budget;
+  fakeServer({ view: { budget: legacy as AgentView["budget"] } });
   render(tree());
   await ready();
   expect(within(block("Budgets (USD)")).queryByText(/Out of budget/)).not.toBeInTheDocument();

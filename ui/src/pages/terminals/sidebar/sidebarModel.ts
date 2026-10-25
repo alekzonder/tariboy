@@ -1,6 +1,5 @@
 import type { HostAgents } from "@/lib/aggregate";
-import type { ChatSummary } from "@/lib/api";
-import type { AgentSummary } from "@/lib/types";
+import type { AgentRow, ChatSummary } from "@/lib/api";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
 
 /** Identity of one agent across the whole sidebar. The same encoding the
@@ -16,7 +15,7 @@ export interface SidebarAgent {
   hostLabel: string;
   hostError?: string;
   group: string;
-  agent: AgentSummary;
+  agent: AgentRow;
   /** This agent's chats folded into one row, when it has any. */
   chat?: ChatSummary;
 }
