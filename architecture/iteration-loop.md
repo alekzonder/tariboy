@@ -31,7 +31,15 @@ The loop is driven three ways, all requiring the agent to be **enabled**:
 
 Loop policy is per-agent: `interval`, `timeout` (soft), `hard-timeout`,
 `on_timeout` and `on_error` (e.g. `restart`). An iteration ends when it signals
-completion, exits, or reaches an enforced deadline.
+completion, exits, or reaches an enforced deadline. A `timeout` or
+`hard-timeout` of 0 means no deadline, in headless and interactive mode alike.
+When only `timeout` is set, the hard deadline is `timeout` plus 60 seconds.
+
+The engine re-reads the agent's saved settings before each iteration it starts,
+whatever started it: timer, schedule, message, or a manual run (`agent exec`,
+**Run now**). A change you save, such as the user prompt, applies to the next
+iteration. An iteration that is already running keeps the settings it started
+with.
 
 ### Schedule
 

@@ -303,7 +303,8 @@ each with ref, manifest version, and digest. The next selection explains its
 pending, mutable-ref, or current-pinned origin; a digest difference signals an
 update even at equal versions. Inspection and activation failures remain visible
 without a pending ref. The preview is explicitly not a reservation. Ordinary
-agent status refreshes and image-build events reload it without overwriting
+agent status refreshes and image-build notifications (see
+[Image change notifications](#image-change-notifications)) reload it without overwriting
 runtime drafts, and responses from an older host, agent, or refresh are ignored.
 Selection becomes active at the next iteration boundary; cancelling pending
 keeps automatic mutable-ref following enabled.
@@ -359,9 +360,8 @@ and the version of that workflow's built `latest` tag on the same host. It shows
 source errors (Build disabled), missing latest, update needed (highlighted), and
 up to date; when the workflow image list cannot be read it shows "Comparison
 unavailable" and keeps Build. **Build** sends the `STORE/NAME` selector to the
-workflow-image build endpoint, reports the published version and tags,
-dispatches `tariboy:workflow-image-built`, and reloads the detail and the
-comparison. Workflow sources have no automatic builds.
+workflow-image build endpoint, reports the published version and tags, and
+reloads the detail and the comparison. Workflow sources have no automatic builds.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources
@@ -422,6 +422,275 @@ daemon. The client therefore still needs memory proportional to the archive;
 streaming directly to a file requires a separate authenticated Desktop/Rust
 download API.
 
+## API layer
+
+`ui/src/lib/api/` is the only HTTP client of the Desktop UI. `@/lib/api`
+resolves to its `index.ts`, which assembles the client and re-exports the
+modules; it holds no requests of its own.
+
+- `client.ts` owns the transport: JSON requests that unwrap the
+  `{ok, result}` / `{ok, error}` envelope, raw requests for archives, uploads
+  and text exports, and the single `ApiError` class (`status`, `code`,
+  `message`, `details`). Every request uses `cache: "no-store"`, sends the
+  host's bearer token, and passes the caller's `AbortSignal`.
+- `hosts.ts` owns server selection: the active host that the host switcher
+  sets, the local daemon origin that Desktop sets at boot, and the
+  `ApiTarget` type (`undefined` = the active host, `null` = the local daemon,
+  a `Daemon` = that host).
+- One module per domain: `agents`, `iterations`, `usage`, `daemon`,
+  `harnesses`, `plugins`, `scripts`, `files`, `images`, `imageSources`,
+  `groups`, `stores`, `messages`, `audit`, `tasks`, and `workflows`. Each
+  module re-exports the types of its responses (see [API types](#api-types))
+  and exports a factory that receives a transport bound to one host. Domain
+  methods never take a target. `lib/tasks.ts` and `lib/audit.ts` keep only
+  presentation helpers.
+
+`createApi(target)` returns an `ApiClient`: the bound transport plus one
+section per domain, such as `api.tasks.getTask(key)` or
+`api.images.listImages()`. The target is fixed when the client is created:
+`undefined` resolves to the active host once, and a later host switch never
+redirects an existing client. A registered host without an endpoint (an SSH
+tunnel that is reconnecting) yields a client whose `ready` is false; its
+requests fail with `host_not_ready` and never fall back to the local daemon.
+
+React code reads the client from context:
+
+~~~tsx
+const api = useApi()
+const detail = await api.tasks.getTask(taskKey, signal)
+~~~
+
+`ApiProvider` fixes the server for the tree below it. `DaemonProvider`
+provides the active host, `RouteHostBoundary` provides the route host, and
+an agent workspace, a server pane, or a dialog with its own host picker mounts
+a provider for that host. Components do not pass a target down to children.
+`useApi()` outside a provider throws, and component tests render through
+`@/test/queryRender` or the `apiWrapper` / `fakeApi` helpers in
+`@/test/api.tsx`. An equal target keeps the same client across renders, so
+effects and subscriptions that depend on `api` do not restart. A new endpoint
+or token for the same host gives a new client without changing any tree key:
+loaded data and unsaved drafts survive a reconnect, while requests and
+subscriptions move to the new connection. A response from the previous client
+never replaces data of the current one.
+
+Code that works with several hosts at once creates one client per host with
+`createApi(daemon)`: the all-hosts agent list, the all-servers task view, and
+customer question notifications. A transfer between hosts (a task, an image,
+a workflow image) holds one source client and one destination client for the
+whole operation. The native host registry, SSH tunnels, and Keychain tokens
+stay in `lib/daemons.ts` and `lib/desktop.ts`.
+
+### API types
+
+`ui/src/lib/api-types.generated.ts` holds the TypeScript types of every
+response that `/api/openapi.json` describes. `npm run api-types` in `ui/`
+generates it from the committed snapshot
+`internal/commands/testdata/openapi.json`, and the `ui-api-types` step of
+`make frontend-check` fails when the file is out of date. Do not edit it; see
+[Go control plane and plugins](/docs/development#go-control-plane-and-plugins)
+for the workflow after an API change.
+
+Each schema is a top-level type with the Go type's name, such as `AgentRow`
+or `TaskDetail`. A domain module re-exports the types that its callers need,
+for example `export type { AgentRow, AgentView } from "../api-types.generated"`,
+and components import them from `@/lib/api`. `Comment`, `Event`, and
+`Notification` would shadow DOM globals, so `tasks.ts` re-exports them as
+`TaskComment`, `TaskEvent`, and `TaskNotification`. Where the spec has a plain
+string and the UI needs a union, the module narrows it at one place, such as
+`taskPriority(task)`.
+
+The types follow the spec exactly. A list that Go can return as `null` is
+`T[] | null`, and an optional field is optional, so the code handles both.
+Test data is a complete response, not a partial literal; the factories in
+`ui/src/test/fixtures/apiFixtures.ts` fill the fields a test does not check.
+
+These types stay hand-written. Each response type among them has a comment
+that says why the spec does not cover it:
+
+- Responses that `internal/api/server.go` serves outside the command
+  registry: the agent event stream (`AgentEvent`), the tasks WebSocket frame
+  (`TaskEventHint`), and the image, team, and workflow image archive imports.
+- The transcript calls of `audit.ts`, which the spec describes only as
+  objects.
+- Request bodies and filters, such as `CreateAgentSpec` and `TaskFilters`, and
+  types that the UI derives, such as `AgentPromptLayer`.
+
+## Code splitting
+
+The first download contains only the shell: the titlebar, the agent list, the
+providers, server selection, and the agent workspace frame. Everything else
+loads with `React.lazy` when it first renders:
+
+- the server pages in `TerminalsRoutes` (Tasks, All tasks, Activity, Images,
+  Workflows, Stores, and Settings) and the nested image and settings routes of
+  `routes.tsx`;
+- every agent workspace tab and the Goal task drawer in `AgentWorkspace`;
+- the TipTap editor (`tasks/TaskMarkdownEditor.tsx`): `MarkdownEditor` in
+  `TaskMarkdown.tsx` is a lazy wrapper, so `MarkdownContent` never loads TipTap;
+- the file viewer of `FileBrowser`, with CodeMirror, its languages, and the
+  highlighted preview.
+
+`components/LazyBoundary` wraps each place that renders a lazy component. It
+sits inside the layout that stays mounted, so the titlebar, the agent list,
+and the server or settings navigation stay visible. While a chunk downloads,
+the content area shows a `role="status"` text, **Loading…**. A later open uses
+the loaded module. A navigation inside the router is a transition, so the
+previous screen stays until the next one is ready. If a chunk fails to load,
+for example after an update or when the server is unreachable, the boundary
+shows **This screen failed to load.** and **Reloading discards unsaved input.**
+with a **Reload** button. It never retries by itself. A new route path, tab,
+or file clears the error.
+
+`vite.desktop.config.ts` puts vendor libraries in named chunks with
+`build.rolldownOptions.output.codeSplitting.groups`, the Vite 8 replacement for
+`manualChunks`: `react` (React, React DOM, and the router), `codemirror`,
+`tiptap` (TipTap and ProseMirror), `xterm`, and `markdown` (react-markdown,
+remark, rehype, and highlight.js). Only `react` is part of the first download;
+each other group loads with the first screen that needs it. Keep a group
+narrow: if the shell imports one module of a group, the whole group becomes
+part of the first download.
+
+`npm run bundle:budget`, a step of `make frontend-check`, has three limits in
+bytes before compression. The entry chunk is limited to 351,000 bytes. The
+entry chunk plus its static imports is limited to 723,000 bytes. All JavaScript
+chunks, lazily loaded ones included, are limited to 3,215,000 bytes. The step
+fails when a size is over its limit. The budget does not measure CSS or the
+start time on a device.
+
+## Component boundaries
+
+The public screen components keep their existing imports and properties.
+Their internal modules separate form state, requests, and presentation:
+
+- `terminals/create-agent` owns the single creation draft, source and image
+  loading, request validation, and the Target, Identity, Runtime, Loop, and
+  Lifecycle sections. Submission keeps creation separate from a retry of Start.
+- `terminals/server-dialog` separates HTTPS and SSH forms from host-operation
+  events and progress. The operation result remains separate from connectivity.
+- `components/file-browser` separates the tree, toolbar, viewer, dialogs, and
+  file actions. `FileBrowser` keeps the public API and source reset boundary.
+- `agents/configuration` owns the configuration blocks. The existing draft and
+  commit modules still own the single Save operation for the page.
+- `agents/chat` separates the toolbar and feed from loading, read markers, and
+  scroll position. It keeps its existing loader.
+- Tasks separates local view state, panel sizing, query composition, and write
+  actions. `TaskDetail` keeps one draft with its original revision. Its fields,
+  relations, history, and dialogs render that state without another server cache.
+- `components/tui-screen` separates the xterm lifecycle and sizing hook and the
+  tmux scrollback hook from the toolbar, compose, and help markup. The input
+  handler stays stable, so a render does not recreate the terminal.
+- `lib/audit.ts` and `lib/auditCodex.ts` read an audit record through handler
+  tables keyed by event kind, harness message type, and Codex item type.
+  `components/audit` renders each row kind in its own small component and keeps
+  the full log's filter and paging state in hooks.
+- `pages/audit-log` separates the URL query and the polled iteration list from
+  the list and tag editor markup.
+
+## Shared helpers and styles
+
+Helpers that more than one screen needs live in `ui/src/lib/`, and each name
+is declared once:
+
+- `lib/errors.ts` exports `errorText(error)`. It returns the message of any
+  `Error`, `ApiError` included, and `String(error)` for other values. A plain
+  error therefore shows `Failed to fetch`, without the class name.
+- `lib/ids.ts` exports `idempotencyKey(prefix)`. It returns
+  `crypto.randomUUID()`, or `prefix-<time>-<random>` when the WebView has no
+  `randomUUID`.
+- `lib/statusTone.ts` exports `flexibleStatusLabel(status)` for a flexible
+  task status. `lib/tasks.ts` alone exports `taskStatusLabel(task)`, the label
+  of any task.
+
+Styles are Tailwind utilities on the element. The `@theme` block of
+`ui/src/index.css` names the dense text sizes and the radii between the
+`--radius` steps:
+
+| Utility | Value |
+| --- | --- |
+| `text-nano`, `text-micro`, `text-tiny`, `text-caption`, `text-meta` | 9, 10, 10.5, 11, 11.5 px |
+| `text-ui`, `text-body-sm`, `text-body`, `text-body-lg`, `text-title` | 12, 12.5, 13, 14, 15 px |
+| `rounded-hair`, `rounded-xs`, `rounded-chip`, `rounded-sm`, `rounded-control` | 1.5, 2, 5, 6, 7 px |
+| `rounded-md`, `rounded-panel`, `rounded-lg`, `rounded-card`, `rounded-xl` | 8, 9, 10, 12, 14 px |
+
+The text sizes set only `font-size`, so the element keeps its line height.
+Sizes, spacing, and ring widths use the 4 px spacing scale: `h-6.5` is 26 px.
+`cn()` in `lib/utils.ts` tells tailwind-merge about the new names. Without
+that, tailwind-merge reads `text-ui` as a color and drops the color class next
+to it. When you add a text size or a radius to `@theme`, add it to `cn()` too.
+`ui/src/lib/utils.test.ts` fails when the two lists differ.
+
+`ui/src/test/arbitraryPxPolicy.test.ts` fails when production code under
+`ui/src` or `ui/store` uses a class of the form `utility-[Npx]`. Composite
+values, such as `grid-cols-[76px_minmax(0,1fr)]`, are allowed. The shadcn
+primitives under `ui/src/components/ui/` are not checked, so they stay the same
+as upstream. An inline `style` is only for a value that the code calculates at
+run time, such as a column width or a CSS variable.
+
+A CSS file is only for a rule that utilities cannot express clearly:
+pseudo-elements, a media query for one widget, or a rule that must override
+another component. `ui/src/pages/tasks/tasks.css` lists the rules it keeps
+and gives the reason for each at its top.
+
+## WebView storage
+
+`ui/src/lib/storage.ts` owns all access to `localStorage` and `sessionStorage`
+in the Desktop UI and the Store UI. It declares every key in one registry with
+its area, name, version, parser, and fallback value. Other modules call
+`readKey`, `writeKey`, and `removeKey` with a key from that registry. The unit
+test `ui/src/test/webStoragePolicy.test.ts` fails when production code under
+`ui/src` or `ui/store` uses `localStorage`, `sessionStorage`, or
+`window.dispatchEvent` directly. It scans the sources because the lint policy
+allows no per-file oxlint overrides. Tests and fixtures still seed raw values,
+so they detect a change of a stored format.
+
+Storage access is best effort. A missing value, a value the parser rejects,
+broken JSON, and storage that throws (blocked, private mode) all read as the
+fallback value. A failed write returns `false` and does not throw, so the
+interface keeps its state in memory until a reload. A read that finds a bad
+value does not delete it; the next write replaces it. Values are never logged,
+because some of them are tokens.
+
+Key names did not change when the registry was added, so saved state survives
+upgrades. A new key uses the form `<area>:<purpose>:v<N>`, and the registry
+test requires a versioned name to end with its version. When a format changes
+incompatibly, the key gets a new name with the next version. The old name
+stays in the registry only so it can be read once, like `terminals:workspace:v1`.
+
+| Key | Area | Owner | Value | Fallback |
+| --- | --- | --- | --- | --- |
+| `tariboy-theme` | local | theme provider | `light`, `dark`, or `system` | `system` |
+| `app:ui-mode:v1` | local | interface mode | `simple` or `expert` | `simple` |
+| `app:workspaces:v1` | local | host workspaces | JSON workspaces, host map, active workspace | Default only |
+| `desktop:updates:auto-download:v1` | local | Desktop updates | `true` or `false` | `true` |
+| `tariboy:runtime-presets:v1` | local | create-agent presets | JSON saved models and efforts per harness | none |
+| `tariboy_daemons` | local | browser host registry | JSON host metadata list | empty |
+| `tariboy_active_daemon` | local | host registry | selected host ID | none |
+| `tariboy_daemons_rejected_cleartext` | local | Desktop host migration | JSON cleartext hosts not imported | none |
+| `tariboy_daemon_token_<id>` | session | browser host registry | host token (browser mode only; Desktop uses the Keychain) | empty |
+| `tariboy:team-import` | local | Groups | JSON pending team import ID and host | none |
+| `terminals:server-order:v1` | local | sidebar | JSON host order | registry order |
+| `terminals:sidebar:v1` | local | sidebar | JSON width and hidden state | 268px, shown |
+| `terminals:workspace:v1` | local | sidebar (legacy, read once) | JSON record of the removed canvas | none |
+| `terminals:sidebar-tab:v1` | local | sidebar | `servers` or `agents` | `servers` |
+| `terminals:sidebar-pinned:v1` | local | sidebar | JSON pinned agents | none |
+| `terminals:chat-types:v1` | local | agent chat | JSON message types | default types |
+| `tui:draft:<agent>:<section>` | local | inject modal | draft text | empty |
+| `tasks:columns:v1` | local | task tables | JSON column order and widths | default layout |
+| `tasks:workspace:v1` | local | task detail panel | JSON detail width | half the window |
+| `tasks:new-task-queue:v1` | local | new task form | JSON last queue per server | none |
+| `tasks:queue-filter:v1` | session | task queue filter | queue prefix | none |
+| `tasks:all-view:v1` | session | All tasks | JSON search, status view, and server | active, all servers |
+| `tariboy_store_token` | session | Store UI | Store bearer token | none |
+
+### Image change notifications
+
+`ui/src/lib/imageEvents.ts` connects image builds to the image lists in the
+same window. A finished build from a directory or from a Store calls
+`notifyImagesChanged()`. **Built images** and the agent configuration sources
+subscribe with `subscribeImagesChanged()` and reload the images of their
+current host. A failing subscriber does not stop the others. Builds outside
+this window, for example from the CLI, do not notify the lists.
+
 ## Server data in Tasks
 
 TanStack Query v5 owns the server data for Tasks. One QueryClient serves the
@@ -435,9 +704,8 @@ List keys include the agent scope, text, status view, assignee, and waiting
 principal. Queue filtering remains local. History keys distinguish the
 workspace's latest 200 events from the drawer's first 200 events.
 
-The connection adapter resolves an omitted ApiTarget to an explicit target
-before a request starts. A null target always selects the local server.
-Server identity is independent of its endpoint. A new SSH port cancels old
+Queries read the server from the surrounding `ApiProvider`; a client for
+the local daemon has the identity `local`. Server identity is independent of its endpoint. A new SSH port cancels old
 reads and refreshes active queries without changing their keys or form state.
 An unavailable endpoint disables background reads. Credentials never appear
 in query keys, logs, or persistent storage. Credential changes clear that
@@ -469,8 +737,8 @@ stale for the next socket, manual, or mount refresh.
 For another Tasks reader, reuse its typed query options:
 
 ~~~tsx
-const target = useApiTarget(inputTarget)
-const detail = useApiQuery(taskQueries.detail(target, taskKey), target)
+const api = useApi()
+const detail = useApiQuery(taskQueries.detail(api, taskKey))
 ~~~
 
 Keep selection, drafts, expansion, sizing, and focus in the component.
@@ -543,7 +811,11 @@ marker with a problem mark whose title is the message; the pause pill
 outranks it, and `idle` earns no mark. The row needs no request of its own:
 both objects come with the task JSON. `TaskDetail`
 compares `status` only with `category` for its dirty check and tone, and sends
-no `status` or `assignee` on Save for a workflow task; it hides **Move to
+no `status` or `assignee` on Save for a workflow task. Its assignee is
+`WorkflowAssignee`: in an open, unpaused pool status of the shared workflow
+query it is a select of that pool's members (`listAgentPools` through
+`taskQueries.pools`) that calls `reassignTaskWorkflow` on change and then
+`onTaskChanged`; otherwise it is text. `TaskDetail` hides **Move to
 another server…** for one, and neither its banner nor a comment chip asks for
 a comment on the workflow's own (`system:workflow`) wait. In place of the status
 select it renders `WorkflowPanel`, which reads the shared workflow query. A task revision, an event sequence, or
@@ -570,7 +842,8 @@ targets with `returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the
 upgrade form appears when `canUpgrade` finds the view's `queue_digest` differs
 from its `digest` and sends `upgradeTaskWorkflow`, the move form uses
 `moveTaskWorkflow` (targets from the view's `statuses`), and cancel uses
-`cancelWorkflowTask`. `stepMarks`, `returnTargets`, and `defaultReturnTarget`
+`cancelWorkflowTask`. The move and upgrade forms live in
+`WorkflowMoveForms.tsx`. `stepMarks`, `returnTargets`, and `defaultReturnTarget`
 read `runVisits`, the visits of the task's current workflow digest. Outcomes, the problem block, and the return form follow
 a transition request through `useFollowRequest` in `workflowShared.ts`
 (`getTransitionRequest` once a second until the request settles or
@@ -578,12 +851,15 @@ a transition request through `useFollowRequest` in `workflowShared.ts`
 the controlled alert dialog of `useWorkflowConfirm`; `workflowShared.ts` also holds
 `errorText` and `useMounted`. Messages and logs render as React text;
 artifact values render through `MarkdownContent`, or as React text when an
-artifact is switched to **Text**. Every call passes the `ApiTarget` of the surrounding
-component. After a drawer action `TasksWorkspace` reloads the tree as well as
+artifact is switched to **Text**. Every call uses the client of the surrounding
+`ApiProvider`. After a drawer action `TasksWorkspace` reloads the tree as well as
 the detail, so the row agrees with the drawer before the socket reports the
 change. Queue settings are `QueueSettingsDialog`: a large `Dialog` (full
 screen on a phone) with the queue list on the left and the selected queue in
-tabs on the right. When it opens it reads each queue's binding
+tabs on the right. `QueueSettingsDetail.tsx` renders the selected queue and
+the new-queue form; `queueSettingsModel.ts` holds the pure readings: a list
+row's summary and warning, the tabs, the form requests, and how a refused bind
+reads. When it opens it reads each queue's binding
 (`getQueueWorkflow`), the bound manifest (`getWorkflowImage` by digest), and
 its pools (`listAgentPools`), so each list row can show the workflow and a dot
 for a required pool without agents; a queue that fails to load shows an error

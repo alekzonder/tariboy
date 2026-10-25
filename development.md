@@ -145,6 +145,7 @@ not need to read unrelated subsystems.
 | Images and groups | [Images](/docs/images) and [Images and groups](/docs/images-and-groups) |
 | Plugins and agent tools | [Plugins](/docs/plugins) and [Binaries](/docs/binaries) |
 | Release, support, diagnostics | [Support](/docs/support), [Security and controls](/docs/security-controls), and `docs/internal-alpha-release-runbook.md` |
+| HTTP commands, response types, OpenAPI, generated UI types | [Command registry](/docs/architecture#command-registry), [API layer](/docs/architecture/web-ui#api-layer), and [API types](/docs/architecture/web-ui#api-types) |
 
 If behavior crosses rows, follow all matching routes. For example, a terminal
 change in the Desktop app requires the loop/shim, Web UI, and Desktop/SSH rows.
@@ -164,11 +165,15 @@ make full-check      # heavy, tens of minutes, includes check
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
-`staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. The
-frontend target runs UI typecheck, lint, unit tests, branding, and the
-documentation checks. Before checking, `backend-check` runs `go mod download`
+`staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. Its
+`test` and `tariboy-tasks-e2e` steps also check the HTTP API against the
+committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
+frontend target runs the UI format check, the generated API types check, UI
+typecheck, lint with the complexity and size thresholds, the unused-code check, unit tests,
+branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
-`scripts/npm-ci-locked.sh` for locked installs under both `ui/` and `docs/`.
+`scripts/npm-ci-locked.sh` for locked installs under `ui/`, `ui/tools/api-types/`
+and `docs/`.
 They do not write into
 `bin/` or dirty `git status`. Each step reports its result and duration as it
 finishes.
@@ -291,6 +296,76 @@ Changes to queue-trigger delivery also exercise bus/daemon recovery; Compose
 changes exercise `internal/compose`. The isolated Tasks mode path is
 `scripts/tariboy-tasks-e2e.sh`, which runs inside `backend-check`.
 
+The HTTP API contract is checked inside `backend-check`; see
+[Command registry](/docs/architecture#command-registry) for the rules. The
+`test` step fails for a new HTTP command without a result schema, for a
+response that does not match its schema, and for a spec change without an
+updated snapshot. The `tariboy-tasks-e2e` step fails when the isolated daemon
+serves a spec other than the snapshot or answers a typed `GET` route outside
+its schema. The snapshot is `internal/commands/testdata/openapi.json`. A change
+to a command's arguments, summary, route or result type changes the spec, so
+update the snapshot in the same change:
+
+```bash
+go test ./internal/commands -run TestOpenAPISnapshot -update-openapi
+```
+
+Give every new HTTP command a typed result: a named struct, or a slice of
+one, declared with `registry.WithResult`. A handler never returns
+`map[string]any`; `TestHTTPCommandsDeclareResultSchema` and
+`TestCommandsReturnNoRawMaps` fail otherwise. Add a call for the new operation
+to `TestTypedResponsesMatchOpenAPI`: a domain registers its calls in
+`typedCallSets` from an `init` function in its own test file. Before you
+change a handler's result type, pin its JSON in the domain's golden test (for
+example `daemon_golden_test.go`) on the unchanged handler, and keep that
+golden file unchanged through the change.
+
+The UI does not declare response types by hand. `ui/src/lib/api-types.generated.ts`
+is generated from the snapshot and committed. After you update the snapshot,
+regenerate the file and commit both in the same change:
+
+```bash
+cd ui
+npm run api-types
+```
+
+The command reads the snapshot from the repository and needs no running
+daemon. The `ui-api-types` step of `make frontend-check` runs
+`npm run api-types:check`. It generates the file again in a temporary
+directory and compares it with the committed file. When they differ, the step
+fails, prints the diff and the command above, and changes no file. Fix the UI
+code that the new types break: `npx tsc -b` names every place. See
+[API types](/docs/architecture/web-ui#api-types) for how the UI uses the file.
+
+The generator, `openapi-typescript`, runs from its own package in
+`ui/tools/api-types/` with its own lock file. It needs the TypeScript 5
+compiler API, and `ui/` uses TypeScript 7, so the two cannot share one
+`package.json`. `frontend-check` installs the package with
+`scripts/npm-ci-locked.sh` like `ui/` and `docs/`.
+
+#### Changing an API response end to end
+
+One pull request carries an API change from the Go type to the UI. For
+example, to add a field to an agent response:
+
+1. Add the field to the result struct in the domain's `*_types.go` file under
+   `internal/commands`. If the change replaces the result type, first pin the
+   current JSON in the domain's golden test, as described above.
+2. Update the snapshot:
+   `go test ./internal/commands -run TestOpenAPISnapshot -update-openapi`.
+3. Regenerate the UI types: `cd ui && npm run api-types`.
+4. Run `npx tsc -b` in `ui/` and fix every place it names. Add the new field
+   to the factory in `ui/src/test/fixtures/apiFixtures.ts`, so test data stays
+   a complete response.
+5. Use the field in the UI through the domain module's re-exported type.
+6. Run `make check`.
+7. Commit the Go change, `internal/commands/testdata/openapi.json`,
+   `ui/src/lib/api-types.generated.ts`, and the UI change together.
+
+When you rebase such a branch and the snapshot or the generated file
+conflicts, resolve the conflicts in the code, then run steps 2 and 3 again
+instead of merging the generated lines.
+
 Workflow changes span `internal/workflowfile` and `internal/workflowimage`
 (the image), `internal/tasks` (the engine, run records, queue secrets, and the
 run log route), `internal/workflowrun` (the script protocol, process execution,
@@ -359,20 +434,231 @@ cd ui
 npm ci
 ```
 
-`make check` then covers `npx tsc -b`, `npm run lint`, `npm test`, and
-`npm run branding:check`. `make full-check` adds `npm run test:tasks-browser`
+`make check` then covers `npm run fmt:check`, `npm run api-types:check`, `npx tsc -b`, `npm run lint`, `npm run knip`,
+`npm test`, `npm run branding:check`, and `npm run bundle:budget`. `make full-check` adds `npm run test:tasks-browser`
 and `npm run test:images-browser`, and builds the desktop bundle through its
 desktop step. Run any of them directly under `ui/` while iterating:
 
 ```bash
 cd ui
 npm test
+npm run api-types
+npm run api-types:check
+npm run fmt
+npm run fmt:check
 npm run lint
+npm run knip
+npm run bundle:budget
+npm run complexity:report
 npm run build:desktop
 npm run test:tasks-browser
 npm run test:images-browser
 npm run build:store
 ```
+
+`npm run bundle:budget` runs `ui/scripts/bundle-budget.mjs`. It builds the
+production Desktop bundle into a temporary directory, reads the Vite manifest,
+and removes the directory afterwards. It checks three sizes against
+`LIMITS` in the script:
+
+| Size | Limit in bytes |
+| --- | --- |
+| The entry chunk | 351,000 |
+| The initial JavaScript: the entry chunk and every chunk that it imports statically | 723,000 |
+| All JavaScript: every chunk, lazily loaded chunks included | 3,215,000 |
+
+The sizes are minified bytes before compression. Each limit is the size at
+the time the limit was set, plus 5%, rounded up to 1,000 bytes. When the code
+becomes smaller, lower the limit in the same change. Raise a limit only in the
+change that needs it, and give the reason in the pull request.
+
+The failure message names each size that is over its limit, gives the size and
+the limit, and lists the files of the initial JavaScript. A missing entry,
+manifest import, or output file is also a failure. To fix an entry or initial
+failure, load the new code with `React.lazy`, or keep the library out of the
+groups that the shell imports (see
+[Code splitting](/docs/architecture/web-ui#code-splitting)). To fix a failure
+of all JavaScript, make the lazily loaded code smaller.
+
+`npm run fmt` formats `ui/src`, `ui/store`, `ui/tests`, and `ui/.design-sync`
+in place with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) and
+`ui/.oxfmtrc.json`: double quotes, semicolons, and two-space indentation
+without tabs. Import sorting and Tailwind class sorting are off. oxfmt skips
+files that it does not support, such as shell scripts, and the paths in
+`ui/.gitignore`. `npm run fmt:check`, also available as `make ui-fmt-check`, checks
+the same paths without writing files. It is the `ui-fmt-check` step of
+`make frontend-check`, so formatting drift fails `make check`. Run
+`npm run fmt` when it reports drift. oxfmt 0.73.0 formats some chained calls,
+such as `vi.fn().mockImplementation(...)` inside a call, in two passes. If
+`npm run fmt:check` still reports a file right after `npm run fmt`, run
+`npm run fmt` again. Configure your editor to use oxfmt with
+the same configuration, so that a save does not reformat other code.
+
+The commit that first formatted these paths is listed in
+`.git-blame-ignore-revs` at the repository root. Use
+`git blame --ignore-revs-file .git-blame-ignore-revs FILE` to skip it, or set
+it once for your clone:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
+`npm run lint` runs oxlint with `ui/.oxlintrc.json` and `--deny-warnings`.
+A warning therefore fails `make frontend-check` in the same way as an error.
+The configuration turns on the complete `correctness` category, adds
+selected rules from other categories, and turns on the
+[complexity and size thresholds](#frontend-complexity-thresholds). It has
+two kinds of rule override: the test override and the `.design-sync` override.
+The next section describes them.
+
+Fix the code before you suppress a diagnostic. If a suppression is necessary,
+put an oxlint comment on the line before the diagnostic. The comment names the
+rule and gives the reason after `--`:
+
+```tsx
+// oxlint-disable-next-line react/exhaustive-deps -- keyed by identity on purpose: an equal target keeps the same client
+```
+
+A generated file can use one file-level `/* oxlint-disable RULE -- reason */`
+comment. Do not use `eslint-disable` comments. `ui/src/test/lintPolicy.test.ts`
+fails on an `eslint-disable` comment, on an oxlint comment without a rule or a
+reason, and on a rule override of another kind. Turn off a `correctness` rule
+for the complete project only when the rule does not apply to the project, and
+write the reason in this guide.
+
+#### Frontend complexity thresholds
+
+These are the size and complexity limits for the UI code. `ui/.oxlintrc.json`
+turns them on as errors, so `npm run lint`, the `ui-lint` step of
+`make frontend-check`, fails on a violation. The diagnostic gives the file, the
+line, the function name, the value, and the limit, for example:
+
+```text
+src/pages/ExamplePage.tsx:14:16 ... The function `ExamplePage` has too many lines (155). Maximum allowed is 150.
+```
+
+| Rule | Limit |
+| --- | --- |
+| `complexity` | 15 |
+| `max-lines` | 400, without blank lines and comments |
+| `max-lines-per-function` | 150, without blank lines and comments |
+| `max-depth` | 4 |
+| `max-params` | 5 |
+| `max-nested-callbacks` | 4 |
+
+Test-only files do not have the two length limits. A long `describe` block is
+the normal shape of a test file, so a length limit only moves tests around.
+The other four limits apply to test-only files in the same way as to app code.
+A test with many branches is not reliable: put each case in its own test and
+use a route table instead of an `if` chain in a fake server. For a fake
+`fetch`, use `routeFetch` from `ui/src/test/fetchRoutes.ts`. The test-only
+files are unit tests, Playwright tests, and the shared test code in
+`ui/src/test/` and `ui/tests/`:
+
+```json
+{
+  "files": ["**/*.test.{ts,tsx}", "**/*.pw.ts", "src/test/**", "tests/**"],
+  "rules": {
+    "max-lines": "off",
+    "max-lines-per-function": "off"
+  }
+}
+```
+
+Unlike `make gocyclo`, which does not measure Go test files, these limits
+measure the complexity of the frontend tests.
+
+`ui/.design-sync` is the design synchronization tool, not app code. An
+override turns off the six limits for `.design-sync/**`. The `correctness`
+rules still apply to it.
+
+`make ui-complexity-report` prints every function and file over a limit. When
+nothing is over a limit, it prints
+`No UI function or file is over a complexity or size threshold.`. It never fails on a violation, like
+`make gocyclo-report`. Use it to plan refactoring. Each line gives the rule,
+the value and the limit, the file and line, and the oxlint message, which
+names the function. The lines are sorted by rule, the largest value first. The
+last lines give the number of violations for each rule:
+
+```text
+complexity                18/15  src/pages/ExamplePanel.tsx:15   function `ExamplePanel` has a complexity of 18
+max-lines-per-function  239/150  src/pages/ExamplePage.tsx:27    The function `ExamplePage` has too many lines (239)
+
+complexity: 1
+max-lines-per-function: 1
+total: 2
+```
+
+If a test file becomes slow, divide it into one file for each scenario, for
+example `TasksWorkspace.realtime.test.tsx`. Vitest runs the files in parallel.
+Put the shared fixtures in `ui/src/test/`. Keep the `vi.hoisted` and `vi.mock`
+calls in each test file, because Vitest hoists them only in the test file
+itself.
+
+`npm run knip` runs [Knip](https://knip.dev) from `ui/knip.json`. The
+`ui-dead-code` step of `make frontend-check` runs it. It fails when it finds
+unused code or an unused package, and it does not delete code. It runs two
+passes:
+
+1. `knip --production --include files` follows imports from the Desktop and
+   Android app (`src/main.tsx`, found through `index.html`) and from the Store
+   app (`store/main.tsx`, found through `vite.store.config.ts`). Tests,
+   `tests/**`, and `.design-sync/**` are not entry points in this pass. A file
+   that only a test or the design-sync bundle imports is reported as unused.
+2. `knip` checks the complete graph: the apps, the Vitest unit tests, the
+   Playwright tests and fixtures under `tests/`, and the design-sync files
+   under `.design-sync/`. It reports every issue type: unused files, exports,
+   exported types, duplicate exports, unused or unlisted dependencies and
+   devDependencies, and unlisted binaries. An export that a test imports is
+   not reported, but an export that no file imports is.
+
+Knip finds entry points in three ways. Its Vite, Vitest, and Playwright
+plugins read every `vite*.config.ts` and `playwright.*.config.ts` file in
+`ui/`, so a new config with a name of that form needs no change. The `entry`
+list in `ui/knip.json` adds `tests/**` and `.design-sync/**`, because a
+script or an external tool loads those files by path, not by import. A new
+file that is loaded by path, by a glob, or by a tool outside the import graph
+must be added to `entry`. Otherwise Knip reports it as an unused file. The
+`project` list names the files that can be reported. It includes `*.css`
+under `src/` and `store/`, so a package used only by a CSS `@import`, such as
+`tailwindcss`, counts as used.
+
+The report has one group for each issue type, for example
+`Unused files (1)` or `Unused exported types (2)`. Each line gives the name,
+the file, and the line. Fix each group as follows:
+
+| Group | Fix |
+| --- | --- |
+| Unused files | Delete the file. If a tool loads it by path, add it to `entry` |
+| Unused exports, exported types | Delete the code, or remove the `export` keyword when only its own file uses it |
+| Duplicate exports | Keep one name and delete the alias |
+| Unused dependencies, devDependencies | Remove the package with `npm uninstall` |
+| Unlisted dependencies | Add the package to `package.json` with `npm install` |
+| Unlisted binaries | Add the npm package that provides it. A tool that is not an npm package, such as `go`, goes to `ignoreBinaries` |
+
+If Knip reports unlisted binaries such as `oxfmt` or `knip` that are in
+`package.json`, `ui/node_modules` is out of date: run `npm ci` in `ui/`.
+Shared test helpers live under `src/test/`,
+which the first pass does not check. Add an exception to `ignoreIssues` in
+`ui/knip.json` only for code that the app does not use on purpose. Name each
+file, list only the issue types it needs, and give the reason in the pull
+request. Do not add a pattern that covers all of `src/` or all components.
+The current exceptions are the shadcn primitives under `src/components/ui/`.
+The repository keeps that kit complete for the design-sync catalog, so its
+unused exports and the unused `separator.tsx` and `tooltip.tsx` files are
+allowed.
+
+The design-sync catalog under `ui/.design-sync` is checked by `make check` in
+two places. `npx tsc -b` builds `ui/tsconfig.design-sync.json`, which
+type-checks `.design-sync/entry.tsx` and every preview against the real
+component props: the `tariboy-ui` import in a preview resolves to the
+generated entry. When a component's props change, update its preview in the
+same change. `src/test/designSyncCatalog.test.ts` fails when the committed
+`entry.tsx` differs from a fresh `node .design-sync/make-entry.mjs` run, when a
+`componentSrcMap` path in `config.json` names a missing file, or when a preview
+or an override has no `componentSrcMap` key. To fix the first case, run
+`node .design-sync/make-entry.mjs` from `ui/` and commit the result. For the
+other cases, correct `config.json`.
 
 For interactive visual checks of React-only changes, start the production UI
 and its real API together:
@@ -792,6 +1078,12 @@ The two UI targets have different Git contracts:
   After a store UI or relevant shared UI change, run `make store-ui` in an
   isolated worktree at the target commit and commit only the intended generated
   store bundle with its source change.
+- `internal/commands/testdata/openapi.json` and
+  `ui/src/lib/api-types.generated.ts` are committed and never edited by hand.
+  Update the snapshot with
+  `go test ./internal/commands -run TestOpenAPISnapshot -update-openapi` and
+  the UI types with `npm run api-types` from `ui/`; see
+  [Changing an API response end to end](#changing-an-api-response-end-to-end).
 `tariboyd` is API/WebSocket only. It does not embed a Desktop UI, and there is
 no `internal/webui` tree.
 

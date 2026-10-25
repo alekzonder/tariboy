@@ -733,6 +733,72 @@ all derived from it.
   `update` and the `compose` verbs. `daemon status` also keeps its HTTP route.
   `AbsPathArgs` names the path arguments the CLI makes absolute, and
   `ExitCodeFrom` derives the CLI exit code from a result.
+- **Results are typed Go structs.** A handler returns a named struct, never
+  `map[string]any`, and the command declares it with
+  `registry.WithResult[T](registry.Command{...})`. The helper derives the JSON
+  Schema of `T` with `github.com/invopop/jsonschema`, adds `T` and every named
+  struct it reaches to `Schemas` under its Go type name, and sets
+  `ResultSchema` to `{"$ref": "#/components/schemas/T"}`. For a slice of a
+  named struct, such as `[]StoreView`, `ResultSchema` is an array of that
+  reference. `/api/openapi.json`
+  copies `Schemas` into `components.schemas` and puts `ResultSchema` under
+  `result` in the `200` envelope. The rules follow `encoding/json`:
+  - the `json` tag names a property;
+  - a field without `omitempty` is required, a field with it is optional;
+  - a pointer field must carry `omitempty`, or registration panics;
+  - every struct schema has `additionalProperties: false`;
+  - an embedded struct adds its fields to the parent;
+  - an enum is a string type whose `JSONSchemaExtend` method sets `Enum` from
+    its Go constants;
+  - a value that can be JSON `null`, such as a nil slice, carries
+    `jsonschema_extras:"nullable=true"`;
+  - a result whose shape the code does not own, such as a plugin's action
+    result or the daemon config keyed by config name, is a named struct with
+    a `MarshalJSON` method that keeps the wire format and a `JSONSchema`
+    method that describes the open shape.
+
+  Two different schemas under one component name in one command also panic at
+  registration. Every command in `internal/commands` uses this form. The
+  result types of a domain are in its `*_types.go` file, for example
+  `agents_types.go`. The task commands in `tasks.go` name their result types
+  in the `taskResultTypes` table. The field descriptions and enums of the
+  `internal/tasks` types come from `jsonschema:"description=..."` tags and
+  `JSONSchemaExtend` methods. No command has a hand-written `ResultSchema`.
+- **The spec is a checked contract.** These tests in `internal/commands` keep
+  `/api/openapi.json` and the code together:
+  - `TestHTTPCommandsDeclareResultSchema` fails for an HTTP command whose
+    `ResultSchema` is not a component reference or an array of one. There is
+    no exception list.
+  - `TestCommandsReturnNoRawMaps` (`result_guard_test.go`) parses the
+    package's non-test files and fails for a function with the handler result
+    `(any, error)` that returns a `map[string]any` literal,
+    `make(map[string]any)`, or a variable filled from one.
+  - `TestCommandsDeclareConsistentComponents` fails when two commands declare
+    one component name with different schemas. Give result types a domain
+    prefix, such as `StoreView`, not a generic name such as `Item`.
+  - `TestOpenAPISnapshot` compares the served spec with the committed
+    snapshot `internal/commands/testdata/openapi.json`. The snapshot pins
+    `info.version` to `snapshot`, so a release does not change it. A contract
+    change is a change with an updated snapshot. Rewrite it with
+    `go test ./internal/commands -run TestOpenAPISnapshot -update-openapi`
+    and commit it with the code.
+  - `TestTypedResponsesMatchOpenAPI` sends a request to every operation whose
+    result is a component reference or has properties, and validates the
+    response against the served spec with
+    `github.com/santhosh-tekuri/jsonschema/v6`. A new typed operation needs a
+    call in its table or in its domain's `typedCallSets` entry, or the test
+    fails. The check finds a result that differs
+    from its declared type: an extra field, a missing required field, a wrong
+    type, or `null` where the schema does not allow it. Error responses are
+    validated against the `default` error envelope.
+  - `TestDaemonOpenAPIContract` runs only from
+    `scripts/tariboy-tasks-e2e.sh`. It reads the spec of the isolated daemon,
+    compares it with the snapshot apart from `info.version`, and validates the
+    daemon's answers to typed `GET` routes.
+
+  The spec stays OpenAPI 3.0.3. Before validation, the tests rewrite
+  `nullable: true`, which JSON Schema does not know, into a type and enum that
+  allow `null`.
 
 Native task commands have one more table: `internal/tasks/wire.go` declares
 each task action's request struct, CLI words, flags and operator route. The
@@ -1019,7 +1085,15 @@ The loop is driven three ways, all requiring the agent to be **enabled**:
 
 Loop policy is per-agent: `interval`, `timeout` (soft), `hard-timeout`,
 `on_timeout` and `on_error` (e.g. `restart`). An iteration ends when it signals
-completion, exits, or reaches an enforced deadline.
+completion, exits, or reaches an enforced deadline. A `timeout` or
+`hard-timeout` of 0 means no deadline, in headless and interactive mode alike.
+When only `timeout` is set, the hard deadline is `timeout` plus 60 seconds.
+
+The engine re-reads the agent's saved settings before each iteration it starts,
+whatever started it: timer, schedule, message, or a manual run (`agent exec`,
+**Run now**). A change you save, such as the user prompt, applies to the next
+iteration. An iteration that is already running keeps the settings it started
+with.
 
 ### Schedule
 
@@ -2662,7 +2736,8 @@ each with ref, manifest version, and digest. The next selection explains its
 pending, mutable-ref, or current-pinned origin; a digest difference signals an
 update even at equal versions. Inspection and activation failures remain visible
 without a pending ref. The preview is explicitly not a reservation. Ordinary
-agent status refreshes and image-build events reload it without overwriting
+agent status refreshes and image-build notifications (see
+[Image change notifications](#image-change-notifications)) reload it without overwriting
 runtime drafts, and responses from an older host, agent, or refresh are ignored.
 Selection becomes active at the next iteration boundary; cancelling pending
 keeps automatic mutable-ref following enabled.
@@ -2718,9 +2793,8 @@ and the version of that workflow's built `latest` tag on the same host. It shows
 source errors (Build disabled), missing latest, update needed (highlighted), and
 up to date; when the workflow image list cannot be read it shows "Comparison
 unavailable" and keeps Build. **Build** sends the `STORE/NAME` selector to the
-workflow-image build endpoint, reports the published version and tags,
-dispatches `tariboy:workflow-image-built`, and reloads the detail and the
-comparison. Workflow sources have no automatic builds.
+workflow-image build endpoint, reports the published version and tags, and
+reloads the detail and the comparison. Workflow sources have no automatic builds.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources
@@ -2781,6 +2855,275 @@ daemon. The client therefore still needs memory proportional to the archive;
 streaming directly to a file requires a separate authenticated Desktop/Rust
 download API.
 
+## API layer
+
+`ui/src/lib/api/` is the only HTTP client of the Desktop UI. `@/lib/api`
+resolves to its `index.ts`, which assembles the client and re-exports the
+modules; it holds no requests of its own.
+
+- `client.ts` owns the transport: JSON requests that unwrap the
+  `{ok, result}` / `{ok, error}` envelope, raw requests for archives, uploads
+  and text exports, and the single `ApiError` class (`status`, `code`,
+  `message`, `details`). Every request uses `cache: "no-store"`, sends the
+  host's bearer token, and passes the caller's `AbortSignal`.
+- `hosts.ts` owns server selection: the active host that the host switcher
+  sets, the local daemon origin that Desktop sets at boot, and the
+  `ApiTarget` type (`undefined` = the active host, `null` = the local daemon,
+  a `Daemon` = that host).
+- One module per domain: `agents`, `iterations`, `usage`, `daemon`,
+  `harnesses`, `plugins`, `scripts`, `files`, `images`, `imageSources`,
+  `groups`, `stores`, `messages`, `audit`, `tasks`, and `workflows`. Each
+  module re-exports the types of its responses (see [API types](#api-types))
+  and exports a factory that receives a transport bound to one host. Domain
+  methods never take a target. `lib/tasks.ts` and `lib/audit.ts` keep only
+  presentation helpers.
+
+`createApi(target)` returns an `ApiClient`: the bound transport plus one
+section per domain, such as `api.tasks.getTask(key)` or
+`api.images.listImages()`. The target is fixed when the client is created:
+`undefined` resolves to the active host once, and a later host switch never
+redirects an existing client. A registered host without an endpoint (an SSH
+tunnel that is reconnecting) yields a client whose `ready` is false; its
+requests fail with `host_not_ready` and never fall back to the local daemon.
+
+React code reads the client from context:
+
+~~~tsx
+const api = useApi()
+const detail = await api.tasks.getTask(taskKey, signal)
+~~~
+
+`ApiProvider` fixes the server for the tree below it. `DaemonProvider`
+provides the active host, `RouteHostBoundary` provides the route host, and
+an agent workspace, a server pane, or a dialog with its own host picker mounts
+a provider for that host. Components do not pass a target down to children.
+`useApi()` outside a provider throws, and component tests render through
+`@/test/queryRender` or the `apiWrapper` / `fakeApi` helpers in
+`@/test/api.tsx`. An equal target keeps the same client across renders, so
+effects and subscriptions that depend on `api` do not restart. A new endpoint
+or token for the same host gives a new client without changing any tree key:
+loaded data and unsaved drafts survive a reconnect, while requests and
+subscriptions move to the new connection. A response from the previous client
+never replaces data of the current one.
+
+Code that works with several hosts at once creates one client per host with
+`createApi(daemon)`: the all-hosts agent list, the all-servers task view, and
+customer question notifications. A transfer between hosts (a task, an image,
+a workflow image) holds one source client and one destination client for the
+whole operation. The native host registry, SSH tunnels, and Keychain tokens
+stay in `lib/daemons.ts` and `lib/desktop.ts`.
+
+### API types
+
+`ui/src/lib/api-types.generated.ts` holds the TypeScript types of every
+response that `/api/openapi.json` describes. `npm run api-types` in `ui/`
+generates it from the committed snapshot
+`internal/commands/testdata/openapi.json`, and the `ui-api-types` step of
+`make frontend-check` fails when the file is out of date. Do not edit it; see
+[Go control plane and plugins](/docs/development#go-control-plane-and-plugins)
+for the workflow after an API change.
+
+Each schema is a top-level type with the Go type's name, such as `AgentRow`
+or `TaskDetail`. A domain module re-exports the types that its callers need,
+for example `export type { AgentRow, AgentView } from "../api-types.generated"`,
+and components import them from `@/lib/api`. `Comment`, `Event`, and
+`Notification` would shadow DOM globals, so `tasks.ts` re-exports them as
+`TaskComment`, `TaskEvent`, and `TaskNotification`. Where the spec has a plain
+string and the UI needs a union, the module narrows it at one place, such as
+`taskPriority(task)`.
+
+The types follow the spec exactly. A list that Go can return as `null` is
+`T[] | null`, and an optional field is optional, so the code handles both.
+Test data is a complete response, not a partial literal; the factories in
+`ui/src/test/fixtures/apiFixtures.ts` fill the fields a test does not check.
+
+These types stay hand-written. Each response type among them has a comment
+that says why the spec does not cover it:
+
+- Responses that `internal/api/server.go` serves outside the command
+  registry: the agent event stream (`AgentEvent`), the tasks WebSocket frame
+  (`TaskEventHint`), and the image, team, and workflow image archive imports.
+- The transcript calls of `audit.ts`, which the spec describes only as
+  objects.
+- Request bodies and filters, such as `CreateAgentSpec` and `TaskFilters`, and
+  types that the UI derives, such as `AgentPromptLayer`.
+
+## Code splitting
+
+The first download contains only the shell: the titlebar, the agent list, the
+providers, server selection, and the agent workspace frame. Everything else
+loads with `React.lazy` when it first renders:
+
+- the server pages in `TerminalsRoutes` (Tasks, All tasks, Activity, Images,
+  Workflows, Stores, and Settings) and the nested image and settings routes of
+  `routes.tsx`;
+- every agent workspace tab and the Goal task drawer in `AgentWorkspace`;
+- the TipTap editor (`tasks/TaskMarkdownEditor.tsx`): `MarkdownEditor` in
+  `TaskMarkdown.tsx` is a lazy wrapper, so `MarkdownContent` never loads TipTap;
+- the file viewer of `FileBrowser`, with CodeMirror, its languages, and the
+  highlighted preview.
+
+`components/LazyBoundary` wraps each place that renders a lazy component. It
+sits inside the layout that stays mounted, so the titlebar, the agent list,
+and the server or settings navigation stay visible. While a chunk downloads,
+the content area shows a `role="status"` text, **Loading…**. A later open uses
+the loaded module. A navigation inside the router is a transition, so the
+previous screen stays until the next one is ready. If a chunk fails to load,
+for example after an update or when the server is unreachable, the boundary
+shows **This screen failed to load.** and **Reloading discards unsaved input.**
+with a **Reload** button. It never retries by itself. A new route path, tab,
+or file clears the error.
+
+`vite.desktop.config.ts` puts vendor libraries in named chunks with
+`build.rolldownOptions.output.codeSplitting.groups`, the Vite 8 replacement for
+`manualChunks`: `react` (React, React DOM, and the router), `codemirror`,
+`tiptap` (TipTap and ProseMirror), `xterm`, and `markdown` (react-markdown,
+remark, rehype, and highlight.js). Only `react` is part of the first download;
+each other group loads with the first screen that needs it. Keep a group
+narrow: if the shell imports one module of a group, the whole group becomes
+part of the first download.
+
+`npm run bundle:budget`, a step of `make frontend-check`, has three limits in
+bytes before compression. The entry chunk is limited to 351,000 bytes. The
+entry chunk plus its static imports is limited to 723,000 bytes. All JavaScript
+chunks, lazily loaded ones included, are limited to 3,215,000 bytes. The step
+fails when a size is over its limit. The budget does not measure CSS or the
+start time on a device.
+
+## Component boundaries
+
+The public screen components keep their existing imports and properties.
+Their internal modules separate form state, requests, and presentation:
+
+- `terminals/create-agent` owns the single creation draft, source and image
+  loading, request validation, and the Target, Identity, Runtime, Loop, and
+  Lifecycle sections. Submission keeps creation separate from a retry of Start.
+- `terminals/server-dialog` separates HTTPS and SSH forms from host-operation
+  events and progress. The operation result remains separate from connectivity.
+- `components/file-browser` separates the tree, toolbar, viewer, dialogs, and
+  file actions. `FileBrowser` keeps the public API and source reset boundary.
+- `agents/configuration` owns the configuration blocks. The existing draft and
+  commit modules still own the single Save operation for the page.
+- `agents/chat` separates the toolbar and feed from loading, read markers, and
+  scroll position. It keeps its existing loader.
+- Tasks separates local view state, panel sizing, query composition, and write
+  actions. `TaskDetail` keeps one draft with its original revision. Its fields,
+  relations, history, and dialogs render that state without another server cache.
+- `components/tui-screen` separates the xterm lifecycle and sizing hook and the
+  tmux scrollback hook from the toolbar, compose, and help markup. The input
+  handler stays stable, so a render does not recreate the terminal.
+- `lib/audit.ts` and `lib/auditCodex.ts` read an audit record through handler
+  tables keyed by event kind, harness message type, and Codex item type.
+  `components/audit` renders each row kind in its own small component and keeps
+  the full log's filter and paging state in hooks.
+- `pages/audit-log` separates the URL query and the polled iteration list from
+  the list and tag editor markup.
+
+## Shared helpers and styles
+
+Helpers that more than one screen needs live in `ui/src/lib/`, and each name
+is declared once:
+
+- `lib/errors.ts` exports `errorText(error)`. It returns the message of any
+  `Error`, `ApiError` included, and `String(error)` for other values. A plain
+  error therefore shows `Failed to fetch`, without the class name.
+- `lib/ids.ts` exports `idempotencyKey(prefix)`. It returns
+  `crypto.randomUUID()`, or `prefix-<time>-<random>` when the WebView has no
+  `randomUUID`.
+- `lib/statusTone.ts` exports `flexibleStatusLabel(status)` for a flexible
+  task status. `lib/tasks.ts` alone exports `taskStatusLabel(task)`, the label
+  of any task.
+
+Styles are Tailwind utilities on the element. The `@theme` block of
+`ui/src/index.css` names the dense text sizes and the radii between the
+`--radius` steps:
+
+| Utility | Value |
+| --- | --- |
+| `text-nano`, `text-micro`, `text-tiny`, `text-caption`, `text-meta` | 9, 10, 10.5, 11, 11.5 px |
+| `text-ui`, `text-body-sm`, `text-body`, `text-body-lg`, `text-title` | 12, 12.5, 13, 14, 15 px |
+| `rounded-hair`, `rounded-xs`, `rounded-chip`, `rounded-sm`, `rounded-control` | 1.5, 2, 5, 6, 7 px |
+| `rounded-md`, `rounded-panel`, `rounded-lg`, `rounded-card`, `rounded-xl` | 8, 9, 10, 12, 14 px |
+
+The text sizes set only `font-size`, so the element keeps its line height.
+Sizes, spacing, and ring widths use the 4 px spacing scale: `h-6.5` is 26 px.
+`cn()` in `lib/utils.ts` tells tailwind-merge about the new names. Without
+that, tailwind-merge reads `text-ui` as a color and drops the color class next
+to it. When you add a text size or a radius to `@theme`, add it to `cn()` too.
+`ui/src/lib/utils.test.ts` fails when the two lists differ.
+
+`ui/src/test/arbitraryPxPolicy.test.ts` fails when production code under
+`ui/src` or `ui/store` uses a class of the form `utility-[Npx]`. Composite
+values, such as `grid-cols-[76px_minmax(0,1fr)]`, are allowed. The shadcn
+primitives under `ui/src/components/ui/` are not checked, so they stay the same
+as upstream. An inline `style` is only for a value that the code calculates at
+run time, such as a column width or a CSS variable.
+
+A CSS file is only for a rule that utilities cannot express clearly:
+pseudo-elements, a media query for one widget, or a rule that must override
+another component. `ui/src/pages/tasks/tasks.css` lists the rules it keeps
+and gives the reason for each at its top.
+
+## WebView storage
+
+`ui/src/lib/storage.ts` owns all access to `localStorage` and `sessionStorage`
+in the Desktop UI and the Store UI. It declares every key in one registry with
+its area, name, version, parser, and fallback value. Other modules call
+`readKey`, `writeKey`, and `removeKey` with a key from that registry. The unit
+test `ui/src/test/webStoragePolicy.test.ts` fails when production code under
+`ui/src` or `ui/store` uses `localStorage`, `sessionStorage`, or
+`window.dispatchEvent` directly. It scans the sources because the lint policy
+allows no per-file oxlint overrides. Tests and fixtures still seed raw values,
+so they detect a change of a stored format.
+
+Storage access is best effort. A missing value, a value the parser rejects,
+broken JSON, and storage that throws (blocked, private mode) all read as the
+fallback value. A failed write returns `false` and does not throw, so the
+interface keeps its state in memory until a reload. A read that finds a bad
+value does not delete it; the next write replaces it. Values are never logged,
+because some of them are tokens.
+
+Key names did not change when the registry was added, so saved state survives
+upgrades. A new key uses the form `<area>:<purpose>:v<N>`, and the registry
+test requires a versioned name to end with its version. When a format changes
+incompatibly, the key gets a new name with the next version. The old name
+stays in the registry only so it can be read once, like `terminals:workspace:v1`.
+
+| Key | Area | Owner | Value | Fallback |
+| --- | --- | --- | --- | --- |
+| `tariboy-theme` | local | theme provider | `light`, `dark`, or `system` | `system` |
+| `app:ui-mode:v1` | local | interface mode | `simple` or `expert` | `simple` |
+| `app:workspaces:v1` | local | host workspaces | JSON workspaces, host map, active workspace | Default only |
+| `desktop:updates:auto-download:v1` | local | Desktop updates | `true` or `false` | `true` |
+| `tariboy:runtime-presets:v1` | local | create-agent presets | JSON saved models and efforts per harness | none |
+| `tariboy_daemons` | local | browser host registry | JSON host metadata list | empty |
+| `tariboy_active_daemon` | local | host registry | selected host ID | none |
+| `tariboy_daemons_rejected_cleartext` | local | Desktop host migration | JSON cleartext hosts not imported | none |
+| `tariboy_daemon_token_<id>` | session | browser host registry | host token (browser mode only; Desktop uses the Keychain) | empty |
+| `tariboy:team-import` | local | Groups | JSON pending team import ID and host | none |
+| `terminals:server-order:v1` | local | sidebar | JSON host order | registry order |
+| `terminals:sidebar:v1` | local | sidebar | JSON width and hidden state | 268px, shown |
+| `terminals:workspace:v1` | local | sidebar (legacy, read once) | JSON record of the removed canvas | none |
+| `terminals:sidebar-tab:v1` | local | sidebar | `servers` or `agents` | `servers` |
+| `terminals:sidebar-pinned:v1` | local | sidebar | JSON pinned agents | none |
+| `terminals:chat-types:v1` | local | agent chat | JSON message types | default types |
+| `tui:draft:<agent>:<section>` | local | inject modal | draft text | empty |
+| `tasks:columns:v1` | local | task tables | JSON column order and widths | default layout |
+| `tasks:workspace:v1` | local | task detail panel | JSON detail width | half the window |
+| `tasks:new-task-queue:v1` | local | new task form | JSON last queue per server | none |
+| `tasks:queue-filter:v1` | session | task queue filter | queue prefix | none |
+| `tasks:all-view:v1` | session | All tasks | JSON search, status view, and server | active, all servers |
+| `tariboy_store_token` | session | Store UI | Store bearer token | none |
+
+### Image change notifications
+
+`ui/src/lib/imageEvents.ts` connects image builds to the image lists in the
+same window. A finished build from a directory or from a Store calls
+`notifyImagesChanged()`. **Built images** and the agent configuration sources
+subscribe with `subscribeImagesChanged()` and reload the images of their
+current host. A failing subscriber does not stop the others. Builds outside
+this window, for example from the CLI, do not notify the lists.
+
 ## Server data in Tasks
 
 TanStack Query v5 owns the server data for Tasks. One QueryClient serves the
@@ -2794,9 +3137,8 @@ List keys include the agent scope, text, status view, assignee, and waiting
 principal. Queue filtering remains local. History keys distinguish the
 workspace's latest 200 events from the drawer's first 200 events.
 
-The connection adapter resolves an omitted ApiTarget to an explicit target
-before a request starts. A null target always selects the local server.
-Server identity is independent of its endpoint. A new SSH port cancels old
+Queries read the server from the surrounding `ApiProvider`; a client for
+the local daemon has the identity `local`. Server identity is independent of its endpoint. A new SSH port cancels old
 reads and refreshes active queries without changing their keys or form state.
 An unavailable endpoint disables background reads. Credentials never appear
 in query keys, logs, or persistent storage. Credential changes clear that
@@ -2828,8 +3170,8 @@ stale for the next socket, manual, or mount refresh.
 For another Tasks reader, reuse its typed query options:
 
 ~~~tsx
-const target = useApiTarget(inputTarget)
-const detail = useApiQuery(taskQueries.detail(target, taskKey), target)
+const api = useApi()
+const detail = useApiQuery(taskQueries.detail(api, taskKey))
 ~~~
 
 Keep selection, drafts, expansion, sizing, and focus in the component.
@@ -2902,7 +3244,11 @@ marker with a problem mark whose title is the message; the pause pill
 outranks it, and `idle` earns no mark. The row needs no request of its own:
 both objects come with the task JSON. `TaskDetail`
 compares `status` only with `category` for its dirty check and tone, and sends
-no `status` or `assignee` on Save for a workflow task; it hides **Move to
+no `status` or `assignee` on Save for a workflow task. Its assignee is
+`WorkflowAssignee`: in an open, unpaused pool status of the shared workflow
+query it is a select of that pool's members (`listAgentPools` through
+`taskQueries.pools`) that calls `reassignTaskWorkflow` on change and then
+`onTaskChanged`; otherwise it is text. `TaskDetail` hides **Move to
 another server…** for one, and neither its banner nor a comment chip asks for
 a comment on the workflow's own (`system:workflow`) wait. In place of the status
 select it renders `WorkflowPanel`, which reads the shared workflow query. A task revision, an event sequence, or
@@ -2929,7 +3275,8 @@ targets with `returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the
 upgrade form appears when `canUpgrade` finds the view's `queue_digest` differs
 from its `digest` and sends `upgradeTaskWorkflow`, the move form uses
 `moveTaskWorkflow` (targets from the view's `statuses`), and cancel uses
-`cancelWorkflowTask`. `stepMarks`, `returnTargets`, and `defaultReturnTarget`
+`cancelWorkflowTask`. The move and upgrade forms live in
+`WorkflowMoveForms.tsx`. `stepMarks`, `returnTargets`, and `defaultReturnTarget`
 read `runVisits`, the visits of the task's current workflow digest. Outcomes, the problem block, and the return form follow
 a transition request through `useFollowRequest` in `workflowShared.ts`
 (`getTransitionRequest` once a second until the request settles or
@@ -2937,12 +3284,15 @@ a transition request through `useFollowRequest` in `workflowShared.ts`
 the controlled alert dialog of `useWorkflowConfirm`; `workflowShared.ts` also holds
 `errorText` and `useMounted`. Messages and logs render as React text;
 artifact values render through `MarkdownContent`, or as React text when an
-artifact is switched to **Text**. Every call passes the `ApiTarget` of the surrounding
-component. After a drawer action `TasksWorkspace` reloads the tree as well as
+artifact is switched to **Text**. Every call uses the client of the surrounding
+`ApiProvider`. After a drawer action `TasksWorkspace` reloads the tree as well as
 the detail, so the row agrees with the drawer before the socket reports the
 change. Queue settings are `QueueSettingsDialog`: a large `Dialog` (full
 screen on a phone) with the queue list on the left and the selected queue in
-tabs on the right. When it opens it reads each queue's binding
+tabs on the right. `QueueSettingsDetail.tsx` renders the selected queue and
+the new-queue form; `queueSettingsModel.ts` holds the pure readings: a list
+row's summary and warning, the tabs, the form requests, and how a refused bind
+reads. When it opens it reads each queue's binding
 (`getQueueWorkflow`), the bound manifest (`getWorkflowImage` by digest), and
 its pools (`listAgentPools`), so each list row can show the workflow and a dot
 for a required pool without agents; a queue that fails to load shows an error
@@ -4360,6 +4710,7 @@ not need to read unrelated subsystems.
 | Images and groups | [Images](/docs/images) and [Images and groups](/docs/images-and-groups) |
 | Plugins and agent tools | [Plugins](/docs/plugins) and [Binaries](/docs/binaries) |
 | Release, support, diagnostics | [Support](/docs/support), [Security and controls](/docs/security-controls), and `docs/internal-alpha-release-runbook.md` |
+| HTTP commands, response types, OpenAPI, generated UI types | [Command registry](/docs/architecture#command-registry), [API layer](/docs/architecture/web-ui#api-layer), and [API types](/docs/architecture/web-ui#api-types) |
 
 If behavior crosses rows, follow all matching routes. For example, a terminal
 change in the Desktop app requires the loop/shim, Web UI, and Desktop/SSH rows.
@@ -4379,11 +4730,15 @@ make full-check      # heavy, tens of minutes, includes check
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
-`staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. The
-frontend target runs UI typecheck, lint, unit tests, branding, and the
-documentation checks. Before checking, `backend-check` runs `go mod download`
+`staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. Its
+`test` and `tariboy-tasks-e2e` steps also check the HTTP API against the
+committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
+frontend target runs the UI format check, the generated API types check, UI
+typecheck, lint with the complexity and size thresholds, the unused-code check, unit tests,
+branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
-`scripts/npm-ci-locked.sh` for locked installs under both `ui/` and `docs/`.
+`scripts/npm-ci-locked.sh` for locked installs under `ui/`, `ui/tools/api-types/`
+and `docs/`.
 They do not write into
 `bin/` or dirty `git status`. Each step reports its result and duration as it
 finishes.
@@ -4506,6 +4861,76 @@ Changes to queue-trigger delivery also exercise bus/daemon recovery; Compose
 changes exercise `internal/compose`. The isolated Tasks mode path is
 `scripts/tariboy-tasks-e2e.sh`, which runs inside `backend-check`.
 
+The HTTP API contract is checked inside `backend-check`; see
+[Command registry](/docs/architecture#command-registry) for the rules. The
+`test` step fails for a new HTTP command without a result schema, for a
+response that does not match its schema, and for a spec change without an
+updated snapshot. The `tariboy-tasks-e2e` step fails when the isolated daemon
+serves a spec other than the snapshot or answers a typed `GET` route outside
+its schema. The snapshot is `internal/commands/testdata/openapi.json`. A change
+to a command's arguments, summary, route or result type changes the spec, so
+update the snapshot in the same change:
+
+```bash
+go test ./internal/commands -run TestOpenAPISnapshot -update-openapi
+```
+
+Give every new HTTP command a typed result: a named struct, or a slice of
+one, declared with `registry.WithResult`. A handler never returns
+`map[string]any`; `TestHTTPCommandsDeclareResultSchema` and
+`TestCommandsReturnNoRawMaps` fail otherwise. Add a call for the new operation
+to `TestTypedResponsesMatchOpenAPI`: a domain registers its calls in
+`typedCallSets` from an `init` function in its own test file. Before you
+change a handler's result type, pin its JSON in the domain's golden test (for
+example `daemon_golden_test.go`) on the unchanged handler, and keep that
+golden file unchanged through the change.
+
+The UI does not declare response types by hand. `ui/src/lib/api-types.generated.ts`
+is generated from the snapshot and committed. After you update the snapshot,
+regenerate the file and commit both in the same change:
+
+```bash
+cd ui
+npm run api-types
+```
+
+The command reads the snapshot from the repository and needs no running
+daemon. The `ui-api-types` step of `make frontend-check` runs
+`npm run api-types:check`. It generates the file again in a temporary
+directory and compares it with the committed file. When they differ, the step
+fails, prints the diff and the command above, and changes no file. Fix the UI
+code that the new types break: `npx tsc -b` names every place. See
+[API types](/docs/architecture/web-ui#api-types) for how the UI uses the file.
+
+The generator, `openapi-typescript`, runs from its own package in
+`ui/tools/api-types/` with its own lock file. It needs the TypeScript 5
+compiler API, and `ui/` uses TypeScript 7, so the two cannot share one
+`package.json`. `frontend-check` installs the package with
+`scripts/npm-ci-locked.sh` like `ui/` and `docs/`.
+
+#### Changing an API response end to end
+
+One pull request carries an API change from the Go type to the UI. For
+example, to add a field to an agent response:
+
+1. Add the field to the result struct in the domain's `*_types.go` file under
+   `internal/commands`. If the change replaces the result type, first pin the
+   current JSON in the domain's golden test, as described above.
+2. Update the snapshot:
+   `go test ./internal/commands -run TestOpenAPISnapshot -update-openapi`.
+3. Regenerate the UI types: `cd ui && npm run api-types`.
+4. Run `npx tsc -b` in `ui/` and fix every place it names. Add the new field
+   to the factory in `ui/src/test/fixtures/apiFixtures.ts`, so test data stays
+   a complete response.
+5. Use the field in the UI through the domain module's re-exported type.
+6. Run `make check`.
+7. Commit the Go change, `internal/commands/testdata/openapi.json`,
+   `ui/src/lib/api-types.generated.ts`, and the UI change together.
+
+When you rebase such a branch and the snapshot or the generated file
+conflicts, resolve the conflicts in the code, then run steps 2 and 3 again
+instead of merging the generated lines.
+
 Workflow changes span `internal/workflowfile` and `internal/workflowimage`
 (the image), `internal/tasks` (the engine, run records, queue secrets, and the
 run log route), `internal/workflowrun` (the script protocol, process execution,
@@ -4574,20 +4999,231 @@ cd ui
 npm ci
 ```
 
-`make check` then covers `npx tsc -b`, `npm run lint`, `npm test`, and
-`npm run branding:check`. `make full-check` adds `npm run test:tasks-browser`
+`make check` then covers `npm run fmt:check`, `npm run api-types:check`, `npx tsc -b`, `npm run lint`, `npm run knip`,
+`npm test`, `npm run branding:check`, and `npm run bundle:budget`. `make full-check` adds `npm run test:tasks-browser`
 and `npm run test:images-browser`, and builds the desktop bundle through its
 desktop step. Run any of them directly under `ui/` while iterating:
 
 ```bash
 cd ui
 npm test
+npm run api-types
+npm run api-types:check
+npm run fmt
+npm run fmt:check
 npm run lint
+npm run knip
+npm run bundle:budget
+npm run complexity:report
 npm run build:desktop
 npm run test:tasks-browser
 npm run test:images-browser
 npm run build:store
 ```
+
+`npm run bundle:budget` runs `ui/scripts/bundle-budget.mjs`. It builds the
+production Desktop bundle into a temporary directory, reads the Vite manifest,
+and removes the directory afterwards. It checks three sizes against
+`LIMITS` in the script:
+
+| Size | Limit in bytes |
+| --- | --- |
+| The entry chunk | 351,000 |
+| The initial JavaScript: the entry chunk and every chunk that it imports statically | 723,000 |
+| All JavaScript: every chunk, lazily loaded chunks included | 3,215,000 |
+
+The sizes are minified bytes before compression. Each limit is the size at
+the time the limit was set, plus 5%, rounded up to 1,000 bytes. When the code
+becomes smaller, lower the limit in the same change. Raise a limit only in the
+change that needs it, and give the reason in the pull request.
+
+The failure message names each size that is over its limit, gives the size and
+the limit, and lists the files of the initial JavaScript. A missing entry,
+manifest import, or output file is also a failure. To fix an entry or initial
+failure, load the new code with `React.lazy`, or keep the library out of the
+groups that the shell imports (see
+[Code splitting](/docs/architecture/web-ui#code-splitting)). To fix a failure
+of all JavaScript, make the lazily loaded code smaller.
+
+`npm run fmt` formats `ui/src`, `ui/store`, `ui/tests`, and `ui/.design-sync`
+in place with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) and
+`ui/.oxfmtrc.json`: double quotes, semicolons, and two-space indentation
+without tabs. Import sorting and Tailwind class sorting are off. oxfmt skips
+files that it does not support, such as shell scripts, and the paths in
+`ui/.gitignore`. `npm run fmt:check`, also available as `make ui-fmt-check`, checks
+the same paths without writing files. It is the `ui-fmt-check` step of
+`make frontend-check`, so formatting drift fails `make check`. Run
+`npm run fmt` when it reports drift. oxfmt 0.73.0 formats some chained calls,
+such as `vi.fn().mockImplementation(...)` inside a call, in two passes. If
+`npm run fmt:check` still reports a file right after `npm run fmt`, run
+`npm run fmt` again. Configure your editor to use oxfmt with
+the same configuration, so that a save does not reformat other code.
+
+The commit that first formatted these paths is listed in
+`.git-blame-ignore-revs` at the repository root. Use
+`git blame --ignore-revs-file .git-blame-ignore-revs FILE` to skip it, or set
+it once for your clone:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
+`npm run lint` runs oxlint with `ui/.oxlintrc.json` and `--deny-warnings`.
+A warning therefore fails `make frontend-check` in the same way as an error.
+The configuration turns on the complete `correctness` category, adds
+selected rules from other categories, and turns on the
+[complexity and size thresholds](#frontend-complexity-thresholds). It has
+two kinds of rule override: the test override and the `.design-sync` override.
+The next section describes them.
+
+Fix the code before you suppress a diagnostic. If a suppression is necessary,
+put an oxlint comment on the line before the diagnostic. The comment names the
+rule and gives the reason after `--`:
+
+```tsx
+// oxlint-disable-next-line react/exhaustive-deps -- keyed by identity on purpose: an equal target keeps the same client
+```
+
+A generated file can use one file-level `/* oxlint-disable RULE -- reason */`
+comment. Do not use `eslint-disable` comments. `ui/src/test/lintPolicy.test.ts`
+fails on an `eslint-disable` comment, on an oxlint comment without a rule or a
+reason, and on a rule override of another kind. Turn off a `correctness` rule
+for the complete project only when the rule does not apply to the project, and
+write the reason in this guide.
+
+#### Frontend complexity thresholds
+
+These are the size and complexity limits for the UI code. `ui/.oxlintrc.json`
+turns them on as errors, so `npm run lint`, the `ui-lint` step of
+`make frontend-check`, fails on a violation. The diagnostic gives the file, the
+line, the function name, the value, and the limit, for example:
+
+```text
+src/pages/ExamplePage.tsx:14:16 ... The function `ExamplePage` has too many lines (155). Maximum allowed is 150.
+```
+
+| Rule | Limit |
+| --- | --- |
+| `complexity` | 15 |
+| `max-lines` | 400, without blank lines and comments |
+| `max-lines-per-function` | 150, without blank lines and comments |
+| `max-depth` | 4 |
+| `max-params` | 5 |
+| `max-nested-callbacks` | 4 |
+
+Test-only files do not have the two length limits. A long `describe` block is
+the normal shape of a test file, so a length limit only moves tests around.
+The other four limits apply to test-only files in the same way as to app code.
+A test with many branches is not reliable: put each case in its own test and
+use a route table instead of an `if` chain in a fake server. For a fake
+`fetch`, use `routeFetch` from `ui/src/test/fetchRoutes.ts`. The test-only
+files are unit tests, Playwright tests, and the shared test code in
+`ui/src/test/` and `ui/tests/`:
+
+```json
+{
+  "files": ["**/*.test.{ts,tsx}", "**/*.pw.ts", "src/test/**", "tests/**"],
+  "rules": {
+    "max-lines": "off",
+    "max-lines-per-function": "off"
+  }
+}
+```
+
+Unlike `make gocyclo`, which does not measure Go test files, these limits
+measure the complexity of the frontend tests.
+
+`ui/.design-sync` is the design synchronization tool, not app code. An
+override turns off the six limits for `.design-sync/**`. The `correctness`
+rules still apply to it.
+
+`make ui-complexity-report` prints every function and file over a limit. When
+nothing is over a limit, it prints
+`No UI function or file is over a complexity or size threshold.`. It never fails on a violation, like
+`make gocyclo-report`. Use it to plan refactoring. Each line gives the rule,
+the value and the limit, the file and line, and the oxlint message, which
+names the function. The lines are sorted by rule, the largest value first. The
+last lines give the number of violations for each rule:
+
+```text
+complexity                18/15  src/pages/ExamplePanel.tsx:15   function `ExamplePanel` has a complexity of 18
+max-lines-per-function  239/150  src/pages/ExamplePage.tsx:27    The function `ExamplePage` has too many lines (239)
+
+complexity: 1
+max-lines-per-function: 1
+total: 2
+```
+
+If a test file becomes slow, divide it into one file for each scenario, for
+example `TasksWorkspace.realtime.test.tsx`. Vitest runs the files in parallel.
+Put the shared fixtures in `ui/src/test/`. Keep the `vi.hoisted` and `vi.mock`
+calls in each test file, because Vitest hoists them only in the test file
+itself.
+
+`npm run knip` runs [Knip](https://knip.dev) from `ui/knip.json`. The
+`ui-dead-code` step of `make frontend-check` runs it. It fails when it finds
+unused code or an unused package, and it does not delete code. It runs two
+passes:
+
+1. `knip --production --include files` follows imports from the Desktop and
+   Android app (`src/main.tsx`, found through `index.html`) and from the Store
+   app (`store/main.tsx`, found through `vite.store.config.ts`). Tests,
+   `tests/**`, and `.design-sync/**` are not entry points in this pass. A file
+   that only a test or the design-sync bundle imports is reported as unused.
+2. `knip` checks the complete graph: the apps, the Vitest unit tests, the
+   Playwright tests and fixtures under `tests/`, and the design-sync files
+   under `.design-sync/`. It reports every issue type: unused files, exports,
+   exported types, duplicate exports, unused or unlisted dependencies and
+   devDependencies, and unlisted binaries. An export that a test imports is
+   not reported, but an export that no file imports is.
+
+Knip finds entry points in three ways. Its Vite, Vitest, and Playwright
+plugins read every `vite*.config.ts` and `playwright.*.config.ts` file in
+`ui/`, so a new config with a name of that form needs no change. The `entry`
+list in `ui/knip.json` adds `tests/**` and `.design-sync/**`, because a
+script or an external tool loads those files by path, not by import. A new
+file that is loaded by path, by a glob, or by a tool outside the import graph
+must be added to `entry`. Otherwise Knip reports it as an unused file. The
+`project` list names the files that can be reported. It includes `*.css`
+under `src/` and `store/`, so a package used only by a CSS `@import`, such as
+`tailwindcss`, counts as used.
+
+The report has one group for each issue type, for example
+`Unused files (1)` or `Unused exported types (2)`. Each line gives the name,
+the file, and the line. Fix each group as follows:
+
+| Group | Fix |
+| --- | --- |
+| Unused files | Delete the file. If a tool loads it by path, add it to `entry` |
+| Unused exports, exported types | Delete the code, or remove the `export` keyword when only its own file uses it |
+| Duplicate exports | Keep one name and delete the alias |
+| Unused dependencies, devDependencies | Remove the package with `npm uninstall` |
+| Unlisted dependencies | Add the package to `package.json` with `npm install` |
+| Unlisted binaries | Add the npm package that provides it. A tool that is not an npm package, such as `go`, goes to `ignoreBinaries` |
+
+If Knip reports unlisted binaries such as `oxfmt` or `knip` that are in
+`package.json`, `ui/node_modules` is out of date: run `npm ci` in `ui/`.
+Shared test helpers live under `src/test/`,
+which the first pass does not check. Add an exception to `ignoreIssues` in
+`ui/knip.json` only for code that the app does not use on purpose. Name each
+file, list only the issue types it needs, and give the reason in the pull
+request. Do not add a pattern that covers all of `src/` or all components.
+The current exceptions are the shadcn primitives under `src/components/ui/`.
+The repository keeps that kit complete for the design-sync catalog, so its
+unused exports and the unused `separator.tsx` and `tooltip.tsx` files are
+allowed.
+
+The design-sync catalog under `ui/.design-sync` is checked by `make check` in
+two places. `npx tsc -b` builds `ui/tsconfig.design-sync.json`, which
+type-checks `.design-sync/entry.tsx` and every preview against the real
+component props: the `tariboy-ui` import in a preview resolves to the
+generated entry. When a component's props change, update its preview in the
+same change. `src/test/designSyncCatalog.test.ts` fails when the committed
+`entry.tsx` differs from a fresh `node .design-sync/make-entry.mjs` run, when a
+`componentSrcMap` path in `config.json` names a missing file, or when a preview
+or an override has no `componentSrcMap` key. To fix the first case, run
+`node .design-sync/make-entry.mjs` from `ui/` and commit the result. For the
+other cases, correct `config.json`.
 
 For interactive visual checks of React-only changes, start the production UI
 and its real API together:
@@ -5007,6 +5643,12 @@ The two UI targets have different Git contracts:
   After a store UI or relevant shared UI change, run `make store-ui` in an
   isolated worktree at the target commit and commit only the intended generated
   store bundle with its source change.
+- `internal/commands/testdata/openapi.json` and
+  `ui/src/lib/api-types.generated.ts` are committed and never edited by hand.
+  Update the snapshot with
+  `go test ./internal/commands -run TestOpenAPISnapshot -update-openapi` and
+  the UI types with `npm run api-types` from `ui/`; see
+  [Changing an API response end to end](#changing-an-api-response-end-to-end).
 `tariboyd` is API/WebSocket only. It does not embed a Desktop UI, and there is
 no `internal/webui` tree.
 
@@ -7379,13 +8021,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.93.0` alpha on an Apple Silicon Mac.
+This path is for the `0.94.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.93.0_aarch64.dmg`;
+- a verified `Tariboy_0.94.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -9139,7 +9781,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.93.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.94.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -9253,7 +9895,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.93.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.94.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -9906,6 +10548,41 @@ any assigned task.
 
 One pass assigns at most one task to each agent, in priority and creation order,
 so a single free agent does not collect every waiting task.
+
+### Changing the holder
+
+The customer can give a task in a pool status to another member of that pool:
+
+```bash
+ttasks workflow reassign DEV-ab12 --agent dev-2
+```
+
+The command is operator-only, like `workflow move`. It applies only to an open
+task in a status owned by an agent pool. It is refused with
+`invalid_status_owner` in a customer, script, or terminal status, with
+`workflow_paused` on a paused task (there, `workflow resume --decision release`
+gives the task to another member), and with `transition_pending` while a
+transition request runs. The agent must be a member of the status's pool and
+able to work: it exists, is enabled, is not halted, and does not run the bare
+image. Otherwise the command fails with `agent_unavailable`, and the error data
+names the cause (`deleted`, `disabled`, `halted`, `bare`, or `left_pool`). Other
+work of the agent is not checked: the customer chose it. Reassigning a task to
+its current holder changes nothing.
+
+In one transaction the command:
+
+- resolves the open questions the previous holder asked the customer;
+- resets the idle iterations and rejected requests of the current visit, so
+  the previous holder's stall counters cannot pause the task under the new one;
+- records the new agent as the task's holder for the pool, so the sticky rule
+  gives the task back to it when the task returns to a status of that pool;
+- sets `assignee` to `agent:<name>`, records `workflow.reassigned` (`status`,
+  `pool`, `from`, `to`, `actor`), and sends the usual assignment notification.
+
+Goal then wakes the new agent. The previous agent is no longer the holder, so
+it loses the task's Goal and its access to the task. Artifacts such as `branch`
+and `pull_request` stay, and the new agent continues from them. Uncommitted
+work in the previous agent's worktree does not move.
 
 Entering a customer status keeps the assignee, sets the category to
 `wait_customer`, and opens a wait for the customer through a comment by
@@ -10830,6 +11507,7 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks workflow move KEY --to STATUS --reason TEXT` | operator | Move without checks. |
 | `ttasks workflow upgrade KEY [--reason TEXT]` | operator | Restart the task at the queue's current workflow version. |
 | `ttasks workflow resume KEY --decision continue\|release` | operator | Resolve a pause. |
+| `ttasks workflow reassign KEY --agent NAME` | operator | Give the pool status to another member of its pool. |
 | `ttasks workflow retry KEY [REQUEST]` | operator | Run a failed request's checks again and wait for them. |
 | `ttasks cancel KEY` | operator | Cancel the task. |
 | `ttasks requeue KEY --queue QUEUE` | operator | Move the task to another queue as a new task. |
@@ -10868,6 +11546,7 @@ generated OpenAPI document is the authority for request and response schemas.
 | `POST` | `/api/tasks/{key}/workflow/move` | move to a status (`to`, `reason`) | operator |
 | `POST` | `/api/tasks/{key}/workflow/upgrade` | restart at the queue's current version (`reason`, optional); returns the task | operator |
 | `POST` | `/api/tasks/{key}/workflow/resume` | resolve a pause (`decision`: `continue` or `release`); returns the task | operator |
+| `POST` | `/api/tasks/{key}/workflow/reassign` | give the pool status to another member (`agent`); returns the task | operator |
 | `POST` | `/api/tasks/{key}/cancel` | cancel | operator |
 | `POST` | `/api/tasks/{key}/requeue` | move to another queue (`queue`, optional `revision`); returns the new task | operator |
 
@@ -10940,6 +11619,9 @@ the key, and the run id. A failed source run records the queue event
 | `workflow_not_paused` | 409 | `workflow resume` on a task that is not paused. |
 | `request_not_failed` | 409 | `workflow retry` of a request that did not fail. |
 | `request_superseded` | 409 | `workflow retry` of a request that is not the task's latest one in its current status. |
+| `invalid_status_owner` | 409 | `workflow reassign` of a task whose current status is not owned by an agent pool. |
+| `agent_unavailable` | 409 | `workflow reassign` to an agent that is not a member of the status's pool or cannot work; `data.cause` says why. |
+| `invalid_agent` | 400 | `workflow reassign` without an agent name. |
 | `invalid_decision` | 400 | A resume decision that is not `continue` or `release`, or `release` outside a pool status. |
 | `workflow_in_use` | 409 | A queue binds the image or a task, open or closed, pins it. |
 | `workflow_pool_empty` | 409 | A pool the image names is missing or has no agents. |
@@ -10948,7 +11630,7 @@ the key, and the run id. A failed source run records the queue event
 | `workflow_not_found` | 409 | The image a task or binding pins is not published. |
 | `queue_workflow_not_found` | 404 | The queue has no binding. |
 | `not_holder` | 403 | The caller does not own the current status. |
-| `forbidden` | 403 | A caller that is not the customer used an operator-only route (move, upgrade, cancel, resume), or a caller that may not read a run log asked for it. |
+| `forbidden` | 403 | A caller that is not the customer used an operator-only route (move, upgrade, cancel, resume, reassign), or a caller that may not read a run log asked for it. |
 | `status_changed` | 409 | An advance named `from`, and the task is in another status. |
 | `outcome_unknown` | 400 | The status does not declare that outcome. |
 | `status_unknown` | 400, 409 | The image does not declare that status (400 for a move, 409 for a task in an undeclared status). |
@@ -11113,8 +11795,12 @@ How the list shows these tasks is in [Tasks](/docs/tasks#desktop).
 
 Opening a workflow task shows a **Workflow** panel in the task sheet in place of
 the status select. It reads top down: what is wrong, where the task is, what
-may happen next, what it produced, and what ran. The task's assignee is
-read-only, because the workflow assigns pool work, and the sheet has no
+may happen next, what it produced, and what ran. The workflow assigns pool
+work, so Save never changes the assignee. In an open, unpaused pool status the
+**Assignee** field is a list of the members of that status's pool: choosing one
+runs `workflow reassign` at once (see [Changing the holder](#changing-the-holder)),
+and a refusal shows its message under the field. In any other status the
+assignee is read-only text. The sheet has no
 **Move to another server…**, because the daemon refuses to export a workflow
 task. Its actions menu offers **Move to queue…** instead (see
 [Tasks](/docs/tasks#moving-a-task-to-another-queue)). The panel follows the task's events as well as its revision: a rejected

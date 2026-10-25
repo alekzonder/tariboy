@@ -376,6 +376,72 @@ all derived from it.
   `update` and the `compose` verbs. `daemon status` also keeps its HTTP route.
   `AbsPathArgs` names the path arguments the CLI makes absolute, and
   `ExitCodeFrom` derives the CLI exit code from a result.
+- **Results are typed Go structs.** A handler returns a named struct, never
+  `map[string]any`, and the command declares it with
+  `registry.WithResult[T](registry.Command{...})`. The helper derives the JSON
+  Schema of `T` with `github.com/invopop/jsonschema`, adds `T` and every named
+  struct it reaches to `Schemas` under its Go type name, and sets
+  `ResultSchema` to `{"$ref": "#/components/schemas/T"}`. For a slice of a
+  named struct, such as `[]StoreView`, `ResultSchema` is an array of that
+  reference. `/api/openapi.json`
+  copies `Schemas` into `components.schemas` and puts `ResultSchema` under
+  `result` in the `200` envelope. The rules follow `encoding/json`:
+  - the `json` tag names a property;
+  - a field without `omitempty` is required, a field with it is optional;
+  - a pointer field must carry `omitempty`, or registration panics;
+  - every struct schema has `additionalProperties: false`;
+  - an embedded struct adds its fields to the parent;
+  - an enum is a string type whose `JSONSchemaExtend` method sets `Enum` from
+    its Go constants;
+  - a value that can be JSON `null`, such as a nil slice, carries
+    `jsonschema_extras:"nullable=true"`;
+  - a result whose shape the code does not own, such as a plugin's action
+    result or the daemon config keyed by config name, is a named struct with
+    a `MarshalJSON` method that keeps the wire format and a `JSONSchema`
+    method that describes the open shape.
+
+  Two different schemas under one component name in one command also panic at
+  registration. Every command in `internal/commands` uses this form. The
+  result types of a domain are in its `*_types.go` file, for example
+  `agents_types.go`. The task commands in `tasks.go` name their result types
+  in the `taskResultTypes` table. The field descriptions and enums of the
+  `internal/tasks` types come from `jsonschema:"description=..."` tags and
+  `JSONSchemaExtend` methods. No command has a hand-written `ResultSchema`.
+- **The spec is a checked contract.** These tests in `internal/commands` keep
+  `/api/openapi.json` and the code together:
+  - `TestHTTPCommandsDeclareResultSchema` fails for an HTTP command whose
+    `ResultSchema` is not a component reference or an array of one. There is
+    no exception list.
+  - `TestCommandsReturnNoRawMaps` (`result_guard_test.go`) parses the
+    package's non-test files and fails for a function with the handler result
+    `(any, error)` that returns a `map[string]any` literal,
+    `make(map[string]any)`, or a variable filled from one.
+  - `TestCommandsDeclareConsistentComponents` fails when two commands declare
+    one component name with different schemas. Give result types a domain
+    prefix, such as `StoreView`, not a generic name such as `Item`.
+  - `TestOpenAPISnapshot` compares the served spec with the committed
+    snapshot `internal/commands/testdata/openapi.json`. The snapshot pins
+    `info.version` to `snapshot`, so a release does not change it. A contract
+    change is a change with an updated snapshot. Rewrite it with
+    `go test ./internal/commands -run TestOpenAPISnapshot -update-openapi`
+    and commit it with the code.
+  - `TestTypedResponsesMatchOpenAPI` sends a request to every operation whose
+    result is a component reference or has properties, and validates the
+    response against the served spec with
+    `github.com/santhosh-tekuri/jsonschema/v6`. A new typed operation needs a
+    call in its table or in its domain's `typedCallSets` entry, or the test
+    fails. The check finds a result that differs
+    from its declared type: an extra field, a missing required field, a wrong
+    type, or `null` where the schema does not allow it. Error responses are
+    validated against the `default` error envelope.
+  - `TestDaemonOpenAPIContract` runs only from
+    `scripts/tariboy-tasks-e2e.sh`. It reads the spec of the isolated daemon,
+    compares it with the snapshot apart from `info.version`, and validates the
+    daemon's answers to typed `GET` routes.
+
+  The spec stays OpenAPI 3.0.3. Before validation, the tests rewrite
+  `nullable: true`, which JSON Schema does not know, into a type and enum that
+  allow `null`.
 
 Native task commands have one more table: `internal/tasks/wire.go` declares
 each task action's request struct, CLI words, flags and operator route. The
