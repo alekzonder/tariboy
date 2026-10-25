@@ -47,7 +47,9 @@ func (s *workflowStub) GetArtifact(_ context.Context, a tasks.Actor, key, name s
 }
 func (s *workflowStub) GetWorkflow(_ context.Context, a tasks.Actor, key string) (tasks.WorkflowView, error) {
 	s.record(a, "workflow_get %s", key)
-	return tasks.WorkflowView{Name: "flow", Version: "1.0.0", Status: "develop", Outcomes: []tasks.OutcomeView{}}, s.err
+	return tasks.WorkflowView{Name: "flow", Version: "1.0.0", Status: "develop", Category: tasks.StatusInProgress, Owner: "pool:developers",
+		Outcomes: []tasks.OutcomeView{}, Artifacts: []tasks.Artifact{}, Visits: []tasks.StatusVisit{}, Runs: []tasks.ScriptRun{},
+		DeclaredArtifacts: []tasks.DeclaredArtifact{}, Statuses: []tasks.StatusView{}}, s.err
 }
 func (s *workflowStub) GetTransitionRequest(_ context.Context, a tasks.Actor, key string, id int64) (tasks.TransitionRequest, error) {
 	s.record(a, "request_get %s %d", key, id)
@@ -59,11 +61,11 @@ func (s *workflowStub) RetryTransitionRequest(_ context.Context, a tasks.Actor, 
 }
 func (s *workflowStub) ListScriptRuns(_ context.Context, a tasks.Actor, key string) ([]tasks.ScriptRun, error) {
 	s.record(a, "runs %s", key)
-	return []tasks.ScriptRun{{ID: 4, TaskKey: key, Kind: "check", State: "finished"}}, s.err
+	return []tasks.ScriptRun{{ID: 4, TaskKey: key, Kind: "check", RunAs: "queue", State: "finished"}}, s.err
 }
 func (s *workflowStub) GetScriptRun(_ context.Context, a tasks.Actor, key string, id int64) (tasks.ScriptRun, error) {
 	s.record(a, "run_get %s %d", key, id)
-	return tasks.ScriptRun{ID: id, TaskKey: key, Kind: "check", State: "finished"}, s.err
+	return tasks.ScriptRun{ID: id, TaskKey: key, Kind: "check", RunAs: "queue", State: "finished"}, s.err
 }
 func (s *workflowStub) ScriptRunLog(_ context.Context, a tasks.Actor, key string, id int64, maxBytes int) (string, bool, error) {
 	s.record(a, "run_log %s %d max=%d", key, id, maxBytes)
@@ -143,7 +145,7 @@ func (s *workflowStub) RemoveQueueSecret(_ context.Context, a tasks.Actor, queue
 
 func (s *workflowStub) ListQueueSources(_ context.Context, a tasks.Actor, queue string) ([]tasks.QueueSource, error) {
 	s.record(a, "queue_source_ls %s", queue)
-	return []tasks.QueueSource{{Queue: queue, Name: "pull-requests", Script: "./scripts/prs.sh", Every: "2m", Failures: 1}}, s.err
+	return []tasks.QueueSource{{Queue: queue, Name: "pull-requests", Script: "./scripts/prs.sh", Every: "2m", Failures: 1, Runs: []tasks.SourceRun{}}}, s.err
 }
 func (s *workflowStub) QueueSourceRunLog(_ context.Context, a tasks.Actor, queue string, id int64, maxBytes int) (string, bool, error) {
 	s.record(a, "queue_source_log %s %d max=%d", queue, id, maxBytes)

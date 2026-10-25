@@ -400,6 +400,38 @@ all derived from it.
   as in `internal/commands/tasks_openapi.go`, is allowed only until its domain
   moves to `WithResult`. A command without either publishes a free-form
   result.
+- **The spec is a checked contract.** Four tests in `internal/commands` keep
+  `/api/openapi.json` and the code together:
+  - `TestHTTPCommandsDeclareResultSchema` fails for an HTTP command without a
+    `ResultSchema`. The commands that still publish a free-form result are
+    listed in `commandsWithoutResultSchema` in `openapi_contract_test.go`.
+    The list only shrinks: a command that gets a schema leaves the list in the
+    same change, the test fails on a stale entry, and review refuses a new
+    entry.
+  - `TestOpenAPISnapshot` compares the served spec with the committed
+    snapshot `internal/commands/testdata/openapi.json`. The snapshot pins
+    `info.version` to `snapshot`, so a release does not change it. A contract
+    change is a change with an updated snapshot. Rewrite it with
+    `go test ./internal/commands -run TestOpenAPISnapshot -update-openapi`
+    and commit it with the code.
+  - `TestTypedResponsesMatchOpenAPI` sends a request to every operation whose
+    result is a component reference or has properties, and validates the
+    response against the served spec with
+    `github.com/santhosh-tekuri/jsonschema/v6`. A new typed operation needs a
+    row in its table, or the test fails. The check finds a result that differs
+    from its declared type: an extra field, a missing required field, a wrong
+    type, or `null` where the schema does not allow it. Error responses are
+    validated against the `default` error envelope.
+  - `TestDaemonOpenAPIContract` runs only from
+    `scripts/tariboy-tasks-e2e.sh`. It reads the spec of the isolated daemon,
+    compares it with the snapshot apart from `info.version`, and validates the
+    daemon's answers to typed `GET` routes.
+
+  The spec stays OpenAPI 3.0.3. Before validation, the tests rewrite
+  `nullable: true`, which JSON Schema does not know, into a type and enum that
+  allow `null`. Hand-written task schemas do not set
+  `additionalProperties: false`, so for them the validation finds missing
+  fields and wrong types, not extra fields.
 
 Native task commands have one more table: `internal/tasks/wire.go` declares
 each task action's request struct, CLI words, flags and operator route. The

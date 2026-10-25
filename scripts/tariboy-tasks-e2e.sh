@@ -126,4 +126,11 @@ set -e
 unset TARIBOY_TOOLS_SOCKET
 ttasks mine --json | grep -q '"queue":"OPS"' || fail "operator daemon was not still available"
 
+echo "--- the daemon serves the committed OpenAPI snapshot and matches its schemas"
+# -v and the PASS line prove the test ran: without its variables it skips.
+OPENAPI_E2E_SOCKET="$SOCK" OPENAPI_E2E_AGENT=worker OPENAPI_E2E_QUEUE=OPS OPENAPI_E2E_TASK="$OPS_KEY" \
+  go test ./internal/commands -run '^TestDaemonOpenAPIContract$' -count=1 -v >"$RUNTIME/openapi.out" 2>&1 \
+  || { cat "$RUNTIME/openapi.out" >&2; fail "daemon OpenAPI contract"; }
+grep -q -- '--- PASS: TestDaemonOpenAPIContract' "$RUNTIME/openapi.out" || { cat "$RUNTIME/openapi.out" >&2; fail "daemon OpenAPI contract did not run"; }
+
 echo "PASS: isolated operator and identity-bound agent Tasks modes"

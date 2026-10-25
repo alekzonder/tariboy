@@ -26,9 +26,11 @@ var updateAgentsGolden = flag.Bool("update-agents-golden", false, "rewrite testd
 // agentsGoldenVolatile names keys whose values depend on the wall clock.
 var agentsGoldenVolatile = map[string]bool{"server_now": true, "schedule_next_at": true, "status_updated": true}
 
-// Catches a typed agents response changing the JSON a client sees: the set of
-// keys, their JSON types, and their values must match the recorded responses.
-func TestAgentsResponsesMatchGolden(t *testing.T) {
+// agentsFixture stores agents alpha, beta and gamma in the states the typed
+// agents responses cover: a built image, an error, a schedule, a running
+// iteration, a budget, an idle stop, a missing image and a stall timeout.
+func agentsFixture(t *testing.T) (*registry.Ctx, *fakeControl, image.Ref, image.Manifest) {
+	t.Helper()
 	c, as, fc := ctxWithStore(t)
 	fixed := time.Date(2026, 7, 14, 10, 0, 0, 0, time.UTC)
 	ref := image.Ref{Name: "reviewer", Tag: "latest"}
@@ -78,7 +80,13 @@ func TestAgentsResponsesMatchGolden(t *testing.T) {
 	if err := as.Create(agent.Agent{Name: "gamma", AIStallTimeoutS: 300}); err != nil {
 		t.Fatal(err)
 	}
+	return c, fc, ref, manifest
+}
 
+// Catches a typed agents response changing the JSON a client sees: the set of
+// keys, their JSON types, and their values must match the recorded responses.
+func TestAgentsResponsesMatchGolden(t *testing.T) {
+	c, fc, ref, manifest := agentsFixture(t)
 	type call struct {
 		label, path string
 		params      registry.Params
