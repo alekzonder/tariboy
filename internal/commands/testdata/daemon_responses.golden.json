@@ -46,6 +46,10 @@
   "daemon.agent-shell-script.set": {
     "saved": true
   },
+  "daemon.config.get all": {
+    "log_level": "debug"
+  },
+  "daemon.config.get all empty": {},
   "daemon.config.get key": {
     "log_level": "debug"
   },

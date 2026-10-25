@@ -93,6 +93,8 @@ func TestDaemonResponsesMatchGolden(t *testing.T) {
 		{"daemon.config.set", "daemon.config.set", c, registry.Params{"key": "log_level", "value": "debug"}},
 		{"daemon.config.get key", "daemon.config.get", c, registry.Params{"key": "log_level"}},
 		{"daemon.config.get missing key", "daemon.config.get", c, registry.Params{"key": "absent"}},
+		{"daemon.config.get all", "daemon.config.get", c, registry.Params{}},
+		{"daemon.config.get all empty", "daemon.config.get", empty, registry.Params{}},
 		{"daemon.reindex", "daemon.reindex", c, registry.Params{}},
 		{"daemon.agent-shell-script.get empty", "daemon.agent-shell-script.get", c, registry.Params{}},
 		{"daemon.agent-shell-script.set", "daemon.agent-shell-script.set", c, registry.Params{"script": "export A=1\n"}},
