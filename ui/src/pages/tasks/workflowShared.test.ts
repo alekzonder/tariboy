@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { TransitionRequest } from "@/lib/api";
-import { followNoticeText, visibleNotice, type FollowResult, type Notice } from "./workflowShared";
+import type { Task, TransitionRequest, WorkflowView } from "@/lib/api";
+import {
+  assignablePool,
+  followNoticeText,
+  visibleNotice,
+  type FollowResult,
+  type Notice,
+} from "./workflowShared";
 
 describe("followNoticeText", () => {
   it.each<[string, Exclude<FollowResult, { kind: "applied" }>, string]>([
@@ -74,5 +80,29 @@ describe("visibleNotice", () => {
     ["an error", error, req(4, "rejected"), error],
   ])("shows %s as expected", (_name, notice, last, shown) => {
     expect(visibleNotice(notice, last)).toBe(shown);
+  });
+});
+
+describe("assignablePool", () => {
+  const task = { access: "write", category: "in_progress" } as Task;
+  const view = { owner: "pool:developers" } as WorkflowView;
+
+  it("names the pool of an open, unpaused pool status", () => {
+    expect(assignablePool(task, view)).toBe("developers");
+  });
+
+  it.each<[string, Partial<Task>, Partial<WorkflowView> | undefined]>([
+    ["context access", { access: "context" }, {}],
+    ["respond access", { access: "respond" }, {}],
+    ["no workflow view yet", {}, undefined],
+    ["a paused task", {}, { paused_reason: "customer" }],
+    ["a task waiting on a pause", {}, { waiting_on: "pause" }],
+    ["a status not owned by a pool", {}, { owner: "customer" }],
+    ["a done task", { category: "done" }, {}],
+    ["a cancelled task", { category: "cancelled" }, {}],
+  ])("is empty for %s", (_, taskPatch, viewPatch) => {
+    expect(
+      assignablePool({ ...task, ...taskPatch }, viewPatch && { ...view, ...viewPatch }),
+    ).toBe("");
   });
 });

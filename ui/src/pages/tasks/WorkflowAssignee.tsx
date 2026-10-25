@@ -5,6 +5,7 @@ import type { Task } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { FIELD_MONO, LABEL, MONO, SelectShell } from "./panelStyles";
 import { taskQueries, writeTask } from "./taskQueries";
+import { assignablePool } from "./workflowShared";
 import { errorText } from "@/lib/errors";
 
 /**
@@ -22,17 +23,7 @@ export default function WorkflowAssignee({
   const api = useApi();
   const client = useQueryClient();
   const view = useApiQuery(taskQueries.workflow(api, task.key)).data;
-  const editable = task.access !== "context" && task.access !== "respond";
-  const pool =
-    editable &&
-    view &&
-    !view.paused_reason &&
-    view.waiting_on !== "pause" &&
-    view.owner.startsWith("pool:") &&
-    task.category !== "done" &&
-    task.category !== "cancelled"
-      ? view.owner.slice("pool:".length)
-      : "";
+  const pool = assignablePool(task, view);
   const pools = useApiQuery(taskQueries.pools(api, pool ? task.queue : "")).data;
   const members = pools?.items.find((item) => item.name === pool)?.agents ?? [];
   const reassign = useMutation({
