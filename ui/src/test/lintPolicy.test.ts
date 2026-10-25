@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { expect, it } from "vitest";
 
 // The lint policy: correctness errors everywhere, the complexity and size
-// thresholds of development.mdx, three kinds of rule override, and one
+// thresholds of development.mdx, two kinds of rule override, and one
 // suppression form, an oxlint comment that names its rule and a reason.
 const ui = resolve(__dirname, "../..");
 const raw = readFileSync(join(ui, ".oxlintrc.json"), "utf8");
@@ -32,7 +32,6 @@ const designSyncOverride = {
   files: [".design-sync/**"],
   rules: Object.fromEntries(Object.keys(thresholds).map((rule) => [rule, "off"])),
 };
-const temporaryComment = "// Temporary: task 20, must be empty before the next release.";
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -55,22 +54,9 @@ it("turns on the complexity and size thresholds as errors", () => {
     expect(config.rules[rule]).toEqual(setting);
 });
 
-it("overrides rules only for test files, .design-sync, and the temporary list", () => {
+it("overrides rules only for test files and .design-sync", () => {
   const overrides = (config.overrides ?? []).filter((override) => override.rules);
-  expect(overrides.slice(0, 2)).toEqual([testOverride, designSyncOverride]);
-  const temporary = overrides.slice(2);
-  if (temporary.length === 0) return;
-  // The temporary list follows its comment and only raises a threshold, so a
-  // listed function cannot grow and the rule stays on for the rest of the file.
-  expect(raw).toContain(temporaryComment);
-  expect(raw.indexOf(temporaryComment)).toBeLessThan(
-    raw.indexOf(JSON.stringify(temporary[0].files[0])),
-  );
-  for (const { rules } of temporary)
-    for (const [rule, setting] of Object.entries(rules ?? {})) {
-      expect(Object.keys(thresholds)).toContain(rule);
-      expect(Array.isArray(setting) && setting[0] === "error").toBe(true);
-    }
+  expect(overrides).toEqual([testOverride, designSyncOverride]);
 });
 
 it("suppresses only with an oxlint comment that names the rule and a reason", () => {

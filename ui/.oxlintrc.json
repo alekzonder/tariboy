@@ -110,42 +110,6 @@
         "max-nested-callbacks": "off",
         "max-params": "off"
       }
-    },
-    // Temporary: task 20, must be empty before the next release.
-    {
-      "files": [
-        "src/components/AgentControls.tsx",
-        "src/components/AgentSubscriptions.tsx",
-        "src/components/MaintenanceSettings.tsx",
-        "src/pages/ChannelsPage.tsx",
-        "src/pages/PluginsPage.tsx",
-        "src/pages/UsagePage.tsx",
-        "src/pages/tasks/QueueSecrets.tsx",
-        "src/pages/tasks/ReturnToAgent.tsx",
-        "src/pages/workflows/WorkflowTransferDialog.tsx"
-      ],
-      "rules": {
-        "max-lines-per-function": [
-          "error",
-          {
-            "max": 239,
-            "skipBlankLines": true,
-            "skipComments": true
-          }
-        ]
-      }
-    },
-    {
-      "files": [
-        "src/hooks/useApiQuery.ts",
-        "src/pages/tasks/WorkflowAssignee.tsx"
-      ],
-      "rules": {
-        "complexity": [
-          "error",
-          18
-        ]
-      }
     }
   ]
 }
