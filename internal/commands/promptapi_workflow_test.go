@@ -95,7 +95,7 @@ func TestPromptPreviewShowsTheWorkflowGoalBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prompt := res.(map[string]any)["prompt"].(string)
+	prompt := res.(AgentPromptPreview).Prompt
 	for _, want := range []string{"## Goal", "This task follows a workflow.", "key: " + task.Key + "\n", "### Status instructions\n\nDo the work.\n", "ttasks advance " + task.Key + " --outcome NAME --from work"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("missing %q in %s", want, prompt)

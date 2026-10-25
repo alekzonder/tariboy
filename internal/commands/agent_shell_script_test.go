@@ -20,7 +20,7 @@ func TestAgentShellScriptCommandsPersistAndRejectInvalidBash(t *testing.T) {
 	if _, err := h(t, "agent.shell-script.set")(c, registry.Params{"name": "a1", "script": valid}); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := h(t, "agent.shell-script.get")(c, registry.Params{"name": "a1"}); err != nil || got.(map[string]any)["script"] != valid {
+	if got, err := h(t, "agent.shell-script.get")(c, registry.Params{"name": "a1"}); err != nil || got.(ShellScriptResult).Script != valid {
 		t.Fatalf("get=%v err=%v", got, err)
 	}
 	if _, err := h(t, "agent.shell-script.set")(c, registry.Params{"name": "a1", "script": "if then\n"}); err == nil {
@@ -39,7 +39,7 @@ func TestGlobalShellScriptCommandsPersistAndRejectInvalidBash(t *testing.T) {
 	if _, err := h(t, "daemon.agent-shell-script.set")(c, registry.Params{"script": valid}); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := h(t, "daemon.agent-shell-script.get")(c, registry.Params{}); err != nil || got.(map[string]any)["script"] != valid {
+	if got, err := h(t, "daemon.agent-shell-script.get")(c, registry.Params{}); err != nil || got.(ShellScriptResult).Script != valid {
 		t.Fatalf("get=%v err=%v", got, err)
 	}
 	if _, err := h(t, "daemon.agent-shell-script.set")(c, registry.Params{"script": "if then\n"}); err == nil {

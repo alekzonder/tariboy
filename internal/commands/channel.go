@@ -23,7 +23,7 @@ func requireBus(c *registry.Ctx) (*bus.Bus, error) {
 }
 
 func channelLs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ChannelList](registry.Command{
 		Path:    "channel.ls",
 		Summary: "List channels",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/channels"},
@@ -36,17 +36,17 @@ func channelLs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			rows := make([]map[string]any, 0, len(chans))
+			rows := make([]ChannelRow, 0, len(chans))
 			for _, ch := range chans {
-				rows = append(rows, map[string]any{"name": ch.Name, "kind": ch.Kind})
+				rows = append(rows, ChannelRow{Name: ch.Name, Kind: ch.Kind})
 			}
-			return map[string]any{"channels": rows, "count": len(rows)}, nil
+			return ChannelList{Channels: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
 func agentSubscriptions() registry.Command {
-	return registry.Command{
+	return registry.WithResult[SubscriptionChannelList](registry.Command{
 		Path:    "agent.subscriptions",
 		Summary: "List the channels one agent is subscribed to",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -63,25 +63,25 @@ func agentSubscriptions() registry.Command {
 			// Distinct channels (an agent can hold several subscriptions on one
 			// channel with different matchers); the UI lists channels, not subs.
 			seen := map[string]bool{}
-			rows := make([]map[string]any, 0, len(subs))
+			rows := make([]SubscriptionChannel, 0, len(subs))
 			for _, s := range subs {
 				if seen[s.Channel] {
 					continue
 				}
 				seen[s.Channel] = true
-				rows = append(rows, map[string]any{
-					"name":      s.Channel,
-					"kind":      bus.ChannelKind(s.Channel),
-					"protected": bus.IsProtectedSubscription(p.String("name"), s.Channel),
+				rows = append(rows, SubscriptionChannel{
+					Name:      s.Channel,
+					Kind:      bus.ChannelKind(s.Channel),
+					Protected: bus.IsProtectedSubscription(p.String("name"), s.Channel),
 				})
 			}
-			return map[string]any{"channels": rows, "count": len(rows)}, nil
+			return SubscriptionChannelList{Channels: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
 func agentSubscribe() registry.Command {
-	return registry.Command{
+	return registry.WithResult[SubscribeResult](registry.Command{
 		Path:    "agent.subscribe",
 		Summary: "Subscribe an agent to a channel (operator)",
 		Args: []registry.Arg{
@@ -137,16 +137,10 @@ func agentSubscribe() registry.Command {
 					break
 				}
 			}
-			res := map[string]any{"name": name, "channel": channel, "kind": bus.ChannelKind(channel), "id": sub.ID, "changed": changed}
-			if sub.Watch != "" {
-				res["watch"] = sub.Watch
-			}
-			if len(sub.Params) > 0 {
-				res["params"] = sub.Params
-			}
-			return res, nil
+			return SubscribeResult{Name: name, Channel: channel, Kind: bus.ChannelKind(channel), ID: sub.ID,
+				Changed: changed, Watch: sub.Watch, Params: sub.Params}, nil
 		},
-	}
+	})
 }
 
 // coerceMatcher turns an optional matcher argument into a bus.Matcher. It
@@ -241,7 +235,7 @@ func splitCommaList(s string) []string {
 }
 
 func agentUnsubscribe() registry.Command {
-	return registry.Command{
+	return registry.WithResult[UnsubscribeResult](registry.Command{
 		Path:    "agent.unsubscribe",
 		Summary: "Unsubscribe an agent from a channel (operator)",
 		Args: []registry.Arg{
@@ -265,13 +259,13 @@ func agentUnsubscribe() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: "no such subscription"}
 			}
-			return map[string]any{"name": name, "channel": channel, "removed": n}, nil
+			return UnsubscribeResult{Name: name, Channel: channel, Removed: n}, nil
 		},
-	}
+	})
 }
 
 func channelInspect() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ChannelInspectView](registry.Command{
 		Path:    "channel.inspect",
 		Summary: "Show a channel's kind and message count",
 		Args:    []registry.Arg{{Name: "channel", Type: registry.String, Required: true, Help: "channel name"}},
@@ -285,13 +279,13 @@ func channelInspect() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: "channel not found"}
 			}
-			return map[string]any{"name": ch.Name, "kind": ch.Kind, "messages": count}, nil
+			return ChannelInspectView{Name: ch.Name, Kind: ch.Kind, Messages: count}, nil
 		},
-	}
+	})
 }
 
 func channelTail() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ChannelTail](registry.Command{
 		Path:    "channel.tail",
 		Summary: "Print recent messages on a channel (-f to follow)",
 		Args: []registry.Arg{
@@ -316,13 +310,13 @@ func channelTail() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"messages": messageViews(msgs), "count": len(msgs)}, nil
+			return ChannelTail{Messages: messageViews(msgs), Count: len(msgs)}, nil
 		},
-	}
+	})
 }
 
 func messageSend() registry.Command {
-	return registry.Command{
+	return registry.WithResult[MessageSendResult](registry.Command{
 		Path:    "message.send",
 		Summary: "Publish a message to a channel (operator)",
 		Args: []registry.Arg{
@@ -361,13 +355,13 @@ func messageSend() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"id": out.ID, "channel": out.Channel, "sent": true}, nil
+			return MessageSendResult{ID: out.ID, Channel: out.Channel, Sent: true}, nil
 		},
-	}
+	})
 }
 
 func agentInbox() registry.Command {
-	return registry.Command{
+	return registry.WithResult[InboxList](registry.Command{
 		Path:    "agent.inbox.ls",
 		Summary: "List an agent's inbox (operator), newest first",
 		Args: []registry.Arg{
@@ -397,13 +391,13 @@ func agentInbox() registry.Command {
 				return nil, api.UserError{Code: "bad_status", Msg: err.Error()}
 			}
 			rows := inboxItemViews(items)
-			return map[string]any{"messages": rows, "count": len(rows)}, nil
+			return InboxList{Messages: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
 func agentInboxProcessed() registry.Command {
-	return registry.Command{
+	return registry.WithResult[InboxProcessedResult](registry.Command{
 		Path:    "agent.inbox.processed",
 		Summary: "Mark an inbox message processed (operator ack)",
 		Args: []registry.Arg{
@@ -430,13 +424,13 @@ func agentInboxProcessed() registry.Command {
 				}
 				return nil, err
 			}
-			return map[string]any{"id": item.ID, "processed_at": item.ProcessedAt, "result": item.Result}, nil
+			return InboxProcessedResult{ID: item.ID, ProcessedAt: item.ProcessedAt, Result: item.Result}, nil
 		},
-	}
+	})
 }
 
 func agentInboxClear() registry.Command {
-	return registry.Command{
+	return registry.WithResult[InboxClearResult](registry.Command{
 		Path:    "agent.inbox.clear",
 		Summary: "Physically clear an agent's pending inbox queue",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -453,16 +447,13 @@ func agentInboxClear() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{
-				"deleted_deliveries": result.DeletedDeliveries,
-				"deleted_messages":   result.DeletedMessages,
-			}, nil
+			return InboxClearResult{DeletedDeliveries: result.DeletedDeliveries, DeletedMessages: result.DeletedMessages}, nil
 		},
-	}
+	})
 }
 
 func agentInboxReply() registry.Command {
-	return registry.Command{
+	return registry.WithResult[InboxReplyResult](registry.Command{
 		Path:    "agent.inbox.reply",
 		Summary: "Reply to an inbox message (operator); auto-processes the row",
 		Args: []registry.Arg{
@@ -493,14 +484,14 @@ func agentInboxReply() registry.Command {
 				}
 				return nil, perr
 			}
-			return map[string]any{"id": reply.ID, "channel": reply.Channel,
-				"in_reply_to": reply.InReplyTo, "correlation_id": reply.CorrelationID, "replied": true}, nil
+			return InboxReplyResult{ID: reply.ID, Channel: reply.Channel,
+				InReplyTo: reply.InReplyTo, CorrelationID: reply.CorrelationID, Replied: true}, nil
 		},
-	}
+	})
 }
 
 func agentInboxRequeue() registry.Command {
-	return registry.Command{
+	return registry.WithResult[InboxRequeueResult](registry.Command{
 		Path:    "agent.inbox.requeue",
 		Summary: "Requeue a DLQ'd inbox message (operator)",
 		Args: []registry.Arg{
@@ -520,13 +511,13 @@ func agentInboxRequeue() registry.Command {
 				}
 				return nil, err
 			}
-			return map[string]any{"id": id, "requeued": true}, nil
+			return InboxRequeueResult{ID: id, Requeued: true}, nil
 		},
-	}
+	})
 }
 
 func channelWatches() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ChannelWatchList](registry.Command{
 		Path:    "channel.watches",
 		Summary: "List a channel's distinct watches (watch, params, subscribers)",
 		Args:    []registry.Arg{{Name: "channel", Type: registry.String, Required: true, Help: "channel name"}},
@@ -540,19 +531,17 @@ func channelWatches() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			rows := make([]map[string]any, 0, len(watches))
+			rows := make([]ChannelWatch, 0, len(watches))
 			for _, w := range watches {
-				rows = append(rows, map[string]any{
-					"watch": w.Watch, "params": w.Params, "subscribers": w.Subscribers,
-				})
+				rows = append(rows, ChannelWatch{Watch: w.Watch, Params: w.Params, Subscribers: w.Subscribers})
 			}
-			return map[string]any{"watches": rows, "count": len(rows)}, nil
+			return ChannelWatchList{Watches: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
 func scheduleLs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentScheduleList](registry.Command{
 		Path:    "schedule.ls",
 		Summary: "List an agent's schedules (read-only)",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -562,23 +551,32 @@ func scheduleLs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			rows := make([]map[string]any, 0, len(list))
+			rows := make([]AgentSchedule, 0, len(list))
 			for _, s := range list {
-				rows = append(rows, map[string]any{"id": s.ID, "kind": s.Kind, "spec": s.Spec,
-					"channel": s.Channel, "next_fire_at": s.NextFireAt, "enabled": s.Enabled})
+				rows = append(rows, agentScheduleFrom(s))
 			}
-			return map[string]any{"schedules": rows, "count": len(rows)}, nil
+			return AgentScheduleList{Schedules: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
-func messageViews(msgs []bus.Message) []map[string]any {
-	rows := make([]map[string]any, 0, len(msgs))
+func messageViews(msgs []bus.Message) []ChannelMessage {
+	rows := make([]ChannelMessage, 0, len(msgs))
 	for _, m := range msgs {
-		row := map[string]any{"id": m.ID, "ts": m.TS, "type": m.Type, "source": m.Source,
-			"text": m.Text, "produced_by_agent": m.ProducedByAgent, "produced_in_iteration": m.ProducedInIteration}
-		addThreadingFields(row, m)
-		rows = append(rows, row)
+		rows = append(rows, ChannelMessage{ID: m.ID, TS: m.TS, Type: m.Type, Source: m.Source, Text: m.Text,
+			ProducedByAgent: m.ProducedByAgent, ProducedInIteration: m.ProducedInIteration,
+			MessageThreading: messageThreading(m)})
+	}
+	return rows
+}
+
+// chatMessageViews renders chat messages: the channel view plus the channel
+// each message travelled on and the principal it speaks for.
+func chatMessageViews(msgs []bus.Message) []ChatMessage {
+	views := messageViews(msgs)
+	rows := make([]ChatMessage, 0, len(msgs))
+	for i, msg := range msgs {
+		rows = append(rows, ChatMessage{ChannelMessage: views[i], Channel: msg.Channel, From: bus.MessageFrom(msg)})
 	}
 	return rows
 }
@@ -586,51 +584,22 @@ func messageViews(msgs []bus.Message) []map[string]any {
 // inboxItemViews renders per-agent inbox items: immutable message fields plus
 // threading and aggregated per-agent delivery state (§8.1). Optional fields are
 // omitted when empty so a plain pending row stays terse.
-func inboxItemViews(items []bus.InboxItem) []map[string]any {
-	rows := make([]map[string]any, 0, len(items))
+func inboxItemViews(items []bus.InboxItem) []InboxMessage {
+	rows := make([]InboxMessage, 0, len(items))
 	for _, it := range items {
-		row := map[string]any{
-			"id": it.ID, "channel": it.Channel, "ts": it.TS, "source": it.Source,
-			"type": it.Type, "text": it.Text, "attempts": it.Attempts, "dlq": it.DLQ,
-			"produced_by_agent": it.ProducedByAgent, "produced_in_iteration": it.ProducedInIteration,
-		}
-		addThreadingFields(row, it.Message)
-		if it.DeliveredAt != "" {
-			row["delivered_at"] = it.DeliveredAt
+		row := InboxMessage{
+			ID: it.ID, Channel: it.Channel, TS: it.TS, Source: it.Source,
+			Type: it.Type, Text: it.Text, Attempts: it.Attempts, DLQ: it.DLQ,
+			ProducedByAgent: it.ProducedByAgent, ProducedInIteration: it.ProducedInIteration,
+			MessageThreading: messageThreading(it.Message), DeliveredAt: it.DeliveredAt,
 		}
 		if it.ProcessedAt != "" {
-			row["processed_at"] = it.ProcessedAt
-			row["result"] = it.Result
+			row.ProcessedAt = it.ProcessedAt
+			row.Result = &it.Result
 		}
 		rows = append(rows, row)
 	}
 	return rows
-}
-
-// addThreadingFields overlays the message's optional kind/subject/threading
-// fields onto row, skipping empties so terse rows stay terse.
-func addThreadingFields(row map[string]any, m bus.Message) {
-	if m.Kind != "" {
-		row["kind"] = m.Kind
-	}
-	if len(m.Subject) > 0 {
-		row["subject"] = m.Subject
-	}
-	if len(m.Data) > 0 {
-		row["data"] = m.Data
-	}
-	if m.CorrelationID != "" {
-		row["correlation_id"] = m.CorrelationID
-	}
-	if m.InReplyTo != "" {
-		row["in_reply_to"] = m.InReplyTo
-	}
-	if m.ReplyTo != "" {
-		row["reply_to"] = m.ReplyTo
-	}
-	if m.Deadline != "" {
-		row["deadline"] = m.Deadline
-	}
 }
 
 func kvToAny(m map[string]string) map[string]any {

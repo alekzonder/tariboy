@@ -1,0 +1,691 @@
+{
+  "agent.usage iteration": {
+    "agent": "alice",
+    "bucket": "1d",
+    "group_by": "iteration",
+    "rows": [
+      {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 10,
+        "cost_usd": 0.1,
+        "input_tokens": 100,
+        "key": "alice-1",
+        "output_tokens": 50,
+        "requests": 1
+      },
+      {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.02,
+        "input_tokens": 20,
+        "key": "alice-2",
+        "output_tokens": 10,
+        "requests": 1
+      }
+    ],
+    "series": [
+      {
+        "bucket_start": "2026-07-06T00:00:00Z",
+        "cost_usd": 0.12,
+        "requests": 2,
+        "tokens": 195
+      }
+    ],
+    "totals": {
+      "cache_read_tokens": 5,
+      "cache_write_tokens": 10,
+      "cost_usd": 0.12,
+      "input_tokens": 120,
+      "output_tokens": 60,
+      "requests": 2
+    }
+  },
+  "agent.usage model": {
+    "agent": "alice",
+    "bucket": "1h",
+    "group_by": "model",
+    "rows": [
+      {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 10,
+        "cost_usd": 0.1,
+        "input_tokens": 100,
+        "key": "claude-opus-4-8",
+        "output_tokens": 50,
+        "requests": 1
+      },
+      {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.02,
+        "input_tokens": 20,
+        "key": "gpt-5",
+        "output_tokens": 10,
+        "requests": 1
+      }
+    ],
+    "series": [
+      {
+        "bucket_start": "2026-07-06T09:00:00Z",
+        "cost_usd": 0.1,
+        "requests": 1,
+        "tokens": 165
+      },
+      {
+        "bucket_start": "2026-07-06T10:00:00Z",
+        "cost_usd": 0.02,
+        "requests": 1,
+        "tokens": 30
+      }
+    ],
+    "totals": {
+      "cache_read_tokens": 5,
+      "cache_write_tokens": 10,
+      "cost_usd": 0.12,
+      "input_tokens": 120,
+      "output_tokens": 60,
+      "requests": 2
+    }
+  },
+  "agent.usage task": {
+    "agent": "alice",
+    "bucket": "1d",
+    "group_by": "task",
+    "rows": [
+      {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.02,
+        "input_tokens": 20,
+        "key": "untagged",
+        "output_tokens": 10,
+        "requests": 1,
+        "title": "untagged"
+      },
+      {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 10,
+        "cost_usd": 0.1,
+        "input_tokens": 100,
+        "key": "USE-2",
+        "output_tokens": 50,
+        "requests": 1,
+        "title": "USE-2"
+      }
+    ],
+    "series": [
+      {
+        "bucket_start": "2026-07-06T00:00:00Z",
+        "cost_usd": 0.12,
+        "requests": 2,
+        "tokens": 195
+      }
+    ],
+    "totals": {
+      "cache_read_tokens": 5,
+      "cache_write_tokens": 10,
+      "cost_usd": 0.12,
+      "input_tokens": 120,
+      "output_tokens": 60,
+      "requests": 2
+    }
+  },
+  "budget.ls": {
+    "budgets": [
+      {
+        "limit_usd": 1.5,
+        "mode": "block",
+        "period_s": 43200,
+        "scope": "agent:alice"
+      },
+      {
+        "limit_usd": 0.2,
+        "mode": "block",
+        "period_s": 86400,
+        "scope": "agent:bob"
+      },
+      {
+        "limit_usd": 10,
+        "mode": "warn",
+        "period_s": 86400,
+        "scope": "global"
+      },
+      {
+        "limit_usd": 5,
+        "mode": "warn",
+        "period_s": 3600,
+        "scope": "group:ops"
+      }
+    ],
+    "count": 4
+  },
+  "budget.ls defaults": {
+    "budgets": [
+      {
+        "limit_usd": 3,
+        "mode": "warn",
+        "period_s": 86400,
+        "scope": "global"
+      }
+    ],
+    "count": 1
+  },
+  "budget.set": {
+    "limit_usd": 1.5,
+    "mode": "block",
+    "period_s": 43200,
+    "scope": "agent:alice"
+  },
+  "budget.set defaults": {
+    "limit_usd": 3,
+    "mode": "warn",
+    "period_s": 86400,
+    "scope": "global"
+  },
+  "budget.status": {
+    "budgets": [
+      {
+        "limit_usd": 1.5,
+        "mode": "block",
+        "over": false,
+        "scope": "agent:alice",
+        "spent_usd": 0
+      },
+      {
+        "limit_usd": 0.2,
+        "mode": "block",
+        "over": true,
+        "scope": "agent:bob",
+        "spent_usd": 0.25
+      },
+      {
+        "limit_usd": 10,
+        "mode": "warn",
+        "over": false,
+        "scope": "global",
+        "spent_usd": 0.25
+      },
+      {
+        "limit_usd": 5,
+        "mode": "warn",
+        "over": false,
+        "scope": "group:ops",
+        "spent_usd": 0
+      }
+    ],
+    "count": 4
+  },
+  "budget.status defaults": {
+    "budgets": [
+      {
+        "limit_usd": 3,
+        "mode": "warn",
+        "over": false,
+        "scope": "global",
+        "spent_usd": 0
+      }
+    ],
+    "count": 1
+  },
+  "iteration.extend-timeout": {
+    "hard_timeout_deadline": "2026-07-06T11:00:00Z",
+    "id": "alice-2",
+    "shim_sync": "pending",
+    "timeout_deadline": "2026-07-06T10:00:00Z",
+    "timeout_extensions": 1
+  },
+  "iteration.inspect done": {
+    "agent": "alice",
+    "cpu_ms": 1200,
+    "done": true,
+    "ended_at": "2026-07-06T09:05:00Z",
+    "exit_code": 0,
+    "id": "alice-1",
+    "image_digest": "sha256:abc",
+    "image_ref": "basic:latest",
+    "image_version": "1.2.3",
+    "mem_peak_kb": 4096,
+    "productive": true,
+    "prompt_path": "prompt.md",
+    "prompt_template_sha256": "def",
+    "started_at": "2026-07-06T09:00:00Z",
+    "status": "done",
+    "tags": [
+      "keep",
+      "review"
+    ],
+    "trigger": "interval"
+  },
+  "iteration.inspect running": {
+    "agent": "alice",
+    "done": false,
+    "ended_at": "",
+    "id": "alice-2",
+    "image_digest": "",
+    "image_ref": "",
+    "image_version": "",
+    "productive": true,
+    "prompt_path": "",
+    "prompt_template_sha256": "",
+    "started_at": "2026-07-06T10:00:00Z",
+    "status": "running",
+    "tags": [],
+    "trigger": "message"
+  },
+  "iteration.logs": {
+    "stderr": "err-line",
+    "stdout": "out-line"
+  },
+  "iteration.logs missing": {
+    "stderr": "",
+    "stdout": ""
+  },
+  "iteration.ls": {
+    "count": 2,
+    "iterations": [
+      {
+        "done": true,
+        "id": "alice-1",
+        "productive": true,
+        "started_at": "2026-07-06T09:00:00Z",
+        "status": "done",
+        "tags": [
+          "keep",
+          "review"
+        ],
+        "trigger": "interval"
+      },
+      {
+        "done": false,
+        "id": "alice-2",
+        "productive": true,
+        "started_at": "2026-07-06T10:00:00Z",
+        "status": "running",
+        "tags": [],
+        "trigger": "message"
+      }
+    ]
+  },
+  "iteration.ls empty": {
+    "count": 0,
+    "iterations": []
+  },
+  "iteration.ls filtered": {
+    "count": 1,
+    "iterations": [
+      {
+        "done": true,
+        "id": "alice-1",
+        "productive": true,
+        "started_at": "2026-07-06T09:00:00Z",
+        "status": "done",
+        "tags": [
+          "keep",
+          "review"
+        ],
+        "trigger": "interval"
+      }
+    ]
+  },
+  "iteration.tag.add": {
+    "count": 2,
+    "tags": {
+      "alice-1": [
+        "keep",
+        "review"
+      ],
+      "alice-2": [
+        "keep",
+        "review"
+      ]
+    }
+  },
+  "iteration.tag.rm": {
+    "count": 1,
+    "tags": {
+      "alice-2": [
+        "keep"
+      ]
+    }
+  },
+  "iteration.tag.set clear": {
+    "count": 1,
+    "tags": {
+      "alice-2": []
+    }
+  },
+  "logs before": {
+    "count": 1,
+    "events": [
+      {
+        "at": "2026-07-06T09:00:00.000Z",
+        "data": "{\"line\":\"boom\"}",
+        "iteration_id": "alice-1",
+        "kind": "shim",
+        "seq": 2,
+        "source": "shim"
+      }
+    ]
+  },
+  "logs distinct": {
+    "types": [
+      "iteration_started",
+      "shim",
+      "status"
+    ]
+  },
+  "logs distinct empty": {
+    "types": []
+  },
+  "logs empty": {
+    "count": 0,
+    "events": []
+  },
+  "logs iteration": {
+    "count": 2,
+    "events": [
+      {
+        "at": "2026-07-06T09:00:00.000Z",
+        "data": "{}",
+        "iteration_id": "alice-1",
+        "kind": "iteration_started",
+        "seq": 1,
+        "source": "system"
+      },
+      {
+        "at": "2026-07-06T09:00:00.000Z",
+        "data": "{\"line\":\"boom\"}",
+        "iteration_id": "alice-1",
+        "kind": "shim",
+        "seq": 2,
+        "source": "shim"
+      }
+    ]
+  },
+  "logs query": {
+    "capped": false,
+    "count": 1,
+    "events": [
+      {
+        "at": "2026-07-06T09:00:00.000Z",
+        "data": "{\"line\":\"boom\"}",
+        "iteration_id": "alice-1",
+        "kind": "shim",
+        "seq": 2,
+        "source": "shim"
+      }
+    ]
+  },
+  "logs recent": {
+    "count": 4,
+    "events": [
+      {
+        "at": "2026-07-06T09:00:00.000Z",
+        "data": "{}",
+        "iteration_id": "alice-2",
+        "kind": "iteration_started",
+        "seq": 4,
+        "source": "system"
+      },
+      {
+        "at": "2026-07-06T09:00:00.000Z",
+        "data": "{\"text\":\"building\"}",
+        "iteration_id": "",
+        "kind": "status",
+        "seq": 3,
+        "source": "agent"
+      },
+      {
+        "at": "2026-07-06T09:00:00.000Z",
+        "data": "{\"line\":\"boom\"}",
+        "iteration_id": "alice-1",
+        "kind": "shim",
+        "seq": 2,
+        "source": "shim"
+      },
+      {
+        "at": "2026-07-06T09:00:00.000Z",
+        "data": "{}",
+        "iteration_id": "alice-1",
+        "kind": "iteration_started",
+        "seq": 1,
+        "source": "system"
+      }
+    ]
+  },
+  "logs since": {
+    "count": 2,
+    "events": [
+      {
+        "at": "2026-07-06T09:00:00.000Z",
+        "data": "{\"text\":\"building\"}",
+        "iteration_id": "",
+        "kind": "status",
+        "seq": 3,
+        "source": "agent"
+      },
+      {
+        "at": "2026-07-06T09:00:00.000Z",
+        "data": "{}",
+        "iteration_id": "alice-2",
+        "kind": "iteration_started",
+        "seq": 4,
+        "source": "system"
+      }
+    ]
+  },
+  "logs type": {
+    "capped": false,
+    "count": 1,
+    "events": [
+      {
+        "at": "2026-07-06T09:00:00.000Z",
+        "data": "{\"text\":\"building\"}",
+        "iteration_id": "",
+        "kind": "status",
+        "seq": 3,
+        "source": "agent"
+      }
+    ]
+  },
+  "transcript": {
+    "calls": [
+      {
+        "cost_usd": 0,
+        "delta": [
+          {
+            "blocks": [
+              {
+                "text": "hi",
+                "type": "text"
+              }
+            ],
+            "role": "user"
+          }
+        ],
+        "instructions": "S1",
+        "instructions_changed": true,
+        "latency_ms": 0,
+        "model": "m",
+        "provider": "anthropic",
+        "response": {
+          "blocks": [
+            {
+              "text": "ok",
+              "type": "text"
+            }
+          ],
+          "stop_reason": "end_turn"
+        },
+        "seq": 0,
+        "status": "",
+        "truncated": false,
+        "ts": "2026-07-06T09:00:00Z",
+        "usage": {
+          "cache_read": 0,
+          "cache_write": 0,
+          "input": 3,
+          "output": 0
+        }
+      }
+    ],
+    "count": 1
+  },
+  "transcript missing": {
+    "calls": [],
+    "count": 0
+  },
+  "transcript raw": {
+    "calls": [
+      {
+        "request": "{\"system\":\"S1\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+        "response": "{\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"ok\"}]}",
+        "seq": 0,
+        "ts": "2026-07-06T09:00:00Z"
+      }
+    ],
+    "count": 1
+  },
+  "transcript raw missing": {
+    "calls": [],
+    "count": 0
+  },
+  "usage empty": {
+    "count": 0,
+    "requests": [],
+    "rows": [],
+    "series": [],
+    "total_cache_read_tokens": 0,
+    "total_cache_write_tokens": 0,
+    "total_cost_usd": 0,
+    "total_input_tokens": 0,
+    "total_output_tokens": 0,
+    "total_requests": 0
+  },
+  "usage group": {
+    "count": 1,
+    "requests": [
+      {
+        "agent": "alice",
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 10,
+        "cost_usd": 0.1,
+        "group_id": "g1",
+        "group_name": "ops",
+        "id": "r1",
+        "image": "basic",
+        "input_tokens": 100,
+        "model": "claude-opus-4-8",
+        "output_tokens": 50,
+        "provider": "anthropic",
+        "status": "ok",
+        "ts": "2026-07-06T09:00:00.000000000Z"
+      }
+    ],
+    "rows": [
+      {
+        "agent": "alice",
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 10,
+        "cost_usd": 0.1,
+        "group_id": "g1",
+        "group_name": "ops",
+        "image": "basic",
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "requests": 1
+      }
+    ],
+    "series": [
+      {
+        "bucket_start": "2026-07-06T00:00:00Z",
+        "cost_usd": 0.1,
+        "requests": 1,
+        "tokens": 165
+      }
+    ],
+    "total_cache_read_tokens": 5,
+    "total_cache_write_tokens": 10,
+    "total_cost_usd": 0.1,
+    "total_input_tokens": 100,
+    "total_output_tokens": 50,
+    "total_requests": 1
+  },
+  "usage window": {
+    "count": 2,
+    "requests": [
+      {
+        "agent": "alice",
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.02,
+        "group_id": "",
+        "group_name": "",
+        "id": "r2",
+        "image": "basic",
+        "input_tokens": 20,
+        "model": "gpt-5",
+        "output_tokens": 10,
+        "provider": "openai",
+        "status": "upstream_error",
+        "ts": "2026-07-06T10:00:00.000000000Z"
+      },
+      {
+        "agent": "alice",
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 10,
+        "cost_usd": 0.1,
+        "group_id": "g1",
+        "group_name": "ops",
+        "id": "r1",
+        "image": "basic",
+        "input_tokens": 100,
+        "model": "claude-opus-4-8",
+        "output_tokens": 50,
+        "provider": "anthropic",
+        "status": "ok",
+        "ts": "2026-07-06T09:00:00.000000000Z"
+      }
+    ],
+    "rows": [
+      {
+        "agent": "alice",
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.02,
+        "group_id": "",
+        "group_name": "",
+        "image": "basic",
+        "input_tokens": 20,
+        "output_tokens": 10,
+        "requests": 1
+      },
+      {
+        "agent": "alice",
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 10,
+        "cost_usd": 0.1,
+        "group_id": "g1",
+        "group_name": "ops",
+        "image": "basic",
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "requests": 1
+      }
+    ],
+    "series": [
+      {
+        "bucket_start": "2026-07-06T00:00:00Z",
+        "cost_usd": 0.12,
+        "requests": 2,
+        "tokens": 195
+      }
+    ],
+    "total_cache_read_tokens": 5,
+    "total_cache_write_tokens": 10,
+    "total_cost_usd": 0.12,
+    "total_input_tokens": 120,
+    "total_output_tokens": 60,
+    "total_requests": 2
+  }
+}

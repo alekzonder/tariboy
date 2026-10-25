@@ -28,7 +28,7 @@ func TestLoopIntervalGetSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["interval_s"] != 120 {
+	if res.(LoopIntervalResult).IntervalS != 120 {
 		t.Fatalf("get result: %v", res)
 	}
 }
@@ -92,7 +92,7 @@ func TestUserPromptGetSet(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, err := h(t, "user-prompt.get")(c, registry.Params{"name": "smoke"})
-	if err != nil || res.(map[string]any)["user_prompt"] != "focus on X" {
+	if err != nil || res.(AgentUserPromptResult).UserPrompt != "focus on X" {
 		t.Fatalf("user-prompt: %v err=%v", res, err)
 	}
 }
@@ -122,13 +122,13 @@ func TestLoopScheduleSetReadClear(t *testing.T) {
 		!strings.HasSuffix(got.ScheduleRRule, "\nRRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=0") {
 		t.Fatalf("stored schedule = %q", got.ScheduleRRule)
 	}
-	view := res.(map[string]any)
-	if view["schedule"] != got.ScheduleRRule {
+	view := res.(LoopScheduleResult)
+	if view.Schedule != got.ScheduleRRule {
 		t.Fatalf("set result = %v", view)
 	}
-	next, err := time.Parse(time.RFC3339, view["schedule_next_at"].(string))
+	next, err := time.Parse(time.RFC3339, view.ScheduleNextAt)
 	if err != nil || !next.After(time.Now()) || next.In(time.Local).Hour() != 9 || next.In(time.Local).Minute() != 30 {
-		t.Fatalf("schedule_next_at = %v (%v)", view["schedule_next_at"], err)
+		t.Fatalf("schedule_next_at = %v (%v)", view.ScheduleNextAt, err)
 	}
 
 	if _, err := cmd(c, registry.Params{"name": "smoke", "value": "FREQ=SECONDLY"}); err == nil {
@@ -141,7 +141,7 @@ func TestLoopScheduleSetReadClear(t *testing.T) {
 	}
 
 	read, err := cmd(c, registry.Params{"name": "smoke"})
-	if err != nil || read.(map[string]any)["schedule"] != got.ScheduleRRule {
+	if err != nil || read.(LoopScheduleResult).Schedule != got.ScheduleRRule {
 		t.Fatalf("read = %v, %v", read, err)
 	}
 
@@ -149,7 +149,7 @@ func TestLoopScheduleSetReadClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := cleared.(map[string]any); v["schedule"] != "" || v["schedule_next_at"] != "" {
+	if v := cleared.(LoopScheduleResult); v.Schedule != "" || v.ScheduleNextAt != "" {
 		t.Fatalf("clear result = %v", v)
 	}
 	if after, _ := as.Get("smoke"); after.ScheduleRRule != "" {

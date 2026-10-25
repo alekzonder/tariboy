@@ -1,0 +1,36 @@
+{
+  "files.upload": {
+    "abs": "$BASE/files/$UPLOAD/notes.txt",
+    "bytes": 5,
+    "path": "files/$UPLOAD/notes.txt"
+  },
+  "fs.list child": {
+    "entries": [
+      {
+        "dir": true,
+        "name": "src"
+      }
+    ],
+    "parent": "$ROOT",
+    "path": "$ROOT/proj"
+  },
+  "fs.list empty": {
+    "entries": [],
+    "parent": "$ROOT",
+    "path": "$ROOT/empty"
+  },
+  "fs.list root": {
+    "entries": [
+      {
+        "dir": true,
+        "name": "empty"
+      },
+      {
+        "dir": true,
+        "name": "proj"
+      }
+    ],
+    "parent": "",
+    "path": "$ROOT"
+  }
+}

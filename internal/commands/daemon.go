@@ -298,7 +298,7 @@ func mustValidate(r *registry.Registry) {
 }
 
 func daemonStatus() registry.Command {
-	return registry.Command{
+	return registry.WithResult[DaemonStatus](registry.Command{
 		Path:    "daemon.status",
 		Summary: "Show whether the daemon runs (exit 0) or is stopped (exit 1); --json prints its full status",
 		Help:    "The API returns the daemon version, uptime, base directory and missing host tools. The CLI probes the daemon socket itself, so it works while the daemon is down.",
@@ -313,24 +313,28 @@ func daemonStatus() registry.Command {
 				schema, _ = c.Store.SchemaVersion()
 			}
 			tools := toolcheck.Check()
-			return map[string]any{
-				"state":          tools.State,
-				"missing_tools":  tools.MissingTools,
-				"message":        tools.Message,
-				"version":        c.Version,
-				"pid":            os.Getpid(),
-				"started_at":     store.FormatTime(c.StartedAt),
-				"uptime_seconds": int64(time.Since(c.StartedAt).Seconds()),
-				"base_dir":       c.BaseDir,
-				"http_addr":      c.HTTPAddr,
-				"schema_version": schema,
+			missing := make([]DaemonMissingTool, 0, len(tools.MissingTools))
+			for _, tool := range tools.MissingTools {
+				missing = append(missing, DaemonMissingTool(tool))
+			}
+			return DaemonStatus{
+				State:         tools.State,
+				MissingTools:  missing,
+				Message:       tools.Message,
+				Version:       c.Version,
+				Pid:           os.Getpid(),
+				StartedAt:     store.FormatTime(c.StartedAt),
+				UptimeSeconds: int64(time.Since(c.StartedAt).Seconds()),
+				BaseDir:       c.BaseDir,
+				HTTPAddr:      c.HTTPAddr,
+				SchemaVersion: schema,
 			}, nil
 		},
-	}
+	})
 }
 
 func daemonConfigGet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[DaemonConfig](registry.Command{
 		Path:    "daemon.config.get",
 		Summary: "Read daemon config (all keys, or one with --key)",
 		Args: []registry.Arg{
@@ -338,14 +342,14 @@ func daemonConfigGet() registry.Command {
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/config"},
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
-			out := map[string]any{}
+			out := DaemonConfig{Values: map[string]string{}}
 			if key := p.String("key"); key != "" {
 				v, ok, err := c.Store.ConfigGet(key)
 				if err != nil {
 					return nil, err
 				}
 				if ok {
-					out[key] = v
+					out.Values[key] = v
 				}
 				return out, nil
 			}
@@ -359,15 +363,15 @@ func daemonConfigGet() registry.Command {
 				if err := rows.Scan(&k, &v); err != nil {
 					return nil, err
 				}
-				out[k] = v
+				out.Values[k] = v
 			}
 			return out, rows.Err()
 		},
-	}
+	})
 }
 
 func daemonConfigSet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[DaemonConfigEntry](registry.Command{
 		Path:    "daemon.config.set",
 		Summary: "Set a daemon config key (runtime-mutable)",
 		Args: []registry.Arg{
@@ -388,7 +392,7 @@ func daemonConfigSet() registry.Command {
 			if err := c.Store.AddEvent("", "config_set", string(data)); err != nil {
 				return nil, err
 			}
-			return map[string]any{"key": key, "value": value}, nil
+			return DaemonConfigEntry{Key: key, Value: value}, nil
 		},
-	}
+	})
 }

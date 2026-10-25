@@ -23,7 +23,7 @@ func TestAgentModelSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["model"] != "opus" {
+	if res.(AgentModelResult).Model != "opus" {
 		t.Fatalf("echo: %v", res)
 	}
 	a, _ := getAgent(c, "a1")
@@ -43,7 +43,7 @@ func TestAgentModelReadOnlyWhenNoValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["model"] != "sonnet" {
+	if res.(AgentModelResult).Model != "sonnet" {
 		t.Fatalf("read = %v", res)
 	}
 }
@@ -87,7 +87,7 @@ func TestAgentHarnessSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["harness"] != "codex" {
+	if res.(AgentHarnessResult).Harness != "codex" {
 		t.Fatalf("echo: %v", res)
 	}
 	a, _ := getAgent(c, "a1")
@@ -125,7 +125,7 @@ func TestAgentHarnessReadOnlyWhenNoValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["harness"] != "opencode" {
+	if res.(AgentHarnessResult).Harness != "opencode" {
 		t.Fatalf("read = %v", res)
 	}
 }
@@ -162,7 +162,18 @@ func TestAgentMessageSettingsValidateAndPersist(t *testing.T) {
 		"agent.messages.max-queue": "messages_max_queue",
 	} {
 		res, err := h(t, path)(c, registry.Params{"name": "a1", "value": float64(23)})
-		if err != nil || res.(map[string]any)[field] != 23 {
+		got := -1
+		switch v := res.(type) {
+		case AgentMessagesBatch:
+			if field == "messages_batch" {
+				got = v.MessagesBatch
+			}
+		case AgentMessagesMaxQueue:
+			if field == "messages_max_queue" {
+				got = v.MessagesMaxQueue
+			}
+		}
+		if err != nil || got != 23 {
 			t.Fatalf("%s result=%#v err=%v", path, res, err)
 		}
 		if _, err := h(t, path)(c, registry.Params{"name": "a1", "value": float64(0)}); err == nil {
@@ -184,7 +195,7 @@ func TestAgentCwdSetReadClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["cwd"] != dir {
+	if res.(AgentCwdResult).Cwd != dir {
 		t.Fatalf("echo: %v", res)
 	}
 	if a, _ := getAgent(c, "a1"); a.Cwd != dir {
@@ -195,7 +206,7 @@ func TestAgentCwdSetReadClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["cwd"] != dir {
+	if res.(AgentCwdResult).Cwd != dir {
 		t.Fatalf("read = %v", res)
 	}
 	// relative -> bad_cwd error, value unchanged

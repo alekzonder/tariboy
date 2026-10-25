@@ -1,8 +1,10 @@
 package commands
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/agent"
@@ -22,7 +24,7 @@ func TestBackupRestoreCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["path"].(string) != out {
+	if res.(BackupResult).Path != out {
 		t.Fatalf("backup result = %+v", res)
 	}
 	if fi, err := os.Stat(out); err != nil || fi.Mode().Perm() != 0o600 {
@@ -33,7 +35,7 @@ func TestBackupRestoreCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rr.(map[string]any)["agent"] != "clone" {
+	if rr.(RestoreResult).Agent != "clone" {
 		t.Fatalf("restore result = %+v", rr)
 	}
 	if _, err := as.Get("clone"); err != nil {
@@ -52,7 +54,7 @@ func TestBackupIncludeSecretsWarns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w, _ := res.(map[string]any)["warning"].(string); w == "" {
+	if w := res.(BackupResult).Warning; w == "" {
 		t.Fatalf("expected a warning in backup result when --include-secrets is set, got %+v", res)
 	}
 
@@ -62,7 +64,7 @@ func TestBackupIncludeSecretsWarns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := res2.(map[string]any)["warning"]; ok {
+	if data, err := json.Marshal(res2); err != nil || strings.Contains(string(data), `"warning"`) {
 		t.Fatalf("did not expect a warning without --include-secrets, got %+v", res2)
 	}
 }

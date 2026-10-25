@@ -125,7 +125,14 @@ func loginCmd() registry.Command {
 			if err := rs.Save(); err != nil {
 				return nil, err
 			}
-			return map[string]any{"registry": regURL, "logged_in": true}, nil
+			return RegistryLogin{LoggedIn: true, Registry: regURL}, nil
 		},
 	}
+}
+
+// RegistryLogin confirms the registry a token was saved for. The fields keep
+// the key order of the former map result.
+type RegistryLogin struct {
+	LoggedIn bool   `json:"logged_in"`
+	Registry string `json:"registry"`
 }

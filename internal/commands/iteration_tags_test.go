@@ -34,8 +34,8 @@ func lsIDs(t *testing.T, c *registry.Ctx, p registry.Params) []string {
 		t.Fatalf("iteration.ls %v: %v", p, err)
 	}
 	var out []string
-	for _, row := range res.(map[string]any)["iterations"].([]map[string]any) {
-		out = append(out, row["id"].(string))
+	for _, row := range res.(IterationList).Iterations {
+		out = append(out, row.ID)
 	}
 	return out
 }
@@ -49,7 +49,7 @@ func TestIterationTagCommandsAddRemoveSetInBatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tags := res.(map[string]any)["tags"].(map[string][]string)
+	tags := res.(IterationTagResult).Tags
 	if len(tags["it-1"]) != 2 || len(tags["it-2"]) != 2 {
 		t.Fatalf("add tags = %v", tags)
 	}
@@ -67,7 +67,7 @@ func TestIterationTagCommandsAddRemoveSetInBatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := res.(map[string]any)["tags"].([]string); len(got) != 1 || got[0] != "done" {
+	if got := res.(IterationView).Tags; len(got) != 1 || got[0] != "done" {
 		t.Fatalf("inspect tags = %v", got)
 	}
 }
@@ -119,8 +119,8 @@ func TestIterationLsFiltersByTagAndStartDate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	row := res.(map[string]any)["iterations"].([]map[string]any)[0]
-	if got := row["tags"].([]string); len(got) != 1 || got[0] != "processed" {
+	row := res.(IterationList).Iterations[0]
+	if got := row.Tags; len(got) != 1 || got[0] != "processed" {
 		t.Fatalf("ls row tags = %v", got)
 	}
 

@@ -1,0 +1,544 @@
+{
+  "schedule.ls": {
+    "count": 1,
+    "schedules": [
+      {
+        "channel": "agent.alice.inbox",
+        "enabled": true,
+        "id": "sch-alice-20260714100000-000000001",
+        "kind": "cron",
+        "next_fire_at": "2026-07-15T09:00:00.000000000Z",
+        "spec": "0 9 * * *"
+      }
+    ]
+  },
+  "schedule.ls empty": {
+    "count": 0,
+    "schedules": []
+  },
+  "script.cancel": {
+    "cancelled": true,
+    "id": "scr-1"
+  },
+  "script.logs": {
+    "log": "log",
+    "run": {
+      "agent": "alice",
+      "cancel_requested": false,
+      "created_at": "2026-07-14T10:00:00Z",
+      "exit_code": 3,
+      "finished_at": "2026-07-14T10:00:02Z",
+      "id": "srun-done",
+      "log_path": "/logs/srun-done.log",
+      "pid": 4242,
+      "script_id": "scr-1",
+      "started_at": "2026-07-14T10:00:01Z",
+      "status": "failed"
+    }
+  },
+  "script.ls empty": {
+    "count": 0,
+    "scripts": []
+  },
+  "script.ls latest run": {
+    "count": 1,
+    "scripts": [
+      {
+        "agent": "alice",
+        "command": "make check",
+        "created_at": "",
+        "description": "check repo",
+        "id": "scr-1",
+        "interval_seconds": 0,
+        "latest_run": {
+          "agent": "alice",
+          "cancel_requested": false,
+          "created_at": "2026-07-14T10:00:00Z",
+          "exit_code": 3,
+          "finished_at": "2026-07-14T10:00:02Z",
+          "id": "srun-done",
+          "log_path": "/logs/srun-done.log",
+          "pid": 4242,
+          "script_id": "scr-1",
+          "started_at": "2026-07-14T10:00:01Z",
+          "status": "failed"
+        },
+        "mode": "once",
+        "name": "check",
+        "next_run_at": "",
+        "state": "active"
+      }
+    ]
+  },
+  "script.rerun": {
+    "agent": "alice",
+    "cancel_requested": false,
+    "created_at": "",
+    "finished_at": "",
+    "id": "srun-rerun",
+    "log_path": "",
+    "script_id": "scr-1",
+    "started_at": "",
+    "status": "pending"
+  },
+  "script.rm": {
+    "id": "scr-1",
+    "removed": true
+  },
+  "script.run": {
+    "run": {
+      "agent": "alice",
+      "cancel_requested": false,
+      "created_at": "",
+      "finished_at": "",
+      "id": "srun-1",
+      "log_path": "",
+      "script_id": "scr-1",
+      "started_at": "",
+      "status": "pending"
+    },
+    "script": {
+      "agent": "alice",
+      "command": "make check",
+      "created_at": "",
+      "description": "check repo",
+      "id": "scr-1",
+      "interval_seconds": 0,
+      "latest_run": {
+        "agent": "alice",
+        "cancel_requested": false,
+        "created_at": "",
+        "finished_at": "",
+        "id": "srun-1",
+        "log_path": "",
+        "script_id": "scr-1",
+        "started_at": "",
+        "status": "pending"
+      },
+      "mode": "once",
+      "name": "check",
+      "next_run_at": "",
+      "state": "active"
+    }
+  },
+  "script.run-get finished": {
+    "agent": "alice",
+    "cancel_requested": false,
+    "created_at": "2026-07-14T10:00:00Z",
+    "exit_code": 3,
+    "finished_at": "2026-07-14T10:00:02Z",
+    "id": "srun-done",
+    "log_path": "/logs/srun-done.log",
+    "pid": 4242,
+    "script_id": "scr-1",
+    "started_at": "2026-07-14T10:00:01Z",
+    "status": "failed"
+  },
+  "script.run-get pending": {
+    "agent": "alice",
+    "cancel_requested": false,
+    "created_at": "",
+    "finished_at": "",
+    "id": "srun-1",
+    "log_path": "",
+    "script_id": "scr-1",
+    "started_at": "",
+    "status": "pending"
+  },
+  "script.runs": {
+    "count": 2,
+    "runs": [
+      {
+        "agent": "alice",
+        "cancel_requested": false,
+        "created_at": "2026-07-14T10:00:00Z",
+        "exit_code": 3,
+        "finished_at": "2026-07-14T10:00:02Z",
+        "id": "srun-done",
+        "log_path": "/logs/srun-done.log",
+        "pid": 4242,
+        "script_id": "scr-1",
+        "started_at": "2026-07-14T10:00:01Z",
+        "status": "failed"
+      },
+      {
+        "agent": "alice",
+        "cancel_requested": false,
+        "created_at": "",
+        "finished_at": "",
+        "id": "srun-1",
+        "log_path": "",
+        "script_id": "scr-1",
+        "started_at": "",
+        "status": "pending"
+      }
+    ]
+  },
+  "script.schedule": {
+    "run": {
+      "agent": "alice",
+      "cancel_requested": false,
+      "created_at": "",
+      "finished_at": "",
+      "id": "srun-2",
+      "log_path": "",
+      "script_id": "scr-2",
+      "started_at": "",
+      "status": "pending"
+    },
+    "script": {
+      "agent": "alice",
+      "command": "make poll",
+      "created_at": "",
+      "description": "poll repo",
+      "id": "scr-2",
+      "interval_seconds": 60,
+      "mode": "every",
+      "name": "poll",
+      "next_run_at": "",
+      "state": "active"
+    }
+  },
+  "workflow.build again": {
+    "created": false,
+    "digest": "af6929ee30e429ce96c8f658bd37087f59b72648b02cbc854dc20345927a0896",
+    "name": "demo",
+    "tags": [
+      "1.0.0",
+      "latest"
+    ],
+    "version": "1.0.0"
+  },
+  "workflow.build created": {
+    "created": true,
+    "digest": "af6929ee30e429ce96c8f658bd37087f59b72648b02cbc854dc20345927a0896",
+    "name": "demo",
+    "tags": [
+      "1.0.0",
+      "latest"
+    ],
+    "version": "1.0.0"
+  },
+  "workflow.build rich": {
+    "created": true,
+    "digest": "9ccdad4f2505699d72a83faf9ef218362ca676e84d1dfcb03e24dbf070ed37a6",
+    "name": "rich",
+    "tags": [
+      "0.1.0",
+      "latest"
+    ],
+    "version": "0.1.0"
+  },
+  "workflow.inspect demo": {
+    "built_at": "$VOLATILE",
+    "definition": {
+      "initial_status": "work",
+      "name": "demo",
+      "schema_version": 1,
+      "statuses": [
+        {
+          "id": "work",
+          "instructions": "./statuses/work.md",
+          "owner": {
+            "kind": "pool",
+            "pool": "devs"
+          },
+          "transitions": [
+            {
+              "checks": [
+                {
+                  "script": "./scripts/check.sh"
+                }
+              ],
+              "on": "done",
+              "to": "finished"
+            }
+          ]
+        },
+        {
+          "id": "finished",
+          "owner": {
+            "kind": ""
+          },
+          "terminal": true
+        }
+      ],
+      "workflow_version": "1.0.0"
+    },
+    "digest": "af6929ee30e429ce96c8f658bd37087f59b72648b02cbc854dc20345927a0896",
+    "files": [
+      {
+        "executable": false,
+        "path": "Workflowfile.yaml",
+        "sha256": "f597b11a67d10635537e7d1d4b22af423d25c82af6fbd4bc9f139e719adb9120",
+        "size": 306
+      },
+      {
+        "executable": true,
+        "path": "scripts/check.sh",
+        "sha256": "306c6ca7407560340797866e077e053627ad409277d1b9da58106fce4cf717cb",
+        "size": 17
+      },
+      {
+        "executable": false,
+        "path": "statuses/work.md",
+        "sha256": "5286fddd8674b2e595bbff2774d885a3a6d52ed1d613a60209ef5d9dbe8c113c",
+        "size": 12
+      }
+    ],
+    "name": "demo",
+    "schema_version": 1,
+    "version": "1.0.0"
+  },
+  "workflow.inspect rich": {
+    "built_at": "$VOLATILE",
+    "definition": {
+      "artifacts": [
+        {
+          "description": "The implementation plan, as Markdown.",
+          "name": "plan"
+        },
+        {
+          "name": "pull_request"
+        }
+      ],
+      "env": {
+        "PR_POLL_SECONDS": "60"
+      },
+      "initial_status": "plan",
+      "limits": {
+        "idle_iterations": 3,
+        "rejected_requests": 5,
+        "script_failures": 3,
+        "unavailable_grace": "5m"
+      },
+      "name": "rich",
+      "requires_secrets": [
+        "GH_TOKEN"
+      ],
+      "schema_version": 1,
+      "sources": [
+        {
+          "description": "Lists the open pull requests.",
+          "every": "2m",
+          "name": "incoming",
+          "script": "./scripts/incoming.sh",
+          "timeout": "30s"
+        }
+      ],
+      "statuses": [
+        {
+          "id": "plan",
+          "instructions": "./statuses/plan.md",
+          "limits": {
+            "idle_iterations": 6
+          },
+          "owner": {
+            "kind": "pool",
+            "pool": "developers"
+          },
+          "transitions": [
+            {
+              "checks": [
+                {
+                  "description": "The plan exists.",
+                  "run_as": "agent",
+                  "script": "./scripts/check.sh",
+                  "timeout": "60s"
+                }
+              ],
+              "on": "planned",
+              "requires": [
+                "plan"
+              ],
+              "to": "approval"
+            }
+          ]
+        },
+        {
+          "id": "approval",
+          "owner": {
+            "kind": "customer"
+          },
+          "transitions": [
+            {
+              "on": "approved",
+              "to": "review"
+            },
+            {
+              "on": "rejected",
+              "to": "cancelled"
+            }
+          ]
+        },
+        {
+          "id": "review",
+          "owner": {
+            "kind": "script"
+          },
+          "transitions": [
+            {
+              "on": "merged",
+              "to": "done"
+            }
+          ],
+          "watch": {
+            "description": "Watches the pull request.",
+            "every": "60s",
+            "script": "./scripts/monitor.sh",
+            "timeout": "60s"
+          }
+        },
+        {
+          "id": "done",
+          "owner": {
+            "kind": ""
+          },
+          "terminal": true
+        },
+        {
+          "cancelled": true,
+          "id": "cancelled",
+          "owner": {
+            "kind": ""
+          },
+          "terminal": true
+        }
+      ],
+      "watch_spacing": "30s",
+      "workflow_version": "0.1.0"
+    },
+    "digest": "9ccdad4f2505699d72a83faf9ef218362ca676e84d1dfcb03e24dbf070ed37a6",
+    "files": [
+      {
+        "executable": false,
+        "path": "Workflowfile.yaml",
+        "sha256": "641d7cf34b87df08423e535600c7e55edffac215195019b06f81ed352ee2a1f6",
+        "size": 1280
+      },
+      {
+        "executable": true,
+        "path": "scripts/check.sh",
+        "sha256": "306c6ca7407560340797866e077e053627ad409277d1b9da58106fce4cf717cb",
+        "size": 17
+      },
+      {
+        "executable": true,
+        "path": "scripts/incoming.sh",
+        "sha256": "306c6ca7407560340797866e077e053627ad409277d1b9da58106fce4cf717cb",
+        "size": 17
+      },
+      {
+        "executable": true,
+        "path": "scripts/monitor.sh",
+        "sha256": "306c6ca7407560340797866e077e053627ad409277d1b9da58106fce4cf717cb",
+        "size": 17
+      },
+      {
+        "executable": false,
+        "path": "statuses/plan.md",
+        "sha256": "4e7621df879cd7c5ae2b889f8a7c74a9b37ff4fe321dee5b31e4c432740be93a",
+        "size": 14
+      }
+    ],
+    "name": "rich",
+    "schema_version": 1,
+    "version": "0.1.0"
+  },
+  "workflow.ls": {
+    "count": 4,
+    "workflows": [
+      {
+        "built_at": "$VOLATILE",
+        "digest": "af6929ee30e429ce96c8f658bd37087f59b72648b02cbc854dc20345927a0896",
+        "name": "demo",
+        "tag": "1.0.0",
+        "version": "1.0.0"
+      },
+      {
+        "built_at": "$VOLATILE",
+        "digest": "af6929ee30e429ce96c8f658bd37087f59b72648b02cbc854dc20345927a0896",
+        "name": "demo",
+        "tag": "latest",
+        "version": "1.0.0"
+      },
+      {
+        "built_at": "$VOLATILE",
+        "digest": "9ccdad4f2505699d72a83faf9ef218362ca676e84d1dfcb03e24dbf070ed37a6",
+        "name": "rich",
+        "tag": "0.1.0",
+        "version": "0.1.0"
+      },
+      {
+        "built_at": "$VOLATILE",
+        "digest": "9ccdad4f2505699d72a83faf9ef218362ca676e84d1dfcb03e24dbf070ed37a6",
+        "name": "rich",
+        "tag": "latest",
+        "version": "0.1.0"
+      }
+    ]
+  },
+  "workflow.ls empty": {
+    "count": 0,
+    "workflows": []
+  },
+  "workflow.rm last tag": {
+    "content_removed": true,
+    "name": "demo",
+    "removed": true,
+    "tag": "1.0.0"
+  },
+  "workflow.rm latest": {
+    "content_removed": false,
+    "name": "demo",
+    "removed": true,
+    "tag": "latest"
+  },
+  "workflow.validate invalid": {
+    "errors": [
+      {
+        "code": "file_missing",
+        "message": "file \"./statuses/work.md\" does not exist",
+        "path": "statuses[0].instructions"
+      }
+    ],
+    "files": [
+      "scripts/check.sh",
+      "statuses/work.md"
+    ],
+    "name": "demo",
+    "pools": [
+      "devs"
+    ],
+    "valid": false,
+    "version": "1.0.0"
+  },
+  "workflow.validate rich": {
+    "errors": [],
+    "files": [
+      "scripts/check.sh",
+      "scripts/incoming.sh",
+      "scripts/monitor.sh",
+      "statuses/plan.md"
+    ],
+    "name": "rich",
+    "pools": [
+      "developers"
+    ],
+    "valid": true,
+    "version": "0.1.0"
+  },
+  "workflow.validate valid": {
+    "errors": [],
+    "files": [
+      "scripts/check.sh",
+      "statuses/work.md"
+    ],
+    "name": "demo",
+    "pools": [
+      "devs"
+    ],
+    "valid": true,
+    "version": "1.0.0"
+  }
+}

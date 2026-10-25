@@ -13,7 +13,7 @@ import (
 // per-agent audit.jsonl (every status set is mirrored there as type="status"
 // by the loop manager). Newest-first. Optional ?limit caps the count.
 func agentStatusHistory() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentStatusHistory](registry.Command{
 		Path:    "agent.status.history",
 		Summary: "List an agent's status-message history (from the audit log)",
 		Args: []registry.Arg{
@@ -31,21 +31,21 @@ func agentStatusHistory() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			out := []map[string]any{}
+			out := []AgentStatusEvent{}
 			for i := len(evs) - 1; i >= 0; i-- { // newest-first
 				ev := evs[i]
 				if ev.Type != "status" {
 					continue
 				}
 				msg, _ := ev.Data["message"].(string)
-				out = append(out, map[string]any{"ts": ev.TS, "message": msg, "iteration_id": ev.IterationID})
+				out = append(out, AgentStatusEvent{TS: ev.TS, Message: msg, IterationID: ev.IterationID})
 			}
 			if s := p.String("limit"); s != "" {
 				if n, err := strconv.Atoi(s); err == nil && n > 0 && len(out) > n {
 					out = out[:n]
 				}
 			}
-			return map[string]any{"events": out, "count": len(out)}, nil
+			return AgentStatusHistory{Events: out, Count: len(out)}, nil
 		},
-	}
+	})
 }

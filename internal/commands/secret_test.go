@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/agent"
@@ -21,15 +23,17 @@ func TestSecretStoreLsRm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys := ls.(map[string]any)["keys"].([]string)
+	keys := ls.(SecretKeyList).Keys
 	if len(keys) != 1 || keys[0] != "TOKEN" {
 		t.Fatalf("keys = %v", keys)
 	}
 	// values must never appear anywhere in the ls output
-	for _, v := range ls.(map[string]any) {
-		if s, ok := v.(string); ok && s == "s3cr3t" {
-			t.Fatal("secret value leaked in ls output")
-		}
+	encoded, err := json.Marshal(ls)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "s3cr3t") {
+		t.Fatal("secret value leaked in ls output")
 	}
 	if _, err := h(t, "secret.rm")(c, registry.Params{"name": "smoke", "key": "TOKEN"}); err != nil {
 		t.Fatal(err)

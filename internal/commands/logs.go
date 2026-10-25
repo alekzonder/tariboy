@@ -17,7 +17,7 @@ import (
 // Registering the DB read as remote is what keeps `logs <agent>` (no -f) from
 // dereferencing a nil Store when it dispatches in the CLI process.
 func logsCommand() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AuditLogResult](registry.Command{
 		Path:    "logs",
 		Summary: "Stream or print an agent's events (-f to follow)",
 		Args: []registry.Arg{
@@ -47,7 +47,7 @@ func logsCommand() registry.Command {
 				if err != nil {
 					return nil, err
 				}
-				return map[string]any{"types": types}, nil
+				return AuditLogResult{Types: types}, nil
 			}
 			// A type and/or full-text filter scans the whole log (like before=)
 			// and returns matches newest-first, capped so a broad query can't
@@ -57,14 +57,14 @@ func logsCommand() registry.Command {
 				if err != nil {
 					return nil, err
 				}
-				return map[string]any{"events": rows, "count": len(rows), "capped": capped}, nil
+				return newAuditLogPage(rows, &capped), nil
 			}
 			if id := p.String("iteration"); id != "" {
 				rows, err := eventsForIteration(c, name, id)
 				if err != nil {
 					return nil, err
 				}
-				return map[string]any{"events": rows, "count": len(rows)}, nil
+				return newAuditLogPage(rows, nil), nil
 			}
 			if b := p.String("before"); b != "" {
 				before, _ := strconv.ParseInt(b, 10, 64)
@@ -81,7 +81,7 @@ func logsCommand() registry.Command {
 				if err != nil {
 					return nil, err
 				}
-				return map[string]any{"events": rows, "count": len(rows)}, nil
+				return newAuditLogPage(rows, nil), nil
 			}
 			if s := p.String("since"); s != "" {
 				since, _ := strconv.ParseInt(s, 10, 64)
@@ -89,21 +89,21 @@ func logsCommand() registry.Command {
 				if err != nil {
 					return nil, err
 				}
-				return map[string]any{"events": rows, "count": len(rows)}, nil
+				return newAuditLogPage(rows, nil), nil
 			}
 			rows, err := recentEvents(c, name, 50)
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"events": rows, "count": len(rows)}, nil
+			return newAuditLogPage(rows, nil), nil
 		},
-	}
+	})
 }
 
 // recentEvents returns the newest limit audit events for an agent, read from the
 // per-agent audit.jsonl (the durable audit log). Shape is unchanged from the
 // former DB-backed reader ({kind, data, at}) so the web UI needs no change.
-func recentEvents(c *registry.Ctx, agent string, limit int) ([]map[string]any, error) {
+func recentEvents(c *registry.Ctx, agent string, limit int) ([]AuditLogEvent, error) {
 	path := agentdir.New(paths.New(c.BaseDir).AgentsDir(), agent).AuditLog()
 	evs, err := audit.ReadEvents(path, limit, 0)
 	if err != nil {
@@ -112,7 +112,7 @@ func recentEvents(c *registry.Ctx, agent string, limit int) ([]map[string]any, e
 	// Newest-first to match the previous `ORDER BY id DESC`. Non-nil so an agent
 	// with zero events serializes as [] not null (a nil slice → JSON null crashes
 	// the web UI audit-log page).
-	out := []map[string]any{}
+	out := []AuditLogEvent{}
 	for i := len(evs) - 1; i >= 0; i-- {
 		out = append(out, eventRow(evs[i]))
 	}
@@ -121,38 +121,38 @@ func recentEvents(c *registry.Ctx, agent string, limit int) ([]map[string]any, e
 
 // eventsSince returns audit events with seq > since in chronological (oldest
 // first) order — the incremental cursor read that powers `logs -f`.
-func eventsSince(c *registry.Ctx, agent string, since int64) ([]map[string]any, error) {
+func eventsSince(c *registry.Ctx, agent string, since int64) ([]AuditLogEvent, error) {
 	path := agentdir.New(paths.New(c.BaseDir).AgentsDir(), agent).AuditLog()
 	evs, err := audit.ReadEvents(path, 0, since)
 	if err != nil {
 		return nil, err
 	}
-	out := []map[string]any{}
+	out := []AuditLogEvent{}
 	for _, ev := range evs {
 		out = append(out, eventRow(ev))
 	}
 	return out, nil
 }
 
-func eventRow(ev audit.Event) map[string]any {
+func eventRow(ev audit.Event) AuditLogEvent {
 	data := "{}"
 	if ev.Data != nil {
 		if b, err := json.Marshal(ev.Data); err == nil {
 			data = string(b)
 		}
 	}
-	return map[string]any{"seq": ev.Seq, "kind": ev.Type, "source": ev.Source,
-		"iteration_id": ev.IterationID, "data": data, "at": ev.TS}
+	return AuditLogEvent{Seq: ev.Seq, Kind: ev.Type, Source: ev.Source,
+		IterationID: ev.IterationID, Data: data, At: ev.TS}
 }
 
 // eventsForIteration returns all events for one iteration, chronological.
-func eventsForIteration(c *registry.Ctx, agent, iterationID string) ([]map[string]any, error) {
+func eventsForIteration(c *registry.Ctx, agent, iterationID string) ([]AuditLogEvent, error) {
 	path := agentdir.New(paths.New(c.BaseDir).AgentsDir(), agent).AuditLog()
 	evs, err := audit.ReadByIteration(path, iterationID)
 	if err != nil {
 		return nil, err
 	}
-	out := []map[string]any{}
+	out := []AuditLogEvent{}
 	for _, ev := range evs {
 		out = append(out, eventRow(ev))
 	}
@@ -169,7 +169,7 @@ func distinctTypes(c *registry.Ctx, agent string) ([]string, error) {
 // filteredEvents returns events matching a comma-separated type list AND a
 // full-text query, newest-first (matching recentEvents), capped to limit. The
 // bool reports whether the match set was truncated to the cap.
-func filteredEvents(c *registry.Ctx, agent, types, query string, limit int) ([]map[string]any, bool, error) {
+func filteredEvents(c *registry.Ctx, agent, types, query string, limit int) ([]AuditLogEvent, bool, error) {
 	path := agentdir.New(paths.New(c.BaseDir).AgentsDir(), agent).AuditLog()
 	// Read all matches first so we can report truncation, then keep the newest.
 	evs, err := audit.ReadFiltered(path, splitCSV(types), query, 0)
@@ -182,7 +182,7 @@ func filteredEvents(c *registry.Ctx, agent, types, query string, limit int) ([]m
 		capped = true
 	}
 	// Newest-first to match recentEvents; non-nil so zero matches serialize as [].
-	out := []map[string]any{}
+	out := []AuditLogEvent{}
 	for i := len(evs) - 1; i >= 0; i-- {
 		out = append(out, eventRow(evs[i]))
 	}
@@ -204,13 +204,13 @@ func splitCSV(s string) []string {
 }
 
 // eventsBefore returns up to limit events with seq < before, chronological.
-func eventsBefore(c *registry.Ctx, agent string, before int64, limit int) ([]map[string]any, error) {
+func eventsBefore(c *registry.Ctx, agent string, before int64, limit int) ([]AuditLogEvent, error) {
 	path := agentdir.New(paths.New(c.BaseDir).AgentsDir(), agent).AuditLog()
 	evs, err := audit.ReadBefore(path, before, limit)
 	if err != nil {
 		return nil, err
 	}
-	out := []map[string]any{}
+	out := []AuditLogEvent{}
 	for _, ev := range evs {
 		out = append(out, eventRow(ev))
 	}

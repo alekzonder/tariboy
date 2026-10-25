@@ -14,7 +14,7 @@ func requireScripts(c *registry.Ctx) (registry.ScriptControl, error) {
 }
 
 func scriptLs() registry.Command {
-	return registry.Command{Path: "script.ls", Summary: "List an agent's local scripts",
+	return registry.WithResult[AgentScriptList](registry.Command{Path: "script.ls", Summary: "List an agent's local scripts",
 		Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/scripts"},
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
@@ -26,17 +26,17 @@ func scriptLs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			rows := make([]map[string]any, 0, len(definitions))
+			rows := make([]AgentScript, 0, len(definitions))
 			for _, definition := range definitions {
-				rows = append(rows, scriptDefinitionView(definition))
+				rows = append(rows, scriptDefinitionFrom(definition))
 			}
-			return map[string]any{"scripts": rows, "count": len(rows)}, nil
+			return AgentScriptList{Scripts: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
 func scriptRunOnce() registry.Command {
-	return registry.Command{Path: "script.run", Summary: "Run a local command once",
+	return registry.WithResult[AgentScriptStarted](registry.Command{Path: "script.run", Summary: "Run a local command once",
 		Args: scriptCreateArgs(false), HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/scripts/run"},
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			name := p.String("name")
@@ -48,14 +48,14 @@ func scriptRunOnce() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"script": scriptDefinitionView(definition), "run": scriptRunView(run)}, nil
+			return AgentScriptStarted{Script: scriptDefinitionFrom(definition), Run: scriptRunFrom(run)}, nil
 		},
-	}
+	})
 }
 
 func scriptSchedule() registry.Command {
 	args := scriptCreateArgs(true)
-	return registry.Command{Path: "script.schedule", Summary: "Schedule a fixed-interval local command",
+	return registry.WithResult[AgentScriptStarted](registry.Command{Path: "script.schedule", Summary: "Schedule a fixed-interval local command",
 		Args: args, HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/scripts/schedule"},
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			name := p.String("name")
@@ -72,9 +72,9 @@ func scriptSchedule() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"script": scriptDefinitionView(definition), "run": scriptRunView(run)}, nil
+			return AgentScriptStarted{Script: scriptDefinitionFrom(definition), Run: scriptRunFrom(run)}, nil
 		},
-	}
+	})
 }
 
 func scriptCreateArgs(schedule bool) []registry.Arg {
@@ -93,35 +93,35 @@ func scriptCreateArgs(schedule bool) []registry.Arg {
 }
 
 func scriptRerun() registry.Command {
-	return scriptRunAction("script.rerun", "Run a stored script now, resuming a stopped schedule", "POST", "/api/agents/{name}/scripts/{id}/rerun", func(sc registry.ScriptControl, name, id string) (any, error) {
+	return registry.WithResult[AgentScriptRun](scriptRunAction("script.rerun", "Run a stored script now, resuming a stopped schedule", "POST", "/api/agents/{name}/scripts/{id}/rerun", func(sc registry.ScriptControl, name, id string) (any, error) {
 		run, err := sc.RerunScript(name, id)
-		return scriptRunView(run), err
-	})
+		return scriptRunFrom(run), err
+	}))
 }
 
 func scriptRuns() registry.Command {
-	return scriptRunAction("script.runs", "List a script's runs", "GET", "/api/agents/{name}/scripts/{id}/runs", func(sc registry.ScriptControl, name, id string) (any, error) {
+	return registry.WithResult[AgentScriptRunList](scriptRunAction("script.runs", "List a script's runs", "GET", "/api/agents/{name}/scripts/{id}/runs", func(sc registry.ScriptControl, name, id string) (any, error) {
 		runs, err := sc.ListScriptRuns(name, id)
 		if err != nil {
 			return nil, err
 		}
-		rows := make([]map[string]any, 0, len(runs))
+		rows := make([]AgentScriptRun, 0, len(runs))
 		for _, run := range runs {
-			rows = append(rows, scriptRunView(run))
+			rows = append(rows, scriptRunFrom(run))
 		}
-		return map[string]any{"runs": rows, "count": len(rows)}, nil
-	})
+		return AgentScriptRunList{Runs: rows, Count: len(rows)}, nil
+	}))
 }
 
 func scriptRunDetail() registry.Command {
-	return scriptRunAction("script.run-get", "Get one script run", "GET", "/api/agents/{name}/script-runs/{id}", func(sc registry.ScriptControl, name, id string) (any, error) {
+	return registry.WithResult[AgentScriptRun](scriptRunAction("script.run-get", "Get one script run", "GET", "/api/agents/{name}/script-runs/{id}", func(sc registry.ScriptControl, name, id string) (any, error) {
 		run, err := sc.GetScriptRun(name, id)
-		return scriptRunView(run), err
-	})
+		return scriptRunFrom(run), err
+	}))
 }
 
 func scriptLogs() registry.Command {
-	return scriptRunAction("script.logs", "Read a bounded script run log tail", "GET", "/api/agents/{name}/script-runs/{id}/logs", func(sc registry.ScriptControl, name, id string) (any, error) {
+	return registry.WithResult[AgentScriptRunLog](scriptRunAction("script.logs", "Read a bounded script run log tail", "GET", "/api/agents/{name}/script-runs/{id}/logs", func(sc registry.ScriptControl, name, id string) (any, error) {
 		run, err := sc.GetScriptRun(name, id)
 		if err != nil {
 			return nil, err
@@ -130,16 +130,26 @@ func scriptLogs() registry.Command {
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"run": scriptRunView(run), "log": logText}, nil
-	})
+		return AgentScriptRunLog{Run: scriptRunFrom(run), Log: logText}, nil
+	}))
 }
 
 func scriptCancel() registry.Command {
-	return scriptAction("script.cancel", "Cancel a script or one run", "POST", "/api/agents/{name}/script-targets/{id}/cancel", "cancelled", func(sc registry.ScriptControl, name, id string) error { return sc.CancelScriptTarget(name, id) })
+	return registry.WithResult[AgentScriptCancelResult](scriptRunAction("script.cancel", "Cancel a script or one run", "POST", "/api/agents/{name}/script-targets/{id}/cancel", func(sc registry.ScriptControl, name, id string) (any, error) {
+		if err := sc.CancelScriptTarget(name, id); err != nil {
+			return nil, err
+		}
+		return AgentScriptCancelResult{ID: id, Cancelled: true}, nil
+	}))
 }
 
 func scriptRemove() registry.Command {
-	return scriptAction("script.rm", "Remove an inactive script", "DELETE", "/api/agents/{name}/scripts/{id}", "removed", func(sc registry.ScriptControl, name, id string) error { return sc.RemoveScript(name, id) })
+	return registry.WithResult[AgentScriptRemoveResult](scriptRunAction("script.rm", "Remove an inactive script", "DELETE", "/api/agents/{name}/scripts/{id}", func(sc registry.ScriptControl, name, id string) (any, error) {
+		if err := sc.RemoveScript(name, id); err != nil {
+			return nil, err
+		}
+		return AgentScriptRemoveResult{ID: id, Removed: true}, nil
+	}))
 }
 
 func scriptControlForAgent(c *registry.Ctx, name string) (registry.ScriptControl, error) {
@@ -165,35 +175,4 @@ func scriptRunAction(path, summary, method, route string, action func(registry.S
 			return result, nil
 		},
 	}
-}
-
-func scriptAction(path, summary, method, route, result string, action func(registry.ScriptControl, string, string) error) registry.Command {
-	return scriptRunAction(path, summary, method, route, func(sc registry.ScriptControl, name, id string) (any, error) {
-		if err := action(sc, name, id); err != nil {
-			return nil, err
-		}
-		return map[string]any{"id": id, result: true}, nil
-	})
-}
-
-func scriptDefinitionView(definition script.Definition) map[string]any {
-	row := map[string]any{"id": definition.ID, "agent": definition.Agent, "name": definition.Name, "description": definition.Description,
-		"command": definition.Command, "mode": definition.Mode, "interval_seconds": definition.IntervalSeconds, "state": definition.State,
-		"created_at": definition.CreatedAt, "next_run_at": definition.NextRunAt}
-	if definition.LatestRun != nil {
-		row["latest_run"] = scriptRunView(*definition.LatestRun)
-	}
-	return row
-}
-
-func scriptRunView(run script.Run) map[string]any {
-	row := map[string]any{"id": run.ID, "script_id": run.ScriptID, "agent": run.Agent, "status": run.Status,
-		"cancel_requested": run.CancelRequested, "created_at": run.CreatedAt, "started_at": run.StartedAt, "finished_at": run.FinishedAt, "log_path": run.LogPath}
-	if run.PID != nil {
-		row["pid"] = *run.PID
-	}
-	if run.ExitCode != nil {
-		row["exit_code"] = *run.ExitCode
-	}
-	return row
 }

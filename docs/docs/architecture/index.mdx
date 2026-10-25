@@ -381,7 +381,9 @@ all derived from it.
   `registry.WithResult[T](registry.Command{...})`. The helper derives the JSON
   Schema of `T` with `github.com/invopop/jsonschema`, adds `T` and every named
   struct it reaches to `Schemas` under its Go type name, and sets
-  `ResultSchema` to `{"$ref": "#/components/schemas/T"}`. `/api/openapi.json`
+  `ResultSchema` to `{"$ref": "#/components/schemas/T"}`. For a slice of a
+  named struct, such as `[]StoreView`, `ResultSchema` is an array of that
+  reference. `/api/openapi.json`
   copies `Schemas` into `components.schemas` and puts `ResultSchema` under
   `result` in the `200` envelope. The rules follow `encoding/json`:
   - the `json` tag names a property;
@@ -392,22 +394,31 @@ all derived from it.
   - an enum is a string type whose `JSONSchemaExtend` method sets `Enum` from
     its Go constants;
   - a value that can be JSON `null`, such as a nil slice, carries
-    `jsonschema_extras:"nullable=true"`.
+    `jsonschema_extras:"nullable=true"`;
+  - a result whose shape the code does not own, such as a plugin's action
+    result or the daemon config keyed by config name, is a named struct with
+    a `MarshalJSON` method that keeps the wire format and a `JSONSchema`
+    method that describes the open shape.
 
   Two different schemas under one component name in one command also panic at
-  registration. The agents commands in `internal/commands/agents.go` use this
-  form; their types are in `agents_types.go`. A hand-written `ResultSchema`,
-  as in `internal/commands/tasks_openapi.go`, is allowed only until its domain
-  moves to `WithResult`. A command without either publishes a free-form
-  result.
-- **The spec is a checked contract.** Four tests in `internal/commands` keep
+  registration. Every command in `internal/commands` uses this form. The
+  result types of a domain are in its `*_types.go` file, for example
+  `agents_types.go`. The task commands in `tasks.go` name their result types
+  in the `taskResultTypes` table. The field descriptions and enums of the
+  `internal/tasks` types come from `jsonschema:"description=..."` tags and
+  `JSONSchemaExtend` methods. No command has a hand-written `ResultSchema`.
+- **The spec is a checked contract.** These tests in `internal/commands` keep
   `/api/openapi.json` and the code together:
-  - `TestHTTPCommandsDeclareResultSchema` fails for an HTTP command without a
-    `ResultSchema`. The commands that still publish a free-form result are
-    listed in `commandsWithoutResultSchema` in `openapi_contract_test.go`.
-    The list only shrinks: a command that gets a schema leaves the list in the
-    same change, the test fails on a stale entry, and review refuses a new
-    entry.
+  - `TestHTTPCommandsDeclareResultSchema` fails for an HTTP command whose
+    `ResultSchema` is not a component reference or an array of one. There is
+    no exception list.
+  - `TestCommandsReturnNoRawMaps` (`result_guard_test.go`) parses the
+    package's non-test files and fails for a function with the handler result
+    `(any, error)` that returns a `map[string]any` literal,
+    `make(map[string]any)`, or a variable filled from one.
+  - `TestCommandsDeclareConsistentComponents` fails when two commands declare
+    one component name with different schemas. Give result types a domain
+    prefix, such as `StoreView`, not a generic name such as `Item`.
   - `TestOpenAPISnapshot` compares the served spec with the committed
     snapshot `internal/commands/testdata/openapi.json`. The snapshot pins
     `info.version` to `snapshot`, so a release does not change it. A contract
@@ -418,7 +429,8 @@ all derived from it.
     result is a component reference or has properties, and validates the
     response against the served spec with
     `github.com/santhosh-tekuri/jsonschema/v6`. A new typed operation needs a
-    row in its table, or the test fails. The check finds a result that differs
+    call in its table or in its domain's `typedCallSets` entry, or the test
+    fails. The check finds a result that differs
     from its declared type: an extra field, a missing required field, a wrong
     type, or `null` where the schema does not allow it. Error responses are
     validated against the `default` error envelope.
@@ -429,9 +441,7 @@ all derived from it.
 
   The spec stays OpenAPI 3.0.3. Before validation, the tests rewrite
   `nullable: true`, which JSON Schema does not know, into a type and enum that
-  allow `null`. Hand-written task schemas do not set
-  `additionalProperties: false`, so for them the validation finds missing
-  fields and wrong types, not extra fields.
+  allow `null`.
 
 Native task commands have one more table: `internal/tasks/wire.go` declares
 each task action's request struct, CLI words, flags and operator route. The

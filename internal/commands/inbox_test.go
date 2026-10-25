@@ -37,8 +37,8 @@ func TestAgentInboxClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := res.(map[string]any)
-	if got["deleted_deliveries"] != int64(2) || got["deleted_messages"] != int64(2) {
+	got := res.(InboxClearResult)
+	if got.DeletedDeliveries != 2 || got.DeletedMessages != 2 {
 		t.Fatalf("clear result = %#v", got)
 	}
 	if _, err := h(t, "agent.inbox.clear")(c, registry.Params{"name": "missing"}); !isCode(err, "not_found") {
@@ -56,14 +56,14 @@ func TestAgentInboxListAndStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := res.(map[string]any)["messages"].([]map[string]any)
+	rows := res.(InboxList).Messages
 	if len(rows) != 2 {
 		t.Fatalf("pending rows = %d, want 2", len(rows))
 	}
-	if rows[0]["text"] != "two" || rows[1]["text"] != "one" {
+	if rows[0].Text != "two" || rows[1].Text != "one" {
 		t.Fatalf("not newest-first: %v", rows)
 	}
-	if rows[0]["attempts"] == nil || rows[0]["dlq"] != false {
+	if rows[0].Attempts != 0 || rows[0].DLQ {
 		t.Fatalf("missing delivery state: %v", rows[0])
 	}
 
@@ -73,21 +73,21 @@ func TestAgentInboxListAndStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	pend, _ := h(t, "agent.inbox.ls")(c, registry.Params{"name": "worker", "status": "pending"})
-	if n := pend.(map[string]any)["count"].(int); n != 1 {
+	if n := pend.(InboxList).Count; n != 1 {
 		t.Fatalf("pending after processed = %d, want 1", n)
 	}
 	proc, _ := h(t, "agent.inbox.ls")(c, registry.Params{"name": "worker", "status": "processed"})
-	prows := proc.(map[string]any)["messages"].([]map[string]any)
-	if len(prows) != 1 || prows[0]["result"] != "operator: looked at it" {
+	prows := proc.(InboxList).Messages
+	if len(prows) != 1 || prows[0].Result == nil || *prows[0].Result != "operator: looked at it" {
 		t.Fatalf("processed row = %v", prows)
 	}
-	if prows[0]["processed_at"] == "" || prows[0]["processed_at"] == nil {
+	if prows[0].ProcessedAt == "" {
 		t.Fatalf("processed_at not set: %v", prows[0])
 	}
 
 	// default status (empty) → all.
 	all, _ := h(t, "agent.inbox.ls")(c, registry.Params{"name": "worker"})
-	if n := all.(map[string]any)["count"].(int); n != 2 {
+	if n := all.(InboxList).Count; n != 2 {
 		t.Fatalf("all count = %d, want 2", n)
 	}
 }
@@ -119,8 +119,8 @@ func TestAgentInboxReply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := res.(map[string]any)
-	if m["replied"] != true || m["in_reply_to"] != msgs[0].ID {
+	m := res.(InboxReplyResult)
+	if !m.Replied || m.InReplyTo != msgs[0].ID {
 		t.Fatalf("reply = %v", m)
 	}
 	// the reply was published on the original's channel (Source=operator → channel).
@@ -136,8 +136,8 @@ func TestAgentInboxReply(t *testing.T) {
 	}
 	// the row is auto-processed with operator attribution.
 	proc, _ := h(t, "agent.inbox.ls")(c, registry.Params{"name": "worker", "status": "processed"})
-	prows := proc.(map[string]any)["messages"].([]map[string]any)
-	if len(prows) != 1 || prows[0]["result"] != "operator replied: "+m["id"].(string) {
+	prows := proc.(InboxList).Messages
+	if len(prows) != 1 || prows[0].Result == nil || *prows[0].Result != "operator replied: "+m.ID {
 		t.Fatalf("reply did not auto-process with attribution: %v", prows)
 	}
 	// replying to an unknown message → not_found.
@@ -177,15 +177,15 @@ func TestChannelWatches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := res.(map[string]any)["watches"].([]map[string]any)
+	rows := res.(ChannelWatchList).Watches
 	if len(rows) != 1 {
 		t.Fatalf("watches = %d, want 1 (same params dedup): %v", len(rows), rows)
 	}
-	subs := rows[0]["subscribers"].([]string)
+	subs := rows[0].Subscribers
 	if len(subs) != 2 {
 		t.Fatalf("subscribers = %v, want worker+other", subs)
 	}
-	if p, _ := rows[0]["params"].(map[string]any); p["q"] != "status:open" {
-		t.Fatalf("params = %v", rows[0]["params"])
+	if p := rows[0].Params; p["q"] != "status:open" {
+		t.Fatalf("params = %v", rows[0].Params)
 	}
 }

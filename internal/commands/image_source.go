@@ -55,7 +55,7 @@ func imageSourceError(err error) error {
 }
 
 func imageSourceLs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ImageSourceListResult](registry.Command{
 		Path:    "image.source.ls",
 		Summary: "List editable image sources",
 		HTTP:    &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/image-sources"},
@@ -64,13 +64,13 @@ func imageSourceLs() registry.Command {
 			if err != nil {
 				return nil, imageSourceError(err)
 			}
-			return map[string]any{"sources": sources, "count": len(sources)}, nil
+			return ImageSourceListResult{Sources: convertSlice(sources, imageSourceView), Count: len(sources)}, nil
 		},
-	}
+	})
 }
 
 func imageSourceCreate() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ImageSource](registry.Command{
 		Path:    "image.source.create",
 		Summary: "Create an editable image source",
 		Args: []registry.Arg{
@@ -89,13 +89,13 @@ func imageSourceCreate() registry.Command {
 				}
 				return nil, api.UserError{Code: "bad_source", Msg: err.Error(), Status: http.StatusBadRequest}
 			}
-			return source, nil
+			return imageSourceView(source), nil
 		},
-	}
+	})
 }
 
 func imageSourceInspect() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ImageSource](registry.Command{
 		Path:    "image.source.inspect",
 		Summary: "Show editable image source metadata",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "source name"}},
@@ -105,13 +105,13 @@ func imageSourceInspect() registry.Command {
 			if err != nil {
 				return nil, imageSourceError(err)
 			}
-			return source, nil
+			return imageSourceView(source), nil
 		},
-	}
+	})
 }
 
 func imageSourceRm() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ImageRemoveResult](registry.Command{
 		Path:    "image.source.rm",
 		Summary: "Remove an editable image source without removing built images",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "source name"}},
@@ -121,13 +121,13 @@ func imageSourceRm() registry.Command {
 			if err := imageSourceStore(c).Delete(name); err != nil {
 				return nil, imageSourceError(err)
 			}
-			return map[string]any{"removed": name}, nil
+			return ImageRemoveResult{Removed: name}, nil
 		},
-	}
+	})
 }
 
 func imageSourceFiles() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ImageSourceFilesResult](registry.Command{
 		Path:    "image.source.files",
 		Summary: "List editable files in an image source",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "source name"}},
@@ -137,13 +137,13 @@ func imageSourceFiles() registry.Command {
 			if err != nil {
 				return nil, imageSourceError(err)
 			}
-			return map[string]any{"files": files, "count": len(files)}, nil
+			return ImageSourceFilesResult{Files: convertSlice(files, func(f imagesource.FileEntry) ImageSourceFileEntry { return ImageSourceFileEntry(f) }), Count: len(files)}, nil
 		},
-	}
+	})
 }
 
 func imageSourceFileGet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ImageFileContent](registry.Command{
 		Path:    "image.source.file.get",
 		Summary: "Read an editable image source file",
 		Args: []registry.Arg{
@@ -157,13 +157,13 @@ func imageSourceFileGet() registry.Command {
 			if err != nil {
 				return nil, imageSourceError(err)
 			}
-			return map[string]any{"path": path, "content": string(content)}, nil
+			return ImageFileContent{Path: path, Content: string(content)}, nil
 		},
-	}
+	})
 }
 
 func imageSourceFilePut() registry.Command {
-	return withMaxBody(registry.Command{
+	return registry.WithResult[ImageSourceSaveResult](withMaxBody(registry.Command{
 		Path:      "image.source.file.put",
 		Summary:   "Write an editable image source file",
 		CLIHidden: true,
@@ -178,13 +178,13 @@ func imageSourceFilePut() registry.Command {
 			if err := imageSourceStore(c).WriteFile(p.String("name"), path, []byte(p.String("content"))); err != nil {
 				return nil, imageSourceError(err)
 			}
-			return map[string]any{"path": path, "saved": true}, nil
+			return ImageSourceSaveResult{Path: path, Saved: true}, nil
 		},
-	}, jsonEscapedBodyLimit(imagesource.MaxFileSize))
+	}, jsonEscapedBodyLimit(imagesource.MaxFileSize)))
 }
 
 func imageSourceValidate() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ImageSourceValidateResult](registry.Command{
 		Path:    "image.source.validate",
 		Summary: "Validate an editable image source",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "source name"}},
@@ -198,23 +198,18 @@ func imageSourceValidate() registry.Command {
 			dir := filepath.Join(paths.Paths{Base: c.BaseDir}.ImageSourcesDir(), name)
 			parsed, err := imagefile.ParseV2(dir)
 			if err != nil {
-				return map[string]any{
-					"valid": false,
-					"diagnostics": []map[string]string{{
-						"path": "Tariboyfile.yaml", "message": err.Error(),
-					}},
-				}, nil
+				return ImageSourceValidateResult{Diagnostics: []ImageDiagnostic{{Path: "Tariboyfile.yaml", Message: err.Error()}}}, nil
 			}
 			if len(parsed.Extends) > 0 {
-				return map[string]any{"valid": false, "diagnostics": []map[string]string{{"path": "Tariboyfile.yaml", "message": imagefile.ExtendsUnassembledMessage}}}, nil
+				return ImageSourceValidateResult{Diagnostics: []ImageDiagnostic{{Path: "Tariboyfile.yaml", Message: imagefile.ExtendsUnassembledMessage}}}, nil
 			}
-			return map[string]any{"valid": true, "diagnostics": []any{}}, nil
+			return ImageSourceValidateResult{Valid: true, Diagnostics: []ImageDiagnostic{}}, nil
 		},
-	}
+	})
 }
 
 func imageSourceBuild() registry.Command {
-	return registry.Command{
+	return registry.WithResult[ImageSourceBuildResult](registry.Command{
 		Path:    "image.source.build",
 		Summary: "Build an image from an editable image source",
 		Args: []registry.Arg{
@@ -290,12 +285,12 @@ func imageSourceBuild() registry.Command {
 				}
 				return nil, api.UserError{Code: "build_failed", Msg: err.Error(), Status: http.StatusBadRequest}
 			}
-			return map[string]any{
-				"ref":      record.Ref,
-				"digest":   record.Digest,
-				"built_at": record.BuiltAt,
-				"layers":   len(manifest.Layers),
+			return ImageSourceBuildResult{
+				Ref:     record.Ref,
+				Digest:  record.Digest,
+				BuiltAt: record.BuiltAt,
+				Layers:  len(manifest.Layers),
 			}, nil
 		},
-	}
+	})
 }

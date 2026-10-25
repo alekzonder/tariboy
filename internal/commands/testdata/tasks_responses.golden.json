@@ -1,0 +1,1401 @@
+{
+  "tasks.activity": {
+    "agents": [
+      {
+        "agent": "dev-a",
+        "completed": 1,
+        "cost_usd": 0.75,
+        "iterations": 3,
+        "requests": 3,
+        "tasks": 3
+      }
+    ],
+    "since": "2026-07-14T09:00:00.000000000Z",
+    "tasks": [
+      {
+        "agents": [
+          "dev-a"
+        ],
+        "assignee": "agent:dev-a",
+        "category": "in_progress",
+        "comments": 1,
+        "completed": false,
+        "cost_usd": 0.25,
+        "entered_statuses": [],
+        "first_at": "2026-07-14T10:00:00.000000000Z",
+        "iterations": 1,
+        "key": "GLD-OTHER",
+        "last_at": "2026-07-14T10:03:00.000000000Z",
+        "outcomes": [],
+        "queue": "GLD",
+        "requests": 1,
+        "status": "in_progress",
+        "title": "Other",
+        "tokens": 15
+      },
+      {
+        "agents": [
+          "dev-a"
+        ],
+        "assignee": "",
+        "category": "done",
+        "comments": 0,
+        "completed": true,
+        "cost_usd": 0.25,
+        "entered_statuses": [],
+        "first_at": "2026-07-14T10:00:00.000000000Z",
+        "iterations": 1,
+        "key": "GLD-CHILD",
+        "last_at": "2026-07-14T10:02:00.000000000Z",
+        "outcomes": [],
+        "queue": "GLD",
+        "requests": 1,
+        "status": "done",
+        "title": "Child renamed",
+        "tokens": 15
+      },
+      {
+        "agents": [
+          "dev-a"
+        ],
+        "assignee": "",
+        "category": "open",
+        "comments": 2,
+        "completed": false,
+        "cost_usd": 0.25,
+        "entered_statuses": [],
+        "first_at": "2026-07-14T10:00:00.000000000Z",
+        "iterations": 1,
+        "key": "GLD-PARENT",
+        "last_at": "2026-07-14T10:01:00.000000000Z",
+        "outcomes": [],
+        "queue": "GLD",
+        "requests": 1,
+        "status": "open",
+        "title": "Parent",
+        "tokens": 15
+      }
+    ],
+    "totals": {
+      "comments": 3,
+      "completed": 1,
+      "cost_usd": 0.75,
+      "iterations": 3,
+      "requests": 3,
+      "tasks": 3,
+      "tokens": 45,
+      "transitions": 0
+    },
+    "truncated": false,
+    "until": "2026-07-14T11:00:00.000000000Z"
+  },
+  "tasks.activity agent": {
+    "agent": "dev-a",
+    "since": "2026-07-14T09:00:00.000000000Z",
+    "tasks": [
+      {
+        "agents": [
+          "dev-a"
+        ],
+        "assignee": "agent:dev-a",
+        "category": "in_progress",
+        "comments": 0,
+        "completed": false,
+        "cost_usd": 0.25,
+        "entered_statuses": [],
+        "first_at": "2026-07-14T10:00:00.000000000Z",
+        "iterations": 1,
+        "key": "GLD-OTHER",
+        "last_at": "2026-07-14T10:03:00.000000000Z",
+        "outcomes": [],
+        "queue": "GLD",
+        "requests": 1,
+        "status": "in_progress",
+        "title": "Other",
+        "tokens": 15
+      },
+      {
+        "agents": [
+          "dev-a"
+        ],
+        "assignee": "",
+        "category": "done",
+        "comments": 0,
+        "completed": true,
+        "cost_usd": 0.25,
+        "entered_statuses": [],
+        "first_at": "2026-07-14T10:02:00.000000000Z",
+        "iterations": 1,
+        "key": "GLD-CHILD",
+        "last_at": "2026-07-14T10:02:00.000000000Z",
+        "outcomes": [],
+        "queue": "GLD",
+        "requests": 1,
+        "status": "done",
+        "title": "Child renamed",
+        "tokens": 15
+      },
+      {
+        "agents": [
+          "dev-a"
+        ],
+        "assignee": "",
+        "category": "open",
+        "comments": 1,
+        "completed": false,
+        "cost_usd": 0.25,
+        "entered_statuses": [],
+        "first_at": "2026-07-14T10:00:00.000000000Z",
+        "iterations": 1,
+        "key": "GLD-PARENT",
+        "last_at": "2026-07-14T10:01:00.000000000Z",
+        "outcomes": [],
+        "queue": "GLD",
+        "requests": 1,
+        "status": "open",
+        "title": "Parent",
+        "tokens": 15
+      }
+    ],
+    "totals": {
+      "comments": 1,
+      "completed": 1,
+      "cost_usd": 0.75,
+      "iterations": 3,
+      "requests": 3,
+      "tasks": 3,
+      "tokens": 45,
+      "transitions": 0
+    },
+    "truncated": false,
+    "until": "2026-07-14T11:00:00.000000000Z"
+  },
+  "tasks.activity empty": {
+    "since": "2026-07-12T10:00:00.000000000Z",
+    "tasks": [],
+    "totals": {
+      "comments": 0,
+      "completed": 0,
+      "cost_usd": 0,
+      "iterations": 0,
+      "requests": 0,
+      "tasks": 0,
+      "tokens": 0,
+      "transitions": 0
+    },
+    "truncated": false,
+    "until": "2026-07-13T10:00:00.000000000Z"
+  },
+  "tasks.advance": {
+    "actor": "",
+    "created_at": "",
+    "id": 7,
+    "outcome": "ready",
+    "state": "applied",
+    "task_key": "DEV-1"
+  },
+  "tasks.artifacts.get": {
+    "artifact": {
+      "author": "",
+      "created_at": "",
+      "id": 0,
+      "name": "plan",
+      "value": "p"
+    },
+    "history": [
+      {
+        "author": "",
+        "created_at": "",
+        "id": 0,
+        "name": "plan",
+        "value": "p"
+      }
+    ]
+  },
+  "tasks.artifacts.list": {
+    "artifacts": [
+      {
+        "author": "",
+        "created_at": "",
+        "id": 0,
+        "name": "plan",
+        "value": "p"
+      }
+    ],
+    "count": 1
+  },
+  "tasks.artifacts.set": {
+    "author": "user:customer",
+    "created_at": "",
+    "id": 1,
+    "name": "plan",
+    "value": "step 1\n"
+  },
+  "tasks.cancel": {
+    "assignee": "",
+    "author": "",
+    "blocked": false,
+    "category": "cancelled",
+    "completed_at": "",
+    "created_at": "",
+    "customer": "",
+    "description": "",
+    "group": "",
+    "key": "DEV-1",
+    "manual_block_reason": "",
+    "parent_key": "",
+    "position": 0,
+    "priority": "",
+    "pull_request": "",
+    "queue": "",
+    "revision": 0,
+    "started_at": "",
+    "status": "cancelled",
+    "title": "",
+    "updated_at": ""
+  },
+  "tasks.claim other": {
+    "access": "write",
+    "assignee": "agent:dev-a",
+    "author": "user:customer",
+    "blocked": false,
+    "category": "in_progress",
+    "completed_at": "",
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "customer": "user:customer",
+    "description": "",
+    "group": "",
+    "key": "GLD-OTHER",
+    "manual_block_reason": "",
+    "parent_key": "",
+    "position": 0,
+    "priority": "P2",
+    "pull_request": "",
+    "queue": "GLD",
+    "revision": 5,
+    "started_at": "2026-07-14T10:00:00.000000000Z",
+    "status": "in_progress",
+    "title": "Other",
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.comments.add answer": {
+    "comment": {
+      "author": "user:customer",
+      "body": "Answered",
+      "created_at": "2026-07-14T10:00:00.000000000Z",
+      "id": 3,
+      "revision": 1,
+      "task_key": "GLD-PARENT",
+      "updated_at": "2026-07-14T10:00:00.000000000Z"
+    },
+    "created_waits": [],
+    "resolved_waits": [
+      {
+        "expected_principal": "user:customer",
+        "id": 2,
+        "requested_at": "2026-07-14T10:00:00.000000000Z",
+        "requesting_comment_id": 2,
+        "requesting_principal": "agent:dev-a",
+        "resolved_at": "2026-07-14T10:00:00.000000000Z",
+        "resolving_comment_id": 3,
+        "task_key": "GLD-PARENT"
+      }
+    ]
+  },
+  "tasks.comments.add mention": {
+    "comment": {
+      "author": "user:customer",
+      "body": "Please look, @agent:dev-a",
+      "created_at": "2026-07-14T10:00:00.000000000Z",
+      "id": 1,
+      "revision": 1,
+      "task_key": "GLD-OTHER",
+      "updated_at": "2026-07-14T10:00:00.000000000Z"
+    },
+    "created_waits": [
+      {
+        "expected_principal": "agent:dev-a",
+        "id": 1,
+        "requested_at": "2026-07-14T10:00:00.000000000Z",
+        "requesting_comment_id": 1,
+        "requesting_principal": "user:customer",
+        "task_key": "GLD-OTHER"
+      }
+    ],
+    "resolved_waits": []
+  },
+  "tasks.comments.list": {
+    "comments": [
+      {
+        "author": "agent:dev-a",
+        "body": "Need input from @user:customer",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "id": 2,
+        "revision": 1,
+        "task_key": "GLD-PARENT",
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      },
+      {
+        "author": "user:customer",
+        "body": "Answered",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "id": 3,
+        "revision": 1,
+        "task_key": "GLD-PARENT",
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      }
+    ],
+    "count": 2
+  },
+  "tasks.comments.list empty": {
+    "comments": [],
+    "count": 0
+  },
+  "tasks.complete child": {
+    "access": "write",
+    "assignee": "",
+    "author": "user:customer",
+    "blocked": false,
+    "category": "done",
+    "completed_at": "2026-07-14T10:00:00.000000000Z",
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "customer": "user:customer",
+    "description": "",
+    "group": "",
+    "key": "GLD-CHILD",
+    "manual_block_reason": "",
+    "parent_key": "",
+    "position": 1,
+    "priority": "P2",
+    "pull_request": "",
+    "queue": "GLD",
+    "revision": 4,
+    "started_at": "",
+    "status": "done",
+    "title": "Child renamed",
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.create child": {
+    "access": "write",
+    "assignee": "",
+    "author": "user:customer",
+    "blocked": false,
+    "category": "open",
+    "completed_at": "",
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "customer": "user:customer",
+    "description": "",
+    "group": "",
+    "key": "GLD-CHILD",
+    "manual_block_reason": "",
+    "parent_key": "GLD-PARENT",
+    "position": 0,
+    "priority": "P2",
+    "pull_request": "",
+    "queue": "GLD",
+    "revision": 1,
+    "started_at": "",
+    "status": "open",
+    "title": "Child",
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.create other": {
+    "access": "write",
+    "assignee": "",
+    "author": "user:customer",
+    "blocked": false,
+    "category": "open",
+    "completed_at": "",
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "customer": "user:customer",
+    "description": "",
+    "group": "",
+    "key": "GLD-OTHER",
+    "manual_block_reason": "",
+    "parent_key": "",
+    "position": 0,
+    "priority": "P2",
+    "pull_request": "",
+    "queue": "GLD",
+    "revision": 1,
+    "started_at": "",
+    "status": "open",
+    "title": "Other",
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.create parent": {
+    "access": "write",
+    "assignee": "",
+    "author": "user:customer",
+    "blocked": false,
+    "category": "open",
+    "completed_at": "",
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "customer": "user:customer",
+    "description": "the root",
+    "group": "",
+    "key": "GLD-PARENT",
+    "manual_block_reason": "",
+    "parent_key": "",
+    "position": 0,
+    "priority": "P1",
+    "pull_request": "https://example.test/o/r/pull/1",
+    "queue": "GLD",
+    "revision": 1,
+    "started_at": "",
+    "status": "open",
+    "title": "Parent",
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.events": {
+    "count": 5,
+    "events": [
+      {
+        "actor": "user:customer",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "event_id": "$VOLATILE",
+        "kind": "task.created",
+        "payload": {
+          "key": "GLD-PARENT",
+          "parent_key": "",
+          "priority": "P1",
+          "pull_request": "https://example.test/o/r/pull/1"
+        },
+        "queue": "GLD",
+        "sequence": 4,
+        "task_key": "GLD-PARENT",
+        "task_revision": 1
+      },
+      {
+        "actor": "agent:dev-a",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "event_id": "$VOLATILE",
+        "kind": "task.comment_added",
+        "payload": {
+          "comment_id": 2,
+          "mentions": [
+            "user:customer"
+          ],
+          "resolved": []
+        },
+        "queue": "GLD",
+        "sequence": 9,
+        "task_key": "GLD-PARENT",
+        "task_revision": 2
+      },
+      {
+        "actor": "user:customer",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "event_id": "$VOLATILE",
+        "kind": "task.comment_added",
+        "payload": {
+          "comment_id": 3,
+          "mentions": [],
+          "resolved": [
+            "user:customer"
+          ]
+        },
+        "queue": "GLD",
+        "sequence": 10,
+        "task_key": "GLD-PARENT",
+        "task_revision": 3
+      },
+      {
+        "actor": "user:customer",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "event_id": "$VOLATILE",
+        "kind": "task.relation_added",
+        "payload": {
+          "relation_id": 1,
+          "type": "related"
+        },
+        "queue": "GLD",
+        "sequence": 12,
+        "task_key": "GLD-PARENT",
+        "task_revision": 3
+      },
+      {
+        "actor": "user:customer",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "event_id": "$VOLATILE",
+        "kind": "task.relation_removed",
+        "payload": {
+          "relation_id": 1,
+          "type": "related"
+        },
+        "queue": "GLD",
+        "sequence": 14,
+        "task_key": "GLD-PARENT",
+        "task_revision": 3
+      }
+    ]
+  },
+  "tasks.events after": {
+    "count": 0,
+    "events": []
+  },
+  "tasks.export parent": {
+    "queue": "GLD",
+    "relations": [],
+    "root_key": "GLD-PARENT",
+    "tasks": [
+      {
+        "assignee": "",
+        "author": "user:customer",
+        "comments": [
+          {
+            "author": "agent:dev-a",
+            "body": "Need input from @user:customer",
+            "created_at": "2026-07-14T10:00:00.000000000Z"
+          },
+          {
+            "author": "user:customer",
+            "body": "Answered",
+            "created_at": "2026-07-14T10:00:00.000000000Z"
+          }
+        ],
+        "completed_at": "",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "customer": "user:customer",
+        "description": "the root",
+        "group": "",
+        "key": "GLD-PARENT",
+        "manual_block_reason": "",
+        "parent_key": "",
+        "priority": "P1",
+        "pull_request": "https://example.test/o/r/pull/1",
+        "queue": "GLD",
+        "started_at": "",
+        "status": "open",
+        "title": "Parent",
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      }
+    ]
+  },
+  "tasks.get other": {
+    "active_descendants": 0,
+    "comments": [
+      {
+        "author": "user:customer",
+        "body": "Please look, @agent:dev-a",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "id": 1,
+        "revision": 1,
+        "task_key": "GLD-OTHER",
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      }
+    ],
+    "descendants": 0,
+    "relations": [
+      {
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "created_by": "user:customer",
+        "id": 1,
+        "source_key": "GLD-PARENT",
+        "source_status": "open",
+        "source_title": "Parent",
+        "target_key": "GLD-OTHER",
+        "target_status": "open",
+        "target_title": "Other",
+        "type": "related"
+      }
+    ],
+    "task": {
+      "access": "write",
+      "assignee": "",
+      "author": "user:customer",
+      "blocked": false,
+      "category": "open",
+      "completed_at": "",
+      "created_at": "2026-07-14T10:00:00.000000000Z",
+      "customer": "user:customer",
+      "description": "",
+      "group": "",
+      "key": "GLD-OTHER",
+      "manual_block_reason": "",
+      "parent_key": "",
+      "position": 0,
+      "priority": "P2",
+      "pull_request": "",
+      "queue": "GLD",
+      "revision": 3,
+      "started_at": "",
+      "status": "open",
+      "title": "Other",
+      "updated_at": "2026-07-14T10:00:00.000000000Z"
+    },
+    "waiting_for": [
+      {
+        "expected_principal": "agent:dev-a",
+        "id": 1,
+        "requested_at": "2026-07-14T10:00:00.000000000Z",
+        "requesting_comment_id": 1,
+        "requesting_principal": "user:customer",
+        "task_key": "GLD-OTHER"
+      }
+    ]
+  },
+  "tasks.get parent": {
+    "active_descendants": 1,
+    "comments": [
+      {
+        "author": "agent:dev-a",
+        "body": "Need input from @user:customer",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "id": 2,
+        "revision": 1,
+        "task_key": "GLD-PARENT",
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      },
+      {
+        "author": "user:customer",
+        "body": "Answered",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "id": 3,
+        "revision": 1,
+        "task_key": "GLD-PARENT",
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      }
+    ],
+    "descendants": 1,
+    "relations": [
+      {
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "created_by": "user:customer",
+        "id": 1,
+        "source_key": "GLD-PARENT",
+        "source_status": "open",
+        "source_title": "Parent",
+        "target_key": "GLD-OTHER",
+        "target_status": "open",
+        "target_title": "Other",
+        "type": "related"
+      }
+    ],
+    "task": {
+      "access": "write",
+      "assignee": "",
+      "author": "user:customer",
+      "blocked": false,
+      "category": "open",
+      "completed_at": "",
+      "created_at": "2026-07-14T10:00:00.000000000Z",
+      "customer": "user:customer",
+      "description": "the root",
+      "group": "",
+      "key": "GLD-PARENT",
+      "manual_block_reason": "",
+      "parent_key": "",
+      "position": 0,
+      "priority": "P1",
+      "pull_request": "https://example.test/o/r/pull/1",
+      "queue": "GLD",
+      "revision": 3,
+      "started_at": "",
+      "status": "open",
+      "title": "Parent",
+      "updated_at": "2026-07-14T10:00:00.000000000Z"
+    },
+    "waiting_for": []
+  },
+  "tasks.import parent": {
+    "assignee": "",
+    "author": "user:customer",
+    "blocked": false,
+    "category": "open",
+    "completed_at": "",
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "customer": "user:customer",
+    "description": "the root",
+    "group": "",
+    "key": "GLD-PARENT",
+    "manual_block_reason": "",
+    "parent_key": "",
+    "position": 0,
+    "priority": "P1",
+    "pull_request": "https://example.test/o/r/pull/1",
+    "queue": "GLD",
+    "revision": 1,
+    "started_at": "",
+    "status": "open",
+    "title": "Parent",
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.list": {
+    "sequence": 17,
+    "tasks": [
+      {
+        "access": "write",
+        "assignee": "",
+        "author": "user:customer",
+        "blocked": false,
+        "category": "open",
+        "completed_at": "",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "customer": "user:customer",
+        "description": "the root",
+        "group": "",
+        "key": "GLD-PARENT",
+        "manual_block_reason": "",
+        "parent_key": "",
+        "position": 0,
+        "priority": "P1",
+        "pull_request": "https://example.test/o/r/pull/1",
+        "queue": "GLD",
+        "revision": 3,
+        "started_at": "",
+        "status": "open",
+        "title": "Parent",
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      },
+      {
+        "access": "write",
+        "assignee": "agent:dev-a",
+        "author": "user:customer",
+        "blocked": false,
+        "category": "in_progress",
+        "completed_at": "",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "customer": "user:customer",
+        "description": "",
+        "group": "",
+        "key": "GLD-OTHER",
+        "manual_block_reason": "",
+        "parent_key": "",
+        "position": 0,
+        "priority": "P2",
+        "pull_request": "",
+        "queue": "GLD",
+        "revision": 5,
+        "started_at": "2026-07-14T10:00:00.000000000Z",
+        "status": "in_progress",
+        "title": "Other",
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      }
+    ]
+  },
+  "tasks.list empty": {
+    "sequence": 3,
+    "tasks": []
+  },
+  "tasks.list page": {
+    "next_cursor": "GLD-PARENT",
+    "sequence": 17,
+    "tasks": [
+      {
+        "access": "write",
+        "assignee": "",
+        "author": "user:customer",
+        "blocked": false,
+        "category": "open",
+        "completed_at": "",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "customer": "user:customer",
+        "description": "the root",
+        "group": "",
+        "key": "GLD-PARENT",
+        "manual_block_reason": "",
+        "parent_key": "",
+        "position": 0,
+        "priority": "P1",
+        "pull_request": "https://example.test/o/r/pull/1",
+        "queue": "GLD",
+        "revision": 3,
+        "started_at": "",
+        "status": "open",
+        "title": "Parent",
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      }
+    ]
+  },
+  "tasks.move child to root": {
+    "access": "write",
+    "assignee": "",
+    "author": "user:customer",
+    "blocked": false,
+    "category": "open",
+    "completed_at": "",
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "customer": "user:customer",
+    "description": "",
+    "group": "",
+    "key": "GLD-CHILD",
+    "manual_block_reason": "",
+    "parent_key": "",
+    "position": 1,
+    "priority": "P2",
+    "pull_request": "",
+    "queue": "GLD",
+    "revision": 3,
+    "started_at": "",
+    "status": "open",
+    "title": "Child renamed",
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.notifications.dismiss": {
+    "channel": "user:customer",
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "dismissed_at": "2026-07-14T10:00:00.000000000Z",
+    "event_sequence": 9,
+    "id": "$NOTIFICATION",
+    "published_at": "",
+    "read_at": "2026-07-14T10:00:00.000000000Z",
+    "requesting_principal": "agent:dev-a",
+    "task_key": "GLD-PARENT",
+    "text": "agent:dev-a asked for an answer on GLD-PARENT",
+    "type": "task.question"
+  },
+  "tasks.notifications.list": {
+    "count": 1,
+    "notifications": [
+      {
+        "channel": "user:customer",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "dismissed_at": "",
+        "event_sequence": 9,
+        "id": "$NOTIFICATION",
+        "published_at": "",
+        "read_at": "",
+        "requesting_principal": "agent:dev-a",
+        "task_key": "GLD-PARENT",
+        "text": "agent:dev-a asked for an answer on GLD-PARENT",
+        "type": "task.question"
+      }
+    ]
+  },
+  "tasks.notifications.list with dismissed": {
+    "count": 1,
+    "notifications": [
+      {
+        "channel": "user:customer",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "dismissed_at": "2026-07-14T10:00:00.000000000Z",
+        "event_sequence": 9,
+        "id": "$NOTIFICATION",
+        "published_at": "",
+        "read_at": "2026-07-14T10:00:00.000000000Z",
+        "requesting_principal": "agent:dev-a",
+        "task_key": "GLD-PARENT",
+        "text": "agent:dev-a asked for an answer on GLD-PARENT",
+        "type": "task.question"
+      }
+    ]
+  },
+  "tasks.notifications.list without dismissed": {
+    "count": 0,
+    "notifications": []
+  },
+  "tasks.notifications.read": {
+    "channel": "user:customer",
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "dismissed_at": "",
+    "event_sequence": 9,
+    "id": "$NOTIFICATION",
+    "published_at": "",
+    "read_at": "2026-07-14T10:00:00.000000000Z",
+    "requesting_principal": "agent:dev-a",
+    "task_key": "GLD-PARENT",
+    "text": "agent:dev-a asked for an answer on GLD-PARENT",
+    "type": "task.question"
+  },
+  "tasks.principals": {
+    "agents": [
+      "dev-a"
+    ],
+    "customer": "user:customer",
+    "groups": []
+  },
+  "tasks.queue.create EMP": {
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "description": "",
+    "name": "Empty",
+    "owners": [],
+    "prefix": "EMP",
+    "responsible_agent": "",
+    "revision": 1,
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.queue.create GLD": {
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "description": "pinned",
+    "name": "Golden",
+    "owners": [
+      "dev-a"
+    ],
+    "prefix": "GLD",
+    "responsible_agent": "dev-a",
+    "revision": 1,
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.queue.env.ls": {
+    "count": 1,
+    "env": [
+      {
+        "key": "LOG_LEVEL",
+        "updated_at": "2026-10-02T00:00:00Z",
+        "value": "debug"
+      }
+    ]
+  },
+  "tasks.queue.env.rm": {
+    "key": "LOG_LEVEL",
+    "queue": "DEV",
+    "removed": true
+  },
+  "tasks.queue.env.set": {
+    "key": "LOG_LEVEL",
+    "queue": "DEV",
+    "updated_at": "2026-10-02T00:00:01Z",
+    "value": "debug"
+  },
+  "tasks.queue.get GLD": {
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "description": "pinned",
+    "name": "Golden",
+    "owners": [
+      "dev-a"
+    ],
+    "prefix": "GLD",
+    "responsible_agent": "dev-a",
+    "revision": 1,
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.queue.list": {
+    "count": 2,
+    "queues": [
+      {
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "description": "",
+        "name": "Empty",
+        "owners": [],
+        "prefix": "EMP",
+        "responsible_agent": "",
+        "revision": 1,
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      },
+      {
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "description": "updated",
+        "name": "Golden",
+        "owners": [],
+        "prefix": "GLD",
+        "responsible_agent": "dev-a",
+        "revision": 2,
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      }
+    ]
+  },
+  "tasks.queue.list empty": {
+    "count": 0,
+    "queues": []
+  },
+  "tasks.queue.pool.get": {
+    "agents": [
+      "dev-a"
+    ],
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "id": 1,
+    "name": "developers",
+    "queue": "GLD",
+    "revision": 1,
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.queue.pool.list": {
+    "count": 1,
+    "items": [
+      {
+        "agents": [
+          "dev-a"
+        ],
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "id": 1,
+        "name": "developers",
+        "queue": "GLD",
+        "revision": 1,
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      }
+    ]
+  },
+  "tasks.queue.pool.list empty": {
+    "count": 0,
+    "items": []
+  },
+  "tasks.queue.pool.set": {
+    "agents": [
+      "dev-a"
+    ],
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "id": 1,
+    "name": "developers",
+    "queue": "GLD",
+    "revision": 1,
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.queue.secret.ls": {
+    "count": 1,
+    "global_env": [
+      "GH_TOKEN"
+    ],
+    "secrets": [
+      {
+        "key": "GH_TOKEN",
+        "updated_at": "2026-10-02T00:00:00Z"
+      }
+    ]
+  },
+  "tasks.queue.secret.rm": {
+    "key": "GH_TOKEN",
+    "queue": "DEV",
+    "removed": true
+  },
+  "tasks.queue.secret.set": {
+    "key": "GH_TOKEN",
+    "queue": "DEV",
+    "updated_at": "2026-10-02T00:00:01Z"
+  },
+  "tasks.queue.source.log": {
+    "run_id": 5,
+    "text": "source log\n",
+    "truncated": false
+  },
+  "tasks.queue.source.ls": {
+    "count": 1,
+    "sources": [
+      {
+        "every": "2m",
+        "failures": 1,
+        "name": "pull-requests",
+        "queue": "DEV",
+        "runs": [],
+        "script": "./scripts/prs.sh"
+      }
+    ]
+  },
+  "tasks.queue.trigger.create": {
+    "action": "create_task",
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "created_by": "user:customer",
+    "enabled": true,
+    "id": 1,
+    "pattern": "incident:*",
+    "queue": "GLD",
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.queue.trigger.create correlated": {
+    "action": "create_task",
+    "correlation_key": "data.id",
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "created_by": "user:customer",
+    "enabled": true,
+    "id": 2,
+    "pattern": "alert:*",
+    "queue": "GLD",
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.queue.trigger.delete": {
+    "deleted": true,
+    "id": 1
+  },
+  "tasks.queue.trigger.list": {
+    "count": 2,
+    "items": [
+      {
+        "action": "create_task",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "created_by": "user:customer",
+        "enabled": true,
+        "id": 1,
+        "pattern": "incident:*",
+        "queue": "GLD",
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      },
+      {
+        "action": "create_task",
+        "correlation_key": "data.id",
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "created_by": "user:customer",
+        "enabled": true,
+        "id": 2,
+        "pattern": "alert:*",
+        "queue": "GLD",
+        "updated_at": "2026-07-14T10:00:00.000000000Z"
+      }
+    ]
+  },
+  "tasks.queue.trigger.list empty": {
+    "count": 0,
+    "items": []
+  },
+  "tasks.queue.update GLD": {
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "description": "updated",
+    "name": "Golden",
+    "owners": [],
+    "prefix": "GLD",
+    "responsible_agent": "dev-a",
+    "revision": 2,
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.queue.workflow.clear": {
+    "cleared": true,
+    "queue": "dev"
+  },
+  "tasks.queue.workflow.get": {
+    "digest": "",
+    "name": "flow",
+    "queue": "DEV",
+    "revision": 3,
+    "tag": "",
+    "updated_at": "",
+    "version": ""
+  },
+  "tasks.queue.workflow.set": {
+    "digest": "",
+    "name": "flow",
+    "queue": "DEV",
+    "revision": 3,
+    "tag": "",
+    "updated_at": "",
+    "version": "1.0.0"
+  },
+  "tasks.relations.add": {
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "created_by": "user:customer",
+    "id": 1,
+    "source_key": "GLD-PARENT",
+    "source_status": "open",
+    "source_title": "Parent",
+    "target_key": "GLD-OTHER",
+    "target_status": "open",
+    "target_title": "Other",
+    "type": "related"
+  },
+  "tasks.relations.delete": {
+    "deleted": true,
+    "relation_id": 1
+  },
+  "tasks.relations.list": {
+    "count": 1,
+    "relations": [
+      {
+        "created_at": "2026-07-14T10:00:00.000000000Z",
+        "created_by": "user:customer",
+        "id": 1,
+        "source_key": "GLD-PARENT",
+        "source_status": "open",
+        "source_title": "Parent",
+        "target_key": "GLD-OTHER",
+        "target_status": "open",
+        "target_title": "Other",
+        "type": "related"
+      }
+    ]
+  },
+  "tasks.relations.list empty": {
+    "count": 0,
+    "relations": []
+  },
+  "tasks.requeue": {
+    "assignee": "",
+    "author": "",
+    "blocked": false,
+    "category": "open",
+    "completed_at": "",
+    "created_at": "",
+    "customer": "",
+    "description": "",
+    "group": "",
+    "key": "OPS-2",
+    "manual_block_reason": "",
+    "parent_key": "",
+    "position": 0,
+    "priority": "",
+    "pull_request": "",
+    "queue": "OPS",
+    "revision": 0,
+    "started_at": "",
+    "status": "open",
+    "title": "",
+    "updated_at": ""
+  },
+  "tasks.update child": {
+    "access": "write",
+    "assignee": "",
+    "author": "user:customer",
+    "blocked": false,
+    "category": "open",
+    "completed_at": "",
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "customer": "user:customer",
+    "description": "",
+    "group": "",
+    "key": "GLD-CHILD",
+    "manual_block_reason": "",
+    "parent_key": "GLD-PARENT",
+    "position": 0,
+    "priority": "P2",
+    "pull_request": "",
+    "queue": "GLD",
+    "revision": 2,
+    "started_at": "",
+    "status": "open",
+    "title": "Child renamed",
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.workflow.get": {
+    "artifacts": [],
+    "category": "in_progress",
+    "declared_artifacts": [],
+    "digest": "",
+    "name": "flow",
+    "outcomes": [],
+    "owner": "pool:developers",
+    "runs": [],
+    "status": "develop",
+    "statuses": [],
+    "version": "1.0.0",
+    "visits": []
+  },
+  "tasks.workflow.move": {
+    "assignee": "",
+    "author": "",
+    "blocked": false,
+    "category": "in_progress",
+    "completed_at": "",
+    "created_at": "",
+    "customer": "",
+    "description": "",
+    "group": "",
+    "key": "DEV-1",
+    "manual_block_reason": "",
+    "parent_key": "",
+    "position": 0,
+    "priority": "",
+    "pull_request": "",
+    "queue": "",
+    "revision": 0,
+    "started_at": "",
+    "status": "review",
+    "title": "",
+    "updated_at": "",
+    "workflow_digest": "d"
+  },
+  "tasks.workflow.reassign": {
+    "assignee": "agent:dev-2",
+    "author": "",
+    "blocked": false,
+    "category": "in_progress",
+    "completed_at": "",
+    "created_at": "",
+    "customer": "",
+    "description": "",
+    "group": "",
+    "key": "DEV-1",
+    "manual_block_reason": "",
+    "parent_key": "",
+    "position": 0,
+    "priority": "",
+    "pull_request": "",
+    "queue": "",
+    "revision": 0,
+    "started_at": "",
+    "status": "develop",
+    "title": "",
+    "updated_at": "",
+    "workflow_digest": "d"
+  },
+  "tasks.workflow.requests.get": {
+    "actor": "",
+    "created_at": "",
+    "id": 7,
+    "outcome": "",
+    "state": "pending",
+    "task_key": "DEV-1",
+    "wait_seconds": 90
+  },
+  "tasks.workflow.requests.retry": {
+    "actor": "",
+    "created_at": "",
+    "id": 8,
+    "outcome": "",
+    "state": "pending",
+    "task_key": "DEV-1",
+    "wait_seconds": 90
+  },
+  "tasks.workflow.resume": {
+    "assignee": "",
+    "author": "",
+    "blocked": false,
+    "category": "in_progress",
+    "completed_at": "",
+    "created_at": "",
+    "customer": "",
+    "description": "",
+    "group": "",
+    "key": "DEV-1",
+    "manual_block_reason": "",
+    "parent_key": "",
+    "position": 0,
+    "priority": "",
+    "pull_request": "",
+    "queue": "",
+    "revision": 0,
+    "started_at": "",
+    "status": "develop",
+    "title": "",
+    "updated_at": "",
+    "workflow_digest": "d"
+  },
+  "tasks.workflow.runs.get": {
+    "created_at": "",
+    "id": 4,
+    "kind": "check",
+    "run_as": "queue",
+    "script": "",
+    "state": "finished",
+    "task_key": "DEV-1"
+  },
+  "tasks.workflow.runs.list": {
+    "count": 1,
+    "runs": [
+      {
+        "created_at": "",
+        "id": 4,
+        "kind": "check",
+        "run_as": "queue",
+        "script": "",
+        "state": "finished",
+        "task_key": "DEV-1"
+      }
+    ]
+  },
+  "tasks.workflow.runs.log": {
+    "run_id": 4,
+    "text": "log text\n",
+    "truncated": true
+  },
+  "tasks.workflow.upgrade": {
+    "assignee": "",
+    "author": "",
+    "blocked": false,
+    "category": "in_progress",
+    "completed_at": "",
+    "created_at": "",
+    "customer": "",
+    "description": "",
+    "group": "",
+    "key": "DEV-1",
+    "manual_block_reason": "",
+    "parent_key": "",
+    "position": 0,
+    "priority": "",
+    "pull_request": "",
+    "queue": "",
+    "revision": 0,
+    "started_at": "",
+    "status": "develop",
+    "title": "",
+    "updated_at": "",
+    "workflow_digest": "d2"
+  }
+}

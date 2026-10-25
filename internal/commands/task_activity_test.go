@@ -59,7 +59,7 @@ func TestTaskActivityMergesUsageAndEventsPerTaskAndAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	report := res.(taskActivityReport)
+	report := res.(TaskActivityReport)
 	if len(report.Tasks) != 2 || report.Tasks[0].Key != second.Key || report.Tasks[1].Key != first.Key {
 		t.Fatalf("tasks by last activity = %#v", report.Tasks)
 	}
@@ -81,7 +81,7 @@ func TestTaskActivityMergesUsageAndEventsPerTaskAndAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	report = res.(taskActivityReport)
+	report = res.(TaskActivityReport)
 	if len(report.Tasks) != 1 || report.Tasks[0].Key != second.Key || report.Agents != nil {
 		t.Fatalf("bob report = %#v", report)
 	}

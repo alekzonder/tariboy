@@ -113,3 +113,30 @@ func TestWithResultRejectsConflictingComponent(t *testing.T) {
 	}()
 	WithResult[testResult](c)
 }
+
+func TestWithResultDerivesArrayOfComponents(t *testing.T) {
+	c := WithResult[[]testItem](cmd("a.b", "GET", "/api/a/b"))
+	want := map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/testItem"}}
+	if !reflect.DeepEqual(c.ResultSchema, want) {
+		t.Fatalf("ResultSchema = %#v", c.ResultSchema)
+	}
+	if c.Schemas["testItem"]["additionalProperties"] != false {
+		t.Fatalf("component = %#v", c.Schemas["testItem"])
+	}
+}
+
+func TestWithResultRejectsUnnamedResult(t *testing.T) {
+	for name, build := range map[string]func(){
+		"map":          func() { WithResult[map[string]any](cmd("a.b", "GET", "/api/a/b")) },
+		"string slice": func() { WithResult[[]string](cmd("a.b", "GET", "/api/a/b")) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil || !strings.Contains(r.(string), "named struct") {
+					t.Fatalf("panic = %v, want named struct error", r)
+				}
+			}()
+			build()
+		})
+	}
+}

@@ -17,7 +17,6 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
-	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/image"
@@ -117,8 +116,8 @@ func TestImageCommandLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := res.(map[string]any)
-	if m["name"] != "demo" || m["tag"] != "latest" || m["digest"] == "" {
+	m := res.(ImageBuildResult)
+	if m.Name != "demo" || m.Tag != "latest" || m.Digest == "" {
 		t.Fatalf("build result: %v", m)
 	}
 
@@ -126,7 +125,7 @@ func TestImageCommandLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ls.(map[string]any)["count"].(int) != 1 {
+	if ls.(ImageListResult).Count != 1 {
 		t.Fatalf("ls: %v", ls)
 	}
 
@@ -134,7 +133,7 @@ func TestImageCommandLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s := pr.(map[string]any)["prompt"].(string); !strings.Contains(s, "BE A TEST AGENT") {
+	if s := pr.(ImagePromptResult).Prompt; !strings.Contains(s, "BE A TEST AGENT") {
 		t.Fatalf("prompt missing source content: %q", s)
 	}
 
@@ -146,7 +145,7 @@ func TestImageCommandLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	ls, _ = cmdHandler(t, "image.ls")(c, registry.Params{})
-	if ls.(map[string]any)["count"].(int) != 0 {
+	if ls.(ImageListResult).Count != 0 {
 		t.Fatalf("image not removed: %v", ls)
 	}
 
@@ -170,8 +169,8 @@ func TestImageBuildV2RequiresNameAndDefaultsTag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := result.(map[string]any)
-	if got["name"] != "transparent" || got["tag"] != "latest" {
+	got := result.(ImageBuildResult)
+	if got.Name != "transparent" || got.Tag != "latest" {
 		t.Fatalf("result = %#v", got)
 	}
 	manifest, err := imageStore(c).Inspect(image.Ref{Name: "transparent", Tag: "latest"})
@@ -198,7 +197,7 @@ func TestImageBuildUsesSourceVersionUnlessTagExplicit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := result.(map[string]any)["tag"]; got != want {
+		if got := result.(ImageBuildResult).Tag; got != want {
 			t.Fatalf("tag = %v, want %s", got, want)
 		}
 		if _, err := imageStore(c).Inspect(image.Ref{Name: "versioned", Tag: want}); err != nil {
@@ -247,7 +246,7 @@ func TestImageBuildV2PackagesSiblingSkill(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", command, err)
 		}
-		if command == "image.validate" && result.(map[string]any)["valid"] != true {
+		if command == "image.validate" && !result.(ImageValidateResult).Valid {
 			t.Fatalf("validation failed: %+v", result)
 		}
 	}
@@ -308,7 +307,7 @@ func TestImageBuildRebuildsExistingTag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.(map[string]any)["digest"] == second.(map[string]any)["digest"] {
+	if first.(ImageBuildResult).Digest == second.(ImageBuildResult).Digest {
 		t.Fatal("rebuild kept the old digest")
 	}
 }
@@ -373,7 +372,7 @@ func TestImageBuildUpdatesImportedAndRetaggedRefs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			digest := result.(map[string]any)["digest"].(string)
+			digest := result.(ImageBuildResult).Digest
 			current, inspectErr := imageStore(c).Inspect(ref)
 			if inspectErr != nil || digest == before || current.Digest != digest {
 				t.Fatalf("updated ref: manifest=%#v err=%v", current, inspectErr)
@@ -416,7 +415,7 @@ func TestImageBuildUpdatesImportedRefAfterRefRemoval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	digest := result.(map[string]any)["digest"].(string)
+	digest := result.(ImageBuildResult).Digest
 	current, inspectErr := imageStore(c).Inspect(ref)
 	if inspectErr != nil || digest == imported.Digest || current.Digest != digest {
 		t.Fatalf("updated import: manifest=%#v err=%v", current, inspectErr)
@@ -457,16 +456,16 @@ func TestArtifactImportOverBuildHidesStaleProvenance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := result.(map[string]any); got["source_cwd"] != nil || got["source_available"] != false {
+	if got := result.(ImageProvenance); got.SourceCWD.Valid || got.SourceAvailable || got.Digest != nil {
 		t.Fatalf("stale provenance exposed: %#v", got)
 	}
 	listed, err := cmdHandler(t, "image.ls")(c, registry.Params{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, item := range listed.(map[string]any)["images"].([]map[string]any) {
-		if item["name"] == ref.Name && item["tag"] == ref.Tag {
-			if _, ok := item["source_cwd"]; ok {
+	for _, item := range listed.(ImageListResult).Images {
+		if item.Name == ref.Name && item.Tag == ref.Tag {
+			if item.SourceCWD != nil {
 				t.Fatalf("image list exposed stale provenance: %#v", item)
 			}
 			return
@@ -501,7 +500,7 @@ func TestImageBuildMigratesUnmarkedOrdinaryRefWithMatchingProvenance(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.(map[string]any)["digest"] == first.Digest {
+	if result.(ImageBuildResult).Digest == first.Digest {
 		t.Fatalf("legacy ref was not rebuilt: %#v", result)
 	}
 }
@@ -515,8 +514,8 @@ func TestImageBuildMultipleTags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	images, ok := result.(map[string]any)["images"].([]map[string]any)
-	if !ok || len(images) != 2 {
+	built := result.(ImageBuildResult)
+	if len(built.Images) != 2 || built.Name != "" || built.Layers != nil {
 		t.Fatalf("images = %#v", result)
 	}
 	for _, tag := range []string{"latest", "v2"} {
@@ -719,7 +718,7 @@ func TestAgentImageAssignmentWaitsForPublicationRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first := firstResult.(map[string]any)["digest"].(string)
+	first := firstResult.(ImageBuildResult).Digest
 	if err := agent.NewStore(c.Store).Create(agent.Agent{Name: "worker", ImageRef: "other:latest", ImageDigest: "other"}); err != nil {
 		t.Fatal(err)
 	}
@@ -784,7 +783,7 @@ func TestImageRemoveWaitsForCommittedAssignment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	digest := result.(map[string]any)["digest"].(string)
+	digest := result.(ImageBuildResult).Digest
 	entered := make(chan struct{})
 	commitAssignment := make(chan struct{})
 	locked := make(chan error, 1)
@@ -830,7 +829,7 @@ func TestImageBuildRestoresExistingRefAndMetadataWhenProvenanceFails(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstDigest := first.(map[string]any)["digest"].(string)
+	firstDigest := first.(ImageBuildResult).Digest
 	previousSnapshot, ok, err := imageSnapshotStore(c).Lookup(context.Background(), ref.String())
 	if err != nil || !ok {
 		t.Fatalf("previous snapshot = %#v, %v, %v", previousSnapshot, ok, err)
@@ -906,7 +905,7 @@ func TestImageBuildRecordsExplicitGitProvenance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	digest := result.(map[string]any)["digest"].(string)
+	digest := result.(ImageBuildResult).Digest
 	snapshot, ok, err := imageSnapshotStore(c).LookupDigest(context.Background(), digest)
 	if err != nil || !ok {
 		t.Fatalf("LookupDigest = ok %v, err %v", ok, err)
@@ -918,8 +917,8 @@ func TestImageBuildRecordsExplicitGitProvenance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	provenance := shown.(map[string]any)
-	if provenance["repository_id"] != "tariboy" || provenance["git_commit"] != "97cf20ec0c8542f54b68904521be6a2ca85552a1" || provenance["source_digest"] == "" {
+	provenance := shown.(ImageProvenance)
+	if provenance.RepositoryID == nil || *provenance.RepositoryID != "tariboy" || provenance.GitCommit == nil || *provenance.GitCommit != "97cf20ec0c8542f54b68904521be6a2ca85552a1" || provenance.SourceDigest == nil || *provenance.SourceDigest == "" {
 		t.Fatalf("shown provenance = %#v", provenance)
 	}
 }
@@ -960,7 +959,7 @@ func TestImageListReportsCurrentAndPendingAgents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	digest := result.(map[string]any)["digest"].(string)
+	digest := result.(ImageBuildResult).Digest
 	as := agent.NewStore(c.Store)
 	if err := as.Create(agent.Agent{Name: "active-worker", ImageRef: "shared:latest"}); err != nil {
 		t.Fatal(err)
@@ -976,21 +975,20 @@ func TestImageListReportsCurrentAndPendingAgents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := listed.(map[string]any)["images"].([]map[string]any)
+	rows := listed.(ImageListResult).Images
 	if len(rows) != 1 {
 		t.Fatalf("images = %#v", rows)
 	}
-	if got := rows[0]["current_agents"]; !equalStrings(got, []string{"active-worker"}) {
+	if got := rows[0].CurrentAgents; !equalStrings(got, []string{"active-worker"}) {
 		t.Fatalf("current_agents = %#v", got)
 	}
-	if got := rows[0]["pending_agents"]; !equalStrings(got, []string{"pending-worker"}) {
+	if got := rows[0].PendingAgents; !equalStrings(got, []string{"pending-worker"}) {
 		t.Fatalf("pending_agents = %#v", got)
 	}
 }
 
-func equalStrings(value any, want []string) bool {
-	got, ok := value.([]string)
-	if !ok || len(got) != len(want) {
+func equalStrings(got, want []string) bool {
+	if len(got) != len(want) {
 		return false
 	}
 	for i := range want {
@@ -1012,8 +1010,8 @@ func TestImageValidateV2ResolvesPromptFilesWithoutWritingArtifact(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := got.(map[string]any)
-	if result["valid"] != false {
+	result := got.(ImageValidateResult)
+	if result.Valid {
 		t.Fatalf("validate = %#v, want invalid", result)
 	}
 	images, err := imageStore(c).List()
@@ -1033,7 +1031,7 @@ func TestImageValidateChecksTargetRefAndAllowsExistingTag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if invalid.(map[string]any)["valid"] != false {
+	if invalid.(ImageValidateResult).Valid {
 		t.Fatalf("invalid target accepted: %#v", invalid)
 	}
 	if _, err := cmdHandler(t, "image.build")(c, registry.Params{"path": source, "name": "taken", "tag": "v1"}); err != nil {
@@ -1043,7 +1041,7 @@ func TestImageValidateChecksTargetRefAndAllowsExistingTag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if collision.(map[string]any)["valid"] != true {
+	if !collision.(ImageValidateResult).Valid {
 		t.Fatalf("existing tag rejected: %#v", collision)
 	}
 }
@@ -1063,19 +1061,19 @@ func TestImageValidateV2ReturnsOrderedResolvedTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := got.(map[string]any)
-	if result["valid"] != true {
+	result := got.(ImageValidateResult)
+	if !result.Valid {
 		t.Fatalf("validate = %#v", result)
 	}
-	template, ok := result["template"].(image.PromptTemplate)
-	if !ok || len(template.Entries) != 3 {
-		t.Fatalf("template = %#v", result["template"])
+	template := result.Template.ImagePromptTemplate
+	if template == nil || len(template.Entries) != 3 {
+		t.Fatalf("template = %#v", result.Template)
 	}
 	if template.Entries[0].Runtime != "one-shot" || template.Entries[1].Source != "./role.md" || template.Entries[1].Category != "source" || template.Entries[1].Size != int64(len("review carefully")) || template.Entries[1].SHA256 == "" || template.Entries[2].Runtime != "user-prompt" {
 		t.Fatalf("entries = %#v", template.Entries)
 	}
-	if plugins, ok := result["plugins"].([]string); !ok || len(plugins) != 0 {
-		t.Fatalf("plugins = %#v", result["plugins"])
+	if plugins := result.Plugins; plugins == nil || len(plugins) != 0 {
+		t.Fatalf("plugins = %#v", result.Plugins)
 	}
 	images, err := imageStore(c).List()
 	if err != nil || len(images) != 0 {
@@ -1108,19 +1106,19 @@ func TestImageValidateV2ReturnsSkillMetadataAndDuplicateWarnings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := got.(map[string]any)
-	skills, ok := result["skills"].([]agentskills.Metadata)
-	if !ok || len(skills) != 1 {
-		t.Fatalf("skills = %#v", result["skills"])
+	result := got.(ImageValidateResult)
+	skills := result.Skills
+	if len(skills) != 1 {
+		t.Fatalf("skills = %#v", result.Skills)
 	}
 	skill := skills[0]
 	if skill.Name != "code-review" || skill.Description != "Review changes safely." || skill.Source != "./skills/code-review" || skill.Category != "source" || skill.ArchiveRoot != "skills/code-review" || skill.FileCount != 1 || skill.Size <= 0 || len(skill.TreeSHA256) != 64 {
 		t.Fatalf("skill = %#v", skill)
 	}
-	warnings := result["warnings"].([]map[string]string)
+	warnings := result.Warnings
 	found := false
 	for _, warning := range warnings {
-		if warning["path"] == "skills[0]" && warning["message"] == "skill code-review is also visible in cwd scope; native harness precedence applies" {
+		if warning.Path == "skills[0]" && warning.Message == "skill code-review is also visible in cwd scope; native harness precedence applies" {
 			found = true
 		}
 	}
@@ -1210,14 +1208,14 @@ func TestImageListManifestVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result.(map[string]any)["images"].([]map[string]any)
+	rows := result.(ImageListResult).Images
 	seen := make(map[string]bool)
 	for _, row := range rows {
-		seen[row["name"].(string)] = true
-		if row["name"] == "versioned" && row["image_version"] != "1.2.3" {
+		seen[row.Name] = true
+		if row.Name == "versioned" && row.ImageVersion != "1.2.3" {
 			t.Errorf("versioned row = %v, want manifest version 1.2.3", row)
 		}
-		if row["name"] == "legacy" && row["image_version"] != nil && row["image_version"] != "" {
+		if row.Name == "legacy" && row.ImageVersion != "" {
 			t.Errorf("legacy row invented version: %v", row)
 		}
 	}
@@ -1397,20 +1395,20 @@ func TestImageBuildWithoutVersionBumpKeepsRefID(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	build := func() map[string]any {
+	build := func() ImageBuildResult {
 		t.Helper()
 		result, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "path": src})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return result.(map[string]any)
+		return result.(ImageBuildResult)
 	}
 	write("FIRST")
 	first := build()
 	write("SECOND")
 	second := build()
-	if first["digest"] != second["digest"] {
-		t.Fatalf("same image_version produced %v and %v", first["digest"], second["digest"])
+	if first.Digest != second.Digest {
+		t.Fatalf("same image_version produced %v and %v", first.Digest, second.Digest)
 	}
 	versioned, err := imageStore(c).Inspect(image.Ref{Name: "reviewer", Tag: "1.0.0"})
 	if err != nil {
@@ -1420,8 +1418,8 @@ func TestImageBuildWithoutVersionBumpKeepsRefID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if versioned.Digest != second["digest"] || latest.Digest != second["digest"] {
-		t.Fatalf("tags = %s and %s, want %v", versioned.Digest, latest.Digest, second["digest"])
+	if versioned.Digest != second.Digest || latest.Digest != second.Digest {
+		t.Fatalf("tags = %s and %s, want %v", versioned.Digest, latest.Digest, second.Digest)
 	}
 	prompt, err := imageStore(c).RenderPrompt(image.Ref{Name: "reviewer", Tag: "latest"})
 	if err != nil || !strings.Contains(prompt, "SECOND") {
@@ -1438,7 +1436,7 @@ func TestImageDetailRejectsChangedDigest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return result.(map[string]any)["digest"].(string)
+		return result.(ImageBuildResult).Digest
 	}
 	old := build()
 	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("NEW GENERATION"), 0o600); err != nil {
@@ -1498,9 +1496,9 @@ func TestImageValidateAndBuildPathAssembleExtends(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := got.(map[string]any)
-	template, ok := result["template"].(image.PromptTemplate)
-	if result["valid"] != true || !ok || len(template.Entries) != 2 || template.Entries[0].Source != "./.tariboy-extends/0/role.md" || template.Entries[1].Source != "./.tariboy-extends/1/role.md" {
+	result := got.(ImageValidateResult)
+	template := result.Template.ImagePromptTemplate
+	if !result.Valid || template == nil || len(template.Entries) != 2 || template.Entries[0].Source != "./.tariboy-extends/0/role.md" || template.Entries[1].Source != "./.tariboy-extends/1/role.md" {
 		t.Fatalf("validate = %#v", result)
 	}
 	if _, err := cmdHandler(t, "image.build")(c, registry.Params{"path": child, "name": "child"}); err != nil {

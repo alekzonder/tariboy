@@ -13,7 +13,7 @@ import (
 )
 
 func daemonReindex() registry.Command {
-	return registry.Command{
+	return registry.WithResult[DaemonReindexResult](registry.Command{
 		Path:    "daemon.reindex",
 		Summary: "Rebuild ai_requests metadata from proxy-transcript.jsonl files",
 		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/daemon/reindex"},
@@ -30,9 +30,9 @@ func daemonReindex() registry.Command {
 			if err := s.InsertBatch(rows); err != nil {
 				return nil, err
 			}
-			return map[string]any{"reindexed": len(rows)}, nil
+			return DaemonReindexResult{Reindexed: len(rows)}, nil
 		},
-	}
+	})
 }
 
 // scanTranscripts walks agents/<name>/iterations/<id>/proxy-transcript.jsonl[.gz]

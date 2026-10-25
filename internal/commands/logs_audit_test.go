@@ -28,16 +28,16 @@ func TestEventsSinceCursor(t *testing.T) {
 		t.Fatalf("since=1 rows = %d, want 2", len(rows))
 	}
 	// Chronological (oldest first) with seq carried through.
-	if rows[0]["seq"].(int64) != 2 || rows[0]["kind"] != "shim" {
+	if rows[0].Seq != 2 || rows[0].Kind != "shim" {
 		t.Fatalf("row0 = %+v", rows[0])
 	}
-	if rows[1]["seq"].(int64) != 3 || rows[1]["source"] != "harness" {
+	if rows[1].Seq != 3 || rows[1].Source != "harness" {
 		t.Fatalf("row1 = %+v", rows[1])
 	}
 
 	// recentEvents is newest-first and includes everything.
 	recent, err := recentEvents(c, "m", 50)
-	if err != nil || len(recent) != 3 || recent[0]["kind"] != "harness_output" {
+	if err != nil || len(recent) != 3 || recent[0].Kind != "harness_output" {
 		t.Fatalf("recent = %+v err=%v", recent, err)
 	}
 }
@@ -56,7 +56,7 @@ func TestEventsIterationAndBefore(t *testing.T) {
 	if err != nil || len(its) != 2 {
 		t.Fatalf("iteration m-1 = %d err=%v", len(its), err)
 	}
-	if its[0]["iteration_id"] != "m-1" || its[0]["seq"].(int64) != 1 {
+	if its[0].IterationID != "m-1" || its[0].Seq != 1 {
 		t.Fatalf("row0 = %+v", its[0])
 	}
 
@@ -64,7 +64,7 @@ func TestEventsIterationAndBefore(t *testing.T) {
 	if err != nil || len(before) != 2 {
 		t.Fatalf("before=3 = %d err=%v", len(before), err)
 	}
-	if before[1]["seq"].(int64) != 2 {
+	if before[1].Seq != 2 {
 		t.Fatalf("before last = %+v", before[1])
 	}
 }
@@ -85,19 +85,19 @@ func TestFilteredEventsAndDistinctTypes(t *testing.T) {
 	if err != nil || capped || len(byType) != 2 {
 		t.Fatalf("type=status = %d capped=%v err=%v", len(byType), capped, err)
 	}
-	if byType[0]["seq"].(int64) != 4 || byType[1]["seq"].(int64) != 2 {
+	if byType[0].Seq != 4 || byType[1].Seq != 2 {
 		t.Fatalf("type rows = %+v", byType)
 	}
 
 	// Full-text query matches the data body of any type (the harness line).
 	byText, _, err := filteredEvents(c, "m", "", "boom", 500)
-	if err != nil || len(byText) != 1 || byText[0]["seq"].(int64) != 3 {
+	if err != nil || len(byText) != 1 || byText[0].Seq != 3 {
 		t.Fatalf("q=boom = %+v err=%v", byText, err)
 	}
 
 	// Case-insensitive, and type AND query compose: only the "building" status.
 	both, _, err := filteredEvents(c, "m", "status", "BUILD", 500)
-	if err != nil || len(both) != 1 || both[0]["seq"].(int64) != 4 {
+	if err != nil || len(both) != 1 || both[0].Seq != 4 {
 		t.Fatalf("type=status q=BUILD = %+v err=%v", both, err)
 	}
 
@@ -109,7 +109,7 @@ func TestFilteredEventsAndDistinctTypes(t *testing.T) {
 
 	// A tiny cap truncates and flags capped, keeping the newest match.
 	one, capped, err := filteredEvents(c, "m", "status", "", 1)
-	if err != nil || !capped || len(one) != 1 || one[0]["seq"].(int64) != 4 {
+	if err != nil || !capped || len(one) != 1 || one[0].Seq != 4 {
 		t.Fatalf("cap=1 = %+v capped=%v err=%v", one, capped, err)
 	}
 

@@ -16,7 +16,7 @@ func requireMaintenance(c *registry.Ctx) (*maintenance.Service, error) {
 }
 
 func maintenanceGet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[MaintenanceView](registry.Command{
 		Path:    "maintenance.get",
 		Summary: "Show database maintenance settings and the last run",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/maintenance"},
@@ -33,17 +33,13 @@ func maintenanceGet() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			out := map[string]any{"settings": set, "last_run": nil}
-			if last != nil {
-				out["last_run"] = *last
-			}
-			return out, nil
+			return MaintenanceView{Settings: MaintenanceSettings(set), LastRun: newMaintenanceLastRun(last)}, nil
 		},
-	}
+	})
 }
 
 func maintenanceSet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[MaintenanceSettings](registry.Command{
 		Path:    "maintenance.set",
 		Summary: "Change database maintenance settings; unset flags keep their value",
 		Args: []registry.Arg{
@@ -84,13 +80,13 @@ func maintenanceSet() registry.Command {
 			if err := m.SetSettings(set); err != nil {
 				return nil, err
 			}
-			return set, nil
+			return MaintenanceSettings(set), nil
 		},
-	}
+	})
 }
 
 func maintenanceRun() registry.Command {
-	return registry.Command{
+	return registry.WithResult[MaintenanceRun](registry.Command{
 		Path:    "maintenance.run",
 		Summary: "Back up the database, delete expired data, and compact it now",
 		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/maintenance/run"},
@@ -107,7 +103,7 @@ func maintenanceRun() registry.Command {
 				return nil, err
 			}
 			// A run that started reports its own error in the result.
-			return res, nil
+			return MaintenanceRun(res), nil
 		},
-	}
+	})
 }

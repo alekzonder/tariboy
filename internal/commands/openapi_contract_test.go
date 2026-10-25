@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"net/http/httptest"
 	"os"
-	"slices"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -17,194 +17,21 @@ import (
 	"github.com/alekzonder/tariboy/internal/registry"
 )
 
-// commandsWithoutResultSchema lists the HTTP commands that still publish a
-// free-form result. The list only shrinks: a command that gains a result
-// schema leaves it in the same change, and review refuses new entries.
-var commandsWithoutResultSchema = []string{
-	"agent.alias.get",
-	"agent.alias.set",
-	"agent.color.get",
-	"agent.color.set",
-	"agent.cwd",
-	"agent.effort",
-	"agent.exec",
-	"agent.file.create",
-	"agent.file.delete",
-	"agent.file.list",
-	"agent.file.read",
-	"agent.file.rename",
-	"agent.file.write",
-	"agent.harness",
-	"agent.inbox.clear",
-	"agent.inbox.ls",
-	"agent.inbox.processed",
-	"agent.inbox.reply",
-	"agent.inbox.requeue",
-	"agent.interactive",
-	"agent.messages.batch",
-	"agent.messages.max-queue",
-	"agent.model",
-	"agent.notes.get",
-	"agent.notes.set",
-	"agent.pull",
-	"agent.screen",
-	"agent.send-keys",
-	"agent.shell-script.get",
-	"agent.shell-script.set",
-	"agent.status.history",
-	"agent.subscribe",
-	"agent.subscriptions",
-	"agent.unsubscribe",
-	"agent.usage",
-	"backup",
-	"budget.ls",
-	"budget.set",
-	"budget.status",
-	"channel.inspect",
-	"channel.ls",
-	"channel.tail",
-	"channel.watches",
-	"chat.create",
-	"chat.join",
-	"chat.leave",
-	"chat.ls",
-	"chat.messages",
-	"chat.participants",
-	"chat.read",
-	"chat.unanswered",
-	"context.get",
-	"context.set",
-	"daemon.agent-shell-script.get",
-	"daemon.agent-shell-script.set",
-	"daemon.config.get",
-	"daemon.config.set",
-	"daemon.reindex",
-	"daemon.status",
-	"files.upload",
-	"fs.list",
-	"group.assign",
-	"group.create",
-	"group.inspect",
-	"group.lead.set",
-	"group.ls",
-	"group.member.rm",
-	"group.rename",
-	"group.rm",
-	"harness.codex-approval.get",
-	"harness.codex-approval.set",
-	"harness.models",
-	"image.build",
-	"image.file",
-	"image.files",
-	"image.inspect",
-	"image.ls",
-	"image.prompt",
-	"image.provenance",
-	"image.rm",
-	"image.source.build",
-	"image.source.create",
-	"image.source.file.get",
-	"image.source.file.put",
-	"image.source.files",
-	"image.source.inspect",
-	"image.source.ls",
-	"image.source.rm",
-	"image.source.validate",
-	"image.template",
-	"image.validate",
-	"iteration.extend-timeout",
-	"iteration.inspect",
-	"iteration.logs",
-	"iteration.ls",
-	"iteration.tag.add",
-	"iteration.tag.rm",
-	"iteration.tag.set",
-	"logs",
-	"loop.ai-stall-timeout",
-	"loop.hard-timeout",
-	"loop.interval",
-	"loop.max-idle",
-	"loop.on-error",
-	"loop.on-timeout",
-	"loop.schedule",
-	"loop.timeout",
-	"maintenance.get",
-	"maintenance.run",
-	"maintenance.set",
-	"message.send",
-	"plugin.action",
-	"plugin.contributions",
-	"plugin.inspect",
-	"plugin.install",
-	"plugin.logs",
-	"plugin.ls",
-	"plugin.restart",
-	"plugin.rm",
-	"plugin.routes",
-	"prompt.get",
-	"prune",
-	"restore",
-	"retention.get",
-	"retention.set",
-	"schedule.ls",
-	"script.cancel",
-	"script.logs",
-	"script.ls",
-	"script.rerun",
-	"script.rm",
-	"script.run",
-	"script.run-get",
-	"script.runs",
-	"script.schedule",
-	"secret.ls",
-	"secret.rm",
-	"secret.store",
-	"store.add",
-	"store.auto",
-	"store.list",
-	"store.refresh",
-	"store.remove",
-	"store.show",
-	"tasks.activity",
-	"team.compose",
-	"team.import.archive.apply",
-	"team.import.archive.status",
-	"team.import.yaml",
-	"transcript",
-	"usage",
-	"user-prompt.get",
-	"user-prompt.set",
-	"workflow.build",
-	"workflow.inspect",
-	"workflow.ls",
-	"workflow.rm",
-	"workflow.validate",
-}
-
-// Catches an HTTP command without a result schema outside the allowlist, and
-// an allowlist entry that no longer names a schemaless HTTP command.
+// Catches an HTTP command whose result is not a declared component: every
+// HTTP command must return a named struct (or a slice of one) declared with
+// registry.WithResult, so its result schema is a component reference.
 func TestHTTPCommandsDeclareResultSchema(t *testing.T) {
 	t.Parallel()
-	if !slices.IsSorted(commandsWithoutResultSchema) {
-		t.Error("commandsWithoutResultSchema is not sorted")
-	}
-	allowed := map[string]bool{}
-	for _, path := range commandsWithoutResultSchema {
-		allowed[path] = true
-	}
-	schemaless := map[string]bool{}
 	for _, c := range BuildRegistry().Commands() {
-		if c.HTTP == nil || c.ResultSchema != nil {
+		if c.HTTP == nil {
 			continue
 		}
-		schemaless[c.Path] = true
-		if !allowed[c.Path] {
-			t.Errorf("HTTP command %s declares no ResultSchema: wrap it in registry.WithResult", c.Path)
+		schema := c.ResultSchema
+		if schema["type"] == "array" {
+			schema, _ = schema["items"].(map[string]any)
 		}
-	}
-	for _, path := range commandsWithoutResultSchema {
-		if !schemaless[path] {
-			t.Errorf("allowlist entry %s is stale: the command has a result schema, no HTTP route, or no longer exists; remove the entry", path)
+		if ref, _ := schema["$ref"].(string); !strings.HasPrefix(ref, "#/components/schemas/") {
+			t.Errorf("HTTP command %s result is %v, not a component reference: return a named struct declared with registry.WithResult", c.Path, c.ResultSchema)
 		}
 	}
 }
@@ -283,5 +110,43 @@ func firstLineDiff(want, got []byte) string {
 		if w != g || i >= len(wantLines) || i >= len(gotLines) {
 			return fmt.Sprintf("line %d:\n snapshot: %s\n   served: %s", i+1, w, g)
 		}
+	}
+}
+
+// Catches two commands that declare one component name with different
+// schemas: the served spec keeps only one of them, so the other command
+// would publish a wrong result schema.
+func TestCommandsDeclareConsistentComponents(t *testing.T) {
+	t.Parallel()
+	if err := componentConflicts(BuildRegistry().Commands()); err != "" {
+		t.Error(err)
+	}
+}
+
+func componentConflicts(commands []registry.Command) string {
+	declared := map[string]registry.Command{}
+	var problems []string
+	for _, c := range commands {
+		for name, schema := range c.Schemas {
+			if first, ok := declared[name]; ok && !reflect.DeepEqual(first.Schemas[name], schema) {
+				problems = append(problems, fmt.Sprintf("component %s: commands %s and %s declare different schemas; give one type a distinct name", name, first.Path, c.Path))
+				continue
+			}
+			declared[name] = c
+		}
+	}
+	return strings.Join(problems, "\n")
+}
+
+func TestComponentConflictsReportsDifferentSchemas(t *testing.T) {
+	t.Parallel()
+	a := registry.Command{Path: "a.get", Schemas: map[string]map[string]any{"Item": {"type": "object"}}}
+	b := registry.Command{Path: "b.get", Schemas: map[string]map[string]any{"Item": {"type": "string"}}}
+	same := registry.Command{Path: "c.get", Schemas: map[string]map[string]any{"Item": {"type": "object"}}}
+	if got := componentConflicts([]registry.Command{a, same}); got != "" {
+		t.Errorf("equal schemas reported: %s", got)
+	}
+	if got := componentConflicts([]registry.Command{a, b}); !strings.Contains(got, "component Item: commands a.get and b.get") {
+		t.Errorf("conflict = %q", got)
 	}
 }

@@ -34,7 +34,7 @@ func TestHarnessModelsReturnsCatalogAndCLIErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog := res.(harness.Catalog)
+	catalog := res.(HarnessModelCatalog)
 	if catalog.Error != "" || len(catalog.Models) != 1 || catalog.Models[0].ID != "openai/gpt-5" {
 		t.Fatalf("catalog = %+v", catalog)
 	}
@@ -43,7 +43,7 @@ func TestHarnessModelsReturnsCatalogAndCLIErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if catalog := res.(harness.Catalog); catalog.Error != "codex not found on PATH" || len(catalog.Models) != 0 {
+	if catalog := res.(HarnessModelCatalog); catalog.Error != "codex not found on PATH" || len(catalog.Models) != 0 {
 		t.Fatalf("missing CLI catalog = %+v", catalog)
 	}
 
@@ -61,7 +61,7 @@ func TestHarnessCodexApprovalGetSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := res.(map[string]any)["mode"]; got != harness.CodexApprovalYolo {
+	if got := res.(HarnessCodexApproval).Mode; got != harness.CodexApprovalYolo {
 		t.Fatalf("default mode = %v", got)
 	}
 
@@ -73,7 +73,7 @@ func TestHarnessCodexApprovalGetSet(t *testing.T) {
 			t.Fatalf("stored = %q, want %q", v, mode)
 		}
 		res, err := get(c, registry.Params{})
-		if err != nil || res.(map[string]any)["mode"] != mode {
+		if err != nil || res.(HarnessCodexApproval).Mode != CodexApprovalMode(mode) {
 			t.Fatalf("get after set %q = %v, %v", mode, res, err)
 		}
 	}

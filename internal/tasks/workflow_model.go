@@ -42,14 +42,14 @@ type TransitionRequest struct {
 	Outcome       string       `json:"outcome"`
 	Message       string       `json:"message,omitempty"`
 	Actor         string       `json:"actor"`
-	State         RequestState `json:"state"`
+	State         RequestState `json:"state" jsonschema:"description=One of pending\\, applied\\, rejected\\, failed\\, cancelled"`
 	ResultMessage string       `json:"result_message,omitempty"`
 	CreatedAt     string       `json:"created_at"`
 	FinishedAt    string       `json:"finished_at,omitempty"`
 	// WaitSeconds is how long a caller may wait for a pending request: the
 	// timeouts of the transition's checks plus a margin. It is computed from
 	// the pinned manifest, never stored, and set only while pending.
-	WaitSeconds int `json:"wait_seconds,omitempty"`
+	WaitSeconds int `json:"wait_seconds,omitempty" jsonschema:"description=Only while pending: how long to wait for the checks\\, in seconds"`
 }
 
 // Artifact is one stored version of a named task artifact.
@@ -204,22 +204,22 @@ const maxAttentionRunes = 200
 // WorkflowAttention says what, if anything, needs a person on an open workflow
 // task, with the ids a reader needs to look further.
 type WorkflowAttention struct {
-	Kind string `json:"kind"`
+	Kind string `json:"kind" jsonschema:"description=What needs a person on an open workflow task\\, the most urgent kind first: paused\\, failed\\, rejected\\, script_failed\\, idle"`
 	// Message is the first line of the script's message, or what a pause
 	// means, cut to one line.
-	Message string `json:"message,omitempty"`
+	Message string `json:"message,omitempty" jsonschema:"description=The first line of the script's message\\, or what the pause means"`
 	// Count is the visit counter behind the kind: rejected requests, script
 	// failures, or idle iterations.
-	Count     int   `json:"count,omitempty"`
-	RequestID int64 `json:"request_id,omitempty"` // the failed or rejected request
-	RunID     int64 `json:"run_id,omitempty"`     // the run whose log explains it
+	Count     int   `json:"count,omitempty" jsonschema:"description=The visit counter behind the kind: rejected requests\\, script failures\\, or idle iterations"`
+	RequestID int64 `json:"request_id,omitempty" jsonschema:"description=The failed or rejected transition request"`
+	RunID     int64 `json:"run_id,omitempty" jsonschema:"description=The script run whose log explains it"`
 }
 
 // WorkflowStep is the position of the current status in the manifest,
 // counted from 1.
 type WorkflowStep struct {
-	Index int `json:"index"`
-	Total int `json:"total"`
+	Index int `json:"index" jsonschema:"description=The position of the current status in the manifest\\, from 1"`
+	Total int `json:"total" jsonschema:"description=The number of statuses the manifest declares"`
 }
 
 // workflowAttention derives the attention summary of an open workflow task

@@ -31,20 +31,20 @@ func TestChatListFeedAndReadMark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := listed.(map[string]any)
-	if list["customer"] != "user:customer" {
-		t.Fatalf("customer = %v", list["customer"])
+	list := listed.(ChatList)
+	if list.Customer != "user:customer" {
+		t.Fatalf("customer = %v", list.Customer)
 	}
-	chats := list["chats"].([]map[string]any)
+	chats := list.Chats
 	if len(chats) != 3 {
 		t.Fatalf("a reconciled agent has a conversation, a tasks and a service chat: %#v", chats)
 	}
-	if chats[0]["agent"] != "worker" || chats[0]["id"] != "dm:worker" ||
-		chats[0]["kind"] != "direct" || chats[0]["unread"] != 1 {
+	if chats[0].Agent != "worker" || chats[0].ID != "dm:worker" ||
+		chats[0].Kind != "direct" || chats[0].Unread != 1 {
 		t.Fatalf("chats = %#v", chats)
 	}
-	lastTS, _ := chats[0]["last_ts"].(string)
-	if lastTS == "" || chats[0]["last_from"] != "agent:worker" {
+	lastTS := chats[0].LastTS
+	if lastTS == "" || chats[0].LastFrom != "agent:worker" {
 		t.Fatalf("chat last message = %#v", chats[0])
 	}
 
@@ -52,14 +52,14 @@ func TestChatListFeedAndReadMark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	messages := fed.(map[string]any)["messages"].([]map[string]any)
-	if len(messages) != 2 || messages[0]["from"] != "user:customer" || messages[1]["from"] != "agent:worker" {
+	messages := fed.(ChatFeed).Messages
+	if len(messages) != 2 || messages[0].From != "user:customer" || messages[1].From != "agent:worker" {
 		t.Fatalf("feed = %#v", messages)
 	}
 
 	// The feed carries the read mark the chat was opened at, which is what the
 	// "New messages" separator is drawn from; before any read it is empty.
-	if got := fed.(map[string]any)["read_ts"]; got != "" {
+	if got := fed.(ChatFeed).ReadTS; got != "" {
 		t.Fatalf("read_ts before the first read = %v, want empty", got)
 	}
 
@@ -70,14 +70,14 @@ func TestChatListFeedAndReadMark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fed.(map[string]any)["read_ts"]; got != lastTS {
+	if got := fed.(ChatFeed).ReadTS; got != lastTS {
 		t.Fatalf("read_ts after the read = %v, want %v", got, lastTS)
 	}
 	listed, err = h(t, "chat.ls")(c, registry.Params{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := listed.(map[string]any)["chats"].([]map[string]any)[0]["unread"]; got != 0 {
+	if got := listed.(ChatList).Chats[0].Unread; got != 0 {
 		t.Fatalf("unread after read = %v, want 0", got)
 	}
 
@@ -137,11 +137,11 @@ func TestChatReadExactMovesTheMarkBackAndFeedCarriesIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, ok := fed.(map[string]any)["read_ts"].(string); !ok || got != "" {
-		t.Fatalf("read_ts before any read = %v (present %v), want an empty string", got, ok)
+	if got := fed.(ChatFeed).ReadTS; got != "" {
+		t.Fatalf("read_ts before any read = %v, want an empty string", got)
 	}
-	messages := fed.(map[string]any)["messages"].([]map[string]any)
-	first, last := messages[0]["ts"].(string), messages[1]["ts"].(string)
+	messages := fed.(ChatFeed).Messages
+	first, last := messages[0].TS, messages[1].TS
 
 	if _, err := h(t, "chat.read")(c, registry.Params{"agent": "worker", "ts": last}); err != nil {
 		t.Fatal(err)
@@ -154,14 +154,14 @@ func TestChatReadExactMovesTheMarkBackAndFeedCarriesIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := listed.(map[string]any)["chats"].([]map[string]any)[0]["unread"]; got != 1 {
+	if got := listed.(ChatList).Chats[0].Unread; got != 1 {
 		t.Fatalf("unread after marking unread = %v, want 1", got)
 	}
 	fed, err = h(t, "chat.messages")(c, registry.Params{"agent": "worker"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fed.(map[string]any)["read_ts"]; got != first {
+	if got := fed.(ChatFeed).ReadTS; got != first {
 		t.Fatalf("read_ts = %v, want %v", got, first)
 	}
 }
@@ -185,8 +185,8 @@ func TestChatUnansweredAndParticipants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	queue := listed.(map[string]any)["messages"].([]map[string]any)
-	if len(queue) != 1 || queue[0]["id"] != asked.ID || queue[0]["from"] != "user:customer" {
+	queue := listed.(ChatUnansweredList).Messages
+	if len(queue) != 1 || queue[0].ID != asked.ID || queue[0].From != "user:customer" {
 		t.Fatalf("queue = %#v", queue)
 	}
 
@@ -197,7 +197,7 @@ func TestChatUnansweredAndParticipants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := listed.(map[string]any)["count"]; got != 0 {
+	if got := listed.(ChatUnansweredList).Count; got != 0 {
 		t.Fatalf("count after the reply = %v, want 0", got)
 	}
 
@@ -205,7 +205,7 @@ func TestChatUnansweredAndParticipants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := parts.(map[string]any)["participants"].([]map[string]any)
+	rows := parts.(ChatParticipantList).Participants
 	if len(rows) != 2 {
 		t.Fatalf("participants = %#v", rows)
 	}
@@ -231,16 +231,16 @@ func TestChatMessagesAndReadAddressAChatByID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	page := fed.(map[string]any)
-	if page["chat"] != "tasks:worker" || page["agent"] != "worker" {
+	page := fed.(ChatFeed)
+	if page.Chat != "tasks:worker" || page.Agent != "worker" {
 		t.Fatalf("a chat id names its own chat and its agent: %#v", page)
 	}
-	messages := page["messages"].([]map[string]any)
-	if len(messages) != 1 || messages[0]["text"] != "DEV-1 assigned" {
+	messages := page.Messages
+	if len(messages) != 1 || messages[0].Text != "DEV-1 assigned" {
 		t.Fatalf("tasks feed = %#v", messages)
 	}
 
-	ts, _ := messages[0]["ts"].(string)
+	ts := messages[0].TS
 	if _, err := h(t, "chat.read")(c, registry.Params{"agent": "tasks:worker", "ts": ts}); err != nil {
 		t.Fatal(err)
 	}
@@ -292,8 +292,8 @@ func TestChatCreateAndParticipantCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	page := created.(map[string]any)
-	if page["chat"] != "team-alpha" || page["channel"] != "chat:team-alpha" || page["kind"] != "group" {
+	page := created.(ChatView)
+	if page.Chat != "team-alpha" || page.Channel != "chat:team-alpha" || page.Kind != "group" {
 		t.Fatalf("created chat = %#v", page)
 	}
 	principals := func() []string {
@@ -303,8 +303,8 @@ func TestChatCreateAndParticipantCommands(t *testing.T) {
 			t.Fatal(err)
 		}
 		var out []string
-		for _, row := range listed.(map[string]any)["participants"].([]map[string]any) {
-			out = append(out, row["principal"].(string))
+		for _, row := range listed.(ChatParticipantList).Participants {
+			out = append(out, row.Principal)
 		}
 		return out
 	}
@@ -352,12 +352,11 @@ func TestChatCreateAndParticipantCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, row := range listed.(map[string]any)["chats"].([]map[string]any) {
-		if row["id"] != "team-alpha" {
+	for _, row := range listed.(ChatList).Chats {
+		if row.ID != "team-alpha" {
 			continue
 		}
-		parts, _ := row["participants"].([]string)
-		if len(parts) != 3 || row["agent"] != "" {
+		if len(row.Participants) != 3 || row.Agent != "" {
 			t.Fatalf("a group chat belongs to no single agent and names its participants: %#v", row)
 		}
 		return

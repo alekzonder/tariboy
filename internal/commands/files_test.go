@@ -34,7 +34,7 @@ func TestPullConfinement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, _ := base64.StdEncoding.DecodeString(res.(map[string]any)["content"].(string))
+	raw, _ := base64.StdEncoding.DecodeString(res.(AgentPullResult).Content)
 	if string(raw) != "hello file" {
 		t.Fatalf("pulled = %q", raw)
 	}
@@ -82,7 +82,7 @@ func TestSymlinkConfinement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("legit real-subdir pull failed: %v", err)
 	}
-	if got := res.(map[string]any)["content"].(string); got != content {
+	if got := res.(AgentPullResult).Content; got != content {
 		t.Fatalf("round-tripped content = %q", got)
 	}
 
@@ -125,7 +125,7 @@ func TestServerUploadFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		abs := result.(map[string]any)["abs"].(string)
+		abs := result.(FileUploadResult).Abs
 		if !filepath.IsAbs(abs) || !strings.HasPrefix(abs, filepath.Join(c.BaseDir, "files")+string(os.PathSeparator)) || filepath.Base(abs) != "notes.txt" || abs == previous {
 			t.Fatalf("invalid upload path %q", abs)
 		}

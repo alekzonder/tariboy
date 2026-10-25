@@ -1,0 +1,152 @@
+{
+  "store.add": {
+    "name": "team",
+    "path": "$ROOT/store",
+    "source": "$ROOT/store"
+  },
+  "store.auto": {
+    "auto": {
+      "images": [
+        "reviewer"
+      ],
+      "interval_minutes": 45
+    },
+    "images": [
+      {
+        "built_version": "",
+        "error": "lstat $ROOT/store/images/broken/Tariboyfile.yaml: no such file or directory",
+        "latest_status": "missing",
+        "name": "broken",
+        "update_needed": false,
+        "version": ""
+      },
+      {
+        "built_version": "1.2.0",
+        "latest_status": "built",
+        "name": "reviewer",
+        "update_needed": true,
+        "version": "3.4.5"
+      }
+    ],
+    "name": "team",
+    "path": "$ROOT/store",
+    "source": "$ROOT/store",
+    "workflows": [
+      {
+        "error": "lstat $ROOT/store/workflows/broken/Workflowfile.yaml: no such file or directory",
+        "name": "broken",
+        "version": ""
+      }
+    ]
+  },
+  "store.auto off": {
+    "auto": {
+      "images": [],
+      "interval_minutes": 0
+    },
+    "images": [
+      {
+        "built_version": "",
+        "error": "lstat $ROOT/store/images/broken/Tariboyfile.yaml: no such file or directory",
+        "latest_status": "missing",
+        "name": "broken",
+        "update_needed": false,
+        "version": ""
+      },
+      {
+        "built_version": "1.2.0",
+        "latest_status": "built",
+        "name": "reviewer",
+        "update_needed": true,
+        "version": "3.4.5"
+      }
+    ],
+    "name": "team",
+    "path": "$ROOT/store",
+    "source": "$ROOT/store",
+    "workflows": [
+      {
+        "error": "lstat $ROOT/store/workflows/broken/Workflowfile.yaml: no such file or directory",
+        "name": "broken",
+        "version": ""
+      }
+    ]
+  },
+  "store.list": [
+    {
+      "name": "team",
+      "path": "$ROOT/store",
+      "source": "$ROOT/store"
+    }
+  ],
+  "store.list empty": [],
+  "store.refresh": {
+    "auto": {
+      "images": [],
+      "interval_minutes": 0
+    },
+    "images": [
+      {
+        "built_version": "",
+        "error": "lstat $ROOT/store/images/broken/Tariboyfile.yaml: no such file or directory",
+        "latest_status": "missing",
+        "name": "broken",
+        "update_needed": false,
+        "version": ""
+      },
+      {
+        "built_version": "1.2.0",
+        "latest_status": "built",
+        "name": "reviewer",
+        "update_needed": true,
+        "version": "3.4.5"
+      }
+    ],
+    "name": "team",
+    "path": "$ROOT/store",
+    "source": "$ROOT/store",
+    "workflows": [
+      {
+        "error": "lstat $ROOT/store/workflows/broken/Workflowfile.yaml: no such file or directory",
+        "name": "broken",
+        "version": ""
+      }
+    ]
+  },
+  "store.remove": {
+    "removed": true
+  },
+  "store.show": {
+    "auto": {
+      "images": [],
+      "interval_minutes": 0
+    },
+    "images": [
+      {
+        "built_version": "",
+        "error": "lstat $ROOT/store/images/broken/Tariboyfile.yaml: no such file or directory",
+        "latest_status": "missing",
+        "name": "broken",
+        "update_needed": false,
+        "version": ""
+      },
+      {
+        "built_version": "1.2.0",
+        "latest_status": "built",
+        "name": "reviewer",
+        "update_needed": true,
+        "version": "3.4.5"
+      }
+    ],
+    "name": "team",
+    "path": "$ROOT/store",
+    "source": "$ROOT/store",
+    "workflows": [
+      {
+        "error": "lstat $ROOT/store/workflows/broken/Workflowfile.yaml: no such file or directory",
+        "name": "broken",
+        "version": ""
+      }
+    ]
+  }
+}

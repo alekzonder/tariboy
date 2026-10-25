@@ -15,7 +15,7 @@ import (
 // efforts it supports. CLI failures come back in the catalog's error field, so
 // clients keep free-form input working.
 func harnessModels() registry.Command {
-	return registry.Command{
+	return registry.WithResult[HarnessModelCatalog](registry.Command{
 		Path:    "harness.models",
 		Summary: "List the models and efforts a harness supports on the daemon host",
 		Args: []registry.Arg{
@@ -29,15 +29,15 @@ func harnessModels() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "bad_harness", Msg: err.Error()}
 			}
-			return catalog, nil
+			return harnessModelCatalog(catalog), nil
 		},
-	}
+	})
 }
 
 // harnessCodexApprovalGet reports how this daemon starts codex: --yolo (the
 // default when nothing is stored) or --approve-for-me.
 func harnessCodexApprovalGet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[HarnessCodexApproval](registry.Command{
 		Path:    "harness.codex-approval.get",
 		Summary: "Read the codex approval mode of this daemon (yolo|approve-for-me)",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/harnesses/codex/approval-mode"},
@@ -49,15 +49,15 @@ func harnessCodexApprovalGet() registry.Command {
 			if !ok || !slices.Contains(harness.CodexApprovalModes, v) {
 				v = harness.CodexApprovalYolo
 			}
-			return map[string]any{"mode": v}, nil
+			return HarnessCodexApproval{Mode: CodexApprovalMode(v)}, nil
 		},
-	}
+	})
 }
 
 // harnessCodexApprovalSet changes the codex approval mode; codex iterations
 // started afterwards use it.
 func harnessCodexApprovalSet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[HarnessCodexApproval](registry.Command{
 		Path:    "harness.codex-approval.set",
 		Summary: "Set the codex approval mode of this daemon for the next iterations",
 		Args: []registry.Arg{
@@ -76,7 +76,7 @@ func harnessCodexApprovalSet() registry.Command {
 			if err := c.Store.AddEvent("", "config_set", string(data)); err != nil {
 				return nil, err
 			}
-			return map[string]any{"mode": mode}, nil
+			return HarnessCodexApproval{Mode: CodexApprovalMode(mode)}, nil
 		},
-	}
+	})
 }

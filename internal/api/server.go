@@ -271,8 +271,20 @@ func (s *Server) serveTeamExport(w http.ResponseWriter, r *http.Request) {
 		WriteErr(w, http.StatusBadRequest, "team_export_failed", err.Error())
 		return
 	}
-	result, _ := value.(map[string]any)
-	yamlText, _ := result["yaml"].(string)
+	// The command result is a typed struct; read its yaml field through its
+	// JSON encoding, which the api package can decode without the type.
+	var result struct {
+		YAML string `json:"yaml"`
+	}
+	encoded, err := json.Marshal(value)
+	if err == nil {
+		err = json.Unmarshal(encoded, &result)
+	}
+	if err != nil {
+		WriteErr(w, http.StatusInternalServerError, "internal", "cannot read team compose")
+		return
+	}
+	yamlText := result.YAML
 	temp, err := os.CreateTemp(s.cctx.BaseDir, ".team-export-*.tar.gz")
 	if err != nil {
 		WriteErr(w, http.StatusInternalServerError, "internal", "cannot stage export")

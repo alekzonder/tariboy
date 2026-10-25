@@ -113,13 +113,13 @@ func TestScriptCommandsExposeDefinitionsAndRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created := result.(map[string]any)
-	if created["script"].(map[string]any)["mode"] != script.ModeOnce || created["run"].(map[string]any)["status"] != script.RunPending {
+	created := result.(AgentScriptStarted)
+	if created.Script.Mode != script.ModeOnce || created.Run.Status != script.RunPending {
 		t.Fatalf("created=%#v", created)
 	}
 	runsCommand, _ := reg.Get("script.runs")
 	result, err = registry.Call(ctx, context.Background(), runsCommand, registry.Params{"name": "alice", "id": "scr-1"})
-	if err != nil || result.(map[string]any)["count"] != 1 {
+	if err != nil || result.(AgentScriptRunList).Count != 1 {
 		t.Fatalf("runs=%#v err=%v", result, err)
 	}
 }

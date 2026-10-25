@@ -500,8 +500,8 @@ func TestIterationExtendTimeoutCommand(t *testing.T) {
 	if err != nil || fc.extendName != "smoke" || fc.extendID != "smoke-1" {
 		t.Fatalf("res=%#v err=%v control=%+v", res, err, fc)
 	}
-	out := res.(map[string]any)
-	if out["shim_sync"] != "pending" || out["timeout_extensions"] != 2 {
+	out := res.(IterationTimeoutResult)
+	if out.ShimSync != "pending" || out.TimeoutExtensions != 2 {
 		t.Fatalf("result = %#v", out)
 	}
 	fc.extendErr = agent.ErrNoIterationTimeout

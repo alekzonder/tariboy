@@ -13,7 +13,7 @@ import (
 )
 
 func secretStore() registry.Command {
-	return registry.Command{
+	return registry.WithResult[SecretStored](registry.Command{
 		Path:    "secret.store",
 		Summary: "Store a secret value (write-only; used by 'secret set')",
 		// HTTP-only: the value arg must never become a CLI positional (it would
@@ -33,13 +33,13 @@ func secretStore() registry.Command {
 			if err := agentStore(c).SecretSet(p.String("name"), p.String("key"), p.String("value")); err != nil {
 				return nil, err
 			}
-			return map[string]any{"name": p.String("name"), "key": p.String("key"), "stored": true}, nil
+			return SecretStored{Name: p.String("name"), Key: p.String("key"), Stored: true}, nil
 		},
-	}
+	})
 }
 
 func secretLs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[SecretKeyList](registry.Command{
 		Path:    "secret.ls",
 		Summary: "List secret keys (values are never shown)",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -52,13 +52,13 @@ func secretLs() registry.Command {
 			if keys == nil {
 				keys = []string{}
 			}
-			return map[string]any{"keys": keys, "count": len(keys)}, nil
+			return SecretKeyList{Keys: keys, Count: len(keys)}, nil
 		},
-	}
+	})
 }
 
 func secretRm() registry.Command {
-	return registry.Command{
+	return registry.WithResult[SecretRemoved](registry.Command{
 		Path:    "secret.rm",
 		Summary: "Remove a secret",
 		Args: []registry.Arg{
@@ -73,9 +73,9 @@ func secretRm() registry.Command {
 				}
 				return nil, err // propagate real DB errors distinctly
 			}
-			return map[string]any{"removed": p.String("key")}, nil
+			return SecretRemoved{Removed: p.String("key")}, nil
 		},
-	}
+	})
 }
 
 // secretSet is CLI-local so the value can be read from stdin (never argv) and
@@ -101,7 +101,7 @@ func secretSet() registry.Command {
 			}); err != nil {
 				return nil, err
 			}
-			return map[string]any{"name": p.String("name"), "key": p.String("key"), "stored": true}, nil
+			return SecretStored{Name: p.String("name"), Key: p.String("key"), Stored: true}, nil
 		},
 	}
 }

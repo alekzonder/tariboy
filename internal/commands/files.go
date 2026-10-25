@@ -84,7 +84,7 @@ func agentCwdFor(c *registry.Ctx, name string) (string, error) {
 // serverUpload stores operator uploads independently of agents and tasks.
 func serverUpload() registry.Command {
 	const maxUpload = 16 << 20
-	return registry.Command{
+	return registry.WithResult[FileUploadResult](registry.Command{
 		Path:    "files.upload",
 		Summary: "Upload a file to the server and return its absolute path",
 		Args: []registry.Arg{
@@ -108,13 +108,13 @@ func serverUpload() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"path": result.Path, "abs": result.Abs, "bytes": len(raw)}, nil
+			return FileUploadResult{Path: result.Path, Abs: result.Abs, Bytes: len(raw)}, nil
 		},
-	}
+	})
 }
 
 func agentPull() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentPullResult](registry.Command{
 		Path:    "agent.pull",
 		Summary: "Read a base64 file from an agent's cwd (used by 'cp')",
 		Args: []registry.Arg{
@@ -135,9 +135,9 @@ func agentPull() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: "file not found"}
 			}
-			return map[string]any{"path": p.String("path"), "content": base64.StdEncoding.EncodeToString(raw)}, nil
+			return AgentPullResult{Path: p.String("path"), Content: base64.StdEncoding.EncodeToString(raw)}, nil
 		},
-	}
+	})
 }
 
 // cp is CLI-local: it reads/writes a local file and calls upload/pull on the daemon.
@@ -187,9 +187,14 @@ func cpCommand() registry.Command {
 			if err := os.WriteFile(local, data, 0o600); err != nil {
 				return nil, err
 			}
-			return map[string]any{"copied": fmt.Sprintf("%s:%s -> %s", name, remote, local)}, nil
+			return FileCopyResult{Copied: fmt.Sprintf("%s:%s -> %s", name, remote, local)}, nil
 		},
 	}
+}
+
+// FileCopyResult names the agent file cp downloaded and where it wrote it.
+type FileCopyResult struct {
+	Copied string `json:"copied"`
 }
 
 // parseCp accepts a local upload or an agent-relative download with a local destination.

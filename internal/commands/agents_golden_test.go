@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -116,72 +115,16 @@ func TestAgentsResponsesMatchGolden(t *testing.T) {
 		{label: "agent.reprovision", path: "agent.reprovision", params: registry.Params{"name": "alpha"}},
 		{label: "agent.rm", path: "agent.rm", params: registry.Params{"name": "beta", "purge": true}},
 	}
-	got := map[string]any{}
+	recorder := newGoldenRecorder(t, agentsGoldenVolatile, manifest.Digest, "$DIGEST", c.BaseDir, "$BASE")
 	for _, call := range calls {
 		fc.live = call.live
 		value, err := h(t, call.path)(c, call.params)
 		if err != nil {
 			t.Fatalf("%s: %v", call.label, err)
 		}
-		data, err := json.Marshal(value)
-		if err != nil {
-			t.Fatalf("%s: %v", call.label, err)
-		}
-		data = []byte(strings.ReplaceAll(string(data), manifest.Digest, "$DIGEST"))
-		data = []byte(strings.ReplaceAll(string(data), c.BaseDir, "$BASE"))
-		var decoded any
-		if err := json.Unmarshal(data, &decoded); err != nil {
-			t.Fatal(err)
-		}
-		got[call.label] = maskAgentsGoldenVolatile(decoded)
+		recorder.record(call.label, value)
 	}
-
-	golden := filepath.Join("testdata", "agents_responses.golden.json")
-	if *updateAgentsGolden {
-		data, err := json.MarshalIndent(got, "", "  ")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(golden, append(data, '\n'), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	data, err := os.ReadFile(golden)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var want map[string]any
-	if err := json.Unmarshal(data, &want); err != nil {
-		t.Fatal(err)
-	}
-	for label := range want {
-		if !reflect.DeepEqual(got[label], want[label]) {
-			gotJSON, _ := json.MarshalIndent(got[label], "", "  ")
-			wantJSON, _ := json.MarshalIndent(want[label], "", "  ")
-			t.Errorf("%s response changed:\n got: %s\nwant: %s", label, gotJSON, wantJSON)
-		}
-	}
-	if len(got) != len(want) {
-		t.Errorf("recorded %d responses, golden has %d", len(got), len(want))
-	}
-}
-
-func maskAgentsGoldenVolatile(value any) any {
-	switch v := value.(type) {
-	case map[string]any:
-		for key, item := range v {
-			if agentsGoldenVolatile[key] && item != "" {
-				v[key] = "$VOLATILE"
-			} else {
-				v[key] = maskAgentsGoldenVolatile(item)
-			}
-		}
-	case []any:
-		for i, item := range v {
-			v[i] = maskAgentsGoldenVolatile(item)
-		}
-	}
-	return value
+	recorder.check("agents_responses.golden.json", *updateAgentsGolden)
 }
 
 // Catches an agents.go HTTP command publishing a free-form result in the

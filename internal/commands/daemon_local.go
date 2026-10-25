@@ -79,7 +79,7 @@ func daemonStatusLocal(c *registry.Ctx, p registry.Request) (any, error) {
 		} else {
 			fmt.Fprintln(c.Out, "stopped")
 		}
-		return map[string]any{"running": false}, nil
+		return DaemonStopped{Running: false}, nil
 	}
 	if c.JSON {
 		if len(s.Raw) == 0 {

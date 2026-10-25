@@ -104,7 +104,7 @@ func invalidExitCode(raw json.RawMessage) int {
 }
 
 func workflowValidate() registry.Command {
-	return registry.Command{
+	return registry.WithResult[WorkflowImageValidation](registry.Command{
 		Path:         "workflow.validate",
 		AbsPathArgs:  []string{"path"},
 		ExitCodeFrom: invalidExitCode,
@@ -127,19 +127,16 @@ func workflowValidate() registry.Command {
 			// The same validation build runs, so validate reports every
 			// source build would refuse.
 			errs := workflowimage.Validate(f)
-			if errs == nil {
-				errs = []workflowfile.ValidationError{}
-			}
-			return map[string]any{
-				"valid":   len(errs) == 0,
-				"name":    f.Name,
-				"version": f.WorkflowVersion,
-				"pools":   nonNil(f.Pools()),
-				"files":   nonNil(f.Files()),
-				"errors":  errs,
+			return WorkflowImageValidation{
+				Valid:   len(errs) == 0,
+				Name:    f.Name,
+				Version: f.WorkflowVersion,
+				Pools:   nonNil(f.Pools()),
+				Files:   nonNil(f.Files()),
+				Errors:  workflowValidationErrors(errs),
 			}, nil
 		},
-	}
+	})
 }
 
 func nonNil(s []string) []string {
@@ -150,7 +147,7 @@ func nonNil(s []string) []string {
 }
 
 func workflowBuild() registry.Command {
-	return registry.Command{
+	return registry.WithResult[WorkflowImageBuildResult](registry.Command{
 		Path:        "workflow.build",
 		AbsPathArgs: []string{"path"},
 		Summary:     "Build a workflow image from a Workflowfile.yaml",
@@ -181,13 +178,13 @@ func workflowBuild() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"name": m.Name, "version": m.Version, "digest": m.Digest, "tags": nonNil(tags), "created": created}, nil
+			return WorkflowImageBuildResult{Name: m.Name, Version: m.Version, Digest: m.Digest, Tags: nonNil(tags), Created: created}, nil
 		},
-	}
+	})
 }
 
 func workflowLs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[WorkflowImageList](registry.Command{
 		Path:    "workflow.ls",
 		Summary: "List built workflow images",
 		HTTP:    &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/workflow-images"},
@@ -196,17 +193,17 @@ func workflowLs() registry.Command {
 			if err != nil {
 				return nil, workflowImageError(err)
 			}
-			rows := make([]map[string]any, 0, len(listed))
+			rows := make([]WorkflowImageListing, 0, len(listed))
 			for _, l := range listed {
-				rows = append(rows, map[string]any{"name": l.Name, "tag": l.Tag, "version": l.Version, "digest": l.Digest, "built_at": l.BuiltAt})
+				rows = append(rows, WorkflowImageListing{Name: l.Name, Tag: l.Tag, Version: l.Version, Digest: l.Digest, BuiltAt: l.BuiltAt})
 			}
-			return map[string]any{"workflows": rows, "count": len(rows)}, nil
+			return WorkflowImageList{Workflows: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
 func workflowInspect() registry.Command {
-	return registry.Command{
+	return registry.WithResult[WorkflowImageManifest](registry.Command{
 		Path:    "workflow.inspect",
 		Summary: "Show a workflow image manifest",
 		Args: []registry.Arg{
@@ -223,13 +220,13 @@ func workflowInspect() registry.Command {
 			if err != nil {
 				return nil, workflowImageError(err)
 			}
-			return m, nil
+			return workflowManifestFrom(m)
 		},
-	}
+	})
 }
 
 func workflowRm() registry.Command {
-	return registry.Command{
+	return registry.WithResult[WorkflowImageRemoveResult](registry.Command{
 		Path:    "workflow.rm",
 		Summary: "Remove a workflow image tag, and its content when no tag remains",
 		Args: []registry.Arg{
@@ -248,7 +245,7 @@ func workflowRm() registry.Command {
 			if err != nil {
 				return nil, workflowImageError(err)
 			}
-			return map[string]any{"name": name, "tag": tag, "removed": true, "content_removed": contentRemoved}, nil
+			return WorkflowImageRemoveResult{Name: name, Tag: tag, Removed: true, ContentRemoved: contentRemoved}, nil
 		},
-	}
+	})
 }

@@ -1,0 +1,298 @@
+{
+  "agent.alias.get": {
+    "alias": "Alpha",
+    "name": "alpha"
+  },
+  "agent.alias.set": {
+    "alias": "A",
+    "name": "alpha"
+  },
+  "agent.alias.set clear": {
+    "alias": "",
+    "name": "beta"
+  },
+  "agent.color.get": {
+    "color": "#4f8cff",
+    "name": "alpha"
+  },
+  "agent.color.set": {
+    "color": "#00ff00",
+    "name": "alpha"
+  },
+  "agent.cwd clear": {
+    "cwd": "",
+    "name": "alpha"
+  },
+  "agent.cwd read": {
+    "cwd": "$CWD",
+    "name": "alpha"
+  },
+  "agent.cwd set": {
+    "cwd": "$CWD/made",
+    "name": "alpha"
+  },
+  "agent.effort read": {
+    "effort": "high",
+    "name": "alpha"
+  },
+  "agent.effort set": {
+    "effort": "low",
+    "name": "alpha"
+  },
+  "agent.exec": {
+    "name": "alpha",
+    "status": "queued"
+  },
+  "agent.file.create dir": {
+    "created": true,
+    "path": "sub"
+  },
+  "agent.file.create file": {
+    "created": true,
+    "path": "new.txt"
+  },
+  "agent.file.delete": {
+    "deleted": true,
+    "path": "sub/moved.txt"
+  },
+  "agent.file.list": {
+    "entries": [
+      {
+        "isDir": false,
+        "mtime": "$VOLATILE",
+        "name": "blob.bin",
+        "size": 3
+      },
+      {
+        "isDir": false,
+        "mtime": "$VOLATILE",
+        "name": "notes.txt",
+        "size": 10
+      }
+    ],
+    "path": ""
+  },
+  "agent.file.list empty": {
+    "entries": [],
+    "path": "sub"
+  },
+  "agent.file.read binary": {
+    "kind": "binary",
+    "path": "blob.bin",
+    "size": 3
+  },
+  "agent.file.read text": {
+    "content": "hello file",
+    "kind": "text",
+    "path": "notes.txt",
+    "size": 10
+  },
+  "agent.file.rename": {
+    "from": "new.txt",
+    "renamed": true,
+    "to": "sub/moved.txt"
+  },
+  "agent.file.write": {
+    "path": "notes.txt",
+    "saved": true
+  },
+  "agent.harness read": {
+    "harness": "stub",
+    "name": "alpha"
+  },
+  "agent.harness set": {
+    "harness": "codex",
+    "name": "alpha"
+  },
+  "agent.interactive read": {
+    "interactive": true,
+    "name": "alpha"
+  },
+  "agent.interactive set": {
+    "interactive": false,
+    "name": "alpha"
+  },
+  "agent.model read": {
+    "model": "m1",
+    "name": "alpha"
+  },
+  "agent.model set": {
+    "model": "m2",
+    "name": "alpha"
+  },
+  "agent.notes.get": {
+    "name": "alpha",
+    "notes": "some notes"
+  },
+  "agent.notes.set": {
+    "name": "alpha",
+    "notes": "new notes"
+  },
+  "agent.pull": {
+    "content": "aGVsbG8gZmlsZQ==",
+    "path": "notes.txt"
+  },
+  "agent.screen": {
+    "screen": ""
+  },
+  "agent.send-keys items": {
+    "name": "alpha",
+    "sent": 2
+  },
+  "agent.send-keys line": {
+    "name": "alpha",
+    "sent": true
+  },
+  "agent.shell-script.get": {
+    "script": "echo hi\n"
+  },
+  "agent.shell-script.get empty": {
+    "script": ""
+  },
+  "agent.shell-script.set": {
+    "saved": true
+  },
+  "agent.status.history": {
+    "count": 2,
+    "events": [
+      {
+        "iteration_id": "",
+        "message": "second",
+        "ts": "$VOLATILE"
+      },
+      {
+        "iteration_id": "alpha-1",
+        "message": "first",
+        "ts": "$VOLATILE"
+      }
+    ]
+  },
+  "agent.status.history empty": {
+    "count": 0,
+    "events": []
+  },
+  "agent.status.history limit": {
+    "count": 1,
+    "events": [
+      {
+        "iteration_id": "",
+        "message": "second",
+        "ts": "$VOLATILE"
+      }
+    ]
+  },
+  "context.get": {
+    "context": "remember X",
+    "name": "alpha"
+  },
+  "context.get missing": {
+    "context": "",
+    "name": "beta"
+  },
+  "context.set": {
+    "name": "beta",
+    "saved": true
+  },
+  "loop.ai-stall-timeout": {
+    "ai_stall_timeout_s": 600,
+    "name": "alpha"
+  },
+  "loop.hard-timeout": {
+    "hard_timeout_s": 180,
+    "name": "alpha"
+  },
+  "loop.interval read": {
+    "interval_s": 30,
+    "name": "alpha"
+  },
+  "loop.interval set": {
+    "interval_s": 45,
+    "name": "alpha"
+  },
+  "loop.max-idle": {
+    "max_idle_iterations": 4,
+    "name": "alpha"
+  },
+  "loop.on-error": {
+    "name": "alpha",
+    "on_error": "stop"
+  },
+  "loop.on-timeout read": {
+    "name": "alpha",
+    "on_timeout": "stop"
+  },
+  "loop.on-timeout set": {
+    "name": "alpha",
+    "on_timeout": "restart"
+  },
+  "loop.schedule clear": {
+    "name": "beta",
+    "schedule": "",
+    "schedule_next_at": ""
+  },
+  "loop.schedule none": {
+    "name": "beta",
+    "schedule": "",
+    "schedule_next_at": ""
+  },
+  "loop.schedule read": {
+    "name": "alpha",
+    "schedule": "DTSTART:20261018T000000\nRRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=0",
+    "schedule_next_at": "$VOLATILE"
+  },
+  "loop.schedule set": {
+    "name": "beta",
+    "schedule": "DTSTART:20261018T000000\nRRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=0",
+    "schedule_next_at": "$VOLATILE"
+  },
+  "loop.timeout": {
+    "name": "alpha",
+    "timeout_s": 90
+  },
+  "prompt.get bare": {
+    "layers": [],
+    "name": "bare",
+    "prompt": ""
+  },
+  "prompt.get v1": {
+    "layers": [
+      {
+        "name": "system",
+        "sha256": "abc"
+      }
+    ],
+    "name": "alpha",
+    "prompt": "# You are agent alpha\ncwd: $CWD\n\n# image prompt\n\nremember X\n\n# Task Processing Order\n\nProcess the following inputs in order: one-shot, then messages, then goal.\nIf an input is absent, continue to the next section; do not run commands merely to look for that absent input.\n\n## One-shot\n\n[runtime: one-shot]\n\n## Messages\n\n[runtime: messages]\n\n## Goal\n\nNo goal selected for this iteration.\n\nUse the Native Task workflow for selected work. If a task is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n\nnew prompt\n"
+  },
+  "prompt.get v1 without layers": {
+    "layers": null,
+    "name": "beta",
+    "prompt": "# You are agent beta\ncwd: $BASE/agents/beta/workdir\n\n# beta prompt\n\nbeta context\n\n# Task Processing Order\n\nProcess the following inputs in order: one-shot, then messages, then goal.\nIf an input is absent, continue to the next section; do not run commands merely to look for that absent input.\n\n## One-shot\n\n[runtime: one-shot]\n\n## Messages\n\n[runtime: messages]\n\n## Goal\n\nNo goal selected for this iteration.\n\nUse the Native Task workflow for selected work. If a task is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n"
+  },
+  "prompt.get v2": {
+    "layers": [
+      {
+        "archive_path": "prompt/layers/000.md",
+        "category": "prompt",
+        "kind": "file",
+        "sha256": "0e19f02ca15d6060d63dc1946cc784d739c69a4cc5e6ef266a50e3b58c673f35",
+        "size": 6,
+        "source": "./prompt.md"
+      },
+      {
+        "kind": "runtime",
+        "runtime": "user-prompt"
+      }
+    ],
+    "name": "v2",
+    "prompt": "# Task Processing Order\n\nProcess the following inputs in order: one-shot, then messages, then goal.\nIf an input is absent, continue to the next section; do not run commands merely to look for that absent input.\n\n## One-shot\n\n[runtime: one-shot]\n\n## Messages\n\n[runtime: messages]\n\n## Goal\n\nNo goal selected for this iteration.\n\nUse the Native Task workflow for selected work. If a task is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n\nSTATIC\n\n# [runtime: user-prompt]\n\nUSER\n"
+  },
+  "user-prompt.get": {
+    "name": "alpha",
+    "user_prompt": "do work"
+  },
+  "user-prompt.set": {
+    "name": "alpha",
+    "saved": true
+  }
+}

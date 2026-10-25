@@ -18,7 +18,7 @@ func TestAgentColorSetReadClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["color"] != "#4f8cff" {
+	if res.(AgentColorResult).Color != "#4f8cff" {
 		t.Fatalf("read=%v", res)
 	}
 	// clear with empty

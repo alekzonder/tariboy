@@ -1,0 +1,254 @@
+{
+  "backup all": {
+    "archives": [
+      {
+        "agent": "bot",
+        "bytes": "$VOLATILE",
+        "path": "$VOLATILE",
+        "schema_version": "$VOLATILE",
+        "sha256": "$VOLATILE"
+      },
+      {
+        "agent": "old",
+        "bytes": "$VOLATILE",
+        "path": "$VOLATILE",
+        "schema_version": "$VOLATILE",
+        "sha256": "$VOLATILE"
+      }
+    ],
+    "count": 2
+  },
+  "backup all empty": {
+    "archives": null,
+    "count": 0
+  },
+  "backup bot": {
+    "agent": "bot",
+    "bytes": "$VOLATILE",
+    "path": "$VOLATILE",
+    "schema_version": "$VOLATILE",
+    "sha256": "$VOLATILE"
+  },
+  "backup bot with secrets": {
+    "agent": "bot",
+    "bytes": "$VOLATILE",
+    "path": "$VOLATILE",
+    "schema_version": "$VOLATILE",
+    "sha256": "$VOLATILE",
+    "warning": "secret values are included in this archive; store it securely"
+  },
+  "daemon.agent-shell-script.get": {
+    "script": "export A=1\n"
+  },
+  "daemon.agent-shell-script.get empty": {
+    "script": ""
+  },
+  "daemon.agent-shell-script.set": {
+    "saved": true
+  },
+  "daemon.config.get all": {
+    "log_level": "debug"
+  },
+  "daemon.config.get all empty": {},
+  "daemon.config.get key": {
+    "log_level": "debug"
+  },
+  "daemon.config.get missing key": {},
+  "daemon.config.set": {
+    "key": "log_level",
+    "value": "debug"
+  },
+  "daemon.reindex": {
+    "reindexed": 1
+  },
+  "daemon.status": {
+    "base_dir": "$BASE",
+    "http_addr": "127.0.0.1:0",
+    "message": "missing required tools: tmux, python3, git, npx, tariboy, ttasks, claude | codex | opencode | agent; install them on the daemon host",
+    "missing_tools": [
+      {
+        "install": "install tmux with the system package manager",
+        "name": "tmux",
+        "purpose": "agent terminal sessions"
+      },
+      {
+        "install": "install Python 3 with the system package manager",
+        "name": "python3",
+        "purpose": "agent tool scripts"
+      },
+      {
+        "install": "install git with the system package manager",
+        "name": "git",
+        "purpose": "adding and refreshing Stores"
+      },
+      {
+        "install": "install Node.js (npm ships npx)",
+        "name": "npx",
+        "purpose": "building images that carry skills-lock.json"
+      },
+      {
+        "install": "install the Tariboy CLI and put ~/.local/bin on PATH",
+        "name": "tariboy",
+        "purpose": "the tariboy command inside agents"
+      },
+      {
+        "install": "install the Tariboy CLI and put ~/.local/bin on PATH",
+        "name": "ttasks",
+        "purpose": "the ttasks command inside agents"
+      },
+      {
+        "install": "install Claude Code, Codex, OpenCode or Cursor Agent",
+        "name": "claude | codex | opencode | agent",
+        "purpose": "at least one agent harness"
+      }
+    ],
+    "pid": "$VOLATILE",
+    "schema_version": "$VOLATILE",
+    "started_at": "2026-07-14T10:00:00.000000000Z",
+    "state": "error",
+    "uptime_seconds": "$VOLATILE",
+    "version": "v-golden"
+  },
+  "maintenance.get after run": {
+    "last_run": {
+      "backup": "$BASE/maintenance-backups/tariboyd-20260714T100000Z.db",
+      "compacted": false,
+      "deleted": {
+        "ai_requests": 0,
+        "events": 0,
+        "messages": 0,
+        "task_idempotency": 0,
+        "tasks": 0
+      },
+      "finished_at": "2026-07-14T10:00:00.000000000Z",
+      "size_after": "$VOLATILE",
+      "size_before": "$VOLATILE",
+      "started_at": "2026-07-14T10:00:00.000000000Z",
+      "trigger": "manual"
+    },
+    "settings": {
+      "chat_retention_days": 7,
+      "compact": true,
+      "compact_threshold_pct": 10,
+      "enabled": true,
+      "keep_backups": 7,
+      "retention_days": 120,
+      "time": "04:30"
+    }
+  },
+  "maintenance.get before run": {
+    "last_run": null,
+    "settings": {
+      "chat_retention_days": 7,
+      "compact": true,
+      "compact_threshold_pct": 10,
+      "enabled": true,
+      "keep_backups": 7,
+      "retention_days": 90,
+      "time": "03:00"
+    }
+  },
+  "maintenance.run": {
+    "backup": "$BASE/maintenance-backups/tariboyd-20260714T100000Z.db",
+    "compacted": false,
+    "deleted": {
+      "ai_requests": 0,
+      "events": 0,
+      "messages": 0,
+      "task_idempotency": 0,
+      "tasks": 0
+    },
+    "finished_at": "2026-07-14T10:00:00.000000000Z",
+    "size_after": "$VOLATILE",
+    "size_before": "$VOLATILE",
+    "started_at": "2026-07-14T10:00:00.000000000Z",
+    "trigger": "manual"
+  },
+  "maintenance.set": {
+    "chat_retention_days": 7,
+    "compact": true,
+    "compact_threshold_pct": 10,
+    "enabled": true,
+    "keep_backups": 7,
+    "retention_days": 120,
+    "time": "04:30"
+  },
+  "prune all dry-run": {
+    "dry_run": true,
+    "reports": [
+      {
+        "agent": "bot",
+        "archived": [],
+        "dry_run": true,
+        "freed_bytes": 0,
+        "pruned": []
+      },
+      {
+        "agent": "old",
+        "archived": [],
+        "dry_run": true,
+        "freed_bytes": 0,
+        "pruned": [
+          "old-1",
+          "old-2"
+        ]
+      }
+    ]
+  },
+  "prune all empty": {
+    "dry_run": false,
+    "reports": null
+  },
+  "prune old dry-run": {
+    "agent": "old",
+    "archived": [],
+    "dry_run": true,
+    "freed_bytes": 0,
+    "pruned": [
+      "old-1",
+      "old-2"
+    ]
+  },
+  "restore new name": {
+    "agent": "clone",
+    "schema_version": "$VOLATILE",
+    "source_agent": "bot"
+  },
+  "restore same name": {
+    "agent": "bot",
+    "schema_version": "$VOLATILE",
+    "source_agent": "bot"
+  },
+  "retention.get default": {
+    "keep_days": 0,
+    "keep_iterations": 0,
+    "max_bytes": 0
+  },
+  "retention.get old": {
+    "default": {
+      "keep_days": 0,
+      "keep_iterations": 0,
+      "max_bytes": 500
+    },
+    "keep_days": 7,
+    "keep_iterations": 1,
+    "max_bytes": 500,
+    "override": {
+      "keep_days": 7,
+      "keep_iterations": 1,
+      "max_bytes": 0
+    }
+  },
+  "retention.set default": {
+    "agent": "default",
+    "keep_days": 0,
+    "keep_iterations": 0,
+    "max_bytes": 500
+  },
+  "retention.set old": {
+    "agent": "old",
+    "keep_days": 7,
+    "keep_iterations": 1,
+    "max_bytes": 0
+  }
+}

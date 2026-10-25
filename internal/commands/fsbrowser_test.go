@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/api"
-	"github.com/alekzonder/tariboy/internal/fsbrowser"
 	"github.com/alekzonder/tariboy/internal/registry"
 )
 
@@ -35,9 +34,9 @@ func TestFsListStatusCodes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List root: %v", err)
 	}
-	l, ok := res.(fsbrowser.Listing)
+	l, ok := res.(FsListing)
 	if !ok {
-		t.Fatalf("List root result = %T, want fsbrowser.Listing", res)
+		t.Fatalf("List root result = %T, want FsListing", res)
 	}
 	if len(l.Entries) != 1 || l.Entries[0].Name != "proj" {
 		t.Fatalf("entries = %+v, want [proj] (files filtered)", l.Entries)

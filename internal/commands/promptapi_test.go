@@ -30,7 +30,7 @@ func TestContextGetSet(t *testing.T) {
 
 	// missing CONTEXT.md reads as empty, not an error
 	res, err := h(t, "context.get")(c, registry.Params{"name": "smoke"})
-	if err != nil || res.(map[string]any)["context"] != "" {
+	if err != nil || res.(AgentContextResult).Context != "" {
 		t.Fatalf("context.get on missing file: %v err=%v", res, err)
 	}
 
@@ -38,7 +38,7 @@ func TestContextGetSet(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, err = h(t, "context.get")(c, registry.Params{"name": "smoke"})
-	if err != nil || res.(map[string]any)["context"] != "remember X" {
+	if err != nil || res.(AgentContextResult).Context != "remember X" {
 		t.Fatalf("context.get after set: %v err=%v", res, err)
 	}
 
@@ -81,16 +81,18 @@ func TestPromptGet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := res.(map[string]any)
-	prompt, _ := out["prompt"].(string)
+	out := res.(AgentPromptPreview)
+	prompt := out.Prompt
 	for _, want := range []string{"# You are agent smoke", "# image prompt", "remember X", "focus on X"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt missing %q:\n%s", want, prompt)
 		}
 	}
-	layers, ok := out["layers"].([]image.Layer)
-	if !ok || len(layers) != 1 {
-		t.Fatalf("layers = %v", out["layers"])
+	if len(out.Layers) != 1 {
+		t.Fatalf("layers = %v", out.Layers)
+	}
+	if _, ok := out.Layers[0].(image.Layer); !ok {
+		t.Fatalf("layers = %v", out.Layers)
 	}
 }
 
@@ -120,7 +122,7 @@ func TestPromptPreviewBareHasNoTaskProcessingOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := res.(map[string]any)["prompt"]; got != "" {
+	if got := res.(AgentPromptPreview).Prompt; got != "" {
 		t.Fatalf("bare preview = %q", got)
 	}
 }
@@ -164,7 +166,7 @@ func TestPromptPreviewV2UsesTemplateWithoutDrainingRuntimeMessages(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	prompt := res.(map[string]any)["prompt"].(string)
+	prompt := res.(AgentPromptPreview).Prompt
 	if !strings.Contains(prompt, "STATIC") || !strings.Contains(prompt, "[runtime: messages]") || strings.Contains(prompt, "[runtime: awaiting-replies]") || !strings.Contains(prompt, "USER") {
 		t.Fatalf("prompt = %q", prompt)
 	}
@@ -224,7 +226,7 @@ func TestPromptPreviewV2RendersAuthoritativeGoal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prompt := res.(map[string]any)["prompt"].(string)
+	prompt := res.(AgentPromptPreview).Prompt
 	for _, want := range []string{"# Task Processing Order", "## Goal", "key: " + goal.Key + "\ntitle: Render goal\npriority: P1\nstatus: open\ndescription: line one\nline two", "do not merge it yourself"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("missing %q in %s", want, prompt)

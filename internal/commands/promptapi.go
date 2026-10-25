@@ -15,7 +15,7 @@ import (
 )
 
 func contextGet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentContextResult](registry.Command{
 		Path:    "context.get",
 		Summary: "Read the agent's CONTEXT.md",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -30,13 +30,13 @@ func contextGet() registry.Command {
 			if err != nil && !os.IsNotExist(err) {
 				return nil, err
 			}
-			return map[string]any{"name": a.Name, "context": string(data)}, nil
+			return AgentContextResult{Name: a.Name, Context: string(data)}, nil
 		},
-	}
+	})
 }
 
 func contextSet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentSavedResult](registry.Command{
 		Path:    "context.set",
 		Summary: "Overwrite the agent's CONTEXT.md",
 		Args: []registry.Arg{
@@ -53,9 +53,9 @@ func contextSet() registry.Command {
 			if err := writeFileAtomic(l.ContextPath(), []byte(p.String("text"))); err != nil {
 				return nil, err
 			}
-			return map[string]any{"name": a.Name, "saved": true}, nil
+			return AgentSavedResult{Name: a.Name, Saved: true}, nil
 		},
-	}
+	})
 }
 
 // writeFileAtomic mirrors agentapi's writeContextAtomic: write to a temp file
@@ -87,7 +87,7 @@ func writeFileAtomic(path string, data []byte) error {
 }
 
 func promptGet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentPromptPreview](registry.Command{
 		Path:    "prompt.get",
 		Summary: "Preview the agent's assembled next-iteration prompt",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -112,7 +112,7 @@ func promptGet() registry.Command {
 				cwd = l.Workdir()
 			}
 			var prompt string
-			var layers any = man.Layers
+			layers := promptLayers(man.Layers)
 			goal := ""
 			if a.ImageRef != image.BareRef.String() {
 				if task, ok, err := taskgoal.NewStore(c.Store).Current(a.Name, time.Now().UTC()); err != nil {
@@ -122,7 +122,7 @@ func promptGet() registry.Command {
 				}
 			}
 			if a.ImageRef == image.BareRef.String() {
-				layers = []image.TemplateEntry{}
+				layers = AgentPromptLayers{}
 			} else if man.SchemaVersion == 2 {
 				data, err := os.ReadFile(filepath.Join(l.ImageDir(), "prompt", "template.json"))
 				if err != nil {
@@ -139,7 +139,7 @@ func promptGet() registry.Command {
 				if err != nil {
 					return nil, err
 				}
-				layers = template.Entries
+				layers = promptLayers(template.Entries)
 			} else {
 				imagePrompt, err := os.ReadFile(filepath.Join(l.ImageDir(), "PROMPT.md"))
 				if err != nil {
@@ -149,10 +149,22 @@ func promptGet() registry.Command {
 				prompt = loop.AssemblePrompt(loop.PromptParts{Agent: a.Name, Cwd: cwd, ImagePrompt: string(imagePrompt), Context: string(contextText), UserPrompt: a.UserPrompt, Goal: goal, Messages: "[runtime: messages]", OneShot: "[runtime: one-shot]", Tail: string(tail)})
 			}
 
-			out := map[string]any{"name": a.Name, "prompt": prompt, "layers": layers}
-			return out, nil
+			return AgentPromptPreview{Name: a.Name, Prompt: prompt, Layers: layers}, nil
 		},
+	})
+}
+
+// promptLayers copies items into prompt layers; nil stays nil, so it still
+// encodes as null.
+func promptLayers[T any](items []T) AgentPromptLayers {
+	if items == nil {
+		return nil
 	}
+	layers := make(AgentPromptLayers, 0, len(items))
+	for _, item := range items {
+		layers = append(layers, item)
+	}
+	return layers
 }
 
 func readManifest(path string) (image.Manifest, error) {

@@ -1,0 +1,428 @@
+{
+  "image.build default tags": {
+    "digest": "$VOLATILE",
+    "layers": 0,
+    "name": "reviewer",
+    "tag": "1.2.0"
+  },
+  "image.build one tag": {
+    "digest": "$VOLATILE",
+    "layers": 0,
+    "name": "solo",
+    "tag": "latest"
+  },
+  "image.build two tags": {
+    "images": [
+      {
+        "digest": "$VOLATILE",
+        "layers": 0,
+        "name": "demo",
+        "tag": "v1"
+      },
+      {
+        "digest": "$VOLATILE",
+        "layers": 0,
+        "name": "demo",
+        "tag": "v2"
+      }
+    ]
+  },
+  "image.file": {
+    "content": "REVIEW THE CHANGE",
+    "path": "prompt/layers/000-task.md"
+  },
+  "image.files": {
+    "count": 5,
+    "files": [
+      {
+        "is_dir": false,
+        "path": "manifest.json",
+        "size": "$VOLATILE"
+      },
+      {
+        "is_dir": false,
+        "path": "prompt/layers/000-task.md",
+        "size": 17
+      },
+      {
+        "is_dir": false,
+        "path": "prompt/template.json",
+        "size": 368
+      },
+      {
+        "is_dir": false,
+        "path": "skills/golden-review/SKILL.md",
+        "size": 73
+      },
+      {
+        "is_dir": false,
+        "path": "skills/golden-review/notes/checklist.md",
+        "size": 5
+      }
+    ]
+  },
+  "image.inspect plain": {
+    "built_at": "$VOLATILE",
+    "digest": "$VOLATILE",
+    "env": null,
+    "harness": {
+      "interactive": false,
+      "type": ""
+    },
+    "layers": null,
+    "name": "demo",
+    "parents": null,
+    "plugins": [],
+    "policy": {},
+    "prompt_template_sha256": "c3c6883f44974e878eb4a5ff6a4499ddd47a63f5ee78f2fe2ce99a1f8ec1b81e",
+    "requires_secrets": null,
+    "schema_version": 2,
+    "tag": "v1"
+  },
+  "image.inspect versioned": {
+    "built_at": "$VOLATILE",
+    "digest": "$VOLATILE",
+    "env": null,
+    "harness": {
+      "interactive": false,
+      "type": ""
+    },
+    "id": "01f3d379e8f317f76438cb2ef31a15ddecfb77d09aad408bf0e5ab4b202a94ac",
+    "image_version": "1.2.0",
+    "layers": null,
+    "name": "reviewer",
+    "parents": null,
+    "plugins": [],
+    "policy": {},
+    "prompt_template_sha256": "e2471afeb85b787e745ae9f57f9fec97ae9ee254bf7817aa076018199e2f3563",
+    "requires_secrets": null,
+    "schema_version": 2,
+    "skills": [
+      {
+        "archive_root": "skills/golden-review",
+        "category": "source",
+        "description": "Review golden changes.",
+        "file_count": 2,
+        "name": "golden-review",
+        "size": 78,
+        "source": "./skills/golden-review",
+        "tree_sha256": "18bae402cb553b64ac055fddff1e3f16c95da94fc6d50100d5cecedc0b273a01"
+      }
+    ],
+    "tag": "latest"
+  },
+  "image.ls": {
+    "count": 6,
+    "images": [
+      {
+        "bare": false,
+        "built_at": "$VOLATILE",
+        "current_agents": null,
+        "digest": "$VOLATILE",
+        "exportable": true,
+        "name": "demo",
+        "pending_agents": [
+          "dev-b"
+        ],
+        "schema_version": 2,
+        "source_available": true,
+        "source_cwd": "$ROOT/plain",
+        "source_digest": "$VOLATILE",
+        "tag": "v1"
+      },
+      {
+        "bare": false,
+        "built_at": "$VOLATILE",
+        "current_agents": null,
+        "digest": "$VOLATILE",
+        "exportable": true,
+        "name": "demo",
+        "pending_agents": null,
+        "schema_version": 2,
+        "source_available": true,
+        "source_cwd": "$ROOT/plain",
+        "source_digest": "$VOLATILE",
+        "tag": "v2"
+      },
+      {
+        "bare": false,
+        "built_at": "$VOLATILE",
+        "current_agents": null,
+        "digest": "$VOLATILE",
+        "exportable": true,
+        "name": "drafter",
+        "pending_agents": null,
+        "schema_version": 2,
+        "source": "drafter",
+        "source_digest": "$VOLATILE",
+        "tag": "latest"
+      },
+      {
+        "bare": false,
+        "built_at": "$VOLATILE",
+        "current_agents": null,
+        "digest": "$VOLATILE",
+        "exportable": true,
+        "image_version": "1.2.0",
+        "name": "reviewer",
+        "pending_agents": null,
+        "schema_version": 2,
+        "source_available": true,
+        "source_cwd": "$ROOT/versioned",
+        "source_digest": "$VOLATILE",
+        "tag": "1.2.0"
+      },
+      {
+        "bare": false,
+        "built_at": "$VOLATILE",
+        "current_agents": [
+          "dev-a",
+          "dev-b"
+        ],
+        "digest": "$VOLATILE",
+        "exportable": true,
+        "image_version": "1.2.0",
+        "name": "reviewer",
+        "pending_agents": null,
+        "schema_version": 2,
+        "source_available": true,
+        "source_cwd": "$ROOT/versioned",
+        "source_digest": "$VOLATILE",
+        "tag": "latest"
+      },
+      {
+        "bare": false,
+        "built_at": "$VOLATILE",
+        "current_agents": null,
+        "digest": "$VOLATILE",
+        "exportable": true,
+        "name": "solo",
+        "pending_agents": null,
+        "schema_version": 2,
+        "source_available": true,
+        "source_cwd": "$ROOT/plain",
+        "source_digest": "$VOLATILE",
+        "tag": "latest"
+      }
+    ]
+  },
+  "image.prompt": {
+    "prompt": "REVIEW THE CHANGE"
+  },
+  "image.provenance absent": {
+    "ref": "drafter:latest",
+    "source_available": false,
+    "source_cwd": null
+  },
+  "image.provenance versioned": {
+    "built_at": "$VOLATILE",
+    "digest": "$VOLATILE",
+    "git_commit": "",
+    "lock_digest": "",
+    "ref": "reviewer:1.2.0",
+    "repository_id": "",
+    "source_available": true,
+    "source_cwd": "$ROOT/versioned",
+    "source_digest": "$VOLATILE",
+    "source_name": "reviewer"
+  },
+  "image.provenance with snapshot": {
+    "built_at": "$VOLATILE",
+    "digest": "$VOLATILE",
+    "git_commit": "97cf20ec0c8542f54b68904521be6a2ca85552a1",
+    "lock_digest": "",
+    "ref": "demo:v1",
+    "repository_id": "tariboy",
+    "source_available": true,
+    "source_cwd": "$ROOT/plain",
+    "source_digest": "$VOLATILE",
+    "source_name": "demo"
+  },
+  "image.rm": {
+    "removed": "solo:latest"
+  },
+  "image.source.build": {
+    "built_at": "$VOLATILE",
+    "digest": "$VOLATILE",
+    "layers": 0,
+    "ref": "drafter:latest"
+  },
+  "image.source.create": {
+    "created_at": "$VOLATILE",
+    "name": "drafter",
+    "provenance": {},
+    "schema_version": 2,
+    "updated_at": "$VOLATILE"
+  },
+  "image.source.create broken": {
+    "created_at": "$VOLATILE",
+    "name": "broken",
+    "provenance": {},
+    "schema_version": 2,
+    "updated_at": "$VOLATILE"
+  },
+  "image.source.file.get": {
+    "content": "Draft the reply.",
+    "path": "PROMPT.md"
+  },
+  "image.source.file.put": {
+    "path": "Tariboyfile.yaml",
+    "saved": true
+  },
+  "image.source.files": {
+    "count": 2,
+    "files": [
+      {
+        "path": "PROMPT.md",
+        "size": 16
+      },
+      {
+        "path": "Tariboyfile.yaml",
+        "size": 51
+      }
+    ]
+  },
+  "image.source.inspect built": {
+    "created_at": "$VOLATILE",
+    "last_build": {
+      "built_at": "$VOLATILE",
+      "digest": "$VOLATILE",
+      "ref": "drafter:latest"
+    },
+    "name": "drafter",
+    "provenance": {},
+    "schema_version": 2,
+    "updated_at": "$VOLATILE"
+  },
+  "image.source.inspect unbuilt": {
+    "created_at": "$VOLATILE",
+    "name": "broken",
+    "provenance": {},
+    "schema_version": 2,
+    "updated_at": "$VOLATILE"
+  },
+  "image.source.ls": {
+    "count": 2,
+    "sources": [
+      {
+        "created_at": "$VOLATILE",
+        "name": "broken",
+        "provenance": {},
+        "schema_version": 2,
+        "updated_at": "$VOLATILE"
+      },
+      {
+        "created_at": "$VOLATILE",
+        "last_build": {
+          "built_at": "$VOLATILE",
+          "digest": "$VOLATILE",
+          "ref": "drafter:latest"
+        },
+        "name": "drafter",
+        "provenance": {},
+        "schema_version": 2,
+        "updated_at": "$VOLATILE"
+      }
+    ]
+  },
+  "image.source.rm": {
+    "removed": "broken"
+  },
+  "image.source.validate invalid": {
+    "diagnostics": [
+      {
+        "message": "parse $ROOT/base/image-sources/broken/Tariboyfile.yaml: yaml: line 1: did not find expected node content",
+        "path": "Tariboyfile.yaml"
+      }
+    ],
+    "valid": false
+  },
+  "image.source.validate valid": {
+    "diagnostics": [],
+    "valid": true
+  },
+  "image.template": {
+    "entries": [
+      {
+        "archive_path": "prompt/layers/000-task.md",
+        "category": "source",
+        "kind": "file",
+        "sha256": "43b30c54bc3111735746001e2ca60e3f8063c2600f6a87a8f1d58033be018037",
+        "size": 17,
+        "source": "./task.md"
+      }
+    ],
+    "schema_version": 2,
+    "sha256": "e2471afeb85b787e745ae9f57f9fec97ae9ee254bf7817aa076018199e2f3563"
+  },
+  "image.validate bad name": {
+    "diagnostics": [
+      {
+        "message": "image name is required",
+        "path": "name/tag"
+      }
+    ],
+    "plugins": [],
+    "schema_version": 0,
+    "skills": [],
+    "template": null,
+    "valid": false,
+    "warnings": []
+  },
+  "image.validate bad path": {
+    "diagnostics": [
+      {
+        "message": "stat $ROOT/missing: no such file or directory",
+        "path": "Tariboyfile.yaml"
+      }
+    ],
+    "plugins": [],
+    "schema_version": 0,
+    "skills": [],
+    "template": null,
+    "valid": false,
+    "warnings": []
+  },
+  "image.validate valid": {
+    "diagnostics": [],
+    "plugins": [],
+    "schema_version": 2,
+    "skills": [
+      {
+        "archive_root": "skills/golden-review",
+        "category": "source",
+        "description": "Review golden changes.",
+        "file_count": 2,
+        "name": "golden-review",
+        "size": 78,
+        "source": "./skills/golden-review",
+        "tree_sha256": "18bae402cb553b64ac055fddff1e3f16c95da94fc6d50100d5cecedc0b273a01"
+      }
+    ],
+    "template": {
+      "entries": [
+        {
+          "archive_path": "prompt/layers/000-task.md",
+          "category": "source",
+          "kind": "file",
+          "sha256": "43b30c54bc3111735746001e2ca60e3f8063c2600f6a87a8f1d58033be018037",
+          "size": 17,
+          "source": "./task.md"
+        }
+      ],
+      "schema_version": 2,
+      "sha256": "e2471afeb85b787e745ae9f57f9fec97ae9ee254bf7817aa076018199e2f3563"
+    },
+    "valid": true,
+    "warnings": [
+      {
+        "message": "skill golden-review is also visible in cwd scope; native harness precedence applies",
+        "path": "skills[0]"
+      },
+      {
+        "message": "identity placeholder is omitted",
+        "path": "prompts"
+      }
+    ]
+  }
+}

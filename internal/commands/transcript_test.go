@@ -32,9 +32,9 @@ func TestTranscriptHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := out.(map[string]any)
-	if m["count"].(int) != 1 {
-		t.Fatalf("want 1 call, got %v", m["count"])
+	m := out.(TranscriptResult)
+	if m.Count != 1 {
+		t.Fatalf("want 1 call, got %v", m.Count)
 	}
 	b, err := json.Marshal(m)
 	if err != nil {
@@ -51,9 +51,9 @@ func TestTranscriptHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rm := rawOut.(map[string]any)
-	if rm["count"].(int) != 1 {
-		t.Fatalf("want 1 raw call, got %v", rm["count"])
+	rm := rawOut.(TranscriptResult)
+	if rm.Count != 1 {
+		t.Fatalf("want 1 raw call, got %v", rm.Count)
 	}
 	rb, err := json.Marshal(rm)
 	if err != nil {

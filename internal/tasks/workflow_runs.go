@@ -47,7 +47,7 @@ type ScriptRun struct {
 	PID *int `json:"-"`
 	// RequestID is the transition request a check belongs to, 0 for a watch;
 	// the Goal block and Desktop match a failed request to its run by it.
-	RequestID int64 `json:"request_id,omitempty"`
+	RequestID int64 `json:"request_id,omitempty" jsonschema:"description=The transition request a check run belongs to; absent for a watch run"`
 }
 
 // RunJob is everything the worker needs to execute one pending run.
