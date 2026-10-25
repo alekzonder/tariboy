@@ -1,17 +1,21 @@
 #!/usr/bin/env node
-// Initial JavaScript budget of the Desktop/Android bundle. Builds the production
-// UI into a temporary directory, reads Vite's manifest, and sums the entry chunk
-// plus every chunk it imports statically: what the WebView must download and
-// parse before the first screen. Lazily loaded chunks are not counted. Sizes are
+// JavaScript budget of the Desktop/Android bundle. Builds the production UI into
+// a temporary directory, reads Vite's manifest, and checks three sizes: the
+// entry chunk; the initial JavaScript, which is the entry chunk plus every chunk
+// it imports statically, what the WebView must download and parse before the
+// first screen; and all JavaScript, lazily loaded chunks included. Sizes are
 // minified bytes before compression.
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const LIMIT_BYTES = 800_000;
+// The sizes measured when the limits were set, plus 5% and rounded up to 1,000
+// bytes. Lower a limit when the code shrinks; raise one only with a reason in
+// the same change.
+export const LIMITS = { entry: 351_000, initial: 723_000, total: 3_215_000 };
 
-export function budgetReport(manifest, sizeOf, limit) {
+export function budgetReport(manifest, sizeOf, limits) {
   const entryKey = Object.keys(manifest).find((key) => manifest[key].isEntry);
   if (!entryKey) throw new Error("bundle budget: the Vite manifest has no entry chunk");
   const seen = new Set();
@@ -30,15 +34,26 @@ export function budgetReport(manifest, sizeOf, limit) {
   const [entry, ...deps] = files;
   const sorted = [entry, ...deps.sort((a, b) => a.file.localeCompare(b.file))];
   const total = sorted.reduce((sum, f) => sum + f.size, 0);
+  const allJs = [...new Set(Object.values(manifest).map((chunk) => chunk.file))]
+    .filter((file) => file.endsWith(".js"))
+    .reduce((sum, file) => {
+      const size = sizeOf(file);
+      if (size === undefined) throw new Error(`bundle budget: ${file} is missing from the build output`);
+      return sum + size;
+    }, 0);
   const problems = [];
-  if (entry.size > limit) problems.push(`entry chunk ${entry.file} is ${entry.size} bytes, limit ${limit} bytes`);
-  if (total > limit) problems.push(`initial JavaScript (entry and static imports) is ${total} bytes, limit ${limit} bytes`);
+  if (entry.size > limits.entry) problems.push(`entry chunk ${entry.file} is ${entry.size} bytes, limit ${limits.entry} bytes`);
+  if (total > limits.initial) problems.push(`initial JavaScript (entry and static imports) is ${total} bytes, limit ${limits.initial} bytes`);
+  if (allJs > limits.total) problems.push(`all JavaScript (every chunk, lazy ones included) is ${allJs} bytes, limit ${limits.total} bytes`);
   const listing = sorted.map((f) => `  ${String(f.size).padStart(9)}  ${f.file}`).join("\n");
   const message = problems.length
     ? `UI bundle budget exceeded: ${problems.join("; ")}.\n` +
-      `Load the new code with React.lazy or move a library into a lazily loaded chunk.\n${listing}`
-    : `UI bundle budget ok: entry ${entry.size} bytes, initial JavaScript ${total} bytes, limit ${limit} bytes.\n${listing}`;
-  return { ok: problems.length === 0, entry, total, files: sorted, message };
+      `Load the new code with React.lazy or move a library into a lazily loaded chunk. ` +
+      `If only all JavaScript is over, make the lazy code smaller, or raise LIMITS.total with a reason.\n${listing}`
+    : `UI bundle budget ok: entry ${entry.size} bytes, limit ${limits.entry} bytes; ` +
+      `initial JavaScript ${total} bytes, limit ${limits.initial} bytes; ` +
+      `all JavaScript ${allJs} bytes, limit ${limits.total} bytes.\n${listing}`;
+  return { ok: problems.length === 0, entry, total, allJs, files: sorted, message };
 }
 
 async function main() {
@@ -60,7 +75,7 @@ async function main() {
         return undefined;
       }
     };
-    const report = budgetReport(manifest, sizeOf, LIMIT_BYTES);
+    const report = budgetReport(manifest, sizeOf, LIMITS);
     (report.ok ? console.log : console.error)(report.message);
     if (!report.ok) process.exitCode = 1;
   } finally {
