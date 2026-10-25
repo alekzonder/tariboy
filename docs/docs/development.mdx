@@ -432,8 +432,8 @@ A warning therefore fails `make frontend-check` in the same way as an error.
 The configuration turns on the complete `correctness` category, adds
 selected rules from other categories, and turns on the
 [complexity and size thresholds](#frontend-complexity-thresholds). It has
-three kinds of rule override: the test override, the `.design-sync` override,
-and the temporary list. The next section describes them.
+two kinds of rule override: the test override and the `.design-sync` override.
+The next section describes them.
 
 Fix the code before you suppress a diagnostic. If a suppression is necessary,
 put an oxlint comment on the line before the diagnostic. The comment names the
@@ -458,7 +458,7 @@ turns them on as errors, so `npm run lint`, the `ui-lint` step of
 line, the function name, the value, and the limit, for example:
 
 ```text
-src/pages/UsagePage.tsx:14:16 ... The function `UsagePage` has too many lines (155). Maximum allowed is 150.
+src/pages/ExamplePage.tsx:14:16 ... The function `ExamplePage` has too many lines (155). Maximum allowed is 150.
 ```
 
 | Rule | Limit |
@@ -496,29 +496,21 @@ measure the complexity of the frontend tests.
 override turns off the six limits for `.design-sync/**`. The `correctness`
 rules still apply to it.
 
-Some functions in `ui/src/` were over a limit when the limits were turned on.
-The temporary list at the end of `ui/.oxlintrc.json` names them, after the
-comment `// Temporary: task 20, must be empty before the next release.`. Each
-temporary override raises a limit to the current maximum of its files. It does
-not turn the rule off, so a listed function cannot become larger. Do not add a
-file to the list. When you divide a listed function, remove its file from the
-list, and lower the raised limit to the new maximum. `lintPolicy.test.ts` fails
-on a temporary override that turns a rule off or changes another rule.
-
-`make ui-complexity-report` prints every function and file over a limit,
-including the temporary list. It never fails on a violation, like
+`make ui-complexity-report` prints every function and file over a limit. When
+nothing is over a limit, it prints
+`No UI function or file is over a complexity or size threshold.`. It never fails on a violation, like
 `make gocyclo-report`. Use it to plan refactoring. Each line gives the rule,
 the value and the limit, the file and line, and the oxlint message, which
 names the function. The lines are sorted by rule, the largest value first. The
 last lines give the number of violations for each rule:
 
 ```text
-complexity                18/15  src/pages/tasks/WorkflowAssignee.tsx:15     function `WorkflowAssignee` has a complexity of 18
-max-lines-per-function  239/150  src/components/MaintenanceSettings.tsx:27   The function `MaintenanceSettingsCard` has too many lines (239)
+complexity                18/15  src/pages/ExamplePanel.tsx:15   function `ExamplePanel` has a complexity of 18
+max-lines-per-function  239/150  src/pages/ExamplePage.tsx:27    The function `ExamplePage` has too many lines (239)
 
-complexity: 2
-max-lines-per-function: 9
-total: 11
+complexity: 1
+max-lines-per-function: 1
+total: 2
 ```
 
 If a test file becomes slow, divide it into one file for each scenario, for
