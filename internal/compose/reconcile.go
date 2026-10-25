@@ -73,9 +73,22 @@ func desiredPeriodSeconds(period string) int {
 
 // Down stops+removes the file's agents and removes its groups (spec §5.3). The
 // shared dir is kept unless volumes is set. Scoped strictly to the names in the
-// file; unrelated agents/groups are untouched.
+// file; unrelated agents/groups are untouched. A member the daemon does not
+// know counts as already removed and is skipped; any other error still fails.
 func (r *Runner) Down(f File, volumes bool) error {
+	agents, err := r.liveAgents()
+	if err != nil {
+		return err
+	}
+	groups, err := r.liveGroups()
+	if err != nil {
+		return err
+	}
 	for _, name := range sortedKeys(f.Agents) {
+		if _, ok := agents[name]; !ok {
+			r.logf("agent %s absent, skipping", name)
+			continue
+		}
 		r.logf("removing agent %s (purge=%v)", name, volumes)
 		q := map[string]string{"force": "true"}
 		// Mirror the group --volumes semantics onto agents: a plain down preserves
@@ -90,6 +103,10 @@ func (r *Runner) Down(f File, volumes bool) error {
 		}
 	}
 	for _, name := range sortedKeys(f.Groups) {
+		if _, ok := groups[name]; !ok {
+			r.logf("group %s absent, skipping", name)
+			continue
+		}
 		r.logf("removing group %s (volumes=%v)", name, volumes)
 		q := map[string]string{}
 		if volumes {
@@ -166,13 +183,25 @@ func (r *Runner) memberNames(f File, args []string) ([]string, error) {
 func fileHasAgent(f File, name string) bool { _, ok := f.Agents[name]; return ok }
 func fileHasGroup(f File, name string) bool { _, ok := f.Groups[name]; return ok }
 
-// Lifecycle applies an agent lifecycle verb to the selected members.
+// Lifecycle applies an agent lifecycle verb to the selected members. For stop
+// and kill, a member the daemon does not know is already stopped and is
+// skipped; start and restart of an absent member still fail.
 func (r *Runner) Lifecycle(f File, verb string, args []string) error {
 	names, err := r.memberNames(f, args)
 	if err != nil {
 		return err
 	}
+	var live map[string]liveAgent
+	if verb == "stop" || verb == "kill" {
+		if live, err = r.liveAgents(); err != nil {
+			return err
+		}
+	}
 	for _, name := range names {
+		if _, ok := live[name]; live != nil && !ok {
+			r.logf("%s %s: absent, skipping", verb, name)
+			continue
+		}
 		r.logf("%s %s", verb, name)
 		if _, err := r.call.Call("POST", "/api/agents/"+name+"/"+verb, map[string]any{}); err != nil {
 			return fmt.Errorf("%s %s: %w", verb, name, err)

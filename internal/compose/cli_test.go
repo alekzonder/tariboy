@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -297,5 +298,69 @@ func TestVerbFirst(t *testing.T) {
 		if got := strings.Join(VerbFirst(strings.Fields(in)), " "); got != want {
 			t.Fatalf("VerbFirst(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestDownSkipsAbsentMembers pins that down treats a member the daemon does
+// not know as already removed: no DELETE is sent for it (the daemon would
+// answer rm_failed: not found) and the present members are still removed.
+func TestDownSkipsAbsentMembers(t *testing.T) {
+	fc := newFake()
+	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running", "group": "research-team"}
+	fc.groups["research-team"] = map[string]any{"name": "research-team"}
+	fc.fail = map[string]error{"DELETE /api/agents/scout": errors.New("rm_failed: not found")}
+	var buf bytes.Buffer
+	r := NewRunner(fc, "", &buf)
+	f, _ := Parse([]byte(goodYAML))
+	if err := r.Down(f, false); err != nil {
+		t.Fatalf("down with an absent member: %v", err)
+	}
+	if countCalls(fc, "DELETE /api/agents/scout") != 0 {
+		t.Fatalf("absent agent must not be deleted: %v", fc.calls)
+	}
+	if countCalls(fc, "DELETE /api/agents/writer") != 1 || countCalls(fc, "DELETE /api/groups/research-team") != 1 {
+		t.Fatalf("present members not removed: %v", fc.calls)
+	}
+	if !strings.Contains(buf.String(), "agent scout absent, skipping") {
+		t.Fatalf("expected a skip line for scout, got:\n%s", buf.String())
+	}
+}
+
+func TestDownAllAbsent(t *testing.T) {
+	fc := newFake()
+	var buf bytes.Buffer
+	r := NewRunner(fc, "", &buf)
+	f, _ := Parse([]byte(goodYAML))
+	if err := r.Down(f, true); err != nil {
+		t.Fatalf("down with every member absent: %v", err)
+	}
+	for _, c := range fc.calls {
+		if strings.HasPrefix(c, "DELETE ") {
+			t.Fatalf("nothing is live, yet down sent %s: %v", c, fc.calls)
+		}
+	}
+	if !strings.Contains(buf.String(), "group research-team absent, skipping") {
+		t.Fatalf("expected a skip line for the group, got:\n%s", buf.String())
+	}
+}
+
+func TestDownStillFailsOnOtherErrors(t *testing.T) {
+	fc := newFake()
+	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team"}
+	fc.fail = map[string]error{"DELETE /api/agents/scout": errors.New("rm_failed: busy")}
+	r := NewRunner(fc, "", io.Discard)
+	f, _ := Parse([]byte(goodYAML))
+	if err := r.Down(f, false); err == nil || !strings.Contains(err.Error(), "rm_failed: busy") {
+		t.Fatalf("down must fail on a present member error, got %v", err)
+	}
+}
+
+func TestDownFailsWhenLiveListFails(t *testing.T) {
+	fc := newFake()
+	fc.fail = map[string]error{"GET /api/agents": errors.New("daemon down")}
+	r := NewRunner(fc, "", io.Discard)
+	f, _ := Parse([]byte(goodYAML))
+	if err := r.Down(f, false); err == nil {
+		t.Fatal("down must fail when the live agent list cannot be read")
 	}
 }
