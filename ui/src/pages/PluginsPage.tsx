@@ -26,6 +26,77 @@ interface Plugin {
   state: string;
 }
 
+function PluginRow({
+  plugin: pl,
+  onLogs,
+  onChanged,
+}: {
+  plugin: Plugin;
+  onLogs: () => void;
+  onChanged: () => void;
+}) {
+  const api = useApi();
+  return (
+    <tr className="border-t">
+      <td className="px-3 py-1.5 font-mono">{pl.name}</td>
+      <td className="px-3 py-1.5">{pl.version}</td>
+      <td className="px-3 py-1.5 text-xs text-muted-foreground">{(pl.types || []).join(", ")}</td>
+      <td className="px-3 py-1.5">
+        {pl.state === "running" ? (
+          <Badge>running</Badge>
+        ) : (
+          <Badge variant="secondary">{pl.state}</Badge>
+        )}
+      </td>
+      <td className="px-3 py-1.5 text-right">
+        <Button size="sm" variant="ghost" onClick={onLogs}>
+          Logs
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() =>
+            guard(
+              "restart",
+              () => api.post(`/api/plugins/${encodeURIComponent(pl.name)}/restart`),
+              { verb: "ok", after: onChanged },
+            )
+          }
+        >
+          Restart
+        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button size="sm" variant="destructive">
+              Remove
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove plugin {pl.name}?</AlertDialogTitle>
+              <AlertDialogDescription>Stops and removes the plugin (force).</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() =>
+                  guard(
+                    "remove",
+                    () => api.delete(`/api/plugins/${encodeURIComponent(pl.name)}?force=true`),
+                    { verb: "ok", after: onChanged },
+                  )
+                }
+              >
+                Remove
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </td>
+    </tr>
+  );
+}
+
 export default function PluginsPage() {
   const api = useApi();
   const [plugins, setPlugins] = useState<Plugin[]>([]);
@@ -92,70 +163,12 @@ export default function PluginsPage() {
           </thead>
           <tbody>
             {plugins.map((pl) => (
-              <tr key={pl.name} className="border-t">
-                <td className="px-3 py-1.5 font-mono">{pl.name}</td>
-                <td className="px-3 py-1.5">{pl.version}</td>
-                <td className="px-3 py-1.5 text-xs text-muted-foreground">
-                  {(pl.types || []).join(", ")}
-                </td>
-                <td className="px-3 py-1.5">
-                  {pl.state === "running" ? (
-                    <Badge>running</Badge>
-                  ) : (
-                    <Badge variant="secondary">{pl.state}</Badge>
-                  )}
-                </td>
-                <td className="px-3 py-1.5 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => void showLogs(pl.name)}>
-                    Logs
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      guard(
-                        "restart",
-                        () => api.post(`/api/plugins/${encodeURIComponent(pl.name)}/restart`),
-                        { verb: "ok", after: () => void load() },
-                      )
-                    }
-                  >
-                    Restart
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button size="sm" variant="destructive">
-                        Remove
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Remove plugin {pl.name}?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Stops and removes the plugin (force).
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() =>
-                            guard(
-                              "remove",
-                              () =>
-                                api.delete(
-                                  `/api/plugins/${encodeURIComponent(pl.name)}?force=true`,
-                                ),
-                              { verb: "ok", after: () => void load() },
-                            )
-                          }
-                        >
-                          Remove
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </td>
-              </tr>
+              <PluginRow
+                key={pl.name}
+                plugin={pl}
+                onLogs={() => void showLogs(pl.name)}
+                onChanged={() => void load()}
+              />
             ))}
             {plugins.length === 0 && (
               <tr>
