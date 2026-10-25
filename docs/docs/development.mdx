@@ -165,8 +165,9 @@ Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
 `staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. The
-frontend target runs the UI format check, UI typecheck, lint, the unused-code check, unit tests,
-branding, the initial bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
+frontend target runs the UI format check, UI typecheck, lint with the
+complexity and size thresholds, the unused-code check, unit tests,
+branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
 `scripts/npm-ci-locked.sh` for locked installs under both `ui/` and `docs/`.
 They do not write into
@@ -372,6 +373,7 @@ npm run fmt:check
 npm run lint
 npm run knip
 npm run bundle:budget
+npm run complexity:report
 npm run build:desktop
 npm run test:tasks-browser
 npm run test:images-browser
@@ -380,14 +382,27 @@ npm run build:store
 
 `npm run bundle:budget` runs `ui/scripts/bundle-budget.mjs`. It builds the
 production Desktop bundle into a temporary directory, reads the Vite manifest,
-and removes the directory afterwards. It fails when the entry chunk, or the
-entry chunk plus every chunk it imports statically, is larger than 800,000
-bytes. The sizes are minified bytes before compression. Chunks that load
-through a dynamic import, such as a lazily loaded screen, do not count. The
-failure message gives both sizes, the limit, and every counted file. A missing
-entry, manifest import, or output file is also a failure. To fix a failure,
-load the new code with `React.lazy`, or keep the library out of the groups that
-the shell imports (see [Code splitting](/docs/architecture/web-ui#code-splitting)).
+and removes the directory afterwards. It checks three sizes against
+`LIMITS` in the script:
+
+| Size | Limit in bytes |
+| --- | --- |
+| The entry chunk | 351,000 |
+| The initial JavaScript: the entry chunk and every chunk that it imports statically | 723,000 |
+| All JavaScript: every chunk, lazily loaded chunks included | 3,215,000 |
+
+The sizes are minified bytes before compression. Each limit is the size at
+the time the limit was set, plus 5%, rounded up to 1,000 bytes. When the code
+becomes smaller, lower the limit in the same change. Raise a limit only in the
+change that needs it, and give the reason in the pull request.
+
+The failure message names each size that is over its limit, gives the size and
+the limit, and lists the files of the initial JavaScript. A missing entry,
+manifest import, or output file is also a failure. To fix an entry or initial
+failure, load the new code with `React.lazy`, or keep the library out of the
+groups that the shell imports (see
+[Code splitting](/docs/architecture/web-ui#code-splitting)). To fix a failure
+of all JavaScript, make the lazily loaded code smaller.
 
 `npm run fmt` formats `ui/src`, `ui/store`, `ui/tests`, and `ui/.design-sync`
 in place with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) and
@@ -414,9 +429,11 @@ git config blame.ignoreRevsFile .git-blame-ignore-revs
 
 `npm run lint` runs oxlint with `ui/.oxlintrc.json` and `--deny-warnings`.
 A warning therefore fails `make frontend-check` in the same way as an error.
-The configuration turns on the complete `correctness` category and adds
-selected rules from other categories. It has no rule overrides for single
-files.
+The configuration turns on the complete `correctness` category, adds
+selected rules from other categories, and turns on the
+[complexity and size thresholds](#frontend-complexity-thresholds). It has
+three kinds of rule override: the test override, the `.design-sync` override,
+and the temporary list. The next section describes them.
 
 Fix the code before you suppress a diagnostic. If a suppression is necessary,
 put an oxlint comment on the line before the diagnostic. The comment names the
@@ -429,16 +446,20 @@ rule and gives the reason after `--`:
 A generated file can use one file-level `/* oxlint-disable RULE -- reason */`
 comment. Do not use `eslint-disable` comments. `ui/src/test/lintPolicy.test.ts`
 fails on an `eslint-disable` comment, on an oxlint comment without a rule or a
-reason, and on a rule override for single files. Turn off a `correctness` rule
+reason, and on a rule override of another kind. Turn off a `correctness` rule
 for the complete project only when the rule does not apply to the project, and
 write the reason in this guide.
 
 #### Frontend complexity thresholds
 
-These are the agreed size and complexity limits for the UI code. They are not
-in `ui/.oxlintrc.json` yet. The task that adds code-quality checks to
-`make check` turns them on. At the same time, that task lets
-`lintPolicy.test.ts` accept the one test override below.
+These are the size and complexity limits for the UI code. `ui/.oxlintrc.json`
+turns them on as errors, so `npm run lint`, the `ui-lint` step of
+`make frontend-check`, fails on a violation. The diagnostic gives the file, the
+line, the function name, the value, and the limit, for example:
+
+```text
+src/pages/UsagePage.tsx:14:16 ... The function `UsagePage` has too many lines (155). Maximum allowed is 150.
+```
 
 | Rule | Limit |
 | --- | --- |
@@ -470,6 +491,35 @@ files are unit tests, Playwright tests, and the shared test code in
 
 Unlike `make gocyclo`, which does not measure Go test files, these limits
 measure the complexity of the frontend tests.
+
+`ui/.design-sync` is the design synchronization tool, not app code. An
+override turns off the six limits for `.design-sync/**`. The `correctness`
+rules still apply to it.
+
+Some functions in `ui/src/` were over a limit when the limits were turned on.
+The temporary list at the end of `ui/.oxlintrc.json` names them, after the
+comment `// Temporary: task 20, must be empty before the next release.`. Each
+temporary override raises a limit to the current maximum of its files. It does
+not turn the rule off, so a listed function cannot become larger. Do not add a
+file to the list. When you divide a listed function, remove its file from the
+list, and lower the raised limit to the new maximum. `lintPolicy.test.ts` fails
+on a temporary override that turns a rule off or changes another rule.
+
+`make ui-complexity-report` prints every function and file over a limit,
+including the temporary list. It never fails on a violation, like
+`make gocyclo-report`. Use it to plan refactoring. Each line gives the rule,
+the value and the limit, the file and line, and the oxlint message, which
+names the function. The lines are sorted by rule, the largest value first. The
+last lines give the number of violations for each rule:
+
+```text
+complexity                18/15  src/pages/tasks/WorkflowAssignee.tsx:15     function `WorkflowAssignee` has a complexity of 18
+max-lines-per-function  239/150  src/components/MaintenanceSettings.tsx:27   The function `MaintenanceSettingsCard` has too many lines (239)
+
+complexity: 2
+max-lines-per-function: 9
+total: 11
+```
 
 If a test file becomes slow, divide it into one file for each scenario, for
 example `TasksWorkspace.realtime.test.tsx`. Vitest runs the files in parallel.

@@ -78,9 +78,12 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   for mixed changes or whenever ownership is unclear. Backend checks cover
   `fmt-check`, `go vet`, `staticcheck`, the `gocyclo` complexity threshold,
   Go unit tests, Store skills, and smoke contracts;
-  frontend checks cover the UI format check (oxfmt), UI typecheck, lint,
+  frontend checks cover the UI format check (oxfmt), UI typecheck, lint
+  with the complexity and size thresholds (`complexity`, `max-lines`,
+  `max-lines-per-function`, `max-params`, `max-depth`, `max-nested-callbacks`),
   unused files, exports, types and dependencies (Knip),
-  unit tests, branding, the initial UI bundle budget, and the documentation
+  unit tests, branding, the UI bundle budget for the entry chunk, the initial
+  JavaScript and all JavaScript, and the documentation
   `doctor` plus `build`. Before
   checking, they download Go
   modules and install locked UI and documentation dependencies with `npm ci`
