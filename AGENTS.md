@@ -43,6 +43,7 @@ documents that own the behavior in scope.
 | Images and groups | `docs/docs/images/index.mdx`, `docs/docs/images-and-groups/index.mdx` |
 | Plugins and agent tools | `docs/docs/plugins/index.mdx`, `docs/docs/binaries/index.mdx` |
 | Release, support, diagnostics | `docs/docs/support.mdx`, `docs/docs/security-controls.mdx`, `docs/internal-alpha-release-runbook.md` |
+| HTTP commands, response types, OpenAPI, generated UI types | `docs/docs/architecture/index.mdx` (Command registry), `docs/docs/architecture/web-ui.mdx` (API layer, API types) |
 
 When a task crosses boundaries, read all matching rows. For example, a Desktop
 terminal change requires the loop/shim, Web UI, and Desktop documentation.
@@ -77,8 +78,11 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   frontend- or documentation-only changes. Run `make check`, which runs both,
   for mixed changes or whenever ownership is unclear. Backend checks cover
   `fmt-check`, `go vet`, `staticcheck`, the `gocyclo` complexity threshold,
-  Go unit tests, Store skills, and smoke contracts;
-  frontend checks cover the UI format check (oxfmt), UI typecheck, lint
+  Go unit tests, Store skills, the Tasks mode E2E (`tariboy-tasks-e2e`), and
+  smoke contracts; the `test` and `tariboy-tasks-e2e` steps also check the
+  HTTP API against the committed OpenAPI snapshot;
+  frontend checks cover the UI format check (oxfmt), the generated API types
+  check (`ui-api-types`), UI typecheck, lint
   with the complexity and size thresholds (`complexity`, `max-lines`,
   `max-lines-per-function`, `max-params`, `max-depth`, `max-nested-callbacks`),
   unused files, exports, types and dependencies (Knip),
@@ -113,6 +117,41 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   each step covers.
 - Run `git diff --check` and inspect the complete diff before committing.
 - Resolve Critical and Important review findings before completion.
+
+## API contract
+
+The HTTP API is described by an OpenAPI spec that the command registry derives
+from Go types. The rules below keep the Go code, the committed spec, and the UI
+types in step. See "Go control plane and plugins" in `docs/docs/development.mdx`
+for the full workflow and an end-to-end example.
+
+- Every HTTP command in `internal/commands` returns a named struct, or a slice
+  of one, and declares it with `registry.WithResult[T]`. A handler never
+  returns `map[string]any`; `TestHTTPCommandsDeclareResultSchema` and
+  `TestCommandsReturnNoRawMaps` fail otherwise. A new typed operation also
+  needs a call in its domain's `typedCallSets` for
+  `TestTypedResponsesMatchOpenAPI`.
+- A change to a command's arguments, summary, route, or result type changes
+  the contract. In the same pull request, update the snapshot
+  `internal/commands/testdata/openapi.json` with
+  `go test ./internal/commands -run TestOpenAPISnapshot -update-openapi`, and
+  regenerate `ui/src/lib/api-types.generated.ts` with
+  `cd ui && npm run api-types`. `make check` fails when either is out of date
+  (the `test` and `ui-api-types` steps).
+- The UI does not declare daemon response types by hand. A domain module in
+  `ui/src/lib/api/` re-exports them from the generated file, and components
+  import them from `@/lib/api`. A hand-written type is allowed only for data
+  outside the spec: the exceptions listed under "API types" in
+  `docs/docs/architecture/web-ui.mdx`, request bodies and filters, UI state,
+  and `localStorage`. A hand-written response type carries a comment that says
+  why the spec does not cover it.
+- A new API call goes into its domain module in `ui/src/lib/api/` and uses the
+  shared transport in `client.ts`. Do not call `fetch` directly and do not put
+  `ApiTarget` in a domain method signature. No lint or test enforces this rule;
+  review does.
+- Do not edit the snapshot or the generated types file by hand. When either
+  conflicts during a rebase, do not merge it line by line: resolve the code
+  conflicts, then regenerate both files with the two commands above.
 
 Commit messages:
 
