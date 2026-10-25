@@ -41,25 +41,25 @@ func TestReadersExposeHaltReason(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			return res.(map[string]any)
+			return jsonObject(t, res)
 		}},
 		{"ps", func(t *testing.T, c *registry.Ctx) map[string]any {
 			res, err := h(t, "agent.ps")(c, registry.Params{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			rows := res.(map[string]any)["agents"].([]map[string]any)
+			rows := jsonObject(t, res)["agents"].([]any)
 			if len(rows) != 1 {
 				t.Fatalf("want 1 ps row, got %d", len(rows))
 			}
-			return rows[0]
+			return rows[0].(map[string]any)
 		}},
 		{"status", func(t *testing.T, c *registry.Ctx) map[string]any {
 			res, err := h(t, "agent.status.show")(c, registry.Params{"name": "smoke"})
 			if err != nil {
 				t.Fatal(err)
 			}
-			return res.(map[string]any)
+			return jsonObject(t, res)
 		}},
 	}
 

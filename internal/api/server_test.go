@@ -266,6 +266,49 @@ func TestHelpAndOpenAPI(t *testing.T) {
 	}
 }
 
+type openAPITypedResult struct {
+	Name string `json:"name"`
+}
+
+// Catches a result type declared with registry.WithResult not reaching the
+// generated spec as a component and a 200 response reference.
+func TestOpenAPIIncludesTypedResultComponent(t *testing.T) {
+	t.Parallel()
+	reg := registry.New()
+	if err := reg.Register(registry.WithResult[openAPITypedResult](registry.Command{
+		Path: "typed.get", Summary: "typed",
+		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/typed"},
+		Handler: func(*registry.Ctx, registry.Request) (any, error) { return openAPITypedResult{}, nil },
+	})); err != nil {
+		t.Fatal(err)
+	}
+	srv := NewServer(reg, &registry.Ctx{Version: "test", Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/openapi.json", nil))
+	var body struct {
+		Result struct {
+			Paths map[string]map[string]struct {
+				Responses map[string]struct {
+					Content map[string]struct {
+						Schema struct{ Properties map[string]map[string]any }
+					}
+				}
+			}
+			Components struct{ Schemas map[string]map[string]any }
+		}
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Result.Components.Schemas["openAPITypedResult"]["type"] != "object" {
+		t.Fatalf("components = %#v", body.Result.Components.Schemas)
+	}
+	result := body.Result.Paths["/api/typed"]["get"].Responses["200"].Content["application/json"].Schema.Properties["result"]
+	if result["$ref"] != "#/components/schemas/openAPITypedResult" {
+		t.Fatalf("200 result schema = %#v", result)
+	}
+}
+
 func TestOpenAPIRepeatableArgIsArray(t *testing.T) {
 	t.Parallel()
 	schema := openAPIArgSchema(registry.Arg{Name: "tag", Type: registry.String, Repeatable: true, Help: "target tags"})

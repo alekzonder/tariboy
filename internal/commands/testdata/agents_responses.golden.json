@@ -1,0 +1,482 @@
+{
+  "agent.budget.get alpha": {
+    "day_spent_usd": 0,
+    "day_usd": 2,
+    "exhausted": null,
+    "hour_spent_usd": 0,
+    "hour_usd": 1,
+    "month_spent_usd": 0,
+    "month_usd": 4,
+    "week_spent_usd": 0,
+    "week_usd": 3
+  },
+  "agent.budget.set beta": {
+    "day_spent_usd": 0,
+    "day_usd": 2,
+    "exhausted": null,
+    "hour_spent_usd": 0,
+    "hour_usd": 1.5,
+    "month_spent_usd": 0,
+    "month_usd": 4,
+    "week_spent_usd": 0,
+    "week_usd": 3
+  },
+  "agent.goal-delivery-cooldown alpha": {
+    "goal_delivery_cooldown_s": 90,
+    "goal_enabled": false,
+    "goal_wait_customer_timeout_s": 120,
+    "name": "alpha"
+  },
+  "agent.goal-enabled alpha": {
+    "goal_delivery_cooldown_s": 60,
+    "goal_enabled": false,
+    "goal_wait_customer_timeout_s": 300,
+    "name": "alpha"
+  },
+  "agent.goal-wait-customer-timeout alpha": {
+    "goal_delivery_cooldown_s": 60,
+    "goal_enabled": false,
+    "goal_wait_customer_timeout_s": 120,
+    "name": "alpha"
+  },
+  "agent.image.cancel alpha": {
+    "current": {
+      "digest": "$DIGEST",
+      "error": "",
+      "image_version": "1.0.0",
+      "ref": "reviewer:latest"
+    },
+    "name": "alpha",
+    "next": {
+      "digest": "$DIGEST",
+      "error": "",
+      "image_version": "1.0.0",
+      "reason": "ref_moved",
+      "ref": "reviewer:latest"
+    },
+    "pending": {
+      "digest": "",
+      "error": "",
+      "ref": ""
+    }
+  },
+  "agent.image.set alpha": {
+    "current": {
+      "digest": "$DIGEST",
+      "error": "",
+      "image_version": "1.0.0",
+      "ref": "reviewer:latest"
+    },
+    "name": "alpha",
+    "next": {
+      "digest": "$DIGEST",
+      "error": "",
+      "image_version": "1.0.0",
+      "reason": "pending",
+      "ref": "reviewer:latest"
+    },
+    "pending": {
+      "digest": "$DIGEST",
+      "error": "",
+      "ref": "reviewer:latest"
+    }
+  },
+  "agent.image.status alpha": {
+    "current": {
+      "digest": "$DIGEST",
+      "error": "",
+      "image_version": "1.0.0",
+      "ref": "reviewer:latest"
+    },
+    "name": "alpha",
+    "next": {
+      "digest": "$DIGEST",
+      "error": "",
+      "image_version": "1.0.0",
+      "reason": "ref_moved",
+      "ref": "reviewer:latest"
+    },
+    "pending": {
+      "digest": "",
+      "error": "",
+      "ref": ""
+    }
+  },
+  "agent.image.status beta": {
+    "current": {
+      "digest": "",
+      "error": "invalid pinned image id",
+      "ref": "missing:latest"
+    },
+    "name": "beta",
+    "next": {
+      "digest": "",
+      "error": "image missing:latest not found",
+      "reason": "ref_moved",
+      "ref": "missing:latest"
+    },
+    "pending": {
+      "digest": "",
+      "error": "",
+      "ref": ""
+    }
+  },
+  "agent.inspect alpha": {
+    "ai_stall_timeout_s": 1800,
+    "alias": "",
+    "budget": {
+      "day_spent_usd": 0,
+      "day_usd": 2,
+      "exhausted": null,
+      "hour_spent_usd": 0,
+      "hour_usd": 1,
+      "month_spent_usd": 0,
+      "month_usd": 4,
+      "week_spent_usd": 0,
+      "week_usd": 3
+    },
+    "color": "",
+    "configured_cwd": "/srv/alpha",
+    "current_goal_task_key": "",
+    "cwd": "/srv/alpha",
+    "digest": "$DIGEST",
+    "effort": "high",
+    "enabled": true,
+    "env": {
+      "A": "1"
+    },
+    "error_reason": "halted: boom",
+    "goal_delivery_cooldown_s": 60,
+    "goal_enabled": true,
+    "goal_wait_customer_timeout_s": 300,
+    "group": "",
+    "halt_kind": "error",
+    "halt_reason": "halted: boom",
+    "hard_timeout_s": 120,
+    "harness": "stub",
+    "image": "reviewer:latest",
+    "interactive": true,
+    "interval_s": 30,
+    "max_idle_iterations": 3,
+    "messages_batch": 5,
+    "messages_max_queue": 50,
+    "model": "m1",
+    "name": "alpha",
+    "notes": "",
+    "on_error": "restart",
+    "on_timeout": "stop",
+    "plugins": [
+      "context"
+    ],
+    "schedule": "DTSTART:20261018T000000\nRRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=0",
+    "schedule_next_at": "$VOLATILE",
+    "state": "idle",
+    "timeout_s": 60,
+    "user_prompt": "do work"
+  },
+  "agent.inspect beta": {
+    "ai_stall_timeout_s": 1800,
+    "alias": "",
+    "budget": {
+      "day_spent_usd": 0,
+      "day_usd": 0,
+      "exhausted": null,
+      "hour_spent_usd": 0,
+      "hour_usd": 0,
+      "month_spent_usd": 0,
+      "month_usd": 0,
+      "week_spent_usd": 0,
+      "week_usd": 0
+    },
+    "color": "",
+    "configured_cwd": "",
+    "current_goal_task_key": "",
+    "cwd": "$BASE/agents/beta/workdir",
+    "digest": "",
+    "effort": "",
+    "enabled": false,
+    "env": {},
+    "goal_delivery_cooldown_s": 60,
+    "goal_enabled": true,
+    "goal_wait_customer_timeout_s": 300,
+    "group": "",
+    "halt_kind": "idle_limit",
+    "halt_reason": "idle_limit: 3 idle iterations",
+    "hard_timeout_s": 0,
+    "harness": "",
+    "image": "missing:latest",
+    "interactive": false,
+    "interval_s": 0,
+    "max_idle_iterations": 0,
+    "messages_batch": 10,
+    "messages_max_queue": 10,
+    "model": "",
+    "name": "beta",
+    "notes": "",
+    "on_error": "",
+    "on_timeout": "",
+    "plugins": [],
+    "schedule": "",
+    "schedule_next_at": "",
+    "state": "idle",
+    "timeout_s": 0,
+    "user_prompt": ""
+  },
+  "agent.inspect gamma stalled": {
+    "ai_stall_timeout_s": 300,
+    "alias": "",
+    "budget": {
+      "day_spent_usd": 0,
+      "day_usd": 0,
+      "exhausted": null,
+      "hour_spent_usd": 0,
+      "hour_usd": 0,
+      "month_spent_usd": 0,
+      "month_usd": 0,
+      "week_spent_usd": 0,
+      "week_usd": 0
+    },
+    "color": "",
+    "configured_cwd": "",
+    "current_goal_task_key": "",
+    "cwd": "$BASE/agents/gamma/workdir",
+    "digest": "",
+    "effort": "",
+    "enabled": false,
+    "env": {},
+    "error_reason": "agent stalled - no AI-proxy requests for 300 seconds",
+    "goal_delivery_cooldown_s": 60,
+    "goal_enabled": true,
+    "goal_wait_customer_timeout_s": 300,
+    "group": "",
+    "hard_timeout_s": 0,
+    "harness": "",
+    "image": "",
+    "interactive": false,
+    "interval_s": 0,
+    "max_idle_iterations": 0,
+    "messages_batch": 10,
+    "messages_max_queue": 100,
+    "model": "",
+    "name": "gamma",
+    "notes": "",
+    "on_error": "",
+    "on_timeout": "",
+    "plugins": [],
+    "schedule": "",
+    "schedule_next_at": "",
+    "state": "error",
+    "timeout_s": 0,
+    "user_prompt": ""
+  },
+  "agent.kill": {
+    "action": "kill",
+    "name": "alpha"
+  },
+  "agent.ps": {
+    "agents": [
+      {
+        "ai_stall_timeout_s": 1800,
+        "alias": "",
+        "budget": {
+          "day_spent_usd": 0,
+          "day_usd": 2,
+          "exhausted": null,
+          "hour_spent_usd": 0,
+          "hour_usd": 1,
+          "month_spent_usd": 0,
+          "month_usd": 4,
+          "week_spent_usd": 0,
+          "week_usd": 3
+        },
+        "color": "",
+        "current_goal_task_key": "",
+        "cwd": "/srv/alpha",
+        "enabled": true,
+        "error_reason": "halted: boom",
+        "goal_delivery_cooldown_s": 60,
+        "goal_enabled": true,
+        "goal_wait_customer_timeout_s": 300,
+        "group": "",
+        "halt_kind": "error",
+        "halt_reason": "halted: boom",
+        "harness": "stub",
+        "image": "reviewer:latest",
+        "interactive": true,
+        "interval_s": 30,
+        "max_idle_iterations": 3,
+        "name": "alpha",
+        "on_error": "restart",
+        "on_timeout": "stop",
+        "schedule": "DTSTART:20261018T000000\nRRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=0",
+        "schedule_next_at": "$VOLATILE",
+        "state": "idle",
+        "timeout_s": 60
+      },
+      {
+        "ai_stall_timeout_s": 1800,
+        "alias": "",
+        "budget": {
+          "day_spent_usd": 0,
+          "day_usd": 0,
+          "exhausted": null,
+          "hour_spent_usd": 0,
+          "hour_usd": 0,
+          "month_spent_usd": 0,
+          "month_usd": 0,
+          "week_spent_usd": 0,
+          "week_usd": 0
+        },
+        "color": "",
+        "current_goal_task_key": "",
+        "cwd": "",
+        "enabled": false,
+        "goal_delivery_cooldown_s": 60,
+        "goal_enabled": true,
+        "goal_wait_customer_timeout_s": 300,
+        "group": "",
+        "halt_kind": "idle_limit",
+        "halt_reason": "idle_limit: 3 idle iterations",
+        "harness": "",
+        "image": "missing:latest",
+        "interactive": false,
+        "interval_s": 0,
+        "max_idle_iterations": 0,
+        "name": "beta",
+        "on_error": "",
+        "on_timeout": "",
+        "schedule": "",
+        "schedule_next_at": "",
+        "state": "idle",
+        "timeout_s": 0
+      },
+      {
+        "ai_stall_timeout_s": 300,
+        "alias": "",
+        "budget": {
+          "day_spent_usd": 0,
+          "day_usd": 0,
+          "exhausted": null,
+          "hour_spent_usd": 0,
+          "hour_usd": 0,
+          "month_spent_usd": 0,
+          "month_usd": 0,
+          "week_spent_usd": 0,
+          "week_usd": 0
+        },
+        "color": "",
+        "current_goal_task_key": "",
+        "cwd": "",
+        "enabled": false,
+        "goal_delivery_cooldown_s": 60,
+        "goal_enabled": true,
+        "goal_wait_customer_timeout_s": 300,
+        "group": "",
+        "harness": "",
+        "image": "",
+        "interactive": false,
+        "interval_s": 0,
+        "max_idle_iterations": 0,
+        "name": "gamma",
+        "on_error": "",
+        "on_timeout": "",
+        "schedule": "",
+        "schedule_next_at": "",
+        "state": "idle",
+        "timeout_s": 0
+      }
+    ],
+    "count": 3
+  },
+  "agent.reprovision": {
+    "name": "alpha",
+    "state": "idle"
+  },
+  "agent.restart": {
+    "action": "restart",
+    "name": "alpha"
+  },
+  "agent.rm": {
+    "purged": true,
+    "removed": "beta"
+  },
+  "agent.run": {
+    "goal_delivery_cooldown_s": 60,
+    "goal_enabled": false,
+    "goal_wait_customer_timeout_s": 300,
+    "name": "delta",
+    "state": "idle"
+  },
+  "agent.start": {
+    "action": "start",
+    "name": "alpha"
+  },
+  "agent.status.show alpha": {
+    "active_iteration": {
+      "effective_deadline": "2026-07-14T10:01:00.000000000Z",
+      "hard_timeout_deadline": "2026-07-14T10:02:00.000000000Z",
+      "id": "alpha-1",
+      "started_at": "2026-07-14T10:00:00Z",
+      "timeout_deadline": "2026-07-14T10:01:00.000000000Z",
+      "timeout_extensions": 0,
+      "timeout_period_s": 60
+    },
+    "budget": {
+      "day_spent_usd": 0,
+      "day_usd": 2,
+      "exhausted": null,
+      "hour_spent_usd": 0,
+      "hour_usd": 1,
+      "month_spent_usd": 0,
+      "month_usd": 4,
+      "week_spent_usd": 0,
+      "week_usd": 3
+    },
+    "enabled": true,
+    "error_reason": "halted: boom",
+    "halt_kind": "error",
+    "halt_reason": "halted: boom",
+    "iterations": 1,
+    "last_iteration": "running",
+    "last_iteration_id": "alpha-1",
+    "messages_max_queue": 50,
+    "messages_pending": 0,
+    "messages_queue_full": false,
+    "name": "alpha",
+    "server_now": "$VOLATILE",
+    "state": "idle",
+    "status_message": "",
+    "status_updated": ""
+  },
+  "agent.status.show beta": {
+    "budget": {
+      "day_spent_usd": 0,
+      "day_usd": 0,
+      "exhausted": null,
+      "hour_spent_usd": 0,
+      "hour_usd": 0,
+      "month_spent_usd": 0,
+      "month_usd": 0,
+      "week_spent_usd": 0,
+      "week_usd": 0
+    },
+    "enabled": false,
+    "halt_kind": "idle_limit",
+    "halt_reason": "idle_limit: 3 idle iterations",
+    "iterations": 1,
+    "last_iteration": "done",
+    "last_iteration_id": "beta-1",
+    "messages_max_queue": 10,
+    "messages_pending": 0,
+    "messages_queue_full": false,
+    "name": "beta",
+    "server_now": "$VOLATILE",
+    "state": "idle",
+    "status_message": "idle_limit: 3 idle iterations",
+    "status_updated": "$VOLATILE"
+  },
+  "agent.stop": {
+    "action": "stop",
+    "name": "alpha"
+  }
+}

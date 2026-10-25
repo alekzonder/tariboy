@@ -17,20 +17,20 @@ import (
 
 func agentStore(c *registry.Ctx) *agent.Store { return agent.NewStore(c.Store) }
 
-func agentBudgetView(c *registry.Ctx, name string) (map[string]any, error) {
+func agentBudgetView(c *registry.Ctx, name string) (AgentBudget, error) {
 	b, err := aiproxy.NewStore(c.Store, time.Now).AgentBudgetStatus(name, time.Now())
 	if err != nil {
-		return nil, err
+		return AgentBudget{}, err
 	}
 	return budgetView(b), nil
 }
 
-func budgetView(b aiproxy.AgentBudgetStatus) map[string]any {
-	return map[string]any{
-		"hour_usd": b.HourUSD, "day_usd": b.DayUSD, "week_usd": b.WeekUSD, "month_usd": b.MonthUSD,
-		"hour_spent_usd": b.HourSpentUSD, "day_spent_usd": b.DaySpentUSD,
-		"week_spent_usd": b.WeekSpentUSD, "month_spent_usd": b.MonthSpentUSD,
-		"exhausted": b.Exhausted,
+func budgetView(b aiproxy.AgentBudgetStatus) AgentBudget {
+	return AgentBudget{
+		HourUSD: b.HourUSD, DayUSD: b.DayUSD, WeekUSD: b.WeekUSD, MonthUSD: b.MonthUSD,
+		HourSpentUSD: b.HourSpentUSD, DaySpentUSD: b.DaySpentUSD,
+		WeekSpentUSD: b.WeekSpentUSD, MonthSpentUSD: b.MonthSpentUSD,
+		Exhausted: b.Exhausted,
 	}
 }
 
@@ -44,42 +44,46 @@ func liveStateOf(c *registry.Ctx, a agent.Agent) string {
 	return state
 }
 
-func agentView(c *registry.Ctx, a agent.Agent, state string) (map[string]any, error) {
-	v := map[string]any{
-		"name": a.Name, "image": a.ImageRef, "digest": a.ImageDigest, "state": state,
-		"cwd": a.Cwd, "configured_cwd": a.Cwd,
-		"harness": a.HarnessType, "model": a.Model, "effort": a.Effort,
-		"interactive": a.Interactive, "enabled": a.Enabled, "interval_s": a.IntervalS,
-		"timeout_s": a.TimeoutS, "hard_timeout_s": a.HardTimeoutS, "on_timeout": a.OnTimeout,
-		"on_error": a.OnError, "user_prompt": a.UserPrompt, "env": a.Env, "plugins": a.Plugins,
-		"messages_batch": a.MessagesBatch, "messages_max_queue": a.MessagesMaxQueue,
-		"goal_enabled": a.GoalEnabled, "goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS, "goal_delivery_cooldown_s": a.GoalDeliveryCooldownS,
-		"current_goal_task_key": a.CurrentGoalTaskKey,
-		"group":                 a.Group, "alias": a.Alias, "notes": a.Notes, "color": a.Color,
-		"max_idle_iterations": a.MaxIdleIterations,
-		"ai_stall_timeout_s":  a.AIStallTimeoutS,
-		"schedule":            a.ScheduleRRule, "schedule_next_at": scheduleNextAt(a),
-	}
+func agentView(c *registry.Ctx, a agent.Agent, state string) (AgentView, error) {
 	budget, err := agentBudgetView(c, a.Name)
 	if err != nil {
-		return nil, err
+		return AgentView{}, err
 	}
-	v["budget"] = budget
-	addErrorReason(v, a, state)
-	addHaltReason(v, a)
-	return v, nil
+	return AgentView{
+		Name: a.Name, Image: a.ImageRef, Digest: a.ImageDigest, State: state,
+		Cwd: a.Cwd, ConfiguredCwd: a.Cwd,
+		Harness: a.HarnessType, Model: a.Model, Effort: a.Effort,
+		Interactive: a.Interactive, Enabled: a.Enabled, IntervalS: a.IntervalS,
+		TimeoutS: a.TimeoutS, HardTimeoutS: a.HardTimeoutS, OnTimeout: a.OnTimeout,
+		OnError: a.OnError, UserPrompt: a.UserPrompt, Env: a.Env, Plugins: a.Plugins,
+		MessagesBatch: a.MessagesBatch, MessagesMaxQueue: a.MessagesMaxQueue,
+		GoalEnabled: a.GoalEnabled, GoalWaitCustomerTimeoutS: a.GoalWaitCustomerTimeoutS, GoalDeliveryCooldownS: a.GoalDeliveryCooldownS,
+		CurrentGoalTaskKey: a.CurrentGoalTaskKey,
+		Group:              a.Group, Alias: a.Alias, Notes: a.Notes, Color: a.Color,
+		MaxIdleIterations: a.MaxIdleIterations,
+		AIStallTimeoutS:   a.AIStallTimeoutS,
+		Schedule:          a.ScheduleRRule, ScheduleNextAt: scheduleNextAt(a),
+		Budget:    budget,
+		AgentHalt: agentHalt(a, state),
+	}, nil
 }
 
-func addErrorReason(v map[string]any, a agent.Agent, state string) {
+// agentHalt derives the halt keys of every agent reader, so the idle-prefix
+// test lives in exactly one place. error_reason is the persisted reason, or a
+// derived AI-stall reason while the agent is in error.
+func agentHalt(a agent.Agent, state string) AgentHalt {
+	var h AgentHalt
 	if a.ErrorReason != "" {
-		v["error_reason"] = a.ErrorReason
+		h.ErrorReason = a.ErrorReason
 	} else if state == "error" && a.AIStallTimeoutS > 0 {
-		v["error_reason"] = fmt.Sprintf("agent stalled - no AI-proxy requests for %d seconds", a.AIStallTimeoutS)
+		h.ErrorReason = fmt.Sprintf("agent stalled - no AI-proxy requests for %d seconds", a.AIStallTimeoutS)
 	}
+	h.HaltKind, h.HaltReason = a.HaltReason()
+	return h
 }
 
 func agentImageSet() registry.Command {
-	return registry.Command{Path: "agent.image.set", Summary: "Select an image for the agent's next iteration", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "image", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+	return registry.WithResult[AgentImageStatus](registry.Command{Path: "agent.image.set", Summary: "Select an image for the agent's next iteration", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "image", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		var result any
 		// Agent image commands take the store lock: they read the agent's
 		// current and pending images, which can have different names, and
@@ -104,32 +108,26 @@ func agentImageSet() registry.Command {
 			return err
 		})
 		return result, err
-	}}
-}
-
-type agentImageProjection struct {
-	agent.ImageAssignment
-	ImageVersion string `json:"image_version,omitempty"`
-	Reason       string `json:"reason,omitempty"`
+	}})
 }
 
 // The caller holds the image store lock, including when set returns its preview.
-func agentImageStatusValue(c *registry.Ctx, name string) (map[string]any, error) {
+func agentImageStatusValue(c *registry.Ctx, name string) (AgentImageStatus, error) {
 	a, err := getAgent(c, name)
 	if err != nil {
-		return nil, err
+		return AgentImageStatus{}, err
 	}
 	pending, err := agentStore(c).PendingImage(name)
 	if err != nil {
-		return nil, err
+		return AgentImageStatus{}, err
 	}
 	images := imageStore(c)
-	inspect := func(refText, digest, reason string) agentImageProjection {
-		projection := agentImageProjection{ImageAssignment: agent.ImageAssignment{Ref: refText, Digest: digest}, Reason: reason}
+	inspect := func(refText, digest string, reason AgentImageReason) AgentImageProjection {
+		projection := AgentImageProjection{ImageAssignment: agent.ImageAssignment{Ref: refText, Digest: digest}, Reason: reason}
 		ref, err := image.ParseRef(refText)
 		var manifest image.Manifest
 		if err == nil {
-			if reason == "ref_moved" {
+			if reason == AgentImageReasonRefMoved {
 				manifest, err = images.Inspect(ref)
 			} else {
 				manifest, err = images.InspectPinned(ref, digest)
@@ -145,19 +143,19 @@ func agentImageStatusValue(c *registry.Ctx, name string) (map[string]any, error)
 	}
 	current := inspect(a.ImageRef, a.ImageDigest, "")
 	next := current
-	next.Reason = "current"
+	next.Reason = AgentImageReasonCurrent
 	if pending.Ref != "" {
-		next = inspect(pending.Ref, pending.Digest, "pending")
+		next = inspect(pending.Ref, pending.Digest, AgentImageReasonPending)
 	} else if _, err := image.ParseRef(a.ImageRef); err == nil {
 		// Any ref can be rebuilt, so the active ref's current content is what
 		// the next iteration would adopt.
-		next = inspect(a.ImageRef, "", "ref_moved")
+		next = inspect(a.ImageRef, "", AgentImageReasonRefMoved)
 	}
-	return map[string]any{"name": name, "current": current, "pending": pending, "next": next}, nil
+	return AgentImageStatus{Name: name, Current: current, Pending: pending, Next: next}, nil
 }
 
 func agentImageStatus() registry.Command {
-	return registry.Command{Path: "agent.image.status", Summary: "Show current, pending, and next agent image", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+	return registry.WithResult[AgentImageStatus](registry.Command{Path: "agent.image.status", Summary: "Show current, pending, and next agent image", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		var result any
 		err := image.WithStoreLock(func() error {
 			var err error
@@ -165,11 +163,11 @@ func agentImageStatus() registry.Command {
 			return err
 		})
 		return result, err
-	}}
+	}})
 }
 
 func agentImageCancel() registry.Command {
-	return registry.Command{Path: "agent.image.cancel", Summary: "Cancel a pending agent image", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodDelete, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+	return registry.WithResult[AgentImageStatus](registry.Command{Path: "agent.image.cancel", Summary: "Cancel a pending agent image", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodDelete, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		var result any
 		err := image.WithStoreLock(func() error {
 			name := p.String("name")
@@ -181,18 +179,7 @@ func agentImageCancel() registry.Command {
 			return err
 		})
 		return result, err
-	}}
-}
-
-// addHaltReason emits the derived halt keys on a reader's output, and only when
-// there is a halt: with no reason NEITHER key appears, matching the
-// emit-only-when-non-empty style of error_reason above. Every reader goes
-// through here so the idle-prefix test lives in exactly one place.
-func addHaltReason(v map[string]any, a agent.Agent) {
-	if kind, reason := a.HaltReason(); kind != "" {
-		v["halt_kind"] = kind
-		v["halt_reason"] = reason
-	}
+	}})
 }
 
 func parseKV(list string) map[string]string {
@@ -287,7 +274,7 @@ func parseAgentTimeout(value string) (int, error) {
 }
 
 func agentRun() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentRunResult](registry.Command{
 		Path:    "agent.run",
 		Summary: "Create an agent from an image (image:tag); starts stopped — enable with 'agent start'",
 		Args: []registry.Arg{
@@ -456,14 +443,14 @@ func agentRun() registry.Command {
 				return nil, api.UserError{Code: "run_failed", Msg: err.Error()}
 			}
 			state, _ := c.Control.LiveState(name)
-			return map[string]any{"name": name, "state": state,
-				"goal_enabled": goalEnabled, "goal_wait_customer_timeout_s": goalWaitCustomerTimeoutS, "goal_delivery_cooldown_s": goalDeliveryCooldownS}, nil
+			return AgentRunResult{Name: name, State: state,
+				GoalEnabled: goalEnabled, GoalWaitCustomerTimeoutS: goalWaitCustomerTimeoutS, GoalDeliveryCooldownS: goalDeliveryCooldownS}, nil
 		},
-	}
+	})
 }
 
 func agentPs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentListResult](registry.Command{
 		Path:    "agent.ps",
 		Summary: "List agents",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents"},
@@ -476,35 +463,33 @@ func agentPs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			rows := make([]map[string]any, 0, len(list))
+			rows := make([]AgentRow, 0, len(list))
 			for _, a := range list {
 				state := liveStateOf(c, a)
-				row := map[string]any{
-					"name": a.Name, "image": a.ImageRef, "state": state,
-					"alias":   a.Alias,
-					"harness": a.HarnessType, "enabled": a.Enabled, "group": a.Group,
-					"color": a.Color, "cwd": a.Cwd, "timeout_s": a.TimeoutS,
-					"interval_s": a.IntervalS, "on_timeout": a.OnTimeout, "on_error": a.OnError,
-					"max_idle_iterations": a.MaxIdleIterations,
-					"ai_stall_timeout_s":  a.AIStallTimeoutS,
-					"interactive":         a.Interactive,
-					"goal_enabled":        a.GoalEnabled, "goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS, "goal_delivery_cooldown_s": a.GoalDeliveryCooldownS,
-					"current_goal_task_key": a.CurrentGoalTaskKey,
-					"schedule":              a.ScheduleRRule, "schedule_next_at": scheduleNextAt(a),
-				}
-				row["budget"] = budgetView(budgets[a.Name])
-				addErrorReason(row, a, state)
-				addHaltReason(row, a)
-				rows = append(rows, row)
+				rows = append(rows, AgentRow{
+					Name: a.Name, Image: a.ImageRef, State: state,
+					Alias:   a.Alias,
+					Harness: a.HarnessType, Enabled: a.Enabled, Group: a.Group,
+					Color: a.Color, Cwd: a.Cwd, TimeoutS: a.TimeoutS,
+					IntervalS: a.IntervalS, OnTimeout: a.OnTimeout, OnError: a.OnError,
+					MaxIdleIterations: a.MaxIdleIterations,
+					AIStallTimeoutS:   a.AIStallTimeoutS,
+					Interactive:       a.Interactive,
+					GoalEnabled:       a.GoalEnabled, GoalWaitCustomerTimeoutS: a.GoalWaitCustomerTimeoutS, GoalDeliveryCooldownS: a.GoalDeliveryCooldownS,
+					CurrentGoalTaskKey: a.CurrentGoalTaskKey,
+					Schedule:           a.ScheduleRRule, ScheduleNextAt: scheduleNextAt(a),
+					Budget:    budgetView(budgets[a.Name]),
+					AgentHalt: agentHalt(a, state),
+				})
 			}
-			return map[string]any{"agents": rows, "count": len(rows)}, nil
+			return AgentListResult{Agents: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
-func agentGoalSettingsView(a agent.Agent) map[string]any {
-	return map[string]any{"name": a.Name, "goal_enabled": a.GoalEnabled,
-		"goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS, "goal_delivery_cooldown_s": a.GoalDeliveryCooldownS}
+func agentGoalSettingsView(a agent.Agent) AgentGoalSettings {
+	return AgentGoalSettings{Name: a.Name, GoalEnabled: a.GoalEnabled,
+		GoalWaitCustomerTimeoutS: a.GoalWaitCustomerTimeoutS, GoalDeliveryCooldownS: a.GoalDeliveryCooldownS}
 }
 
 func refreshAgentGoal(c *registry.Ctx, name string) {
@@ -514,7 +499,7 @@ func refreshAgentGoal(c *registry.Ctx, name string) {
 }
 
 func agentGoalEnabled() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentGoalSettings](registry.Command{
 		Path: "agent.goal-enabled", Summary: "Enable or disable Native Task goal selection",
 		Args: []registry.Arg{
 			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
@@ -533,11 +518,11 @@ func agentGoalEnabled() registry.Command {
 			refreshAgentGoal(c, a.Name)
 			return agentGoalSettingsView(a), nil
 		},
-	}
+	})
 }
 
 func agentGoalWaitCustomerTimeout() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentGoalSettings](registry.Command{
 		Path: "agent.goal-wait-customer-timeout", Summary: "Set the Goal customer-wait grace period",
 		Args: []registry.Arg{
 			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
@@ -560,11 +545,11 @@ func agentGoalWaitCustomerTimeout() registry.Command {
 			refreshAgentGoal(c, a.Name)
 			return agentGoalSettingsView(a), nil
 		},
-	}
+	})
 }
 
 func agentGoalDeliveryCooldown() registry.Command {
-	return registry.Command{Path: "agent.goal-delivery-cooldown", Summary: "Set the Goal delivery cooldown", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "seconds", Type: registry.Int, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/goal-delivery-cooldown"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+	return registry.WithResult[AgentGoalSettings](registry.Command{Path: "agent.goal-delivery-cooldown", Summary: "Set the Goal delivery cooldown", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "seconds", Type: registry.Int, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/goal-delivery-cooldown"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		a, err := getAgent(c, p.String("name"))
 		if err != nil {
 			return nil, err
@@ -579,11 +564,11 @@ func agentGoalDeliveryCooldown() registry.Command {
 		}
 		refreshAgentGoal(c, a.Name)
 		return agentGoalSettingsView(a), nil
-	}}
+	}})
 }
 
 func agentStatus() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentStatus](registry.Command{
 		Path:    "agent.status.show",
 		Summary: "Show one agent's runtime status",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -608,44 +593,35 @@ func agentStatus() registry.Command {
 				last = string(its[n-1].Status)
 				lastID = its[n-1].ID
 			}
-			out := map[string]any{"name": a.Name, "state": state, "enabled": a.Enabled,
-				"iterations": len(its), "last_iteration": last, "last_iteration_id": lastID,
-				"status_message": a.StatusMessage, "status_updated": a.StatusUpdated,
-				"messages_pending": messagesPending, "messages_max_queue": a.MessagesMaxQueue,
-				"messages_queue_full": messagesPending >= a.MessagesMaxQueue,
-				"server_now":          store.FormatTime(time.Now())}
-			if budget, err := agentBudgetView(c, a.Name); err != nil {
+			budget, err := agentBudgetView(c, a.Name)
+			if err != nil {
 				return nil, err
-			} else {
-				out["budget"] = budget
 			}
-			addErrorReason(out, a, state)
-			addHaltReason(out, a)
+			out := AgentStatus{Name: a.Name, State: state, Enabled: a.Enabled,
+				Iterations: len(its), LastIteration: last, LastIterationID: lastID,
+				StatusMessage: a.StatusMessage, StatusUpdated: a.StatusUpdated,
+				MessagesPending: messagesPending, MessagesMaxQueue: a.MessagesMaxQueue,
+				MessagesQueueFull: messagesPending >= a.MessagesMaxQueue,
+				ServerNow:         store.FormatTime(time.Now()),
+				Budget:            budget,
+				AgentHalt:         agentHalt(a, state)}
 			for i := len(its) - 1; i >= 0; i-- {
 				it := its[i]
 				if it.Status != agent.IterationRunning {
 					continue
 				}
-				active := map[string]any{"id": it.ID, "started_at": it.StartedAt,
-					"timeout_extensions": it.TimeoutExtensions}
-				if it.TimeoutPeriodS != nil {
-					active["timeout_period_s"] = *it.TimeoutPeriodS
-				}
-				if it.TimeoutDeadline != nil {
-					active["timeout_deadline"] = *it.TimeoutDeadline
-				}
-				if it.HardTimeoutDeadline != nil {
-					active["hard_timeout_deadline"] = *it.HardTimeoutDeadline
-				}
+				active := &AgentActiveIteration{ID: it.ID, StartedAt: it.StartedAt,
+					TimeoutExtensions: it.TimeoutExtensions, TimeoutPeriodS: it.TimeoutPeriodS,
+					TimeoutDeadline: it.TimeoutDeadline, HardTimeoutDeadline: it.HardTimeoutDeadline}
 				if it.TimeoutDeadline != nil || it.HardTimeoutDeadline != nil {
-					active["effective_deadline"] = effectiveDeadline(it.TimeoutDeadline, it.HardTimeoutDeadline)
+					active.EffectiveDeadline = effectiveDeadline(it.TimeoutDeadline, it.HardTimeoutDeadline)
 				}
-				out["active_iteration"] = active
+				out.ActiveIteration = active
 				break
 			}
 			return out, nil
 		},
-	}
+	})
 }
 
 func effectiveDeadline(soft, hard *string) string {
@@ -664,7 +640,7 @@ func effectiveDeadline(soft, hard *string) string {
 }
 
 func agentInspect() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentView](registry.Command{
 		Path:    "agent.inspect",
 		Summary: "Show one agent's full config",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
@@ -682,25 +658,25 @@ func agentInspect() registry.Command {
 			// Report the EFFECTIVE cwd (the workdir fallback when Cwd is unset),
 			// matching cwdOf/agentCwdFor, so the UI never shows an empty value.
 			if cwd, err := agentCwdFor(c, a.Name); err == nil {
-				v["cwd"] = cwd
+				v.Cwd = cwd
 			}
 			return v, nil
 		},
-	}
+	})
 }
 
 func agentBudgetGet() registry.Command {
-	return registry.Command{Path: "agent.budget.get", Summary: "Show an agent's calendar USD budget", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/agents/{name}/budget"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+	return registry.WithResult[AgentBudget](registry.Command{Path: "agent.budget.get", Summary: "Show an agent's calendar USD budget", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/agents/{name}/budget"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		name := p.String("name")
 		if _, err := getAgent(c, name); err != nil {
 			return nil, err
 		}
 		return agentBudgetView(c, name)
-	}}
+	}})
 }
 
 func agentBudgetSet() registry.Command {
-	return registry.Command{Path: "agent.budget.set", Summary: "Set an agent's calendar USD budget", Args: []registry.Arg{
+	return registry.WithResult[AgentBudget](registry.Command{Path: "agent.budget.set", Summary: "Set an agent's calendar USD budget", Args: []registry.Arg{
 		{Name: "name", Type: registry.String, Required: true},
 		{Name: "hour_usd", Type: registry.String, Required: true}, {Name: "day_usd", Type: registry.String, Required: true},
 		{Name: "week_usd", Type: registry.String, Required: true}, {Name: "month_usd", Type: registry.String, Required: true},
@@ -722,38 +698,38 @@ func agentBudgetSet() registry.Command {
 			return nil, api.UserError{Code: "bad_budget", Msg: err.Error()}
 		}
 		return agentBudgetView(c, name)
-	}}
+	}})
 }
 
-func agentLifecycle(path, summary, verb string) registry.Command {
-	return registry.Command{
+func agentLifecycle(path, summary string, verb AgentAction) registry.Command {
+	return registry.WithResult[AgentActionResult](registry.Command{
 		Path:    path,
 		Summary: summary,
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
-		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/" + verb},
+		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/" + string(verb)},
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			name := p.String("name")
 			var err error
 			switch verb {
-			case "stop":
+			case AgentActionStop:
 				err = c.Control.Stop(name)
-			case "start":
+			case AgentActionStart:
 				err = c.Control.Start(name)
-			case "restart":
+			case AgentActionRestart:
 				err = c.Control.Restart(name)
-			case "kill":
+			case AgentActionKill:
 				err = c.Control.Kill(name)
 			}
 			if err != nil {
-				return nil, api.UserError{Code: verb + "_failed", Msg: err.Error()}
+				return nil, api.UserError{Code: string(verb) + "_failed", Msg: err.Error()}
 			}
-			return map[string]any{"name": name, "action": verb}, nil
+			return AgentActionResult{Name: name, Action: verb}, nil
 		},
-	}
+	})
 }
 
 func agentRm() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentRemoveResult](registry.Command{
 		Path:    "agent.rm",
 		Summary: "Remove an agent (stop it first, or --force)",
 		Args: []registry.Arg{
@@ -768,13 +744,13 @@ func agentRm() registry.Command {
 			if err := c.Control.Remove(p.String("name"), force, purge); err != nil {
 				return nil, api.UserError{Code: "rm_failed", Msg: err.Error()}
 			}
-			return map[string]any{"removed": p.String("name"), "purged": purge}, nil
+			return AgentRemoveResult{Removed: p.String("name"), Purged: purge}, nil
 		},
-	}
+	})
 }
 
 func agentReprovision() registry.Command {
-	return registry.Command{
+	return registry.WithResult[AgentStateResult](registry.Command{
 		Path:    "agent.reprovision",
 		Summary: "Re-unpack an agent's image tree in place and restart its loop, keeping its data",
 		Args: []registry.Arg{
@@ -788,9 +764,9 @@ func agentReprovision() registry.Command {
 				return nil, api.UserError{Code: "reprovision_failed", Msg: err.Error()}
 			}
 			state, _ := c.Control.LiveState(name)
-			return map[string]any{"name": name, "state": state}, nil
+			return AgentStateResult{Name: name, State: state}, nil
 		},
-	}
+	})
 }
 
 func getAgent(c *registry.Ctx, name string) (agent.Agent, error) {
