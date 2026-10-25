@@ -140,61 +140,95 @@ export function AgentSubscriptions({
         </div>
       ))}
       {subs.length === 0 && <p className="p-2 text-sm text-muted-foreground">No subscriptions.</p>}
-      <div className="mt-2 flex flex-col gap-2 border-t p-2">
-        <Command shouldFilter={false} className="relative overflow-visible bg-transparent">
-          <CommandInput
-            value={pick}
-            onValueChange={(v) => {
-              setPick(v);
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            // Close on blur so the dropdown does not linger; item selection uses
-            // onMouseDown/preventDefault to fire before this blur closes the list.
-            onBlur={() => setOpen(false)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                e.stopPropagation();
-                subscribe();
-              }
-            }}
-            placeholder="pick or type a channel…"
-            aria-label="channel"
-            aria-invalid={invalid}
-          />
-          {open && options.length > 0 && (
-            <CommandList className="absolute top-full left-0 z-50 mt-1 w-full rounded-lg border bg-popover shadow-md">
-              {options.map((c) => (
-                <CommandItem
-                  key={c.name}
-                  value={c.name}
-                  onMouseDown={(ev) => ev.preventDefault()}
-                  onSelect={() => {
-                    setPick(c.name);
-                    setOpen(false);
-                  }}
-                >
-                  <span className="truncate font-mono text-xs">{c.name}</span>
-                  {c.kind === "chat" && (
-                    <Badge variant="outline" className="ml-auto shrink-0">
-                      chat
-                    </Badge>
-                  )}
-                </CommandItem>
-              ))}
-            </CommandList>
-          )}
-        </Command>
-        {invalid && (
-          <p role="alert" className="text-xs text-destructive">
-            Invalid channel name — use prefix:segment (e.g. chat:room), lowercase a–z, 0–9, _ or -.
-          </p>
+      <SubscribeField
+        pick={pick}
+        setPick={setPick}
+        open={open}
+        setOpen={setOpen}
+        options={options}
+        invalid={invalid}
+        disabled={busy || !trimmed || invalid}
+        onSubscribe={subscribe}
+      />
+    </div>
+  );
+}
+
+// SubscribeField is the editable channel combobox and its Subscribe button.
+function SubscribeField({
+  pick,
+  setPick,
+  open,
+  setOpen,
+  options,
+  invalid,
+  disabled,
+  onSubscribe,
+}: {
+  pick: string;
+  setPick: (pick: string) => void;
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  options: Chan[];
+  invalid: boolean;
+  disabled: boolean;
+  onSubscribe: () => void;
+}) {
+  return (
+    <div className="mt-2 flex flex-col gap-2 border-t p-2">
+      <Command shouldFilter={false} className="relative overflow-visible bg-transparent">
+        <CommandInput
+          value={pick}
+          onValueChange={(v) => {
+            setPick(v);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          // Close on blur so the dropdown does not linger; item selection uses
+          // onMouseDown/preventDefault to fire before this blur closes the list.
+          onBlur={() => setOpen(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.stopPropagation();
+              onSubscribe();
+            }
+          }}
+          placeholder="pick or type a channel…"
+          aria-label="channel"
+          aria-invalid={invalid}
+        />
+        {open && options.length > 0 && (
+          <CommandList className="absolute top-full left-0 z-50 mt-1 w-full rounded-lg border bg-popover shadow-md">
+            {options.map((c) => (
+              <CommandItem
+                key={c.name}
+                value={c.name}
+                onMouseDown={(ev) => ev.preventDefault()}
+                onSelect={() => {
+                  setPick(c.name);
+                  setOpen(false);
+                }}
+              >
+                <span className="truncate font-mono text-xs">{c.name}</span>
+                {c.kind === "chat" && (
+                  <Badge variant="outline" className="ml-auto shrink-0">
+                    chat
+                  </Badge>
+                )}
+              </CommandItem>
+            ))}
+          </CommandList>
         )}
-        <Button size="sm" disabled={busy || !trimmed || invalid} onClick={subscribe}>
-          Subscribe
-        </Button>
-      </div>
+      </Command>
+      {invalid && (
+        <p role="alert" className="text-xs text-destructive">
+          Invalid channel name — use prefix:segment (e.g. chat:room), lowercase a–z, 0–9, _ or -.
+        </p>
+      )}
+      <Button size="sm" disabled={disabled} onClick={onSubscribe}>
+        Subscribe
+      </Button>
     </div>
   );
 }
