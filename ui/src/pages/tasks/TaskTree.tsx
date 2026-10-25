@@ -43,6 +43,7 @@ export default function TaskTree({
   activeQuestionTaskKeys,
   expanded,
   selectedKey,
+  goalTaskKey,
   onToggle,
   onSelect,
   onAddChild,
@@ -54,6 +55,7 @@ export default function TaskTree({
   activeQuestionTaskKeys: ReadonlySet<string>;
   expanded: ReadonlySet<string>;
   selectedKey: string;
+  goalTaskKey?: string;
   onToggle: (key: string) => void;
   onSelect: (key: string) => void;
   onAddChild: (key: string) => void;
@@ -96,6 +98,7 @@ export default function TaskTree({
               hasActiveQuestion={activeQuestionTaskKeys.has(row.task.key)}
               expanded={expanded.has(row.task.key)}
               selected={selectedKey === row.task.key}
+              goal={!!goalTaskKey && goalTaskKey === row.task.key}
               onToggle={() => onToggle(row.task.key)}
               onSelect={() => onSelect(row.task.key)}
               onAddChild={() => onAddChild(row.task.key)}

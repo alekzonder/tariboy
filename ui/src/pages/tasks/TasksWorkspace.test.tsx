@@ -417,6 +417,23 @@ describe("TasksWorkspace", () => {
     expect(screen.getByText("Starting now")).toBeInTheDocument();
   });
 
+  it("highlights the row of the agent's Goal task only while it is in the list", async () => {
+    const { rerender } = render(<TasksWorkspace scopeAgent="worker" goalTaskKey="TEST-2" />);
+
+    const rootRow = await screen.findByTestId("task-row-TEST-1");
+    expect(rootRow).not.toHaveAttribute("data-goal");
+    await userEvent.click(screen.getByRole("button", { name: "Expand TEST-1" }));
+    expect(screen.getByTestId("task-row-TEST-2")).toHaveAttribute("data-goal", "true");
+    expect(screen.getByTestId("task-row-TEST-2")).toHaveAttribute(
+      "title",
+      "Current Goal of this agent",
+    );
+    expect(rootRow).not.toHaveAttribute("data-goal");
+
+    rerender(<TasksWorkspace scopeAgent="worker" />);
+    expect(screen.getByTestId("task-row-TEST-2")).not.toHaveAttribute("data-goal");
+  });
+
   it("creates tasks and children inline in the selected queue", async () => {
     render(<TasksWorkspace />);
     await screen.findByText("Ship native tasks");

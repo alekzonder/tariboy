@@ -10,12 +10,15 @@ import "./tasks.css";
 
 type TasksWorkspaceProps = {
   scopeAgent?: string;
+  /** The scope agent's current Goal; its row is highlighted when listed. */
+  goalTaskKey?: string;
   initialTaskKey?: string;
   onNotificationsChanged?: () => void;
 };
 
 function TasksWorkspaceController({
   scopeAgent,
+  goalTaskKey,
   initialTaskKey,
   onNotificationsChanged,
   server,
@@ -35,6 +38,7 @@ function TasksWorkspaceController({
   return (
     <TasksWorkspaceContent
       scopeAgent={scopeAgent}
+      goalTaskKey={goalTaskKey}
       server={server}
       state={state}
       data={data}

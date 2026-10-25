@@ -19,6 +19,7 @@ const newTaskQueue = (queue: string, queues: Queue[], server: string) =>
 
 export function TasksWorkspaceContent({
   scopeAgent,
+  goalTaskKey,
   server,
   state,
   data,
@@ -26,6 +27,7 @@ export function TasksWorkspaceContent({
   layout,
 }: {
   scopeAgent?: string;
+  goalTaskKey?: string;
   server: string;
   state: TasksWorkspaceView;
   data: TasksWorkspaceData;
@@ -70,6 +72,7 @@ export function TasksWorkspaceContent({
       className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)]"
       data-testid="tasks-workspace"
       data-scope-agent={scopeAgent ?? ""}
+      data-goal-task-key={goalTaskKey ?? ""}
     >
       <main className="min-h-0 min-w-0 overflow-auto">
         <TaskFilterBar
@@ -98,7 +101,13 @@ export function TasksWorkspaceContent({
             onCancel={() => setCreatingParent(null)}
           />
         )}
-        <TasksWorkspaceList scopeAgent={scopeAgent} state={state} data={data} actions={actions} />
+        <TasksWorkspaceList
+          scopeAgent={scopeAgent}
+          goalTaskKey={goalTaskKey}
+          state={state}
+          data={data}
+          actions={actions}
+        />
         {creatingParent && (
           <TaskForm
             queues={queues}
@@ -130,11 +139,13 @@ export function TasksWorkspaceContent({
 /** The task tree, or why it is not there yet. */
 function TasksWorkspaceList({
   scopeAgent,
+  goalTaskKey,
   state,
   data,
   actions,
 }: {
   scopeAgent?: string;
+  goalTaskKey?: string;
   state: TasksWorkspaceView;
   data: TasksWorkspaceData;
   actions: TasksWorkspaceActions;
@@ -168,6 +179,7 @@ function TasksWorkspaceList({
       activeQuestionTaskKeys={data.activeQuestionTaskKeys}
       expanded={expanded}
       selectedKey={selectedKey}
+      goalTaskKey={goalTaskKey}
       onToggle={toggleExpanded}
       onSelect={(key) => void loadDetail(key)}
       onAddChild={setCreatingParent}
