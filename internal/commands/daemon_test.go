@@ -23,11 +23,6 @@ func ctx(t *testing.T) *registry.Ctx {
 	}
 }
 
-func call(t *testing.T, c *registry.Ctx, path string, p registry.Params) map[string]any {
-	t.Helper()
-	return callAs[map[string]any](t, c, path, p)
-}
-
 // callAs runs the command at path and returns its result as T.
 func callAs[T any](t *testing.T, c *registry.Ctx, path string, p registry.Params) T {
 	t.Helper()
@@ -63,12 +58,12 @@ func TestDaemonConfigRoundTrip(t *testing.T) {
 	t.Parallel()
 	c := ctx(t)
 	callAs[DaemonConfigEntry](t, c, "daemon.config.set", registry.Params{"key": "log_level", "value": "debug"})
-	got := call(t, c, "daemon.config.get", registry.Params{"key": "log_level"})
-	if got["log_level"] != "debug" {
+	got := callAs[DaemonConfig](t, c, "daemon.config.get", registry.Params{"key": "log_level"})
+	if got.Values["log_level"] != "debug" {
 		t.Fatalf("get after set: %v", got)
 	}
-	all := call(t, c, "daemon.config.get", registry.Params{})
-	if all["log_level"] != "debug" {
+	all := callAs[DaemonConfig](t, c, "daemon.config.get", registry.Params{})
+	if all.Values["log_level"] != "debug" {
 		t.Fatalf("get all: %v", all)
 	}
 	// config_set must be audited

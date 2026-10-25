@@ -1,8 +1,26 @@
 package commands
 
+import "github.com/invopop/jsonschema"
+
 // Response types of the usage, budget, logs and iteration commands. Each
 // command declares its type with registry.WithResult, which derives the
 // OpenAPI result schema from it.
+
+// TranscriptResult is the transcript of one iteration: the parsed calls, or
+// with raw the decoded request and response bytes of each call.
+type TranscriptResult struct {
+	Calls any `json:"calls"`
+	Count int `json:"count"`
+}
+
+// JSONSchemaExtend describes calls as a list of call objects, whose shape
+// depends on raw.
+func (TranscriptResult) JSONSchemaExtend(s *jsonschema.Schema) {
+	calls, _ := s.Properties.Get("calls")
+	calls.Type = "array"
+	calls.Items = &jsonschema.Schema{Type: "object"}
+	calls.Description = "Parsed calls, or with raw the seq, ts, request and response of each call."
+}
 
 // UsageRow is the AI usage of one agent, image and request-time group.
 type UsageRow struct {

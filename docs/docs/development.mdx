@@ -308,10 +308,15 @@ update the snapshot in the same change:
 go test ./internal/commands -run TestOpenAPISnapshot -update-openapi
 ```
 
-Do not add entries to `commandsWithoutResultSchema` in
-`internal/commands/openapi_contract_test.go`. Give a new HTTP command a typed
-result with `registry.WithResult`, and add a call for it to
-`TestTypedResponsesMatchOpenAPI`.
+Give every new HTTP command a typed result: a named struct, or a slice of
+one, declared with `registry.WithResult`. A handler never returns
+`map[string]any`; `TestHTTPCommandsDeclareResultSchema` and
+`TestCommandsReturnNoRawMaps` fail otherwise. Add a call for the new operation
+to `TestTypedResponsesMatchOpenAPI`: a domain registers its calls in
+`typedCallSets` from an `init` function in its own test file. Before you
+change a handler's result type, pin its JSON in the domain's golden test (for
+example `daemon_golden_test.go`) on the unchanged handler, and keep that
+golden file unchanged through the change.
 
 Workflow changes span `internal/workflowfile` and `internal/workflowimage`
 (the image), `internal/tasks` (the engine, run records, queue secrets, and the

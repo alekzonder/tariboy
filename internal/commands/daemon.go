@@ -334,7 +334,7 @@ func daemonStatus() registry.Command {
 }
 
 func daemonConfigGet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[DaemonConfig](registry.Command{
 		Path:    "daemon.config.get",
 		Summary: "Read daemon config (all keys, or one with --key)",
 		Args: []registry.Arg{
@@ -342,14 +342,14 @@ func daemonConfigGet() registry.Command {
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/config"},
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
-			out := map[string]any{}
+			out := DaemonConfig{Values: map[string]string{}}
 			if key := p.String("key"); key != "" {
 				v, ok, err := c.Store.ConfigGet(key)
 				if err != nil {
 					return nil, err
 				}
 				if ok {
-					out[key] = v
+					out.Values[key] = v
 				}
 				return out, nil
 			}
@@ -363,11 +363,11 @@ func daemonConfigGet() registry.Command {
 				if err := rows.Scan(&k, &v); err != nil {
 					return nil, err
 				}
-				out[k] = v
+				out.Values[k] = v
 			}
 			return out, rows.Err()
 		},
-	}
+	})
 }
 
 func daemonConfigSet() registry.Command {

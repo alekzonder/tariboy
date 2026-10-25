@@ -142,6 +142,8 @@ func daemonTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 	return c, []typedCall{
 		{"GET", "/api/daemon/status", "/api/daemon/status", nil},
 		{"POST", "/api/daemon/config", "/api/daemon/config", map[string]any{"key": "log_level", "value": "debug"}},
+		{"GET", "/api/daemon/config", "/api/daemon/config", nil},
+		{"GET", "/api/daemon/config", "/api/daemon/config?key=absent", nil},
 		{"POST", "/api/daemon/reindex", "/api/daemon/reindex", nil},
 		{"GET", "/api/daemon/agent-shell-script", "/api/daemon/agent-shell-script", nil},
 		{"POST", "/api/daemon/agent-shell-script", "/api/daemon/agent-shell-script", map[string]any{"script": "export A=1\n"}},

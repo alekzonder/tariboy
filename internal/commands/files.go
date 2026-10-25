@@ -187,9 +187,14 @@ func cpCommand() registry.Command {
 			if err := os.WriteFile(local, data, 0o600); err != nil {
 				return nil, err
 			}
-			return map[string]any{"copied": fmt.Sprintf("%s:%s -> %s", name, remote, local)}, nil
+			return FileCopyResult{Copied: fmt.Sprintf("%s:%s -> %s", name, remote, local)}, nil
 		},
 	}
+}
+
+// FileCopyResult names the agent file cp downloaded and where it wrote it.
+type FileCopyResult struct {
+	Copied string `json:"copied"`
 }
 
 // parseCp accepts a local upload or an agent-relative download with a local destination.

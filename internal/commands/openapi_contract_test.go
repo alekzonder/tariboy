@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 
@@ -18,38 +17,21 @@ import (
 	"github.com/alekzonder/tariboy/internal/registry"
 )
 
-// commandsWithoutResultSchema lists the HTTP commands that still publish a
-// free-form result. The list only shrinks: a command that gains a result
-// schema leaves it in the same change, and review refuses new entries.
-var commandsWithoutResultSchema = []string{
-	"daemon.config.get",
-	"transcript",
-}
-
-// Catches an HTTP command without a result schema outside the allowlist, and
-// an allowlist entry that no longer names a schemaless HTTP command.
+// Catches an HTTP command whose result is not a declared component: every
+// HTTP command must return a named struct (or a slice of one) declared with
+// registry.WithResult, so its result schema is a component reference.
 func TestHTTPCommandsDeclareResultSchema(t *testing.T) {
 	t.Parallel()
-	if !slices.IsSorted(commandsWithoutResultSchema) {
-		t.Error("commandsWithoutResultSchema is not sorted")
-	}
-	allowed := map[string]bool{}
-	for _, path := range commandsWithoutResultSchema {
-		allowed[path] = true
-	}
-	schemaless := map[string]bool{}
 	for _, c := range BuildRegistry().Commands() {
-		if c.HTTP == nil || c.ResultSchema != nil {
+		if c.HTTP == nil {
 			continue
 		}
-		schemaless[c.Path] = true
-		if !allowed[c.Path] {
-			t.Errorf("HTTP command %s declares no ResultSchema: wrap it in registry.WithResult", c.Path)
+		schema := c.ResultSchema
+		if schema["type"] == "array" {
+			schema, _ = schema["items"].(map[string]any)
 		}
-	}
-	for _, path := range commandsWithoutResultSchema {
-		if !schemaless[path] {
-			t.Errorf("allowlist entry %s is stale: the command has a result schema, no HTTP route, or no longer exists; remove the entry", path)
+		if ref, _ := schema["$ref"].(string); !strings.HasPrefix(ref, "#/components/schemas/") {
+			t.Errorf("HTTP command %s result is %v, not a component reference: return a named struct declared with registry.WithResult", c.Path, c.ResultSchema)
 		}
 	}
 }

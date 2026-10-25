@@ -11,7 +11,7 @@ import (
 // request/response bytes per call instead. Runs in the daemon (reads the agent
 // dir on disk); a missing transcript is a normal empty result, not an error.
 func transcriptCommand() registry.Command {
-	return registry.Command{
+	return registry.WithResult[TranscriptResult](registry.Command{
 		Path:    "transcript",
 		Summary: "Show the AI proxy transcript for an iteration (parsed; ?raw=1 for bytes)",
 		Args: []registry.Arg{
@@ -35,10 +35,10 @@ func transcriptCommand() registry.Command {
 			// disabled (rule.go).
 			if p.Bool("raw") {
 				calls := session.RawCalls(entries)
-				return map[string]any{"calls": calls, "count": len(calls)}, nil
+				return TranscriptResult{Calls: calls, Count: len(calls)}, nil
 			}
 			tl := session.Build(entries)
-			return map[string]any{"calls": tl.Calls, "count": len(tl.Calls)}, nil
+			return TranscriptResult{Calls: tl.Calls, Count: len(tl.Calls)}, nil
 		},
-	}
+	})
 }

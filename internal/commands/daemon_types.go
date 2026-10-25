@@ -34,6 +34,31 @@ type DaemonMissingTool struct {
 	Install string `json:"install"`
 }
 
+// DaemonConfig is the daemon.config.get result: the stored config values by
+// key, one key when the request names one, an empty object when none is set.
+type DaemonConfig struct {
+	Values map[string]string `json:"-"`
+}
+
+// MarshalJSON encodes the values as one object keyed by config key.
+func (c DaemonConfig) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.Values)
+}
+
+// JSONSchema describes an object whose keys are config keys.
+func (DaemonConfig) JSONSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type:                 "object",
+		Description:          "Stored daemon config values by key.",
+		AdditionalProperties: &jsonschema.Schema{Type: "string"},
+	}
+}
+
+// DaemonStopped is the local daemon status result when no daemon runs.
+type DaemonStopped struct {
+	Running bool `json:"running"`
+}
+
 // DaemonConfigEntry is the key and value daemon.config.set stored.
 type DaemonConfigEntry struct {
 	Key   string `json:"key"`

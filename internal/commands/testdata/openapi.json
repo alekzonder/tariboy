@@ -2360,6 +2360,13 @@
         ],
         "type": "object"
       },
+      "DaemonConfig": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "description": "Stored daemon config values by key.",
+        "type": "object"
+      },
       "DaemonConfigEntry": {
         "additionalProperties": false,
         "properties": {
@@ -6770,6 +6777,26 @@
           "kind",
           "name",
           "status"
+        ],
+        "type": "object"
+      },
+      "TranscriptResult": {
+        "additionalProperties": false,
+        "properties": {
+          "calls": {
+            "description": "Parsed calls, or with raw the seq, ts, request and response of each call.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "calls",
+          "count"
         ],
         "type": "object"
       },
@@ -12289,7 +12316,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/TranscriptResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -18115,7 +18144,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/DaemonConfig"
+                    }
                   },
                   "required": [
                     "ok",
