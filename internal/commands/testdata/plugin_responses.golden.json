@@ -71,6 +71,12 @@
     "harness": "stub",
     "models": []
   },
+  "plugin.action public": {
+    "ok": true
+  },
+  "plugin.action result": {
+    "connected": true
+  },
   "plugin.contributions": {
     "count": 1,
     "plugins": [
@@ -233,6 +239,12 @@
   },
   "plugin.rm quiet": {
     "removed": "quiet"
+  },
+  "plugin.routes echo": {
+    "has_token": true,
+    "routes": {
+      "c1": "chat:orders"
+    }
   },
   "secret.ls bare": {
     "count": 0,

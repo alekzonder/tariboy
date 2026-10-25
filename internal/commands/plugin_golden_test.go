@@ -187,6 +187,34 @@ func TestPluginsMiscResponsesMatchGolden(t *testing.T) {
 		}
 		values[call.label] = value
 	}
+	// plugin.routes and plugin.action need a running plugin; a fake host
+	// returns the plugin-defined bodies they forward.
+	running := &fakePlugins{
+		routesFn: func(string) (map[string]any, error) {
+			return map[string]any{"routes": map[string]any{"c1": "chat:orders"}, "has_token": true}, nil
+		},
+		actionFn: func(_ string, body map[string]any) (map[string]any, error) {
+			if body["action"] == "status" {
+				return map[string]any{"result": map[string]any{"connected": true}}, nil
+			}
+			return map[string]any{"ok": true, "subscriptions": []any{"chat:in"}}, nil
+		},
+	}
+	fakeCtx := *f.c
+	fakeCtx.Plugins = running
+	fakeCalls := []call{
+		{"plugin.routes echo", "plugin.routes", registry.Params{"name": "echo"}},
+		{"plugin.action result", "plugin.action", registry.Params{"name": "echo", "action": "status"}},
+		{"plugin.action public", "plugin.action", registry.Params{"name": "echo", "action": "bind", "data": `{"chat":"c1"}`}},
+	}
+	for _, call := range fakeCalls {
+		value, err := h(t, call.path)(&fakeCtx, call.params)
+		if err != nil {
+			t.Fatalf("%s: %v", call.label, err)
+		}
+		values[call.label] = value
+	}
+	calls = append(calls, fakeCalls...)
 	recorder := newGoldenRecorder(t, map[string]bool{},
 		f.c.BaseDir, "$BASE", f.fsRoot, "$FSROOT", f.widgetSrc, "$WIDGET",
 		uploadDir(t, f.c.BaseDir), "$UPLOAD")
