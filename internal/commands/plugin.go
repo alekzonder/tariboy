@@ -27,7 +27,7 @@ func checkPluginName(name string) error {
 }
 
 func pluginInstall() registry.Command {
-	return registry.Command{
+	return registry.WithResult[PluginInstallResult](registry.Command{
 		Path:    "plugin.install",
 		Summary: "Install and start a plugin from a directory with plugin.json",
 		Args: []registry.Arg{
@@ -47,13 +47,13 @@ func pluginInstall() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "install_failed", Msg: err.Error()}
 			}
-			return res, nil
+			return pluginResult[PluginInstallResult](res)
 		},
-	}
+	})
 }
 
 func pluginLs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[PluginList](registry.Command{
 		Path:    "plugin.ls",
 		Summary: "List installed plugins (name/version/types/state/health)",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/plugins"},
@@ -66,9 +66,9 @@ func pluginLs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"plugins": list, "count": len(list)}, nil
+			return pluginResult[PluginList](map[string]any{"plugins": list, "count": len(list)})
 		},
-	}
+	})
 }
 
 type pluginContributionsControl interface {
@@ -76,7 +76,7 @@ type pluginContributionsControl interface {
 }
 
 func pluginContributions() registry.Command {
-	return registry.Command{
+	return registry.WithResult[PluginContributionList](registry.Command{
 		Path:    "plugin.contributions",
 		Summary: "List enabled plugin CLI and settings contributions",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/plugin-contributions"},
@@ -93,13 +93,13 @@ func pluginContributions() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "contributions_failed", Msg: err.Error()}
 			}
-			return map[string]any{"plugins": items, "count": len(items)}, nil
+			return pluginContributionList(items), nil
 		},
-	}
+	})
 }
 
 func pluginInspect() registry.Command {
-	return registry.Command{
+	return registry.WithResult[PluginView](registry.Command{
 		Path:    "plugin.inspect",
 		Summary: "Show one plugin's manifest, state and socket",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "plugin name"}},
@@ -120,13 +120,13 @@ func pluginInspect() registry.Command {
 				}
 				return nil, api.UserError{Code: "inspect_failed", Msg: err.Error()}
 			}
-			return res, nil
+			return pluginResult[PluginView](res)
 		},
-	}
+	})
 }
 
 func pluginRm() registry.Command {
-	return registry.Command{
+	return registry.WithResult[PluginRemoved](registry.Command{
 		Path:    "plugin.rm",
 		Summary: "Stop and remove a plugin",
 		Args: []registry.Arg{
@@ -155,13 +155,13 @@ func pluginRm() registry.Command {
 			if err := pc.Remove(name); err != nil {
 				return nil, api.UserError{Code: "rm_failed", Msg: err.Error()}
 			}
-			return map[string]any{"removed": name}, nil
+			return PluginRemoved{Removed: name}, nil
 		},
-	}
+	})
 }
 
 func pluginRestart() registry.Command {
-	return registry.Command{
+	return registry.WithResult[PluginRestarted](registry.Command{
 		Path:    "plugin.restart",
 		Summary: "Restart a single plugin in place (stop + start) without touching others",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "plugin name"}},
@@ -181,13 +181,13 @@ func pluginRestart() registry.Command {
 				}
 				return nil, api.UserError{Code: "restart_failed", Msg: err.Error()}
 			}
-			return map[string]any{"restarted": name}, nil
+			return PluginRestarted{Restarted: name}, nil
 		},
-	}
+	})
 }
 
 func pluginLogs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[PluginLogs](registry.Command{
 		Path:    "plugin.logs",
 		Summary: "Show captured plugin stdout/stderr",
 		Args: []registry.Arg{
@@ -208,9 +208,9 @@ func pluginLogs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"lines": lines, "count": len(lines)}, nil
+			return PluginLogs{Lines: lines, Count: len(lines)}, nil
 		},
-	}
+	})
 }
 
 func pluginRoutes() registry.Command {

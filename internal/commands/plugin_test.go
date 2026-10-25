@@ -93,14 +93,14 @@ func TestPluginCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ls.(map[string]any)["count"].(int) != 1 {
+	if ls.(PluginList).Count != 1 {
 		t.Fatalf("ls = %v", ls)
 	}
 	if _, err := h(t, "plugin.inspect")(c, registry.Params{"name": "echo"}); err != nil {
 		t.Fatal(err)
 	}
 	logs, _ := h(t, "plugin.logs")(c, registry.Params{"name": "echo", "tail": 50})
-	if len(logs.(map[string]any)["lines"].([]string)) != 2 {
+	if len(logs.(PluginLogs).Lines) != 2 {
 		t.Fatalf("logs = %v", logs)
 	}
 	if _, err := h(t, "plugin.rm")(c, registry.Params{"name": "echo"}); err != nil {
@@ -193,7 +193,7 @@ func TestPluginRestart(t *testing.T) {
 	if fp.restarted != "echo" {
 		t.Fatalf("restarted = %q, want echo", fp.restarted)
 	}
-	if res.(map[string]any)["restarted"] != "echo" {
+	if res.(PluginRestarted).Restarted != "echo" {
 		t.Fatalf("res = %v", res)
 	}
 
@@ -330,7 +330,7 @@ func TestPluginContributionsForwardsSafeManifestData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := res.(map[string]any)["plugins"].([]plugins.Contribution)
+	got := res.(PluginContributionList).Plugins
 	if len(got) != 1 || got[0].Name != "telegram" || got[0].Commands[0].Action != "status" {
 		t.Fatalf("contributions = %+v", got)
 	}

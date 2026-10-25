@@ -2574,6 +2574,75 @@
         ],
         "type": "object"
       },
+      "HarnessCodexApproval": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "yolo",
+              "approve-for-me"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "HarnessModel": {
+        "additionalProperties": false,
+        "properties": {
+          "efforts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "HarnessModelCatalog": {
+        "additionalProperties": false,
+        "properties": {
+          "efforts": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "error": {
+            "type": "string"
+          },
+          "harness": {
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/HarnessModel"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "harness",
+          "models",
+          "efforts",
+          "error"
+        ],
+        "type": "object"
+      },
       "ImageAssignment": {
         "additionalProperties": false,
         "properties": {
@@ -4079,6 +4148,57 @@
         ],
         "type": "object"
       },
+      "OperatorArg": {
+        "additionalProperties": false,
+        "properties": {
+          "flag": {
+            "type": "string"
+          },
+          "help": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "type": "object"
+      },
+      "OperatorCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "args": {
+            "items": {
+              "$ref": "#/components/schemas/OperatorArg"
+            },
+            "type": "array"
+          },
+          "path": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "summary",
+          "action"
+        ],
+        "type": "object"
+      },
       "OutcomeView": {
         "properties": {
           "check_details": {
@@ -4116,6 +4236,276 @@
         "required": [
           "on",
           "to"
+        ],
+        "type": "object"
+      },
+      "PluginChannels": {
+        "additionalProperties": false,
+        "properties": {
+          "provide": {
+            "items": {
+              "$ref": "#/components/schemas/PluginProvidedChannel"
+            },
+            "type": "array"
+          },
+          "publish": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "subscribe": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "publish",
+          "subscribe"
+        ],
+        "type": "object"
+      },
+      "PluginContribution": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "operator_commands": {
+            "items": {
+              "$ref": "#/components/schemas/OperatorCommand"
+            },
+            "type": "array"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/SettingsContribution"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "PluginContributionList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "plugins": {
+            "items": {
+              "$ref": "#/components/schemas/PluginContribution"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "plugins",
+          "count"
+        ],
+        "type": "object"
+      },
+      "PluginInstallResult": {
+        "additionalProperties": false,
+        "properties": {
+          "installed": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "types": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "types",
+          "installed"
+        ],
+        "type": "object"
+      },
+      "PluginList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "plugins": {
+            "items": {
+              "$ref": "#/components/schemas/PluginSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "plugins",
+          "count"
+        ],
+        "type": "object"
+      },
+      "PluginLogs": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "lines",
+          "count"
+        ],
+        "type": "object"
+      },
+      "PluginProvidedChannel": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "help": {
+            "type": "string"
+          },
+          "params_schema": true
+        },
+        "required": [
+          "channel"
+        ],
+        "type": "object"
+      },
+      "PluginRemoved": {
+        "additionalProperties": false,
+        "properties": {
+          "removed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "type": "object"
+      },
+      "PluginRestarted": {
+        "additionalProperties": false,
+        "properties": {
+          "restarted": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "restarted"
+        ],
+        "type": "object"
+      },
+      "PluginSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "health": true,
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "types": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "types",
+          "enabled",
+          "state",
+          "health"
+        ],
+        "type": "object"
+      },
+      "PluginView": {
+        "additionalProperties": false,
+        "properties": {
+          "channels": {
+            "$ref": "#/components/schemas/PluginChannels"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "exec": {
+            "type": "string"
+          },
+          "installed_at": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "protocol_version": {
+            "type": "integer"
+          },
+          "socket": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "types": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "types",
+          "protocol_version",
+          "exec",
+          "source_path",
+          "channels",
+          "enabled",
+          "state",
+          "installed_at",
+          "socket"
         ],
         "type": "object"
       },
@@ -4519,6 +4909,169 @@
           "run_as",
           "state",
           "created_at"
+        ],
+        "type": "object"
+      },
+      "SecretKeyList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys",
+          "count"
+        ],
+        "type": "object"
+      },
+      "SecretRemoved": {
+        "additionalProperties": false,
+        "properties": {
+          "removed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "type": "object"
+      },
+      "SecretStored": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "stored": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "key",
+          "stored"
+        ],
+        "type": "object"
+      },
+      "SettingAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "action"
+        ],
+        "type": "object"
+      },
+      "SettingField": {
+        "additionalProperties": false,
+        "properties": {
+          "help": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "type"
+        ],
+        "type": "object"
+      },
+      "SettingSection": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/SettingAction"
+            },
+            "type": "array"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SettingField"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      },
+      "SettingStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label"
+        ],
+        "type": "object"
+      },
+      "SettingsContribution": {
+        "additionalProperties": false,
+        "properties": {
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SettingSection"
+            },
+            "type": "array"
+          },
+          "status": {
+            "items": {
+              "$ref": "#/components/schemas/SettingStatus"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
         ],
         "type": "object"
       },
@@ -13407,7 +13960,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/SecretRemoved"
+                    }
                   },
                   "required": [
                     "ok",
@@ -13482,7 +14037,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/SecretKeyList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -13581,7 +14138,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/SecretStored"
+                    }
                   },
                   "required": [
                     "ok",
@@ -17645,7 +18204,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/HarnessCodexApproval"
+                    }
                   },
                   "required": [
                     "ok",
@@ -17728,7 +18289,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/HarnessCodexApproval"
+                    }
                   },
                   "required": [
                     "ok",
@@ -17814,7 +18377,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/HarnessModelCatalog"
+                    }
                   },
                   "required": [
                     "ok",
@@ -19895,7 +20460,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/PluginContributionList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -19961,7 +20528,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/PluginList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -20044,7 +20613,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/PluginInstallResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -20130,7 +20701,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/PluginRemoved"
+                    }
                   },
                   "required": [
                     "ok",
@@ -20205,7 +20778,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/PluginView"
+                    }
                   },
                   "required": [
                     "ok",
@@ -20391,7 +20966,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/PluginLogs"
+                    }
                   },
                   "required": [
                     "ok",
@@ -20479,7 +21056,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/PluginRestarted"
+                    }
                   },
                   "required": [
                     "ok",

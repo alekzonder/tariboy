@@ -23,21 +23,8 @@ import (
 // schema leaves it in the same change, and review refuses new entries.
 var commandsWithoutResultSchema = []string{
 	"daemon.config.get",
-	"harness.codex-approval.get",
-	"harness.codex-approval.set",
-	"harness.models",
 	"plugin.action",
-	"plugin.contributions",
-	"plugin.inspect",
-	"plugin.install",
-	"plugin.logs",
-	"plugin.ls",
-	"plugin.restart",
-	"plugin.rm",
 	"plugin.routes",
-	"secret.ls",
-	"secret.rm",
-	"secret.store",
 	"tasks.activity",
 	"transcript",
 }
