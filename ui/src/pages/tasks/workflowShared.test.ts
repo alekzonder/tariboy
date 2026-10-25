@@ -101,8 +101,8 @@ describe("assignablePool", () => {
     ["a done task", { category: "done" }, {}],
     ["a cancelled task", { category: "cancelled" }, {}],
   ])("is empty for %s", (_, taskPatch, viewPatch) => {
-    expect(
-      assignablePool({ ...task, ...taskPatch }, viewPatch && { ...view, ...viewPatch }),
-    ).toBe("");
+    expect(assignablePool({ ...task, ...taskPatch }, viewPatch && { ...view, ...viewPatch })).toBe(
+      "",
+    );
   });
 });

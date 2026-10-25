@@ -4,7 +4,7 @@ import type { GroupRow } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { fmtTokens } from "@/lib/audit";
 import { fmtDateTime } from "@/lib/time";
-import type { UsagePoint, UsageReport, UsageRequest, UsageRow } from "@/lib/types";
+import type { UsagePoint, UsageReport } from "@/lib/types";
 import { fmtCost } from "@/lib/usage";
 import UsageSummaryCard from "@/components/usage/UsageSummaryCard";
 
@@ -87,7 +87,7 @@ export default function UsagePage() {
   );
 }
 
-function UsageByAgent({ rows }: { rows: UsageRow[] }) {
+function UsageByAgent({ rows }: { rows: UsageReport["rows"] }) {
   return (
     <section aria-labelledby="usage-aggregates-heading">
       <h2 id="usage-aggregates-heading" className="mb-2 text-base font-semibold">
@@ -136,7 +136,7 @@ function UsageByAgent({ rows }: { rows: UsageRow[] }) {
   );
 }
 
-function RecentRequests({ requests }: { requests: UsageRequest[] }) {
+function RecentRequests({ requests }: { requests: UsageReport["requests"] }) {
   return (
     <section aria-labelledby="recent-requests-heading">
       <h2 id="recent-requests-heading" className="mb-2 text-base font-semibold">
