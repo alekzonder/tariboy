@@ -14,6 +14,7 @@ export default function TaskRow({
   hasActiveQuestion,
   expanded,
   selected,
+  goal = false,
   onToggle,
   onSelect,
   onAddChild,
@@ -26,6 +27,8 @@ export default function TaskRow({
   hasActiveQuestion: boolean;
   expanded: boolean;
   selected: boolean;
+  /** The row is the scope agent's current Goal task. */
+  goal?: boolean;
   onToggle: () => void;
   onSelect: () => void;
   onAddChild?: () => void;
@@ -68,6 +71,8 @@ export default function TaskRow({
     <div
       ref={setNodeRef}
       data-testid={`task-row-${row.task.key}`}
+      data-goal={goal || undefined}
+      title={goal ? "Current Goal of this agent" : undefined}
       // A mouse or finger opens the task anywhere on the row; the keyboard keeps
       // the title button. The row's own buttons, and clicks React bubbles up
       // from the priority menu's portal, keep their own action.
@@ -79,6 +84,9 @@ export default function TaskRow({
       className={cn(
         "group/row relative flex min-h-7.5 cursor-pointer items-center gap-2.5 px-4 text-body",
         selected ? "bg-accent" : "hover:bg-muted",
+        // The tint gives way to the selection; the left stripe stays.
+        goal && !selected && "bg-status-running/8 hover:bg-status-running/12",
+        goal && "shadow-[inset_2px_0_0_var(--status-running)]",
         overInside && "ring-1 ring-primary ring-inset",
         row.task.access === "context" && "opacity-60",
         // Last, so a dragged context row still dims to the drag opacity.

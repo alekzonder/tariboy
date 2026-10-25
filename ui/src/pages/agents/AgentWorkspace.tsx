@@ -49,6 +49,7 @@ const TAB_CONTENT: Record<AgentTab, (ctx: TabContext) => ReactNode> = {
   tasks: ({ agent, initialTaskKey, onNotificationsChanged }) => (
     <TasksWorkspace
       scopeAgent={agent.name}
+      goalTaskKey={agent.current_goal_task_key}
       initialTaskKey={initialTaskKey}
       onNotificationsChanged={onNotificationsChanged}
     />
