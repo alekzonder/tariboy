@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WorkflowScriptRun, TransitionRequest, WorkflowView } from "@/lib/api";
+import type { ScriptRun, TransitionRequest, WorkflowView } from "@/lib/api";
 import { customerView, poolView } from "@/test/fixtures/workflowFixtures";
 import { explainProblem } from "./explainWorkflowProblem";
 
@@ -16,7 +16,7 @@ const request = (
   ...extra,
 });
 
-const failedRun: WorkflowScriptRun = {
+const failedRun: ScriptRun = {
   id: 8,
   task_key: "REL-1",
   kind: "check",
@@ -139,7 +139,7 @@ describe("explainProblem", () => {
   });
 
   it("explains a failed watch with its run", () => {
-    const watch: WorkflowScriptRun = {
+    const watch: ScriptRun = {
       id: 9,
       task_key: "REL-1",
       kind: "watch",
@@ -197,7 +197,7 @@ describe("explainProblem", () => {
 });
 
 describe("explainProblem kinds and priority", () => {
-  const watchRun: WorkflowScriptRun = {
+  const watchRun: ScriptRun = {
     ...failedRun,
     id: 9,
     kind: "watch",

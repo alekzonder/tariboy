@@ -1,11 +1,20 @@
-import { ApiError, createApi, type ChatSummaryRow, type AgentRow } from "@/lib/api";
+import {
+  ApiError,
+  createApi,
+  type AgentListResult,
+  type AgentRow,
+  type ChatSummaryRow,
+  type DaemonConfig,
+  type GroupList,
+  type GroupRow,
+} from "@/lib/api";
 import { listDaemons, resolveDaemon } from "@/lib/daemons";
 import { hasLocalDaemon } from "@/lib/desktop";
 
 export interface HostAgents {
   host: { id: string; label: string };
   agents: AgentRow[];
-  groups?: Array<{ name: string; lead: string; members: number }>;
+  groups?: GroupRow[];
   sidebarOrder?: { version: 1; groups: string[]; agents: string[] };
   /** One entry per agent this host holds a conversation with. Absent on a
    *  daemon too old to project chats — that host simply has no chat order. */
@@ -27,14 +36,11 @@ export async function fetchAllAgents(): Promise<HostAgents[]> {
       try {
         const api = createApi(await resolveDaemon(t.id));
         const [res, groupResult, config, chats] = await Promise.all([
-          api.request<{ agents: AgentRow[]; count: number }>("GET", "/api/agents"),
-          api.request<{
-            groups: Array<{ name: string; lead: string; members: number }>;
-            count: number;
-          }>("GET", "/api/groups"),
+          api.request<AgentListResult>("GET", "/api/agents"),
+          api.request<GroupList>("GET", "/api/groups"),
           api
-            .request<Record<string, string>>("GET", "/api/daemon/config?key=sidebar_order_v1")
-            .catch((): Record<string, string> => ({})),
+            .request<DaemonConfig>("GET", "/api/daemon/config?key=sidebar_order_v1")
+            .catch((): DaemonConfig => ({})),
           // Chats are additive: a host whose daemon does not project them yet
           // degrades to no chat order rather than to an unreachable host.
           api.messages

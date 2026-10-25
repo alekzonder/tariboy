@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { TaskEvent, TaskWait } from "./api";
+import type { TaskEvent, WaitingFor } from "./api";
 import { taskCommentWaits, taskEventSequence } from "./taskDetail";
 
-function wait(id: number, requestingPrincipal: string): TaskWait {
+function wait(id: number, requestingPrincipal: string): WaitingFor {
   return {
     id,
     task_key: "TEST-1",

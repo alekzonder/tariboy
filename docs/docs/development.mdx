@@ -167,11 +167,12 @@ when ownership is unclear. The backend target runs `fmt-check`, `vet`,
 `staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. Its
 `test` and `tariboy-tasks-e2e` steps also check the HTTP API against the
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
-frontend target runs the UI format check, UI typecheck, lint with the
-complexity and size thresholds, the unused-code check, unit tests,
+frontend target runs the UI format check, the generated API types check, UI
+typecheck, lint with the complexity and size thresholds, the unused-code check, unit tests,
 branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
-`scripts/npm-ci-locked.sh` for locked installs under both `ui/` and `docs/`.
+`scripts/npm-ci-locked.sh` for locked installs under `ui/`, `ui/tools/api-types/`
+and `docs/`.
 They do not write into
 `bin/` or dirty `git status`. Each step reports its result and duration as it
 finishes.
@@ -318,6 +319,29 @@ change a handler's result type, pin its JSON in the domain's golden test (for
 example `daemon_golden_test.go`) on the unchanged handler, and keep that
 golden file unchanged through the change.
 
+The UI does not declare response types by hand. `ui/src/lib/api-types.generated.ts`
+is generated from the snapshot and committed. After you update the snapshot,
+regenerate the file and commit both in the same change:
+
+```bash
+cd ui
+npm run api-types
+```
+
+The command reads the snapshot from the repository and needs no running
+daemon. The `ui-api-types` step of `make frontend-check` runs
+`npm run api-types:check`. It generates the file again in a temporary
+directory and compares it with the committed file. When they differ, the step
+fails, prints the diff and the command above, and changes no file. Fix the UI
+code that the new types break: `npx tsc -b` names every place. See
+[API types](/docs/architecture/web-ui#api-types) for how the UI uses the file.
+
+The generator, `openapi-typescript`, runs from its own package in
+`ui/tools/api-types/` with its own lock file. It needs the TypeScript 5
+compiler API, and `ui/` uses TypeScript 7, so the two cannot share one
+`package.json`. `frontend-check` installs the package with
+`scripts/npm-ci-locked.sh` like `ui/` and `docs/`.
+
 Workflow changes span `internal/workflowfile` and `internal/workflowimage`
 (the image), `internal/tasks` (the engine, run records, queue secrets, and the
 run log route), `internal/workflowrun` (the script protocol, process execution,
@@ -386,7 +410,7 @@ cd ui
 npm ci
 ```
 
-`make check` then covers `npm run fmt:check`, `npx tsc -b`, `npm run lint`, `npm run knip`,
+`make check` then covers `npm run fmt:check`, `npm run api-types:check`, `npx tsc -b`, `npm run lint`, `npm run knip`,
 `npm test`, `npm run branding:check`, and `npm run bundle:budget`. `make full-check` adds `npm run test:tasks-browser`
 and `npm run test:images-browser`, and builds the desktop bundle through its
 desktop step. Run any of them directly under `ui/` while iterating:
@@ -394,6 +418,8 @@ desktop step. Run any of them directly under `ui/` while iterating:
 ```bash
 cd ui
 npm test
+npm run api-types
+npm run api-types:check
 npm run fmt
 npm run fmt:check
 npm run lint

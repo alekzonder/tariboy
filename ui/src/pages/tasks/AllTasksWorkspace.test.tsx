@@ -80,6 +80,8 @@ function task(key: string, extra: Partial<Task> = {}): Task {
     created_at: "2026-09-01T10:00:00Z",
     updated_at: "2026-09-01T10:00:00Z",
     completed_at: "",
+    started_at: "",
+    pull_request: "",
     access: "write",
     ...extra,
   };
@@ -302,7 +304,14 @@ it("follows the task to its new server even when a step after the import fails",
   await pickRemoteAssignee();
   api.getTask.mockImplementation(async (key: string, target: { id: string } | null) => {
     if (target) throw new Error("tunnel dropped");
-    return { task: task(key, { revision: 4 }), comments: [], waiting_for: [], relations: [] };
+    return {
+      task: task(key, { revision: 4 }),
+      comments: [],
+      waiting_for: [],
+      relations: [],
+      descendants: 0,
+      active_descendants: 0,
+    };
   });
   await userEvent.click(screen.getByRole("button", { name: "Save task" }));
 

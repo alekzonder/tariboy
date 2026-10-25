@@ -3,7 +3,7 @@ import {
   type StoreImageView,
   type StoreWorkflowView,
   TARIBOY_STORE,
-  type WorkflowImage,
+  type WorkflowImageListing,
 } from "@/lib/api";
 import {
   hasTariboyStore,
@@ -94,7 +94,7 @@ describe("latestWorkflowVersion", () => {
     { name: "flow", tag: "1", version: "1" },
     { name: "flow", tag: "latest", version: "2" },
     { name: "other", tag: "latest", version: "9" },
-  ] as WorkflowImage[];
+  ] as WorkflowImageListing[];
 
   it("returns the latest tag version", () => {
     expect(latestWorkflowVersion(images, "flow")).toBe("2");

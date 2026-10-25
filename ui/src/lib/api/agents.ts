@@ -59,12 +59,14 @@ export type {
   AgentActionResult,
   AgentBudget,
   AgentImageStatus,
+  AgentListResult,
   AgentPromptPreview,
   AgentRow,
   AgentRunResult,
   AgentStatus,
   AgentStatusEvent,
   AgentView,
+  SecretKeyList,
   ShellScriptResult,
 } from "../api-types.generated";
 

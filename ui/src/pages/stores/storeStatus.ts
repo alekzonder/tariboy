@@ -3,7 +3,7 @@ import {
   type StoreImageView,
   type StoreWorkflowView,
   TARIBOY_STORE,
-  type WorkflowImage,
+  type WorkflowImageListing,
 } from "@/lib/api";
 
 const builtComparison = (image: StoreImageView) => {
@@ -50,7 +50,7 @@ export const workflowStatus = (workflow: StoreWorkflowView, latest: string | nul
 };
 
 export const latestWorkflowVersion = (
-  workflowImages: WorkflowImage[] | null,
+  workflowImages: WorkflowImageListing[] | null,
   workflowName: string,
 ) =>
   workflowImages

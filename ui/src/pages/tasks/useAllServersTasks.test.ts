@@ -49,6 +49,8 @@ function task(key: string, extra: Partial<Task> = {}): Task {
     created_at: "",
     updated_at: "",
     completed_at: "",
+    started_at: "",
+    pull_request: "",
     ...extra,
   };
 }

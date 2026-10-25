@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
-import type { IterationRow } from "@/lib/api";
+import type { IterationList, IterationRow } from "@/lib/api";
 
 // useIterationList loads an agent's iterations for AuditLogPage. filterKey
 // identifies the filter the rows belong to; queryString is what is sent.
@@ -24,10 +24,7 @@ export function useIterationList(name: string, filterKey: string, queryString: s
     const load = () => {
       const requestGeneration = ++generation;
       void api
-        .agentGet<{ iterations: IterationRow[]; count: number }>(
-          name,
-          queryString ? `iterations?${queryString}` : "iterations",
-        )
+        .agentGet<IterationList>(name, queryString ? `iterations?${queryString}` : "iterations")
         .then((r) => {
           if (current && requestGeneration === generation)
             setListState({

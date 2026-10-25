@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { TaskQueue } from "@/lib/api";
+import type { Queue } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { LABEL, MONO, SelectShell } from "./panelStyles";
 
@@ -34,7 +34,7 @@ export default function TaskRequeueDialog({
   onRequeue: (queue: string) => Promise<void>;
 }) {
   const api = useApi();
-  const [queues, setQueues] = useState<TaskQueue[]>([]);
+  const [queues, setQueues] = useState<Queue[]>([]);
   const [choice, setChoice] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

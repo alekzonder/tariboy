@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api";
-import type { WorkflowManifest } from "@/lib/api";
+import type { WorkflowImageManifest } from "@/lib/api";
 import { apiWrapper, fakeApi } from "@/test/api";
 import WorkflowImageDetail from "./WorkflowImageDetail";
 
@@ -28,7 +28,7 @@ const remoteApi = fakeApi(
   remote,
 );
 const digest = "c".repeat(64);
-const manifest: WorkflowManifest = {
+const manifest: WorkflowImageManifest = {
   schema_version: 1,
   name: "development",
   version: "0.1.0",

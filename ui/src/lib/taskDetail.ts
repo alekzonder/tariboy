@@ -1,9 +1,9 @@
-import type { TaskEvent, TaskWait } from "./api";
+import type { TaskEvent, WaitingFor } from "./api";
 
 // The workflow's own wait (a customer status or a pause) is answered in the
 // workflow panel, never by a comment, so neither the banner nor a comment
 // chip asks for one.
-export function taskCommentWaits(waits: TaskWait[], workflow: boolean): TaskWait[] {
+export function taskCommentWaits(waits: WaitingFor[], workflow: boolean): WaitingFor[] {
   return waits.filter((wait) => !(workflow && wait.requesting_principal === "system:workflow"));
 }
 

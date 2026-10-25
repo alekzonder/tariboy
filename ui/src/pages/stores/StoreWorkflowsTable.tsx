@@ -1,10 +1,10 @@
-import type { StoreWorkflowView, WorkflowImage } from "@/lib/api";
+import type { StoreWorkflowView, WorkflowImageListing } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { latestWorkflowVersion, workflowStatus } from "./storeStatus";
 
 interface StoreWorkflowRowProps {
   workflow: StoreWorkflowView;
-  workflowImages: WorkflowImage[] | null;
+  workflowImages: WorkflowImageListing[] | null;
   busy: string;
   buildWorkflow: (workflowName: string) => Promise<void>;
 }

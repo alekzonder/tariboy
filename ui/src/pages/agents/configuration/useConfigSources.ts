@@ -5,21 +5,12 @@ import {
   type ImageSummary,
   type AgentStatus,
   type AgentView,
+  type RetentionView,
+  type SecretKeyList,
 } from "@/lib/api";
 import { subscribeImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
 import { errorText } from "@/lib/errors";
-
-interface RetentionLimits {
-  keep_iterations: number;
-  keep_days: number;
-  max_bytes: number;
-}
-// The effective limits, the agent's own override (0 inherits) and the server default.
-export interface RetentionPolicy extends RetentionLimits {
-  override: RetentionLimits;
-  default: RetentionLimits;
-}
 
 // A loaded value, or the reason it is missing. A failed reload keeps the last
 // value: a failed read is not an empty one.
@@ -36,7 +27,7 @@ export interface ConfigSources {
   inventoryLoading: boolean;
   inventoryError: string;
   script: Loaded<string>;
-  retention: Loaded<RetentionPolicy>;
+  retention: Loaded<RetentionView>;
   secrets: Loaded<string[]>;
   loadImages: () => Promise<void>;
   reloadAll: () => Promise<void>;
@@ -58,7 +49,7 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
   const [inventoryLoading, setInventoryLoading] = useState(true);
   const [inventoryError, setInventoryError] = useState("");
   const [script, setScript] = useState<Loaded<string>>(empty);
-  const [retention, setRetention] = useState<Loaded<RetentionPolicy>>(empty);
+  const [retention, setRetention] = useState<Loaded<RetentionView>>(empty);
   const [secrets, setSecrets] = useState<Loaded<string[]>>(empty);
   const targetId = api.target?.id;
 
@@ -111,10 +102,10 @@ export function useConfigSources(name: string, status: AgentStatus | null): Conf
         if (current())
           setScript({ value: typeof next?.script === "string" ? next.script : "", error: "" });
       }, keep(setScript)),
-      api.agentGet<RetentionPolicy>(name, "retention").then((next) => {
+      api.agentGet<RetentionView>(name, "retention").then((next) => {
         if (current()) setRetention({ value: next, error: "" });
       }, keep(setRetention)),
-      api.agentGet<{ keys: string[] | null }>(name, "secrets").then((next) => {
+      api.agentGet<SecretKeyList>(name, "secrets").then((next) => {
         if (current()) setSecrets({ value: Array.isArray(next?.keys) ? next.keys : [], error: "" });
       }, keep(setSecrets)),
     ]);

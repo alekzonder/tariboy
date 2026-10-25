@@ -1,5 +1,5 @@
 import type { StatusTone } from "@/lib/statusTone";
-import type { WorkflowScriptRun, TransitionRequest, WorkflowView } from "@/lib/api";
+import type { ScriptRun, TransitionRequest, WorkflowView } from "@/lib/api";
 import {
   counterText,
   currentStatus,
@@ -28,7 +28,7 @@ export interface Problem {
   /** The request behind a failure or rejection; Retry acts on it. */
   request?: TransitionRequest;
   /** The run whose log explains it; shown with its log open. */
-  run?: WorkflowScriptRun;
+  run?: ScriptRun;
   /** `2 of 5 rejections`: how close the task is to a pause. */
   counter?: string;
 }
@@ -39,7 +39,7 @@ function firstLine(message: string | undefined): string {
 }
 
 /** The latest finished run of the open visit, newest first. */
-function latestFinishedRun(view: WorkflowView): WorkflowScriptRun | undefined {
+function latestFinishedRun(view: WorkflowView): ScriptRun | undefined {
   return [...(view.runs ?? [])]
     .filter(
       (run) => run.state === "finished" && inCurrentVisit(view, run.started_at ?? run.created_at),
@@ -48,10 +48,7 @@ function latestFinishedRun(view: WorkflowView): WorkflowScriptRun | undefined {
 }
 
 /** The run that served a request: the check that failed or rejected it. */
-function runOfRequest(
-  view: WorkflowView,
-  request: TransitionRequest,
-): WorkflowScriptRun | undefined {
+function runOfRequest(view: WorkflowView, request: TransitionRequest): ScriptRun | undefined {
   return [...(view.runs ?? [])]
     .filter((run) => run.kind === "check" && run.request_id === request.id)
     .sort((a, b) => b.id - a.id)[0];
@@ -61,7 +58,7 @@ function runOfRequest(
 function failureDetail(
   view: WorkflowView,
   request: TransitionRequest,
-  run: WorkflowScriptRun | undefined,
+  run: ScriptRun | undefined,
 ): string {
   if (run?.state === "interrupted") return "The daemon restarted during the check.";
   const line = firstLine(request.result_message) || firstLine(run?.message);

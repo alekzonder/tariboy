@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { TaskQueue } from "@/lib/api";
+import type { Queue } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 
 export default function TaskForm({
@@ -9,7 +9,7 @@ export default function TaskForm({
   onCreate,
   onCancel,
 }: {
-  queues: TaskQueue[];
+  queues: Queue[];
   initialQueue: string;
   parentKey?: string;
   onCreate: (input: { queue: string; parent_key: string; title: string }) => Promise<void>;

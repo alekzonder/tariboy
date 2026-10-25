@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { TaskQueue } from "@/lib/api";
+import type { Queue } from "@/lib/api";
 import { queueMenuItems, serverMenuItems } from "@/lib/taskFilterMenus";
 import type { TaskPrincipalFilter } from "./TaskFilterBar";
 
@@ -37,7 +37,7 @@ export function TaskQueueMenu({
   queueCounts,
   onManageQueues,
 }: {
-  queues: ReadonlyArray<Pick<TaskQueue, "prefix">>;
+  queues: ReadonlyArray<Pick<Queue, "prefix">>;
   queue: string;
   onQueue: (prefix: string) => void;
   queueCounts: ReadonlyMap<string, number>;

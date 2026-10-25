@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { ApiError, type WorkflowValidation, type WorkflowValidationError } from "@/lib/api";
+import {
+  ApiError,
+  type WorkflowImageValidation,
+  type WorkflowImageValidationError,
+} from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,8 +15,8 @@ export default function WorkflowBuildFromDirectory({ onBuilt }: { onBuilt: () =>
   const api = useApi();
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
-  const [validation, setValidation] = useState<WorkflowValidation | null>(null);
-  const [errors, setErrors] = useState<WorkflowValidationError[]>([]);
+  const [validation, setValidation] = useState<WorkflowImageValidation | null>(null);
+  const [errors, setErrors] = useState<WorkflowImageValidationError[]>([]);
   const [failure, setFailure] = useState<{ message: string; hint?: string } | null>(null);
 
   const run = async (action: () => Promise<void>) => {
@@ -48,7 +52,7 @@ export default function WorkflowBuildFromDirectory({ onBuilt }: { onBuilt: () =>
       } catch (err) {
         const list =
           err instanceof ApiError && Array.isArray(err.details?.errors)
-            ? (err.details.errors as WorkflowValidationError[])
+            ? (err.details.errors as WorkflowImageValidationError[])
             : [];
         if (list.length) setErrors(list);
         else if (err instanceof ApiError && err.code === "workflow_version_published") {

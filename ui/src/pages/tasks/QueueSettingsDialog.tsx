@@ -3,13 +3,7 @@ import { Plus } from "lucide-react";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import type {
-  AgentPool,
-  ApiClient,
-  CreateQueueInput,
-  TaskQueue,
-  UpdateQueueInput,
-} from "@/lib/api";
+import type { AgentPool, ApiClient, CreateQueueInput, Queue, UpdateQueueInput } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EMPTY, MONO } from "./panelStyles";
 import { NewQueuePane, QueueDetail } from "./QueueSettingsDetail";
@@ -49,7 +43,7 @@ export default function QueueSettingsDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  queues: TaskQueue[];
+  queues: Queue[];
   onCreate: (input: CreateQueueInput) => Promise<void>;
   onUpdate: (prefix: string, input: UpdateQueueInput) => Promise<void>;
 }) {
@@ -73,7 +67,7 @@ function QueueSettings({
   onCreate,
   onUpdate,
 }: {
-  queues: TaskQueue[];
+  queues: Queue[];
   onCreate: (input: CreateQueueInput) => Promise<void>;
   onUpdate: (prefix: string, input: UpdateQueueInput) => Promise<void>;
 }) {
@@ -234,7 +228,7 @@ function QueueList({
   onChoose,
   onNew,
 }: {
-  queues: TaskQueue[];
+  queues: Queue[];
   entries: Record<string, QueueEntry>;
   current?: string;
   creating: boolean;
@@ -285,7 +279,7 @@ function QueueListItem({
   current,
   onChoose,
 }: {
-  queue: TaskQueue;
+  queue: Queue;
   entry: QueueEntry | undefined;
   current: boolean;
   onChoose: () => void;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import type { WorkflowImage } from "@/lib/api";
+import type { WorkflowImageListing } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { errorText } from "@/lib/errors";
@@ -18,10 +18,10 @@ const CELL = "px-3 py-2";
 /** The workflow image registry of one server: build, list, and copy to other servers. */
 export default function WorkflowImagesPage({ basePath }: { basePath: string }) {
   const api = useApi();
-  const [images, setImages] = useState<WorkflowImage[] | null>(null);
+  const [images, setImages] = useState<WorkflowImageListing[] | null>(null);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
-  const [transfer, setTransfer] = useState<WorkflowImage | null>(null);
+  const [transfer, setTransfer] = useState<WorkflowImageListing | null>(null);
   const bindings = useQueueBindings();
   const transferDaemons = useTransferDaemons();
   const reloadBindings = bindings.reload;

@@ -1,7 +1,7 @@
 import { Check, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { StatusDot } from "@/components/ui/status";
-import type { WorkflowStatusInfo, WorkflowView } from "@/lib/api";
+import type { StatusView, WorkflowView } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { LABEL, MONO } from "./panelStyles";
 import { stepMarks, type StepMark } from "./workflowGraph";
@@ -110,7 +110,7 @@ function Step({ mark, open, onToggle }: { mark: StepMark; open: boolean; onToggl
 }
 
 /** The owner of a status as a short phrase. */
-function ownerText(status: WorkflowStatusInfo): string {
+function ownerText(status: StatusView): string {
   if (status.terminal) return status.cancelled ? "terminal, counts as cancelled" : "terminal";
   if (status.owner.startsWith("pool:")) return `pool ${status.owner.slice(5)}`;
   if (status.owner === "customer") return "the customer";
@@ -118,7 +118,7 @@ function ownerText(status: WorkflowStatusInfo): string {
   return status.owner;
 }
 
-function StepDetail({ status }: { status: WorkflowStatusInfo }) {
+function StepDetail({ status }: { status: StatusView }) {
   return (
     <div
       data-testid="step-detail"

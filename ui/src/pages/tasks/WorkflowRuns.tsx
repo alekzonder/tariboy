@@ -1,5 +1,5 @@
 import { useApi } from "@/components/apiContext";
-import type { WorkflowScriptRun } from "@/lib/api";
+import type { ScriptRun } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { COUNT, EMPTY, LABEL, MONO } from "./panelStyles";
 import RunRow from "./RunRow";
@@ -8,13 +8,7 @@ import RunRow from "./RunRow";
  * The task's script runs, newest first. The view carries only the latest 20.
  * A log is read only when asked for, at the daemon's default size.
  */
-export default function WorkflowRuns({
-  taskKey,
-  runs,
-}: {
-  taskKey: string;
-  runs: WorkflowScriptRun[];
-}) {
+export default function WorkflowRuns({ taskKey, runs }: { taskKey: string; runs: ScriptRun[] }) {
   const api = useApi();
   const sorted = [...runs].sort((a, b) => b.id - a.id);
   return (

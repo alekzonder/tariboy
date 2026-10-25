@@ -1,4 +1,4 @@
-import type { WorkflowStatusInfo, WorkflowView, WorkflowVisit } from "@/lib/api";
+import type { StatusView, WorkflowView, StatusVisit } from "@/lib/api";
 
 /**
  * Pure readings of a workflow view: where the task is in its status graph,
@@ -11,17 +11,17 @@ export function isClosed(view: WorkflowView): boolean {
   return view.category === "done" || view.category === "cancelled";
 }
 
-function isPoolStatus(status: WorkflowStatusInfo | undefined): boolean {
+function isPoolStatus(status: StatusView | undefined): boolean {
   return !!status && status.owner.startsWith("pool:");
 }
 
 /** The status the view is in, as the manifest declares it. */
-export function currentStatus(view: WorkflowView): WorkflowStatusInfo | undefined {
+export function currentStatus(view: WorkflowView): StatusView | undefined {
   return view.statuses.find((status) => status.id === view.status);
 }
 
 /** The open visit: the stay in the current status, with its counters. */
-export function currentVisit(view: WorkflowView): WorkflowVisit | undefined {
+export function currentVisit(view: WorkflowView): StatusVisit | undefined {
   return [...view.visits]
     .filter((visit) => !visit.left_at)
     .sort((a, b) => b.sequence - a.sequence)[0];
@@ -39,7 +39,7 @@ export function inCurrentVisit(view: WorkflowView, at: string): boolean {
  * task under a new digest; the visits before it stay as history only. A visit
  * without a digest predates the record and counts as current.
  */
-function runVisits(view: WorkflowView): WorkflowVisit[] {
+function runVisits(view: WorkflowView): StatusVisit[] {
   return view.visits.filter(
     (visit) => !visit.workflow_digest || visit.workflow_digest === view.digest,
   );
@@ -70,7 +70,7 @@ export function selectedStep(view: WorkflowView, chosen: string | null | undefin
 }
 
 export interface StepMark {
-  status: WorkflowStatusInfo;
+  status: StatusView;
   /** `current` is where the task is; `visited` was entered before; `ahead` not yet. */
   state: "current" | "visited" | "ahead";
   /** How many times the task came back to this status from a later one. */

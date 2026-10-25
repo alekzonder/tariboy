@@ -23,8 +23,8 @@ export default function GroupsPage() {
 
   const load = useCallback(
     () =>
-      api
-        .request<{ groups: GroupRow[] }>("GET", "/api/groups")
+      api.groups
+        .listGroups()
         .then((r) => setGroups(r.groups))
         .catch(() => setGroups([])),
     [api],

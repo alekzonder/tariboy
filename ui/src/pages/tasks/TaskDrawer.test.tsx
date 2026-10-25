@@ -74,8 +74,16 @@ const task: Task = {
   created_at: "2026-07-31T10:00:00Z",
   updated_at: "2026-07-31T10:00:00Z",
   completed_at: "",
+  started_at: "",
 };
-const detail: Detail = { task, comments: [], waiting_for: [], relations: [] };
+const detail: Detail = {
+  task,
+  comments: [],
+  waiting_for: [],
+  relations: [],
+  descendants: 0,
+  active_descendants: 0,
+};
 
 it("does not show one server's detail while the same key loads on another", async () => {
   const first = { id: "first", label: "First", baseURL: "https://first.test", token: "" };

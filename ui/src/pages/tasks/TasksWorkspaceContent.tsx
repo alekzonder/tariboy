@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { TaskQueue } from "@/lib/api";
+import type { Queue } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 import QueueSettingsDialog from "./QueueSettingsDialog";
 import { TaskFilterBar } from "./TaskFilterBar";
@@ -14,7 +14,7 @@ import type { TasksWorkspaceActions } from "./useTasksWorkspaceActions";
 import type { useTasksWorkspaceLayout } from "./useTasksWorkspaceLayout";
 
 // A toolbar filter is the explicit context; otherwise the queue of the last task made here.
-const newTaskQueue = (queue: string, queues: TaskQueue[], server: string) =>
+const newTaskQueue = (queue: string, queues: Queue[], server: string) =>
   queue || queues.find((item) => item.prefix === readRememberedQueue(server))?.prefix || "";
 
 export function TasksWorkspaceContent({

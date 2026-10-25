@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import type { Mock } from "vitest";
 import { ApiProvider } from "@/components/ApiProvider";
-import type { Task, TaskDetail, TaskNotification, TaskQueue } from "@/lib/api";
+import type { Task, TaskDetail, TaskNotification, Queue } from "@/lib/api";
 import type { Daemon } from "@/lib/daemons";
 
 // Fixtures shared by the TasksWorkspace test files. Each file keeps its own
@@ -23,7 +23,7 @@ export function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-export const queue: TaskQueue = {
+export const queue: Queue = {
   prefix: "TEST",
   name: "Test work",
   description: "",
@@ -54,6 +54,7 @@ export const root: Task = {
   created_at: "2026-07-31T10:00:00Z",
   updated_at: "2026-07-31T10:00:00Z",
   completed_at: "",
+  started_at: "",
 };
 export const child: Task = {
   ...root,
@@ -94,6 +95,8 @@ export const detail: TaskDetail = {
       created_at: root.created_at,
     },
   ],
+  descendants: 0,
+  active_descendants: 0,
 };
 export const notification: TaskNotification = {
   id: "notification-1",

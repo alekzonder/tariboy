@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ApiError, type WorkflowManifest } from "@/lib/api";
+import { ApiError, type WorkflowImageManifest } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { useWorkflowConfirm } from "@/pages/tasks/WorkflowConfirm";
 import { errorText } from "@/lib/errors";
@@ -28,7 +28,7 @@ export default function WorkflowImageDetail({
   basePath: string;
 }) {
   const api = useApi();
-  const [manifest, setManifest] = useState<WorkflowManifest | null>(null);
+  const [manifest, setManifest] = useState<WorkflowImageManifest | null>(null);
   const [error, setError] = useState("");
   const [removeError, setRemoveError] = useState("");
   const [busy, setBusy] = useState(false);

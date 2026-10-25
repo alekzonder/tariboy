@@ -3,6 +3,8 @@ import type { Transport } from "./client";
 
 export type {
   AgentUsage,
+  BudgetSpend,
+  BudgetStatusList,
   TaskActivityAgent,
   TaskActivityReport,
   TaskActivityRow,

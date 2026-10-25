@@ -57,7 +57,7 @@ export async function moveTaskToHost({
   const destination = createApi(targetFor(hostId));
   const label = remote.hostLabel || hostId || "local";
   const bundle = await api.tasks.exportTask(key);
-  const tasks = (bundle.tasks as Array<{ key: string; assignee: string }>).map((item) =>
+  const tasks = bundle.tasks.map((item) =>
     item.key === bundle.root_key ? { ...item, assignee: "" } : item,
   );
   const imported = await destination.tasks.importTask({ ...bundle, tasks });

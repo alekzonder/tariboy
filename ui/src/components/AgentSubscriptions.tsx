@@ -1,22 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useApi } from "@/components/apiContext";
+import type {
+  ChannelList,
+  ChannelRow,
+  SubscriptionChannel,
+  SubscriptionChannelList,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { validChannel } from "./channelName";
 import { Command, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { errorText } from "@/lib/errors";
-
-interface Sub {
-  name: string;
-  kind: string;
-  protected: boolean;
-}
-interface Chan {
-  name: string;
-  kind: string;
-}
 
 // AgentSubscriptions manages the per-agent bus subscriptions: protected rows
 // (own inbox, group:*) are read-only; ad-hoc rows get an Unsubscribe button. The
@@ -34,19 +30,19 @@ export function AgentSubscriptions({
   onSelect?: (ch: string) => void;
 }) {
   const api = useApi();
-  const [subs, setSubs] = useState<Sub[]>([]);
-  const [channels, setChannels] = useState<Chan[]>([]);
+  const [subs, setSubs] = useState<SubscriptionChannel[]>([]);
+  const [channels, setChannels] = useState<ChannelRow[]>([]);
   const [pick, setPick] = useState("");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     api
-      .get<{ channels: Sub[] }>(`/api/agents/${encodeURIComponent(name)}/subscriptions`)
+      .get<SubscriptionChannelList>(`/api/agents/${encodeURIComponent(name)}/subscriptions`)
       .then((r) => setSubs(r.channels))
       .catch(() => setSubs([]));
     api
-      .get<{ channels: Chan[] }>("/api/channels")
+      .get<ChannelList>("/api/channels")
       .then((r) => setChannels(r.channels))
       .catch(() => setChannels([]));
   }, [api, name]);
@@ -169,7 +165,7 @@ function SubscribeField({
   setPick: (pick: string) => void;
   open: boolean;
   setOpen: (open: boolean) => void;
-  options: Chan[];
+  options: ChannelRow[];
   invalid: boolean;
   disabled: boolean;
   onSubscribe: () => void;

@@ -251,8 +251,17 @@ function taskDetail(key: string, description: string): TaskDetail {
     created_at: "2026-08-18T12:00:00Z",
     updated_at: "2026-08-18T12:00:00Z",
     completed_at: "",
+    started_at: "",
+    pull_request: "",
   };
-  return { task, comments: [], waiting_for: [], relations: [] };
+  return {
+    task,
+    comments: [],
+    waiting_for: [],
+    relations: [],
+    descendants: 0,
+    active_descendants: 0,
+  };
 }
 
 function renderActivationFlow() {

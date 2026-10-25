@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { COUNT, LABEL, SelectShell } from "./panelStyles";
 import { TaskCommentForm } from "./TaskCommentForm";
 import { TaskCommentList } from "./TaskCommentList";
-import type { TaskComment, TaskPrincipals, TaskWait } from "@/lib/api";
+import type { TaskComment, PrincipalInfo, WaitingFor } from "@/lib/api";
 import { idempotencyKey } from "@/lib/ids";
 
 export default function TaskComments({
@@ -18,8 +18,8 @@ export default function TaskComments({
   onUploadingChange,
 }: {
   comments: TaskComment[];
-  waits: TaskWait[];
-  principals: TaskPrincipals | null;
+  waits: WaitingFor[];
+  principals: PrincipalInfo | null;
   assignee: string;
   formFirst: boolean;
   order: "newest" | "oldest";

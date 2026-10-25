@@ -68,6 +68,7 @@ const BASE_TASK: Detail["task"] = {
   created_at: "2026-09-08T09:12:00Z",
   updated_at: "2026-09-11T16:40:00Z",
   completed_at: "",
+  started_at: "",
 };
 
 const COMMENTS: Detail["comments"] = [
@@ -180,7 +181,16 @@ const Panel = ({ detail, width = 820 }: { detail: Detail; width?: number }) => {
 };
 
 export const OpenTask = () => (
-  <Panel detail={{ task: BASE_TASK, comments: COMMENTS, waiting_for: [], relations: RELATIONS }} />
+  <Panel
+    detail={{
+      task: BASE_TASK,
+      comments: COMMENTS,
+      waiting_for: [],
+      relations: RELATIONS,
+      descendants: 0,
+      active_descendants: 0,
+    }}
+  />
 );
 
 // A workflow task: the status select gives way to the Workflow panel, which
@@ -203,6 +213,8 @@ export const ManagedWorkflow = () => (
         comments: COMMENTS,
         waiting_for: [],
         relations: RELATIONS,
+        descendants: 0,
+        active_descendants: 0,
       }}
     />
   </DaemonProvider>

@@ -9,6 +9,7 @@ import type {
 import type { Transport } from "./client";
 
 export type {
+  GroupList,
   GroupRow,
   GroupView,
   TeamImportApplyResult,

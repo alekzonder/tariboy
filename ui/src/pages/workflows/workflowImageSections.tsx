@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
-import type { WorkflowDefinition, WorkflowDefinitionStatus, WorkflowManifest } from "@/lib/api";
+import type {
+  WorkflowImageDefinition,
+  WorkflowImageStatus,
+  WorkflowImageManifest,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { effectiveLimits, ownerLabel } from "./workflowImages";
 
@@ -7,7 +11,7 @@ const CELL = "px-3 py-2 align-top";
 const HEAD = "bg-muted/50 text-left text-xs text-muted-foreground";
 const DEFAULT_TIMEOUT = "60s";
 
-type Transition = NonNullable<WorkflowDefinitionStatus["transitions"]>[number];
+type Transition = NonNullable<WorkflowImageStatus["transitions"]>[number];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -70,7 +74,7 @@ export function WorkflowImageHeader({
   error,
   removeError,
 }: {
-  manifest: WorkflowManifest;
+  manifest: WorkflowImageManifest;
   bound: { text: string; title?: string };
   uploadDisabled: boolean;
   onUpload: () => void;
@@ -137,7 +141,7 @@ function StatusRow({
   status,
   initialStatus,
 }: {
-  status: WorkflowDefinitionStatus;
+  status: WorkflowImageStatus;
   initialStatus: string;
 }) {
   return (
@@ -174,7 +178,7 @@ function StatusRow({
   );
 }
 
-export function StatusesTable({ definition }: { definition: WorkflowDefinition }) {
+export function StatusesTable({ definition }: { definition: WorkflowImageDefinition }) {
   return (
     <TableSection
       title="Statuses"
@@ -187,7 +191,7 @@ export function StatusesTable({ definition }: { definition: WorkflowDefinition }
   );
 }
 
-export function LimitsTable({ definition }: { definition: WorkflowDefinition }) {
+export function LimitsTable({ definition }: { definition: WorkflowImageDefinition }) {
   return (
     <TableSection
       title="Limits"
@@ -213,7 +217,7 @@ export function LimitsTable({ definition }: { definition: WorkflowDefinition }) 
   );
 }
 
-export function ArtifactsList({ definition }: { definition: WorkflowDefinition }) {
+export function ArtifactsList({ definition }: { definition: WorkflowImageDefinition }) {
   return (
     <Section title="Artifacts">
       {definition.artifacts?.length ? (
@@ -234,7 +238,7 @@ export function ArtifactsList({ definition }: { definition: WorkflowDefinition }
   );
 }
 
-export function SecretsList({ definition }: { definition: WorkflowDefinition }) {
+export function SecretsList({ definition }: { definition: WorkflowImageDefinition }) {
   return (
     <Section title="Requires secrets">
       {definition.requires_secrets?.length ? (
@@ -250,7 +254,7 @@ export function SecretsList({ definition }: { definition: WorkflowDefinition }) 
   );
 }
 
-export function EnvList({ definition }: { definition: WorkflowDefinition }) {
+export function EnvList({ definition }: { definition: WorkflowImageDefinition }) {
   return (
     <Section title="Env">
       {Object.keys(definition.env ?? {}).length ? (
@@ -268,7 +272,7 @@ export function EnvList({ definition }: { definition: WorkflowDefinition }) {
   );
 }
 
-export function FilesTable({ files }: { files: WorkflowManifest["files"] }) {
+export function FilesTable({ files }: { files: WorkflowImageManifest["files"] }) {
   return (
     <TableSection title="Files" columns={["Path", "Size", "Executable"]}>
       {files.map((file) => (

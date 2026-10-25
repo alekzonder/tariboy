@@ -8,6 +8,7 @@ import type {
 import type { Transport } from "./client";
 
 export type {
+  IterationList,
   IterationLogs,
   IterationRow,
   IterationTimeoutResult,

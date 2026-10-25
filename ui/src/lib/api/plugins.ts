@@ -1,7 +1,13 @@
 import type { PluginContributionList, PluginRoutes } from "../api-types.generated";
 import type { Transport } from "./client";
 
-export type { PluginContribution, SettingField } from "../api-types.generated";
+export type {
+  PluginContribution,
+  PluginList,
+  PluginLogs,
+  PluginSummary,
+  SettingField,
+} from "../api-types.generated";
 
 export function pluginsApi(t: Transport) {
   return {

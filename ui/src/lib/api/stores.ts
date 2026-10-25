@@ -1,7 +1,7 @@
 import type { StoreDetail, StoreRemoveResult, StoreView } from "../api-types.generated";
 import type { Transport } from "./client";
 import type { ImageBuildResult } from "./images";
-import type { WorkflowBuildResult } from "./workflows";
+import type { WorkflowImageBuildResult } from "./workflows";
 
 export type {
   StoreDetail,
@@ -30,6 +30,6 @@ export function storesApi(t: Transport) {
     buildStoreImage: (input: { source: string; name?: string; tag?: string }) =>
       t.post<ImageBuildResult>("/api/images/build", input),
     buildStoreWorkflow: (source: string) =>
-      t.post<WorkflowBuildResult>("/api/workflow-images/build", { source }),
+      t.post<WorkflowImageBuildResult>("/api/workflow-images/build", { source }),
   };
 }

@@ -12,7 +12,20 @@ import type {
 } from "../api-types.generated";
 import type { Transport } from "./client";
 
-export type { ChatMessage, ChatSummaryRow, ChatView, InboxMessage } from "../api-types.generated";
+export type {
+  ChannelList,
+  ChannelMessage,
+  ChannelRow,
+  ChannelTail,
+  ChannelWatch,
+  ChannelWatchList,
+  ChatMessage,
+  ChatSummaryRow,
+  ChatView,
+  InboxMessage,
+  SubscriptionChannel,
+  SubscriptionChannelList,
+} from "../api-types.generated";
 
 // Backend status filter: pending → Queue, processed → Archive, dlq → DLQ.
 export type InboxStatus = "pending" | "processed" | "dlq" | "all";

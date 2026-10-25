@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, type AgentRow } from "@/lib/api";
+import { ApiError, type AgentListResult, type AgentRow } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { chatIdFromTitle } from "./chatModel";
 
@@ -39,7 +39,7 @@ export default function ChatCreate({
 
   useEffect(() => {
     void api
-      .get<{ agents: AgentRow[] }>("/api/agents")
+      .get<AgentListResult>("/api/agents")
       .then((page) => setOthers((page.agents ?? []).filter((row) => row.name !== agent)))
       .catch(() => setOthers([]));
   }, [agent, api]);

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { StoreView, StoreDetail, WorkflowImage } from "@/lib/api";
+import type { StoreView, StoreDetail, WorkflowImageListing } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { errorText } from "@/lib/errors";
 
@@ -11,7 +11,7 @@ export function useStoreData(name: string | undefined) {
   const [error, setError] = useState("");
   const [autoInterval, setAutoInterval] = useState("0");
   const [autoImages, setAutoImages] = useState<string[]>([]);
-  const [workflowImages, setWorkflowImages] = useState<WorkflowImage[] | null>(null);
+  const [workflowImages, setWorkflowImages] = useState<WorkflowImageListing[] | null>(null);
   // The Store whose policy seeded the form: a re-read after a reconnect must
   // not overwrite an unsaved edit.
   const policyLoaded = useRef("");
