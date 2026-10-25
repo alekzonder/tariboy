@@ -517,10 +517,12 @@ each other group loads with the first screen that needs it. Keep a group
 narrow: if the shell imports one module of a group, the whole group becomes
 part of the first download.
 
-`npm run bundle:budget`, a step of `make frontend-check`, fails when the entry
-chunk, or the entry chunk plus its static imports, is larger than 800,000
-bytes before compression. The budget does not measure CSS, the total size of
-all chunks, or the start time on a device.
+`npm run bundle:budget`, a step of `make frontend-check`, has three limits in
+bytes before compression. The entry chunk is limited to 351,000 bytes. The
+entry chunk plus its static imports is limited to 723,000 bytes. All JavaScript
+chunks, lazily loaded ones included, are limited to 3,215,000 bytes. The step
+fails when a size is over its limit. The budget does not measure CSS or the
+start time on a device.
 
 ## Component boundaries
 

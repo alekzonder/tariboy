@@ -11,6 +11,7 @@
     "build:store": "tsc -b && vite build -c vite.store.config.ts",
     "branding:check": "node scripts/generate-desktop-branding.mjs --check",
     "bundle:budget": "node scripts/bundle-budget.mjs",
+    "complexity:report": "node scripts/complexity-report.mjs",
     "fmt": "oxfmt src store tests .design-sync",
     "fmt:check": "oxfmt --check src store tests .design-sync",
     "lint": "oxlint . --deny-warnings",
