@@ -89,8 +89,8 @@ func TestYAMLPreviewReportsMissingAgentImageBeforeApply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agents := result.(map[string]any)["agents"].([]map[string]any)
-	if len(agents) != 1 || agents[0]["action"] != "blocked" || agents[0]["conflict"] != true {
+	agents := result.Agents
+	if len(agents) != 1 || agents[0].Action != "blocked" || !agents[0].Conflict {
 		t.Fatalf("agent plans = %#v", agents)
 	}
 }

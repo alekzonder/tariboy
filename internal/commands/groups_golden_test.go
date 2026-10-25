@@ -1,14 +1,22 @@
 package commands
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"encoding/json"
 	"flag"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/groups"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
@@ -118,4 +126,77 @@ func TestGroupsResponsesMatchGolden(t *testing.T) {
 	call("group.rm crew volumes", "group.rm", registry.Params{"name": "crew", "volumes": true})
 	call("group.rm empty", "group.rm", registry.Params{"name": "empty"})
 	recorder.check("groups_responses.golden.json", *updateGroupsGolden)
+}
+
+// Catches the team export route losing the compose YAML of the typed
+// team.compose result: the archive must carry the YAML team.compose renders.
+func TestTeamExportArchivesTypedComposeYAML(t *testing.T) {
+	c := groupsFixture(t)
+	c.Log = slog.New(slog.NewTextHandler(io.Discard, nil))
+	if _, err := h(t, "group.assign")(c, registry.Params{"name": "core", "agent": "lead1"}); err != nil {
+		t.Fatal(err)
+	}
+	rendered, err := h(t, "team.compose")(c, registry.Params{"name": "core"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	api.NewServer(BuildRegistry(), c).Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/groups/core/export", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("export status=%d body=%s", w.Code, w.Body.String())
+	}
+	gz, err := gzip.NewReader(w.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := tar.NewReader(gz)
+	for {
+		header, err := archive.Next()
+		if err != nil {
+			t.Fatalf("archive has no tariboy-compose.yaml: %v", err)
+		}
+		if filepath.Base(header.Name) != "tariboy-compose.yaml" {
+			continue
+		}
+		data, err := io.ReadAll(archive)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The archive is compose-only: export drops the images section.
+		if !strings.Contains(rendered.(TeamCompose).YAML, "cwd: /srv/lead1") || !strings.Contains(string(data), "cwd: /srv/lead1") {
+			t.Fatalf("archived compose = %q, rendered %#v", data, rendered)
+		}
+		return
+	}
+}
+
+func init() { typedCallSets["groups"] = groupsTypedCalls }
+
+// groupsTypedCalls serves the groups fixture with one staged team import
+// whose agent image is resolved through refs at apply time.
+func groupsTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
+	c := groupsFixture(t)
+	staged, err := h(t, "team.import.yaml")(c, registry.Params{"yaml": "version: 1\ngroups:\n  fresh: {lead: newbie}\nagents:\n  newbie:\n    image: ghost:1\n    group: fresh\n"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := importID(t, staged)
+	return c, []typedCall{
+		{"POST", "/api/groups", "/api/groups", map[string]any{"name": "core"}},
+		{"POST", "/api/groups/{name}/assign", "/api/groups/core/assign", map[string]any{"agent": "lead1"}},
+		{"POST", "/api/groups/{name}/assign", "/api/groups/core/assign", map[string]any{"agent": "dev1"}},
+		{"POST", "/api/groups/{name}/assign", "/api/groups/core/assign", map[string]any{"agent": "dev2"}},
+		{"POST", "/api/groups", "/api/groups", map[string]any{"name": "core", "lead": "lead1"}},
+		{"GET", "/api/groups", "/api/groups", nil},
+		{"GET", "/api/groups/{name}", "/api/groups/core", nil},
+		{"PATCH", "/api/groups/{name}/lead", "/api/groups/core/lead", map[string]any{"lead": "dev1"}},
+		{"DELETE", "/api/groups/{name}/members/{agent}", "/api/groups/core/members/dev2", nil},
+		{"GET", "/api/groups/{name}/compose", "/api/groups/core/compose", nil},
+		{"PATCH", "/api/groups/{name}/name", "/api/groups/core/name", map[string]any{"new_name": "crew"}},
+		{"POST", "/api/team-imports/preview-yaml", "/api/team-imports/preview-yaml", map[string]any{"yaml": "version: 1\ngroups:\n  crew: {}\nagents:\n  lead1:\n    image: worker:latest\n    group: crew\n"}},
+		{"GET", "/api/team-imports/{id}", "/api/team-imports/" + id, nil},
+		{"POST", "/api/team-imports/{id}/apply", "/api/team-imports/" + id + "/apply", map[string]any{"refs": map[string]any{"ghost:1": "worker:latest"}}},
+		{"GET", "/api/team-imports/{id}", "/api/team-imports/" + id, nil},
+		{"DELETE", "/api/groups/{name}", "/api/groups/crew?volumes=true", nil},
+	}
 }

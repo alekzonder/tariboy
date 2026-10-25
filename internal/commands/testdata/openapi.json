@@ -1795,6 +1795,112 @@
         ],
         "type": "object"
       },
+      "GroupAssignment": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent",
+          "group"
+        ],
+        "type": "object"
+      },
+      "GroupList": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupRow"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "groups",
+          "count"
+        ],
+        "type": "object"
+      },
+      "GroupRemoveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "removed": {
+            "type": "string"
+          },
+          "volumes": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "removed",
+          "volumes"
+        ],
+        "type": "object"
+      },
+      "GroupRow": {
+        "additionalProperties": false,
+        "properties": {
+          "lead": {
+            "type": "string"
+          },
+          "members": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "lead",
+          "members"
+        ],
+        "type": "object"
+      },
+      "GroupView": {
+        "additionalProperties": false,
+        "properties": {
+          "broadcast": {
+            "type": "string"
+          },
+          "inbox": {
+            "type": "string"
+          },
+          "lead": {
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "shared_dir": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "lead",
+          "members",
+          "broadcast",
+          "inbox",
+          "shared_dir"
+        ],
+        "type": "object"
+      },
       "ImageAssignment": {
         "additionalProperties": false,
         "properties": {
@@ -3740,6 +3846,234 @@
           "task_revision",
           "payload",
           "created_at"
+        ],
+        "type": "object"
+      },
+      "TeamApplyAgent": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "type": "object"
+      },
+      "TeamCompose": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "yaml": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "yaml"
+        ],
+        "type": "object"
+      },
+      "TeamImportApplyResult": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/TeamApplyAgent"
+            },
+            "type": "array"
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "groups": {
+            "type": "integer"
+          },
+          "import_id": {
+            "type": "string"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/TeamImportOperation"
+          }
+        },
+        "required": [
+          "groups",
+          "agents",
+          "complete",
+          "import_id",
+          "operation"
+        ],
+        "type": "object"
+      },
+      "TeamImportEntryPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "conflict": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "action",
+          "conflict",
+          "message"
+        ],
+        "type": "object"
+      },
+      "TeamImportImagePlan": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "conflict": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "action",
+          "conflict",
+          "message"
+        ],
+        "type": "object"
+      },
+      "TeamImportOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "compose_yaml": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "import_id": {
+            "type": "string"
+          },
+          "resolved_refs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "status": {
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/TeamImportStep"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "team": {
+            "type": "string"
+          },
+          "update_existing": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "import_id",
+          "team",
+          "status",
+          "steps",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "TeamImportPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/TeamImportEntryPlan"
+            },
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/TeamImportEntryPlan"
+            },
+            "type": "array"
+          },
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/TeamImportImagePlan"
+            },
+            "type": "array"
+          },
+          "import_id": {
+            "type": "string"
+          },
+          "team": {
+            "type": "string"
+          },
+          "yaml": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "import_id",
+          "team",
+          "yaml",
+          "images",
+          "agents",
+          "groups"
+        ],
+        "type": "object"
+      },
+      "TeamImportStep": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source_ready": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "status"
         ],
         "type": "object"
       },
@@ -14623,7 +14957,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/GroupList"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14710,7 +15046,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/GroupView"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14796,7 +15134,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/GroupRemoveResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14871,7 +15211,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/GroupView"
+                    }
                   },
                   "required": [
                     "ok",
@@ -14967,7 +15309,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/GroupAssignment"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15044,7 +15388,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/TeamCompose"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15140,7 +15486,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/GroupView"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15226,7 +15574,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/GroupAssignment"
+                    }
                   },
                   "required": [
                     "ok",
@@ -15322,7 +15672,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/GroupView"
+                    }
                   },
                   "required": [
                     "ok",
@@ -24623,7 +24975,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/TeamImportPlan"
+                    }
                   },
                   "required": [
                     "ok",
@@ -24700,7 +25054,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/TeamImportOperation"
+                    }
                   },
                   "required": [
                     "ok",
@@ -24788,7 +25144,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/TeamImportApplyResult"
+                    }
                   },
                   "required": [
                     "ok",

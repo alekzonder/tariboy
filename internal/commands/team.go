@@ -36,7 +36,7 @@ func rewriteTeamComposeRefs(input []byte, refs map[string]string) ([]byte, error
 func registryError(code string, err error) error { return api.UserError{Code: code, Msg: err.Error()} }
 
 func teamCompose() registry.Command {
-	return registry.Command{Path: "team.compose", Summary: "Render a group as tariboy-compose.yaml", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/groups/{name}/compose"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+	return registry.WithResult[TeamCompose](registry.Command{Path: "team.compose", Summary: "Render a group as tariboy-compose.yaml", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/groups/{name}/compose"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		name := p.String("name")
 		if err := checkGroupName(name); err != nil {
 			return nil, err
@@ -72,8 +72,8 @@ func teamCompose() registry.Command {
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"name": name, "yaml": string(raw)}, nil
-	}}
+		return TeamCompose{Name: name, YAML: string(raw)}, nil
+	}})
 }
 
 func teamApplyYAML() registry.Command {
@@ -100,13 +100,13 @@ func teamApplyYAML() registry.Command {
 				return nil, registryError("create_failed", err)
 			}
 		}
-		results := make([]map[string]any, 0, len(file.Agents))
+		results := make([]TeamApplyAgent, 0, len(file.Agents))
 		for name, spec := range file.Agents {
 			if existing, getErr := agent.NewStore(c.Store).Get(name); getErr == nil {
 				if existing.Group != spec.Group || existing.ImageRef != spec.Image {
-					results = append(results, map[string]any{"name": name, "status": "failed", "error": "existing agent has different group or image"})
+					results = append(results, TeamApplyAgent{Name: name, Status: "failed", Error: "existing agent has different group or image"})
 				} else {
-					results = append(results, map[string]any{"name": name, "status": "reused"})
+					results = append(results, TeamApplyAgent{Name: name, Status: "reused"})
 				}
 				continue
 			}
@@ -119,26 +119,24 @@ func teamApplyYAML() registry.Command {
 			if runErr == nil {
 				created, runErr = c.Control.Run(registry.RunSpec{ImageRef: spec.Image, Name: name, Cwd: spec.Cwd, Harness: harness, Model: model, Effort: effort, Interactive: interactive, Plugins: spec.Plugins, TimeoutS: timeoutS, Group: spec.Group})
 			}
-			item := map[string]any{"name": created, "status": "created"}
+			item := TeamApplyAgent{Name: created, Status: "created"}
 			if runErr != nil {
-				item["name"] = name
-				item["status"] = "failed"
-				item["error"] = runErr.Error()
+				item = TeamApplyAgent{Name: name, Status: "failed", Error: runErr.Error()}
 			}
 			results = append(results, item)
 		}
 		complete := true
 		for _, item := range results {
-			if item["status"] == "failed" {
+			if item.Status == "failed" {
 				complete = false
 			}
 		}
-		return map[string]any{"groups": len(file.Groups), "agents": results, "complete": complete}, nil
+		return TeamApplyResult{Groups: len(file.Groups), Agents: results, Complete: complete}, nil
 	}}
 }
 
 func teamImportYAML() registry.Command {
-	return registry.Command{Path: "team.import.yaml", Summary: "Preview pasted tariboy-compose.yaml", Args: []registry.Arg{{Name: "yaml", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/team-imports/preview-yaml"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+	return registry.WithResult[TeamImportPlan](registry.Command{Path: "team.import.yaml", Summary: "Preview pasted tariboy-compose.yaml", Args: []registry.Arg{{Name: "yaml", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/team-imports/preview-yaml"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		raw := []byte(p.String("yaml"))
 		file, err := compose.Parse(raw)
 		if err == nil {
@@ -160,18 +158,18 @@ func teamImportYAML() registry.Command {
 			return nil, registryError("preview_failed", err)
 		}
 		return planTeamImport(c, preview)
-	}}
+	}})
 }
 
-func planTeamImport(c *registry.Ctx, preview teamportable.Preview) (any, error) {
+func planTeamImport(c *registry.Ctx, preview teamportable.Preview) (TeamImportPlan, error) {
 	file, err := compose.Parse(preview.ComposeYAML)
 	if err == nil {
 		err = file.Validate()
 	}
 	if err != nil {
-		return nil, registryError("bad_compose", err)
+		return TeamImportPlan{}, registryError("bad_compose", err)
 	}
-	agentPlans := make([]map[string]any, 0, len(file.Agents))
+	agentPlans := make([]TeamImportEntryPlan, 0, len(file.Agents))
 	for name, spec := range file.Agents {
 		action, conflict, message := "create", false, ""
 		parsedRef, refErr := image.ParseRef(spec.Image)
@@ -184,21 +182,21 @@ func planTeamImport(c *registry.Ctx, preview teamportable.Preview) (any, error) 
 				action, conflict, message = "rename", true, "destination agent has different group or image"
 			}
 		}
-		agentPlans = append(agentPlans, map[string]any{"name": name, "action": action, "conflict": conflict, "message": message})
+		agentPlans = append(agentPlans, TeamImportEntryPlan{Name: name, Action: action, Conflict: conflict, Message: message})
 	}
-	groupPlans := make([]map[string]any, 0, len(file.Groups))
+	groupPlans := make([]TeamImportEntryPlan, 0, len(file.Groups))
 	gc, groupErr := requireGroups(c)
 	if groupErr != nil {
-		return nil, groupErr
+		return TeamImportPlan{}, groupErr
 	}
 	for name := range file.Groups {
 		action, conflict, message := "create", false, ""
 		if _, inspectErr := gc.Inspect(name); inspectErr == nil {
 			action, conflict, message = "choose", true, "destination team exists; rename it in YAML or explicitly update it"
 		}
-		groupPlans = append(groupPlans, map[string]any{"name": name, "action": action, "conflict": conflict, "message": message})
+		groupPlans = append(groupPlans, TeamImportEntryPlan{Name: name, Action: action, Conflict: conflict, Message: message})
 	}
-	return map[string]any{"import_id": preview.ImportID, "team": preview.Team, "yaml": string(preview.ComposeYAML), "images": []map[string]any{}, "agents": agentPlans, "groups": groupPlans}, nil
+	return TeamImportPlan{ImportID: preview.ImportID, Team: preview.Team, YAML: string(preview.ComposeYAML), Images: []TeamImportImagePlan{}, Agents: agentPlans, Groups: groupPlans}, nil
 }
 
 func teamImportArchivePlan() registry.Command {
@@ -223,7 +221,7 @@ func saveImportOperation(service teamportable.Service, operation teamportable.Op
 }
 
 func teamImportArchiveApply() registry.Command {
-	return registry.Command{Path: "team.import.archive.apply", Summary: "Build images and create a staged portable team", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/team-imports/{id}/apply"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+	return registry.WithResult[TeamImportApplyResult](registry.Command{Path: "team.import.archive.apply", Summary: "Build images and create a staged portable team", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/team-imports/{id}/apply"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		service := teamportable.Service{StagingRoot: filepath.Join(c.BaseDir, "team-imports")}
 		preview, err := service.Load(p.String("id"))
 		if err != nil {
@@ -266,24 +264,18 @@ func teamImportArchiveApply() registry.Command {
 		if value, ok := p.OptBool("update_existing"); ok {
 			updateExisting = value
 		}
-		plannedResult, planErr := planTeamImport(c, preview)
+		planned, planErr := planTeamImport(c, preview)
 		if planErr != nil {
 			return nil, planErr
 		}
-		if planned, ok := plannedResult.(map[string]any); ok {
-			if groups, ok := planned["groups"].([]map[string]any); ok {
-				for _, group := range groups {
-					if conflict, _ := group["conflict"].(bool); conflict && !updateExisting {
-						return nil, api.UserError{Code: "team_conflict", Msg: "destination team exists; rename it in YAML or choose update existing"}
-					}
-				}
+		for _, group := range planned.Groups {
+			if group.Conflict && !updateExisting {
+				return nil, api.UserError{Code: "team_conflict", Msg: "destination team exists; rename it in YAML or choose update existing"}
 			}
-			if agents, ok := planned["agents"].([]map[string]any); ok {
-				for _, candidate := range agents {
-					if conflict, _ := candidate["conflict"].(bool); conflict {
-						return nil, api.UserError{Code: "agent_conflict", Msg: fmt.Sprint(candidate["name"]) + ": " + fmt.Sprint(candidate["message"])}
-					}
-				}
+		}
+		for _, candidate := range planned.Agents {
+			if candidate.Conflict {
+				return nil, api.UserError{Code: "agent_conflict", Msg: candidate.Name + ": " + candidate.Message}
 			}
 		}
 		operation.ComposeYAML = string(preview.ComposeYAML)
@@ -325,38 +317,32 @@ func teamImportArchiveApply() registry.Command {
 			}
 			return nil, err
 		}
-		if mapped, ok := result.(map[string]any); ok {
-			mapped["import_id"] = preview.ImportID
-			if agents, ok := mapped["agents"].([]map[string]any); ok {
-				for _, item := range agents {
-					step := teamportable.OperationStep{Kind: "agent", Name: fmt.Sprint(item["name"]), Status: fmt.Sprint(item["status"])}
-					if itemError, ok := item["error"].(string); ok {
-						step.Error = itemError
-					}
-					operation.Steps = append(operation.Steps, step)
-				}
-			}
-			if complete, _ := mapped["complete"].(bool); complete {
-				operation.Status = "complete"
-			} else {
-				operation.Status = "failed"
-			}
-			if err := saveImportOperation(service, operation, operation.Status); err != nil {
-				return nil, err
-			}
-			mapped["operation"] = operation
+		applied, ok := result.(TeamApplyResult)
+		if !ok {
+			return nil, fmt.Errorf("team import %s: unexpected apply result %T", preview.ImportID, result)
 		}
-		return result, nil
-	}}
+		for _, item := range applied.Agents {
+			operation.Steps = append(operation.Steps, teamportable.OperationStep{Kind: "agent", Name: item.Name, Status: item.Status, Error: item.Error})
+		}
+		if applied.Complete {
+			operation.Status = "complete"
+		} else {
+			operation.Status = "failed"
+		}
+		if err := saveImportOperation(service, operation, operation.Status); err != nil {
+			return nil, err
+		}
+		return TeamImportApplyResult{TeamApplyResult: applied, ImportID: preview.ImportID, Operation: teamImportOperationFrom(operation)}, nil
+	}})
 }
 
 func teamImportArchiveStatus() registry.Command {
-	return registry.Command{Path: "team.import.archive.status", Summary: "Inspect portable team import progress", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/team-imports/{id}"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+	return registry.WithResult[TeamImportOperation](registry.Command{Path: "team.import.archive.status", Summary: "Inspect portable team import progress", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/team-imports/{id}"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		service := teamportable.Service{StagingRoot: filepath.Join(c.BaseDir, "team-imports")}
 		operation, err := service.RecoverOperation(p.String("id"), time.Now(), 5*time.Minute)
 		if err != nil {
 			return nil, registryError("import_not_found", err)
 		}
-		return operation, nil
-	}}
+		return teamImportOperationFrom(operation), nil
+	}})
 }

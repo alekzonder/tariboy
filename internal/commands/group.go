@@ -25,7 +25,7 @@ func checkGroupName(name string) error {
 }
 
 func groupCreate() registry.Command {
-	return registry.Command{
+	return registry.WithResult[GroupView](registry.Command{
 		Path:    "group.create",
 		Summary: "Create (or update) a group with an optional lead",
 		Args: []registry.Arg{
@@ -46,13 +46,13 @@ func groupCreate() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "create_failed", Msg: err.Error()}
 			}
-			return res, nil
+			return groupViewFrom(res), nil
 		},
-	}
+	})
 }
 
 func groupLs() registry.Command {
-	return registry.Command{
+	return registry.WithResult[GroupList](registry.Command{
 		Path:    "group.ls",
 		Summary: "List groups (name/lead/member count)",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/groups"},
@@ -65,13 +65,20 @@ func groupLs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"groups": list, "count": len(list)}, nil
+			rows := make([]GroupRow, 0, len(list))
+			for _, row := range list {
+				name, _ := row["name"].(string)
+				lead, _ := row["lead"].(string)
+				members, _ := row["members"].(int)
+				rows = append(rows, GroupRow{Name: name, Lead: lead, Members: members})
+			}
+			return GroupList{Groups: rows, Count: len(rows)}, nil
 		},
-	}
+	})
 }
 
 func groupInspect() registry.Command {
-	return registry.Command{
+	return registry.WithResult[GroupView](registry.Command{
 		Path:    "group.inspect",
 		Summary: "Show a group's lead, members, channels and shared dir",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "group name"}},
@@ -89,13 +96,13 @@ func groupInspect() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: "group " + name + " not found"}
 			}
-			return res, nil
+			return groupViewFrom(res), nil
 		},
-	}
+	})
 }
 
 func groupRm() registry.Command {
-	return registry.Command{
+	return registry.WithResult[GroupRemoveResult](registry.Command{
 		Path:    "group.rm",
 		Summary: "Remove a group (detach members, delete channels; --volumes drops the shared dir)",
 		Args: []registry.Arg{
@@ -115,13 +122,13 @@ func groupRm() registry.Command {
 			if err := gc.Remove(name, p.Bool("volumes")); err != nil {
 				return nil, api.UserError{Code: "rm_failed", Msg: err.Error()}
 			}
-			return map[string]any{"removed": name, "volumes": p.Bool("volumes")}, nil
+			return GroupRemoveResult{Removed: name, Volumes: p.Bool("volumes")}, nil
 		},
-	}
+	})
 }
 
 func groupAssign() registry.Command {
-	return registry.Command{
+	return registry.WithResult[GroupAssignment](registry.Command{
 		Path:    "group.assign",
 		Summary: "Assign an agent to a group (empty group leaves)",
 		Args: []registry.Arg{
@@ -141,13 +148,13 @@ func groupAssign() registry.Command {
 			if err := gc.Assign(p.String("agent"), name); err != nil {
 				return nil, api.UserError{Code: "assign_failed", Msg: err.Error()}
 			}
-			return map[string]any{"agent": p.String("agent"), "group": name}, nil
+			return GroupAssignment{Agent: p.String("agent"), Group: name}, nil
 		},
-	}
+	})
 }
 
 func groupRename() registry.Command {
-	return registry.Command{
+	return registry.WithResult[GroupView](registry.Command{
 		Path: "group.rename", Summary: "Rename a group without deleting its agents",
 		Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "new_name", Type: registry.String, Required: true}},
 		HTTP: &registry.HTTPRoute{Method: "PATCH", Path: "/api/groups/{name}/name"},
@@ -166,13 +173,13 @@ func groupRename() registry.Command {
 			if err := gc.Rename(oldName, newName); err != nil {
 				return nil, api.UserError{Code: "rename_failed", Msg: err.Error()}
 			}
-			return gc.Inspect(newName)
+			return inspectGroupView(gc, newName)
 		},
-	}
+	})
 }
 
 func groupLeadSet() registry.Command {
-	return registry.Command{
+	return registry.WithResult[GroupView](registry.Command{
 		Path: "group.lead.set", Summary: "Set a group's lead to a current member",
 		Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "lead", Type: registry.String, Required: true}},
 		HTTP: &registry.HTTPRoute{Method: "PATCH", Path: "/api/groups/{name}/lead"},
@@ -191,13 +198,13 @@ func groupLeadSet() registry.Command {
 			if err := gc.ChangeLead(name, lead); err != nil {
 				return nil, api.UserError{Code: "lead_failed", Msg: err.Error()}
 			}
-			return gc.Inspect(name)
+			return inspectGroupView(gc, name)
 		},
-	}
+	})
 }
 
 func groupMemberRm() registry.Command {
-	return registry.Command{
+	return registry.WithResult[GroupAssignment](registry.Command{
 		Path: "group.member.rm", Summary: "Remove an agent from a group without deleting it",
 		Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "agent", Type: registry.String, Required: true}},
 		HTTP: &registry.HTTPRoute{Method: "DELETE", Path: "/api/groups/{name}/members/{agent}"},
@@ -229,7 +236,17 @@ func groupMemberRm() registry.Command {
 			if err := gc.Assign(agentName, ""); err != nil {
 				return nil, api.UserError{Code: "remove_member_failed", Msg: err.Error()}
 			}
-			return map[string]any{"agent": agentName, "group": ""}, nil
+			return GroupAssignment{Agent: agentName, Group: ""}, nil
 		},
+	})
+}
+
+// inspectGroupView returns the group's view after a change; an inspect
+// failure is returned as it is.
+func inspectGroupView(gc registry.GroupControl, name string) (GroupView, error) {
+	view, err := gc.Inspect(name)
+	if err != nil {
+		return GroupView{}, err
 	}
+	return groupViewFrom(view), nil
 }
