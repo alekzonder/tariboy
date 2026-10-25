@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -109,7 +111,8 @@ func (v *openAPIValidator) validate(method, route string, status int, body []byt
 }
 
 // typedOperations returns "METHOD route" for each operation whose success
-// result has a declared shape: a component reference or properties. A free
+// result has a declared shape: a component reference, an array of one, or
+// properties. A free
 // object result is checked only at the envelope level.
 func (v *openAPIValidator) typedOperations() []string {
 	var out []string
@@ -119,7 +122,8 @@ func (v *openAPIValidator) typedOperations() []string {
 			result := dig(operation, "responses", "200", "content", "application/json", "schema", "properties", "result")
 			_, ref := result["$ref"]
 			_, props := result["properties"]
-			if ref || props {
+			_, items := dig(result, "items")["$ref"]
+			if ref || props || items {
 				out = append(out, strings.ToUpper(method)+" "+route)
 			}
 		}
@@ -151,6 +155,10 @@ func TestOpenAPIValidator(t *testing.T) {
 	      "properties": {"ok": {"type": "boolean"}, "result": {"$ref": "#/components/schemas/Thing"}}}}}},
 	    "default": {"content": {"application/json": {"schema": {"type": "object", "required": ["ok", "error"],
 	      "properties": {"ok": {"type": "boolean"}, "error": {"type": "object", "required": ["code", "message"]}}}}}}
+	  }}},
+	  "/api/things": {"get": {"responses": {
+	    "200": {"content": {"application/json": {"schema": {"type": "object", "required": ["ok", "result"],
+	      "properties": {"ok": {"type": "boolean"}, "result": {"type": "array", "items": {"$ref": "#/components/schemas/Thing"}}}}}}}
 	  }}}},
 	  "components": {"schemas": {"Thing": {"type": "object", "additionalProperties": false, "required": ["name", "tags"],
 	    "properties": {"name": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}, "nullable": true}}}}}
@@ -184,7 +192,10 @@ func TestOpenAPIValidator(t *testing.T) {
 	if err := v.validate("POST", route, 200, []byte(`{}`)); err == nil {
 		t.Error("an operation the spec lacks was accepted")
 	}
-	if got := v.typedOperations(); !slices.Equal(got, []string{"GET " + route}) {
+	if err := v.validate("GET", "/api/things", 200, []byte(`{"ok":true,"result":[{"name":"a"}]}`)); err == nil {
+		t.Error("an array item missing a required field was accepted")
+	}
+	if got := v.typedOperations(); !slices.Equal(got, []string{"GET /api/things", "GET " + route}) {
 		t.Errorf("typedOperations = %v", got)
 	}
 }
@@ -215,12 +226,47 @@ func TestTypedResponsesMatchOpenAPI(t *testing.T) {
 	validator := newOpenAPIValidator(t, servedOpenAPI(t))
 	calls := append(agentTypedCalls(ref), taskTypedCalls()...)
 	called := map[string]bool{}
-	for _, call := range calls {
+	validateTypedCalls(t, httpServer, validator, calls, called, func(call typedCall) {
 		fc.live = ""
 		if call.url == "/api/agents/gamma" {
 			fc.live = "error"
 		}
-		status, body := rawRequest(t, httpServer.Client(), call.method, httpServer.URL+call.url, call.body)
+	})
+	for _, name := range slices.Sorted(maps.Keys(typedCallSets)) {
+		t.Run(name, func(t *testing.T) {
+			sc, setCalls := typedCallSets[name](t)
+			if sc.Log == nil {
+				sc.Log = slog.New(slog.NewTextHandler(io.Discard, nil))
+			}
+			setServer := httptest.NewServer(api.NewServer(BuildRegistry(), sc).Handler())
+			t.Cleanup(setServer.Close)
+			validateTypedCalls(t, setServer, validator, setCalls, called, nil)
+		})
+	}
+	for _, operation := range validator.typedOperations() {
+		if !called[operation] {
+			t.Errorf("typed operation %s has no call in TestTypedResponsesMatchOpenAPI: add one", operation)
+		}
+	}
+}
+
+// typedCallSet prepares the state one domain's typed responses need and
+// returns the context to serve them from and the calls to validate. A domain
+// adds its set to typedCallSets from an init function in its own test file.
+type typedCallSet func(t *testing.T) (*registry.Ctx, []typedCall)
+
+// typedCallSets holds the per-domain call sets of TestTypedResponsesMatchOpenAPI.
+var typedCallSets = map[string]typedCallSet{}
+
+// validateTypedCalls sends each call, records its operation as called, and
+// checks the response against the spec; before runs ahead of each call.
+func validateTypedCalls(t *testing.T, server *httptest.Server, validator *openAPIValidator, calls []typedCall, called map[string]bool, before func(typedCall)) {
+	t.Helper()
+	for _, call := range calls {
+		if before != nil {
+			before(call)
+		}
+		status, body := rawRequest(t, server.Client(), call.method, server.URL+call.url, call.body)
 		if status != http.StatusOK {
 			t.Errorf("%s %s = %d %s; the table expects a success", call.method, call.url, status, body)
 			continue
@@ -228,11 +274,6 @@ func TestTypedResponsesMatchOpenAPI(t *testing.T) {
 		called[call.method+" "+call.route] = true
 		if err := validator.validate(call.method, call.route, status, body); err != nil {
 			t.Errorf("%s: %v\nresponse: %s", call.url, err, body)
-		}
-	}
-	for _, operation := range validator.typedOperations() {
-		if !called[operation] {
-			t.Errorf("typed operation %s has no call in TestTypedResponsesMatchOpenAPI: add one", operation)
 		}
 	}
 }

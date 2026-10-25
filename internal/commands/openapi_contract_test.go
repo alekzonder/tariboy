@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -283,5 +284,43 @@ func firstLineDiff(want, got []byte) string {
 		if w != g || i >= len(wantLines) || i >= len(gotLines) {
 			return fmt.Sprintf("line %d:\n snapshot: %s\n   served: %s", i+1, w, g)
 		}
+	}
+}
+
+// Catches two commands that declare one component name with different
+// schemas: the served spec keeps only one of them, so the other command
+// would publish a wrong result schema.
+func TestCommandsDeclareConsistentComponents(t *testing.T) {
+	t.Parallel()
+	if err := componentConflicts(BuildRegistry().Commands()); err != "" {
+		t.Error(err)
+	}
+}
+
+func componentConflicts(commands []registry.Command) string {
+	declared := map[string]registry.Command{}
+	var problems []string
+	for _, c := range commands {
+		for name, schema := range c.Schemas {
+			if first, ok := declared[name]; ok && !reflect.DeepEqual(first.Schemas[name], schema) {
+				problems = append(problems, fmt.Sprintf("component %s: commands %s and %s declare different schemas; give one type a distinct name", name, first.Path, c.Path))
+				continue
+			}
+			declared[name] = c
+		}
+	}
+	return strings.Join(problems, "\n")
+}
+
+func TestComponentConflictsReportsDifferentSchemas(t *testing.T) {
+	t.Parallel()
+	a := registry.Command{Path: "a.get", Schemas: map[string]map[string]any{"Item": {"type": "object"}}}
+	b := registry.Command{Path: "b.get", Schemas: map[string]map[string]any{"Item": {"type": "string"}}}
+	same := registry.Command{Path: "c.get", Schemas: map[string]map[string]any{"Item": {"type": "object"}}}
+	if got := componentConflicts([]registry.Command{a, same}); got != "" {
+		t.Errorf("equal schemas reported: %s", got)
+	}
+	if got := componentConflicts([]registry.Command{a, b}); !strings.Contains(got, "component Item: commands a.get and b.get") {
+		t.Errorf("conflict = %q", got)
 	}
 }

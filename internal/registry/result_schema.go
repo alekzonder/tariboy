@@ -15,15 +15,21 @@ const (
 	openAPIRef        = "#/components/schemas/"
 )
 
-// WithResult declares the named struct T as c's result type: it derives the
-// OpenAPI component schemas of T and every named type T reaches, points
-// ResultSchema at T's component, and adds the components to Schemas. Field
+// WithResult declares the named struct T, or a slice of one, as c's result
+// type: it derives the OpenAPI component schemas of the struct and every named
+// type it reaches, points ResultSchema at the struct's component (or an array
+// of it), and adds the components to Schemas. Field
 // rules follow encoding/json: the json tag names a property, a field without
 // omitempty is required, and a struct allows no additional properties. A
 // pointer field must carry omitempty. An enum is a string type whose
 // JSONSchemaExtend method sets Enum. An invalid type panics at registration.
 func WithResult[T any](c Command) Command {
-	name, schemas, err := resultSchemas(reflect.TypeFor[T]())
+	t := reflect.TypeFor[T]()
+	array := t.Kind() == reflect.Slice
+	if array {
+		t = t.Elem()
+	}
+	name, schemas, err := resultSchemas(t)
 	if err != nil {
 		panic(fmt.Sprintf("%s result: %v", c.Path, err))
 	}
@@ -37,6 +43,9 @@ func WithResult[T any](c Command) Command {
 		c.Schemas[component] = schema
 	}
 	c.ResultSchema = map[string]any{"$ref": openAPIRef + name}
+	if array {
+		c.ResultSchema = map[string]any{"type": "array", "items": c.ResultSchema}
+	}
 	return c
 }
 
