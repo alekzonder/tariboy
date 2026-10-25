@@ -4239,6 +4239,9 @@
         ],
         "type": "object"
       },
+      "PluginActionResult": {
+        "description": "Plugin-defined action result; the plugin defines the shape, which may be any JSON value."
+      },
       "PluginChannels": {
         "additionalProperties": false,
         "properties": {
@@ -4417,6 +4420,11 @@
         "required": [
           "restarted"
         ],
+        "type": "object"
+      },
+      "PluginRoutes": {
+        "description": "Plugin-defined external channel routes; the plugin defines the shape.",
+        "nullable": true,
         "type": "object"
       },
       "PluginSummary": {
@@ -20880,7 +20888,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/PluginActionResult"
+                    }
                   },
                   "required": [
                     "ok",
@@ -21135,7 +21145,9 @@
                     "ok": {
                       "type": "boolean"
                     },
-                    "result": {}
+                    "result": {
+                      "$ref": "#/components/schemas/PluginRoutes"
+                    }
                   },
                   "required": [
                     "ok",

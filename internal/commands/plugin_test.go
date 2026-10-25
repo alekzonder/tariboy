@@ -244,7 +244,7 @@ func TestPluginActionForwards(t *testing.T) {
 	if got["action"] != "bind" || got["external_id"] != "c-1" || got["channel"] != "chat:orders" {
 		t.Fatalf("forwarded body = %v", got)
 	}
-	if res.(map[string]any)["channel"] != "chat:orders" {
+	if res.(PluginActionResult).Value.(map[string]any)["channel"] != "chat:orders" {
 		t.Fatalf("res = %v", res)
 	}
 }
@@ -313,7 +313,7 @@ func TestPluginRoutesForwards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["has_token"] != false {
+	if res.(PluginRoutes).Body["has_token"] != false {
 		t.Fatalf("res = %v", res)
 	}
 }

@@ -66,7 +66,11 @@ func pluginLs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return pluginResult[PluginList](map[string]any{"plugins": list, "count": len(list)})
+			items, err := pluginResult[[]PluginSummary](list)
+			if err != nil {
+				return nil, err
+			}
+			return PluginList{Plugins: items, Count: len(items)}, nil
 		},
 	})
 }
@@ -214,7 +218,7 @@ func pluginLogs() registry.Command {
 }
 
 func pluginRoutes() registry.Command {
-	return registry.Command{
+	return registry.WithResult[PluginRoutes](registry.Command{
 		Path:    "plugin.routes",
 		Summary: "Show a plugin's external channel routes",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "plugin name"}},
@@ -232,13 +236,13 @@ func pluginRoutes() registry.Command {
 			if err != nil {
 				return nil, pluginActionErr(name, err)
 			}
-			return res, nil
+			return PluginRoutes{Body: res}, nil
 		},
-	}
+	})
 }
 
 func pluginAction() registry.Command {
-	return registry.Command{
+	return registry.WithResult[PluginActionResult](registry.Command{
 		Path:    "plugin.action",
 		Summary: "Invoke a generic action on a running plugin",
 		Args: []registry.Arg{
@@ -286,18 +290,9 @@ func pluginAction() registry.Command {
 			if err := pc.ApplyActionSubscriptions(name, res); err != nil {
 				return nil, api.UserError{Code: "bad_action_effect", Msg: err.Error()}
 			}
-			if result, ok := res["result"]; ok {
-				return result, nil
-			}
-			public := make(map[string]any, len(res))
-			for key, value := range res {
-				if key != "subscriptions" {
-					public[key] = value
-				}
-			}
-			return public, nil
+			return pluginActionResult(res), nil
 		},
-	}
+	})
 }
 
 // pluginActionErr maps host/plugin errors to clean UserErrors for the API.

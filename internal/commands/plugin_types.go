@@ -183,3 +183,53 @@ type SecretKeyList struct {
 type SecretRemoved struct {
 	Removed string `json:"removed"`
 }
+
+// PluginRoutes is the plugin.routes result: the body the running plugin
+// answers on GET /routes, encoded unchanged. The host guarantees only a JSON
+// object, or null when the plugin sends an empty or unparsable body.
+type PluginRoutes struct {
+	Body map[string]any `json:"-"`
+}
+
+// MarshalJSON encodes the plugin body as is.
+func (r PluginRoutes) MarshalJSON() ([]byte, error) { return json.Marshal(r.Body) }
+
+// JSONSchema describes the plugin-defined routes body as an open object.
+func (PluginRoutes) JSONSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type:        "object",
+		Description: "Plugin-defined external channel routes; the plugin defines the shape.",
+		Extras:      map[string]any{"nullable": true},
+	}
+}
+
+// PluginActionResult is the plugin.action result: the result value of the
+// action response when the plugin sends one, otherwise the response without
+// its subscriptions. The plugin defines the value, which may be any JSON value.
+type PluginActionResult struct {
+	Value any `json:"-"`
+}
+
+// MarshalJSON encodes the plugin value as is.
+func (r PluginActionResult) MarshalJSON() ([]byte, error) { return json.Marshal(r.Value) }
+
+// JSONSchema accepts any JSON value.
+func (PluginActionResult) JSONSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{Description: "Plugin-defined action result; the plugin defines the shape, which may be any JSON value."}
+}
+
+// pluginActionResult returns the result value of the response when present,
+// otherwise a copy of the response (an object, never null) without the
+// subscriptions the host applied.
+func pluginActionResult(response map[string]any) PluginActionResult {
+	if result, ok := response["result"]; ok {
+		return PluginActionResult{Value: result}
+	}
+	public := PluginActionResult{Value: map[string]any{}}
+	for key, value := range response {
+		if key != "subscriptions" {
+			public.Value.(map[string]any)[key] = value
+		}
+	}
+	return public
+}

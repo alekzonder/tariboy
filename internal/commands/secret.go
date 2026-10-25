@@ -101,7 +101,7 @@ func secretSet() registry.Command {
 			}); err != nil {
 				return nil, err
 			}
-			return map[string]any{"name": p.String("name"), "key": p.String("key"), "stored": true}, nil
+			return SecretStored{Name: p.String("name"), Key: p.String("key"), Stored: true}, nil
 		},
 	}
 }
