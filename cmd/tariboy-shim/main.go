@@ -23,7 +23,7 @@ func main() {
 	iterDir := fs.String("iteration-dir", "", "iteration directory (holds logs/, result.json, shim.sock)")
 	agent := fs.String("agent", "", "agent name")
 	iterID := fs.String("iteration-id", "", "iteration id")
-	hardTimeout := fs.Int("hard-timeout-s", 0, "hard timeout seconds (0 = 60s default)")
+	hardTimeout := fs.Int("hard-timeout-s", 0, "hard timeout seconds (0 = no hard timeout)")
 	hardDeadline := fs.String("hard-deadline", "", "absolute hard deadline (RFC3339)")
 	tmuxSession := fs.String("tmux-session", "", "tmux session name (empty = process mode)")
 	shimSock := fs.String("shim-sock", "", "shim RPC socket path (empty = <iteration-dir>/shim.sock)")

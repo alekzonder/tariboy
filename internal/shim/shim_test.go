@@ -706,8 +706,8 @@ func TestInitialDeadlinePrefersPersistedAbsoluteDeadline(t *testing.T) {
 
 // A zero deadline means "no hard timeout" — the watchdog must never fire on its
 // own, yet must still accept a later Set() (e.g. a resync that arms a real
-// deadline). This is what lets an interactive agent run until it exits or is
-// stopped instead of being killed by the default 60s timeout.
+// deadline). This is what lets an iteration with a hard timeout of 0 run until
+// it exits or is stopped.
 func TestDeadlineWatchdogZeroDeadlineNeverFiresButCanBeArmed(t *testing.T) {
 	t.Parallel()
 	// The watchdog is timer-only code; the bubble's fake clock runs it instantly.
@@ -733,21 +733,26 @@ func TestDeadlineWatchdogZeroDeadlineNeverFiresButCanBeArmed(t *testing.T) {
 	})
 }
 
-// tmuxDeadline (the interactive path) must NOT apply the 60s default: with no
-// explicit hard timeout/deadline it returns the zero time (no deadline). An
-// explicit HardTimeoutS or HardDeadline still arms it.
-func TestTmuxDeadlineNoDefaultForInteractive(t *testing.T) {
+// A hard timeout of 0 or less means "no hard timeout" in both the headless
+// and the interactive path: with no explicit hard timeout/deadline
+// initialDeadline returns the zero time (no deadline). An explicit
+// HardTimeoutS or HardDeadline still arms it.
+func TestInitialDeadlineZeroTimeoutMeansNoDeadline(t *testing.T) {
 	t.Parallel()
-	if got := tmuxDeadline(Options{}); !got.IsZero() {
-		t.Fatalf("tmuxDeadline with no timeout = %s, want zero (no deadline)", got)
+	for _, hard := range []int{0, -1} {
+		if got := initialDeadline(Options{HardTimeoutS: hard}); !got.IsZero() {
+			t.Fatalf("initialDeadline with HardTimeoutS=%d = %s, want zero (no deadline)", hard, got)
+		}
 	}
-	if got := tmuxDeadline(Options{HardTimeoutS: 30}); got.IsZero() {
-		t.Fatal("tmuxDeadline with HardTimeoutS should arm a deadline, got zero")
+	before := time.Now()
+	got := initialDeadline(Options{HardTimeoutS: 30})
+	if got.Before(before.Add(30*time.Second)) || got.After(time.Now().Add(30*time.Second)) {
+		t.Fatalf("initialDeadline with HardTimeoutS=30 = %s, want about now+30s", got)
 	}
 	persisted := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339Nano)
 	want, _ := time.Parse(time.RFC3339Nano, persisted)
-	if got := tmuxDeadline(Options{HardDeadline: persisted}); !got.Equal(want) {
-		t.Fatalf("tmuxDeadline with HardDeadline = %s, want %s", got, want)
+	if got := initialDeadline(Options{HardDeadline: persisted}); !got.Equal(want) {
+		t.Fatalf("initialDeadline with HardDeadline = %s, want %s", got, want)
 	}
 }
 

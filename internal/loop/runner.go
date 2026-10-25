@@ -1298,7 +1298,7 @@ func hardTimeout(ag agent.Agent) int {
 	if ag.TimeoutS > 0 {
 		return ag.TimeoutS + 60
 	}
-	return 0 // shim applies its own 60s default
+	return 0 // no hard deadline
 }
 
 func jsonUnmarshal(data []byte, v any) error { return json.Unmarshal(data, v) }
