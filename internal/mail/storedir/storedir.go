@@ -51,6 +51,11 @@ func (d Directory) PluginInstalled(name string) (bool, error) {
 	return d.exists(`SELECT COUNT(*) FROM plugins WHERE name = ?`, name)
 }
 
+func (d Directory) PluginReceivesMail(name string) (bool, error) {
+	return d.exists(`SELECT COUNT(*) FROM plugins WHERE name = ? AND enabled = 1
+		AND json_valid(mail) AND json_extract(mail, '$.receive') = 1`, name)
+}
+
 func (d Directory) QueueExists(prefix string) (bool, error) {
 	return d.exists(`SELECT COUNT(*) FROM task_queues WHERE prefix = ?`, prefix)
 }

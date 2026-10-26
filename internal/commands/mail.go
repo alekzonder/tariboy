@@ -35,10 +35,11 @@ func mailAs(c *registry.Ctx, p registry.Request) string {
 var mailAsArg = registry.Arg{Name: "as", Flag: "as", Type: registry.String, Help: "principal to act as (default the customer)"}
 
 // mailCommand builds one mail command whose handler gets the mail service and
-// the principal it acts as.
+// the principal it acts as. It serves HTTP only: `tariboy mail` is the tmail
+// client, which calls these routes.
 func mailCommand(path, summary, method, route string, args []registry.Arg, run func(*mail.Mail, string, registry.Request) (any, error)) registry.Command {
 	return registry.Command{
-		Path: path, Summary: summary, Args: append(args, mailAsArg),
+		Path: path, Summary: summary, Args: append(args, mailAsArg), CLIHidden: true,
 		HTTP: &registry.HTTPRoute{Method: method, Path: route},
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			m, err := requireMail(c)
@@ -57,7 +58,7 @@ func mailCommands() []registry.Command {
 			[]registry.Arg{
 				{Name: "box", Flag: "box", Type: registry.String, Default: mail.BoxInbox, Help: "inbox, sent or archive"},
 				{Name: "limit", Flag: "limit", Type: registry.Int, Help: "most letters to return (default 100)"},
-				{Name: "before", Flag: "before", Type: registry.String, Help: "created_at to page before (sent and archive)"},
+				{Name: "before", Flag: "before", Type: registry.String, Help: "cursor of the next page, from next_before"},
 			},
 			func(m *mail.Mail, as string, p registry.Request) (any, error) {
 				box := p.Trimmed("box")

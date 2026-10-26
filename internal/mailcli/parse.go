@@ -34,7 +34,7 @@ type commandHelp struct {
 var (
 	asFlag     = flagSpec{"as", false, "Principal to act as, user:login or agent:name (operator-only; default the customer)"}
 	limitFlag  = flagSpec{"limit", false, "Most letters to list (default 100)"}
-	beforeFlag = flagSpec{"before", false, "created_at to list before, from the next: line or next_before"}
+	beforeFlag = flagSpec{"before", false, "Cursor of the next page, from the next: line or next_before"}
 )
 
 // commands is the tmail command table, in the order help lists them.

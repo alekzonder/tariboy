@@ -16,6 +16,7 @@ import (
 // letter's deadline. A reply to a closed letter is recorded and reopens
 // nothing; closed reports whether this reply closed the letter. A reply to a
 // task.question is refused with answer_on_task: the answer belongs on the task.
+// A reply to a sender that no longer exists is stored closed.
 func (m *Mail) Reply(r ReplyRequest) (Letter, bool, error) {
 	if strings.TrimSpace(r.Text) == "" {
 		return Letter{}, false, errInvalid("reply text is required")
@@ -40,6 +41,11 @@ func (m *Mail) Reply(r ReplyRequest) (Letter, bool, error) {
 	}
 	now := m.now()
 	targets, err := m.resolve(reply.From, reply.To)
+	if ErrorCode(err) == "unknown_recipient" {
+		// The sender is gone (a deleted agent, an uninstalled plugin): the
+		// reply is stored closed so the request can still be answered.
+		targets, err = []target{{principal: reply.To, closed: true}}, nil
+	}
 	if err != nil {
 		return Letter{}, false, err
 	}
@@ -162,8 +168,17 @@ func (m *Mail) MarkRead(as string, ids []string) (closedNotices, read int, err e
 }
 
 // Requeue returns a dead letter of as to the inbox: attempts start over and
-// the dead and closed fields are cleared.
+// the dead and closed fields are cleared. It is refused with queue_limit while
+// the agent's inbox is at its cap. A request's deadline is armed again when
+// it is still ahead and cleared when it has passed.
 func (m *Mail) Requeue(as, id string) (Letter, error) {
+	limit := 0
+	if name, ok := strings.CutPrefix(as, "agent:"); ok {
+		var err error
+		if limit, err = m.dir.InboxCap(name); err != nil {
+			return Letter{}, err
+		}
+	}
 	tx, err := m.db.Begin()
 	if err != nil {
 		return Letter{}, err
@@ -176,17 +191,51 @@ func (m *Mail) Requeue(as, id string) (Letter, error) {
 	if l.DeadAt == "" {
 		return Letter{}, errInvalid("letter %s is not dead", id)
 	}
+	if limit > 0 {
+		open, err := openCount(tx, as)
+		if err != nil {
+			return Letter{}, err
+		}
+		if open >= limit {
+			return Letter{}, newError(http.StatusConflict, DeadQueueLimit,
+				"inbox of %s is full (%d/%d open); close letters first", as, open, limit)
+		}
+	}
+	reason := l.DeadReason
+	l.DeadAt, l.DeadReason, l.Attempts, l.AnsweredAt, l.AnswerID = "", "", 0, "", ""
+	if err := m.requeueDeadlineTx(tx, &l); err != nil {
+		return Letter{}, err
+	}
 	if _, err := tx.Exec(`UPDATE mail SET dead_at = '', dead_reason = '', attempts = 0, answered_at = '',
-		answer_id = '' WHERE id = ?`, id); err != nil {
+		answer_id = '', deadline = ? WHERE id = ?`, l.Deadline, id); err != nil {
 		return Letter{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return Letter{}, err
 	}
-	reason := l.DeadReason
-	l.DeadAt, l.DeadReason, l.Attempts, l.AnsweredAt, l.AnswerID = "", "", 0, "", ""
 	m.emit(written{letters: []Letter{l}, audits: []auditEvent{letterAudit("mail_requeued", l, map[string]any{"reason": reason})}})
 	return l, nil
+}
+
+// requeueDeadlineTx cancels the old deadline schedule of a requeued request
+// and arms it again when the deadline is still ahead; a passed deadline is
+// cleared, as it can no longer fire.
+func (m *Mail) requeueDeadlineTx(tx *sql.Tx, l *Letter) error {
+	if !l.NeedsReply || l.Deadline == "" {
+		return nil
+	}
+	if err := m.cancelDeadline(tx, l.ID); err != nil {
+		return err
+	}
+	at, err := store.ParseTime(l.Deadline)
+	if err != nil || !at.After(m.now()) {
+		l.Deadline = ""
+		return nil
+	}
+	if d := m.deadlineSeam(); d != nil {
+		return d.ArmTx(tx, *l)
+	}
+	return nil
 }
 
 // ClearInbox deletes the open letters to agent and returns how many.
@@ -203,20 +252,23 @@ func (m *Mail) ClearInbox(agent string) (int, error) {
 }
 
 // CloseTaskQuestionsTx closes, inside the caller's transaction, the open
-// task.question letters to recipient about taskKey sent by one of senders,
+// task.question letters to recipient about taskKey asked by one of askers,
 // with note as close note, and returns how many it closed. Native Tasks calls
-// it when the questions those senders asked recipient are answered on the task.
-func CloseTaskQuestionsTx(tx *sql.Tx, recipient, taskKey string, senders []string, note string, now time.Time) (int, error) {
-	if len(senders) == 0 {
+// it when the questions those askers asked recipient are answered on the task.
+// The asker is data.from, or the sender when data has none: the outbox sends
+// a question as system:tasks when its asker can no longer send.
+func CloseTaskQuestionsTx(tx *sql.Tx, recipient, taskKey string, askers []string, note string, now time.Time) (int, error) {
+	if len(askers) == 0 {
 		return 0, nil
 	}
 	args := []any{store.FormatTime(now), note, recipient, KindTaskQuestion, taskKey}
-	for _, sender := range senders {
-		args = append(args, sender)
+	for _, asker := range askers {
+		args = append(args, asker)
 	}
 	res, err := tx.Exec(`UPDATE mail SET answered_at = ?, close_note = ?
 		WHERE recipient = ? AND kind = ? AND CASE WHEN json_valid(data) THEN json_extract(data, '$.task_key') END = ?
-		AND sender IN (`+inPlaceholders(len(senders))+`) AND `+openSQL, args...)
+		AND COALESCE(NULLIF(CASE WHEN json_valid(data) THEN json_extract(data, '$.from') END, ''), sender)
+		IN (`+inPlaceholders(len(askers))+`) AND `+openSQL, args...)
 	if err != nil {
 		return 0, fmt.Errorf("close task questions of %s: %w", taskKey, err)
 	}

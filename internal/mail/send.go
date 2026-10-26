@@ -11,10 +11,12 @@ import (
 )
 
 // target is one resolved recipient. cap is the inbox cap of an agent
-// recipient (zero or less: none).
+// recipient (zero or less: none). closed stores the letter closed: nobody
+// reads it.
 type target struct {
 	principal string
 	cap       int
+	closed    bool
 }
 
 // Send validates the sender and the recipients, expands groups and writes one
@@ -79,6 +81,7 @@ func (m *Mail) ValidateRecipient(from, to string) error {
 // normalize fills the defaults of an outgoing letter and checks its fields.
 func normalize(l Letter, now time.Time) (Letter, error) {
 	l.From, l.To = strings.TrimSpace(l.From), strings.TrimSpace(l.To)
+	l.Subject = OneLine(l.Subject)
 	if l.From == "" {
 		return Letter{}, errInvalid("sender is required")
 	}
@@ -192,7 +195,8 @@ func (m *Mail) resolve(from, to string) ([]target, error) {
 }
 
 // expand validates one recipient principal and returns the principals it
-// addresses: itself, or the members of a group except the sender.
+// addresses: itself, or the members of a group except the sender. A plugin
+// recipient must be an enabled mail sink.
 func (m *Mail) expand(from, p string) ([]string, error) {
 	kind, name, _ := strings.Cut(p, ":")
 	switch {
@@ -206,6 +210,12 @@ func (m *Mail) expand(from, p string) ([]string, error) {
 		return []string{p}, nil
 	case kind == "group":
 		return m.expandGroup(from, p, name)
+	case kind == "plugin":
+		ok, err := m.dir.PluginReceivesMail(name)
+		if err != nil || !ok {
+			return nil, firstErr(err, errUnknownRecipient(p))
+		}
+		return []string{p}, nil
 	}
 	ok, err := m.knownPrincipal(p)
 	if err != nil || !ok {
@@ -286,7 +296,7 @@ func (m *Mail) writeTx(tx *sql.Tx, l Letter, targets []target, now time.Time) ([
 // closeOnArrival stores a letter nobody reads closed and a letter over the
 // agent's inbox cap dead.
 func closeOnArrival(tx *sql.Tx, row *Letter, t target) error {
-	if strings.HasPrefix(t.principal, "system:") || strings.HasPrefix(t.principal, "queue:") {
+	if t.closed || strings.HasPrefix(t.principal, "system:") || strings.HasPrefix(t.principal, "queue:") {
 		row.AnsweredAt = row.CreatedAt
 		return nil
 	}

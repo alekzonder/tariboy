@@ -257,3 +257,32 @@ func TestSendValidatesSenderAndDeadline(t *testing.T) {
 		t.Fatalf("deadline = %q, created %q", l.Deadline, l.CreatedAt)
 	}
 }
+
+func TestSendNormalisesSubjectLineBreaks(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	l := f.sendOne(t, mail.Letter{From: "agent:alice", To: "user:customer", Subject: "  one\r\ntwo\n\n# three\u0000 ", Body: "a\nb"})
+	if l.Subject != "one two # three" || l.Body != "a\nb" {
+		t.Fatalf("subject %q body %q; want one line and the body untouched", l.Subject, l.Body)
+	}
+	if got := f.show(t, "user:customer", l.ID); got.Subject != "one two # three" {
+		t.Fatalf("stored subject %q", got.Subject)
+	}
+}
+
+// A plugin recipient must be an enabled mail sink: a disabled plugin or one
+// without mail.receive has no drainer, so its letters would sit open forever.
+func TestSendToDisabledPluginRejected(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	// metrics is installed (it may send) but does not receive mail.
+	_, err := f.m.Send(mail.Letter{From: "agent:alice", To: "plugin:metrics", Body: "x"})
+	wantCode(t, err, "unknown_recipient")
+	if _, err := f.m.Send(mail.Letter{From: "plugin:metrics", To: "agent:alice", Body: "x"}); err != nil {
+		t.Fatalf("an installed plugin without mail.receive cannot send: %v", err)
+	}
+	f.sendOne(t, mail.Letter{From: "agent:alice", To: "plugin:telegram", Body: "x"})
+	f.dir.sinks["telegram"] = false // disabled
+	_, err = f.m.Send(mail.Letter{From: "agent:alice", To: "plugin:telegram", Body: "x"})
+	wantCode(t, err, "unknown_recipient")
+}

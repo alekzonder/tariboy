@@ -20,10 +20,13 @@ import (
 // and the plugin telegram.
 type roundTripDirectory struct{}
 
-func (roundTripDirectory) AgentExists(name string) (bool, error)       { return name == "worker", nil }
-func (roundTripDirectory) InboxCap(string) (int, error)                { return 1, nil }
-func (roundTripDirectory) CustomerLogin() string                       { return "customer" }
-func (roundTripDirectory) PluginInstalled(name string) (bool, error)   { return name == "telegram", nil }
+func (roundTripDirectory) AgentExists(name string) (bool, error)     { return name == "worker", nil }
+func (roundTripDirectory) InboxCap(string) (int, error)              { return 1, nil }
+func (roundTripDirectory) CustomerLogin() string                     { return "customer" }
+func (roundTripDirectory) PluginInstalled(name string) (bool, error) { return name == "telegram", nil }
+func (d roundTripDirectory) PluginReceivesMail(name string) (bool, error) {
+	return d.PluginInstalled(name)
+}
 func (roundTripDirectory) QueueExists(string) (bool, error)            { return false, nil }
 func (roundTripDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
 

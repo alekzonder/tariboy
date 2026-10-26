@@ -220,7 +220,7 @@ func pluginLogs() registry.Command {
 func pluginRoutes() registry.Command {
 	return registry.WithResult[PluginRoutes](registry.Command{
 		Path:    "plugin.routes",
-		Summary: "Show a plugin's external channel routes",
+		Summary: "Show a plugin's external routes, such as its chat bindings",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "plugin name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/plugins/{name}/routes"},
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {

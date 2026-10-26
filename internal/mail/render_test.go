@@ -3,6 +3,7 @@ package mail_test
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/alekzonder/tariboy/internal/mail"
 )
@@ -181,7 +182,7 @@ func TestListBoxesAndPaging(t *testing.T) {
 		t.Fatalf("inbox = %v, %v; want oldest first", ids(inbox), err)
 	}
 	page, next, err := f.m.List(mail.BoxSent, "agent:alice", 2, "")
-	if err != nil || !reflect.DeepEqual(ids(page), []string{sent[2].ID, sent[1].ID}) || next != sent[1].CreatedAt {
+	if err != nil || !reflect.DeepEqual(ids(page), []string{sent[2].ID, sent[1].ID}) || next == "" {
 		t.Fatalf("sent page = %v next %q, %v", ids(page), next, err)
 	}
 	page, next, err = f.m.List(mail.BoxSent, "agent:alice", 2, next)
@@ -276,5 +277,84 @@ func TestCloseTaskQuestionsTxClosesOnlyThatTask(t *testing.T) {
 	}
 	if got := f.show(t, "user:customer", q3.ID); got.AnsweredAt != "" {
 		t.Fatalf("q3 closed: %+v", got)
+	}
+}
+
+// pageAll pages box of as with limit until next_before is empty and returns
+// every letter id in page order.
+func pageAll(t *testing.T, m *mail.Mail, box, as string, limit int) []string {
+	t.Helper()
+	var out []string
+	before := ""
+	for range 20 {
+		page, next, err := m.List(box, as, limit, before)
+		if err != nil {
+			t.Fatalf("list %s before %q: %v", box, before, err)
+		}
+		out = append(out, ids(page)...)
+		if next == "" {
+			return out
+		}
+		before = next
+	}
+	t.Fatalf("list %s did not end", box)
+	return nil
+}
+
+// fixedClockMail is a Mail over f's store whose clock never moves, so every
+// letter it writes shares one created_at.
+func fixedClockMail(f *fixture) *mail.Mail {
+	at := time.Date(2026, 10, 26, 11, 0, 0, 0, time.UTC)
+	return mail.New(f.st, func() time.Time { return at }, f.dir)
+}
+
+func TestListPagingKeepsRowsSharingCreatedAt(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	m := fixedClockMail(f)
+	// One send to three recipients: three rows with one created_at.
+	out, err := m.Send(mail.Letter{From: "user:customer", To: "agent:alice,agent:bob,agent:carol", Body: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pageAll(t, m, mail.BoxSent, "user:customer", 2); !reflect.DeepEqual(got, []string{out[2].ID, out[1].ID, out[0].ID}) {
+		t.Fatalf("sent pages = %v; want every row once, newest first", got)
+	}
+	// Three letters to one recipient in the same instant, closed: archive and all.
+	var letters []string
+	for range 3 {
+		l, err := m.Send(mail.Letter{From: "agent:alice", To: "user:customer", Body: "y"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		letters = append(letters, l[0].ID)
+	}
+	if _, _, err := m.MarkRead("user:customer", letters); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{letters[2], letters[1], letters[0]}
+	for _, box := range []string{mail.BoxArchive, mail.BoxAll} {
+		if got := pageAll(t, m, box, "user:customer", 2); !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s pages = %v; want %v", box, got, want)
+		}
+	}
+	_, _, err = m.List(mail.BoxSent, "user:customer", 2, "2026-10-26T11:00:00Z/x")
+	wantCode(t, err, "invalid_argument")
+}
+
+func TestInboxPagesAscendingWithCursor(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	m := fixedClockMail(f)
+	var want []string
+	for range 5 {
+		l, err := m.Send(mail.Letter{From: "agent:alice", To: "user:customer", Body: "?", NeedsReply: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, l[0].ID)
+	}
+	if got := pageAll(t, m, mail.BoxInbox, "user:customer", 2); !reflect.DeepEqual(got, want) {
+		t.Fatalf("inbox pages = %v; want %v oldest first", got, want)
 	}
 }

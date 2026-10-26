@@ -136,6 +136,9 @@ type Directory interface {
 	InboxCap(agent string) (int, error)
 	CustomerLogin() string
 	PluginInstalled(name string) (bool, error)
+	// PluginReceivesMail reports whether a plugin is installed, enabled and
+	// declares mail.receive: only such a plugin drains its inbox.
+	PluginReceivesMail(name string) (bool, error)
 	QueueExists(prefix string) (bool, error)
 	// GroupMembers returns the agent names of a group and whether it exists.
 	GroupMembers(group string) (members []string, exists bool, err error)

@@ -13,10 +13,13 @@ import (
 // questionDirectory accepts the agents and the customer these tests use.
 type questionDirectory struct{}
 
-func (questionDirectory) AgentExists(string) (bool, error)            { return true, nil }
-func (questionDirectory) InboxCap(string) (int, error)                { return 0, nil }
-func (questionDirectory) CustomerLogin() string                       { return "customer" }
-func (questionDirectory) PluginInstalled(string) (bool, error)        { return false, nil }
+func (questionDirectory) AgentExists(string) (bool, error)     { return true, nil }
+func (questionDirectory) InboxCap(string) (int, error)         { return 0, nil }
+func (questionDirectory) CustomerLogin() string                { return "customer" }
+func (questionDirectory) PluginInstalled(string) (bool, error) { return false, nil }
+func (d questionDirectory) PluginReceivesMail(name string) (bool, error) {
+	return d.PluginInstalled(name)
+}
 func (questionDirectory) QueueExists(string) (bool, error)            { return false, nil }
 func (questionDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
 
@@ -454,4 +457,52 @@ func assertTaskStatus(t *testing.T, svc *Service, key, want string) TaskDetail {
 		t.Fatalf("status = %q; want %q", detail.Task.Status, want)
 	}
 	return detail
+}
+
+// TestQuestionLetterClosesWhateverSender: a question the outbox sent as
+// system:tasks, because its asker could no longer send, still closes when
+// the question is answered on the task. The asker is in data.from.
+func TestQuestionLetterClosesWhateverSender(t *testing.T) {
+	st := storetest.Open(t)
+	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
+	svc := NewService(st.DB, "customer", func() time.Time { return now })
+	ctx := context.Background()
+	customer := CustomerActor("customer")
+	if _, err := svc.CreateQueue(ctx, customer, CreateQueueInput{Prefix: "ASK", Name: "Questions"}); err != nil {
+		t.Fatal(err)
+	}
+	task, _ := svc.CreateTask(ctx, customer, CreateTaskInput{Queue: "ASK", Title: "orphan", Assignee: "requester"})
+	if _, err := svc.AddComment(ctx, AgentActor("requester"), task.Key, AddCommentInput{Body: "Need input from @user:customer"}); err != nil {
+		t.Fatal(err)
+	}
+	m := mail.New(st, func() time.Time { return now }, questionDirectory{})
+	letters, err := m.Send(mail.Letter{From: "system:tasks", To: "user:customer", Kind: mail.KindTaskQuestion,
+		Body: "?", NeedsReply: true, Data: map[string]any{"task_key": task.Key, "from": "agent:requester"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`UPDATE task_notification_outbox SET published_at = ?
+		WHERE message_type = 'task.question'`, "2026-07-31T12:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	// An unrelated question to the same recipient from another asker stays open.
+	other, err := m.Send(mail.Letter{From: "system:tasks", To: "user:customer", Kind: mail.KindTaskQuestion,
+		Body: "?", NeedsReply: true, Data: map[string]any{"task_key": task.Key, "from": "agent:someone"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	answer, err := svc.AddComment(ctx, customer, task.Key, AddCommentInput{Body: "Approved"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := m.Show("user:customer", letters[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Open() || got.CloseNote != fmt.Sprintf("task-comment:%d", answer.Comment.ID) {
+		t.Fatalf("system:tasks question letter after the answer = %+v", got)
+	}
+	if got, _, _ := m.Show("user:customer", other[0].ID); !got.Open() {
+		t.Fatalf("question of another asker closed: %+v", got)
+	}
 }

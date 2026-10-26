@@ -16459,7 +16459,7 @@
             "description": "Typed error"
           }
         },
-        "summary": "Remove a group (detach members, delete channels; --volumes drops the shared dir)"
+        "summary": "Remove a group (detach members; --volumes drops the shared dir)"
       },
       "get": {
         "operationId": "group.inspect",
@@ -16536,7 +16536,7 @@
             "description": "Typed error"
           }
         },
-        "summary": "Show a group's lead, members, channels and shared dir"
+        "summary": "Show a group's lead, members, mail address and shared dir"
       }
     },
     "/api/groups/{name}/assign": {
@@ -18923,7 +18923,7 @@
             "name": "before",
             "required": false,
             "schema": {
-              "description": "created_at to page before (sent and archive)",
+              "description": "cursor of the next page, from next_before",
               "type": "string"
             }
           },
@@ -20674,7 +20674,7 @@
             "description": "Typed error"
           }
         },
-        "summary": "Show a plugin's external channel routes"
+        "summary": "Show a plugin's external routes, such as its chat bindings"
       }
     },
     "/api/restore": {

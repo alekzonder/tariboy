@@ -159,3 +159,26 @@ func TestMarkReadClosesNoticesOnly(t *testing.T) {
 	_, _, err = f.m.MarkRead("agent:bob", []string{request.ID})
 	wantCode(t, err, "forbidden")
 }
+
+func TestReplyToVanishedSenderClosesOriginal(t *testing.T) {
+	t.Parallel()
+	for _, sender := range []string{"agent:bob", "plugin:telegram"} {
+		f := newFixture(t)
+		orig := f.sendOne(t, mail.Letter{From: sender, To: "agent:alice", Body: "?", NeedsReply: true, Deadline: "1h"})
+		delete(f.dir.agents, "bob")
+		delete(f.dir.plugins, "telegram")
+		reply, closed, err := f.m.Reply(mail.ReplyRequest{As: "agent:alice", ID: orig.ID, Text: "done"})
+		if err != nil {
+			t.Fatalf("reply to vanished %s: %v", sender, err)
+		}
+		if !closed {
+			t.Fatalf("reply to vanished %s did not close the original", sender)
+		}
+		if reply.To != sender || reply.Open() {
+			t.Fatalf("reply to vanished %s = %+v; want it stored closed", sender, reply)
+		}
+		if got := f.show(t, "agent:alice", orig.ID); got.AnswerID != reply.ID {
+			t.Fatalf("original = %+v; want answer_id %s", got, reply.ID)
+		}
+	}
+}

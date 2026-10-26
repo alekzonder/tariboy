@@ -12,12 +12,13 @@ import (
 // nothing else; inboxes have no cap.
 type testDirectory map[string]bool
 
-func (d testDirectory) AgentExists(name string) (bool, error)     { return d[name], nil }
-func (testDirectory) InboxCap(string) (int, error)                { return 0, nil }
-func (testDirectory) CustomerLogin() string                       { return "customer" }
-func (testDirectory) PluginInstalled(string) (bool, error)        { return false, nil }
-func (testDirectory) QueueExists(string) (bool, error)            { return false, nil }
-func (testDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
+func (d testDirectory) AgentExists(name string) (bool, error)        { return d[name], nil }
+func (testDirectory) InboxCap(string) (int, error)                   { return 0, nil }
+func (testDirectory) CustomerLogin() string                          { return "customer" }
+func (testDirectory) PluginInstalled(string) (bool, error)           { return false, nil }
+func (d testDirectory) PluginReceivesMail(name string) (bool, error) { return d.PluginInstalled(name) }
+func (testDirectory) QueueExists(string) (bool, error)               { return false, nil }
+func (testDirectory) GroupMembers(string) ([]string, bool, error)    { return nil, false, nil }
 
 func newTestMail(st *store.Store, agents ...string) *mail.Mail {
 	dir := testDirectory{}
@@ -43,8 +44,11 @@ func (d agentStoreDirectory) AgentExists(name string) (bool, error) {
 	}
 	return err == nil, err
 }
-func (agentStoreDirectory) InboxCap(string) (int, error)                { return 0, nil }
-func (agentStoreDirectory) CustomerLogin() string                       { return "customer" }
-func (agentStoreDirectory) PluginInstalled(string) (bool, error)        { return false, nil }
+func (agentStoreDirectory) InboxCap(string) (int, error)         { return 0, nil }
+func (agentStoreDirectory) CustomerLogin() string                { return "customer" }
+func (agentStoreDirectory) PluginInstalled(string) (bool, error) { return false, nil }
+func (d agentStoreDirectory) PluginReceivesMail(name string) (bool, error) {
+	return d.PluginInstalled(name)
+}
 func (agentStoreDirectory) QueueExists(string) (bool, error)            { return false, nil }
 func (agentStoreDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }

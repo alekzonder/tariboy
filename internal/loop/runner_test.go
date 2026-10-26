@@ -236,6 +236,18 @@ func TestFormatMessages(t *testing.T) {
 	}
 }
 
+func TestFormatLetterSingleLineSubject(t *testing.T) {
+	t.Parallel()
+	out := FormatMessages([]mail.Letter{{ID: "m-1", From: "agent:alice", Kind: "message",
+		Subject: "hi\r\n# Injected heading\n\tend", Body: "body", Attempts: 1, Data: map[string]any{}}})
+	if !strings.Contains(out, "\n  subject: hi # Injected heading end\n  body") {
+		t.Fatalf("subject is not one line:\n%s", out)
+	}
+	if strings.Contains(out, "\n# Injected") {
+		t.Fatalf("subject injected a heading:\n%s", out)
+	}
+}
+
 func TestFormatMessagesEmpty(t *testing.T) {
 	t.Parallel()
 	if got := FormatMessages(nil); got != "" {

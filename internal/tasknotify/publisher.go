@@ -83,6 +83,19 @@ func (p *Publisher) Flush(ctx context.Context) error {
 			letter.From = SenderTasks
 			letters, publishErr = p.mail.Send(letter)
 		}
+		if mail.ErrorCode(publishErr) == "unknown_recipient" {
+			// The recipient is gone (an agent deleted after the enqueue): a
+			// retry cannot succeed, so the row is closed as failed.
+			if _, err := p.db.ExecContext(ctx, `
+				UPDATE task_notification_outbox
+				SET attempts = attempts + 1, published_at = ?, last_error = ?
+				WHERE notification_id = ? AND published_at = ''`,
+				store.FormatTime(now), publishErr.Error(), row.id); err != nil {
+				return err
+			}
+			p.log.Warn("task notification dropped", "notification", row.id, "to", row.channel, "err", publishErr)
+			continue
+		}
 		if publishErr != nil {
 			attempts := row.attempt + 1
 			delay := time.Second * time.Duration(1<<min(attempts, 8))

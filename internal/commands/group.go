@@ -80,7 +80,7 @@ func groupLs() registry.Command {
 func groupInspect() registry.Command {
 	return registry.WithResult[GroupView](registry.Command{
 		Path:    "group.inspect",
-		Summary: "Show a group's lead, members, channels and shared dir",
+		Summary: "Show a group's lead, members, mail address and shared dir",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "group name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/groups/{name}"},
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
@@ -104,7 +104,7 @@ func groupInspect() registry.Command {
 func groupRm() registry.Command {
 	return registry.WithResult[GroupRemoveResult](registry.Command{
 		Path:    "group.rm",
-		Summary: "Remove a group (detach members, delete channels; --volumes drops the shared dir)",
+		Summary: "Remove a group (detach members; --volumes drops the shared dir)",
 		Args: []registry.Arg{
 			{Name: "name", Type: registry.String, Required: true, Help: "group name"},
 			{Name: "volumes", Flag: "volumes", Short: "v", Type: registry.Bool, Help: "also delete the shared dir"},

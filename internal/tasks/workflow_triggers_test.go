@@ -40,11 +40,12 @@ func countTasksMentioning(t *testing.T, svc *Service, text string) int {
 // queueDirectory knows the queues of the service and the plugin metrics.
 type queueDirectory struct{ svc *Service }
 
-func (queueDirectory) AgentExists(string) (bool, error)            { return false, nil }
-func (queueDirectory) InboxCap(string) (int, error)                { return 0, nil }
-func (queueDirectory) CustomerLogin() string                       { return "customer" }
-func (queueDirectory) PluginInstalled(name string) (bool, error)   { return name == "metrics", nil }
-func (queueDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
+func (queueDirectory) AgentExists(string) (bool, error)               { return false, nil }
+func (queueDirectory) InboxCap(string) (int, error)                   { return 0, nil }
+func (queueDirectory) CustomerLogin() string                          { return "customer" }
+func (queueDirectory) PluginInstalled(name string) (bool, error)      { return name == "metrics", nil }
+func (d queueDirectory) PluginReceivesMail(name string) (bool, error) { return d.PluginInstalled(name) }
+func (queueDirectory) GroupMembers(string) ([]string, bool, error)    { return nil, false, nil }
 func (d queueDirectory) QueueExists(prefix string) (bool, error) {
 	var n int
 	err := d.svc.db.QueryRow(`SELECT COUNT(*) FROM task_queues WHERE prefix = ?`, prefix).Scan(&n)

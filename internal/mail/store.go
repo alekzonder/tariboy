@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -173,9 +174,12 @@ func (m *Mail) OpenAgentTotal() (int, error) {
 	return n, err
 }
 
-// List returns one mailbox view of as. The inbox is oldest first; sent and
-// archive are newest first and page with before, a created_at: next is the
-// created_at to pass for the next page, or "" after the last one.
+// List returns one mailbox view of as. The inbox is oldest first; sent,
+// archive and all are newest first. before is the opaque cursor a full page
+// returns as next ("<created_at>/<seq>" of its last letter): the next page
+// continues after that letter in the view's order, or "" after the last
+// page. A bare created_at is still accepted and lists the letters created
+// before it.
 func (m *Mail) List(box, as string, limit int, before string) ([]Letter, string, error) {
 	if limit <= 0 {
 		limit = 100
@@ -195,8 +199,12 @@ func (m *Mail) List(box, as string, limit int, before string) ([]Letter, string,
 	}
 	args := []any{as}
 	if before != "" {
-		where += ` AND created_at < ?`
-		args = append(args, before)
+		cond, condArgs, err := cursorWhere(before, box == BoxInbox)
+		if err != nil {
+			return nil, "", err
+		}
+		where += ` AND ` + cond
+		args = append(args, condArgs...)
 	}
 	args = append(args, limit)
 	rows, err := m.db.Query(`SELECT `+letterColumns+` FROM mail WHERE `+where+` ORDER BY `+order+` LIMIT ?`, args...)
@@ -208,10 +216,29 @@ func (m *Mail) List(box, as string, limit int, before string) ([]Letter, string,
 		return nil, "", err
 	}
 	next := ""
-	if box != BoxInbox && len(letters) == limit {
-		next = letters[len(letters)-1].CreatedAt
+	if len(letters) == limit {
+		last := letters[len(letters)-1]
+		next = fmt.Sprintf("%s/%d", last.CreatedAt, last.Seq)
 	}
 	return letters, next, nil
+}
+
+// cursorWhere is the condition of the page after cursor: the letters after
+// (created_at, seq) in ascending order, or before it in descending order.
+func cursorWhere(cursor string, ascending bool) (string, []any, error) {
+	at, seqText, ok := strings.Cut(cursor, "/")
+	if !ok {
+		return `created_at < ?`, []any{cursor}, nil
+	}
+	seq, err := strconv.ParseInt(seqText, 10, 64)
+	if err != nil || at == "" {
+		return "", nil, errInvalid("before %q is not a cursor from next_before", cursor)
+	}
+	op := "<"
+	if ascending {
+		op = ">"
+	}
+	return `(created_at ` + op + ` ? OR (created_at = ? AND seq ` + op + ` ?))`, []any{at, at, seq}, nil
 }
 
 // Show returns one letter and its reply, if any. as must be its sender or its

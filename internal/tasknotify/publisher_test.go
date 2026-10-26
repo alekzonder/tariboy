@@ -1,10 +1,12 @@
 package tasknotify
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,11 +21,17 @@ type fakeBus struct {
 	fail     bool
 	// refuse is a sender the fake refuses as unknown.
 	refuse string
+	// refuseTo is a recipient the fake refuses as unknown.
+	refuseTo string
 }
 
 func (f *fakeBus) Send(message mail.Letter) ([]mail.Letter, error) {
 	if f.refuse != "" && message.From == f.refuse {
 		return nil, &mail.Error{Status: 400, Code: "unknown_sender", Msg: "unknown sender"}
+	}
+	if f.refuseTo != "" && message.To == f.refuseTo {
+		f.messages = append(f.messages, message)
+		return nil, &mail.Error{Status: 400, Code: "unknown_recipient", Msg: "unknown recipient " + message.To}
 	}
 	f.messages = append(f.messages, message)
 	if f.fail {
@@ -214,5 +222,43 @@ func TestAnsweredQuestionIsNotSentAndUnknownSenderFallsBack(t *testing.T) {
 	}
 	if len(fake.messages) != 2 {
 		t.Fatalf("sent %d letters; want the assignment and the answer", len(fake.messages))
+	}
+}
+
+// A recipient deleted after the enqueue is a permanent error: the row is
+// closed as failed after one attempt and logged once.
+func TestOutboxStopsOnUnknownRecipient(t *testing.T) {
+	st := storetest.Open(t)
+	now := time.Date(2026, 7, 31, 13, 0, 0, 0, time.UTC)
+	svc := tasks.NewService(st.DB, "customer", func() time.Time { return now })
+	ctx := context.Background()
+	customer := tasks.CustomerActor("customer")
+	_, _ = svc.CreateQueue(ctx, customer, tasks.CreateQueueInput{
+		Prefix: "GONE", Name: "Gone", ResponsibleAgent: "triager",
+	})
+	_, _ = svc.CreateTask(ctx, customer, tasks.CreateTaskInput{Queue: "GONE", Title: "orphan"})
+
+	fake := &fakeBus{refuseTo: "agent:triager"}
+	var logs bytes.Buffer
+	publisher := New(st.DB, fake, func() time.Time { return now }, slog.New(slog.NewTextHandler(&logs, nil)))
+	for range 2 {
+		if err := publisher.Flush(ctx); err != nil {
+			t.Fatal(err)
+		}
+		now = now.Add(time.Hour)
+	}
+	if len(fake.messages) != 1 {
+		t.Fatalf("send attempts = %d; want 1", len(fake.messages))
+	}
+	var published, message, lastError string
+	if err := st.DB.QueryRow(`SELECT published_at, published_message, last_error FROM task_notification_outbox
+		WHERE channel = 'agent:triager'`).Scan(&published, &message, &lastError); err != nil {
+		t.Fatal(err)
+	}
+	if published == "" || message != "" || !strings.Contains(lastError, "unknown recipient") {
+		t.Fatalf("row = published %q, message %q, last_error %q; want it closed as failed", published, message, lastError)
+	}
+	if n := strings.Count(logs.String(), "task notification dropped"); n != 1 {
+		t.Fatalf("drop logged %d times; want once:\n%s", n, logs.String())
 	}
 }

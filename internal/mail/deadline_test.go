@@ -41,3 +41,57 @@ func TestDeadlineSchedulesAndReplyCancels(t *testing.T) {
 		t.Fatalf("the reply left %d deadline schedules", len(list))
 	}
 }
+
+func TestRequeueRespectsCapAndDeadline(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	sched := schedule.NewStore(f.st, func() time.Time { return *f.now })
+	f.m.SetDeadlines(schedule.Deadlines{Store: sched})
+	f.dir.agents["bob"] = 1
+	first := f.sendOne(t, mail.Letter{From: "user:customer", To: "agent:bob", Body: "fills the inbox"})
+	// Over the cap: stored dead with queue_limit, and no deadline is armed.
+	req := f.sendOne(t, mail.Letter{From: "agent:alice", To: "agent:bob", Body: "help", NeedsReply: true, Deadline: "1h"})
+	if req.DeadReason != mail.DeadQueueLimit {
+		t.Fatalf("request = %+v; want dead queue_limit", req)
+	}
+	_, err := f.m.Requeue("agent:bob", req.ID)
+	wantCode(t, err, "queue_limit")
+	if mail.ErrorStatus(err) != 409 || !strings.Contains(err.Error(), "close letters first") {
+		t.Fatalf("requeue over the cap = %v (status %d)", err, mail.ErrorStatus(err))
+	}
+	if got := f.show(t, "agent:bob", req.ID); got.DeadAt == "" {
+		t.Fatalf("a refused requeue reopened the letter: %+v", got)
+	}
+	if _, err := f.m.Close("agent:bob", first.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	// Under the cap with the deadline ahead: reopened and the deadline armed.
+	got, err := f.m.Requeue("agent:bob", req.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Deadline != req.Deadline {
+		t.Fatalf("requeued deadline = %q; want %q", got.Deadline, req.Deadline)
+	}
+	if list, _ := sched.List("alice"); len(list) != 1 || !strings.Contains(list[0].MessageTemplate, req.ID) {
+		t.Fatalf("schedules after requeue = %+v; want the deadline armed once", list)
+	}
+	// Dead again by attempts, then requeued after the deadline passed: the
+	// deadline is cleared and nothing stays armed.
+	for range 6 {
+		if _, err := f.m.RenderBatch("bob", 10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	*f.now = f.now.Add(2 * time.Hour)
+	got, err = f.m.Requeue("agent:bob", req.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Deadline != "" || f.show(t, "agent:bob", req.ID).Deadline != "" {
+		t.Fatalf("requeued past deadline = %q; want it cleared", got.Deadline)
+	}
+	if list, _ := sched.List("alice"); len(list) != 0 {
+		t.Fatalf("schedules after a requeue past the deadline = %+v; want none", list)
+	}
+}
