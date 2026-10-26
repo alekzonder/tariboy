@@ -7,6 +7,19 @@ import { useTaskColumns } from "./taskColumnLayout";
 import { TASK_COLUMNS, type TaskRowMode } from "./taskColumns";
 import TaskRowCell from "./TaskRowCells";
 
+/** Marks the scope agent's current Goal row; a plain row gets nothing. */
+function goalRow(goal: boolean, selected: boolean) {
+  if (!goal) return { attrs: {}, className: undefined };
+  return {
+    attrs: { "data-goal": true, title: "Current Goal of this agent" },
+    // The tint gives way to the selection; the left stripe stays.
+    className: cn(
+      "shadow-[inset_2px_0_0_var(--status-running)]",
+      !selected && "bg-status-running/8 hover:bg-status-running/12",
+    ),
+  };
+}
+
 export default function TaskRow({
   row,
   mode,
@@ -57,6 +70,7 @@ export default function TaskRow({
     disabled,
   });
   const columns = useTaskColumns(mode);
+  const goalMark = goalRow(goal, selected);
   const cell = {
     row,
     readOnly,
@@ -71,8 +85,7 @@ export default function TaskRow({
     <div
       ref={setNodeRef}
       data-testid={`task-row-${row.task.key}`}
-      data-goal={goal || undefined}
-      title={goal ? "Current Goal of this agent" : undefined}
+      {...goalMark.attrs}
       // A mouse or finger opens the task anywhere on the row; the keyboard keeps
       // the title button. The row's own buttons, and clicks React bubbles up
       // from the priority menu's portal, keep their own action.
@@ -84,9 +97,7 @@ export default function TaskRow({
       className={cn(
         "group/row relative flex min-h-7.5 cursor-pointer items-center gap-2.5 px-4 text-body",
         selected ? "bg-accent" : "hover:bg-muted",
-        // The tint gives way to the selection; the left stripe stays.
-        goal && !selected && "bg-status-running/8 hover:bg-status-running/12",
-        goal && "shadow-[inset_2px_0_0_var(--status-running)]",
+        goalMark.className,
         overInside && "ring-1 ring-primary ring-inset",
         row.task.access === "context" && "opacity-60",
         // Last, so a dragged context row still dims to the drag opacity.
