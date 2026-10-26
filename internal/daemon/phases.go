@@ -272,7 +272,7 @@ func buildTasks(ctx context.Context, proc *process, c *coreParts) (*taskParts, e
 	taskService.SetGlobalEnv(globalEnv)
 	taskService.SetLogger(log)
 	goalReconciler := taskgoal.NewReconciler(taskgoal.ReconcilerConfig{
-		Store: st, Bus: c.bus, Clock: time.Now, Log: log,
+		Store: st, Mail: c.mail, Clock: time.Now, Log: log,
 	})
 	// A task change, an agent change, and a finished iteration wake both the
 	// goal reconciler and the workflow dispatcher.
@@ -307,7 +307,7 @@ func buildTasks(ctx context.Context, proc *process, c *coreParts) (*taskParts, e
 	}
 	return &taskParts{
 		service: taskService, hub: taskHub,
-		publisher: tasknotify.New(st.DB, c.bus, time.Now, log),
+		publisher: tasknotify.New(st.DB, c.mail, time.Now, log),
 		goal:      goalReconciler, goalStore: taskgoal.NewStore(st),
 		ingress: newWorkflowIngressSignal(), dispatch: workflowDispatch,
 		goalSignal: goalSignal, goalIterationCompleted: goalIterationCompleted,

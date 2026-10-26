@@ -141,19 +141,19 @@ func (s *Store) Current(agent string, now time.Time) (tasks.Task, bool, error) {
 	return task, goal.TaskKey != "", nil
 }
 
-// GoalDeliveryAllowed suppresses another goal wake until the previous one is
-// processed or dead-lettered and the agent's configured cooldown has elapsed.
+// GoalDeliveryAllowed suppresses another goal wake while a Goal letter to the
+// agent is open (a dead one does not count) and until the agent's configured
+// cooldown has elapsed since the last one.
 func (s *Store) GoalDeliveryAllowed(agent string, now time.Time) (bool, error) {
 	var cooldown int
 	var last string
 	var pending bool
+	principal := "agent:" + agent
 	err := s.db.QueryRow(`SELECT goal_delivery_cooldown_s, COALESCE(NULLIF(last_goal_delivery_at, ''), (
-		SELECT MAX(m.ts) FROM deliveries d JOIN subscriptions s ON s.id=d.subscription_id
-		JOIN messages m ON m.id=d.message_id WHERE s.agent=? AND m.type='task.goal'
+		SELECT MAX(created_at) FROM mail WHERE recipient=? AND kind='task.goal'
 	), ''),
-		EXISTS(SELECT 1 FROM deliveries d JOIN subscriptions s ON s.id=d.subscription_id
-		JOIN messages m ON m.id=d.message_id WHERE s.agent=? AND m.type='task.goal'
-		AND d.processed_at IS NULL AND d.dlq=0) FROM agents WHERE name=?`, agent, agent, agent).Scan(&cooldown, &last, &pending)
+		EXISTS(SELECT 1 FROM mail WHERE recipient=? AND kind='task.goal'
+		AND answered_at='' AND dead_at='') FROM agents WHERE name=?`, principal, principal, agent).Scan(&cooldown, &last, &pending)
 	if err != nil || pending {
 		return false, err
 	}

@@ -225,7 +225,7 @@ func isOperatorCommand(args []string) bool {
 	return len(args) > 0 && operatorRoots[args[0]]
 }
 
-var operatorRoots = map[string]bool{"queue": true, "events": true, "principals": true, "notifications": true, "activity": true}
+var operatorRoots = map[string]bool{"queue": true, "events": true, "principals": true, "activity": true}
 
 func runOperatorCommand(ctx context.Context, args []string, m mode, stdout, stderr io.Writer) int {
 	socket, err := m.socket()

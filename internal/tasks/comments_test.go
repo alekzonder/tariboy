@@ -2,49 +2,76 @@ package tasks
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
+
+	"github.com/alekzonder/tariboy/internal/mail"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
-func TestQuestionNotificationProjectsRequestingPrincipal(t *testing.T) {
-	svc := newTestService(t)
-	ctx := context.Background()
-	customer := CustomerActor("customer")
-	_, _ = svc.CreateQueue(ctx, customer, CreateQueueInput{Prefix: "ASK", Name: "Questions"})
-	task, _ := svc.CreateTask(ctx, customer, CreateTaskInput{Queue: "ASK", Title: "decision", Assignee: "requester"})
-	if _, err := svc.AddComment(ctx, AgentActor("requester"), task.Key, AddCommentInput{
-		Body: "Need input from @user:customer",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	got, err := svc.ListNotifications(ctx, customer, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].RequestingPrincipal != "agent:requester" {
-		t.Fatalf("notifications = %#v", got)
-	}
-}
+// questionDirectory accepts the agents and the customer these tests use.
+type questionDirectory struct{}
 
-func TestAnswerMarksResolvedQuestionNotificationRead(t *testing.T) {
-	svc := newTestService(t)
+func (questionDirectory) AgentExists(string) (bool, error)            { return true, nil }
+func (questionDirectory) InboxCap(string) (int, error)                { return 0, nil }
+func (questionDirectory) CustomerLogin() string                       { return "customer" }
+func (questionDirectory) PluginInstalled(string) (bool, error)        { return false, nil }
+func (questionDirectory) QueueExists(string) (bool, error)            { return false, nil }
+func (questionDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
+
+// TestWaitResolutionClosesQuestionLetters: the answer on the task closes the
+// question letter the customer already got, and a question notification the
+// outbox has not sent yet is never sent.
+func TestWaitResolutionClosesQuestionLetters(t *testing.T) {
+	st := storetest.Open(t)
+	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
+	svc := NewService(st.DB, "customer", func() time.Time { return now })
 	ctx := context.Background()
 	customer := CustomerActor("customer")
-	_, _ = svc.CreateQueue(ctx, customer, CreateQueueInput{Prefix: "ASK", Name: "Questions"})
-	task, _ := svc.CreateTask(ctx, customer, CreateTaskInput{Queue: "ASK", Title: "decision", Assignee: "requester"})
-	if _, err := svc.AddComment(ctx, AgentActor("requester"), task.Key, AddCommentInput{
-		Body: "Need input from @user:customer",
-	}); err != nil {
+	if _, err := svc.CreateQueue(ctx, customer, CreateQueueInput{Prefix: "ASK", Name: "Questions"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.AddComment(ctx, customer, task.Key, AddCommentInput{Body: "Approved"}); err != nil {
-		t.Fatal(err)
+	sent, _ := svc.CreateTask(ctx, customer, CreateTaskInput{Queue: "ASK", Title: "sent", Assignee: "requester"})
+	pending, _ := svc.CreateTask(ctx, customer, CreateTaskInput{Queue: "ASK", Title: "pending", Assignee: "requester"})
+	for _, task := range []Task{sent, pending} {
+		if _, err := svc.AddComment(ctx, AgentActor("requester"), task.Key, AddCommentInput{Body: "Need input from @user:customer"}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	notifications, err := svc.ListNotifications(ctx, customer, false)
+	// The outbox already sent the first question: a letter, and its row is
+	// published.
+	m := mail.New(st, func() time.Time { return now }, questionDirectory{})
+	letters, err := m.Send(mail.Letter{From: "agent:requester", To: "user:customer", Kind: mail.KindTaskQuestion,
+		Body: "?", NeedsReply: true, Data: map[string]any{"task_key": sent.Key}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(notifications) != 1 || notifications[0].ReadAt == "" {
-		t.Fatalf("notifications = %#v; want resolved question marked read", notifications)
+	if _, err := st.DB.Exec(`UPDATE task_notification_outbox SET published_at = ?
+		WHERE message_type = 'task.question' AND json_extract(data, '$.task_key') = ?`, "2026-07-31T12:00:00Z", sent.Key); err != nil {
+		t.Fatal(err)
+	}
+	answer, err := svc.AddComment(ctx, customer, sent.Key, AddCommentInput{Body: "Approved"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := m.Show("user:customer", letters[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Open() || got.CloseNote != fmt.Sprintf("task-comment:%d", answer.Comment.ID) {
+		t.Fatalf("question letter after the answer = %+v", got)
+	}
+	if _, err := svc.AddComment(ctx, customer, pending.Key, AddCommentInput{Body: "Approved"}); err != nil {
+		t.Fatal(err)
+	}
+	var published, lastError string
+	if err := st.DB.QueryRow(`SELECT published_at, last_error FROM task_notification_outbox
+		WHERE message_type = 'task.question' AND json_extract(data, '$.task_key') = ?`, pending.Key).Scan(&published, &lastError); err != nil {
+		t.Fatal(err)
+	}
+	if published == "" || lastError != "answered before delivery" {
+		t.Fatalf("unsent question row = published %q, last_error %q; want it marked sent without a letter", published, lastError)
 	}
 }
 

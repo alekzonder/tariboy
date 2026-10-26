@@ -128,7 +128,7 @@ func (m *Mail) validateSender(from string) error {
 		return err
 	}
 	if !ok {
-		return errInvalid("unknown sender %q", from)
+		return newError(http.StatusBadRequest, "unknown_sender", "unknown sender %q", from)
 	}
 	return nil
 }

@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 // Reply writes the answer to letter r.ID from its recipient to its sender:
@@ -200,12 +203,20 @@ func (m *Mail) ClearInbox(agent string) (int, error) {
 }
 
 // CloseTaskQuestionsTx closes, inside the caller's transaction, the open
-// task.question letters to recipient about taskKey with note as close note.
-// Native Tasks calls it when the question's wait resolves.
-func (m *Mail) CloseTaskQuestionsTx(tx *sql.Tx, recipient, taskKey, note string) (int, error) {
+// task.question letters to recipient about taskKey sent by one of senders,
+// with note as close note, and returns how many it closed. Native Tasks calls
+// it when the questions those senders asked recipient are answered on the task.
+func CloseTaskQuestionsTx(tx *sql.Tx, recipient, taskKey string, senders []string, note string, now time.Time) (int, error) {
+	if len(senders) == 0 {
+		return 0, nil
+	}
+	args := []any{store.FormatTime(now), note, recipient, KindTaskQuestion, taskKey}
+	for _, sender := range senders {
+		args = append(args, sender)
+	}
 	res, err := tx.Exec(`UPDATE mail SET answered_at = ?, close_note = ?
-		WHERE recipient = ? AND kind = ? AND CASE WHEN json_valid(data) THEN json_extract(data, '$.task_key') END = ? AND `+openSQL,
-		formatNow(m.now()), note, recipient, KindTaskQuestion, taskKey)
+		WHERE recipient = ? AND kind = ? AND CASE WHEN json_valid(data) THEN json_extract(data, '$.task_key') END = ?
+		AND sender IN (`+inPlaceholders(len(senders))+`) AND `+openSQL, args...)
 	if err != nil {
 		return 0, fmt.Errorf("close task questions of %s: %w", taskKey, err)
 	}

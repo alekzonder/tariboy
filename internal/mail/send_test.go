@@ -241,11 +241,13 @@ func TestSendToSelfWakesTheAgent(t *testing.T) {
 func TestSendValidatesSenderAndDeadline(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	for _, from := range []string{"", "agent:ghost", "group:dev", "queue:OPS", "user:other"} {
+	_, err := f.m.Send(mail.Letter{From: "", To: "agent:alice", Body: "x"})
+	wantCode(t, err, "invalid_argument")
+	for _, from := range []string{"agent:ghost", "group:dev", "queue:OPS", "user:other"} {
 		_, err := f.m.Send(mail.Letter{From: from, To: "agent:alice", Body: "x"})
-		wantCode(t, err, "invalid_argument")
+		wantCode(t, err, "unknown_sender")
 	}
-	_, err := f.m.Send(mail.Letter{From: "agent:alice", To: "", Body: "x"})
+	_, err = f.m.Send(mail.Letter{From: "agent:alice", To: "", Body: "x"})
 	wantCode(t, err, "invalid_argument")
 	_, err = f.m.Send(mail.Letter{From: "agent:alice", To: "agent:bob", Body: "x", NeedsReply: true, Deadline: "soon"})
 	wantCode(t, err, "invalid_argument")

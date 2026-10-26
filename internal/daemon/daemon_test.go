@@ -512,8 +512,8 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 
 	select {
 	case <-spawner.fired:
-		// interval_s=0 leaves the ordinary bus publish hook as the only route
-		// that can wake this agent and reach the injected spawner.
+		// interval_s=0 leaves the mail wake hook as the only route that can
+		// wake this agent and reach the injected spawner.
 	case err := <-done:
 		cancel()
 		t.Fatalf("daemon returned before reminder wake: %v", err)
@@ -542,13 +542,13 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	var channel, typ, source, data, idempotencyKey string
-	if err := reopened.DB.QueryRow(`SELECT channel,type,source,data,idempotency_key
-		FROM messages WHERE idempotency_key='task-goal:worker:GOAL-9xk2:1:'`).Scan(&channel, &typ, &source, &data, &idempotencyKey); err != nil {
+	var recipient, kind, sender, data, answeredAt string
+	if err := reopened.DB.QueryRow(`SELECT recipient,kind,sender,data,answered_at
+		FROM mail WHERE idempotency_key='task-goal:worker:GOAL-9xk2:1:'`).Scan(&recipient, &kind, &sender, &data, &answeredAt); err != nil {
 		t.Fatal(err)
 	}
-	if channel != "chat:service:worker" || typ != "task.goal" || source != "tasks" || idempotencyKey != "task-goal:worker:GOAL-9xk2:1:" {
-		t.Fatalf("goal = channel:%q type:%q source:%q idempotency:%q", channel, typ, source, idempotencyKey)
+	if recipient != "agent:worker" || kind != "task.goal" || sender != "system:goal" || answeredAt != "" {
+		t.Fatalf("goal = recipient:%q kind:%q sender:%q answered_at:%q", recipient, kind, sender, answeredAt)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(data), &payload); err != nil {
@@ -557,13 +557,12 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 	if payload["reason"] != "selected" || payload["task_key"] != "GOAL-9xk2" {
 		t.Fatalf("payload = %#v", payload)
 	}
-	var deliveries int
-	if err := reopened.DB.QueryRow(`SELECT COUNT(*) FROM deliveries d
-		JOIN messages m ON m.id=d.message_id WHERE m.type='task.goal'`).Scan(&deliveries); err != nil {
+	var letters int
+	if err := reopened.DB.QueryRow(`SELECT COUNT(*) FROM mail WHERE kind='task.goal'`).Scan(&letters); err != nil {
 		t.Fatal(err)
 	}
-	if deliveries != 1 {
-		t.Fatalf("durable deliveries = %d, want one unprocessed Goal delivery", deliveries)
+	if letters != 1 {
+		t.Fatalf("Goal letters = %d, want one open Goal letter", letters)
 	}
 }
 

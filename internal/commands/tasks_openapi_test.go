@@ -51,10 +51,6 @@ func tasksTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 	if _, err := svc.AddComment(ctx, tasks.AgentActor("dev-a"), target, tasks.AddCommentInput{Body: "Need input from @user:customer"}); err != nil {
 		t.Fatal(err)
 	}
-	notifications, err := svc.ListNotifications(ctx, customer, false)
-	if err != nil || len(notifications) != 1 {
-		t.Fatalf("notifications = %#v, %v", notifications, err)
-	}
 	trigger, err := svc.CreateQueueWorkflowTrigger(ctx, customer, "TYP", tasks.CreateQueueWorkflowTriggerInput{Pattern: "incident:*", Action: "create_task"})
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +74,6 @@ func tasksTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 	}
 	window := url.Values{"since": {tasksGoldenClock.Add(-time.Hour).Format(time.RFC3339)}, "until": {tasksGoldenClock.Add(time.Hour).Format(time.RFC3339)}}
 	agentWindow := url.Values{"since": window["since"], "until": window["until"], "agent": {"dev-a"}}
-	notification := notifications[0].ID
 	return c, []typedCall{
 		{"GET", "/api/task-queues", "/api/task-queues", nil},
 		{"POST", "/api/task-queues", "/api/task-queues", map[string]any{"prefix": "NEW", "name": "New"}},
@@ -104,10 +99,6 @@ func tasksTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 		{"GET", "/api/tasks/{key}/events", "/api/tasks/" + target + "/events", nil},
 		{"GET", "/api/tasks/{key}/events", "/api/tasks/" + target + "/events?after=1000", nil},
 		{"GET", "/api/task-principals", "/api/task-principals", nil},
-		{"GET", "/api/task-notifications", "/api/task-notifications", nil},
-		{"POST", "/api/task-notifications/{id}/read", "/api/task-notifications/" + notification + "/read", nil},
-		{"POST", "/api/task-notifications/{id}/dismiss", "/api/task-notifications/" + notification + "/dismiss", nil},
-		{"GET", "/api/task-notifications", "/api/task-notifications?include_dismissed=true", nil},
 		{"DELETE", "/api/task-queues/{queue}/workflow-triggers/{id}", fmt.Sprintf("/api/task-queues/TYP/workflow-triggers/%d", trigger.ID), nil},
 		{"POST", "/api/tasks/{key}/workflow/upgrade", "/api/tasks/DEV-1/workflow/upgrade", map[string]any{"reason": "new rules"}},
 		{"POST", "/api/tasks/{key}/workflow/reassign", "/api/tasks/DEV-1/workflow/reassign", map[string]any{"agent": "dev-2"}},

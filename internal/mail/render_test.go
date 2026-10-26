@@ -253,11 +253,14 @@ func TestCloseTaskQuestionsTxClosesOnlyThatTask(t *testing.T) {
 		NeedsReply: true, Data: map[string]any{"task_key": "OPS-1"}})
 	q2 := f.sendOne(t, mail.Letter{From: "agent:alice", To: "user:customer", Kind: "task.question", Body: "?",
 		NeedsReply: true, Data: map[string]any{"task_key": "OPS-2"}})
+	// Another asker's question on the same task stays open: its wait does.
+	q3 := f.sendOne(t, mail.Letter{From: "agent:bob", To: "user:customer", Kind: "task.question", Body: "?",
+		NeedsReply: true, Data: map[string]any{"task_key": "OPS-1"}})
 	tx, err := f.st.DB.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err := f.m.CloseTaskQuestionsTx(tx, "user:customer", "OPS-1", "task-comment:9")
+	n, err := mail.CloseTaskQuestionsTx(tx, "user:customer", "OPS-1", []string{"agent:alice"}, "task-comment:9", *f.now)
 	if err != nil || n != 1 {
 		_ = tx.Rollback()
 		t.Fatalf("closed = %d, %v; want 1", n, err)
@@ -270,5 +273,8 @@ func TestCloseTaskQuestionsTxClosesOnlyThatTask(t *testing.T) {
 	}
 	if got := f.show(t, "user:customer", q2.ID); got.AnsweredAt != "" {
 		t.Fatalf("q2 closed: %+v", got)
+	}
+	if got := f.show(t, "user:customer", q3.ID); got.AnsweredAt != "" {
+		t.Fatalf("q3 closed: %+v", got)
 	}
 }

@@ -9,19 +9,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	basestore "github.com/alekzonder/tariboy/internal/store"
 )
 
-func TestReconcilerPublishesGoalThroughInbox(t *testing.T) {
+func TestReconcilerSendsGoalLetter(t *testing.T) {
 	r, messageBus, _ := seededGoalReconciler(t)
 	if err := r.Reconcile(context.Background(), "", ""); err != nil {
 		t.Fatal(err)
 	}
 	msg := onlyGoalMessage(t, messageBus, "worker")
-	if msg.Type != "task.goal" || msg.Channel != "chat:service:worker" || msg.Source != "tasks" ||
+	if msg.Kind != "task.goal" || msg.To != "agent:worker" || msg.From != SenderGoal || !msg.NeedsReply ||
 		msg.Data["task_key"] != "T-1" || msg.Data["reason"] != "selected" {
-		t.Fatalf("message = %#v", msg)
+		t.Fatalf("letter = %#v", msg)
 	}
 }
 
@@ -30,11 +30,11 @@ func TestReconcilerGoalGenerations(t *testing.T) {
 		name       string
 		want       int
 		wantReason string
-		run        func(*testing.T, *Reconciler, *bus.Bus, *basestore.Store) error
+		run        func(*testing.T, *Reconciler, *mail.Mail, *basestore.Store) error
 	}{
 		{
 			name: "startup_duplicate", want: 1, wantReason: "selected",
-			run: func(t *testing.T, r *Reconciler, _ *bus.Bus, _ *basestore.Store) error {
+			run: func(t *testing.T, r *Reconciler, _ *mail.Mail, _ *basestore.Store) error {
 				if err := r.Reconcile(context.Background(), "", ""); err != nil {
 					return err
 				}
@@ -43,18 +43,18 @@ func TestReconcilerGoalGenerations(t *testing.T) {
 		},
 		{
 			name: "recovery_duplicate", want: 1, wantReason: "selected",
-			run: func(t *testing.T, r *Reconciler, messageBus *bus.Bus, base *basestore.Store) error {
+			run: func(t *testing.T, r *Reconciler, messageBus *mail.Mail, base *basestore.Store) error {
 				seedTerminalIteration(t, base, "iter-7", "worker")
 				if err := r.Reconcile(context.Background(), "", ""); err != nil {
 					return err
 				}
-				restarted := NewReconciler(ReconcilerConfig{Store: base, Bus: messageBus, Clock: func() time.Time { return goalNow }})
+				restarted := NewReconciler(ReconcilerConfig{Store: base, Mail: messageBus, Clock: func() time.Time { return goalNow }})
 				return restarted.Reconcile(context.Background(), "", "")
 			},
 		},
 		{
 			name: "terminal_iteration_once", want: 1, wantReason: "iteration_completed",
-			run: func(t *testing.T, r *Reconciler, _ *bus.Bus, _ *basestore.Store) error {
+			run: func(t *testing.T, r *Reconciler, _ *mail.Mail, _ *basestore.Store) error {
 				r.IterationCompleted("worker", "iter-7")
 				r.IterationCompleted("worker", "iter-7")
 				return nil
@@ -62,7 +62,7 @@ func TestReconcilerGoalGenerations(t *testing.T) {
 		},
 		{
 			name: "waiting_customer", want: 0,
-			run: func(t *testing.T, r *Reconciler, _ *bus.Bus, base *basestore.Store) error {
+			run: func(t *testing.T, r *Reconciler, _ *mail.Mail, base *basestore.Store) error {
 				s := NewStore(base)
 				if _, err := s.ReconcileAgent("worker", goalNow); err != nil {
 					return err
@@ -74,14 +74,14 @@ func TestReconcilerGoalGenerations(t *testing.T) {
 		},
 		{
 			name: "no_candidate", want: 0,
-			run: func(t *testing.T, r *Reconciler, _ *bus.Bus, base *basestore.Store) error {
+			run: func(t *testing.T, r *Reconciler, _ *mail.Mail, base *basestore.Store) error {
 				updateTask(t, NewStore(base), "T-1", "status", "done")
 				return r.Reconcile(context.Background(), "", "")
 			},
 		},
 		{
 			name: "disabled_agent", want: 0,
-			run: func(t *testing.T, r *Reconciler, _ *bus.Bus, base *basestore.Store) error {
+			run: func(t *testing.T, r *Reconciler, _ *mail.Mail, base *basestore.Store) error {
 				if _, err := base.DB.Exec(`UPDATE agents SET enabled=0 WHERE name='worker'`); err != nil {
 					return err
 				}
@@ -90,15 +90,12 @@ func TestReconcilerGoalGenerations(t *testing.T) {
 		},
 		{
 			name: "first_publish_fails", want: 1, wantReason: "selected",
-			run: func(t *testing.T, _ *Reconciler, messageBus *bus.Bus, base *basestore.Store) error {
+			run: func(t *testing.T, _ *Reconciler, messageBus *mail.Mail, base *basestore.Store) error {
 				s := NewStore(base)
 				seedAgent(t, s, "broken", goalNow.Add(-time.Hour))
 				seedTask(t, s, "T-2", "agent:broken", "P0", "open", "2026-09-01T00:00:00Z")
-				if err := messageBus.ReconcileChats([]string{"broken"}, "user:customer"); err != nil {
-					return err
-				}
-				failing := &failOncePublisher{delegate: messageBus, channel: bus.ChatChannelFor(bus.ChatIDService("broken"))}
-				r := NewReconciler(ReconcilerConfig{Store: base, Bus: failing, Clock: func() time.Time { return goalNow }})
+				failing := &failOncePublisher{delegate: messageBus, to: "agent:broken"}
+				r := NewReconciler(ReconcilerConfig{Store: base, Mail: failing, Clock: func() time.Time { return goalNow }})
 				err := r.Reconcile(context.Background(), "", "")
 				if err == nil || !strings.Contains(err.Error(), "broken") {
 					t.Fatalf("Reconcile error = %v, want broken-agent publish error", err)
@@ -114,10 +111,7 @@ func TestReconcilerGoalGenerations(t *testing.T) {
 			if err := tt.run(t, r, messageBus, base); err != nil {
 				t.Fatal(err)
 			}
-			messages, err := messageBus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10)
-			if err != nil {
-				t.Fatal(err)
-			}
+			messages := goalLetters(t, messageBus, "worker")
 			if len(messages) != tt.want {
 				t.Fatalf("message count = %d, want %d: %#v", len(messages), tt.want, messages)
 			}
@@ -126,7 +120,7 @@ func TestReconcilerGoalGenerations(t *testing.T) {
 			}
 			if tt.name == "terminal_iteration_once" || tt.name == "recovery_duplicate" {
 				var key string
-				if err := base.DB.QueryRow(`SELECT idempotency_key FROM messages WHERE id=?`, messages[0].ID).Scan(&key); err != nil {
+				if err := base.DB.QueryRow(`SELECT idempotency_key FROM mail WHERE id=?`, messages[0].ID).Scan(&key); err != nil {
 					t.Fatal(err)
 				}
 				if key != "task-goal:worker:T-1:1:iter-7" {
@@ -173,12 +167,13 @@ func TestReconcilerSignalDoesNotBlockAndRunStops(t *testing.T) {
 	}
 }
 
-func TestReconcilerSuppressesUnprocessedGoalDelivery(t *testing.T) {
+func TestGoalLetterSuppressedWhileOpen(t *testing.T) {
 	r, messageBus, _ := seededGoalReconciler(t)
 	if err := r.Reconcile(context.Background(), "worker", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := messageBus.Pending("worker", 10); err != nil {
+	// Rendered into a prompt, still unanswered: the letter stays open.
+	if _, err := messageBus.RenderBatch("worker", 10); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.Reconcile(context.Background(), "worker", "next"); err != nil {
@@ -190,12 +185,12 @@ func TestReconcilerSuppressesUnprocessedGoalDelivery(t *testing.T) {
 func TestReconcilerDeliversNewGoalAfterDeadLetteredCooldown(t *testing.T) {
 	now := goalNow
 	_, messageBus, base := seededGoalReconciler(t)
-	r := NewReconciler(ReconcilerConfig{Store: base, Bus: messageBus, Clock: func() time.Time { return now }})
+	r := NewReconciler(ReconcilerConfig{Store: base, Mail: messageBus, Clock: func() time.Time { return now }})
 	if err := r.Reconcile(context.Background(), "worker", ""); err != nil {
 		t.Fatal(err)
 	}
-	for range 6 { // maxAttempts plus the delivery that crosses into DLQ.
-		if _, err := messageBus.Pending("worker", 10); err != nil {
+	for range 6 { // maxAttempts plus the render that dead-letters it.
+		if _, err := messageBus.RenderBatch("worker", 10); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -210,101 +205,106 @@ func TestReconcilerDeliversNewGoalAfterDeadLetteredCooldown(t *testing.T) {
 	if err := r.Reconcile(context.Background(), "worker", "next"); err != nil {
 		t.Fatal(err)
 	}
-	messages, err := messageBus.Pending("worker", 10)
+	messages, _, err := messageBus.List(mail.BoxInbox, "agent:worker", 10, "")
 	if err != nil || len(messages) != 1 || messages[0].Data["task_key"] != "T-2" {
-		t.Fatalf("pending after cooldown = %#v, %v; want new goal T-2", messages, err)
+		t.Fatalf("inbox after cooldown = %#v, %v; want new goal T-2", messages, err)
 	}
 	var retained int
-	if err := base.DB.QueryRow(`SELECT COUNT(*) FROM deliveries WHERE dlq=1 AND processed_at IS NULL`).Scan(&retained); err != nil || retained != 1 {
-		t.Fatalf("retained unprocessed DLQ deliveries = %d, %v; want 1", retained, err)
+	if err := base.DB.QueryRow(`SELECT COUNT(*) FROM mail WHERE dead_reason='attempts'`).Scan(&retained); err != nil || retained != 1 {
+		t.Fatalf("retained dead letters = %d, %v; want 1", retained, err)
 	}
 	now = now.Add(time.Minute)
 	if err := r.Reconcile(context.Background(), "worker", "later"); err != nil {
 		t.Fatal(err)
 	}
-	if messages, err := messageBus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10); err != nil || len(messages) != 2 {
-		t.Fatalf("messages with pending new goal = %#v, %v; want 2", messages, err)
+	if messages := goalLetters(t, messageBus, "worker"); len(messages) != 2 {
+		t.Fatalf("letters with an open new goal = %#v; want 2", messages)
 	}
 }
 
 func TestReconcilerDeliversAgainAfterProcessedCooldown(t *testing.T) {
 	now := goalNow
 	_, messageBus, base := seededGoalReconciler(t)
-	r := NewReconciler(ReconcilerConfig{Store: base, Bus: messageBus, Clock: func() time.Time { return now }})
+	r := NewReconciler(ReconcilerConfig{Store: base, Mail: messageBus, Clock: func() time.Time { return now }})
 	if err := r.Reconcile(context.Background(), "worker", ""); err != nil {
 		t.Fatal(err)
 	}
 	first := onlyGoalMessage(t, messageBus, "worker")
-	if _, err := messageBus.MarkProcessed("worker", first.ID, "handled"); err != nil {
+	if _, _, err := messageBus.Reply(mail.ReplyRequest{As: "agent:worker", ID: first.ID, Text: "handled"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.Reconcile(context.Background(), "worker", "next"); err != nil {
 		t.Fatal(err)
 	}
-	if messages, err := messageBus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10); err != nil || len(messages) != 1 {
-		t.Fatalf("messages before cooldown = %#v, %v", messages, err)
+	if messages := goalLetters(t, messageBus, "worker"); len(messages) != 1 {
+		t.Fatalf("letters before cooldown = %#v", messages)
 	}
 	now = now.Add(time.Minute)
 	if err := r.Reconcile(context.Background(), "worker", "next"); err != nil {
 		t.Fatal(err)
 	}
-	if messages, err := messageBus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10); err != nil || len(messages) != 2 {
-		t.Fatalf("messages after cooldown = %#v, %v", messages, err)
+	if messages := goalLetters(t, messageBus, "worker"); len(messages) != 2 {
+		t.Fatalf("letters after cooldown = %#v", messages)
 	}
 }
 
-func seededGoalReconciler(t *testing.T) (*Reconciler, *bus.Bus, *basestore.Store) {
+func seededGoalReconciler(t *testing.T) (*Reconciler, *mail.Mail, *basestore.Store) {
 	t.Helper()
 	base := openGoalStore(t)
 	s := NewStore(base)
 	seedAgent(t, s, "worker", goalNow.Add(-time.Hour))
 	seedTask(t, s, "T-1", "agent:worker", "P0", "open", "2026-09-01T00:00:00Z")
-	messageBus := goalBus(t, base, "worker")
+	messageBus := mail.New(base, func() time.Time { return goalNow }, goalDirectory{base})
 	r := NewReconciler(ReconcilerConfig{
-		Store: base, Bus: messageBus, Clock: func() time.Time { return goalNow },
+		Store: base, Mail: messageBus, Clock: func() time.Time { return goalNow },
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	return r, messageBus, base
 }
 
-func goalBus(t *testing.T, base *basestore.Store, agents ...string) *bus.Bus {
-	t.Helper()
-	messageBus := bus.New(base, func() time.Time { return goalNow })
-	for _, name := range agents {
-		if _, err := messageBus.Subscribe(name, bus.InboxChannel(name), bus.Matcher{}, nil); err != nil {
-			t.Fatal(err)
-		}
-		// The daemon provisions the per-agent chats at startup; a Goal wake is
-		// delivered through the service chat's participant subscription.
-		if err := messageBus.ReconcileChats([]string{name}, "user:customer"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return messageBus
-}
+// goalDirectory knows the agents of the store; nothing else is addressed.
+type goalDirectory struct{ base *basestore.Store }
 
-func onlyGoalMessage(t *testing.T, messageBus *bus.Bus, agent string) bus.Message {
+func (d goalDirectory) AgentExists(name string) (bool, error) {
+	var n int
+	err := d.base.DB.QueryRow(`SELECT COUNT(*) FROM agents WHERE name=?`, name).Scan(&n)
+	return n > 0, err
+}
+func (goalDirectory) InboxCap(string) (int, error)                { return 0, nil }
+func (goalDirectory) CustomerLogin() string                       { return "customer" }
+func (goalDirectory) PluginInstalled(string) (bool, error)        { return false, nil }
+func (goalDirectory) QueueExists(string) (bool, error)            { return false, nil }
+func (goalDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
+
+// goalLetters is every letter sent to agent, newest first.
+func goalLetters(t *testing.T, m *mail.Mail, agent string) []mail.Letter {
 	t.Helper()
-	messages, err := messageBus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService(agent)), "", 10)
+	letters, _, err := m.List(mail.BoxAll, "agent:"+agent, 100, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(messages) != 1 {
-		t.Fatalf("messages = %#v, want one", messages)
+	return letters
+}
+
+func onlyGoalMessage(t *testing.T, m *mail.Mail, agent string) mail.Letter {
+	t.Helper()
+	letters := goalLetters(t, m, agent)
+	if len(letters) != 1 {
+		t.Fatalf("letters = %#v, want one", letters)
 	}
-	return messages[0]
+	return letters[0]
 }
 
 type failOncePublisher struct {
-	delegate *bus.Bus
-	channel  string
+	delegate *mail.Mail
+	to       string
 	failed   bool
 }
 
-func (p *failOncePublisher) Publish(message bus.Message) (bus.Message, error) {
-	if message.Channel == p.channel && !p.failed {
+func (p *failOncePublisher) Send(letter mail.Letter) ([]mail.Letter, error) {
+	if letter.To == p.to && !p.failed {
 		p.failed = true
-		return bus.Message{}, errors.New("injected publish failure")
+		return nil, errors.New("injected send failure")
 	}
-	return p.delegate.Publish(message)
+	return p.delegate.Send(letter)
 }

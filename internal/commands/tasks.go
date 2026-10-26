@@ -143,20 +143,6 @@ func TaskOperatorCommands() []registry.Command {
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				return control.Principals(ctx, actor)
 			}),
-		taskRoute("tasks.notifications.list", "GET", "/api/task-notifications", "List customer task notifications",
-			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				include, _ := p.OptBool("include_dismissed")
-				list, err := control.ListNotifications(ctx, actor, include)
-				return TaskNotificationList{Notifications: list, Count: len(list)}, err
-			}),
-		taskRoute("tasks.notifications.read", "POST", "/api/task-notifications/{id}/read", "Mark a task notification read",
-			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				return control.MarkNotification(ctx, actor, p.Trimmed("id"), "read")
-			}),
-		taskRoute("tasks.notifications.dismiss", "POST", "/api/task-notifications/{id}/dismiss", "Dismiss a task notification",
-			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				return control.MarkNotification(ctx, actor, p.Trimmed("id"), "dismiss")
-			}),
 		taskRoute("tasks.queue.pool.set", "PATCH", "/api/task-queues/{queue}/pools/{pool}", "Bind agents to a logical workflow pool",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				return control.RebindAgentPool(ctx, actor, p.Trimmed("queue"), p.Trimmed("pool"), p.Strings("agents"), p.Int64("revision"), p.Trimmed("idempotency_key"))
@@ -448,9 +434,6 @@ var taskResultTypes = map[string]func(registry.Command) registry.Command{
 	"tasks.relations.delete":        registry.WithResult[TaskRelationDeleted],
 	"tasks.events":                  registry.WithResult[TaskEventList],
 	"tasks.principals":              registry.WithResult[tasks.PrincipalInfo],
-	"tasks.notifications.list":      registry.WithResult[TaskNotificationList],
-	"tasks.notifications.read":      registry.WithResult[tasks.Notification],
-	"tasks.notifications.dismiss":   registry.WithResult[tasks.Notification],
 	"tasks.queue.pool.set":          registry.WithResult[tasks.AgentPool],
 	"tasks.queue.pool.list":         registry.WithResult[TaskAgentPoolList],
 	"tasks.queue.pool.get":          registry.WithResult[tasks.AgentPool],
@@ -533,8 +516,6 @@ func taskHTTPArgs(path string) []registry.Arg {
 			{Name: "responsible_agent", Help: "Responsible agent"},
 			{Name: "revision", Type: registry.Int, Required: true, Help: "Expected current revision"},
 		}
-	case "tasks.notifications.list":
-		return []registry.Arg{{Name: "include_dismissed", Type: registry.Bool, Help: "Include dismissed notifications"}}
 	case "tasks.queue.create":
 		return []registry.Arg{
 			{Name: "prefix", Required: true, Help: "Queue key prefix"},
