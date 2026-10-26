@@ -574,10 +574,13 @@ If task 1 proves too large for one review, the acceptable split is
 protocol change" second, with the first pull request already rendering the
 prompt from mail and the bus receiving no new publishes.
 
-Deployment order matters once 1 merges: the daemon on the development host
-is upgraded first (existing images keep provisioning through the `messages`
-alias and agents are told `tmail reply` by the prompt), then the store
-changes land and the pool agents are moved to the rebuilt images.
+Merging code does not change the daemon that serves the pool agents on this
+host. After tasks 1–3 merge, `tariboy-release-publisher` builds the next
+minor release on a TARI task, the customer approves the version there and
+installs the release. Existing images keep provisioning on the new daemon
+through the `messages` alias and the prompt tells agents `tmail reply`; the
+rebuilt images from task 5 are rolled out to the pool agents only after that
+daemon runs.
 
 ## 9. Left to the builder
 
