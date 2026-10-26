@@ -1,5 +1,4 @@
 import type {
-  Letter,
   MailClearResult,
   MailCloseResult,
   MailList,
@@ -14,12 +13,6 @@ import type { Transport } from "./client";
 import { queryPath } from "./tasks";
 
 export type { Letter, MailList, MailUnread } from "../api-types.generated";
-
-/** The task a letter is about: the string `data.task_key`, or "". */
-export function letterTaskKey(letter: Letter): string {
-  const key = letter.data?.task_key;
-  return typeof key === "string" ? key : "";
-}
 
 export type MailBox = "inbox" | "sent" | "archive";
 

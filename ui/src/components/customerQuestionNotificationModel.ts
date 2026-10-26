@@ -1,4 +1,5 @@
-import { letterTaskKey, type Letter, type MailUnread } from "@/lib/api";
+import type { Letter, MailUnread } from "@/lib/api";
+import { letterTaskKey } from "@/lib/letters";
 import { principalName, questionCountsBySender } from "@/pages/mailbox/mailboxModel";
 
 export const CUSTOMER_QUESTION_RETRY_MS = 3000;

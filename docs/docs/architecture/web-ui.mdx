@@ -446,8 +446,9 @@ modules; it holds no requests of its own.
 - `mail.ts` is the mailbox client: `list`, `show`, `send`, `reply`, `close`,
   `read`, `requeue`, `unread`, and `clear` (an agent's inbox). Each call takes
   an optional `as`, the principal it acts as; without it the daemon acts as
-  the customer. It also holds `letterTaskKey(letter)`, the string
-  `data.task_key` of a letter or `""`.
+  the customer. `lib/letters.ts` holds `letterTaskKey(letter)`, the string
+  `data.task_key` of a letter or `""`, apart from the client so the shell's
+  eager modules can read a letter without loading it.
 
 `createApi(target)` returns an `ApiClient`: the bound transport plus one
 section per domain, such as `api.tasks.getTask(key)` or
@@ -549,8 +550,11 @@ or file clears the error.
 `build.rolldownOptions.output.codeSplitting.groups`, the Vite 8 replacement for
 `manualChunks`: `react` (React, React DOM, and the router), `codemirror`,
 `tiptap` (TipTap and ProseMirror), `xterm`, and `markdown` (react-markdown,
-remark, rehype, and highlight.js). Only `react` is part of the first download;
-each other group loads with the first screen that needs it. Keep a group
+remark, rehype, and highlight.js). One more group, `api`, holds the app's own
+HTTP client (`src/lib/api/`, `lib/daemons.ts`, and `lib/storage.ts`): the shell
+and most lazy screens share it, and without the group the bundler folds it into
+the entry chunk once enough screens share it. Only `react` and `api` are part of
+the first download; each other group loads with the first screen that needs it. Keep a group
 narrow: if the shell imports one module of a group, the whole group becomes
 part of the first download.
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { letterTaskKey, type MailUnread } from "@/lib/api";
+import type { MailUnread } from "@/lib/api";
+import { letterTaskKey } from "@/lib/letters";
 import { letter } from "@/test/fixtures/mailFixtures";
 import {
   letterActions,

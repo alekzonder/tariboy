@@ -1,11 +1,11 @@
+import { lazy, Suspense } from "react";
 import { NavLink } from "react-router-dom";
-import { ApiProvider } from "@/components/ApiProvider";
-import { useApi } from "@/components/apiContext";
 import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
-import { useApiQuery } from "@/hooks/useApiQuery";
-import { serverPath, targetFor, type ServerSection } from "@/lib/terminalsHost";
+import { serverPath, type ServerSection } from "@/lib/terminalsHost";
 import { cn } from "@/lib/utils";
-import { mailQueries, useLiveMail } from "@/pages/mailbox/mailQueries";
+
+// The count brings the host client and the query helpers: it loads after the shell.
+const OpenMailCount = lazy(() => import("@/pages/mailbox/OpenMailCount"));
 
 const SECTIONS: Array<{ section: ServerSection; label: string }> = [
   { section: "mail", label: "Mailbox" },
@@ -16,25 +16,6 @@ const SECTIONS: Array<{ section: ServerSection; label: string }> = [
   { section: "stores", label: "Stores" },
   { section: "settings", label: "Settings" },
 ];
-
-/** The customer's open letters on this server, kept live by the mail socket. */
-function OpenMailCount() {
-  const api = useApi();
-  useLiveMail("");
-  const open = useApiQuery(mailQueries.unread(api, "")).data?.open ?? 0;
-  if (open === 0) return null;
-  const label = `${open} open letter${open === 1 ? "" : "s"}`;
-  return (
-    <span
-      role="img"
-      aria-label={label}
-      title={label}
-      className="ml-1.5 rounded-full bg-primary px-1.5 text-caption font-medium leading-4 text-primary-foreground"
-    >
-      {open}
-    </span>
-  );
-}
 
 /** The island's header for server-scoped views. Same strip as the agent tabs —
  *  34px, a 2px --primary underline on the active section — so the two ways of
@@ -66,9 +47,9 @@ export function ServerContextBar({ hostId, label }: { hostId: string; label: str
         >
           {sectionLabel}
           {section === "mail" && (
-            <ApiProvider target={targetFor(hostId)}>
-              <OpenMailCount />
-            </ApiProvider>
+            <Suspense fallback={null}>
+              <OpenMailCount hostId={hostId} />
+            </Suspense>
           )}
         </NavLink>
       ))}

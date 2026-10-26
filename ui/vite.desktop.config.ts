@@ -32,6 +32,10 @@ export default defineConfig({
             { name: "codemirror", test: /node_modules[\\/](@codemirror|@lezer|@uiw|@marijn|crelt|style-mod|w3c-keyname)[\\/]/ },
             { name: "tiptap", test: /node_modules[\\/](@tiptap|prosemirror-[^\\/]+|orderedmap|rope-sequence|linkifyjs|marked)[\\/]/ },
             { name: "xterm", test: /node_modules[\\/]@xterm[\\/]/ },
+            // The HTTP client and host registry: shared by the shell and most
+            // lazy screens, so without a group the bundler may fold it into the
+            // entry chunk once enough screens share it.
+            { name: "api", test: /src[\\/]lib[\\/](api[\\/]|daemons\.ts|storage\.ts)/ },
             { name: "markdown", test: /node_modules[\\/](react-markdown|remark-[^\\/]+|rehype-[^\\/]+|unified|micromark[^\\/]*|mdast-[^\\/]+|hast-[^\\/]+|unist-[^\\/]+|highlight\.js|lowlight)[\\/]/ },
           ],
         },

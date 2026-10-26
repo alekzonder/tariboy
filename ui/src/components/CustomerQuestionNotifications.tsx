@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useDaemons } from "@/components/daemonContext";
 import { hasLocalDaemon, onTaskNotificationActivated, showTaskNotification } from "@/lib/desktop";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
-import { createApi, letterTaskKey } from "@/lib/api";
+import { createApi } from "@/lib/api";
+import { letterTaskKey } from "@/lib/letters";
 import { serverPath } from "@/lib/terminalsHost";
 import {
   CustomerQuestionNotificationsContext,

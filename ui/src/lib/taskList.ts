@@ -1,10 +1,5 @@
-import {
-  letterTaskKey,
-  type Letter,
-  type Task,
-  type TaskFilters,
-  type TaskStatusView,
-} from "./api";
+import type { Letter, Task, TaskFilters, TaskStatusView } from "./api";
+import { letterTaskKey } from "./letters";
 import { errorText } from "./errors";
 
 export function actorAgent(name: string): string {
