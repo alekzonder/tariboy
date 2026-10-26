@@ -53,7 +53,7 @@ func run(ctx context.Context) error {
 	}
 	handshake := plugins.Handshake{
 		Name: "telegram", Version: version.Version, ProtocolVersion: plugins.ProtocolVersion,
-		Types: []string{"channel-source", "channel-sink"}, Socket: socket,
+		Types: []string{"mail-source", "mail-sink"}, Socket: socket,
 	}
 	if err := json.NewEncoder(os.Stdout).Encode(handshake); err != nil {
 		return err

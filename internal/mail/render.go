@@ -15,6 +15,12 @@ const defaultBatch = 100
 // a letter whose data does not decode is marked dead with reason decode_error;
 // neither counts toward n. Letters held back by n are not touched.
 func (m *Mail) RenderBatch(agent string, n int) ([]Letter, error) {
+	return m.DrainBatch(agentPrincipal(agent), n)
+}
+
+// DrainBatch is RenderBatch for any principal: the plugin host drains the
+// inbox of plugin:<name> with the same attempt and dead-letter rules.
+func (m *Mail) DrainBatch(principal string, n int) ([]Letter, error) {
 	if n <= 0 {
 		n = defaultBatch
 	}
@@ -25,7 +31,7 @@ func (m *Mail) RenderBatch(agent string, n int) ([]Letter, error) {
 	}
 	defer tx.Rollback()
 	rows, err := tx.Query(`SELECT `+letterColumns+` FROM mail WHERE recipient = ? AND `+openSQL+`
-		ORDER BY needs_reply DESC, created_at, seq`, agentPrincipal(agent))
+		ORDER BY needs_reply DESC, created_at, seq`, principal)
 	if err != nil {
 		return nil, err
 	}

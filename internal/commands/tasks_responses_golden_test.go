@@ -181,8 +181,8 @@ func TestTasksResponsesMatchGolden(t *testing.T) {
 		tasksGoldenCall{"tasks.queue.pool.list", "tasks.queue.pool.list", registry.Params{"queue": "GLD"}},
 		tasksGoldenCall{"tasks.queue.pool.list empty", "tasks.queue.pool.list", registry.Params{"queue": "EMP"}},
 		tasksGoldenCall{"tasks.queue.trigger.list empty", "tasks.queue.trigger.list", registry.Params{"queue": "GLD"}},
-		tasksGoldenCall{"tasks.queue.trigger.create", "tasks.queue.trigger.create", registry.Params{"queue": "GLD", "pattern": "incident:*", "action": "create_task"}},
-		tasksGoldenCall{"tasks.queue.trigger.create correlated", "tasks.queue.trigger.create", registry.Params{"queue": "GLD", "pattern": "alert:*", "correlation_key": "data.id", "action": "create_task"}},
+		tasksGoldenCall{"tasks.queue.trigger.create", "tasks.queue.trigger.create", registry.Params{"queue": "GLD", "pattern": "plugin:*", "action": "create_task"}},
+		tasksGoldenCall{"tasks.queue.trigger.create correlated", "tasks.queue.trigger.create", registry.Params{"queue": "GLD", "pattern": "plugin:alerts", "correlation_key": "alert-7", "action": "create_task"}},
 		tasksGoldenCall{"tasks.queue.trigger.list", "tasks.queue.trigger.list", registry.Params{"queue": "GLD"}},
 	)
 	triggers, err := svc.ListQueueWorkflowTriggers(t.Context(), tasks.CustomerActor("customer"), "GLD")

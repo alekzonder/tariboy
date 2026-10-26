@@ -29,10 +29,21 @@ import (
 
 func TestTasksRuntimeAliasRefreshAndOwnership(t *testing.T) {
 	t.Parallel()
+	for _, alias := range []struct{ payload, link string }{{"tariboy-tasks", "ttasks"}, {"tariboy-mail", "tmail"}} {
+		t.Run(alias.link, func(t *testing.T) {
+			t.Parallel()
+			testRuntimeAlias(t, alias.payload, alias.link)
+		})
+	}
+}
+
+// testRuntimeAlias checks that a runtime link follows the newest payload and
+// never replaces a command it does not own.
+func testRuntimeAlias(t *testing.T, payloadName, linkName string) {
 	runtimeDir := t.TempDir()
 	for _, value := range []string{"old", "new"} {
 		bundle := t.TempDir()
-		payload := filepath.Join(bundle, "tariboy-tasks")
+		payload := filepath.Join(bundle, payloadName)
 		if err := os.WriteFile(payload, []byte("#!/bin/sh\nprintf '"+value+"\\n'\n"), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -40,7 +51,7 @@ func TestTasksRuntimeAliasRefreshAndOwnership(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		out, err := exec.Command(filepath.Join(binDir, "ttasks")).Output()
+		out, err := exec.Command(filepath.Join(binDir, linkName)).Output()
 		if err != nil || strings.TrimSpace(string(out)) != value {
 			t.Fatalf("alias output = %q, err = %v", out, err)
 		}
@@ -48,14 +59,14 @@ func TestTasksRuntimeAliasRefreshAndOwnership(t *testing.T) {
 	for _, kind := range []string{"file", "foreign-link", "directory"} {
 		t.Run(kind, func(t *testing.T) {
 			bundle, runtimeDir := t.TempDir(), t.TempDir()
-			if err := os.WriteFile(filepath.Join(bundle, "tariboy-tasks"), []byte("#!/bin/sh\n"), 0o700); err != nil {
+			if err := os.WriteFile(filepath.Join(bundle, payloadName), []byte("#!/bin/sh\n"), 0o700); err != nil {
 				t.Fatal(err)
 			}
 			binDir := filepath.Join(runtimeDir, "bin")
 			if err := os.Mkdir(binDir, 0o700); err != nil {
 				t.Fatal(err)
 			}
-			link := filepath.Join(binDir, "ttasks")
+			link := filepath.Join(binDir, linkName)
 			switch kind {
 			case "file":
 				if err := os.WriteFile(link, []byte("user-owned"), 0o600); err != nil {

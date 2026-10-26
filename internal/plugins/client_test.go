@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/mail"
 )
 
 // serveUnixMux starts an HTTP server on a fresh unix socket bound to mux and
@@ -122,18 +124,18 @@ func TestClientDeliver(t *testing.T) {
 	t.Parallel()
 	var body []byte
 	c := NewClient(serveUnixPlugin(t, 200, 200, &body))
-	msg := MessageDTO{ID: "m1", Channel: "chat:in", Type: "chat.msg", Text: "hi", Source: "user:ops"}
+	msg := mail.Letter{ID: "m1", From: "agent:alice", To: "plugin:echo", Body: "hi"}
 	if err := c.Deliver(context.Background(), msg); err != nil {
 		t.Fatal(err)
 	}
 	var env struct {
-		Message MessageDTO `json:"message"`
+		Letter mail.Letter `json:"letter"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
-		t.Fatalf("deliver body not {message:...}: %v (%s)", err, body)
+		t.Fatalf("deliver body not {letter:...}: %v (%s)", err, body)
 	}
-	if env.Message.ID != "m1" || env.Message.Text != "hi" {
-		t.Fatalf("delivered msg = %+v", env.Message)
+	if env.Letter.ID != "m1" || env.Letter.Body != "hi" || env.Letter.From != "agent:alice" {
+		t.Fatalf("delivered letter = %+v", env.Letter)
 	}
 	// Non-2xx from the plugin is an error the drainer can act on.
 	fail := NewClient(serveUnixPlugin(t, 200, 500, nil))
@@ -183,7 +185,7 @@ func TestClientHungPluginTimesOut(t *testing.T) {
 	t.Run("deliver", func(t *testing.T) {
 		t.Parallel()
 		start := time.Now()
-		msg := MessageDTO{ID: "m1", Channel: "chat:in", Type: "chat.msg"}
+		msg := mail.Letter{ID: "m1", From: "agent:alice", To: "plugin:echo"}
 		if err := c.Deliver(context.Background(), msg); err == nil {
 			t.Fatal("hung plugin deliver should error, not hang forever")
 		}
@@ -191,46 +193,4 @@ func TestClientHungPluginTimesOut(t *testing.T) {
 			t.Fatalf("Deliver took %v; client timeout should have fired well before that", elapsed)
 		}
 	})
-}
-
-func TestClientPushWatches(t *testing.T) {
-	t.Parallel()
-	var got ChannelWatchesDTO
-	mux := http.NewServeMux()
-	mux.HandleFunc("/watches", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&got)
-		w.WriteHeader(200)
-	})
-	err := NewClient(serveUnixMux(t, mux)).PushWatches(context.Background(), "issue-provider:query",
-		[]WatchDTO{{Watch: "a1b2", Params: map[string]any{"query": "PROJ"}, Subscribers: []string{"dev-manager"}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Channel != "issue-provider:query" || len(got.Watches) != 1 {
-		t.Fatalf("plugin received %+v", got)
-	}
-	if got.Watches[0].Watch != "a1b2" || got.Watches[0].Subscribers[0] != "dev-manager" {
-		t.Fatalf("watch payload = %+v", got.Watches[0])
-	}
-}
-
-func TestClientPushWatchesNon2xx(t *testing.T) {
-	t.Parallel()
-	mux := http.NewServeMux()
-	mux.HandleFunc("/watches", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(500) })
-	err := NewClient(serveUnixMux(t, mux)).PushWatches(context.Background(), "issue-provider:query", nil)
-	if err == nil {
-		t.Fatal("non-2xx must be an error so the daemon retries")
-	}
-}
-
-func TestProvidedChannelNames(t *testing.T) {
-	t.Parallel()
-	if got := providedChannelNames(nil); got != nil {
-		t.Fatalf("nil provide → nil, got %v", got)
-	}
-	got := providedChannelNames([]Provided{{Channel: "issue-provider:query"}, {Channel: "issue-provider:ticket"}})
-	if len(got) != 2 || got[0] != "issue-provider:query" || got[1] != "issue-provider:ticket" {
-		t.Fatalf("names = %v", got)
-	}
 }

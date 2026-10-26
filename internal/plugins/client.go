@@ -9,49 +9,9 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/mail"
 )
-
-// MessageDTO is the wire form of a bus.Message the daemon delivers to a
-// channel-sink plugin. Kept here so bus gains no HTTP knowledge.
-type MessageDTO struct {
-	ID                  string         `json:"id"`
-	Channel             string         `json:"channel"`
-	TS                  string         `json:"ts"`
-	Source              string         `json:"source"`
-	Type                string         `json:"type"`
-	Subject             map[string]any `json:"subject,omitempty"`
-	Text                string         `json:"text,omitempty"`
-	Data                map[string]any `json:"data,omitempty"`
-	ProducedByAgent     string         `json:"produced_by_agent,omitempty"`
-	ProducedInIteration string         `json:"produced_in_iteration,omitempty"`
-	ProducedByPlugin    string         `json:"produced_by_plugin,omitempty"`
-	// Routing fields, carried so a channel-sink can implement reply
-	// forwarding: a kind=reply delivery on the plugin's own
-	// channel is mapped back to its external entity via in_reply_to/correlation_id.
-	Kind          string `json:"kind,omitempty"`
-	CorrelationID string `json:"correlation_id,omitempty"`
-	InReplyTo     string `json:"in_reply_to,omitempty"`
-	ReplyTo       string `json:"reply_to,omitempty"`
-	Deadline      string `json:"deadline,omitempty"`
-}
-
-// WatchDTO is the wire form of one unit of provider demand on a channel: the
-// watch fingerprint, the params that produced it, and the subscribing agents
-// Carried by both the push (POST /watches) and pull
-// (GET /api/plugin/watches) paths so a provider always sees full current state.
-type WatchDTO struct {
-	Watch       string         `json:"watch"`
-	Params      map[string]any `json:"params,omitempty"`
-	Subscribers []string       `json:"subscribers"`
-}
-
-// ChannelWatchesDTO is the full current watch list for one provided channel.
-// It is the POST /watches body, and the element type of the GET
-// /api/plugin/watches "channels" array.
-type ChannelWatchesDTO struct {
-	Channel string     `json:"channel"`
-	Watches []WatchDTO `json:"watches"`
-}
 
 // Client is the daemon-side HTTP/JSON client of one plugin's unix socket.
 type Client struct {
@@ -161,34 +121,10 @@ func (c *Client) doJSON(req *http.Request) (map[string]any, error) {
 	return out, nil
 }
 
-// PushWatches POSTs the full current watch list for a provided channel to the
-// plugin's /watches. A non-2xx is an error so the daemon can retry.
-func (c *Client) PushWatches(ctx context.Context, channel string, watches []WatchDTO) error {
-	body, err := json.Marshal(ChannelWatchesDTO{Channel: channel, Watches: watches})
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/watches", bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
-	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("plugin /watches returned %d", resp.StatusCode)
-	}
-	return nil
-}
-
-// Deliver POSTs {message:...} to the plugin's /deliver (channel-sink). A non-2xx
-// is a typed error so the drainer can leave the message unacked for redelivery.
-func (c *Client) Deliver(ctx context.Context, msg MessageDTO) error {
-	body, err := json.Marshal(map[string]any{"message": msg})
+// Deliver POSTs {letter} to the plugin's /deliver (mail-sink). A non-2xx is
+// an error, so the drainer leaves the letter open for the next attempt.
+func (c *Client) Deliver(ctx context.Context, letter mail.Letter) error {
+	body, err := json.Marshal(map[string]any{"letter": letter})
 	if err != nil {
 		return err
 	}

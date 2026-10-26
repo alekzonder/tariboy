@@ -3,11 +3,13 @@ package tasks
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
+	basestore "github.com/alekzonder/tariboy/internal/store"
 )
 
 func triggerFixture(t *testing.T) (*Service, Actor) {
@@ -35,13 +37,69 @@ func countTasksMentioning(t *testing.T, svc *Service, text string) int {
 	return len(tasksMentioning(t, svc, "DEV", text))
 }
 
-func TestReconcileWorkflowObservationsRecoversCommittedBusMessage(t *testing.T) {
+// queueDirectory knows the queues of the service and the plugin metrics.
+type queueDirectory struct{ svc *Service }
+
+func (queueDirectory) AgentExists(string) (bool, error)            { return false, nil }
+func (queueDirectory) InboxCap(string) (int, error)                { return 0, nil }
+func (queueDirectory) CustomerLogin() string                       { return "customer" }
+func (queueDirectory) PluginInstalled(name string) (bool, error)   { return name == "metrics", nil }
+func (queueDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
+func (d queueDirectory) QueueExists(prefix string) (bool, error) {
+	var n int
+	err := d.svc.db.QueryRow(`SELECT COUNT(*) FROM task_queues WHERE prefix = ?`, prefix).Scan(&n)
+	return n > 0, err
+}
+
+// TestQueueTriggerFiresForQueueRecipient: a letter to queue:DEV from a sender
+// the trigger's glob matches, with the trigger's correlation key, creates one
+// task titled by its subject; a letter to another queue, from another sender
+// or with another key creates none.
+func TestQueueTriggerFiresForQueueRecipient(t *testing.T) {
 	svc, operator := triggerFixture(t)
-	mustCreateTrigger(t, svc, operator, "metrics:api")
-	// A committed message without a commit sequence: the bus always records
-	// one, so only a row written before sequences existed lacks it.
-	insertMessage(t, svc.db, legacyMessage{ID: "durable-1", Channel: "metrics:api", TS: "2099-01-01T00:00:00Z",
-		Source: "plugin:metrics", Type: "metric.alert", Text: "API alert"})
+	if _, err := svc.CreateQueue(context.Background(), operator, CreateQueueInput{Prefix: "OPS", Name: "Ops"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateQueueWorkflowTrigger(context.Background(), operator, "DEV",
+		CreateQueueWorkflowTriggerInput{Pattern: "plugin:*", CorrelationKey: "issue-7", Action: "create_task"}); err != nil {
+		t.Fatal(err)
+	}
+	m := mail.New(&basestore.Store{DB: svc.db}, svc.clock, queueDirectory{svc})
+	send := func(to, subject, key string) mail.Letter {
+		t.Helper()
+		out, err := m.Send(mail.Letter{From: "plugin:metrics", To: to, Subject: subject, Body: "details",
+			Kind: "issue.created", Data: map[string]any{"correlation_key": key}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out[0].AnsweredAt == "" {
+			t.Fatalf("a letter to a queue is stored open: %+v", out[0])
+		}
+		return out[0]
+	}
+	fires := send("queue:DEV", "Fix production", "issue-7")
+	send("queue:OPS", "Other queue", "issue-7")
+	send("queue:DEV", "Other key", "issue-8")
+	for range 2 {
+		if _, err := svc.ReconcileWorkflowObservations(context.Background(), 100); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tasks := queueTasks(t, svc, "DEV")
+	if len(tasks) != 1 || tasks[0].Title != "Fix production" || !strings.Contains(tasks[0].Description, fires.ID) ||
+		!strings.Contains(tasks[0].Description, "plugin:metrics") {
+		t.Fatalf("DEV tasks = %#v; want one task from %s", tasks, fires.ID)
+	}
+	if n := len(queueTasks(t, svc, "OPS")); n != 0 {
+		t.Fatalf("OPS tasks = %d; OPS has no trigger", n)
+	}
+}
+
+func TestReconcileWorkflowObservationsRecoversCommittedLetter(t *testing.T) {
+	svc, operator := triggerFixture(t)
+	mustCreateTrigger(t, svc, operator, "plugin:metrics")
+	sendQueueLetter(t, svc, queueLetter{ID: "durable-1", Sender: "plugin:metrics", CreatedAt: "2099-01-01T00:00:00Z",
+		Kind: "metric.alert", Body: "API alert"})
 	if n, err := svc.ReconcileWorkflowObservations(context.Background(), 100); err != nil || n != 1 {
 		t.Fatalf("reconcile = %d, %v", n, err)
 	}
@@ -53,37 +111,14 @@ func TestReconcileWorkflowObservationsRecoversCommittedBusMessage(t *testing.T) 
 	}
 }
 
-func TestClearPendingPreservesUnreconciledTriggerMessage(t *testing.T) {
-	svc, operator := triggerFixture(t)
-	mustCreateTrigger(t, svc, operator, "metrics:api")
-	b := workflowBus(svc)
-	if _, err := b.Subscribe("dev-a", "metrics:api", nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	published, err := b.Publish(bus.Message{Channel: "metrics:api", Source: "plugin:metrics", Type: "metric.alert", Text: "queue pressure"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, err := b.ClearPending("dev-a"); err != nil || got.DeletedDeliveries != 1 || got.DeletedMessages != 0 {
-		t.Fatalf("clear result = %+v, err=%v", got, err)
-	}
-	if n, err := svc.ReconcileWorkflowObservations(context.Background(), 100); err != nil || n != 1 {
-		t.Fatalf("reconcile = %d, %v", n, err)
-	}
-	if got := countTasksMentioning(t, svc, published.ID); got != 1 {
-		t.Fatalf("triggered tasks = %d; want 1", got)
-	}
-}
-
 func TestReconcileWorkflowObservationsUsesCommitSequenceNotTimestampOrID(t *testing.T) {
 	svc, operator := triggerFixture(t)
-	mustCreateTrigger(t, svc, operator, "metrics:*")
-	ts := "2099-01-01T00:00:00Z"
-	// Ids that sort against commit order and one shared timestamp: the bus
-	// chooses both itself, so the rows are written directly.
-	for _, message := range []struct{ id, channel string }{{"z-first", "metrics:z"}, {"a-second", "metrics:a"}} {
-		insertMessage(t, svc.db, legacyMessage{ID: message.id, Channel: message.channel, TS: ts,
-			Source: "plugin:metrics", Type: "alert", Sequenced: true})
+	mustCreateTrigger(t, svc, operator, "plugin:*")
+	at := "2099-01-01T00:00:00Z"
+	// Ids that sort against commit order and one shared time: mail chooses
+	// both itself, so the rows are written directly.
+	for _, id := range []string{"z-first", "a-second"} {
+		sendQueueLetter(t, svc, queueLetter{ID: id, Sender: "plugin:metrics", CreatedAt: at, Kind: "alert"})
 	}
 	if n, err := svc.ReconcileWorkflowObservations(context.Background(), 10); err != nil || n != 2 {
 		t.Fatalf("reconcile = %d, %v", n, err)
@@ -103,14 +138,7 @@ func TestReconcileWorkflowObservationsUsesCommitSequenceNotTimestampOrID(t *test
 	}
 }
 
-func insertWorkflowIngressMessage(t *testing.T, svc *Service, id, channel, eventAt string) int64 {
-	t.Helper()
-	// The event time is the message timestamp, which the bus would take from
-	// its clock.
-	return insertMessage(t, svc.db, legacyMessage{ID: id, Channel: channel, TS: eventAt, Text: id, Sequenced: true})
-}
-
-func TestTriggerActivationSequenceExcludesEarlierCommittedMessage(t *testing.T) {
+func TestTriggerActivationSequenceExcludesEarlierCommittedLetter(t *testing.T) {
 	svc, operator := triggerFixture(t)
 	svc.db.SetMaxOpenConns(4)
 	tx, err := svc.db.Begin()
@@ -120,16 +148,15 @@ func TestTriggerActivationSequenceExcludesEarlierCommittedMessage(t *testing.T) 
 	if err := reserveWorkflowIngressWriter(context.Background(), tx); err != nil {
 		t.Fatal(err)
 	}
-	// The message commits inside this transaction, which holds the ingress
-	// writer; the bus cannot publish into a caller's transaction.
-	oldSequence := insertMessage(t, tx, legacyMessage{ID: "trigger-before", Channel: "issue-provider:issues",
-		TS: "2099-01-01T00:00:00Z", Text: "trigger-before", Sequenced: true})
+	// The letter commits inside this transaction, which holds the ingress
+	// writer.
+	oldSequence := insertQueueLetter(t, tx, queueLetter{ID: "trigger-before", CreatedAt: "2099-01-01T00:00:00Z", Body: "trigger-before"})
 	created := make(chan struct {
 		trigger QueueWorkflowTrigger
 		err     error
 	}, 1)
 	go func() {
-		trigger, err := svc.CreateQueueWorkflowTrigger(context.Background(), operator, "DEV", CreateQueueWorkflowTriggerInput{Pattern: "issue-provider:*", Action: "create_task"})
+		trigger, err := svc.CreateQueueWorkflowTrigger(context.Background(), operator, "DEV", CreateQueueWorkflowTriggerInput{Pattern: "plugin:*", Action: "create_task"})
 		created <- struct {
 			trigger QueueWorkflowTrigger
 			err     error
@@ -137,7 +164,7 @@ func TestTriggerActivationSequenceExcludesEarlierCommittedMessage(t *testing.T) 
 	}()
 	select {
 	case result := <-created:
-		t.Fatalf("activation committed ahead of earlier message: %#v, %v", result.trigger, result.err)
+		t.Fatalf("activation committed ahead of earlier letter: %#v, %v", result.trigger, result.err)
 	case <-time.After(50 * time.Millisecond):
 	}
 	if err := tx.Commit(); err != nil {
@@ -148,7 +175,7 @@ func TestTriggerActivationSequenceExcludesEarlierCommittedMessage(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	newSequence := insertWorkflowIngressMessage(t, svc, "trigger-after", "issue-provider:issues", "2099-01-01T00:00:00Z")
+	newSequence := sendQueueLetter(t, svc, queueLetter{ID: "trigger-after", CreatedAt: "2099-01-01T00:00:00Z", Body: "trigger-after"})
 	if trigger.CreatedAfterSequence != oldSequence || newSequence <= trigger.CreatedAfterSequence {
 		t.Fatalf("trigger watermark=%d old/new=%d/%d", trigger.CreatedAfterSequence, oldSequence, newSequence)
 	}
@@ -163,16 +190,16 @@ func TestTriggerActivationSequenceExcludesEarlierCommittedMessage(t *testing.T) 
 func TestNewTriggerAtSequenceZeroUsesCommitOrderNotExternalTimestamp(t *testing.T) {
 	svc, operator := triggerFixture(t)
 	clearMessages(t, svc)
-	trigger := mustCreateTrigger(t, svc, operator, "issue-provider:*")
+	trigger := mustCreateTrigger(t, svc, operator, "plugin:*")
 	if trigger.CreatedAfterSequence != 0 || !trigger.ActivationSequenceSet {
 		t.Fatalf("new zero-sequence trigger = %#v", trigger)
 	}
-	insertWorkflowIngressMessage(t, svc, "first-after-activation", "issue-provider:issues", "2000-01-01T00:00:00Z")
+	sendQueueLetter(t, svc, queueLetter{ID: "first-after-activation", CreatedAt: "2000-01-01T00:00:00Z", Body: "first-after-activation"})
 	if _, err := svc.ReconcileWorkflowObservations(context.Background(), 100); err != nil {
 		t.Fatal(err)
 	}
 	if tasks := countTasksMentioning(t, svc, "first-after-activation"); tasks != 1 {
-		t.Fatalf("first post-activation event with old external timestamp created %d tasks; want 1", tasks)
+		t.Fatalf("first post-activation letter with an old time created %d tasks; want 1", tasks)
 	}
 }
 
@@ -192,11 +219,10 @@ func TestWorkflowObservationEventAtAcceptsAnyOffset(t *testing.T) {
 	svc, operator := triggerFixture(t)
 	created := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 	svc.clock = func() time.Time { return created }
-	mustCreateTrigger(t, svc, operator, "issue-provider:*")
+	mustCreateTrigger(t, svc, operator, "plugin:*")
 	observe := func(id, eventAt string) error {
 		return svc.ApplyWorkflowObservation(context.Background(), ApplyWorkflowObservationInput{
-			EventID: id, EventAt: eventAt, Channel: "issue-provider:issues", Kind: "issue.created",
-			Payload: map[string]any{"text": id, "source": "plugin:issue-provider"}})
+			EventID: id, EventAt: eventAt, Sender: "plugin:issue-provider", Queue: "DEV", Kind: "issue.created", Body: id})
 	}
 	// 13:59:59+02:00 is one second before the trigger was created.
 	if err := observe("before-creation", "2026-08-07T13:59:59+02:00"); err != nil {
@@ -218,31 +244,11 @@ func TestWorkflowObservationEventAtAcceptsAnyOffset(t *testing.T) {
 	}
 }
 
-func TestTriggerActivationBackfillsPreexistingUnsequencedMessageBeforeWatermark(t *testing.T) {
-	svc, operator := triggerFixture(t)
-	// A row written before commit sequences existed; the bus always records one.
-	insertMessage(t, svc.db, legacyMessage{ID: "legacy-trigger-message", Channel: "issue-provider:issues",
-		TS: "2099-01-01T00:00:00Z", Text: "legacy-trigger-message"})
-	trigger := mustCreateTrigger(t, svc, operator, "issue-provider:*")
-	repairedSequence := messageSequence(t, svc, "legacy-trigger-message")
-	if repairedSequence > trigger.CreatedAfterSequence {
-		t.Fatalf("repaired sequence %d is after activation watermark %d", repairedSequence, trigger.CreatedAfterSequence)
-	}
-	if _, err := svc.ReconcileWorkflowObservations(context.Background(), 100); err != nil {
-		t.Fatal(err)
-	}
-	if tasks := countTasksMentioning(t, svc, "legacy-trigger-message"); tasks != 0 {
-		t.Fatalf("pre-activation unsequenced message created %d tasks", tasks)
-	}
-}
-
 func TestConcurrentWorkflowObservationReconcilersNeverRegressCursor(t *testing.T) {
 	svc := newTestService(t)
 	for i := 0; i < 20; i++ {
-		// Ids that sort against commit order, which the bus never chooses.
-		id := fmt.Sprintf("message-%02d", 19-i)
-		insertMessage(t, svc.db, legacyMessage{ID: id, Channel: "metrics:x", TS: svc.now(),
-			Source: "plugin:metrics", Type: "alert", Sequenced: true})
+		// Ids that sort against commit order, which mail never chooses.
+		sendQueueLetter(t, svc, queueLetter{ID: fmt.Sprintf("message-%02d", 19-i), Sender: "plugin:metrics", Kind: "alert"})
 	}
 	var wg sync.WaitGroup
 	errs := make(chan error, 16)
@@ -272,8 +278,7 @@ func TestZeroTargetCursorAdvanceSerializesAgainstTargetCreation(t *testing.T) {
 	if _, err := svc.CreateQueue(context.Background(), CustomerActor("customer"), CreateQueueInput{Prefix: "DEV", Name: "Development"}); err != nil {
 		t.Fatal(err)
 	}
-	insertMessage(t, svc.db, legacyMessage{ID: "overlap-event", Channel: "issue-provider:issues", TS: svc.now(),
-		Source: "plugin:issue-provider", Type: "issue.created", Text: "overlap", Sequenced: true})
+	sendQueueLetter(t, svc, queueLetter{ID: "overlap-event", Sender: "plugin:issue-provider", Kind: "issue.created", Body: "overlap"})
 
 	counted := make(chan struct{})
 	release := make(chan struct{})
@@ -292,7 +297,7 @@ func TestZeroTargetCursorAdvanceSerializesAgainstTargetCreation(t *testing.T) {
 	go func() {
 		// A bare row insert: the test checks that SQLite itself serializes
 		// it behind the reconciler, not the service's own locking.
-		_, err := svc.db.Exec(`INSERT INTO task_queue_workflow_triggers(queue_prefix,pattern,correlation_key,action,enabled,created_by,created_at,updated_at) VALUES('DEV','issue-provider:*','','create_task',1,'operator',?,?)`, svc.now(), svc.now())
+		_, err := svc.db.Exec(`INSERT INTO task_queue_workflow_triggers(queue_prefix,pattern,correlation_key,action,enabled,created_by,created_at,updated_at) VALUES('DEV','plugin:*','','create_task',1,'operator',?,?)`, svc.now(), svc.now())
 		created <- err
 	}()
 	select {
@@ -314,45 +319,47 @@ func TestZeroTargetCursorAdvanceSerializesAgainstTargetCreation(t *testing.T) {
 
 func TestQueueWorkflowTriggerCreatesFlexibleTaskIdempotently(t *testing.T) {
 	svc, operator := triggerFixture(t)
-	if _, err := svc.CreateQueueWorkflowTrigger(context.Background(), operator, "DEV", CreateQueueWorkflowTriggerInput{Pattern: "issue-provider:*", Action: "run_script"}); ErrorCode(err) != "invalid_trigger_action" {
+	if _, err := svc.CreateQueueWorkflowTrigger(context.Background(), operator, "DEV", CreateQueueWorkflowTriggerInput{Pattern: "plugin:*", Action: "run_script"}); ErrorCode(err) != "invalid_trigger_action" {
 		t.Fatalf("invalid action error = %v", err)
 	}
-	if _, err := svc.CreateQueueWorkflowTrigger(context.Background(), operator, "DEV", CreateQueueWorkflowTriggerInput{Pattern: "agent:*", Action: "create_task"}); ErrorCode(err) != "invalid_channel_pattern" {
-		t.Fatalf("recursive internal trigger error = %v", err)
+	for _, pattern := range []string{"issue-provider:*", "group:dev", "plugin:", "plugin:a*", "queue:DEV"} {
+		if _, err := svc.CreateQueueWorkflowTrigger(context.Background(), operator, "DEV", CreateQueueWorkflowTriggerInput{Pattern: pattern, Action: "create_task"}); ErrorCode(err) != "invalid_sender_pattern" {
+			t.Fatalf("pattern %q error = %v; want invalid_sender_pattern", pattern, err)
+		}
 	}
-	if _, err := svc.CreateQueueWorkflowTrigger(context.Background(), operator, "DEV", CreateQueueWorkflowTriggerInput{Pattern: "issue-provider:*", CorrelationKey: "issue-7", Action: "create_task"}); err != nil {
+	if _, err := svc.CreateQueueWorkflowTrigger(context.Background(), operator, "DEV", CreateQueueWorkflowTriggerInput{Pattern: "plugin:*", CorrelationKey: "issue-7", Action: "create_task"}); err != nil {
 		t.Fatal(err)
 	}
-	notPlugin := ApplyWorkflowObservationInput{EventID: "user-event", Channel: "issue-provider:issues", Kind: "issue.created", CorrelationKey: "issue-7", Payload: map[string]any{"text": "From a user", "source": "user:someone"}}
-	if err := svc.ApplyWorkflowObservation(context.Background(), notPlugin); err != nil {
+	fromUser := ApplyWorkflowObservationInput{EventID: "user-event", Sender: "user:someone", Queue: "DEV", Kind: "issue.created", CorrelationKey: "issue-7", Subject: "From a user"}
+	if err := svc.ApplyWorkflowObservation(context.Background(), fromUser); err != nil {
 		t.Fatal(err)
 	}
-	in := ApplyWorkflowObservationInput{EventID: "issue-provider-event-7", Channel: "issue-provider:issues", Kind: "issue.created", CorrelationKey: "issue-7", Payload: map[string]any{"text": "Fix production", "source": "plugin:issue-provider"}}
+	in := ApplyWorkflowObservationInput{EventID: "issue-provider-event-7", Sender: "plugin:issue-provider", Queue: "DEV", Kind: "issue.created", CorrelationKey: "issue-7", Subject: "Fix production"}
 	for range 2 {
 		if err := svc.ApplyWorkflowObservation(context.Background(), in); err != nil {
 			t.Fatal(err)
 		}
 	}
-	var flexible, fromUser int
+	var flexible, users int
 	for _, task := range queueTasks(t, svc, "DEV") {
 		if task.Title == "Fix production" && task.Status == StatusOpen && task.WorkflowDigest == "" {
 			flexible++
 		}
 		if task.Title == "From a user" {
-			fromUser++
+			users++
 		}
 	}
 	if flexible != 1 {
 		t.Fatalf("trigger tasks = %d", flexible)
 	}
-	if fromUser != 0 {
-		t.Fatalf("non-plugin message tasks = %d; want 0", fromUser)
+	if users != 0 {
+		t.Fatalf("tasks from a sender the glob does not match = %d; want 0", users)
 	}
 }
 
 func TestQueueWorkflowTriggerIsOperatorOnlyAndPersistent(t *testing.T) {
 	svc, operator := triggerFixture(t)
-	in := CreateQueueWorkflowTriggerInput{Pattern: "issue-provider:*", CorrelationKey: "issue", Action: "create_task"}
+	in := CreateQueueWorkflowTriggerInput{Pattern: "plugin:*", CorrelationKey: "issue", Action: "create_task"}
 	if _, err := svc.CreateQueueWorkflowTrigger(context.Background(), AgentActor("dev-a"), "DEV", in); ErrorCode(err) != "forbidden" {
 		t.Fatalf("agent trigger error = %v; want forbidden", err)
 	}

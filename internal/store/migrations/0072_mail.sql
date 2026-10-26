@@ -40,3 +40,13 @@ UPDATE schedules SET recipient = CASE
         THEN 'agent:' || substr(recipient, 7, length(recipient) - 12)
     ELSE 'agent:' || agent
 END;
+
+-- Workflow ingress reads mail.seq, which starts again at 1: the cursor and
+-- the trigger watermarks counted the old message sequence and start over.
+UPDATE task_workflow_ingress_state SET last_message_sequence = 0;
+UPDATE task_queue_workflow_triggers SET created_after_sequence = 0;
+
+-- A plugin declares mail {send, receive} instead of channels; an installed
+-- plugin's manifest is read again when it is installed or updated.
+ALTER TABLE plugins RENAME COLUMN channels TO mail;
+UPDATE plugins SET mail = '{}';

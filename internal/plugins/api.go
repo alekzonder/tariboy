@@ -1,44 +1,42 @@
 package plugins
 
 import (
-	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/api"
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 )
 
-// API is the plugin-facing daemon surface: channel-source publish + subscription
-// read, authenticated by a plugin-token header and scoped to the plugin's
-// declared channels.
+// Sender is the slice of the mail service the plugin API needs.
+type Sender interface {
+	Send(mail.Letter) ([]mail.Letter, error)
+}
+
+// API is the plugin-facing daemon surface: a plugin that declares mail.send
+// sends letters as plugin:<name>, authenticated by its plugin-token.
 type API struct {
 	tokens *TokenRegistry
-	bus    *bus.Bus
+	mail   Sender
 	log    *slog.Logger
 	audit  func(plugin, action, detail string)
 }
 
-func NewAPI(tokens *TokenRegistry, b *bus.Bus, log *slog.Logger, audit func(plugin, action, detail string)) *API {
+func NewAPI(tokens *TokenRegistry, m Sender, log *slog.Logger, audit func(plugin, action, detail string)) *API {
 	if log == nil {
 		log = slog.Default()
 	}
 	if audit == nil {
 		audit = func(string, string, string) {}
 	}
-	return &API{tokens: tokens, bus: b, log: log, audit: audit}
+	return &API{tokens: tokens, mail: m, log: log, audit: audit}
 }
 
 func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
-	case r.Method == http.MethodPost && r.URL.Path == "/api/plugin/publish":
-		a.publish(w, r)
-	case r.Method == http.MethodGet && r.URL.Path == "/api/plugin/subscriptions":
-		a.subscriptions(w, r)
-	case r.Method == http.MethodGet && r.URL.Path == "/api/plugin/watches":
-		a.watches(w, r)
+	case r.Method == http.MethodPost && r.URL.Path == "/api/plugin/mail":
+		a.send(w, r)
 	default:
 		api.WriteErr(w, http.StatusNotFound, "not_found", "unknown plugin route "+r.Method+" "+r.URL.Path)
 	}
@@ -61,119 +59,60 @@ func (a *API) auth(w http.ResponseWriter, r *http.Request) (Identity, bool) {
 	return id, true
 }
 
-func (a *API) publish(w http.ResponseWriter, r *http.Request) {
+// send is POST /api/plugin/mail {to, subject, text, kind, data, notice,
+// idempotency_key}: the letter goes from plugin:<name>, a request unless
+// notice is set. A letter stored dead because the recipient's inbox is full
+// answers 409 inbox_full, so the plugin can tell its user.
+func (a *API) send(w http.ResponseWriter, r *http.Request) {
 	id, ok := a.auth(w, r)
 	if !ok {
 		return
 	}
-	var body struct {
-		Channel              string         `json:"channel"`
-		Type                 string         `json:"type"`
-		Subject              map[string]any `json:"subject"`
-		Text                 string         `json:"text"`
-		Data                 map[string]any `json:"data"`
-		IdempotencyKey       string         `json:"idempotency_key"`
-		RequireDeliveryAgent string         `json:"require_delivery_agent"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_body", "invalid JSON body")
+	if !id.Send {
+		api.WriteErr(w, http.StatusForbidden, "forbidden", "plugin "+id.Name+" does not declare mail.send")
 		return
 	}
-	if body.Channel == "" {
-		api.WriteErr(w, http.StatusBadRequest, "missing_channel", "channel is required")
+	var body struct {
+		To             string         `json:"to"`
+		Subject        string         `json:"subject"`
+		Text           string         `json:"text"`
+		Kind           string         `json:"kind"`
+		Data           map[string]any `json:"data"`
+		Notice         bool           `json:"notice"`
+		IdempotencyKey string         `json:"idempotency_key"`
+	}
+	if !api.DecodeJSONBody(w, r, maxPluginBodyBytes, &body) {
 		return
 	}
 	if len(body.IdempotencyKey) > 256 {
 		api.WriteErr(w, http.StatusBadRequest, "bad_idempotency_key", "idempotency_key is too long")
 		return
 	}
-	if !id.CanPublish(body.Channel) {
-		api.WriteErr(w, http.StatusForbidden, "forbidden_channel",
-			"plugin "+id.Name+" may not publish to "+body.Channel)
+	letters, err := a.mail.Send(mail.Letter{
+		From: "plugin:" + id.Name, To: body.To, Subject: body.Subject, Body: body.Text, Kind: body.Kind,
+		Data: body.Data, NeedsReply: !body.Notice, IdempotencyKey: pluginIdempotencyKey(id.Name, body.IdempotencyKey),
+	})
+	if err != nil {
+		api.WriteError(w, a.log, "plugin "+id.Name+" mail", err)
 		return
 	}
-	message := bus.Message{
-		IdempotencyKey: pluginIdempotencyKey(id.Name, body.IdempotencyKey),
-		Channel:        body.Channel, Type: body.Type, Subject: body.Subject, Text: body.Text, Data: body.Data,
-		Source: "plugin:" + id.Name, ProducedByPlugin: id.Name,
-	}
-	var msg bus.Message
-	var err error
-	if body.RequireDeliveryAgent != "" {
-		msg, err = a.bus.PublishRequiringDelivery(message, body.RequireDeliveryAgent)
-	} else {
-		msg, err = a.bus.Publish(message)
-	}
-	if err != nil {
-		if errors.Is(err, bus.ErrRequiredDelivery) {
-			api.WriteErr(w, http.StatusConflict, "delivery_required", err.Error())
+	for _, l := range letters {
+		if l.DeadReason == mail.DeadQueueLimit {
+			api.WriteErrData(w, http.StatusConflict, "inbox_full", "the inbox of "+l.To+" is full; the letter is stored dead",
+				map[string]any{"letter": l})
 			return
 		}
-		api.WriteErr(w, http.StatusInternalServerError, "publish_failed", err.Error())
-		return
 	}
-	deliveredAgents, err := a.bus.DeliveryAgents(msg.ID)
-	if err != nil {
-		api.WriteErr(w, http.StatusInternalServerError, "delivery_lookup_failed", err.Error())
-		return
-	}
-	// Seed-on-publish: a channel-sink plugin declares its drain surface as globs
-	// (e.g. chat:*) that the exact-match bus can never deliver to. Every concrete
-	// chat surfaces here first — as inbound the plugin itself publishes — so when
-	// the target falls within the plugin's declared sink globs, idempotently
-	// register a CONCRETE subscription for it. A later reply from another source
-	// (agent) to that same channel then fans out to this sink and reaches
-	// /deliver. Seeding AFTER Publish deliberately leaves the just-published
-	// inbound without a delivery row for this new subscription (no echo of the
-	// seeding message); drainOnce's echo-suppression covers any subsequent inbound.
-	// Idempotent: migration 0020 UNIQUE(agent,channel,matcher,type_filter) makes a
-	// repeat subscribe a no-op.
-	if id.MatchesSink(body.Channel) {
-		if _, serr := a.bus.Subscribe("plugin:"+id.Name, body.Channel, bus.Matcher{}, nil); serr != nil {
-			a.log.Warn("sink seed subscribe failed", "plugin", id.Name, "channel", body.Channel, "err", serr)
-		}
-	}
-	a.audit(id.Name, "publish", body.Channel)
-	api.WriteOK(w, map[string]any{"id": msg.ID, "channel": msg.Channel, "delivered_agents": deliveredAgents})
+	a.audit(id.Name, "mail", body.To)
+	api.WriteOK(w, mail.MailSendResult{Letters: letters})
 }
+
+// maxPluginBodyBytes bounds a plugin's letter.
+const maxPluginBodyBytes = 1 << 20
 
 func pluginIdempotencyKey(plugin, key string) string {
 	if key == "" {
 		return ""
 	}
 	return "plugin:" + plugin + ":" + key
-}
-
-func (a *API) subscriptions(w http.ResponseWriter, r *http.Request) {
-	id, ok := a.auth(w, r)
-	if !ok {
-		return
-	}
-	chans := id.Subscribe
-	if chans == nil {
-		chans = []string{}
-	}
-	api.WriteOK(w, map[string]any{"channels": chans})
-}
-
-// watches is the pull path: it returns the full current watch list
-// for every channel this plugin provides, so a plugin that (re)started and lost
-// its in-memory state can reconcile from scratch. Same structure the daemon
-// pushes per-channel on subscribe/unsubscribe. Replaces the misleading static
-// /api/plugin/subscriptions stub (kept alive for now).
-func (a *API) watches(w http.ResponseWriter, r *http.Request) {
-	id, ok := a.auth(w, r)
-	if !ok {
-		return
-	}
-	channels := make([]ChannelWatchesDTO, 0, len(id.Provide))
-	for _, ch := range id.Provide {
-		ws, err := a.bus.WatchList(ch)
-		if err != nil {
-			api.WriteErr(w, http.StatusInternalServerError, "watch_list_failed", err.Error())
-			return
-		}
-		channels = append(channels, ChannelWatchesDTO{Channel: ch, Watches: watchDTOs(ws)})
-	}
-	api.WriteOK(w, map[string]any{"channels": channels})
 }

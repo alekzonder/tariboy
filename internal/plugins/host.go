@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tidy"
@@ -76,7 +76,7 @@ func checkName(name string) error {
 
 type HostConfig struct {
 	Store        *Store
-	Bus          *bus.Bus
+	Mail         Mailbox
 	Tokens       *TokenRegistry
 	PluginsDir   string
 	DaemonSocket string
@@ -104,10 +104,10 @@ type Host struct {
 	running    map[string]*runningPlugin
 	wg         sync.WaitGroup
 
-	// pushMu guards pushQueue: the per-(plugin,channel) watch-push serializers
-	// that keep provider reconciles ordered. See PushWatches.
-	pushMu    sync.Mutex
-	pushQueue map[string]*watchPush
+	// wakeMu guards wakes: one buffered signal per plugin that tells its mail
+	// drainer a letter arrived. See WakePlugins.
+	wakeMu sync.Mutex
+	wakes  map[string]chan struct{}
 }
 
 type Contribution struct {
@@ -115,20 +115,6 @@ type Contribution struct {
 	Description string                `json:"description,omitempty"`
 	Commands    []OperatorCommand     `json:"operator_commands,omitempty"`
 	Settings    *SettingsContribution `json:"settings,omitempty"`
-}
-
-// watchPush serializes watch-list delivery for one (plugin, channel) pair. The
-// provider reconciles by full replace, so only the newest snapshot matters: a
-// fresh PushWatches overwrites any queued-but-not-yet-delivered snapshot
-// (coalescing) and a single worker drains them one at a time. Together this
-// guarantees the provider observes snapshots in the order the subscribe/
-// unsubscribe events occurred and always converges on the final state, instead
-// of a stale snapshot from an out-of-order goroutine winning the race.
-type watchPush struct {
-	pending        []WatchDTO
-	pendingCurrent bool
-	hasPending     bool
-	busy           bool
 }
 
 type runningPlugin struct {
@@ -170,7 +156,7 @@ func NewHost(cfg HostConfig) *Host {
 		rootCtx:    rootCtx,
 		rootCancel: rootCancel,
 		running:    map[string]*runningPlugin{},
-		pushQueue:  map[string]*watchPush{},
+		wakes:      map[string]chan struct{}{},
 	}
 }
 
@@ -465,17 +451,8 @@ func (h *Host) Start(rec Record) error {
 			"TARIBOY_DAEMON_SOCKET="+h.cfg.DaemonSocket),
 	}
 
-	// Carry-forward (b): the token scope is the plugin's declared bus surface.
-	// Sink carries the subscribe patterns ONLY for a channel-sink plugin, so the
-	// publish handler can seed concrete sink subscriptions for a glob like chat:*
-	// (see api.go publish); a non-sink leaves it nil and never seeds.
-	identity := Identity{
-		Name:      name,
-		Publish:   rec.Channels.Publish,
-		Subscribe: rec.Channels.Subscribe,
-		Provide:   providedChannelNames(rec.Channels.Provide),
-		Sink:      sinkPatterns(rec),
-	}
+	// Carry-forward (b): the token scope is the plugin's declared mail surface.
+	identity := Identity{Name: name, Send: rec.Mail.Send && manifestFromRecord(rec).HasType("mail-source")}
 
 	sup := NewSupervisor(SupervisorConfig{
 		Name: name, Manifest: manifestFromRecord(rec), Spec: spec,
@@ -501,8 +478,8 @@ func (h *Host) Start(rec Record) error {
 		},
 	})
 
-	// A channel-sink plugin gets its subscriptions and delivery drainer.
-	h.startSink(ctx, rec, sock)
+	// A mail-sink plugin gets the drainer of its inbox.
+	h.startDrain(ctx, rec, sock)
 
 	go func() {
 		defer h.wg.Done() // the reservation's h.wg.Add above
@@ -514,8 +491,8 @@ func (h *Host) Start(rec Record) error {
 			tidy.Log(h.cfg.Log, "plugin log flush failed", logtw.Flush(), "plugin", name)
 			tidy.Log(h.cfg.Log, "plugin log close failed", logf.Close(), "plugin", name)
 		}()
-		// Defense-in-depth: a panic in the host-side onState/Bus.Publish path must
-		// not crash the daemon. Plugin process failures are already out-of-process.
+		// Defense-in-depth: a panic in the host-side onState path must not crash
+		// the daemon. Plugin process failures are already out-of-process.
 		defer func() {
 			if r := recover(); r != nil {
 				h.cfg.Log.Warn("plugin supervisor goroutine panicked", "plugin", name, "panic", r)
@@ -531,49 +508,27 @@ func (h *Host) Start(rec Record) error {
 }
 
 // onState fans a supervisor state change to the live snapshot, the durable
-// store, and a system:plugins bus event. Repeated idempotent
-// "running" emissions are deduped so a healthy plugin does not spam the bus.
+// store, and the daemon log. Repeated idempotent "running" emissions are
+// deduped so a healthy plugin does not spam the log.
 func (h *Host) onState(name, state string, health map[string]any) {
 	h.mu.Lock()
 	rp := h.running[name]
 	h.mu.Unlock()
-	dup := false
-	var provided []Provided
 	if rp != nil {
 		rp.mu.Lock()
-		if rp.state == state && state == "running" {
-			dup = true
-		}
+		dup := rp.state == state && state == "running"
 		rp.state, rp.health = state, health
-		if state == "running" && !dup {
-			provided = append(provided, rp.rec.Channels.Provide...)
-		}
 		rp.mu.Unlock()
-	}
-	if dup {
-		return
+		if dup {
+			return
+		}
 	}
 	hb, _ := json.Marshal(health)
 	if err := h.cfg.Store.SetState(name, state, string(hb)); err != nil {
 		h.cfg.Log.Error("plugin state persist failed", "plugin", name, "state", state, "err", err)
 	}
 	detail, _ := health["detail"].(string)
-	if _, err := h.cfg.Bus.Publish(bus.Message{
-		Channel: "system:plugins", Type: "plugin.state", Source: "daemon",
-		Text:             fmt.Sprintf("plugin %s -> %s", name, state),
-		ProducedByPlugin: name,
-		Data:             map[string]any{"plugin": name, "state": state, "detail": detail},
-	}); err != nil {
-		h.cfg.Log.Warn("plugin state event publish failed", "plugin", name, "state", state, "err", err)
-	}
-	// A plugin can print its handshake before the host has registered the new
-	// life token, so its one-shot startup pull may race and fail authorization.
-	// Reconcile from the host side whenever this concrete life first becomes
-	// healthy; this also restores watches after a daemon restart without waiting
-	// for an unrelated subscribe/unsubscribe event.
-	for _, p := range provided {
-		h.pushCurrentWatches(name, p.Channel)
-	}
+	h.cfg.Log.Info("plugin state", "plugin", name, "state", state, "detail", detail)
 }
 
 // Stop cancels the supervisor and removes it from the registry. The per-life
@@ -709,7 +664,7 @@ func (h *Host) Install(sourcePath string) (map[string]any, error) {
 	}
 	rec := Record{
 		Name: m.Name, Version: m.Version, Types: m.Types, ProtocolVersion: m.ProtocolVersion,
-		Exec: m.Exec, SourcePath: sourcePath, Channels: m.Channels, Enabled: true, State: "installed",
+		Exec: m.Exec, SourcePath: sourcePath, Mail: m.Mail, Enabled: true, State: "installed",
 	}
 	previous, hadPrevious, err := h.cfg.Store.Get(m.Name)
 	if err != nil {
@@ -818,13 +773,12 @@ func (h *Host) afterDrain(after *runningPlugin, restart func()) {
 	}()
 }
 
-// Remove stops the plugin, drops its subscriptions, deletes the row and files.
+// Remove stops the plugin, deletes the row and files.
 func (h *Host) Remove(name string) error {
 	if err := checkName(name); err != nil {
 		return err
 	}
 	h.stop(name)
-	h.unsubscribeSink(name)
 	if err := h.cfg.Store.Delete(name); err != nil {
 		return err
 	}
@@ -883,7 +837,7 @@ func (h *Host) Inspect(name string) (map[string]any, error) {
 	return map[string]any{
 		"name": rec.Name, "version": rec.Version, "types": rec.Types,
 		"protocol_version": rec.ProtocolVersion, "exec": rec.Exec, "source_path": rec.SourcePath,
-		"channels": rec.Channels, "enabled": rec.Enabled, "state": state,
+		"mail": rec.Mail, "enabled": rec.Enabled, "state": state,
 		"installed_at": rec.InstalledAt, "socket": h.SocketPath(name),
 	}, nil
 }
@@ -917,7 +871,7 @@ func (h *Host) Logs(name string, tail int) ([]string, error) {
 
 func manifestFromRecord(r Record) Manifest {
 	return Manifest{Name: r.Name, Version: r.Version, ProtocolVersion: r.ProtocolVersion,
-		Types: r.Types, Exec: r.Exec, Channels: r.Channels}
+		Types: r.Types, Exec: r.Exec, Mail: r.Mail}
 }
 
 // checkPluginSource rejects the whole source tree if it holds a symlink
@@ -1026,64 +980,63 @@ func writeActiveVersion(dir, version string) error {
 	return os.Rename(name, filepath.Join(dir, activeVersionFile))
 }
 
-// --- channel-sink delivery ---
+// --- mail-sink delivery ---
 
-// sinkFallbackInterval bounds how long a sink drainer sleeps without a bus
-// Wake signal. Wake carries new deliveries; the timer retries failed ones.
+// sinkFallbackInterval bounds how long a drainer sleeps without a wake. A
+// wake carries new letters; the timer retries failed deliveries.
 const sinkFallbackInterval = 5 * time.Second
 
-// sinkBatch is how many pending messages one drain pass takes.
+// sinkBatch is how many open letters one drain pass takes.
 const sinkBatch = 50
 
-// sinkPatterns returns the declared subscribe patterns a channel-sink plugin
-// drains, or nil for any other plugin type. It is the single source that both
-// the token Identity.Sink scope and the seed-on-publish gate agree on.
-func sinkPatterns(rec Record) []string {
-	if !manifestFromRecord(rec).HasType("channel-sink") {
-		return nil
-	}
-	return rec.Channels.Subscribe
+// Mailbox is the slice of the mail service the host needs: the inbox drain
+// of a plugin principal, with the attempt and dead-letter rules, and the close
+// of a delivered letter.
+type Mailbox interface {
+	DrainBatch(principal string, n int) ([]mail.Letter, error)
+	Close(as, id, note string) (mail.Letter, error)
 }
 
-// startSink subscribes a channel-sink plugin to its declared channels and runs a
-// per-plugin drainer that delivers matching bus messages to the plugin's
-// /deliver. The subscriptions are durable; the drainer exits on ctx.
-// It drains at start, then whenever the bus Wake signal reports a new delivery,
-// and at the latest every sinkFallbackInterval to retry failed deliveries.
-//
-// The bus fans out by EXACT channel (store.subscriptionsFor: WHERE channel=?),
-// so a glob subscribe entry like chat:* would match nothing AND is not even a
-// valid channel name — subscribing it literally is dead weight. We therefore
-// subscribe only the concrete/valid entries here (keeps a manifest that lists
-// real channels working), and let a glob entry be realized into a concrete
-// subscription lazily, per target chat, when inbound flows through the publish
-// handler (api.go publish seeds via Identity.MatchesSink). The drainer still
-// starts so those later-seeded subscriptions get drained.
-func (h *Host) startSink(ctx context.Context, rec Record, socket string) {
-	if !manifestFromRecord(rec).HasType("channel-sink") || len(rec.Channels.Subscribe) == 0 {
+// WakePlugins signals the drainers of the named plugins that a letter
+// arrived. The daemon wires it as the mail plugin wake hook.
+func (h *Host) WakePlugins(names []string) {
+	for _, name := range names {
+		select {
+		case h.wakeChan(name) <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (h *Host) wakeChan(name string) chan struct{} {
+	h.wakeMu.Lock()
+	defer h.wakeMu.Unlock()
+	ch, ok := h.wakes[name]
+	if !ok {
+		ch = make(chan struct{}, 1)
+		h.wakes[name] = ch
+	}
+	return ch
+}
+
+// startDrain runs the drainer of a mail-sink plugin's inbox: it delivers each
+// open letter to plugin:<name> at the plugin's /deliver and closes it as
+// delivered. It drains at start, on every wake, and at the latest every
+// sinkFallbackInterval to retry failed deliveries; it exits on ctx.
+func (h *Host) startDrain(ctx context.Context, rec Record, socket string) {
+	if h.cfg.Mail == nil || !rec.Mail.Receive || !manifestFromRecord(rec).HasType("mail-sink") {
 		return
 	}
-	subscriber := "plugin:" + rec.Name
-	for _, ch := range rec.Channels.Subscribe {
-		if !bus.ValidChannel(ch) {
-			// A wildcard/glob (e.g. chat:*) or otherwise non-concrete entry: not a
-			// real channel the exact-match bus can deliver to. Skip the literal
-			// subscribe; publish-time seeding will register the concrete channels.
-			continue
-		}
-		if _, err := h.cfg.Bus.Subscribe(subscriber, ch, bus.Matcher{}, nil); err != nil {
-			h.cfg.Log.Warn("sink subscribe failed", "plugin", rec.Name, "channel", ch, "err", err)
-		}
-	}
+	principal := "plugin:" + rec.Name
 	client := NewClient(socket)
-	// Take the signal before the first drain so a publish in between still
+	// Take the signal before the first drain so a send in between still
 	// leaves a pending wake.
-	wake := h.cfg.Bus.Wake(subscriber)
+	wake := h.wakeChan(rec.Name)
 	h.wg.Add(1)
 	go func() {
 		defer h.wg.Done()
 		for {
-			for ctx.Err() == nil && h.drainOnce(ctx, rec.Name, subscriber, client) {
+			for ctx.Err() == nil && h.drainOnce(ctx, rec.Name, principal, client) {
 			}
 			select {
 			case <-ctx.Done():
@@ -1095,416 +1048,32 @@ func (h *Host) startSink(ctx context.Context, rec Record, socket string) {
 	}()
 }
 
-// drainOnce delivers one batch of pending messages for one plugin. A delivery
-// failure is left unacked (bus redelivery + DLQ handle it) and surfaced as a
-// system:plugins event. Never panics on plugin I/O. It reports
-// whether a full batch went through cleanly, so more may be waiting now; after
-// a failure the drainer waits instead of spending retry attempts in a loop.
-func (h *Host) drainOnce(ctx context.Context, name, subscriber string, client *Client) bool {
-	msgs, err := h.cfg.Bus.Pending(subscriber, sinkBatch)
+// drainOnce delivers one batch of open letters to one plugin. Taking a letter
+// counts an attempt, so a letter the plugin keeps failing is dead-lettered
+// after five; a failed delivery stays open for the next pass. It reports
+// whether a full batch went through cleanly, so more may be waiting now;
+// after a failure the drainer waits instead of spending attempts in a loop.
+func (h *Host) drainOnce(ctx context.Context, name, principal string, client *Client) bool {
+	letters, err := h.cfg.Mail.DrainBatch(principal, sinkBatch)
 	if err != nil {
-		h.cfg.Log.Warn("sink pending", "plugin", name, "err", err)
+		h.cfg.Log.Warn("plugin inbox drain", "plugin", name, "err", err)
 		return false
 	}
 	clean := true
-	ack := func(id string) {
-		if err := h.cfg.Bus.Ack(subscriber, []string{id}); err != nil {
-			// The delivery stays pending and is offered again.
-			h.cfg.Log.Warn("sink ack failed", "plugin", name, "msg", id, "err", err)
+	for _, l := range letters {
+		dctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		err := client.Deliver(dctx, l)
+		cancel()
+		if err != nil {
+			h.cfg.Log.Warn("plugin deliver failed", "plugin", name, "letter", l.ID, "err", err)
 			clean = false
-		}
-	}
-	for _, m := range msgs {
-		// ECHO SUPPRESSION: once a sink is subscribed to a concrete chat channel
-		// (seeded on publish), it is subscribed to a channel it ALSO publishes
-		// INBOUND on — and the bus creates a delivery row for every matching
-		// subscription regardless of msg.Source. Without this guard the plugin
-		// would receive its own inbound back at /deliver and loop. Deliver only
-		// genuine outbound (agent replies / other sources); ack+skip anything this
-		// same plugin produced so it drops out of Pending instead of retrying.
-		if m.ProducedByPlugin == name || m.Source == subscriber {
-			ack(m.ID)
 			continue
 		}
-		dctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		err := client.Deliver(dctx, toDTO(m))
-		cancel()
-		if err != nil {
-			h.cfg.Log.Warn("sink deliver failed", "plugin", name, "msg", m.ID, "err", err)
+		if _, err := h.cfg.Mail.Close(principal, l.ID, mail.CloseNoteDelivered); err != nil {
+			// The letter stays open and is offered again.
+			h.cfg.Log.Warn("plugin delivered letter not closed", "plugin", name, "letter", l.ID, "err", err)
 			clean = false
-			if _, pubErr := h.cfg.Bus.Publish(bus.Message{
-				Channel: "system:plugins", Type: "plugin.deliver_failed", Source: "daemon",
-				Text:             fmt.Sprintf("plugin %s deliver failed for %s", name, m.ID),
-				ProducedByPlugin: name,
-				Data:             map[string]any{"plugin": name, "message": m.ID, "detail": err.Error()},
-			}); pubErr != nil {
-				h.cfg.Log.Warn("sink deliver_failed event publish failed", "plugin", name, "msg", m.ID, "err", pubErr)
-			}
-			continue // leave unacked for redelivery/DLQ
-		}
-		ack(m.ID)
-	}
-	return clean && len(msgs) == sinkBatch
-}
-
-// ApplyActionSubscriptions validates and applies the protocol-level subscription
-// effects returned by a successful plugin action. It accepts effects only from a
-// running sink, confines channels to the manifest scope, preserves standing
-// manifest subscriptions and route-backed channels, and rolls back bus changes
-// if a later mutation fails.
-func (h *Host) ApplyActionSubscriptions(name string, response map[string]any) error {
-	add, remove, present, err := parseSubscriptionEffects(response)
-	if err != nil || !present {
-		return err
-	}
-	if _, err := h.socketIfRunning(name); err != nil {
-		return err
-	}
-	rec, ok, err := h.cfg.Store.Get(name)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return ErrNotFound
-	}
-	sink := Identity{Sink: sinkPatterns(rec)}
-	if len(sink.Sink) == 0 {
-		return fmt.Errorf("plugin %s is not a channel-sink", name)
-	}
-
-	seen := map[string]string{}
-	for _, effect := range []struct {
-		kind     string
-		channels []string
-	}{{"add", add}, {"remove", remove}} {
-		for _, channel := range effect.channels {
-			if !bus.ValidChannel(channel) {
-				return fmt.Errorf("subscriptions.%s contains invalid channel %q", effect.kind, channel)
-			}
-			if !sink.MatchesSink(channel) {
-				return fmt.Errorf("subscriptions.%s channel %q is outside plugin scope", effect.kind, channel)
-			}
-			if previous, exists := seen[channel]; exists && previous != effect.kind {
-				return fmt.Errorf("subscription effect both adds and removes %q", channel)
-			}
-			seen[channel] = effect.kind
 		}
 	}
-	for _, channel := range remove {
-		for _, declared := range rec.Channels.Subscribe {
-			if declared == channel {
-				return fmt.Errorf("cannot remove declared subscription %q", channel)
-			}
-		}
-	}
-	if len(remove) > 0 {
-		routes, err := h.PluginRoutes(name)
-		if err != nil {
-			return fmt.Errorf("verify routes before subscription removal: %w", err)
-		}
-		for _, channel := range remove {
-			if containsActionRoute(routes["routes"], channel) {
-				return fmt.Errorf("cannot remove subscription %q while a route still uses it", channel)
-			}
-		}
-	}
-
-	subscriber := "plugin:" + name
-	existingRows, err := h.cfg.Bus.ListSubscriptions(subscriber)
-	if err != nil {
-		return err
-	}
-	existing := map[string]bool{}
-	for _, subscription := range existingRows {
-		existing[subscription.Channel] = true
-	}
-	added := []string{}
-	removed := []string{}
-	// rollback undoes the applied changes and joins any failure to cause.
-	rollback := func(cause error) error {
-		var errs []error
-		for _, channel := range added {
-			if _, err := h.cfg.Bus.UnsubscribeChannel(subscriber, channel); err != nil {
-				errs = append(errs, fmt.Errorf("unsubscribe %s: %w", channel, err))
-			}
-		}
-		for _, channel := range removed {
-			if _, err := h.cfg.Bus.Subscribe(subscriber, channel, bus.Matcher{}, nil); err != nil {
-				errs = append(errs, fmt.Errorf("resubscribe %s: %w", channel, err))
-			}
-		}
-		if len(errs) == 0 {
-			return cause
-		}
-		return errors.Join(cause, fmt.Errorf("roll back subscriptions: %w", errors.Join(errs...)))
-	}
-	for _, channel := range add {
-		if err := h.cfg.Bus.EnsureChannel(channel); err != nil {
-			return rollback(err)
-		}
-		if _, err := h.cfg.Bus.Subscribe(subscriber, channel, bus.Matcher{}, nil); err != nil {
-			return rollback(err)
-		}
-		if !existing[channel] {
-			added = append(added, channel)
-		}
-	}
-	for _, channel := range remove {
-		_, err := h.cfg.Bus.UnsubscribeChannel(subscriber, channel)
-		if err != nil && !errors.Is(err, bus.ErrNotFound) {
-			return rollback(err)
-		}
-		if err == nil && existing[channel] {
-			removed = append(removed, channel)
-		}
-	}
-	return nil
-}
-
-func containsActionRoute(value any, channel string) bool {
-	switch typed := value.(type) {
-	case string:
-		return typed == channel
-	case []any:
-		for _, child := range typed {
-			if containsActionRoute(child, channel) {
-				return true
-			}
-		}
-	case map[string]any:
-		for _, child := range typed {
-			if containsActionRoute(child, channel) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func parseSubscriptionEffects(response map[string]any) (add, remove []string, present bool, err error) {
-	raw, present := response["subscriptions"]
-	if !present {
-		return nil, nil, false, nil
-	}
-	metadata, ok := raw.(map[string]any)
-	if !ok {
-		return nil, nil, true, fmt.Errorf("subscriptions must be an object")
-	}
-	for key := range metadata {
-		if key != "add" && key != "remove" {
-			return nil, nil, true, fmt.Errorf("subscriptions contains unknown field %q", key)
-		}
-	}
-	parse := func(key string) ([]string, error) {
-		rawList, exists := metadata[key]
-		if !exists {
-			return nil, nil
-		}
-		var values []any
-		switch list := rawList.(type) {
-		case []any:
-			values = list
-		case []string:
-			values = make([]any, len(list))
-			for i := range list {
-				values[i] = list[i]
-			}
-		default:
-			return nil, fmt.Errorf("subscriptions.%s must be an array of strings", key)
-		}
-		out := make([]string, 0, len(values))
-		seen := map[string]bool{}
-		for _, value := range values {
-			channel, ok := value.(string)
-			if !ok || channel == "" {
-				return nil, fmt.Errorf("subscriptions.%s must be an array of non-empty strings", key)
-			}
-			if !seen[channel] {
-				out = append(out, channel)
-				seen[channel] = true
-			}
-		}
-		return out, nil
-	}
-	add, err = parse("add")
-	if err != nil {
-		return nil, nil, true, err
-	}
-	remove, err = parse("remove")
-	return add, remove, true, err
-}
-
-// pushWatchesMaxAttempts bounds the push retry loop. Push is best-effort: the
-// plugin's GET /api/plugin/watches pull path guarantees eventual consistency,
-// so after this many failed attempts we give up rather than block forever.
-const pushWatchesMaxAttempts = 5
-
-// providedChannelNames extracts the channel names from a manifest's provide
-// declarations, dropping the params_schema/help detail the token scope needs.
-func providedChannelNames(provided []Provided) []string {
-	if len(provided) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(provided))
-	for _, p := range provided {
-		out = append(out, p.Channel)
-	}
-	return out
-}
-
-// watchDTOs converts the bus's live watch list into the plugin wire form.
-func watchDTOs(ws []bus.WatchInfo) []WatchDTO {
-	out := make([]WatchDTO, 0, len(ws))
-	for _, w := range ws {
-		subs := w.Subscribers
-		if subs == nil {
-			subs = []string{}
-		}
-		out = append(out, WatchDTO{Watch: w.Watch, Params: w.Params, Subscribers: subs})
-	}
-	return out
-}
-
-// PushWatches asynchronously delivers the full current watch list for a provided
-// channel to its provider plugin's socket. Delivery is serialized
-// per (plugin, channel): concurrent subscribe/unsubscribe events would otherwise
-// each spawn an independent goroutine, and a stale full-list snapshot could
-// overtake a newer one — leaving the provider reconciled to a watch that is gone
-// (or missing one that is live) until the next event or restart. Here a single
-// worker per pair drains snapshots in call order, and a newer snapshot coalesces
-// over any not-yet-delivered one, so the provider always converges on the final
-// state. Each delivery is still best-effort with capped backoff (see
-// deliverWatches); the worker is tracked on h.wg and exits on daemon-ctx cancel,
-// so StopAll drains it.
-func (h *Host) PushWatches(plugin, channel string, watches []bus.WatchInfo) {
-	h.enqueueWatches(plugin, channel, watchDTOs(watches), false)
-}
-
-// pushCurrentWatches enqueues a lazy authoritative refresh. The serialized
-// worker reads WatchList only after it owns this queue item, so a startup
-// reconcile cannot carry an old pre-subscribe snapshot and overwrite a newer
-// subscription hook. Reading outside pushMu avoids coupling the bus/store lock
-// order to the delivery queue.
-func (h *Host) pushCurrentWatches(plugin, channel string) {
-	h.enqueueWatches(plugin, channel, nil, true)
-}
-
-func (h *Host) enqueueWatches(plugin, channel string, dtos []WatchDTO, current bool) {
-	key := plugin + "\x00" + channel
-
-	h.pushMu.Lock()
-	wp := h.pushQueue[key]
-	if wp == nil {
-		wp = &watchPush{}
-		h.pushQueue[key] = wp
-	}
-	wp.pending = dtos
-	wp.pendingCurrent = current
-	wp.hasPending = true
-	if wp.busy {
-		// A worker is already draining this pair; it will pick up the snapshot
-		// we just stored (overwriting any earlier undelivered one).
-		h.pushMu.Unlock()
-		return
-	}
-	wp.busy = true
-	h.pushMu.Unlock()
-
-	ctx, ok := h.track()
-	if !ok {
-		// StopAll has begun: drop the queue; the plugin pulls on its next start.
-		h.pushMu.Lock()
-		if h.pushQueue[key] == wp {
-			delete(h.pushQueue, key)
-		}
-		wp.busy = false
-		h.pushMu.Unlock()
-		return
-	}
-	go func() {
-		defer h.wg.Done()
-		for {
-			h.pushMu.Lock()
-			if !wp.hasPending {
-				// Drained: drop the entry so map presence == "worker live".
-				delete(h.pushQueue, key)
-				wp.busy = false
-				h.pushMu.Unlock()
-				return
-			}
-			dtos := wp.pending
-			current := wp.pendingCurrent
-			wp.pending = nil
-			wp.pendingCurrent = false
-			wp.hasPending = false
-			h.pushMu.Unlock()
-			if current {
-				watches, err := h.cfg.Bus.WatchList(channel)
-				if err != nil {
-					h.cfg.Log.Warn("plugin running reconcile: watch list", "plugin", plugin, "channel", channel, "err", err)
-					continue
-				}
-				dtos = watchDTOs(watches)
-			}
-
-			h.deliverWatches(ctx, plugin, channel, dtos)
-		}
-	}()
-}
-
-// deliverWatches sends one watch snapshot to a running provider's socket with
-// capped backoff. Best-effort: if the plugin is not running, or every attempt
-// fails, it gives up — the plugin reconciles via GET /api/plugin/watches on
-// (re)start. Called only from the serialized PushWatches worker, so snapshots
-// never overlap for a given (plugin, channel).
-func (h *Host) deliverWatches(root context.Context, plugin, channel string, dtos []WatchDTO) {
-	for attempt := 0; attempt < pushWatchesMaxAttempts; attempt++ {
-		sock, err := h.socketIfRunning(plugin)
-		if err != nil {
-			return // not running: pull reconciles on (re)start
-		}
-		ctx, cancel := context.WithTimeout(root, 3*time.Second)
-		err = NewClient(sock).PushWatches(ctx, channel, dtos)
-		cancel()
-		if err == nil {
-			return
-		}
-		h.cfg.Log.Warn("push watches failed", "plugin", plugin, "channel", channel,
-			"attempt", attempt+1, "err", err)
-		select {
-		case <-root.Done():
-			return
-		case <-h.cfg.After(backoff(attempt)):
-		}
-	}
-}
-
-// unsubscribeSink drops a removed plugin's durable subscriptions (and their
-// orphan deliveries) so no outbox is left behind.
-func (h *Host) unsubscribeSink(name string) {
-	subscriber := "plugin:" + name
-	subs, err := h.cfg.Bus.ListSubscriptions(subscriber)
-	if err != nil {
-		h.cfg.Log.Warn("plugin remove: list sink subscriptions", "plugin", name, "err", err)
-		return
-	}
-	for _, s := range subs {
-		if err := h.cfg.Bus.Unsubscribe(subscriber, s.ID); err != nil && !errors.Is(err, bus.ErrNotFound) {
-			h.cfg.Log.Warn("plugin remove: unsubscribe sink", "plugin", name, "subscription", s.ID, "err", err)
-		}
-	}
-}
-
-func toDTO(m bus.Message) MessageDTO {
-	return MessageDTO{
-		ID: m.ID, Channel: m.Channel, TS: m.TS, Source: m.Source, Type: m.Type,
-		Subject: m.Subject, Text: m.Text, Data: m.Data,
-		ProducedByAgent: m.ProducedByAgent, ProducedInIteration: m.ProducedInIteration,
-		ProducedByPlugin: m.ProducedByPlugin,
-		Kind:             m.Kind,
-		CorrelationID:    m.CorrelationID,
-		InReplyTo:        m.InReplyTo,
-		ReplyTo:          m.ReplyTo,
-		Deadline:         m.Deadline,
-	}
+	return clean && len(letters) == sinkBatch
 }

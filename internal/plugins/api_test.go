@@ -4,215 +4,123 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
-func newAPI(t *testing.T) (*API, *bus.Bus, *TokenRegistry) {
+// capDirectory knows agent alice with an inbox cap of 2, the customer and the
+// plugin echo.
+type capDirectory struct{}
+
+func (capDirectory) AgentExists(name string) (bool, error)       { return name == "alice", nil }
+func (capDirectory) InboxCap(string) (int, error)                { return 2, nil }
+func (capDirectory) CustomerLogin() string                       { return "customer" }
+func (capDirectory) PluginInstalled(name string) (bool, error)   { return name == "echo", nil }
+func (capDirectory) QueueExists(string) (bool, error)            { return false, nil }
+func (capDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
+
+func newAPI(t *testing.T) (*API, *mail.Mail, *TokenRegistry) {
 	t.Helper()
 	s := storetest.Open(t)
-	b := bus.New(s, func() time.Time { return time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC) })
+	m := mail.New(s, func() time.Time { return time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC) }, capDirectory{})
 	reg := NewTokenRegistry(nil)
-	a := NewAPI(reg, b, slog.New(slog.NewTextHandler(io.Discard, nil)), func(string, string, string) {})
-	return a, b, reg
+	a := NewAPI(reg, m, slog.New(slog.NewTextHandler(io.Discard, nil)), func(string, string, string) {})
+	return a, m, reg
 }
 
-func TestPublishScoped(t *testing.T) {
-	t.Parallel()
-	a, b, reg := newAPI(t)
-	tok, _ := reg.Mint(Identity{Name: "echo", Publish: []string{"chat:*"}, Subscribe: []string{"chat:in"}})
-
-	do := func(token, body string) *httptest.ResponseRecorder {
-		rr := httptest.NewRecorder()
-		req := httptest.NewRequest("POST", "/api/plugin/publish", strings.NewReader(body))
-		if token != "" {
-			req.Header.Set("Authorization", "Bearer "+token)
-		}
-		a.ServeHTTP(rr, req)
-		return rr
-	}
-	// Allowed channel -> 200 and a bus message with plugin attribution.
-	rr := do(tok, `{"channel":"chat:echo-out","type":"echo.reply","text":"hi"}`)
-	if rr.Code != 200 {
-		t.Fatalf("publish code = %d body=%s", rr.Code, rr.Body)
-	}
-	msgs, _ := b.Tail("chat:echo-out", 10)
-	if len(msgs) != 1 || msgs[0].Source != "plugin:echo" || msgs[0].ProducedByPlugin != "echo" {
-		t.Fatalf("published msg = %+v", msgs)
-	}
-	// Stable plugin-local keys deduplicate retries without colliding with other
-	// plugins or daemon publishers.
-	if rr := do(tok, `{"channel":"chat:echo-out","text":"once","idempotency_key":"update-9"}`); rr.Code != 200 {
-		t.Fatalf("idempotent publish code = %d body=%s", rr.Code, rr.Body)
-	}
-	if rr := do(tok, `{"channel":"chat:echo-out","text":"duplicate","idempotency_key":"update-9"}`); rr.Code != 200 {
-		t.Fatalf("idempotent retry code = %d body=%s", rr.Code, rr.Body)
-	}
-	msgs, _ = b.Tail("chat:echo-out", 10)
-	if len(msgs) != 2 || msgs[1].Text != "once" {
-		t.Fatalf("idempotent messages = %+v", msgs)
-	}
-	// Out-of-scope channel -> 403.
-	if rr := do(tok, `{"channel":"user:ops","type":"x"}`); rr.Code != 403 {
-		t.Fatalf("out-of-scope code = %d", rr.Code)
-	}
-	// Bad token -> 401.
-	if rr := do("plg-bogus", `{"channel":"chat:x"}`); rr.Code != 401 {
-		t.Fatalf("bad token code = %d", rr.Code)
-	}
-	// No token -> 401.
-	if rr := do("", `{"channel":"chat:x"}`); rr.Code != 401 {
-		t.Fatalf("no token code = %d", rr.Code)
-	}
-}
-
-func TestPublishReportsNonDLQRecipients(t *testing.T) {
-	t.Parallel()
-	a, b, reg := newAPI(t)
-	if _, err := b.Subscribe("worker", "chat:telegram:worker", bus.Matcher{}, nil); err != nil {
-		t.Fatal(err)
-	}
-	token, _ := reg.Mint(Identity{Name: "telegram", Publish: []string{"chat:telegram:*"}})
-	req := httptest.NewRequest("POST", "/api/plugin/publish", strings.NewReader(`{"channel":"chat:telegram:worker","text":"hello"}`))
-	req.Header.Set("Authorization", "Bearer "+token)
+func postMail(a *API, token, body string) *httptest.ResponseRecorder {
 	rr := httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("publish code=%d body=%s", rr.Code, rr.Body)
-	}
-	var response struct {
-		Result struct {
-			DeliveredAgents []string `json:"delivered_agents"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
-		t.Fatal(err)
-	}
-	if len(response.Result.DeliveredAgents) != 1 || response.Result.DeliveredAgents[0] != "worker" {
-		t.Fatalf("delivered agents=%v", response.Result.DeliveredAgents)
-	}
-}
-
-func TestPublishRequiresDeliveryBeforePersistingIdempotentMessage(t *testing.T) {
-	t.Parallel()
-	a, b, reg := newAPI(t)
-	token, _ := reg.Mint(Identity{Name: "telegram", Publish: []string{"chat:telegram:*"}})
-	publish := func() *httptest.ResponseRecorder {
-		req := httptest.NewRequest("POST", "/api/plugin/publish", strings.NewReader(`{"channel":"chat:telegram:worker","text":"hello","idempotency_key":"update-9","require_delivery_agent":"worker"}`))
+	req := httptest.NewRequest("POST", "/api/plugin/mail", strings.NewReader(body))
+	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
-		rr := httptest.NewRecorder()
-		a.ServeHTTP(rr, req)
-		return rr
 	}
-	if rr := publish(); rr.Code != http.StatusConflict {
-		t.Fatalf("publish without recipient code=%d body=%s", rr.Code, rr.Body)
-	}
-	if msgs, err := b.Tail("chat:telegram:worker", 10); err != nil || len(msgs) != 0 {
-		t.Fatalf("undeliverable message persisted: msgs=%v err=%v", msgs, err)
-	}
-	if _, err := b.Subscribe("worker", "chat:telegram:worker", bus.Matcher{}, nil); err != nil {
-		t.Fatal(err)
-	}
-	if rr := publish(); rr.Code != http.StatusOK {
-		t.Fatalf("publish after subscription code=%d body=%s", rr.Code, rr.Body)
-	}
-	if msgs, err := b.Tail("chat:telegram:worker", 10); err != nil || len(msgs) != 1 {
-		t.Fatalf("recovered publish: msgs=%v err=%v", msgs, err)
-	}
+	a.ServeHTTP(rr, req)
+	return rr
 }
 
-func TestSubscriptions(t *testing.T) {
+func TestPluginMailSendsAsThePlugin(t *testing.T) {
 	t.Parallel()
-	a, _, reg := newAPI(t)
-	tok, _ := reg.Mint(Identity{Name: "echo", Subscribe: []string{"chat:in", "chat:in2"}})
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/plugin/subscriptions", nil)
-	req.Header.Set("X-Plugin-Token", tok)
-	a.ServeHTTP(rr, req)
+	a, m, reg := newAPI(t)
+	tok, _ := reg.Mint(Identity{Name: "echo", Send: true})
+	rr := postMail(a, tok, `{"to":"agent:alice","subject":"hi","text":"hello","from":"agent:forged","idempotency_key":"update-9"}`)
 	if rr.Code != 200 {
-		t.Fatalf("subs code = %d", rr.Code)
+		t.Fatalf("send code = %d body=%s", rr.Code, rr.Body)
 	}
 	var env struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			Channels []string `json:"channels"`
-		} `json:"result"`
+		Result mail.MailSendResult `json:"result"`
 	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &env); err != nil {
-		t.Fatal(err)
+	if err := json.Unmarshal(rr.Body.Bytes(), &env); err != nil || len(env.Result.Letters) != 1 {
+		t.Fatalf("send result = %s (%v)", rr.Body, err)
 	}
-	if len(env.Data.Channels) != 2 || env.Data.Channels[0] != "chat:in" {
-		t.Fatalf("subs = %+v", env.Data.Channels)
+	got := env.Result.Letters[0]
+	if got.From != "plugin:echo" || got.To != "agent:alice" || !got.NeedsReply || got.Body != "hello" {
+		t.Fatalf("letter = %+v", got)
+	}
+	// A plugin-local key deduplicates retries without colliding with other
+	// plugins or daemon producers.
+	if rr := postMail(a, tok, `{"to":"agent:alice","text":"duplicate","idempotency_key":"update-9"}`); rr.Code != 200 {
+		t.Fatalf("idempotent retry code = %d body=%s", rr.Code, rr.Body)
+	}
+	if letters, _, _ := m.List(mail.BoxInbox, "agent:alice", 10, ""); len(letters) != 1 || letters[0].Body != "hello" {
+		t.Fatalf("inbox after a retry = %+v", letters)
+	}
+	if rr := postMail(a, tok, `{"to":"agent:ghost","text":"x"}`); rr.Code != 400 || !strings.Contains(rr.Body.String(), "unknown_recipient") {
+		t.Fatalf("unknown recipient = %d %s", rr.Code, rr.Body)
 	}
 }
 
-// TestPluginWatchesPull covers GET /api/plugin/watches (the pull path):
-// it returns the full current watch list for exactly the plugin's provided
-// channels, scoped by the plugin token.
-func TestPluginWatchesPull(t *testing.T) {
+func TestPluginMailRequiresTokenAndSendCapability(t *testing.T) {
 	t.Parallel()
-	a, b, reg := newAPI(t)
-	tok, _ := reg.Mint(Identity{Name: "issue-provider", Provide: []string{"issue-provider:query", "issue-provider:ticket"}})
+	a, _, reg := newAPI(t)
+	if rr := postMail(a, "plg-bogus", `{"to":"agent:alice"}`); rr.Code != 401 {
+		t.Fatalf("bad token code = %d", rr.Code)
+	}
+	if rr := postMail(a, "", `{"to":"agent:alice"}`); rr.Code != 401 {
+		t.Fatalf("no token code = %d", rr.Code)
+	}
+	tok, _ := reg.Mint(Identity{Name: "echo"})
+	if rr := postMail(a, tok, `{"to":"agent:alice","text":"x"}`); rr.Code != 403 {
+		t.Fatalf("send without mail.send code = %d", rr.Code)
+	}
+}
 
-	// Two agents share one query watch; a third watches a ticket.
-	if _, err := b.SubscribeParams("dev-manager", "issue-provider:query", bus.Matcher{}, nil,
-		map[string]any{"query": "PROJ"}); err != nil {
-		t.Fatal(err)
+// TestPluginMailInboxFullReturns409: at the recipient's cap the letter is
+// stored dead with queue_limit and the route answers 409 inbox_full.
+func TestPluginMailInboxFullReturns409(t *testing.T) {
+	t.Parallel()
+	a, m, reg := newAPI(t)
+	tok, _ := reg.Mint(Identity{Name: "echo", Send: true})
+	for i := range 2 {
+		if rr := postMail(a, tok, `{"to":"agent:alice","text":"fits"}`); rr.Code != 200 {
+			t.Fatalf("letter %d code = %d body=%s", i, rr.Code, rr.Body)
+		}
 	}
-	if _, err := b.SubscribeParams("dev-worker", "issue-provider:query", bus.Matcher{}, nil,
-		map[string]any{"query": "PROJ"}); err != nil {
-		t.Fatal(err)
+	rr := postMail(a, tok, `{"to":"agent:alice","text":"over the cap"}`)
+	if rr.Code != 409 || !strings.Contains(rr.Body.String(), `"inbox_full"`) {
+		t.Fatalf("over the cap = %d %s", rr.Code, rr.Body)
 	}
-	if _, err := b.SubscribeParams("dev-lead", "issue-provider:ticket", bus.Matcher{}, nil,
-		map[string]any{"ticket": "PROJ-1"}); err != nil {
-		t.Fatal(err)
+	archive, _, err := m.List(mail.BoxArchive, "agent:alice", 10, "")
+	if err != nil || len(archive) != 1 || archive[0].DeadReason != mail.DeadQueueLimit {
+		t.Fatalf("archive = %+v, %v; want the dead letter", archive, err)
 	}
+}
 
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/plugin/watches", nil)
-	req.Header.Set("Authorization", "Bearer "+tok)
-	a.ServeHTTP(rr, req)
-	if rr.Code != 200 {
-		t.Fatalf("watches code=%d body=%s", rr.Code, rr.Body)
-	}
-	var resp struct {
-		Result struct {
-			Channels []ChannelWatchesDTO `json:"channels"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v (body=%s)", err, rr.Body)
-	}
-	byCh := map[string]ChannelWatchesDTO{}
-	for _, c := range resp.Result.Channels {
-		byCh[c.Channel] = c
-	}
-	if len(resp.Result.Channels) != 2 {
-		t.Fatalf("want 2 provided channels, got %d: %+v", len(resp.Result.Channels), resp.Result.Channels)
-	}
-	q := byCh["issue-provider:query"]
-	if len(q.Watches) != 1 || len(q.Watches[0].Subscribers) != 2 {
-		t.Fatalf("query watch = %+v", q.Watches)
-	}
-	if q.Watches[0].Params["query"] != "PROJ" {
-		t.Fatalf("query params not carried: %+v", q.Watches[0].Params)
-	}
-	if tk := byCh["issue-provider:ticket"]; len(tk.Watches) != 1 {
-		t.Fatalf("ticket watch = %+v", tk.Watches)
-	}
-
-	// Unknown token → 401.
-	rr = httptest.NewRecorder()
-	req = httptest.NewRequest("GET", "/api/plugin/watches", nil)
-	req.Header.Set("Authorization", "Bearer plg-bogus")
-	a.ServeHTTP(rr, req)
-	if rr.Code != 401 {
-		t.Fatalf("bad token code=%d", rr.Code)
+func TestRemovedPluginRoutesAnswerNotFound(t *testing.T) {
+	t.Parallel()
+	a, _, reg := newAPI(t)
+	tok, _ := reg.Mint(Identity{Name: "echo", Send: true})
+	for _, route := range []string{"/api/plugin/publish", "/api/plugin/subscriptions", "/api/plugin/watches"} {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", route, nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		a.ServeHTTP(rr, req)
+		if rr.Code != 404 {
+			t.Fatalf("%s = %d; want 404", route, rr.Code)
+		}
 	}
 }

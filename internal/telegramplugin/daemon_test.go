@@ -24,23 +24,29 @@ func TestDaemonClientUsesOperatorAndPluginAPIs(t *testing.T) {
 		switch r.URL.Path {
 		case "/api/agents":
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "result": map[string]any{"agents": []any{map[string]any{"name": "worker", "alias": "Worker"}}, "count": 1}})
-		case "/api/agents/worker/subscriptions":
-			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "result": map[string]any{"id": "s1"}})
-		case "/api/plugin/publish":
+		case "/api/plugin/mail":
 			if r.Header.Get("Authorization") != "Bearer life-token" {
 				t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
 			}
 			var body struct {
-				Data map[string]any `json:"data"`
+				To             string         `json:"to"`
+				Subject        string         `json:"subject"`
+				Text           string         `json:"text"`
+				Notice         bool           `json:"notice"`
+				IdempotencyKey string         `json:"idempotency_key"`
+				Data           map[string]any `json:"data"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Fatal(err)
 			}
+			if body.To != "agent:worker" || body.Text != "hello" || body.Subject != "Telegram: hello" || body.Notice || body.IdempotencyKey != "telegram:9" {
+				t.Fatalf("letter = %#v", body)
+			}
 			if forward, ok := body.Data["telegram_forward"].(map[string]any); !ok || forward["name"] != "News" || body.Data["telegram_update_id"] != float64(9) {
-				t.Fatalf("publish data = %#v", body.Data)
+				t.Fatalf("letter data = %#v", body.Data)
 			}
 			published = true
-			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "result": map[string]any{"id": "m1", "delivered_agents": []string{"worker"}}})
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "result": map[string]any{"letters": []any{}}})
 		default:
 			t.Fatalf("unexpected daemon path %s", r.URL.Path)
 		}
@@ -53,14 +59,11 @@ func TestDaemonClientUsesOperatorAndPluginAPIs(t *testing.T) {
 	if err != nil || len(agents) != 1 || agents[0].Name != "worker" {
 		t.Fatalf("agents=%+v err=%v", agents, err)
 	}
-	if err := client.Subscribe(context.Background(), "worker", "chat:telegram:worker"); err != nil {
-		t.Fatal(err)
-	}
-	if err := client.Publish(context.Background(), PublishedMessage{Channel: "chat:telegram:worker", Agent: "worker", Text: "hello", UpdateID: 9, Forward: map[string]any{"type": "channel", "name": "News"}}); err != nil {
+	if err := client.Send(context.Background(), InboundLetter{Agent: "worker", Text: "hello", UpdateID: 9, ExternalID: "telegram:9", Forward: map[string]any{"type": "channel", "name": "News"}}); err != nil {
 		t.Fatal(err)
 	}
 	if !published {
-		t.Fatal("message was not published")
+		t.Fatal("letter was not sent")
 	}
 	if info, err := os.Stat(socket); err != nil || info.Mode()&os.ModeSocket == 0 {
 		t.Fatalf("socket missing: %v", err)
@@ -71,11 +74,11 @@ type roundTripper func(*http.Request) (*http.Response, error)
 
 func (f roundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-func TestPublishRejectsMissingAgentDelivery(t *testing.T) {
+func TestSendReportsInboxFull(t *testing.T) {
 	client := &DaemonClient{token: "token", http: &http.Client{Transport: roundTripper(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":{"delivered_agents":[]}}`)), Header: make(http.Header)}, nil
+		return &http.Response{StatusCode: http.StatusConflict, Body: io.NopCloser(strings.NewReader(`{"ok":false,"error":{"code":"inbox_full","message":"full"}}`)), Header: make(http.Header)}, nil
 	})}}
-	if err := client.Publish(context.Background(), PublishedMessage{Channel: "chat:telegram:worker", Agent: "worker", Text: "hello"}); err == nil {
-		t.Fatal("publish without an agent delivery succeeded")
+	if err := client.Send(context.Background(), InboundLetter{Agent: "worker", Text: "hello"}); !IsInboxFull(err) {
+		t.Fatalf("send to a full inbox = %v; want inbox_full", err)
 	}
 }

@@ -288,7 +288,6 @@ type PluginControl interface {
 	Logs(name string, tail int) ([]string, error)
 	PluginRoutes(name string) (map[string]any, error)
 	PluginAction(name string, body map[string]any) (map[string]any, error)
-	ApplyActionSubscriptions(name string, response map[string]any) error
 }
 
 // GroupControl is the daemon-side group lifecycle, implemented by

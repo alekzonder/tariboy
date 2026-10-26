@@ -210,10 +210,6 @@ func openStore(ctx context.Context, proc *process, stack *shutdownStack) (*coreP
 
 	as := agent.NewStore(st)
 	channelBus := bus.New(st, time.Now)
-	// Wired before any publish: workflow ingress numbers every message in its
-	// publish transaction and keeps messages it has not consumed yet.
-	channelBus.SetPublishTxHook(tasks.RecordWorkflowMessageSequence)
-	channelBus.SetMessageRetention(tasks.WorkflowMessageRetainedSQL)
 	if err := reconcileAgentInboxes(as, channelBus); err != nil {
 		return nil, fmt.Errorf("reconcile agent inboxes: %w", err)
 	}
@@ -234,10 +230,7 @@ func openStore(ctx context.Context, proc *process, stack *shutdownStack) (*coreP
 	rec := Recorder{log: log, store: st, audit: auditReg, hub: hub}
 	mailbox := mail.New(st, time.Now, storedir.New(st, customerLogin))
 	mailbox.SetAuditHook(rec.Record)
-	mailbox.SetEventHook(func(h mail.Hint) {
-		hub.Emit(events.Event{Agent: mailHintAgent(h), Type: "mail", Time: h.TS,
-			Data: map[string]any{"id": h.ID, "from": h.From, "to": h.To, "kind": h.Kind}})
-	})
+
 	return &coreParts{
 		st: st, metrics: metrics, agents: as, bus: channelBus, mail: mailbox, hub: hub, audit: auditReg,
 		rec: rec, customerLogin: customerLogin,
@@ -467,55 +460,23 @@ type pluginParts struct {
 	api   http.Handler
 }
 
-// buildPlugins builds the plugin host and API and wires the provider contract
-// into the bus. One TokenRegistry is shared between the host (which mints
-// per-plugin tokens) and the plugin API (which resolves them).
+// buildPlugins builds the plugin host and API and connects them to mail. One
+// TokenRegistry is shared between the host (which mints per-plugin tokens)
+// and the plugin API (which resolves them).
 func buildPlugins(proc *process, c *coreParts) *pluginParts {
 	log, p := proc.log, proc.paths
 	pluginTokens := plugins.NewTokenRegistry(nil)
 	pluginStore := plugins.NewStore(c.st, time.Now)
 	pluginHost := plugins.NewHost(plugins.HostConfig{
-		Store: pluginStore, Bus: c.bus, Tokens: pluginTokens,
+		Store: pluginStore, Mail: c.mail, Tokens: pluginTokens,
 		PluginsDir: p.PluginsDir(), DaemonSocket: p.Socket(),
 		Clock: time.Now, After: time.After, Log: log,
 	})
-	pluginAPI := plugins.NewAPI(pluginTokens, c.bus, log, func(plugin, action, detail string) {
+	pluginAPI := plugins.NewAPI(pluginTokens, c.mail, log, func(plugin, action, detail string) {
 		c.rec.Record("", "plugin_"+action, fmt.Sprintf(`{"plugin":%q,"detail":%q}`, plugin, detail))
 	})
-
-	// Provider contract (spec §6.1): gate parameterized subscribes on the target
-	// channel's declared params_schema. Records are read fresh per subscribe (an
-	// infrequent op) so newly installed providers take effect without a restart. A
-	// transient store-read failure treats the channel as non-provider and allows
-	// the subscribe (ParamsValidatorFor) rather than failing every subscribe —
-	// core channels never needed the plugin store.
-	c.bus.SetParamsValidator(plugins.ParamsValidatorFor(pluginStore,
-		func(channel string, err error) {
-			log.Warn("params validator: list plugins", "channel", channel, "err", err)
-		}))
-
-	// Provider watch lifecycle (spec §6.2): after any subscribe/unsubscribe, map
-	// the affected channel to its provider plugin and push the channel's full
-	// current watch list to that plugin's socket. Non-provider channels are a
-	// no-op. The push is best-effort (async, capped backoff inside the host); the
-	// plugin's GET /api/plugin/watches pull path guarantees eventual consistency.
-	c.bus.SetSubscriptionHook(func(channel string) {
-		recs, err := pluginStore.List()
-		if err != nil {
-			log.Warn("subscription hook: list plugins", "channel", channel, "err", err)
-			return
-		}
-		owner, _, ok := plugins.ProviderFor(recs, channel)
-		if !ok {
-			return // not a provided channel — no provider to notify
-		}
-		watches, err := c.bus.WatchList(channel)
-		if err != nil {
-			log.Warn("subscription hook: watch list", "channel", channel, "err", err)
-			return
-		}
-		pluginHost.PushWatches(owner, channel, watches)
-	})
+	// A letter to plugin:<name> wakes that plugin's inbox drainer.
+	c.mail.SetPluginWakeHook(pluginHost.WakePlugins)
 	return &pluginParts{store: pluginStore, host: pluginHost, api: pluginAPI}
 }
 
@@ -647,8 +608,16 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 	// per-agent audit.jsonl so the §8.2 operator-vs-agent attribution actually
 	// lands in the audit timeline.
 	c.bus.SetAuditHook(c.rec.Record)
-	// A letter wakes exactly the agents it was sent to.
+	// A letter wakes exactly the agents it was sent to, feeds the mail hint
+	// socket, and a letter to a queue wakes workflow ingress.
 	c.mail.SetWakeHook(func(agents []string) { manager.WakeAgents(agents, loop.WakeMessage) })
+	c.mail.SetEventHook(func(h mail.Hint) {
+		c.hub.Emit(events.Event{Agent: mailHintAgent(h), Type: "mail", Time: h.TS,
+			Data: map[string]any{"id": h.ID, "from": h.From, "to": h.To, "kind": h.Kind}})
+		if strings.HasPrefix(h.To, "queue:") && tk.service.WorkflowIngressEnabled() {
+			tk.ingress.Signal()
+		}
+	})
 
 	cctx := &registry.Ctx{
 		Store: st, Log: log, BaseDir: p.Base, Socket: p.Socket(), HTTPAddr: o.HTTPAddr,

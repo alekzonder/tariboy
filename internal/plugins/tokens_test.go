@@ -5,30 +5,10 @@ import (
 	"testing"
 )
 
-func TestCanPublish(t *testing.T) {
-	t.Parallel()
-	id := Identity{Name: "echo", Publish: []string{"chat:*", "user:ops"}}
-	for ch, want := range map[string]bool{
-		"chat:echo-out": true,
-		"chat:anything": true,
-		"user:ops":      true,
-		"user:other":    false,
-		"agent:a:inbox": false,
-	} {
-		if got := id.CanPublish(ch); got != want {
-			t.Errorf("CanPublish(%q)=%v want %v", ch, got, want)
-		}
-	}
-	// No publish patterns -> fail closed.
-	if (Identity{Name: "x"}).CanPublish("chat:anything") {
-		t.Fatal("empty publish scope must deny")
-	}
-}
-
 func TestTokenLifecycle(t *testing.T) {
 	t.Parallel()
 	reg := NewTokenRegistry(bytes.NewReader(bytes.Repeat([]byte{0xCD}, 1024)))
-	tok, err := reg.Mint(Identity{Name: "echo", Publish: []string{"chat:*"}, Subscribe: []string{"chat:in"}})
+	tok, err := reg.Mint(Identity{Name: "echo", Send: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +16,7 @@ func TestTokenLifecycle(t *testing.T) {
 		t.Fatalf("token shape wrong: %q", tok)
 	}
 	id, ok := reg.Resolve(tok)
-	if !ok || id.Name != "echo" || !id.CanPublish("chat:x") {
+	if !ok || id.Name != "echo" || !id.Send {
 		t.Fatalf("resolve = %+v ok=%v", id, ok)
 	}
 	reg.Revoke(tok)

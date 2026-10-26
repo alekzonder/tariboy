@@ -285,7 +285,7 @@ var operatorExamples = map[string]string{
 	"queue.pool.list":      "queue pool list DEV",
 	"queue.pool.get":       "queue pool get DEV developers",
 	"queue.trigger.list":   "queue trigger list DEV",
-	"queue.trigger.create": "queue trigger create DEV --pattern external:incidents --action create_task",
+	"queue.trigger.create": "queue trigger create DEV --pattern plugin:telegram --action create_task",
 	"queue.trigger.delete": "queue trigger delete DEV 4",
 	"queue.workflow.set":   "queue workflow set DEV development:latest --revision 0",
 	"queue.workflow.get":   "queue workflow get DEV",

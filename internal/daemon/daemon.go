@@ -318,11 +318,34 @@ const userPathFallbackWarning = "resolve user PATH: keeping inherited PATH"
 // the account's login shell (Desktop does; a terminal or SSH launch does not).
 const shellEnvMarker = "TARIBOY_SHELL_ENV"
 
-// installTasksAlias exposes the one sibling payload to all daemon children,
-// including fresh Desktop agents before optional CLI installation. The stable
-// runtime path survives daemon handoff; explicit agent PATH overrides still win.
+// runtimeAliases are the agent commands linked into <runtime>/bin, each to
+// its sibling payload.
+var runtimeAliases = []struct{ payload, link string }{
+	{"tariboy-tasks", "ttasks"},
+	{"tariboy-mail", "tmail"},
+}
+
+// installTasksAlias exposes the sibling payloads ttasks and tmail to all
+// daemon children, including fresh Desktop agents before optional CLI
+// installation. The stable runtime path survives daemon handoff; explicit
+// agent PATH overrides still win. It returns the runtime bin directory, or ""
+// when no payload is present.
 func installTasksAlias(exeDir, runtimeDir string) (string, error) {
-	source := filepath.Join(exeDir, "tariboy-tasks")
+	installed := ""
+	for _, alias := range runtimeAliases {
+		binDir, err := installRuntimeAlias(exeDir, runtimeDir, alias.payload, alias.link)
+		if err != nil {
+			return "", err
+		}
+		if binDir != "" {
+			installed = binDir
+		}
+	}
+	return installed, nil
+}
+
+func installRuntimeAlias(exeDir, runtimeDir, payload, name string) (string, error) {
+	source := filepath.Join(exeDir, payload)
 	info, err := os.Stat(source)
 	if os.IsNotExist(err) {
 		return "", nil // Direct development builds may contain only tariboyd.
@@ -331,7 +354,7 @@ func installTasksAlias(exeDir, runtimeDir string) (string, error) {
 		return "", err
 	}
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-		return "", errors.New("payload of tariboy-tasks is not executable")
+		return "", fmt.Errorf("payload of %s is not executable", payload)
 	}
 	binDir := filepath.Join(runtimeDir, "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil {
@@ -340,21 +363,21 @@ func installTasksAlias(exeDir, runtimeDir string) (string, error) {
 	if info, err := os.Lstat(binDir); err != nil || !info.IsDir() {
 		return "", errors.New("runtime bin must be a directory")
 	}
-	link := filepath.Join(binDir, "ttasks")
+	link := filepath.Join(binDir, name)
 	if info, err := os.Lstat(link); err == nil && info.Mode()&os.ModeSymlink == 0 {
-		return "", errors.New("refusing to replace non-symlink Tasks command")
+		return "", fmt.Errorf("refusing to replace non-symlink %s command", name)
 	} else if err != nil && !os.IsNotExist(err) {
 		return "", err
 	}
-	if target, err := os.Readlink(link); err == nil && (!filepath.IsAbs(target) || filepath.Base(target) != "tariboy-tasks") {
-		return "", errors.New("refusing to replace foreign Tasks command symlink")
+	if target, err := os.Readlink(link); err == nil && (!filepath.IsAbs(target) || filepath.Base(target) != payload) {
+		return "", fmt.Errorf("refusing to replace foreign %s command symlink", name)
 	}
-	stage, err := os.MkdirTemp(binDir, ".tasks-")
+	stage, err := os.MkdirTemp(binDir, "."+name+"-")
 	if err != nil {
 		return "", err
 	}
 	defer os.RemoveAll(stage)
-	temporary := filepath.Join(stage, "ttasks")
+	temporary := filepath.Join(stage, name)
 	if err := os.Symlink(source, temporary); err != nil {
 		return "", err
 	}
@@ -364,7 +387,7 @@ func installTasksAlias(exeDir, runtimeDir string) (string, error) {
 	return binDir, nil
 }
 
-// ensureLocalBin appends ~/.local/bin, where the managed tariboy and ttasks
+// ensureLocalBin appends ~/.local/bin, where the managed tariboy, ttasks and tmail
 // links live, so agents find them even when the account PATH lacks it.
 func ensureLocalBin(home string) {
 	dir := filepath.Join(home, ".local", "bin")

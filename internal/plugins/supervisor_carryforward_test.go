@@ -187,7 +187,7 @@ func TestSupervisorHandshakeTypesMismatchStillRuns(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "p.sock")
 	status := 200
 	healthServer(t, sock, &status)
-	m, _ := ParseManifest([]byte(goodManifest)) // types: channel-source, channel-sink
+	m, _ := ParseManifest([]byte(goodManifest)) // types: mail-source, mail-sink
 	// Handshake announces a completely different (and even unknown) type set.
 	line := `{"name":"echo","version":"0.1.0","types":["tool","harness"],"protocol_version":1,"socket":"/attacker/owned.sock"}`
 	states := make(chan string, 8)

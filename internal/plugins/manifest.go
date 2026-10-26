@@ -39,29 +39,17 @@ var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 func ValidName(name string) bool { return nameRE.MatchString(name) }
 
 var knownTypes = map[string]bool{
-	"channel-source": true,
-	"channel-sink":   true,
-	"harness":        true, // accepted; the daemon connects nothing to it yet
-	"tool":           true, // accepted; the daemon connects nothing to it yet
+	"mail-source": true, // sends letters through POST /api/plugin/mail
+	"mail-sink":   true, // receives the letters of its inbox at /deliver
+	"harness":     true, // accepted; the daemon connects nothing to it yet
+	"tool":        true, // accepted; the daemon connects nothing to it yet
 }
 
-// Provided is one channel a plugin fulfils for parameterized (query-like)
-// subscriptions. The daemon validates a subscriber's params against
-// ParamsSchema at subscribe time; Help is surfaced by the Messages skill / UI
-// so an agent can discover how to subscribe. A provided channel must lie inside
-// the plugin's Publish scope (enforced by Manifest.Validate).
-type Provided struct {
-	Channel      string          `json:"channel"`
-	ParamsSchema json.RawMessage `json:"params_schema,omitempty"`
-	Help         string          `json:"help,omitempty"`
-}
-
-// Channels is a plugin's declared bus surface (canonical home; also referenced
-// by store.Record).
-type Channels struct {
-	Publish   []string   `json:"publish"`
-	Subscribe []string   `json:"subscribe"`
-	Provide   []Provided `json:"provide,omitempty"`
+// MailCaps is a plugin's declared mail surface: Send lets it send letters as
+// plugin:<name>, Receive lets the daemon deliver the letters of its inbox.
+type MailCaps struct {
+	Send    bool `json:"send"`
+	Receive bool `json:"receive"`
 }
 
 type OperatorCommand struct {
@@ -110,19 +98,6 @@ type SettingAction struct {
 	Fields []string `json:"fields,omitempty"`
 }
 
-// matchesAnyGlob reports whether channel matches at least one of the filepath
-// glob patterns. It is the single glob test shared by publish-scope checks
-// (Identity.CanPublish, provided-channel scope validation) — never inline
-// filepath.Match, call this so the semantics stay identical everywhere.
-func matchesAnyGlob(patterns []string, channel string) bool {
-	for _, pat := range patterns {
-		if ok, err := filepath.Match(pat, channel); err == nil && ok {
-			return true
-		}
-	}
-	return false
-}
-
 // Manifest is <plugin-dir>/plugin.json.
 type Manifest struct {
 	Name             string                `json:"name"`
@@ -134,7 +109,7 @@ type Manifest struct {
 	Commands         []string              `json:"commands,omitempty"`
 	OperatorCommands []OperatorCommand     `json:"operator_commands,omitempty"`
 	Settings         *SettingsContribution `json:"settings,omitempty"`
-	Channels         Channels              `json:"channels"`
+	Mail             MailCaps              `json:"mail"`
 	// Prompt names a Markdown file, relative to the plugin dir, holding the
 	// system-prompt fragment this plugin contributes to an image that includes
 	// it. Optional. Kept with the plugin so plugin-tied guidance is owned by the
@@ -191,27 +166,11 @@ func (m Manifest) Validate() error {
 			return fmt.Errorf("plugin %s prompt escapes the plugin dir: %q", m.Name, m.Prompt)
 		}
 	}
-	// Provided channels: each must be a concrete channel name inside
-	// the plugin's own publish scope — a plugin may only offer to fulfil demand
-	// on channels it is already allowed to publish to — and any declared
-	// params_schema must be a well-formed JSON Schema document.
-	seen := map[string]bool{}
-	for _, p := range m.Channels.Provide {
-		if p.Channel == "" {
-			return fmt.Errorf("plugin %s declares a provided channel with no name", m.Name)
-		}
-		if seen[p.Channel] {
-			return fmt.Errorf("plugin %s declares provided channel %q more than once", m.Name, p.Channel)
-		}
-		seen[p.Channel] = true
-		if !matchesAnyGlob(m.Channels.Publish, p.Channel) {
-			return fmt.Errorf("plugin %s provides channel %q outside its publish scope %v", m.Name, p.Channel, m.Channels.Publish)
-		}
-		if len(p.ParamsSchema) > 0 {
-			if err := validateSchemaDocument(p.ParamsSchema); err != nil {
-				return fmt.Errorf("plugin %s provided channel %q has invalid params_schema: %w", m.Name, p.Channel, err)
-			}
-		}
+	if m.Mail.Send && !m.HasType("mail-source") {
+		return fmt.Errorf("plugin %s declares mail.send without type mail-source", m.Name)
+	}
+	if m.Mail.Receive && !m.HasType("mail-sink") {
+		return fmt.Errorf("plugin %s declares mail.receive without type mail-sink", m.Name)
 	}
 	return nil
 }

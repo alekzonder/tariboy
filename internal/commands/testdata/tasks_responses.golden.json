@@ -1011,18 +1011,18 @@
     "created_by": "user:customer",
     "enabled": true,
     "id": 1,
-    "pattern": "incident:*",
+    "pattern": "plugin:*",
     "queue": "GLD",
     "updated_at": "2026-07-14T10:00:00.000000000Z"
   },
   "tasks.queue.trigger.create correlated": {
     "action": "create_task",
-    "correlation_key": "data.id",
+    "correlation_key": "alert-7",
     "created_at": "2026-07-14T10:00:00.000000000Z",
     "created_by": "user:customer",
     "enabled": true,
     "id": 2,
-    "pattern": "alert:*",
+    "pattern": "plugin:alerts",
     "queue": "GLD",
     "updated_at": "2026-07-14T10:00:00.000000000Z"
   },
@@ -1039,18 +1039,18 @@
         "created_by": "user:customer",
         "enabled": true,
         "id": 1,
-        "pattern": "incident:*",
+        "pattern": "plugin:*",
         "queue": "GLD",
         "updated_at": "2026-07-14T10:00:00.000000000Z"
       },
       {
         "action": "create_task",
-        "correlation_key": "data.id",
+        "correlation_key": "alert-7",
         "created_at": "2026-07-14T10:00:00.000000000Z",
         "created_by": "user:customer",
         "enabled": true,
         "id": 2,
-        "pattern": "alert:*",
+        "pattern": "plugin:alerts",
         "queue": "GLD",
         "updated_at": "2026-07-14T10:00:00.000000000Z"
       }

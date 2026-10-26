@@ -24,9 +24,8 @@ func TestCleanupSplitsSameSecondRowsAtTheCutoff(t *testing.T) {
 	exec(t, db, `INSERT INTO events(ts,kind) VALUES (?,'old'),(?,'at')`, older, at)
 	exec(t, db, `INSERT INTO task_idempotency(actor,action,idempotency_key,response,created_at) VALUES ('a','x','old','',?),('a','x','at','',?)`, older, at)
 	chatCutoff := now.AddDate(0, 0, -7)
-	exec(t, db, `INSERT INTO messages(id,channel,ts) VALUES ('old','c',?),('at','c',?)`,
-		store.FormatTime(chatCutoff.Add(-1)), store.FormatTime(chatCutoff))
-	ingestAllMessages(t, db)
+	insertLetters(t, db, letterRow{id: "old", createdAt: store.FormatTime(chatCutoff.Add(-1)), closed: true},
+		letterRow{id: "at", createdAt: store.FormatTime(chatCutoff), closed: true})
 
 	res, err := svc.Run()
 	if err != nil || res.Error != "" {
@@ -36,7 +35,7 @@ func TestCleanupSplitsSameSecondRowsAtTheCutoff(t *testing.T) {
 		`SELECT group_concat(id) FROM ai_requests`,
 		`SELECT group_concat(kind) FROM events`,
 		`SELECT group_concat(idempotency_key) FROM task_idempotency`,
-		`SELECT group_concat(id) FROM messages`,
+		`SELECT group_concat(id) FROM mail`,
 	} {
 		var got string
 		if err := db.QueryRow(q).Scan(&got); err != nil {

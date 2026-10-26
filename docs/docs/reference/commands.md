@@ -58,6 +58,7 @@ tariboy has three command surfaces:
 | `tariboy agent inspect NAME` | Show one agent's full config |
 | `tariboy agent interactive NAME` | Get or set interactive mode (bool); restart the agent to apply |
 | `tariboy agent kill NAME` | Kill the current iteration via its shim |
+| `tariboy agent mail clear NAME` | Delete the open letters in an agent's inbox |
 | `tariboy agent messages batch NAME VALUE` | Set the agent messages batch |
 | `tariboy agent messages max-queue NAME VALUE` | Set the agent messages max queue |
 | `tariboy agent model NAME` | Get or set the agent model (omit value to read); applies next iteration |
@@ -174,6 +175,14 @@ tariboy has three command surfaces:
 | `tariboy loop on-timeout NAME` | Get or set loop on-timeout policy; omit value to read |
 | `tariboy loop schedule NAME` | Get, set or clear the loop schedule (RFC 5545 RRULE, whole minutes); omit value to read |
 | `tariboy loop timeout NAME` | Get or set loop timeout (seconds); omit value to read |
+| `tariboy mail close ID` | Archive a letter without a reply |
+| `tariboy mail ls` | List one mailbox: inbox, sent or archive |
+| `tariboy mail read` | Mark letters read; a read notice closes |
+| `tariboy mail reply ID` | Reply to a letter, which closes it |
+| `tariboy mail requeue ID` | Return a dead letter to the inbox |
+| `tariboy mail send` | Send a letter: a request unless notice is set |
+| `tariboy mail show ID` | Show one letter and its reply |
+| `tariboy mail unread` | Count the open letters by sender and kind |
 | `tariboy maintenance get` | Show database maintenance settings and the last run |
 | `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
 | `tariboy maintenance set` | Change database maintenance settings; unset flags keep their value |

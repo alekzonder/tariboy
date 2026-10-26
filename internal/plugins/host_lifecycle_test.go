@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
@@ -48,7 +48,7 @@ func TestInstallRollbackAfterStopAllDoesNotStartPlugin(t *testing.T) {
 	healthServer(t, sock, &status)
 	pluginSource := func(version string) string {
 		dir := t.TempDir()
-		manifest := fmt.Sprintf(`{"name":"single","version":%q,"protocol_version":1,"types":["tool"],"exec":"run.sh","channels":{"publish":[],"subscribe":[]}}`, version)
+		manifest := fmt.Sprintf(`{"name":"single","version":%q,"protocol_version":1,"types":["tool"],"exec":"run.sh"}`, version)
 		if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(manifest), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -142,44 +142,47 @@ func nextAttempt(t *testing.T, attempts <-chan int) int {
 	}
 }
 
-func startTestSink(t *testing.T, h *Host, timer <-chan time.Time) (context.CancelFunc, *bus.Bus) {
+func startTestSink(t *testing.T, h *Host, ps *Store, timer <-chan time.Time) context.CancelFunc {
 	t.Helper()
 	h.cfg.SinkAfter = func(time.Duration) <-chan time.Time { return timer }
-	rec := Record{Name: "echo", Types: []string{"channel-sink"}, Channels: Channels{Subscribe: []string{"chat:in"}}}
-	ctx, cancel := context.WithCancel(context.Background())
-	h.startSink(ctx, rec, h.SocketPath("echo"))
-	t.Cleanup(func() { cancel(); h.wg.Wait() })
-	return cancel, h.cfg.Bus
-}
-
-func TestSinkDeliversOnWakeWithoutTimer(t *testing.T) {
-	t.Parallel()
-	h, _, _ := newHost(t, nil)
-	attempts := sinkRecorder(t, h.SocketPath("echo"))
-	_, b := startTestSink(t, h, make(chan time.Time)) // the fallback timer never fires
-	if _, err := b.Publish(bus.Message{Channel: "chat:in", Type: "chat.msg", Text: "hey"}); err != nil {
+	rec := Record{Name: "echo", Version: "0.1.0", Types: []string{"mail-sink"}, Mail: MailCaps{Receive: true}}
+	if err := ps.Upsert(rec); err != nil {
 		t.Fatal(err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	h.startDrain(ctx, rec, h.SocketPath("echo"))
+	t.Cleanup(func() { cancel(); h.wg.Wait() })
+	return cancel
+}
+
+// TestSendToPluginWakesDrainerAndDeliverCloses: a letter to plugin:echo wakes
+// its drainer without the fallback timer, and the delivered letter is closed
+// as delivered.
+func TestSendToPluginWakesDrainerAndDeliverCloses(t *testing.T) {
+	t.Parallel()
+	h, b, ps := newHost(t, nil)
+	attempts := sinkRecorder(t, h.SocketPath("echo"))
+	startTestSink(t, h, ps, make(chan time.Time)) // the fallback timer never fires
+	sent := sendToPlugin(t, b, "echo", "hey")
 	if status := nextAttempt(t, attempts); status != 200 {
 		t.Fatalf("delivery status = %d", status)
 	}
-	if !testutil.WaitFor(2*time.Second, func() bool {
-		has, err := b.HasPending("plugin:echo")
-		return err == nil && !has
-	}) {
-		t.Fatal("delivered message was not acked")
+	if !testutil.WaitFor(2*time.Second, func() bool { return len(openLetters(t, b, "plugin:echo")) == 0 }) {
+		t.Fatal("delivered letter was not closed")
+	}
+	got, _, err := b.Show("plugin:echo", sent.ID)
+	if err != nil || got.CloseNote != mail.CloseNoteDelivered || got.Attempts != 1 {
+		t.Fatalf("delivered letter = %+v, %v", got, err)
 	}
 }
 
 func TestSinkFallbackTimerRetriesFailedDelivery(t *testing.T) {
 	t.Parallel()
-	h, _, _ := newHost(t, nil)
+	h, b, ps := newHost(t, nil)
 	attempts := sinkRecorder(t, h.SocketPath("echo"), 500)
 	timer := make(chan time.Time)
-	_, b := startTestSink(t, h, timer)
-	if _, err := b.Publish(bus.Message{Channel: "chat:in", Type: "chat.msg", Text: "hey"}); err != nil {
-		t.Fatal(err)
-	}
+	startTestSink(t, h, ps, timer)
+	sendToPlugin(t, b, "echo", "hey")
 	if status := nextAttempt(t, attempts); status != 500 {
 		t.Fatalf("first delivery status = %d, want the failing 500", status)
 	}
@@ -191,11 +194,8 @@ func TestSinkFallbackTimerRetriesFailedDelivery(t *testing.T) {
 	if status := nextAttempt(t, attempts); status != 200 {
 		t.Fatalf("retry status = %d", status)
 	}
-	if !testutil.WaitFor(2*time.Second, func() bool {
-		has, err := b.HasPending("plugin:echo")
-		return err == nil && !has
-	}) {
-		t.Fatal("retried message was not acked")
+	if !testutil.WaitFor(2*time.Second, func() bool { return len(openLetters(t, b, "plugin:echo")) == 0 }) {
+		t.Fatal("retried letter was not closed")
 	}
 }
 
@@ -238,7 +238,7 @@ func TestOnStateSurvivesHostRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.onState("echo", "error", map[string]any{"detail": "boom"})
-	restarted := NewHost(HostConfig{Store: ps, Bus: b, Tokens: NewTokenRegistry(nil), PluginsDir: h.cfg.PluginsDir, Clock: h.cfg.Clock})
+	restarted := NewHost(HostConfig{Store: ps, Mail: b, Tokens: NewTokenRegistry(nil), PluginsDir: h.cfg.PluginsDir, Clock: h.cfg.Clock})
 	list, err := restarted.List()
 	if err != nil {
 		t.Fatal(err)

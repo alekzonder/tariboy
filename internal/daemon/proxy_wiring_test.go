@@ -499,7 +499,6 @@ func TestProxyWiredIntoIteration(t *testing.T) {
 		t.Fatalf("start agent: %v", err)
 	}
 
-
 	// Send through the daemon so its mail wake hook wakes the engine.
 	if _, err := c.Call("POST", "/api/mail", map[string]any{
 		"to": "agent:" + created.Name, "text": "go"}); err != nil {
@@ -893,7 +892,6 @@ func TestProviderKeysFromAgentEnvAndSecretsReachHarness(t *testing.T) {
 			if tc.seed != nil {
 				tc.seed(t, c, created.Name)
 			}
-
 
 			if _, err := c.Call("POST", "/api/mail", map[string]any{
 				"to": "agent:" + created.Name, "text": "go"}); err != nil {

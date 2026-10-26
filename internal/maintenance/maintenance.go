@@ -31,7 +31,7 @@ type Settings struct {
 	Time          string `json:"time"` // HH:MM, daemon host local time
 	KeepBackups   int    `json:"keep_backups"`
 	RetentionDays int    `json:"retention_days"` // 0 = never delete
-	// ChatRetentionDays expires bus messages (all chat history) sooner than
+	// ChatRetentionDays expires closed letters (all mail history) sooner than
 	// RetentionDays; 0 leaves them to RetentionDays.
 	ChatRetentionDays   int  `json:"chat_retention_days"`
 	Compact             bool `json:"compact"`
@@ -281,7 +281,7 @@ func (s *Service) backup(keep int) (string, error) {
 }
 
 // cleanup deletes each category in its own transaction, so one failure rolls
-// back only that category. Messages use msgCutoff; a zero cutoff deletes
+// back only that category. Mail uses msgCutoff; a zero cutoff deletes
 // nothing else.
 func (s *Service) cleanup(cutoffAt, msgCutoffAt time.Time, deleted map[string]int64) error {
 	var errs []error
@@ -315,7 +315,7 @@ func (s *Service) cleanup(cutoffAt, msgCutoffAt time.Time, deleted map[string]in
 		}
 	}
 	if cutoffAt.IsZero() {
-		step("messages", func(tx *sql.Tx) (int64, error) { return purgeMessages(tx, msgCutoff) })
+		step("mail", func(tx *sql.Tx) (int64, error) { return purgeMail(tx, msgCutoff) })
 		return errors.Join(errs...)
 	}
 	var purged []string
@@ -342,7 +342,7 @@ func (s *Service) cleanup(cutoffAt, msgCutoffAt time.Time, deleted map[string]in
 		}
 		return r.RowsAffected()
 	})
-	step("messages", func(tx *sql.Tx) (int64, error) { return purgeMessages(tx, msgCutoff) })
+	step("mail", func(tx *sql.Tx) (int64, error) { return purgeMail(tx, msgCutoff) })
 	step("events", simple(`DELETE FROM events WHERE ts < ?`))
 	step("task_idempotency", simple(`DELETE FROM task_idempotency WHERE created_at < ?`))
 	return errors.Join(errs...)
@@ -454,19 +454,12 @@ func (s *Service) removeTaskFiles(keys []string) error {
 	return errors.Join(errs...)
 }
 
-// purgeMessages removes old messages whose every delivery is acknowledged or
-// dead-lettered, with those deliveries. Unacknowledged work and messages
-// workflow ingress has not consumed yet are never deleted.
-func purgeMessages(tx *sql.Tx, cutoff string) (int64, error) {
-	victims := `(SELECT id FROM messages WHERE messages.ts < ? AND NOT EXISTS (
-		SELECT 1 FROM deliveries d WHERE d.message_id = messages.id AND d.acked_at IS NULL AND d.dlq = 0)
-		AND NOT (` + tasks.WorkflowMessageRetainedSQL + `))`
-	if _, err := tx.Exec(`DELETE FROM deliveries WHERE message_id IN `+victims, cutoff); err != nil {
-		return 0, err
-	}
-	// Deliveries of the victims are gone, so re-selecting by age alone plus the
-	// same guard deletes exactly the same messages.
-	r, err := tx.Exec(`DELETE FROM messages WHERE id IN `+victims, cutoff)
+// purgeMail removes closed letters (answered, archived, read or dead) older
+// than cutoff. Open letters and letters to a queue that workflow ingress has
+// not consumed yet are never deleted.
+func purgeMail(tx *sql.Tx, cutoff string) (int64, error) {
+	r, err := tx.Exec(`DELETE FROM mail WHERE created_at < ? AND (answered_at <> '' OR dead_at <> '')
+		AND NOT `+tasks.WorkflowLetterRetainedSQL, cutoff)
 	if err != nil {
 		return 0, err
 	}

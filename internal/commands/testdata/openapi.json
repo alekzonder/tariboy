@@ -4601,36 +4601,6 @@
       "PluginActionResult": {
         "description": "Plugin-defined action result; the plugin defines the shape, which may be any JSON value."
       },
-      "PluginChannels": {
-        "additionalProperties": false,
-        "properties": {
-          "provide": {
-            "items": {
-              "$ref": "#/components/schemas/PluginProvidedChannel"
-            },
-            "type": "array"
-          },
-          "publish": {
-            "items": {
-              "type": "string"
-            },
-            "nullable": true,
-            "type": "array"
-          },
-          "subscribe": {
-            "items": {
-              "type": "string"
-            },
-            "nullable": true,
-            "type": "array"
-          }
-        },
-        "required": [
-          "publish",
-          "subscribe"
-        ],
-        "type": "object"
-      },
       "PluginContribution": {
         "additionalProperties": false,
         "properties": {
@@ -4741,19 +4711,19 @@
         ],
         "type": "object"
       },
-      "PluginProvidedChannel": {
+      "PluginMail": {
         "additionalProperties": false,
         "properties": {
-          "channel": {
-            "type": "string"
+          "receive": {
+            "type": "boolean"
           },
-          "help": {
-            "type": "string"
-          },
-          "params_schema": true
+          "send": {
+            "type": "boolean"
+          }
         },
         "required": [
-          "channel"
+          "send",
+          "receive"
         ],
         "type": "object"
       },
@@ -4823,9 +4793,6 @@
       "PluginView": {
         "additionalProperties": false,
         "properties": {
-          "channels": {
-            "$ref": "#/components/schemas/PluginChannels"
-          },
           "enabled": {
             "type": "boolean"
           },
@@ -4834,6 +4801,9 @@
           },
           "installed_at": {
             "type": "string"
+          },
+          "mail": {
+            "$ref": "#/components/schemas/PluginMail"
           },
           "name": {
             "type": "string"
@@ -4868,7 +4838,7 @@
           "protocol_version",
           "exec",
           "source_path",
-          "channels",
+          "mail",
           "enabled",
           "state",
           "installed_at",
@@ -25966,11 +25936,11 @@
                     "type": "string"
                   },
                   "correlation_key": {
-                    "description": "Correlation selector",
+                    "description": "Value the letter's data.correlation_key must equal",
                     "type": "string"
                   },
                   "pattern": {
-                    "description": "Allowed channel pattern",
+                    "description": "Sender glob a letter to the queue must match, such as plugin:* or plugin:telegram",
                     "type": "string"
                   }
                 },

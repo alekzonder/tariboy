@@ -36,8 +36,13 @@ const (
 	DeadDecodeError = "decode_error"
 )
 
-// CloseNoteRead is the close note of a notice its recipient has read.
-const CloseNoteRead = "read"
+// Close notes of a letter closed without a reply.
+const (
+	// CloseNoteRead closes a notice its recipient has read.
+	CloseNoteRead = "read"
+	// CloseNoteDelivered closes a letter a plugin's /deliver accepted.
+	CloseNoteDelivered = "delivered"
+)
 
 // Mailbox views of List.
 const (

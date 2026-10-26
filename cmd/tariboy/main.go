@@ -16,6 +16,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/commands"
 	"github.com/alekzonder/tariboy/internal/compose"
+	"github.com/alekzonder/tariboy/internal/mailcli"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/taskcli"
@@ -62,6 +63,9 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) int {
 	if argv, ok := tasksArgs(rest); ok {
 		return taskcli.RunOperator(ctx, argv, sock, out, errOut)
 	}
+	if argv, ok := mailArgs(rest); ok {
+		return mailcli.RunOperator(ctx, argv, sock, out, errOut)
+	}
 	// compose has always accepted its flags before the verb
 	// (`compose -f FILE up`); the registry resolves the verb first.
 	if len(rest) > 0 && rest[0] == "compose" {
@@ -90,12 +94,20 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) int {
 
 // tasksArgs reports whether argv's first word is tasks and returns argv
 // without it: tariboy tasks is the ttasks client, always in operator mode.
-func tasksArgs(argv []string) ([]string, bool) {
+func tasksArgs(argv []string) ([]string, bool) { return clientArgs(argv, "tasks") }
+
+// mailArgs reports whether argv's first word is mail and returns argv
+// without it: tariboy mail is the tmail client, always in operator mode.
+func mailArgs(argv []string) ([]string, bool) { return clientArgs(argv, "mail") }
+
+// clientArgs reports whether argv's first word is group and returns argv
+// without it.
+func clientArgs(argv []string, group string) ([]string, bool) {
 	for i, a := range argv {
 		if strings.HasPrefix(a, "-") || a == "help" {
 			continue
 		}
-		if a != "tasks" {
+		if a != group {
 			return nil, false
 		}
 		return append(slices.Clone(argv[:i]), argv[i+1:]...), true

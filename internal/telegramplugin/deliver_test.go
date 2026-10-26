@@ -36,9 +36,8 @@ func TestDeliverSendsAgentReplyToMappedTopicAndSplitsLongText(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := NewServer(state, NewBotClient(api.URL))
-	body, _ := json.Marshal(map[string]any{"message": map[string]any{
-		"id": "m1", "channel": "chat:telegram:worker", "text": strings.Repeat("x", 4100),
-		"produced_by_agent": "worker",
+	body, _ := json.Marshal(map[string]any{"letter": map[string]any{
+		"id": "m1", "from": "agent:worker", "to": "plugin:telegram", "body": strings.Repeat("x", 4100),
 	}})
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/deliver", bytes.NewReader(body)))
@@ -77,7 +76,7 @@ func TestDeliverHonorsTelegramRetryAfter(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := NewServer(state, NewBotClient(api.URL))
-	body := bytes.NewBufferString(`{"message":{"channel":"chat:telegram:worker","text":"hello","produced_by_agent":"worker"}}`)
+	body := bytes.NewBufferString(`{"letter":{"from":"agent:worker","to":"plugin:telegram","body":"hello"}}`)
 	response := httptest.NewRecorder()
 	started := time.Now()
 	server.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/deliver", body))
@@ -86,17 +85,17 @@ func TestDeliverHonorsTelegramRetryAfter(t *testing.T) {
 	}
 }
 
-func TestDeliverIgnoresInboundPluginEcho(t *testing.T) {
+func TestDeliverAcknowledgesALetterFromNoAgent(t *testing.T) {
 	state, err := OpenState(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := NewServer(state, nil)
-	body := bytes.NewBufferString(`{"message":{"channel":"chat:telegram:worker","text":"inbound","produced_by_plugin":"telegram"}}`)
+	body := bytes.NewBufferString(`{"letter":{"from":"system:schedule","to":"plugin:telegram","body":"tick"}}`)
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/deliver", body))
-	if response.Code != http.StatusOK {
-		t.Fatalf("echo should be acknowledged, status=%d", response.Code)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"delivered":false`) {
+		t.Fatalf("a letter without an agent topic should be acknowledged undelivered, status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
@@ -140,8 +139,8 @@ func TestDeliverReplacesMissingAgentTopicAndRetriesOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := NewServer(state, NewBotClient(api.URL))
-	body, _ := json.Marshal(map[string]any{"message": map[string]any{
-		"id": "m1", "channel": "chat:telegram:worker", "text": "hello", "produced_by_agent": "worker",
+	body, _ := json.Marshal(map[string]any{"letter": map[string]any{
+		"id": "m1", "from": "agent:worker", "to": "plugin:telegram", "body": "hello",
 	}})
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/deliver", bytes.NewReader(body)))

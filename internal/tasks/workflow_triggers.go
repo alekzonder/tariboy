@@ -9,11 +9,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/store"
 )
 
-var channelSegmentRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+var principalSegmentRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 
 type QueueWorkflowTrigger struct {
 	ID                    int64  `json:"id"`
@@ -29,94 +28,83 @@ type QueueWorkflowTrigger struct {
 	ActivationSequenceSet bool   `json:"-"`
 }
 
+// CreateQueueWorkflowTriggerInput creates a trigger of a queue. Pattern is a
+// sender glob (plugin:*, plugin:telegram) a letter to queue:<prefix> must
+// match; CorrelationKey, when set, must equal the letter's
+// data.correlation_key.
 type CreateQueueWorkflowTriggerInput struct {
 	Pattern        string `json:"pattern"`
 	CorrelationKey string `json:"correlation_key,omitempty"`
 	Action         string `json:"action"`
 }
 
-// ApplyWorkflowObservationInput is the daemon-side, post-bus-commit ingress
-// contract. EventID must be the immutable bus message id.
+// ApplyWorkflowObservationInput is one letter to a queue: EventID is the
+// letter id and Sequence its mail.seq.
 type ApplyWorkflowObservationInput struct {
 	EventID        string         `json:"event_id"`
 	EventAt        string         `json:"event_at,omitempty"`
-	Channel        string         `json:"channel"`
+	Sender         string         `json:"sender"`
+	Queue          string         `json:"queue"`
 	Kind           string         `json:"kind"`
+	Subject        string         `json:"subject,omitempty"`
+	Body           string         `json:"body,omitempty"`
 	CorrelationKey string         `json:"correlation_key,omitempty"`
-	Payload        map[string]any `json:"payload,omitempty"`
+	Data           map[string]any `json:"data,omitempty"`
 	Sequence       int64          `json:"-"`
 }
 
-// ReconcileWorkflowObservations durably replays committed bus rows after the
-// last successfully ingested monotonic sequence. Apply is idempotent by message
+// ReconcileWorkflowObservations replays committed letters to queue:*
+// principals after the last ingested mail.seq. Apply is idempotent by letter
 // id, so a crash between Apply and cursor advancement is harmless.
 func (s *WorkflowEngine) ReconcileWorkflowObservations(ctx context.Context, limit int) (int, error) {
 	if limit <= 0 {
 		limit = 100
 	}
-	// Repair messages produced by a pre-sequence binary during a rolling update.
-	// The statement is one serialized SQLite write and preserves legacy row order.
-	if err := repairWorkflowMessageSequences(ctx, s.db); err != nil {
-		return 0, err
-	}
 	var lastSequence int64
 	if err := s.db.QueryRowContext(ctx, `SELECT last_message_sequence FROM task_workflow_ingress_state WHERE singleton=1`).Scan(&lastSequence); err != nil {
 		return 0, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT s.sequence,m.id,m.channel,m.ts,m.source,m.type,m.subject,m.text,m.data,m.kind,m.correlation_id,m.in_reply_to,m.reply_to FROM task_workflow_message_sequence s JOIN messages m ON m.id=s.message_id WHERE s.sequence>? ORDER BY s.sequence LIMIT ?`, lastSequence, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT seq,id,sender,recipient,created_at,kind,subject,body,data FROM mail
+		WHERE seq>? AND recipient GLOB 'queue:*' ORDER BY seq LIMIT ?`, lastSequence, limit)
 	if err != nil {
 		return 0, err
 	}
-	type ingressMessage struct {
-		sequence                           int64
-		id, channel, ts, source, kind, typ string
-		correlation, inReplyTo, replyTo    sql.NullString
-		subject, text, data                sql.NullString
-	}
-	messages := []ingressMessage{}
+	letters := []ApplyWorkflowObservationInput{}
 	for rows.Next() {
-		var m ingressMessage
-		if err := rows.Scan(&m.sequence, &m.id, &m.channel, &m.ts, &m.source, &m.typ, &m.subject, &m.text, &m.data, &m.kind, &m.correlation, &m.inReplyTo, &m.replyTo); err != nil {
+		var in ApplyWorkflowObservationInput
+		var recipient, data string
+		if err := rows.Scan(&in.Sequence, &in.EventID, &in.Sender, &recipient, &in.EventAt, &in.Kind, &in.Subject, &in.Body, &data); err != nil {
 			rows.Close()
 			return 0, err
 		}
-		messages = append(messages, m)
+		in.Queue = strings.TrimPrefix(recipient, "queue:")
+		// A letter whose data does not decode still creates its task.
+		if json.Unmarshal([]byte(data), &in.Data) != nil {
+			in.Data = map[string]any{}
+		}
+		in.CorrelationKey, _ = in.Data["correlation_key"].(string)
+		letters = append(letters, in)
 	}
 	if err := rows.Close(); err != nil {
 		return 0, err
 	}
-	if len(messages) == 0 {
+	if len(letters) == 0 {
 		return 0, nil
 	}
-	advanced, err := s.advanceWorkflowIngressIfNoTargets(ctx, messages[len(messages)-1].sequence)
+	advanced, err := s.advanceWorkflowIngressIfNoTargets(ctx, letters[len(letters)-1].Sequence)
 	if err != nil {
 		return 0, err
 	}
 	if advanced {
-		return len(messages), nil
+		return len(letters), nil
 	}
 	processed := 0
 	var lastProcessed int64
-	for _, m := range messages {
-		payload := map[string]any{"source": m.source, "text": m.text.String, "kind": m.kind, "in_reply_to": m.inReplyTo.String, "reply_to": m.replyTo.String}
-		if m.subject.Valid && m.subject.String != "" {
-			var subject map[string]any
-			if err := json.Unmarshal([]byte(m.subject.String), &subject); err != nil {
-				return processed, err
-			}
-			payload["subject"] = subject
-		}
-		if m.data.Valid && m.data.String != "" {
-			var data map[string]any
-			if err := json.Unmarshal([]byte(m.data.String), &data); err != nil {
-				return processed, err
-			}
-			payload["data"] = data
-		}
-		if err := s.ApplyWorkflowObservation(ctx, ApplyWorkflowObservationInput{EventID: m.id, EventAt: m.ts, Channel: m.channel, Kind: m.typ, CorrelationKey: m.correlation.String, Payload: payload, Sequence: m.sequence}); err != nil {
+	for _, in := range letters {
+		if err := s.ApplyWorkflowObservation(ctx, in); err != nil {
 			return processed, err
 		}
-		lastProcessed = m.sequence
+		lastProcessed = in.Sequence
 		processed++
 	}
 	if lastProcessed != 0 {
@@ -132,33 +120,14 @@ func reserveWorkflowIngressWriter(ctx context.Context, tx *sql.Tx) error {
 	return err
 }
 
-type workflowSequenceExecer interface {
-	ExecContext(context.Context, string, ...any) (sql.Result, error)
-}
-
-// RecordWorkflowMessageSequence numbers a new bus message for workflow ingress.
-// The daemon wires it as the bus publish transaction hook, so the number is
-// committed with the message and follows commit order.
-func RecordWorkflowMessageSequence(tx *sql.Tx, msg bus.Message) error {
-	_, err := tx.Exec(`INSERT INTO task_workflow_message_sequence(message_id) VALUES (?)`, msg.ID)
-	return err
-}
-
-// WorkflowMessageRetainedSQL holds a bus message (by messages.id) that
-// workflow ingress has not consumed yet: it has no sequence number or one past
-// the ingress cursor. The bus and maintenance keep such messages.
-const WorkflowMessageRetainedSQL = `NOT EXISTS (SELECT 1 FROM task_workflow_message_sequence q
-	JOIN task_workflow_ingress_state i ON i.singleton = 1
-	WHERE q.message_id = messages.id AND q.sequence <= i.last_message_sequence)`
-
-func repairWorkflowMessageSequences(ctx context.Context, execer workflowSequenceExecer) error {
-	_, err := execer.ExecContext(ctx, `INSERT OR IGNORE INTO task_workflow_message_sequence(message_id) SELECT m.id FROM messages m LEFT JOIN task_workflow_message_sequence s ON s.message_id=m.id WHERE s.message_id IS NULL ORDER BY m.rowid`)
-	return err
-}
+// WorkflowLetterRetainedSQL holds a mail row workflow ingress has not consumed
+// yet: a letter to a queue past the ingress cursor. Retention keeps such rows.
+const WorkflowLetterRetainedSQL = `(mail.recipient GLOB 'queue:*' AND mail.seq >
+	(SELECT last_message_sequence FROM task_workflow_ingress_state WHERE singleton = 1))`
 
 func workflowIngressMaxSequence(ctx context.Context, tx *sql.Tx) (int64, error) {
 	var sequence int64
-	err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(sequence),0) FROM task_workflow_message_sequence`).Scan(&sequence)
+	err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(seq),0) FROM mail`).Scan(&sequence)
 	return sequence, err
 }
 
@@ -196,11 +165,7 @@ func (s *WorkflowEngine) advanceWorkflowIngressIfNoTargets(ctx context.Context, 
 }
 
 func (s *WorkflowEngine) applyQueueWorkflowTriggers(ctx context.Context, in ApplyWorkflowObservationInput) error {
-	source, _ := in.Payload["source"].(string)
-	if !strings.HasPrefix(source, "plugin:") {
-		return nil
-	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,queue_prefix,pattern,correlation_key,action,created_by,created_at,created_after_sequence,activation_sequence_set FROM task_queue_workflow_triggers WHERE enabled=1 ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,queue_prefix,pattern,correlation_key,action,created_by,created_at,created_after_sequence,activation_sequence_set FROM task_queue_workflow_triggers WHERE enabled=1 AND queue_prefix=? ORDER BY id`, in.Queue)
 	if err != nil {
 		return err
 	}
@@ -225,18 +190,21 @@ func (s *WorkflowEngine) applyQueueWorkflowTriggers(ctx context.Context, in Appl
 		if !workflowTargetEligible(in.Sequence, trigger.createdAfterSequence, trigger.activationSequenceSet, in.EventAt, trigger.createdAt) {
 			continue
 		}
-		if !channelPatternMatches(trigger.pattern, in.Channel) || (trigger.correlation != "" && trigger.correlation != in.CorrelationKey) {
+		if !senderPatternMatches(trigger.pattern, in.Sender) || (trigger.correlation != "" && trigger.correlation != in.CorrelationKey) {
 			continue
 		}
 		if trigger.action != "create_task" {
 			return newError(http.StatusConflict, "invalid_trigger_action", "persisted workflow trigger action is unsupported")
 		}
-		title, _ := in.Payload["text"].(string)
-		title = strings.TrimSpace(title)
+		title := strings.TrimSpace(in.Subject)
+		if title == "" {
+			title = strings.TrimSpace(in.Body)
+		}
 		if title == "" {
 			title = "External event: " + in.Kind
 		}
-		description, err := json.Marshal(map[string]any{"event_id": in.EventID, "channel": in.Channel, "correlation_key": in.CorrelationKey, "payload": in.Payload})
+		description, err := json.Marshal(map[string]any{"letter_id": in.EventID, "sender": in.Sender, "kind": in.Kind,
+			"correlation_key": in.CorrelationKey, "body": in.Body, "data": in.Data})
 		if err != nil {
 			return err
 		}
@@ -261,12 +229,9 @@ func (s *WorkflowEngine) CreateQueueWorkflowTrigger(ctx context.Context, actor A
 	}
 	queue = strings.ToUpper(strings.TrimSpace(queue))
 	in.Pattern, in.CorrelationKey, in.Action = strings.TrimSpace(in.Pattern), strings.TrimSpace(in.CorrelationKey), strings.TrimSpace(in.Action)
-	if !validRuntimeChannelPattern(in.Pattern) {
-		return QueueWorkflowTrigger{}, newError(http.StatusBadRequest, "invalid_channel_pattern", "trigger channel pattern is invalid")
-	}
-	switch strings.SplitN(in.Pattern, ":", 2)[0] {
-	case "agent", "group", "user", "system":
-		return QueueWorkflowTrigger{}, newError(http.StatusBadRequest, "invalid_channel_pattern", "task-creating triggers require an external channel namespace")
+	if !validSenderPattern(in.Pattern) {
+		return QueueWorkflowTrigger{}, newError(http.StatusBadRequest, "invalid_sender_pattern",
+			"trigger pattern must be a sender glob such as plugin:* or plugin:telegram")
 	}
 	if in.Action == "" {
 		return QueueWorkflowTrigger{}, newError(http.StatusBadRequest, "invalid_trigger_action", "trigger action is required")
@@ -288,9 +253,6 @@ func (s *WorkflowEngine) CreateQueueWorkflowTrigger(ctx context.Context, actor A
 	}
 	if s.workflowActivationAfterWriterReservation != nil {
 		s.workflowActivationAfterWriterReservation()
-	}
-	if err := repairWorkflowMessageSequences(ctx, tx); err != nil {
-		return QueueWorkflowTrigger{}, err
 	}
 	createdAfterSequence, err := workflowIngressMaxSequence(ctx, tx)
 	if err != nil {
@@ -345,13 +307,13 @@ func (s *WorkflowEngine) DeleteQueueWorkflowTrigger(ctx context.Context, actor A
 	return nil
 }
 
-// ApplyWorkflowObservation turns one committed bus message into tasks for every
-// matching queue trigger. Trigger task creation is idempotent per trigger and
-// message id, so replaying a message creates nothing new.
+// ApplyWorkflowObservation turns one letter to a queue into tasks for every
+// matching trigger of that queue. Trigger task creation is idempotent per
+// trigger and letter id, so replaying a letter creates nothing new.
 func (s *WorkflowEngine) ApplyWorkflowObservation(ctx context.Context, in ApplyWorkflowObservationInput) error {
-	in.EventID, in.EventAt, in.Channel, in.Kind, in.CorrelationKey = strings.TrimSpace(in.EventID), strings.TrimSpace(in.EventAt), strings.TrimSpace(in.Channel), strings.TrimSpace(in.Kind), strings.TrimSpace(in.CorrelationKey)
-	if in.EventID == "" || in.Channel == "" {
-		return newError(http.StatusBadRequest, "invalid_observation", "event id and channel are required")
+	in.EventID, in.EventAt, in.Sender, in.Queue, in.Kind, in.CorrelationKey = strings.TrimSpace(in.EventID), strings.TrimSpace(in.EventAt), strings.TrimSpace(in.Sender), strings.TrimSpace(in.Queue), strings.TrimSpace(in.Kind), strings.TrimSpace(in.CorrelationKey)
+	if in.EventID == "" || in.Sender == "" || in.Queue == "" {
+		return newError(http.StatusBadRequest, "invalid_observation", "letter id, sender and queue are required")
 	}
 	if in.EventAt == "" {
 		in.EventAt = s.now()
@@ -364,33 +326,29 @@ func (s *WorkflowEngine) ApplyWorkflowObservation(ctx context.Context, in ApplyW
 	return s.applyQueueWorkflowTriggers(ctx, in)
 }
 
-func validRuntimeChannelPattern(pattern string) bool {
-	parts := strings.Split(strings.TrimSpace(pattern), ":")
-	if len(parts) < 2 {
+// validSenderPattern accepts kind:name or kind:* for a principal kind that
+// can send mail.
+func validSenderPattern(pattern string) bool {
+	kind, name, ok := strings.Cut(strings.TrimSpace(pattern), ":")
+	if !ok {
 		return false
 	}
-	for i, p := range parts {
-		if p == "*" {
-			if len(parts) != 2 || i != 1 {
-				return false
-			}
-			continue
-		}
-		if !channelSegmentRE.MatchString(p) {
-			return false
-		}
+	switch kind {
+	case "agent", "user", "plugin", "system":
+	default:
+		return false
 	}
-	return true
+	return name == "*" || principalSegmentRE.MatchString(name)
 }
 
-func channelPatternMatches(pattern, channel string) bool {
-	if !validRuntimeChannelPattern(pattern) || !validRuntimeChannelPattern(channel) || strings.Contains(channel, "*") {
+func senderPatternMatches(pattern, sender string) bool {
+	if !validSenderPattern(pattern) {
 		return false
 	}
-	if strings.HasSuffix(pattern, ":*") {
-		return strings.HasPrefix(channel, strings.TrimSuffix(pattern, "*")) && len(strings.Split(channel, ":")) == 2
+	if prefix, ok := strings.CutSuffix(pattern, "*"); ok {
+		return strings.HasPrefix(sender, prefix) && len(sender) > len(prefix)
 	}
-	return pattern == channel
+	return pattern == sender
 }
 
 func timestampNotBefore(eventAt, createdAt string) bool {

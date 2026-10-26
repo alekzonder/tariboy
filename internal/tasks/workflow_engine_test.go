@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -214,10 +213,10 @@ func TestCreateTaskInBoundQueueRejectsAssignee(t *testing.T) {
 func TestQueueTriggerTaskPinsTheBinding(t *testing.T) {
 	svc, actor, digest := engineFixture(t)
 	if _, err := svc.CreateQueueWorkflowTrigger(context.Background(), actor, "DEV",
-		CreateQueueWorkflowTriggerInput{Pattern: "metrics:api", Action: "create_task"}); err != nil {
+		CreateQueueWorkflowTriggerInput{Pattern: "plugin:metrics", Action: "create_task"}); err != nil {
 		t.Fatal(err)
 	}
-	publishMessage(t, svc, bus.Message{Channel: "metrics:api", Source: "plugin:metrics", Type: "metric.alert", Text: "API alert"})
+	sendQueueLetter(t, svc, queueLetter{ID: "m-alert", Sender: "plugin:metrics", Kind: "metric.alert", Subject: "API alert"})
 	if n, err := svc.ReconcileWorkflowObservations(context.Background(), 100); err != nil || n != 1 {
 		t.Fatalf("reconcile = %d, %v", n, err)
 	}

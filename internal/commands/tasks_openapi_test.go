@@ -51,7 +51,7 @@ func tasksTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 	if _, err := svc.AddComment(ctx, tasks.AgentActor("dev-a"), target, tasks.AddCommentInput{Body: "Need input from @user:customer"}); err != nil {
 		t.Fatal(err)
 	}
-	trigger, err := svc.CreateQueueWorkflowTrigger(ctx, customer, "TYP", tasks.CreateQueueWorkflowTriggerInput{Pattern: "incident:*", Action: "create_task"})
+	trigger, err := svc.CreateQueueWorkflowTrigger(ctx, customer, "TYP", tasks.CreateQueueWorkflowTriggerInput{Pattern: "plugin:*", Action: "create_task"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,10 +6,11 @@ use std::path::{Path, PathBuf};
 /// It remains separate from CARGO_PKG_VERSION so bundled payloads and the
 /// running daemon are checked against the same release value.
 pub const VERSION: &str = env!("TARIBOY_VERSION");
-pub const BINARIES: [&str; 5] = [
+pub const BINARIES: [&str; 6] = [
     "tariboyd",
     "tariboy",
     "tariboy-tasks",
+    "tariboy-mail",
     "tariboy-shim",
     "tariboy-plugin-telegram",
 ];
@@ -18,7 +19,7 @@ pub struct ManagedLink {
     pub source: &'static str,
 }
 
-pub const MANAGED_LINKS: [ManagedLink; 6] = [
+pub const MANAGED_LINKS: [ManagedLink; 8] = [
     ManagedLink {
         name: "tariboyd",
         source: "tariboyd",
@@ -34,6 +35,14 @@ pub const MANAGED_LINKS: [ManagedLink; 6] = [
     ManagedLink {
         name: "ttasks",
         source: "tariboy-tasks",
+    },
+    ManagedLink {
+        name: "tariboy-mail",
+        source: "tariboy-mail",
+    },
+    ManagedLink {
+        name: "tmail",
+        source: "tariboy-mail",
     },
     ManagedLink {
         name: "tariboy-shim",
@@ -353,15 +362,18 @@ mod tests {
         );
         let linux = bundle.platform(Platform::LinuxX86_64).unwrap();
         let uploads = linux.files_for_upload();
-        assert_eq!(uploads.len(), 7);
-        assert_eq!(
-            uploads
-                .iter()
-                .filter(|path| path.ends_with("tariboy-tasks"))
-                .count(),
-            1
-        );
+        assert_eq!(uploads.len(), 8);
+        for payload in ["tariboy-tasks", "tariboy-mail"] {
+            assert_eq!(
+                uploads
+                    .iter()
+                    .filter(|path| path.ends_with(payload))
+                    .count(),
+                1
+            );
+        }
         assert!(!uploads.iter().any(|path| path.ends_with("ttasks")));
+        assert!(!uploads.iter().any(|path| path.ends_with("tmail")));
         assert_eq!(linux.version, VERSION);
     }
 
@@ -377,6 +389,12 @@ mod tests {
             .unwrap_err()
             .contains("tariboy-tasks"));
         std::fs::write(dir.join("tariboy-tasks"), b"binary").unwrap();
+        std::fs::remove_file(dir.join("tariboy-mail")).unwrap();
+        assert!(bundle
+            .platform(Platform::LinuxX86_64)
+            .unwrap_err()
+            .contains("tariboy-mail"));
+        std::fs::write(dir.join("tariboy-mail"), b"binary").unwrap();
         std::fs::remove_file(dir.join("tariboy-shim")).unwrap();
         assert!(bundle
             .platform(Platform::LinuxX86_64)
@@ -437,7 +455,7 @@ mod tests {
         std::fs::write(dir.join(INSTALLER_FILE), b"#!/bin/sh\n").unwrap();
         let remote = bundle.remote("Darwin", "arm64").unwrap();
         assert_eq!(remote.dir, dir);
-        assert_eq!(remote.files_for_upload().len(), 7);
+        assert_eq!(remote.files_for_upload().len(), 8);
         assert!(bundle
             .remote("Darwin", "x86_64")
             .unwrap_err()
@@ -462,7 +480,7 @@ mod tests {
                 .unwrap()
                 .files_for_upload()
                 .len(),
-            7
+            8
         );
         assert!(bundle
             .remote("Linux", "armv7l")

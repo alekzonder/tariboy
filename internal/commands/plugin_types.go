@@ -60,35 +60,27 @@ func pluginContributionList(items []plugins.Contribution) PluginContributionList
 	return out
 }
 
-// PluginProvidedChannel is one parameterized channel a plugin provides.
-// ParamsSchema is the JSON Schema of the subscription parameters.
-type PluginProvidedChannel struct {
-	Channel      string          `json:"channel"`
-	ParamsSchema json.RawMessage `json:"params_schema,omitempty"`
-	Help         string          `json:"help,omitempty"`
-}
-
-// PluginChannels is a plugin's declared bus surface.
-type PluginChannels struct {
-	Publish   []string                `json:"publish" jsonschema_extras:"nullable=true"`
-	Subscribe []string                `json:"subscribe" jsonschema_extras:"nullable=true"`
-	Provide   []PluginProvidedChannel `json:"provide,omitempty"`
+// PluginMail is a plugin's declared mail surface: whether it sends letters
+// and whether it receives the letters of its inbox.
+type PluginMail struct {
+	Send    bool `json:"send"`
+	Receive bool `json:"receive"`
 }
 
 // PluginView is one plugin's stored record, live state and socket
 // (plugin.inspect).
 type PluginView struct {
-	Name            string         `json:"name"`
-	Version         string         `json:"version"`
-	Types           []string       `json:"types" jsonschema_extras:"nullable=true"`
-	ProtocolVersion int            `json:"protocol_version"`
-	Exec            string         `json:"exec"`
-	SourcePath      string         `json:"source_path"`
-	Channels        PluginChannels `json:"channels"`
-	Enabled         bool           `json:"enabled"`
-	State           string         `json:"state"`
-	InstalledAt     string         `json:"installed_at"`
-	Socket          string         `json:"socket"`
+	Name            string     `json:"name"`
+	Version         string     `json:"version"`
+	Types           []string   `json:"types" jsonschema_extras:"nullable=true"`
+	ProtocolVersion int        `json:"protocol_version"`
+	Exec            string     `json:"exec"`
+	SourcePath      string     `json:"source_path"`
+	Mail            PluginMail `json:"mail"`
+	Enabled         bool       `json:"enabled"`
+	State           string     `json:"state"`
+	InstalledAt     string     `json:"installed_at"`
+	Socket          string     `json:"socket"`
 }
 
 // PluginRemoved names the plugin plugin.rm removed.

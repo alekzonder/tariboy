@@ -61,27 +61,26 @@ func newPluginsMiscFixture(t *testing.T) pluginsMiscFixture {
 	ps := plugins.NewStore(c.Store, clock)
 	pluginsDir := filepath.Join(c.BaseDir, "plugins")
 	host := plugins.NewHost(plugins.HostConfig{
-		Store: ps, Bus: c.Bus, Tokens: plugins.NewTokenRegistry(nil),
+		Store: ps, Mail: c.Mail, Tokens: plugins.NewTokenRegistry(nil),
 		PluginsDir: pluginsDir, DaemonSocket: filepath.Join(c.BaseDir, "d.sock"),
 		Runner: silentPluginRunner{}, Clock: clock, Log: c.Log,
 	})
 	t.Cleanup(host.StopAll)
 	c.Plugins = host
 
-	echoManifest := `{"name":"echo","version":"1.0.0","protocol_version":1,"types":["channel-source","channel-sink"],"exec":"run.sh",` +
+	echoManifest := `{"name":"echo","version":"1.0.0","protocol_version":1,"types":["mail-source","mail-sink"],"exec":"run.sh",` +
 		`"description":"Echo bridge",` +
 		`"operator_commands":[{"path":"status","summary":"Show status","action":"status"},` +
 		`{"path":"bind","summary":"Bind a chat","action":"bind","args":[{"name":"chat","flag":"chat","type":"string","required":true,"help":"chat id"}]}],` +
 		`"settings":{"title":"Echo","status":[{"name":"connected","label":"Connected"}],` +
 		`"sections":[{"title":"Token","fields":[{"name":"token","label":"Token","type":"password","required":true,"help":"bot token"}],` +
 		`"actions":[{"label":"Save","action":"configure","fields":["token"]}]}]},` +
-		`"channels":{"publish":["echo:*"],"subscribe":["chat:in"],"provide":[{"channel":"echo:feed","params_schema":{"type":"object"},"help":"feed"}]}}`
+		`"mail":{"send":true,"receive":true}}`
 	writePluginPackage(t, filepath.Join(pluginsDir, "echo", "1.0.0"), echoManifest)
 	if err := ps.Upsert(plugins.Record{
-		Name: "echo", Version: "1.0.0", Types: []string{"channel-source", "channel-sink"}, ProtocolVersion: 1,
+		Name: "echo", Version: "1.0.0", Types: []string{"mail-source", "mail-sink"}, ProtocolVersion: 1,
 		Exec: "run.sh", SourcePath: "/src/echo", Enabled: true,
-		Channels: plugins.Channels{Publish: []string{"echo:*"}, Subscribe: []string{"chat:in"},
-			Provide: []plugins.Provided{{Channel: "echo:feed", ParamsSchema: []byte(`{"type":"object"}`), Help: "feed"}}},
+		Mail: plugins.MailCaps{Send: true, Receive: true},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +94,7 @@ func newPluginsMiscFixture(t *testing.T) pluginsMiscFixture {
 	writePluginFile(t, filepath.Join(pluginsDir, "quiet", "logs", "plugin.log"), "")
 
 	widgetSrc := filepath.Join(t.TempDir(), "widget")
-	writePluginPackage(t, widgetSrc, `{"name":"widget","version":"2.0.0","protocol_version":1,"types":["channel-sink"],"exec":"run.sh","channels":{"publish":[],"subscribe":["chat:*"]}}`)
+	writePluginPackage(t, widgetSrc, `{"name":"widget","version":"2.0.0","protocol_version":1,"types":["mail-sink"],"exec":"run.sh","mail":{"receive":true}}`)
 
 	for _, name := range []string{"smoke", "bare"} {
 		if err := as.Create(agent.Agent{Name: name, OnTimeout: "restart", OnError: "restart"}); err != nil {

@@ -531,7 +531,7 @@ func taskHTTPArgs(path string) []registry.Arg {
 	case "tasks.queue.pool.set":
 		return poolMutationArgs(registry.Arg{Name: "agents", Required: true, Help: "Explicit agent names", Schema: map[string]any{"type": "array", "items": map[string]any{"type": "string"}}})
 	case "tasks.queue.trigger.create":
-		return []registry.Arg{{Name: "pattern", Required: true, Help: "Allowed channel pattern"}, {Name: "correlation_key", Help: "Correlation selector"}, {Name: "action", Required: true, Help: "Declared workflow trigger action"}}
+		return []registry.Arg{{Name: "pattern", Required: true, Help: "Sender glob a letter to the queue must match, such as plugin:* or plugin:telegram"}, {Name: "correlation_key", Help: "Value the letter's data.correlation_key must equal"}, {Name: "action", Required: true, Help: "Declared workflow trigger action"}}
 	case "tasks.queue.trigger.delete":
 		return []registry.Arg{{Name: "id", Type: registry.Int, Required: true, Help: "Resource id"}}
 	case "tasks.queue.source.log":

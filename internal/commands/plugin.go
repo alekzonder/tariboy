@@ -287,9 +287,6 @@ func pluginAction() registry.Command {
 			if err != nil {
 				return nil, pluginActionErr(name, err)
 			}
-			if err := pc.ApplyActionSubscriptions(name, res); err != nil {
-				return nil, api.UserError{Code: "bad_action_effect", Msg: err.Error()}
-			}
 			return pluginActionResult(res), nil
 		},
 	})
