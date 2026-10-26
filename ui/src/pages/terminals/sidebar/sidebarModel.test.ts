@@ -9,21 +9,8 @@ import {
   hostAgents,
   rankAgents,
 } from "./sidebarModel";
-import type { AgentRow, ChatSummaryRow } from "@/lib/api";
-import { agentRow, chatSummaryRow } from "@/test/fixtures/apiFixtures";
-
-const chat = (agent: string, last_ts: string, unread = 0, kind = "direct"): ChatSummaryRow =>
-  chatSummaryRow({
-    id: `${kind === "direct" ? "dm" : kind}:${agent}`,
-    kind,
-    title: agent,
-    agent,
-    last_ts,
-    unread,
-    last_from: `agent:${agent}`,
-    last_type: "message",
-    last_text: "...",
-  });
+import type { AgentRow } from "@/lib/api";
+import { agentRow } from "@/test/fixtures/apiFixtures";
 
 const agent = (name: string, group = ""): AgentRow =>
   agentRow({ name, image: "img:latest", state: "running", harness: "claude", group });
@@ -66,50 +53,6 @@ describe("sidebar agent list", () => {
   it("keeps the saved order inside a band", () => {
     const { rest } = rankAgents(allAgents(hosts), new Set(), new Map());
     expect(rest.map((row) => row.agent.name)).toEqual(["beta", "alpha", "gamma", "delta"]);
-  });
-
-  it("orders the remaining agents like a chat list, newest conversation first", () => {
-    const chatted: HostAgents[] = [
-      { ...hosts[0], chats: [chat("alpha", "2026-09-15T10:00:00Z")] },
-      { ...hosts[1], chats: [chat("gamma", "2026-09-15T12:00:00Z", 2)] },
-    ];
-    const rows = allAgents(chatted);
-    expect(rows.find((row) => row.agent.name === "gamma")?.chat?.unread).toBe(2);
-    const { rest } = rankAgents(rows, new Set(), new Map());
-    // gamma spoke last, alpha before it, and the two silent agents keep the
-    // operator's own order behind them.
-    expect(rest.map((row) => row.agent.name)).toEqual(["gamma", "alpha", "beta", "delta"]);
-  });
-
-  it("folds an agent's three chats into one row: newest activity, all unread", () => {
-    const chatted: HostAgents[] = [
-      {
-        ...hosts[0],
-        chats: [
-          chat("alpha", "2026-09-15T10:00:00Z", 1),
-          chat("alpha", "2026-09-15T13:00:00Z", 2, "tasks"),
-          chat("alpha", "2026-09-15T09:00:00Z", 0, "service"),
-        ],
-      },
-      hosts[1],
-    ];
-    const row = allAgents(chatted).find((item) => item.agent.name === "alpha");
-    expect(row?.chat?.unread).toBe(3);
-    expect(row?.chat?.last_ts).toBe("2026-09-15T13:00:00Z");
-  });
-
-  it("keeps an agent calling for a person above a more recent conversation", () => {
-    const chatted: HostAgents[] = [
-      { ...hosts[0], chats: [chat("alpha", "2026-09-15T12:00:00Z")] },
-      hosts[1],
-    ];
-    const { rest } = rankAgents(
-      allAgents(chatted),
-      new Set(),
-      new Map([[agentKey("prod", "gamma"), 1]]),
-    );
-    expect(rest[0].agent.name).toBe("gamma");
-    expect(rest[1].agent.name).toBe("alpha");
   });
 });
 

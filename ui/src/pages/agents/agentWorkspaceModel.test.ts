@@ -12,7 +12,6 @@ const base = "/agents/local/dev";
 describe("agentTabs", () => {
   it("lists every tab in Expert mode", () => {
     expect(agentTabs(false).map(([key]) => key)).toEqual([
-      "chat",
       "tasks",
       "console",
       "activity",
@@ -22,26 +21,25 @@ describe("agentTabs", () => {
   });
 
   it("keeps only the Simple tabs in Simple mode", () => {
-    expect(agentTabs(true).map(([key]) => key)).toEqual([
-      "chat",
-      "tasks",
-      "console",
-      "configuration",
-    ]);
+    expect(agentTabs(true).map(([key]) => key)).toEqual(["tasks", "console", "configuration"]);
   });
 });
 
 describe("resolveAgentTab", () => {
   it.each<[string, Parameters<typeof resolveAgentTab>[0], ReturnType<typeof resolveAgentTab>]>([
     ["a known tab", { tab: "activity", simple: false, base }, { tab: "activity" }],
-    ["a Simple tab", { tab: "chat", simple: true, base }, { tab: "chat" }],
+    ["a Simple tab", { tab: "tasks", simple: true, base }, { tab: "tasks" }],
     [
       "an unknown tab in Expert",
       { tab: "nope", simple: false, base },
       { redirect: `${base}/console` },
     ],
-    ["an unknown tab in Simple", { tab: "nope", simple: true, base }, { redirect: `${base}/chat` }],
-    ["a tab Simple hides", { tab: "advanced", simple: true, base }, { redirect: `${base}/chat` }],
+    [
+      "an unknown tab in Simple",
+      { tab: "nope", simple: true, base },
+      { redirect: `${base}/tasks` },
+    ],
+    ["a tab Simple hides", { tab: "advanced", simple: true, base }, { redirect: `${base}/tasks` }],
   ])("resolves %s", (_name, input, expected) => {
     expect(resolveAgentTab(input)).toEqual(expected);
   });

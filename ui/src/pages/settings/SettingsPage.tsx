@@ -25,7 +25,6 @@ const ADVANCED = [
   ["ops", "Ops"],
   ["daemons", "Daemons"],
   ["groups", "Groups"],
-  ["channels", "Raw channels"],
 ] as const;
 
 export default function SettingsPage({ basePath = "/settings" }: { basePath?: string }) {
@@ -171,8 +170,8 @@ export function AppearanceSettings() {
 export function AdvancedSettingsIndex() {
   return (
     <Copy title="Advanced">
-      Inspect organization-wide usage, budgets, policy, plugins, groups, and raw event channels.
-      These tools are intentionally separated from the everyday agent workflow.
+      Inspect organization-wide usage, budgets, policy, plugins, and groups. These tools are
+      intentionally separated from the everyday agent workflow.
     </Copy>
   );
 }

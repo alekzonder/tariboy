@@ -416,9 +416,9 @@ run_restart_case() {
 }
 
 # db_leaked SEED|COUNT <agent>: seed or count the seven agent-keyed side-table rows
-# that Store.Delete leaves behind and PurgeAgentData is meant to clean (subscriptions
-# + their deliveries, schedules, scripts, ai_requests, retention_policies, and
-# budgets). SEED plants exactly one sentinel row per predicate (7 total);
+# that Store.Delete leaves behind and PurgeAgentData is meant to clean (an open and
+# an archived letter to the agent, schedules, scripts, ai_requests,
+# retention_policies, and budgets). SEED plants exactly one sentinel row per predicate (7 total);
 # COUNT prints how many still match the agent. Both talk to the isolated smoke DB
 # directly via python3's stdlib sqlite3 (WAL + busy_timeout, so it coexists with the
 # stopped daemon's own connection). This lets the --volumes wipe assert the leaked rows
@@ -433,13 +433,14 @@ c = sqlite3.connect(db, timeout=10)
 c.execute("PRAGMA busy_timeout=10000")
 if mode == "SEED":
     c.executescript("BEGIN;")
-    c.execute("INSERT INTO subscriptions(id,agent,channel) VALUES(?,?,?)",
-              ("sub-sentinel", agent, "chan-sentinel"))
-    c.execute("INSERT INTO deliveries(subscription_id,message_id) VALUES(?,?)",
-              ("sub-sentinel", "msg-sentinel"))
+    c.execute("INSERT INTO mail(id,sender,recipient,subject,created_at) VALUES(?,?,?,?,?)",
+              ("m-sentinel-open", "system:smoke", scope, "open sentinel", "2099-01-01T00:00:00Z"))
+    c.execute("INSERT INTO mail(id,sender,recipient,subject,created_at,answered_at,close_note) VALUES(?,?,?,?,?,?,?)",
+              ("m-sentinel-closed", "system:smoke", scope, "archived sentinel", "2099-01-01T00:00:00Z",
+               "2099-01-01T00:00:00Z", "smoke"))
     c.execute("INSERT INTO schedules(id,agent,kind,spec,recipient,next_fire_at) VALUES(?,?,?,?,?,?)",
               ("sch-sentinel", agent, "oneshot", "2099-01-01T00:00:00Z",
-               "inbox:" + agent, "2099-01-01T00:00:00Z"))
+               scope, "2099-01-01T00:00:00Z"))
     c.execute("INSERT INTO scripts(id,agent,name,description,command,mode,state,created_at) VALUES(?,?,?,?,?,?,?,?)",
               ("scr-sentinel", agent, "sentinel", "purge sentinel", "echo hi", "once",
                "completed", "2099-01-01T00:00:00Z"))
@@ -452,20 +453,17 @@ if mode == "SEED":
 else:
     total = 0
     for sql, arg in [
-        # The agent already owns its protected inbox subscription. Count only
-        # this fixture's row so SEED remains exactly seven sentinel records.
-        ("SELECT COUNT(*) FROM subscriptions WHERE id=?", "sub-sentinel"),
-        # Count the seeded delivery directly by its subscription_id (stable across
-        # purge): the subscriptions row is gone after purge, so a subquery join
-        # would miss a leaked delivery there.
-        ("SELECT COUNT(*) FROM deliveries WHERE subscription_id=?", "sub-sentinel"),
+        # Count only this fixture's letters so SEED remains exactly seven
+        # sentinel records whatever other mail the agent received.
+        ("SELECT COUNT(*) FROM mail WHERE id=? AND recipient='agent:'||?", ("m-sentinel-open", agent)),
+        ("SELECT COUNT(*) FROM mail WHERE id=? AND recipient='agent:'||?", ("m-sentinel-closed", agent)),
         ("SELECT COUNT(*) FROM schedules WHERE agent=?", agent),
         ("SELECT COUNT(*) FROM scripts WHERE agent=?", agent),
         ("SELECT COUNT(*) FROM ai_requests WHERE agent=?", agent),
         ("SELECT COUNT(*) FROM retention_policies WHERE agent=?", agent),
         ("SELECT COUNT(*) FROM budgets WHERE scope=?", scope),
     ]:
-        total += c.execute(sql, (arg,)).fetchone()[0]
+        total += c.execute(sql, arg if isinstance(arg, tuple) else (arg,)).fetchone()[0]
     print(total)
 c.close()
 PY

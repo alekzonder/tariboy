@@ -76,7 +76,7 @@ export const taskQueries = {
   notifications: (api: ApiClient) =>
     queryOptions({
       queryKey: taskKeys.notifications(api.target),
-      queryFn: ({ signal }) => api.tasks.listTaskNotifications(false, signal),
+      queryFn: ({ signal }) => api.tasks.listTaskNotifications(signal),
     }),
   sequence: (api: ApiClient) =>
     queryOptions({

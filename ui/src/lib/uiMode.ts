@@ -17,9 +17,9 @@ export function readUiMode(): UiMode {
   return readKey(storageKeys.uiMode);
 }
 
-/** The tab an agent opens on: Chat in Simple, Terminal in Expert. */
-export function defaultAgentTab(): "chat" | "console" {
-  return readUiMode() === "expert" ? "console" : "chat";
+/** The tab an agent opens on: Tasks in Simple, Terminal in Expert. */
+export function defaultAgentTab(): "tasks" | "console" {
+  return readUiMode() === "expert" ? "console" : "tasks";
 }
 
 export function writeUiMode(mode: UiMode): void {

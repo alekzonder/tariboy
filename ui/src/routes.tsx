@@ -30,7 +30,6 @@ const GroupsPage = lazy(() => import("@/pages/GroupsPage"));
 const BudgetsPage = lazy(() => import("@/pages/BudgetsPage"));
 const PluginsPage = lazy(() => import("@/pages/PluginsPage"));
 const OpsPage = lazy(() => import("@/pages/OpsPage"));
-const ChannelsPage = lazy(() => import("@/pages/ChannelsPage"));
 const DaemonsPage = lazy(() => import("@/pages/DaemonsPage"));
 
 export function AppRoutes() {
@@ -84,7 +83,6 @@ export function AppRoutes() {
         <Route path="advanced/ops" element={<OpsPage />} />
         <Route path="advanced/daemons" element={<DaemonsPage />} />
         <Route path="advanced/groups" element={<GroupsPage />} />
-        <Route path="advanced/channels" element={<ChannelsPage />} />
       </Route>
 
       <Route path="/tasks" element={<LegacyServerSurfaceRedirect section="tasks" />} />
@@ -101,7 +99,6 @@ export function AppRoutes() {
       <Route path="/ops" element={<Navigate to="/settings/advanced/ops" replace />} />
       <Route path="/daemons" element={<Navigate to="/settings/advanced/daemons" replace />} />
       <Route path="/groups" element={<Navigate to="/settings/advanced/groups" replace />} />
-      <Route path="/channels" element={<Navigate to="/settings/advanced/channels" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

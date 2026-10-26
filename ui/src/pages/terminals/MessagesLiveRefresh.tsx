@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useCoalesced } from "@/hooks/useCoalesced";
-import { useAgentStatesSocket, useMessagesSocket } from "@/hooks/useMessagesSocket";
+import { useAgentStatesSocket, useMailSocket } from "@/hooks/useMessagesSocket";
 import { targetFor } from "@/lib/terminalsHost";
 
-/** Two sockets per server. It renders nothing: its only job is to turn a live
- *  publication or agent state change into an immediate refresh of the
+/** Two sockets per server. It renders nothing: its only job is to turn a new
+ *  letter or agent state change into an immediate refresh of the
  *  authoritative HTTP snapshot, so the sidebar updates as it happens instead of
  *  on the next poll. */
 function HostMessagesWatch({
@@ -20,7 +20,7 @@ function HostMessagesWatch({
 }) {
   const target = targetFor(hostId);
   const enabled = !target || Boolean(target.baseURL);
-  useMessagesSocket({ target, enabled, onHint: onMessage });
+  useMailSocket({ target, enabled, onHint: onMessage });
   const states = useAgentStatesSocket({ target, enabled, onHint: onState });
   useEffect(() => {
     onAgentStates(hostId, states === "open");
@@ -28,7 +28,7 @@ function HostMessagesWatch({
   return null;
 }
 
-/** Watch every configured server's messages and agent states at once. A burst
+/** Watch every configured server's mail and agent states at once. A burst
  *  of hints is one refresh, not one per hint: the snapshot is the same either
  *  way. onLive reports whether every server's agent states socket is open, so
  *  the caller can poll slowly while hints keep the sidebar current. */
@@ -41,7 +41,7 @@ export function MessagesLiveRefresh({
   onChange: () => void;
   onLive?: (live: boolean) => void;
 }) {
-  // A chat reorders quickly; agent state hints come in bursts from busy
+  // Mail reorders quickly; agent state hints come in bursts from busy
   // agents, so they refetch at most once a second.
   const onMessage = useCoalesced(onChange, 250);
   const onState = useCoalesced(onChange, 1000);

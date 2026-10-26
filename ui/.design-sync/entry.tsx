@@ -30,7 +30,6 @@ export * from "@/components/ui/tooltip";
 export * from "@/components/AgentControls";
 export * from "@/components/AgentFormFields";
 export * from "@/components/AgentRow";
-export * from "@/components/AgentSubscriptions";
 export * from "@/components/ApiProvider";
 export * from "@/components/AuditExportActions";
 export * from "@/components/AuditRow";

@@ -100,16 +100,12 @@ export const detail: TaskDetail = {
 };
 export const notification: TaskNotification = {
   id: "notification-1",
-  channel: "user:owner",
   type: "task.question",
   text: "Need a product decision",
   requesting_principal: "agent:worker",
   task_key: root.key,
-  event_sequence: 4,
   created_at: root.created_at,
-  published_at: root.created_at,
   read_at: "",
-  dismissed_at: "",
 };
 
 /** Answers every mocked task api call the workspace makes on load. */

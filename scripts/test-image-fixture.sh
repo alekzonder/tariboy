@@ -5,7 +5,7 @@ make_test_image_fixture() {
   rm -rf -- "$target"
   mkdir -p "$target/skills/loop/scripts" "$target/skills/tasks/scripts"
   local skill
-  for skill in whoami loop messages context status schedule image-creator tasks; do
+  for skill in whoami loop mail context status schedule image-creator tasks; do
     mkdir -p "$target/skills/$skill"
     printf '%s\n' '---' "name: $skill" "description: Test $skill capability." '---' >"$target/skills/$skill/SKILL.md"
   done
@@ -18,7 +18,7 @@ schema_version: 2
 plugins:
   - name: whoami
   - name: loop
-  - name: messages
+  - name: mail
   - name: context
   - name: status
   - name: schedule
@@ -27,7 +27,7 @@ plugins:
 skills:
   - dir: ./skills/whoami
   - dir: ./skills/loop
-  - dir: ./skills/messages
+  - dir: ./skills/mail
   - dir: ./skills/context
   - dir: ./skills/status
   - dir: ./skills/schedule

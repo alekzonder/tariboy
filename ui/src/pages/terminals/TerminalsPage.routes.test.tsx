@@ -286,12 +286,12 @@ describe("TerminalsPage route changes", () => {
     );
   });
 
-  it("opens a sidebar agent on Chat in Simple mode", async () => {
+  it("opens a sidebar agent on Tasks in Simple mode", async () => {
     localStorage.setItem(UI_MODE_KEY, "simple");
     renderAt("/");
     fireEvent.click(await screen.findByText("a1"));
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/a1/chat"),
+      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/a1/tasks"),
     );
   });
 });

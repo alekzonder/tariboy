@@ -145,9 +145,8 @@ describe("TasksWorkspace", () => {
         notification,
         { ...notification, id: "unrelated", task_key: child.key, type: "task.assigned" },
         { ...notification, id: "read", task_key: child.key, read_at: root.updated_at },
-        { ...notification, id: "dismissed", task_key: child.key, dismissed_at: root.updated_at },
       ],
-      count: 4,
+      count: 3,
     });
 
     render(<TasksWorkspace />);

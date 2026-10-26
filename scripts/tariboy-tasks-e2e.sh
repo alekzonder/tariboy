@@ -19,12 +19,14 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 
 # Compile the current source without modifying workspace artifacts.
 cd "$ROOT"
-for name in tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram; do
+for name in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-shim tariboy-plugin-telegram; do
   go build -trimpath -o "$BIN/$name" "./cmd/$name"
 done
 
 [ -x "$BIN/tariboy-tasks" ] || fail "missing $BIN/tariboy-tasks"
 ttasks() { "$BIN/tariboy-tasks" "$@"; }
+[ -x "$BIN/tariboy-mail" ] || fail "missing $BIN/tariboy-mail"
+tmail() { "$BIN/tariboy-mail" "$@"; }
 mkdir "$RUNTIME/prerequisites"
 ln -s "$(command -v python3)" "$RUNTIME/prerequisites/python3"
 
@@ -64,8 +66,23 @@ echo "--- operator mode sees and updates both queues"
 ttasks queue create --prefix OPS --name "Operator Queue" >/dev/null
 ttasks queue create --prefix AGT --name "Agent Queue" >/dev/null
 ttasks queue get OPS --json | grep -q '"prefix":"OPS"' || fail "operator queue argument was lost"
-ttasks queue trigger create OPS --pattern external:incidents --action create_task >/dev/null
-ttasks queue trigger list OPS --json | grep -q '"pattern":"external:incidents"' || fail "queue trigger was not created"
+ttasks queue trigger create OPS --pattern 'user:*' --action create_task >/dev/null
+ttasks queue trigger list OPS --json | grep -q '"pattern":"user:\*"' || fail "queue trigger was not created"
+if ttasks queue trigger create OPS --pattern external:incidents --action create_task >/dev/null 2>&1; then
+  fail "queue trigger accepted a channel pattern"
+fi
+
+echo "--- a letter to queue:OPS from the customer creates a task through the trigger"
+tmail send --to queue:OPS --subject "incident on api" --text "the api returns 500" >/dev/null \
+  || fail "operator could not mail queue:OPS"
+INGRESS=""
+for _ in $(seq 1 100); do
+  INGRESS="$(ttasks list --queue OPS --json)"
+  printf '%s' "$INGRESS" | grep -q '"title":"incident on api"' && break
+  sleep 0.1
+done
+printf '%s' "$INGRESS" | grep -q '"title":"incident on api"' || { printf '%s\n' "$INGRESS" >&2; fail "trigger did not create the task from the letter"; }
+tmail sent --json | grep -q '"to":"queue:OPS"' || fail "the queue letter is missing from the customer sent box"
 if ttasks workflows versions cli-flow >/dev/null 2>&1; then
   fail "removed workflows command still runs"
 fi

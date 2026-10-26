@@ -477,7 +477,7 @@ describe("AgentWorkspace", () => {
     expect(inspections).toBeGreaterThanOrEqual(2);
   });
 
-  it("orders the workspace tabs with Chat first and Tasks second", async () => {
+  it("orders the workspace tabs with Tasks first", async () => {
     render(
       <DaemonProvider>
         <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
@@ -498,7 +498,7 @@ describe("AgentWorkspace", () => {
       within(nav)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Chat", "Tasks", "Terminal", "Activity", "Configuration", "Advanced"]);
+    ).toEqual(["Tasks", "Terminal", "Activity", "Configuration", "Advanced"]);
   });
 
   it("keeps host and agent identity in every tab link", async () => {
@@ -659,7 +659,7 @@ describe("AgentWorkspace in Simple mode", () => {
 
   beforeEach(() => localStorage.removeItem(UI_MODE_KEY));
 
-  it("shows only Chat, Tasks, Terminal and Configuration with the full header", async () => {
+  it("shows only Tasks, Terminal and Configuration with the full header", async () => {
     renderAt("/agents/local/worker/tasks");
 
     const nav = await screen.findByRole("navigation", { name: "Agent workspace" });
@@ -667,7 +667,7 @@ describe("AgentWorkspace in Simple mode", () => {
       within(nav)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Chat", "Tasks", "Terminal", "Configuration"]);
+    ).toEqual(["Tasks", "Terminal", "Configuration"]);
     expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "IMPROVE-37" })).toBeInTheDocument();
   });
@@ -683,11 +683,11 @@ describe("AgentWorkspace in Simple mode", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console");
   });
 
-  it.each(["activity", "advanced"])("sends a hidden %s tab to Chat", async (tab) => {
+  it.each(["activity", "advanced"])("sends a hidden %s tab to Tasks", async (tab) => {
     renderAt(`/agents/local/worker/${tab}`);
 
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/chat"),
+      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/tasks"),
     );
   });
 });

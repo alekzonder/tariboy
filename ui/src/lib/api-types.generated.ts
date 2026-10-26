@@ -358,91 +358,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/agents/{name}/inbox": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List an agent's inbox (operator), newest first */
-    get: operations["agent.inbox.ls"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/agents/{name}/inbox/clear": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Physically clear an agent's pending inbox queue */
-    post: operations["agent.inbox.clear"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/agents/{name}/inbox/{id}/processed": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Mark an inbox message processed (operator ack) */
-    post: operations["agent.inbox.processed"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/agents/{name}/inbox/{id}/reply": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Reply to an inbox message (operator); auto-processes the row */
-    post: operations["agent.inbox.reply"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/agents/{name}/inbox/{id}/requeue": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Requeue a DLQ'd inbox message (operator) */
-    post: operations["agent.inbox.requeue"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/api/agents/{name}/interactive": {
     parameters: {
       query?: never;
@@ -760,6 +675,23 @@ export interface paths {
     put?: never;
     /** Get or set loop timeout (seconds); omit value to read */
     post: operations["loop.timeout"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/agents/{name}/mail/clear": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Delete the open letters in an agent's inbox */
+    post: operations["agent.mail.clear"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1195,25 +1127,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/agents/{name}/subscriptions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List the channels one agent is subscribed to */
-    get: operations["agent.subscriptions"];
-    put?: never;
-    /** Subscribe an agent to a channel (operator) */
-    post: operations["agent.subscribe"];
-    /** Unsubscribe an agent from a channel (operator) */
-    delete: operations["agent.unsubscribe"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/api/agents/{name}/usage": {
     parameters: {
       query?: never;
@@ -1293,178 +1206,6 @@ export interface paths {
     };
     /** Show current spend vs limit for each budget */
     get: operations["budget.status"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/channels": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List channels */
-    get: operations["channel.ls"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/channels/{channel}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Show a channel's kind and message count */
-    get: operations["channel.inspect"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/channels/{channel}/messages": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Print recent messages on a channel (-f to follow) */
-    get: operations["channel.tail"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/channels/{channel}/watches": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List a channel's distinct watches (watch, params, subscribers) */
-    get: operations["channel.watches"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/chats": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List the customer's chats, most recently active first */
-    get: operations["chat.ls"];
-    put?: never;
-    /** Create a chat and put the customer and the named principals in it */
-    post: operations["chat.create"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/chats/{agent}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Read one chat, oldest first, by chat id or agent name */
-    get: operations["chat.messages"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/chats/{agent}/read": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Mark a chat read up to a message timestamp, by chat id or agent name */
-    post: operations["chat.read"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/chats/{chat}/participants": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List the principals taking part in a chat */
-    get: operations["chat.participants"];
-    put?: never;
-    /** Add a principal to a chat */
-    post: operations["chat.join"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/chats/{chat}/participants/{principal}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    /** Remove a principal from a chat, keeping its outstanding deliveries */
-    delete: operations["chat.leave"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/chats/{chat}/unanswered": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List the chat messages a principal has not answered yet */
-    get: operations["chat.unanswered"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1992,6 +1733,126 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/mail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List one mailbox: inbox, sent or archive */
+    get: operations["mail.ls"];
+    put?: never;
+    /** Send a letter: a request unless notice is set */
+    post: operations["mail.send"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/mail/read": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Mark letters read; a read notice closes */
+    post: operations["mail.read"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/mail/unread": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Count the open letters by sender and kind */
+    get: operations["mail.unread"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/mail/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Show one letter and its reply */
+    get: operations["mail.show"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/mail/{id}/close": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Archive a letter without a reply */
+    post: operations["mail.close"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/mail/{id}/reply": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Reply to a letter, which closes it */
+    post: operations["mail.reply"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/mail/{id}/requeue": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Return a dead letter to the inbox */
+    post: operations["mail.requeue"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/maintenance": {
     parameters: {
       query?: never;
@@ -2021,23 +1882,6 @@ export interface paths {
     put?: never;
     /** Back up the database, delete expired data, and compact it now */
     post: operations["maintenance.run"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/messages": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Publish a message to a channel (operator) */
-    post: operations["message.send"];
     delete?: never;
     options?: never;
     head?: never;
@@ -2263,57 +2107,6 @@ export interface paths {
     get: operations["tasks.activity"];
     put?: never;
     post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/task-notifications": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List customer task notifications */
-    get: operations["tasks.notifications.list"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/task-notifications/{id}/dismiss": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Dismiss a task notification */
-    post: operations["tasks.notifications.dismiss"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/task-notifications/{id}/read": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Mark a task notification read */
-    post: operations["tasks.notifications.read"];
     delete?: never;
     options?: never;
     head?: never;
@@ -3348,12 +3141,12 @@ export interface components {
       saved: boolean;
     };
     AgentSchedule: {
-      channel: string;
       enabled: boolean;
       id: string;
       kind: string;
       next_fire_at: string;
       spec: string;
+      to: string;
     };
     AgentScheduleList: {
       count: number;
@@ -3579,127 +3372,6 @@ export interface components {
       budgets: components["schemas"]["BudgetSpend"][];
       count: number;
     };
-    ChannelInspectView: {
-      kind: string;
-      messages: number;
-      name: string;
-    };
-    ChannelList: {
-      channels: components["schemas"]["ChannelRow"][];
-      count: number;
-    };
-    ChannelMessage: {
-      correlation_id?: string;
-      data?: Record<string, unknown>;
-      deadline?: string;
-      id: string;
-      in_reply_to?: string;
-      kind?: string;
-      produced_by_agent: string;
-      produced_in_iteration: string;
-      reply_to?: string;
-      source: string;
-      subject?: Record<string, unknown>;
-      text: string;
-      ts: string;
-      type: string;
-    };
-    ChannelRow: {
-      kind: string;
-      name: string;
-    };
-    ChannelTail: {
-      count: number;
-      messages: components["schemas"]["ChannelMessage"][];
-    };
-    ChannelWatch: {
-      params: Record<string, unknown> | null;
-      subscribers: string[];
-      watch: string;
-    };
-    ChannelWatchList: {
-      count: number;
-      watches: components["schemas"]["ChannelWatch"][];
-    };
-    ChatFeed: {
-      agent: string;
-      channel: string;
-      chat: string;
-      count: number;
-      customer: string;
-      kind: string;
-      messages: components["schemas"]["ChatMessage"][];
-      read_ts: string;
-      title: string;
-    };
-    ChatList: {
-      chats: components["schemas"]["ChatSummaryRow"][];
-      count: number;
-      customer: string;
-    };
-    ChatMessage: {
-      channel: string;
-      correlation_id?: string;
-      data?: Record<string, unknown>;
-      deadline?: string;
-      from: string;
-      id: string;
-      in_reply_to?: string;
-      kind?: string;
-      produced_by_agent: string;
-      produced_in_iteration: string;
-      reply_to?: string;
-      source: string;
-      subject?: Record<string, unknown>;
-      text: string;
-      ts: string;
-      type: string;
-    };
-    ChatParticipantList: {
-      chat: string;
-      count: number;
-      participants: components["schemas"]["ChatParticipantRow"][];
-    };
-    ChatParticipantRow: {
-      joined_at: string;
-      muted: boolean;
-      principal: string;
-      read_ts: string;
-      role: string;
-    };
-    ChatReadResult: {
-      agent: string;
-      chat: string;
-      read_ts: string;
-    };
-    ChatSummaryRow: {
-      agent: string;
-      channel: string;
-      id: string;
-      kind: string;
-      last_from: string;
-      last_text: string;
-      last_ts: string;
-      last_type: string;
-      participants: string[];
-      read_ts: string;
-      title: string;
-      unread: number;
-    };
-    ChatUnansweredList: {
-      chat: string;
-      count: number;
-      messages: components["schemas"]["ChatMessage"][];
-      principal: string;
-    };
-    ChatView: {
-      agent: string;
-      channel: string;
-      chat: string;
-      kind: string;
-      participants: string[];
-      title: string;
-    };
     CheckView: {
       description?: string;
       /** @enum {string} */
@@ -3800,7 +3472,6 @@ export interface components {
     };
     GroupView: {
       broadcast: string;
-      inbox: string;
       lead: string;
       members: string[];
       name: string;
@@ -4017,52 +3688,6 @@ export interface components {
       schema_version: number;
       sha256: string;
     } | null;
-    InboxClearResult: {
-      deleted_deliveries: number;
-      deleted_messages: number;
-    };
-    InboxList: {
-      count: number;
-      messages: components["schemas"]["InboxMessage"][];
-    };
-    InboxMessage: {
-      attempts: number;
-      channel: string;
-      correlation_id?: string;
-      data?: Record<string, unknown>;
-      deadline?: string;
-      delivered_at?: string;
-      dlq: boolean;
-      id: string;
-      in_reply_to?: string;
-      kind?: string;
-      processed_at?: string;
-      produced_by_agent: string;
-      produced_in_iteration: string;
-      reply_to?: string;
-      result?: string;
-      source: string;
-      subject?: Record<string, unknown>;
-      text: string;
-      ts: string;
-      type: string;
-    };
-    InboxProcessedResult: {
-      id: string;
-      processed_at: string;
-      result: string;
-    };
-    InboxReplyResult: {
-      channel: string;
-      correlation_id: string;
-      id: string;
-      in_reply_to: string;
-      replied: boolean;
-    };
-    InboxRequeueResult: {
-      id: string;
-      requeued: boolean;
-    };
     IterationList: {
       count: number;
       iterations: components["schemas"]["IterationRow"][];
@@ -4112,6 +3737,28 @@ export interface components {
       tags: string[];
       trigger: string;
     };
+    Letter: {
+      answer_id: string;
+      answered_at: string;
+      attempts: number;
+      body: string;
+      close_note: string;
+      created_at: string;
+      data: Record<string, unknown>;
+      dead_at: string;
+      dead_reason: string;
+      deadline: string;
+      from: string;
+      id: string;
+      in_reply_to: string;
+      kind: string;
+      needs_reply: boolean;
+      produced_in_iteration: string;
+      read_at: string;
+      seq: number;
+      subject: string;
+      to: string;
+    };
     LimitsView: {
       idle_iterations: number;
       rejected_requests: number;
@@ -4152,6 +3799,43 @@ export interface components {
       name: string;
       timeout_s: number;
     };
+    MailClearResult: {
+      deleted: number;
+    };
+    MailCloseResult: {
+      letter: components["schemas"]["Letter"];
+    };
+    MailList: {
+      as: string;
+      box: string;
+      count: number;
+      letters: components["schemas"]["Letter"][];
+      next_before: string;
+    };
+    MailReadResult: {
+      closed_notices: number;
+      read: number;
+    };
+    MailReplyResult: {
+      closed: boolean;
+      letter: components["schemas"]["Letter"];
+    };
+    MailRequeueResult: {
+      letter: components["schemas"]["Letter"];
+    };
+    MailSendResult: {
+      letters: components["schemas"]["Letter"][];
+    };
+    MailThread: {
+      letter: components["schemas"]["Letter"];
+      reply?: components["schemas"]["Letter"];
+    };
+    MailUnread: {
+      as: string;
+      by_sender: components["schemas"]["SenderCount"][];
+      open: number;
+      unread: number;
+    };
     MaintenanceLastRun: {
       backup: string;
       compacted: boolean;
@@ -4191,24 +3875,6 @@ export interface components {
       last_run: components["schemas"]["MaintenanceLastRun"];
       settings: components["schemas"]["MaintenanceSettings"];
     };
-    MessageSendResult: {
-      channel: string;
-      id: string;
-      sent: boolean;
-    };
-    Notification: {
-      channel: string;
-      created_at: string;
-      dismissed_at: string;
-      event_sequence: number;
-      id: string;
-      published_at: string;
-      read_at: string;
-      requesting_principal: string;
-      task_key: string;
-      text: string;
-      type: string;
-    };
     OperatorArg: {
       flag?: string;
       help?: string;
@@ -4233,11 +3899,6 @@ export interface components {
     };
     /** @description Plugin-defined action result; the plugin defines the shape, which may be any JSON value. */
     PluginActionResult: unknown;
-    PluginChannels: {
-      provide?: components["schemas"]["PluginProvidedChannel"][];
-      publish: string[] | null;
-      subscribe: string[] | null;
-    };
     PluginContribution: {
       description?: string;
       name: string;
@@ -4262,10 +3923,9 @@ export interface components {
       count: number;
       lines: string[] | null;
     };
-    PluginProvidedChannel: {
-      channel: string;
-      help?: string;
-      params_schema?: unknown;
+    PluginMail: {
+      receive: boolean;
+      send: boolean;
     };
     PluginRemoved: {
       removed: string;
@@ -4284,10 +3944,10 @@ export interface components {
       version: string;
     };
     PluginView: {
-      channels: components["schemas"]["PluginChannels"];
       enabled: boolean;
       exec: string;
       installed_at: string;
+      mail: components["schemas"]["PluginMail"];
       name: string;
       protocol_version: number;
       socket: string;
@@ -4439,6 +4099,11 @@ export interface components {
       name: string;
       stored: boolean;
     };
+    SenderCount: {
+      count: number;
+      kind: string;
+      sender: string;
+    };
     SettingAction: {
       action: string;
       fields?: string[];
@@ -4550,24 +4215,6 @@ export interface components {
       name: string;
       version: string;
     };
-    SubscribeResult: {
-      changed: boolean;
-      channel: string;
-      id: string;
-      kind: string;
-      name: string;
-      params?: Record<string, unknown>;
-      watch?: string;
-    };
-    SubscriptionChannel: {
-      kind: string;
-      name: string;
-      protected: boolean;
-    };
-    SubscriptionChannelList: {
-      channels: components["schemas"]["SubscriptionChannel"][];
-      count: number;
-    };
     Task: {
       access?: string;
       assignee: string;
@@ -4676,10 +4323,6 @@ export interface components {
     TaskEventList: {
       count: number;
       events: components["schemas"]["Event"][];
-    };
-    TaskNotificationList: {
-      count: number;
-      notifications: components["schemas"]["Notification"][];
     };
     TaskPage: {
       next_cursor?: string;
@@ -4869,11 +4512,6 @@ export interface components {
       on: string;
       requires?: string[];
       to: string;
-    };
-    UnsubscribeResult: {
-      channel: string;
-      name: string;
-      removed: number;
     };
     UsageReport: {
       count: number;
@@ -5169,22 +4807,6 @@ export type BudgetLimit = components["schemas"]["BudgetLimit"];
 export type BudgetList = components["schemas"]["BudgetList"];
 export type BudgetSpend = components["schemas"]["BudgetSpend"];
 export type BudgetStatusList = components["schemas"]["BudgetStatusList"];
-export type ChannelInspectView = components["schemas"]["ChannelInspectView"];
-export type ChannelList = components["schemas"]["ChannelList"];
-export type ChannelMessage = components["schemas"]["ChannelMessage"];
-export type ChannelRow = components["schemas"]["ChannelRow"];
-export type ChannelTail = components["schemas"]["ChannelTail"];
-export type ChannelWatch = components["schemas"]["ChannelWatch"];
-export type ChannelWatchList = components["schemas"]["ChannelWatchList"];
-export type ChatFeed = components["schemas"]["ChatFeed"];
-export type ChatList = components["schemas"]["ChatList"];
-export type ChatMessage = components["schemas"]["ChatMessage"];
-export type ChatParticipantList = components["schemas"]["ChatParticipantList"];
-export type ChatParticipantRow = components["schemas"]["ChatParticipantRow"];
-export type ChatReadResult = components["schemas"]["ChatReadResult"];
-export type ChatSummaryRow = components["schemas"]["ChatSummaryRow"];
-export type ChatUnansweredList = components["schemas"]["ChatUnansweredList"];
-export type ChatView = components["schemas"]["ChatView"];
 export type CheckView = components["schemas"]["CheckView"];
 export type Comment = components["schemas"]["Comment"];
 export type CommentResult = components["schemas"]["CommentResult"];
@@ -5238,18 +4860,13 @@ export type ImageSummary = components["schemas"]["ImageSummary"];
 export type ImageTemplateEntry = components["schemas"]["ImageTemplateEntry"];
 export type ImageValidateResult = components["schemas"]["ImageValidateResult"];
 export type ImageValidateTemplate = components["schemas"]["ImageValidateTemplate"];
-export type InboxClearResult = components["schemas"]["InboxClearResult"];
-export type InboxList = components["schemas"]["InboxList"];
-export type InboxMessage = components["schemas"]["InboxMessage"];
-export type InboxProcessedResult = components["schemas"]["InboxProcessedResult"];
-export type InboxReplyResult = components["schemas"]["InboxReplyResult"];
-export type InboxRequeueResult = components["schemas"]["InboxRequeueResult"];
 export type IterationList = components["schemas"]["IterationList"];
 export type IterationLogs = components["schemas"]["IterationLogs"];
 export type IterationRow = components["schemas"]["IterationRow"];
 export type IterationTagResult = components["schemas"]["IterationTagResult"];
 export type IterationTimeoutResult = components["schemas"]["IterationTimeoutResult"];
 export type IterationView = components["schemas"]["IterationView"];
+export type Letter = components["schemas"]["Letter"];
 export type LimitsView = components["schemas"]["LimitsView"];
 export type LoopAiStallTimeoutResult = components["schemas"]["LoopAIStallTimeoutResult"];
 export type LoopHardTimeoutResult = components["schemas"]["LoopHardTimeoutResult"];
@@ -5259,23 +4876,29 @@ export type LoopOnErrorResult = components["schemas"]["LoopOnErrorResult"];
 export type LoopOnTimeoutResult = components["schemas"]["LoopOnTimeoutResult"];
 export type LoopScheduleResult = components["schemas"]["LoopScheduleResult"];
 export type LoopTimeoutResult = components["schemas"]["LoopTimeoutResult"];
+export type MailClearResult = components["schemas"]["MailClearResult"];
+export type MailCloseResult = components["schemas"]["MailCloseResult"];
+export type MailList = components["schemas"]["MailList"];
+export type MailReadResult = components["schemas"]["MailReadResult"];
+export type MailReplyResult = components["schemas"]["MailReplyResult"];
+export type MailRequeueResult = components["schemas"]["MailRequeueResult"];
+export type MailSendResult = components["schemas"]["MailSendResult"];
+export type MailThread = components["schemas"]["MailThread"];
+export type MailUnread = components["schemas"]["MailUnread"];
 export type MaintenanceLastRun = components["schemas"]["MaintenanceLastRun"];
 export type MaintenanceRun = components["schemas"]["MaintenanceRun"];
 export type MaintenanceSettings = components["schemas"]["MaintenanceSettings"];
 export type MaintenanceView = components["schemas"]["MaintenanceView"];
-export type MessageSendResult = components["schemas"]["MessageSendResult"];
-export type Notification = components["schemas"]["Notification"];
 export type OperatorArg = components["schemas"]["OperatorArg"];
 export type OperatorCommand = components["schemas"]["OperatorCommand"];
 export type OutcomeView = components["schemas"]["OutcomeView"];
 export type PluginActionResult = components["schemas"]["PluginActionResult"];
-export type PluginChannels = components["schemas"]["PluginChannels"];
 export type PluginContribution = components["schemas"]["PluginContribution"];
 export type PluginContributionList = components["schemas"]["PluginContributionList"];
 export type PluginInstallResult = components["schemas"]["PluginInstallResult"];
 export type PluginList = components["schemas"]["PluginList"];
 export type PluginLogs = components["schemas"]["PluginLogs"];
-export type PluginProvidedChannel = components["schemas"]["PluginProvidedChannel"];
+export type PluginMail = components["schemas"]["PluginMail"];
 export type PluginRemoved = components["schemas"]["PluginRemoved"];
 export type PluginRestarted = components["schemas"]["PluginRestarted"];
 export type PluginRoutes = components["schemas"]["PluginRoutes"];
@@ -5299,6 +4922,7 @@ export type ScriptRun = components["schemas"]["ScriptRun"];
 export type SecretKeyList = components["schemas"]["SecretKeyList"];
 export type SecretRemoved = components["schemas"]["SecretRemoved"];
 export type SecretStored = components["schemas"]["SecretStored"];
+export type SenderCount = components["schemas"]["SenderCount"];
 export type SettingAction = components["schemas"]["SettingAction"];
 export type SettingField = components["schemas"]["SettingField"];
 export type SettingSection = components["schemas"]["SettingSection"];
@@ -5315,9 +4939,6 @@ export type StoreImageView = components["schemas"]["StoreImageView"];
 export type StoreRemoveResult = components["schemas"]["StoreRemoveResult"];
 export type StoreView = components["schemas"]["StoreView"];
 export type StoreWorkflowView = components["schemas"]["StoreWorkflowView"];
-export type SubscribeResult = components["schemas"]["SubscribeResult"];
-export type SubscriptionChannel = components["schemas"]["SubscriptionChannel"];
-export type SubscriptionChannelList = components["schemas"]["SubscriptionChannelList"];
 export type Task = components["schemas"]["Task"];
 export type TaskActivityAgent = components["schemas"]["TaskActivityAgent"];
 export type TaskActivityReport = components["schemas"]["TaskActivityReport"];
@@ -5329,7 +4950,6 @@ export type TaskArtifactList = components["schemas"]["TaskArtifactList"];
 export type TaskCommentList = components["schemas"]["TaskCommentList"];
 export type TaskDetail = components["schemas"]["TaskDetail"];
 export type TaskEventList = components["schemas"]["TaskEventList"];
-export type TaskNotificationList = components["schemas"]["TaskNotificationList"];
 export type TaskPage = components["schemas"]["TaskPage"];
 export type TaskQueueEnvList = components["schemas"]["TaskQueueEnvList"];
 export type TaskQueueEnvSet = components["schemas"]["TaskQueueEnvSet"];
@@ -5360,7 +4980,6 @@ export type TransferRelation = components["schemas"]["TransferRelation"];
 export type TransferTask = components["schemas"]["TransferTask"];
 export type TransitionRequest = components["schemas"]["TransitionRequest"];
 export type TransitionView = components["schemas"]["TransitionView"];
-export type UnsubscribeResult = components["schemas"]["UnsubscribeResult"];
 export type UsageReport = components["schemas"]["UsageReport"];
 export type UsageRequest = components["schemas"]["UsageRequest"];
 export type UsageRow = components["schemas"]["UsageRow"];
@@ -6934,245 +6553,6 @@ export interface operations {
       };
     };
   };
-  "agent.inbox.ls": {
-    parameters: {
-      query?: {
-        status?: string;
-        limit?: string;
-        before?: string;
-      };
-      header?: never;
-      path: {
-        name: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["InboxList"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "agent.inbox.clear": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        name: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        "application/json": Record<string, unknown>;
-      };
-    };
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["InboxClearResult"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "agent.inbox.processed": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        name: string;
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": {
-          /** @description handling result (mandatory) */
-          result: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["InboxProcessedResult"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "agent.inbox.reply": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        name: string;
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        "application/json": {
-          /** @description reply text */
-          text?: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["InboxReplyResult"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "agent.inbox.requeue": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        name: string;
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        "application/json": Record<string, unknown>;
-      };
-    };
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["InboxRequeueResult"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
   "agent.interactive": {
     parameters: {
       query?: never;
@@ -8069,6 +7449,52 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["LoopTimeoutResult"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "agent.mail.clear": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": Record<string, unknown>;
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["MailClearResult"];
           };
         };
       };
@@ -9423,145 +8849,6 @@ export interface operations {
       };
     };
   };
-  "agent.subscriptions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        name: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["SubscriptionChannelList"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "agent.subscribe": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        name: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": {
-          /** @description channel name */
-          channel: string;
-          matcher?: string | Record<string, unknown>;
-          params?: string | Record<string, unknown>;
-          /** @description comma-separated message type globs */
-          type?: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["SubscribeResult"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "agent.unsubscribe": {
-    parameters: {
-      query: {
-        channel: string;
-      };
-      header?: never;
-      path: {
-        name: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["UnsubscribeResult"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
   "agent.usage": {
     parameters: {
       query?: {
@@ -9864,545 +9151,6 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["BudgetStatusList"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "channel.ls": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["ChannelList"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "channel.inspect": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        channel: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["ChannelInspectView"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "channel.tail": {
-    parameters: {
-      query?: {
-        since?: string;
-        follow?: boolean;
-      };
-      header?: never;
-      path: {
-        channel: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["ChannelTail"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "channel.watches": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        channel: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["ChannelWatchList"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "chat.ls": {
-    parameters: {
-      query?: {
-        types?: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["ChatList"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "chat.create": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": {
-          /** @description chat id, a lowercase slug */
-          id: string;
-          /** @description comma-separated user:<login> or agent:<name> principals */
-          participants?: string;
-          /** @description display title (defaults to the id) */
-          title?: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["ChatView"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "chat.messages": {
-    parameters: {
-      query?: {
-        types?: string;
-        limit?: string;
-        before?: string;
-      };
-      header?: never;
-      path: {
-        agent: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["ChatFeed"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "chat.read": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        agent: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": {
-          /** @description set the mark to ts even when that moves it backwards (mark unread) */
-          exact?: boolean;
-          /** @description timestamp of the newest message shown */
-          ts: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["ChatReadResult"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "chat.participants": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        chat: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["ChatParticipantList"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "chat.join": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        chat: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": {
-          /** @description user:<login> or agent:<name> */
-          principal: string;
-          /** @description member (default) or observer */
-          role?: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["ChatView"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "chat.leave": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        chat: string;
-        principal: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["ChatView"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "chat.unanswered": {
-    parameters: {
-      query: {
-        principal: string;
-      };
-      header?: never;
-      path: {
-        chat: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["ChatUnansweredList"];
           };
         };
       };
@@ -12172,6 +10920,400 @@ export interface operations {
       };
     };
   };
+  "mail.ls": {
+    parameters: {
+      query?: {
+        box?: string;
+        limit?: number;
+        before?: string;
+        as?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["MailList"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "mail.send": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @description principal to act as (default the customer) */
+          as?: string;
+          /** @description structured data object */
+          data?: string;
+          /** @description reply deadline: a duration such as 5m or an RFC 3339 time */
+          deadline?: string;
+          /** @description kind (default message) */
+          kind?: string;
+          /** @description send a notice that needs no reply */
+          notice?: boolean;
+          /** @description subject */
+          subject?: string;
+          /** @description body */
+          text?: string;
+          /** @description recipient principals, comma separated */
+          to: string[];
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["MailSendResult"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "mail.read": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @description principal to act as (default the customer) */
+          as?: string;
+          /** @description letter ids */
+          ids: string[];
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["MailReadResult"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "mail.unread": {
+    parameters: {
+      query?: {
+        as?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["MailUnread"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "mail.show": {
+    parameters: {
+      query?: {
+        as?: string;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["MailThread"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "mail.close": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @description principal to act as (default the customer) */
+          as?: string;
+          /** @description archive note */
+          note?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["MailCloseResult"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "mail.reply": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @description principal to act as (default the customer) */
+          as?: string;
+          /** @description make the reply a request */
+          ask?: boolean;
+          /** @description reply body */
+          text: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["MailReplyResult"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "mail.requeue": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @description principal to act as (default the customer) */
+          as?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["MailRequeueResult"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
   "maintenance.get": {
     parameters: {
       query?: never;
@@ -12293,63 +11435,6 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["MaintenanceRun"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "message.send": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": {
-          /** @description channel name */
-          channel: string;
-          /** @description JSON data payload */
-          data?: string;
-          /** @description channel an agent reply should land on */
-          reply_to?: string;
-          /** @description comma-separated k=v subject */
-          subject?: string;
-          /** @description message text */
-          text?: string;
-          /** @description message type */
-          type?: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["MessageSendResult"];
           };
         };
       };
@@ -13111,140 +12196,6 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["TaskActivityReport"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "tasks.notifications.list": {
-    parameters: {
-      query?: {
-        include_dismissed?: boolean;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["TaskNotificationList"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "tasks.notifications.dismiss": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        "application/json": Record<string, unknown>;
-      };
-    };
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["Notification"];
-          };
-        };
-      };
-      /** @description Typed error */
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            error: {
-              code: string;
-              /** @description May include current_revision and current state for revision_conflict */
-              details?: Record<string, unknown>;
-              message: string;
-            };
-            ok: boolean;
-          };
-        };
-      };
-    };
-  };
-  "tasks.notifications.read": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        "application/json": Record<string, unknown>;
-      };
-    };
-    responses: {
-      /** @description Success */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            ok: boolean;
-            result: components["schemas"]["Notification"];
           };
         };
       };
@@ -14187,9 +13138,9 @@ export interface operations {
         "application/json": {
           /** @description Declared workflow trigger action */
           action: string;
-          /** @description Correlation selector */
+          /** @description Value the letter's data.correlation_key must equal */
           correlation_key?: string;
-          /** @description Allowed channel pattern */
+          /** @description Sender glob a letter to the queue must match, such as plugin:* or plugin:telegram */
           pattern: string;
         };
       };

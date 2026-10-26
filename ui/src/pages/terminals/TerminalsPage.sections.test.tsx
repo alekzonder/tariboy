@@ -18,7 +18,7 @@ import {
   serversTab,
   cloneProjection,
 } from "@/test/terminals/terminalsPage";
-import { agentRow, chatSummaryRow } from "@/test/fixtures/apiFixtures";
+import { agentRow } from "@/test/fixtures/apiFixtures";
 
 vi.mock("@/lib/aggregate", () => ({
   fetchAllAgents: vi.fn(),
@@ -212,7 +212,7 @@ describe("TerminalsPage agent rows", () => {
     expect(a1Row.textContent).not.toMatch(/non-tty/);
   });
 
-  it("carries only the unread message count in an agent row, never a question dot", async () => {
+  it("carries no question dot in an agent row", async () => {
     vi.mocked(fetchAllAgents).mockResolvedValue([
       {
         host: { id: "remote-1", label: "prod" },
@@ -225,24 +225,12 @@ describe("TerminalsPage agent rows", () => {
             interactive: true,
           }),
         ],
-        chats: [
-          chatSummaryRow({
-            id: "dm:alice",
-            title: "alice",
-            agent: "alice",
-            last_ts: "2026-09-15T10:00:00Z",
-            last_from: "agent:alice",
-            last_type: "message",
-            last_text: "hi",
-            unread: 3,
-          }),
-        ],
       },
     ]);
 
     renderAt("/", new Map([[JSON.stringify(["remote-1", "alice"]), 1]]));
 
-    expect(await screen.findByLabelText("3 unread messages from alice")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Open alice" })).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: /customer question/ })).toBeNull();
   });
 });

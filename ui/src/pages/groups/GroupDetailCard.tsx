@@ -57,9 +57,7 @@ function RemoveGroupDialog({ api, group: sel, onClearSelection, load }: Props) {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Remove group {sel.name}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Detaches members and deletes the group's channels.
-          </AlertDialogDescription>
+          <AlertDialogDescription>Detaches members and deletes the group.</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>

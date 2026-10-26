@@ -137,7 +137,7 @@ REMOTE_CLEANUP
 trap cleanup EXIT
 trap 'exit 130' HUP INT TERM
 
-for name in tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram; do
+for name in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-shim tariboy-plugin-telegram; do
   [ -f "desktop/src-tauri/resources/bin/linux-x86_64/$name" ] ||
     fail "missing packaged Linux binary: $name"
 done
@@ -151,6 +151,7 @@ ssh "$TARIBOY_SSH_TEST_HOST" mkdir -p "$REMOTE_STAGE"
 scp desktop/src-tauri/resources/bin/linux-x86_64/tariboyd \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy-tasks \
+  desktop/src-tauri/resources/bin/linux-x86_64/tariboy-mail \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy-shim \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy-plugin-telegram \
   desktop/src-tauri/resources/bin/linux-x86_64/SHA256SUMS \
@@ -199,12 +200,14 @@ for command in curl python3 tmux; do
 done
 
 HOME=$home sh "$stage/remote-install.sh" "$version" ".stage-alpha-$stamp"
-for name in tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram; do
+for name in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-shim tariboy-plugin-telegram; do
   test "$("$release/$name" --version)" = "$version"
   test "$(readlink "$home/.local/bin/$name")" = "$release/$name"
 done
 test "$(readlink "$home/.local/bin/ttasks")" = "$release/tariboy-tasks"
 test "$("$home/.local/bin/ttasks" --version)" = "$version"
+test "$(readlink "$home/.local/bin/tmail")" = "$release/tariboy-mail"
+test "$("$home/.local/bin/tmail" --version)" = "$version"
 test ! -e "$release/ttasks"
 test ! -L "$release/ttasks"
 
@@ -228,8 +231,8 @@ fi
 if test -n "$prompt" && test -f "$prompt"; then
   ids=$(sed -n 's/^- id \([^ ]*\).*/\1/p' "$prompt")
   for id in $ids; do
-    tool_post /tools/message/processed \
-      "{\"id\":\"$id\",\"result\":\"alpha-e2e-consumed\"}" >/dev/null
+    tool_post /tools/mail/reply \
+      "{\"id\":\"$id\",\"text\":\"alpha-e2e-consumed\"}" >/dev/null
   done
 fi
 tool_post /tools/loop/done '{"idle":false}' >/dev/null
@@ -277,22 +280,22 @@ api POST /api/image-sources \
 api PUT /api/image-sources/alpha-remote/files/PROMPT.md \
   '{"content":"Handle exactly one pending event, then finish."}' >/dev/null
 source="$base/image-sources/alpha-remote"
-mkdir -p "$source/skills/messages" "$source/skills/loop/scripts"
+mkdir -p "$source/skills/mail" "$source/skills/loop/scripts"
 cat >"$source/Tariboyfile.yaml" <<'YAML'
 schema_version: 2
 plugins:
-  - name: messages
+  - name: mail
   - name: loop
 skills:
-  - dir: ./skills/messages
+  - dir: ./skills/mail
   - dir: ./skills/loop
 prompts:
   - file: ./PROMPT.md
 YAML
-cat >"$source/skills/messages/SKILL.md" <<'MARKDOWN'
+cat >"$source/skills/mail/SKILL.md" <<'MARKDOWN'
 ---
-name: messages
-description: Process pending alpha-test messages.
+name: mail
+description: Answer pending alpha-test letters.
 ---
 MARKDOWN
 cat >"$source/skills/loop/SKILL.md" <<'MARKDOWN'
@@ -311,7 +314,6 @@ api POST /api/image-sources/alpha-remote/build '{"tag":"latest"}' | grep -q '"re
 
 api POST /api/agents \
   '{"image":"alpha-remote:latest","name":"vertical","harness":"stub","interactive":true}' >/dev/null
-api POST /api/agents/vertical/subscriptions '{"channel":"alpha:e2e"}' >/dev/null
 api POST /api/agents/vertical/start '{}' >/dev/null
 
 i=0
@@ -391,11 +393,11 @@ PY
 
 "$cli" --json iteration ls vertical >"$root/before.json"
 test "$(grep -o '"id"' "$root/before.json" | wc -l | tr -d ' ')" -eq 1
-api POST /api/messages '{"channel":"alpha:e2e","type":"alpha.test","text":"wake after console closes"}' >/dev/null
-api GET /api/agents/vertical/inbox?status=pending | grep -q '"count":1'
+api POST /api/mail '{"to":["agent:vertical"],"subject":"alpha.test","text":"wake after console closes"}' >/dev/null
+api GET '/api/mail?box=inbox&as=agent:vertical' | grep -q '"count":1'
 
 # Closing the live interactive iteration clears the session collision. The
-# pending delivery must then cause one and only one message-triggered iteration.
+# open letter must then cause one and only one message-triggered iteration.
 api POST /api/agents/vertical/kill '{}' >/dev/null
 i=0
 while test "$i" -lt 200; do
@@ -410,7 +412,7 @@ while test "$i" -lt 200; do
 done
 test "$(grep -o '"id"' "$root/after.json" | wc -l | tr -d ' ')" -eq 2
 test "$(grep -o '"trigger":"message"' "$root/after.json" | wc -l | tr -d ' ')" -eq 1
-api GET /api/agents/vertical/inbox?status=pending | grep -q '"count":0'
+api GET '/api/mail?box=inbox&as=agent:vertical' | grep -q '"count":0'
 
 # Activity surfaces used by the Desktop Activity tab plus both usage reports.
 api GET /api/agents/vertical/iterations | grep -q '"count":2'

@@ -69,7 +69,6 @@ export function SidebarAgentRow({
     state: agent.state,
     outOfBudget: Boolean(agent.budget?.exhausted?.length),
     selected: actions.selected?.hostId === row.hostId && actions.selected.agent === agent.name,
-    unreadMessages: row.chat?.unread ?? 0,
     interactive: agent.interactive !== false,
     "aria-label": `Open ${agent.name}`,
     "data-testid": "sidebar-agent",

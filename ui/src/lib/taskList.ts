@@ -53,7 +53,7 @@ export function taskListFilters({
 }
 
 const isUnreadQuestion = (notification: TaskNotification) =>
-  notification.type === "task.question" && !notification.read_at && !notification.dismissed_at;
+  notification.type === "task.question" && !notification.read_at;
 
 /** The tasks with a question nobody has read yet. */
 export function unreadQuestionTaskKeys(notifications: readonly TaskNotification[]): Set<string> {

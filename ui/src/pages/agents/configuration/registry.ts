@@ -218,8 +218,8 @@ export const BLOCKS: readonly ConfigBlock[] = [
   {
     id: "messages",
     title: "Messages",
-    description: "Control queue capacity and iteration batches.",
-    keywords: "channels inbox queue",
+    description: "Control the open inbox cap and the letters read per iteration.",
+    keywords: "mail inbox letters",
     fields: [
       {
         key: "messages-batch",
