@@ -1,195 +1,228 @@
 ---
-title: The channel bus & messaging
-description: Messages move over a store-backed fan-out bus — six tables, per-agent delivery queues, and durable ack with redelivery.
+title: The mailbox
+description: Every message is a letter from one principal to another, stored as one row of the mail table; an agent's inbox wakes its loop until each letter is answered or read.
 sidebar:
-  label: Channel bus
-  icon: radio
+  label: Mailbox
+  icon: mail
 ---
 
-Messages move over a **store-backed fan-out bus** (fan-out/query logic in
-`internal/bus`, schema in `internal/store/migrations/0003_bus.sql`). This page is
-the architectural summary; the [channel bus reference](/docs/reference/channels)
-covers the full model, tools, and debugging.
+Every message in Tariboy is a **letter** from one principal to another, stored
+in one SQLite table, `mail` (service in `internal/mail`, schema in
+`internal/store/migrations/0072_mail.sql`). An agent has an inbox; a letter in
+it wakes the agent's loop; the agent answers it. This page is the architectural
+summary; the [mail reference](/docs/reference/mail) covers `tmail`,
+`tariboy mail`, the routes and debugging.
 
-## Six tables
+## One table, three views
 
-The four transport tables carry every message:
+A letter has a sender, a recipient, a subject, a body, a `kind` (`message`
+unless the producer names another, such as `task.question` or
+`script.result`), a JSON `data` object and its state. A send to several
+recipients writes **one row per recipient**, each with its own id and state, so
+a broadcast shows one row per recipient in the sender's Sent view.
 
-- **channels** — named streams (`agent:<a>:inbox`, `group:<g>:broadcast`, …);
-- **messages** — immutable rows published to a channel;
-- **subscriptions** — an agent's standing interest, optionally filtered by a
-  content `matcher` and `type` globs;
-- **deliveries** — one row per matching `(subscription, message)`; this *is* the
-  per-agent queue.
+Every mailbox is a filter over that table:
 
-Two more make a chat an entity rather than a projection of those four:
+| View | Rows of principal P |
+| --- | --- |
+| Inbox | `recipient = P`, still open (`answered_at` and `dead_at` empty), oldest first |
+| Sent | `sender = P`, newest first |
+| Archive | `recipient = P`, closed or dead, newest first; dead letters are tagged |
 
-- **chats** — one row per chat, owning exactly one transport channel;
-- **chat_participants** — who takes part, with each principal's role, read mark
-  and mute flag.
+So an operator reads exactly what an agent saw, sent and answered, and nothing
+is stored beside the table "for the transport": per-recipient state lives on
+the letter row. Answering never deletes a letter.
 
-The transport four are unaware of the other two: a chat is addressed by
-publishing to the channel it owns, so `Publish -> delivery -> WakeMessage` is
-the same code path it was before chats existed.
+## Principals
 
-## Publish is a write, not a push
-
-Publishing does not push text into a process. `Publish` writes the message,
-creates delivery rows for matching subscriptions, and nudges affected loops.
-
-Publishers may provide a stable idempotency key. A retry returns the original
-immutable message and does not recreate deliveries or fire the publish hook a
-second time. Native Tasks uses this for its transactional notification outbox.
-
-At iteration prepare time the runner drains pending deliveries — oldest first, up
-to `messages_batch` (default 10) — into the prompt. Draining does not acknowledge
-them: the agent must explicitly mark each message processed by its id, and a
-reply auto-processes the message it answers. Anything left unprocessed stays
-pending and is rendered again next iteration, until it reaches the DLQ (max 5
-attempts). Publishing and processing are distinct durable operations, so a
-harness error, timeout, or kill can never silently acknowledge work.
-
-Draining and its attempt count are one SQLite transaction. If the count
-cannot be written, the drain returns the error and hands out no message, so
-a message is never rendered without its attempt being counted toward the DLQ
-cap. A delivery whose stored message row does not decode goes to the DLQ with
-result `decode_error` and a `message_dead_lettered` audit event; the other
-messages are still drained. An acknowledgement of several messages is also
-one transaction: all of them are acknowledged or none.
-
-`messages_max_queue` defaults to 100 for new agents. Reaching it keeps the
-existing overflow behavior: later deliveries for that agent are stored in DLQ
-with result `queue_limit`, so the limit bounds runnable pending work rather than
-all message storage. Agent status derives the distinct pending count and reports
-when it is at or above the configured limit.
-
-Operators can physically clear one agent's pending queue with
-`tariboy agent inbox clear NAME` or `POST /api/agents/{name}/inbox/clear`.
-The bus removes that agent's unacknowledged, non-DLQ deliveries in one SQLite
-transaction and deletes only message rows orphaned by that operation. Processed
-and DLQ deliveries, shared messages, other agents' deliveries, and messages not
-yet consumed by queue-trigger ingress are retained.
-
-The bus does not know the Native Tasks tables. Native Tasks numbers each new
-message for queue-trigger ingress through a hook that runs inside the publish
-transaction, and gives the bus the retention condition that keeps messages
-ingress has not consumed yet. A message without an ingress number is kept
-until ingress repair numbers and consumes it. The daemon wires both before
-the first publish.
-
-## Channel names
-
-Channel name prefixes: `agent`, `group`, `user`, `chat`, `plugin`, `system`.
-Provider-declared channels carry their own plugin-owned prefixes and are
-accepted through the provider registry rather than this list. Well-known shapes:
-
-- `agent:<a>:inbox` — direct inbox for one agent,
-- `agent:<a>:stream` — stream channel for one agent,
-- `group:<g>:broadcast` — fan-out to all group members,
-- `group:<g>:inbox` — group lead inbox,
-- `chat:<id>` — the one transport channel a chat owns,
-- `chat:telegram:<agent>` — one bundled Telegram forum topic mapped to an agent,
-- `user:<name>` — user-facing channel.
-
-Native Tasks publishes `task.assigned`, `task.question`, `task.answered`,
-`task.triage`, and daemon-owned `task.goal`. An agent recipient reads the first
-four in its tasks chat, `chat:tasks:<agent>`, and `task.goal` in its service
-chat, `chat:service:<agent>`; customer recipients use `user:<login>`. Mentions and unresolved-answer state remain in
-the task itself; the channel message is the delivery mechanism, not the source
-of truth.
-
-The customer login is a fixed value rather than the account `tariboyd` happens
-to run as, so `user:customer` names the same person on every server. It defaults
-to `customer` and is overridable through the `customer_login` key in
-`daemon_config`. The first start after upgrading adopts the value in one
-transaction, carrying existing tasks, comments, waits, notification state and
-the old `user:<$USER>` channel — messages and subscriptions included — over to
-the new principal instead of orphaning them.
-
-## Chats are an entity over the channel bus
-
-A chat is a row in `chats`: an id, a kind, a title and exactly one transport
-channel `chat:<id>` that it owns. Who takes part lives in `chat_participants`,
-one row per principal (`user:<login>` or `agent:<name>`) with its role, its read
-mark and its mute flag. `messages`, `subscriptions` and `deliveries` are
-untouched, so `Publish -> delivery -> WakeMessage` and `HasPending` keep working
-exactly as before: the wake path never learns that chats exist.
-
-A chat channel is deliberately never an agent inbox. The bus suppresses an
-author's own delivery on every channel except that agent's inbox and its
-`service:<agent>` chat, so an inbox-backed chat would echo an agent's own reply
-straight back into its own queue. The service chat is the exception because
-`script.result` and self-targeted schedule alarms are published there with
-`produced_by_agent` set to the recipient; they are messages for that agent, and
-suppressing them would leave it asleep.
-
-Startup reconciliation provisions three chats per agent, and agent creation does
-the same for a new agent:
-
-| Chat | Kind | Carries |
+| Principal | Who | As a recipient |
 | --- | --- | --- |
-| `dm:<agent>` | `direct` | the conversation between the customer and that agent |
-| `tasks:<agent>` | `tasks` | task notifications for that agent |
-| `service:<agent>` | `service` | that agent's own wakes — `task.goal`, `script.result`, schedule alarms |
+| `agent:<name>` | an agent | must exist; its inbox wakes its loop |
+| `user:<login>` | the customer | must be the customer login; read in the Desktop or with `tariboy mail` |
+| `plugin:<name>` | a plugin | must be installed; the plugin host delivers the letter to the plugin's `/deliver` |
+| `system:<component>` | a daemon component | always accepted; stored closed, because nothing reads a system inbox |
+| `queue:<prefix>` | a task queue | must exist; stored closed; exists for [queue triggers](#queue-triggers) |
+| `group:<name>` | an alias | expands to every group member except the sender |
 
-A chat the customer creates belongs to no agent and may hold several, which is
-how a multi-agent conversation exists at all. Its id is a channel segment and is
-refused when it is already in use or falls in a namespace the daemon provisions
-itself (`dm:`, `tasks:`, `service:`, `group:`, `telegram:`, `plugin:`), so two
-chats can never share one channel and quietly interleave their history.
-Membership is what carries delivery: adding an agent subscribes it to the chat
-channel, removing one revokes that subscription and leaves the deliveries it
-already holds in its queue, because leaving a chat ends membership, not work
-already handed out.
+Any other recipient is refused with `unknown_recipient`, and a group whose only
+member is the sender with `empty_group`. A sender must be an existing agent,
+the customer, an installed plugin or a `system:*` component.
 
-The personal chat carries a `legacy_agent`, which is how history written before
-the chats migration stays readable: that history is the two inboxes merged by
-time — the customer's messages in `agent:<a>:inbox` and the agent's messages in
-`user:<customer>` — and no message is ever rewritten onto the new channel. The
-feed reads the chat channel and, for a chat with a `legacy_agent`, unions that
-projection.
+The customer login is a fixed value rather than the account `tariboyd` runs
+as, so `user:customer` names the same person on every server. It defaults to
+`customer` and is overridable through the `customer_login` key in
+`daemon_config`. On the first start without a stored `customer_login`, the
+daemon writes `customer` and moves earlier customer principals, in tasks,
+comments, waits and letters, to `user:customer` in one transaction. Changing
+the key later rewrites nothing.
 
-The sender is `data.from` when a producer wrote one, else a principal-shaped
-`source`, else `produced_by_agent`, else `system`. It is resolved once, when the
-message is written, into the indexed `messages.sender` column, so the chat list
-and a chat's history seek `(channel, sender)` instead of parsing every message
-body on each read. Task notifications carry the
-principal that caused them in `data.from` and keep `source` as `system:tasks`,
-because moving the author into `source` would exclude an agent from a
-notification it addressed to itself. An operator publish is attributed to the
-customer principal, and carries `reply_to: user:<customer>` when it is sent from
-a chat.
+## Requests and notices
 
-Processing a delivery and answering a message are separate obligations, and
-neither implies the other. Processing satisfies the transport — every delivered
-message is marked processed with a text result, or it is redelivered and
-eventually dead-lettered. Answering satisfies the conversation: a message counts
-as answered only when a reply of that principal points at it through
-`in_reply_to`, which a reply fills and a plain send does not.
-`GET /api/chats/{chat}/unanswered`, and for an agent `GET /tools/chat/unanswered`
-across every chat it takes part in, is that queue — the messages another
-participant sent at or after this principal joined with no reply of its own
-pointing at them. The answer is published into the chat as an ordinary message,
-so the conversation carries both halves.
+Every letter is a **request** or a **notice**, chosen by its sender:
 
-`GET /api/chats` ranks every chat the customer takes part in by its last message
-and counts what that participant has not read; `GET /api/chats/{chat}` returns
-one chat and the customer's current read mark, so a reader can separate what it
-has already seen; `POST /api/chats/{chat}/read` moves that mark forward. Both
-take a chat id — `dm:worker`, `tasks:worker`, `service:worker` — and still
-accept a bare agent name for that agent's conversation, which is what a caller
-holding only a name can address. An existing chat wins over the name reading,
-so an agent can never shadow a chat. Read marks are `chat_participants.read_ts`, one per participant; the
-single pre-chats `chat_read_v1` value in `daemon_config` is carried into them by
-the migration. Both read endpoints take a `types` filter of globs and default to
-conversation types only, so an agent's own `task.goal`, `script.result` and
-schedule wakes neither appear in the conversation nor move it up the list.
+- A request needs an answer. It leaves the inbox when its recipient replies.
+- A notice needs no answer. It leaves the inbox when its recipient has read it.
 
-`GET /api/messages/ws` streams one hint per publication for every agent on the
-host. A frame carries `{chat, agent, id, channel, type, from, ts}` — `chat` is
-the channel's own chat and is absent for a channel no chat owns, so a client can
-refetch exactly one conversation — and is only a refetch hint — the HTTP responses stay authoritative. Nothing is replayed,
-because a client refetches on connect and on every reconnect.
+A reply goes to the original sender with subject `Re: <subject>` and
+`in_reply_to` set, and closes the original in the same transaction. A reply is
+a notice unless the sender marks it as a request (`tmail reply --ask`).
+Without this split every answer would be a new obligation: two agents would
+answer each other until the attempt limit, and every answer to the customer
+would wait in the customer's inbox.
+
+A reply to a closed letter is recorded and reopens nothing. A reply to a
+`task.question` letter is refused with `answer_on_task`: the answer belongs on
+the task, and the tasks service closes the letter.
+
+## When a letter closes
+
+Closing sets `answered_at`. A reply also sets `answer_id`; any other close
+leaves it empty and records a `close_note`.
+
+| Recipient | A request closes when | A notice closes when |
+| --- | --- | --- |
+| `agent:*` | the agent replies | it was rendered into an iteration that finished successfully (`close_note = read`) |
+| `user:*` | the customer replies or archives it | the customer opens it in the Desktop or runs `tariboy mail read` (`read`) |
+| `plugin:*` | the plugin's `/deliver` accepts it (`delivered`) | the same |
+| `system:*`, `queue:*` | at once: stored closed | at once |
+| any, `task.question` | the question is answered on the task (`task-comment:<id>`), or a workflow outcome resolves it (`task-outcome:<status>`) | — |
+
+An operator can archive any letter without a reply (`tariboy mail close`,
+with an optional note). The agent tool has no archive: an agent answers.
+
+A notice rendered into an iteration that ends in an error, a timeout or a kill
+stays open and is rendered again next iteration, like a request.
+
+## Attempts and dead letters
+
+- Rendering a letter into a prompt adds one to its `attempts` in the same
+  transaction that reads it. A letter whose next render would be its sixth is
+  marked dead with reason `attempts` instead of being rendered.
+- A letter to an agent whose open inbox already holds `messages_max_queue`
+  letters (default 100) is stored dead with reason `queue_limit` and wakes
+  nothing. So the limit bounds runnable work, not mail storage.
+- A row whose `data` does not decode is marked dead with reason
+  `decode_error`; the other letters are still rendered.
+- A dead letter sits in the recipient's Archive. **Requeue** clears its dead
+  state, attempts and close fields and puts it back in the inbox.
+- A send with an idempotency key that the recipient already holds returns the
+  existing letter and writes nothing. Native Tasks' notification outbox,
+  schedules, the Goal reconciler, script results and plugins use it.
+- **Clear** deletes every open letter of one agent (`tariboy mail clear --as
+  agent:NAME` or `POST /api/agents/{name}/mail/clear`); closed and dead
+  letters stay.
+
+Maintenance purges closed letters older than the more recent of the retention
+period and `chat_retention_days` (the field kept its name), and never a letter
+to a queue that the workflow ingress has not consumed yet.
+
+## Wake path
+
+```text
+Send ─▶ one row per recipient (one transaction)
+     └▶ after commit: wake hook ─▶ Manager.WakeAgents(agent recipients)
+                      event hook ─▶ one /api/mail/ws hint per row
+                      plugin wake ─▶ drain plugin:<name> inboxes
+```
+
+The loop starts a message-triggered iteration only for a started agent whose
+open inbox count is above zero; a positive `interval_s` is not needed. A
+stopped agent keeps its letters open until it is started. At prepare time the
+runner reads the oldest open letters, requests first and notices after them,
+up to `messages_batch` (default 10), and renders them into the `## Messages`
+section of the prompt with the standing instruction that names
+`tmail reply`. Requests the agent sent with a deadline and no answer are listed
+under `### Awaiting replies`. See the [mail reference](/docs/reference/mail#the-prompt-block)
+for the exact text.
+
+## Producers
+
+Every producer writes through the one `Send` operation, so the Inbox and Sent
+views never miss a letter.
+
+| Producer | Sender → recipient | Kind | Request or notice |
+| --- | --- | --- | --- |
+| Native Tasks notifications | the principal that caused it (the asker, the assigner, `system:workflow`; `system:tasks` when that principal can no longer send) → the agent or the customer | `task.assigned`, `task.question`, `task.answered`, `task.triage` | `task.question` is a request closed by the answer on the task; the others are notices |
+| Goal reconciler | `system:goal` → the agent | `task.goal` | request: the reply is the agent's report on its Goal |
+| Script results | `system:scripts` → the owning agent | `script.result` | request |
+| Schedules | `system:schedule` → the schedule's recipient (default the owning agent) | `schedule.fire` unless the template names another | request unless the template sets `notice` |
+| Request deadlines | `system:schedule` → the requester | `deadline`, `data.request_id` | notice |
+| AI proxy budget | `system:proxy` → the agent | `budget.warn` | notice |
+| Operator or Desktop | the customer, or `--as` another principal → anyone | `message` unless given | request unless `notice` |
+| Agents | the calling agent → anyone, through `tmail` | sender's choice | sender's choice |
+| Telegram | `plugin:telegram` → the mapped agent | `message` | request |
+| Plugin workflow event | `plugin:<name>` → `queue:<prefix>` | plugin's choice | stored closed |
+
+A request with a deadline sent by an agent arms a one-shot schedule keyed on
+the request letter's id; the reply or archive that closes the request cancels
+it in the same transaction. When the deadline passes first, the requesting
+agent receives the `deadline` notice. A deadline on a request from any other
+principal is stored but arms nothing.
+
+### Goal delivery
+
+The per-agent Goal reconciler sends `task.goal` with the selected task key and
+the `selected` or `iteration_completed` reason. Its idempotency key includes
+the agent, task key, task revision and terminal iteration identity, so recovery
+and repeated scans do not duplicate a generation. An open Goal letter
+suppresses another one; a dead one does not, and a positive per-agent cooldown
+(60 seconds by default) still suppresses rapid repeats. The reconciler never
+starts an iteration directly: the letter wakes the agent. Disabled agents or
+disabled loops receive no new Goal letter.
+
+### Task notifications
+
+Task notifications are letters, and the task stays the source of truth:
+mentions, waits and answers live on the task. A `task.question` letter is
+answered on the task (`ttasks comment`, or the task drawer in the Desktop);
+when the wait resolves, the tasks service closes the matching open question
+letters with `close_note = task-comment:<id>`, for an agent recipient and the
+customer alike. A workflow outcome that resolves the customer's open wait
+closes its question letters with `task-outcome:<status>`.
+
+## Groups
+
+Group membership is the data `group:<name>` expands over; groups create no
+mailboxes of their own. `tmail send --to group:dev-team` writes one letter to
+each member except the sender, and a lead asks one member with
+`tmail send --to agent:<member>`, with `--deadline` for a timed request. The
+group tools that are not sends (`info`, `status`, `observe`, `loop`) are
+unchanged.
+
+## Queue triggers
+
+A plugin that wants a workflow event to create a task sends a letter to
+`queue:<prefix>`. That letter is stored closed and exists for ingress. A
+trigger of queue `<prefix>` fires for a letter whose recipient is
+`queue:<prefix>`, whose sender matches the trigger's `pattern` (a principal
+glob such as `plugin:*` or `plugin:telegram`), and whose
+`data.correlation_key` equals the trigger's correlation key when one is set.
+The ingress reads the monotonic `mail.seq`. A letter to an agent never trips a
+trigger. See [Task workflows](/docs/task-workflows#queue-triggers).
+
+## Plugins
+
+A plugin declares `mail: {send, receive}` in its manifest with the types
+`mail-source` and `mail-sink`. It sends letters as `plugin:<name>` through
+`POST /api/plugin/mail`, which answers `409 inbox_full` when the recipient's
+inbox is at its cap. The plugin host drains the inbox of `plugin:<name>` like a
+prompt drain, with the same attempt and dead-letter rules, calls the plugin's
+`/deliver` with each letter, and closes it as `delivered` on success. The
+drainer is woken after a committed send; a 5-second fallback timer retries
+failed deliveries. A plugin receives only the letters addressed to it. See
+[Plugins](/docs/plugins#mail).
+
+The bundled Telegram process stays outside the daemon. It authorizes forum
+updates and sends each one as a letter to the agent mapped to its topic. An
+agent answers with `tmail reply`, which addresses `plugin:telegram`, and the
+plugin's `/deliver` posts the reply to the topic of the sending agent.
+
+## Live hints and the event hub
+
+`GET /api/mail/ws` streams one frame per written letter, `{id, from, to, kind,
+ts}`. A frame is only a refetch hint: the HTTP responses stay authoritative.
+Nothing is replayed, because a client refetches on connect and on every
+reconnect.
 
 `GET /api/agent-states/ws` uses the same hint loop for agent state. It sends
 `{agent, type, ts}` for every `iteration` and `state` event of any agent on
@@ -210,43 +243,7 @@ writes each event as `id: <seq>` and `event: <type>`, so it forwards
 reset; the client reconnects and refetches, which recovers what it missed.
 The hub keeps no history, so neither stream replays the lost events.
 
-The bundled Telegram process remains outside the daemon. It authorizes and
-maps forum updates, then publishes ordinary text through the authenticated
-plugin API onto `chat:telegram:<agent>`. Agent replies return through the
-existing channel-sink outbox, so bus persistence, wake coalescing,
-acknowledgement, redelivery, and DLQ behavior remain authoritative; Telegram
-does not introduce a second agent-delivery path. The sink drainer does not poll
-on a short interval: the bus wakes it after a committed delivery, and a
-5-second fallback timer retries failed deliveries.
+## Audit
 
-## Agent goal delivery
-
-The per-agent Goal reconciler publishes `task.goal` to the agent's service
-chat, `chat:service:<name>`, with the selected task key and `selected` or
-`iteration_completed` reason. Its idempotency key includes the agent, task key,
-task revision, and terminal iteration identity, so recovery and repeated scans
-do not duplicate a generation. An unprocessed Goal delivery outside the DLQ
-suppresses another publication. Dead-lettered deliveries are retained but do
-not block a new Goal generation; a positive per-agent cooldown still suppresses
-rapid repeats (60 seconds by default). Delivery remains strictly
-`Publish -> delivery -> WakeMessage`; the reconciler never starts an iteration
-directly. Disabled agents or disabled loops receive no new goal wake.
-
-An agent's unfiltered subscription to its own inbox is protected system state.
-Agent creation provisions it, and daemon startup reconciles all persisted
-agents before starting their loops. The same startup step provisions each
-agent's chats and the participant subscription that carries `chat:tasks:<a>`
-and `chat:service:<a>`, so a chat-addressed wake exists before any publisher
-runs. Task notifications therefore follow the ordinary
-`Publish -> delivery -> WakeMessage` path unchanged, whichever channel carries
-them: enabled loops wake for pending deliveries, while disabled loops leave
-them queued. `agent:<a>:inbox` remains the direct inbox for group sends,
-request replies and system events.
-
-An operator-declared external queue trigger may create a new task from a
-plugin-produced message; no incoming message changes a task's status. See
-[Task workflows](/docs/task-workflows#queue-triggers).
-
-See the [channel bus reference](/docs/reference/channels) for message fields,
-subscription matchers, schedules and scripts, groups, and failure-mode
-debugging.
+Mail writes the audit events `mail_sent`, `mail_answered`, `mail_closed`,
+`mail_dead`, `mail_requeued` and `mail_cleared` to the agent's audit log.

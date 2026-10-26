@@ -63,19 +63,21 @@ digits. Examples are the Usage request `ts` and the task usage
 `first_ts`/`last_ts`, which earlier had three digits or a variable number.
 These are valid RFC 3339 values.
 
-## Bus queue index and message ids
+## Mail table, indexes and letter ids
 
-The partial index `idx_deliveries_pending` holds only deliveries that are not
-acknowledged and not dead-lettered. The queue-depth gauge and the per-agent
-pending reads use it, so their cost follows the backlog, not the delivery
-history.
+Every letter is one row of `mail` (migration `0072_mail.sql`), one row per
+recipient. A letter is open while `answered_at` and `dead_at` are empty; a
+closed letter keeps its row. `idx_mail_inbox` on `(recipient, answered_at,
+created_at)` serves the inbox, the open count that wakes the loop and the
+queue-depth gauge; `idx_mail_sent` on `(sender, created_at)` serves Sent;
+`idx_mail_thread` on `in_reply_to` finds the reply of a letter; and the partial
+unique index `idx_mail_idempotency` on `(idempotency_key, recipient)` makes a
+producer retry return the existing letter.
 
-A message id is `<channel>-<yyyymmddhhmmss>-<seq>`. The channel row stores the
-second of its last id in `id_second` and that id's sequence number in
-`id_seq`, so a publish reads one row by key. The stored ids are read only when
-`id_second` is NULL (an upgraded or recreated channel) or the clock stepped
-back before `id_second`. The `messages` primary key still rejects a duplicate
-id.
+A letter id is `m-<yyyymmddThhmmssZ>-<seq>`, where `seq` is the row's
+`INTEGER PRIMARY KEY AUTOINCREMENT`, zero-padded to six digits. `seq` is also
+the monotonic ingress number that queue triggers read. The migration dropped
+the channel bus and chat tables without moving their rows: mail started empty.
 
 ## Schema migrations
 
@@ -178,53 +180,13 @@ transaction, and an id belonging to another agent fails the whole batch rather
 than writing part of it. Tags are a property of the iteration, not of the agent
 that applied them: who tagged an iteration is not recorded.
 
-## Chats and participants
-
-A chat is persisted state, not a view over the bus. `chats` holds one row per
-chat — `id`, `kind`, `title`, the one transport `channel` it owns, an optional
-`legacy_agent`, `created_at` and `archived_at` — and `chat_participants` holds
-one row per principal in it, keyed by `(chat_id, principal)`, with its `role`,
-`joined_at`, `read_ts` and `muted` flag. The `channel` column is unique, so two
-chats can never address the same transport channel.
-
-Ownership follows how the chat came to exist. The daemon owns the three chats
-it provisions for every agent — `dm:<agent>`, `tasks:<agent>` and
-`service:<agent>` — reconciling them at startup and at agent creation, which
-makes them self-healing: a missing row is recreated, and the namespaces they
-live in are refused to anyone else. A chat the customer creates is owned by the
-customer: nothing reconciles it, and its lifetime is exactly its row.
-
-Membership is durable and revocable, and its lifetime is not the delivery's.
-Adding an agent participant materializes its locked subscription to the chat
-channel; removing one sets `subscriptions.revoked_at` instead of deleting the
-row, because `deliveries` joins `subscriptions` and a delete would make the
-agent's already-created, unacknowledged deliveries vanish from its queue.
-A revoked subscription is skipped by fan-out and still owns its past deliveries.
-
-The invariant underneath all of it: **`messages` rows are never rewritten.**
-No chat operation re-channels, edits or deletes a published message; only
-[nightly retention](#nightly-backup-and-data-retention) deletes fully delivered
-messages older than the chat history period. That is
-what lets pre-chats history stay readable without a data migration — a personal
-chat carries `legacy_agent`, and its feed unions the chat channel with the old
-projection of `agent:<a>:inbox` and `user:<customer>` merged by time — and it is
-why a chat can be created, joined and left without risking history.
-
-`messages.sender` is the one derived column: the effective sender (`data.from`,
-else a principal-shaped `source`, else `produced_by_agent`, else `system`),
-stored in the same transaction that inserts the message and indexed with
-`channel` and `ts`. Migration `0048_message_sender.sql` backfilled it for
-existing rows with the same expression. It never changes after the insert, and
-chat reads filter on it instead of parsing `data`.
-
 ## Nightly backup and data retention
 
 Maintenance settings are one JSON value under `maintenance` in `daemon_config`;
 a missing value means the defaults: enabled, 03:00 daemon-host local time, 7
-backups, 90 days of retention, 7 days of chat history, compaction on at 10%
-free pages. A field missing from a stored value takes its default, so a host
-upgraded from a release without chat history retention starts deleting chat
-history older than 7 days on its next run. The last run's
+backups, 90 days of retention, 7 days of mail history (`chat_retention_days`,
+which kept its name), compaction on at 10% free pages. A field missing from a
+stored value takes its default. The last run's
 result (times, trigger, backup path, rows deleted per category, logical size
 before and after, compaction, error) is stored under `maintenance_last_run`.
 Operators change both with **Settings → General → Backup & data retention**,
@@ -237,13 +199,13 @@ while the daemon keeps serving and writing, to
 number of those exact names are kept; other files in the directory are never
 rotated. **If the backup fails, nothing is deleted.** The run then prunes agent
 iterations (see [Iteration retention](#iteration-retention)) and removes data
-older than the retention period, each category in its own transaction. Messages
-use the chat history period instead when it is shorter, and are deleted even
+older than the retention period, each category in its own transaction. Mail
+uses the mail history period instead when it is shorter, and is deleted even
 when retention is `0`:
 
 - **Native Tasks** — only whole trees whose every task is `done` or
   `cancelled` with `completed_at` before the cutoff, with their comments,
-  waits, events, notifications and read state, relations, and outbox rows. A tree related to a task that stays is kept.
+  waits, events, notifications, relations, and outbox rows. A tree related to a task that stays is kept.
   After the deletion commits, each deleted task's `<base-dir>/tasks/<KEY>/`
   directory is removed; a key that is not a single path element is skipped.
 - **AI proxy Usage** — `ai_requests` rows. Retention is `0` (keep everything)
@@ -251,15 +213,12 @@ when retention is `0`:
   and rows inside the longest rolling `budgets` period are kept even when it
   exceeds the retention period. `tariboy daemon reindex` can restore deleted
   rows from retained transcripts; the next run deletes them again.
-- **Messages** — messages whose every delivery is acknowledged or
-  dead-lettered, with those deliveries. Unacknowledged work, and messages that
-  queue-trigger ingress has not consumed yet, are never deleted. A message
-  with no ingress number yet counts as not consumed.
-  The cutoff is the more recent of the retention period and
-  `chat_retention_days` (any value `>= 0`; `0` leaves messages to the retention
-  period), which covers the history of every chat and every agent at once.
-  This is the only path that removes `messages` rows; old chat history
-  therefore ends at that cutoff and stays only in the database backups.
+- **Mail** — closed letters: answered, archived, read or dead. Open letters,
+  and letters to a queue that queue-trigger ingress has not consumed yet, are
+  never deleted. The cutoff is the more recent of the retention period and
+  `chat_retention_days` (any value `>= 0`; `0` leaves mail to the retention
+  period), which covers every mailbox at once. Old mail therefore ends at that
+  cutoff and stays only in the database backups.
 - **Daemon events** (`events`) and task mutation idempotency records.
 
 When compaction is on and at least the threshold share of pages is free, a
@@ -297,26 +256,23 @@ written and synced are those rows and the directory deleted; an iteration
 whose archive fails stays untouched. Archives are not rotated. The legacy
 `archive` column of `retention_policies` is ignored.
 
-## Customer identity and read marks
+## Customer identity and read state
 
 `customer_login` in `daemon_config` is the fixed customer login, defaulted to
-`customer` and adopted once — with existing tasks, comments, waits, notification
-state and the old `user:<$USER>` channel carried over in the same transaction —
-instead of following whichever account runs `tariboyd`. Read marks are
-`chat_participants.read_ts`, one per participant, and only ever move forward;
-the single pre-chats `chat_read_v1` JSON object in `daemon_config` was carried
-into those rows by the chats migration. A read mark is UI state rather than
-authority: losing one costs an unread count, not a message.
+`customer` and adopted once — with existing tasks, comments, waits and the
+senders and recipients of existing letters carried over in the same
+transaction — instead of following whichever account runs `tariboyd`. Read
+state is the letter's own `read_at`: opening a letter in the Desktop or
+`tariboy mail read` sets it, and a read notice closes.
 
-## Message queue state
+## Inbox state
 
-Queue saturation is derived rather than persisted. The agent status endpoint
-counts distinct message IDs across that agent's unacknowledged, non-DLQ
-deliveries and returns `messages_pending`, the configured
+Inbox saturation is derived rather than persisted. The agent status endpoint
+counts the agent's open letters and returns `messages_pending`, the configured
 `messages_max_queue`, and `messages_queue_full`. The flag is true when the
-pending count is at or above the limit. Publish limiting, status, and physical
-queue clearing use the same delivery predicate so the UI never maintains a
-second estimate.
+open count is at or above the limit. The send-time cap, status, the loop wake
+and inbox clearing use the same open-letter predicate, so the UI never
+maintains a second estimate.
 
 ## Native task state
 
@@ -364,13 +320,13 @@ an empty value until its next real move into `in_progress`, rather than taking
 the time of an unrelated edit. Export and import carry the field.
 
 Every task mutation, its event, and any notification intent commit in one
-SQLite transaction. The channel publisher runs afterward from the durable
-outbox with a stable message idempotency key. The WebSocket is only a delivery
+SQLite transaction. The notification publisher sends the letters afterward
+from the durable outbox with a stable idempotency key. The WebSocket is only a delivery
 optimization: `task_events.sequence` is the resume authority and HTTP queries
 remain authoritative. See [Native Tasks](/docs/tasks).
 
 Queues also own agent pools and queue triggers, and the daemon keeps a
-persisted bus-ingress cursor that startup reconciles so a trigger never creates
+persisted mail-ingress cursor over `mail.seq` that startup reconciles so a trigger never creates
 a task twice. The earlier task workflow engine tables were dropped by migration
 `0054`; tasks that had been managed became ordinary tasks and keep a
 `workflow.removed` event that records what they ran on. The unused
@@ -519,8 +475,8 @@ keeps no stale files. A crash while the staging directory is written, or
 between the two renames, can leave `.unpack-*` staging or backup directories
 under the agent root; the next provisioning of that agent removes them. Generations are kept by id under
 `images/<name>/refs/`, so active and pending assignments survive a moved tag.
-Harness, model, effort, environment, CWD, context, workdir, messages, history,
-group, and subscriptions are not image assignment fields.
+Harness, model, effort, environment, CWD, context, workdir, mail, history,
+and group are not image assignment fields.
 
 Image content is addressed by ref id — derived from the image name and the
 source `image_version`, or from the archive bytes when no version is declared —

@@ -1,12 +1,12 @@
 ---
 title: schedule
-description: Create agent-owned one-shot or cron schedules that wake the agent or publish to a channel.
+description: Create agent-owned one-shot or cron schedules that send a letter to the agent or another principal.
 sidebar:
   label: schedule
   icon: calendar-clock
 ---
 
-`schedule` lets an agent arrange future bus events without keeping an iteration
+`schedule` lets an agent arrange future letters without keeping an iteration
 open. It is optional and is not included in the official Store's `basic` source.
 
 ## Capability surface
@@ -14,7 +14,6 @@ open. It is optional and is not included in the official Store's `basic` source.
 ```bash
 scripts/schedule.sh add --kind oneshot --spec 2026-08-20T10:00:00Z
 scripts/schedule.sh add --kind cron --spec "*/15 * * * *" \
-  --channel agent:worker:inbox \
   --message '{"text":"check the queue"}'
 scripts/schedule.sh ls
 scripts/schedule.sh cancel <schedule-id>
@@ -26,9 +25,14 @@ must be valid JSON.
 
 ## Delivery behavior
 
-Without `--channel`, the agent API targets the authenticated agent's own inbox.
-A firing publishes a normal bus message, so it follows the same durable
-delivery and loop-wake behavior as other messages. A one-shot disables itself
+A firing sends a letter from `system:schedule`, so it follows the same durable
+mail and loop-wake behavior as other letters. The agent route
+`POST /tools/schedule/add` takes `to`, a recipient principal; without it the
+schedule writes to the calling agent. A skill that still passes `--channel`
+keeps working: `chat:service:<agent>` and `agent:<agent>:inbox` map to
+`agent:<agent>`, and any other channel to the calling agent. The message
+template may set `subject`, `text`, `kind` (default `schedule.fire`), `data` and
+`notice`; the letter is a request unless `notice` is set. A one-shot disables itself
 after firing. A cron schedule computes its next fire time and remains enabled
 until cancelled.
 
@@ -37,14 +41,14 @@ agent; an agent cannot use an arbitrary name to manage another agent's records.
 
 ## State and lifecycle
 
-The daemon persists the schedule ID, owner, kind, specification, destination,
+The daemon persists the schedule ID, owner, kind, specification, recipient,
 message template, next firing time, and enabled state in SQLite. Daemon restart
 therefore does not discard future wake-ups. Removing an agent's durable data
 removes its schedule records.
 
-The scheduler publishes on the daemon's bus. If a schedule targets the agent's
-inbox while the agent is stopped or halted, the delivery remains pending until
-the loop can consume it.
+The scheduler sends through the daemon's mailbox. If a schedule writes to the
+agent while the agent is stopped or halted, the letter stays open in its inbox
+until the loop can consume it.
 
 ## Prompt integration
 
@@ -60,5 +64,5 @@ There is no schedule runtime marker. The packaged skill teaches the commands;
 
 ## Related reference
 
-- [Channels: schedules and scripts](/docs/reference/channels#schedules-and-scripts)
-- [Messaging architecture](/docs/architecture/messaging)
+- [Mail: schedules and scripts](/docs/reference/mail#schedules-and-scripts)
+- [Mailbox architecture](/docs/architecture/messaging)

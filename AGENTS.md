@@ -36,7 +36,7 @@ documents that own the behavior in scope.
 | --- | --- |
 | Daemon, API, persistence, lifecycle | `docs/docs/architecture/index.mdx`, `docs/docs/architecture/state-model.mdx` |
 | Iteration loop, harness execution, terminal, tmux | `docs/docs/architecture/iteration-loop.mdx`, `docs/docs/architecture/shim.mdx` |
-| Channels, messages, delivery, events | `docs/docs/architecture/messaging.mdx`, `docs/docs/reference/channels.md` |
+| Mail, letters, delivery, events | `docs/docs/architecture/messaging.mdx`, `docs/docs/reference/mail.md` |
 | AI proxy, usage, budgets, policy, audit | `docs/docs/architecture/ai-proxy.mdx`, `docs/docs/security-controls.mdx` |
 | React UI and frontend behavior | `docs/docs/architecture/web-ui.mdx` |
 | Desktop native host, SSH, Keychain, tunnels, packaging | `docs/docs/remote-hosts.mdx`, `docs/docs/security-controls.mdx`, `docs/docs/development.mdx` |

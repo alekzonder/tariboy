@@ -8,7 +8,7 @@ sidebar:
 
 # tariboy command reference
 
-tariboy has three command surfaces:
+tariboy has four command surfaces:
 
 1. **Operator commands** — `tariboy <group> <command>` (`sa` below is a
    convenience alias you define yourself, e.g. `alias sa=tariboy`; the build
@@ -23,6 +23,9 @@ tariboy has three command surfaces:
    verbs for an operator or an identity-bound agent. `ttasks --version` reports
    its build and `ttasks --json …` requests JSON output. `tariboy tasks …` runs
    the same client, always in operator mode; the table below does not list it.
+4. **Mail** — `tariboy-mail`, installed as `tmail`, reads, sends and answers
+   letters for an identity-bound agent or an operator. `tariboy mail …` runs the
+   same client, always in operator mode.
 
 ## Operator commands
 
@@ -294,12 +297,7 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/loop.sh done` | Signal this iteration is finished (i-am-done) |
 | `scripts/context.sh get` | Print the durable working memory (CONTEXT.md) |
 | `scripts/context.sh set <text>` | Overwrite the durable working memory |
-| `scripts/messages.sh message send --channel C [--type T] [--subject k=v,…] [--text … \| --data JSON]` | Publish a message to a channel |
-| `scripts/messages.sh channel subscribe C [--matcher JSON] [--type globs]` | Subscribe to a channel |
-| `scripts/messages.sh channel unsubscribe ID` | Remove a subscription |
-| `scripts/messages.sh channel ls` | List your subscriptions |
-| `scripts/messages.sh sources` | List available channels |
-| `scripts/schedule.sh add --kind cron\|oneshot --spec S [--channel C] [--message JSON]` | Schedule a future wake-up |
+| `scripts/schedule.sh add --kind cron\|oneshot --spec S [--message JSON]` | Schedule a future letter; without a recipient it writes to you |
 | `scripts/schedule.sh ls` | List your schedules |
 | `scripts/schedule.sh cancel ID` | Cancel a schedule |
 | `scripts/scripts.sh ls` | List your scripts |
@@ -309,6 +307,29 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/scripts.sh rerun SCRIPT_ID` | Run a completed one-shot or idle recurring definition immediately |
 | `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
 | `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v2 image from a daemon-readable source directory (`image-creator` only); relative paths start at the managed workdir |
+
+## Mail (`tmail …`)
+
+`tariboy-mail` is the real executable and `tmail` its managed alias. A
+non-empty `TARIBOY_TOOLS_SOCKET` selects agent mode: the sender is the calling
+agent and every read is scoped to its mailbox. Without the variable, the
+client uses the host Unix daemon socket and acts as the customer unless `--as`
+names another principal. `tariboy mail …` is the same client, always in
+operator mode. See the [Mail
+reference](/docs/reference/mail) for flags, routes and debugging.
+
+| Command | Purpose |
+| --- | --- |
+| `tmail inbox [--all] [--limit N] [--before TIME]` | List open letters, oldest first; `--all` lists every letter, newest first |
+| `tmail sent` / `tmail archive` | List the letters you sent / your closed and dead letters |
+| `tmail show ID` | Show one letter and its reply |
+| `tmail send --to P[,P] --subject S --text T [--kind K] [--deadline D] [--notice] [--data JSON]` | Send a letter; a request unless `--notice` |
+| `tmail reply ID TEXT [--ask]` | Answer a letter, which closes it |
+| `tmail requeue ID` | Return a dead letter to the inbox |
+| `tmail close ID [--note T]` | Archive without a reply (operator only) |
+| `tmail read ID...` | Mark letters read; a read notice closes (operator only) |
+| `tmail unread` | Count open letters by sender and kind (operator only) |
+| `tmail clear --as agent:NAME [--yes]` | Delete an agent's open letters (operator only) |
 
 ## Native Tasks (`ttasks …`)
 
@@ -388,7 +409,7 @@ checks and watch statuses.
 The following administration roots are operator-only and are documented by
 `ttasks --help-json`: `queue` (including pools and triggers; see
 [Task workflows](/docs/task-workflows)), `events`, `principals`,
-`notifications`, and `activity` (`GET /api/task-activity`: the work on tasks in
+and `activity` (`GET /api/task-activity`: the work on tasks in
 a `--since`/`--until` window, optionally for one `--agent`). They are
 unavailable to agent mode.
 
@@ -398,7 +419,6 @@ Resource identifiers are positional (or named flags), for example:
 ttasks queue get OPS
 ttasks queue update OPS --name Operations --revision 2
 ttasks queue pool list OPS
-ttasks notifications read 1
 ttasks events OPS-1 --after 7 --limit 10
 ```
 

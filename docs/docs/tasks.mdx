@@ -148,15 +148,22 @@ and read-only to the agent; see [Agents and the iteration
 loop](/docs/architecture/iteration-loop).
 
 Assignment, question, answer, and queue-triage events enter a transactional
-outbox and publish through the existing channels/messages bus. Agent
-notifications target its inbox channel; customer notifications target
-`user:<login>`, where `<login>` is derived from the daemon account's OS login.
-Every persisted agent has a protected subscription to its own inbox. Agent
-creation establishes it and daemon startup repairs it for legacy rows before
-loops start. Publishing a task notification therefore creates a normal bus
-delivery and uses the standard enabled-loop wake mechanism; disabled agents
-retain the pending delivery. The Desktop inbox uses the same durable
-notification records.
+outbox and are sent as [letters](/docs/architecture/messaging) from the
+principal that caused them: the asker, the assigner, or `system:workflow`. An
+agent notification goes to `agent:<name>`; a customer notification goes to
+`user:<login>`, the configured customer login. The kinds are `task.assigned`,
+`task.question`, `task.answered` and `task.triage`, and `data` carries
+`task_key`, `queue` and `notification_id`. A notification therefore wakes an
+enabled agent like any other letter; a disabled agent keeps it open in its
+inbox.
+
+A `task.question` letter is a request that is answered on the task, never by
+mail: `tmail reply` refuses it with `answer_on_task` and names the `ttasks
+comment` command. When the wait resolves, the tasks service closes the
+matching question letters with `close_note = task-comment:<id>`, for an agent
+recipient and the customer alike; a workflow outcome that resolves the
+customer's wait closes them with `task-outcome:<status>`. The other three
+kinds are notices; the agent's Goal letter drives the work.
 
 ## Desktop
 
@@ -171,12 +178,10 @@ component with `scope_agent` fixed to that agent. The layout is Tree-first:
   order is limited to the task's current priority bucket. In-progress tasks
   show an explicit **In progress** label, while open and done tasks retain
   their existing row presentation. A small red indicator marks each task with
-  an unread, non-dismissed customer question notification; opening that task
-  marks its question notifications read and clears the indicator. There is no
-  notification inbox in the workspace: the questions themselves are readable
-  in the agent's **Chat**, where they arrive as messages, and
-  `ttasks notifications` remains the operator command for the inbox state. The
-  agent list carries no question dot — only the count of unread chat messages.
+  an unread `task.question` letter in the customer's mailbox; opening that task
+  marks those letters read and clears the indicator. A question letter stays
+  open until it is answered on the task. `tariboy mail inbox` lists the
+  customer's open letters, the questions among them.
 
 A task in a queue bound to a [workflow](/docs/task-workflows) shows its
 workflow status, for example **Approval**, instead of one of the five fixed
@@ -239,14 +244,14 @@ realtime hints and identical HTTP snapshots do not send it again. Notification
 permission denial or an unavailable native service does not remove the in-app
 dots.
 
-Opening a native question notification marks that exact inbox notification as
+Opening a native question notification marks that exact question letter as
 read and selects its task on its original server. The Desktop route is exactly
 `/servers/:hostId/tasks?task=<key>` (for example,
 `/servers/local/tasks?task=ASK-1`); in the packaged single-page application it
 appears after the URL hash as `#/servers/local/tasks?task=ASK-1`. Routing keeps
 the notification's explicit host identity and never substitutes the local
 daemon for a missing remote host. The task still opens if the read request is
-interrupted, so the customer can answer it and retry inbox cleanup separately.
+interrupted, so the customer can answer it and mark the letter read later.
 
 HTTP remains usable if realtime is disconnected. `GET /api/tasks/ws?after=N`
 replays visible durable event hints after `N`, then streams new hints. The
@@ -362,7 +367,7 @@ ttasks create --help
 ttasks ask -h
 ttasks queue trigger --help
 ttasks queue pool --help
-tariboy-tasks notifications read --help
+tariboy-tasks workflow get --help
 ttasks --help-json
 ```
 

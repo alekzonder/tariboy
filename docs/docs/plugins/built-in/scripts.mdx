@@ -8,8 +8,8 @@ sidebar:
 
 `scripts` runs local shell commands without keeping the current agent iteration
 open. It is included in the official Store's `basic` source. It does not
-publish arbitrary channel messages; the separate [`schedule`](/docs/plugins/built-in/schedule)
-plugin owns timed bus messages and is unchanged.
+send arbitrary letters; the separate [`schedule`](/docs/plugins/built-in/schedule)
+plugin owns timed letters.
 
 ## Capability surface
 
@@ -29,9 +29,9 @@ Runs of one recurring script never overlap. The fixed delay starts at the
 previous run's actual finish time.
 
 A recurring script keeps running only while it stays quiet. As soon as a run
-publishes a `script.result` message, the definition stops: its state becomes
+sends a `script.result` letter, the definition stops: its state becomes
 `completed`, no next run is scheduled, and the agent is notified once instead of
-repeatedly. Resume it deliberately with `rerun` after handling that message. A
+repeatedly. Resume it deliberately with `rerun` after handling that letter. A
 run stays quiet by exiting with the quiet exit code `111` (see
 [Results and exit codes](#results-and-exit-codes)).
 
@@ -88,7 +88,7 @@ until the command's process exits.
 
 Every run has its own durable status, timestamps, exit code, and owner-only log
 file. Combined stdout and stderr remain in that file. The concise
-`script.result` inbox message contains the script ID, run ID, name, mode,
+`script.result` letter from `system:scripts` contains the script ID, run ID, name, mode,
 status, optional exit code, and absolute log path; it never embeds command
 output.
 
@@ -96,7 +96,7 @@ Exit codes:
 
 - exit `0` records `succeeded` and publishes a result;
 - exit `111` from a recurring script is the quiet exit code: the run is stored
-  with its exit code and log, but creates no message, does not wake the agent,
+  with its exit code and log, but sends no letter, does not wake the agent,
   and leaves the schedule running;
 - every other nonzero exit, including `2`, records `failed` and publishes a
   result;
@@ -187,5 +187,5 @@ and non-regular files.
 ## Related reference
 
 - [Agent tools: durable scripts](/docs/binaries/agent-tools#durable-scripts)
-- [Channels: schedules and scripts](/docs/reference/channels#schedules-and-scripts)
+- [Mail: schedules and scripts](/docs/reference/mail#schedules-and-scripts)
 - [Security and controls](/docs/security-controls)

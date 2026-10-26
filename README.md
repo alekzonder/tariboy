@@ -64,8 +64,8 @@ it or delete the agent's data.
 
 ### 5. Team — coordinate agents around shared work
 
-Bring independently configured agents together with a lead and shared
-channels. Use Native Tasks to decompose work, delegate it, track progress, and
+Bring independently configured agents together with a lead and group
+mail. Use Native Tasks to decompose work, delegate it, track progress, and
 keep questions and answers attached to the task.
 
 Copy team configuration as compose YAML or export a portable team archive.
