@@ -20,15 +20,16 @@ interval to 0; it then iterates only for messages, including Goal tasks.
 While the agent is started, an iteration can start from:
 
 - a configured timer interval; or
-- a matching pending message delivery, including a `task.goal` delivery.
+- an open letter in the agent's inbox, including a `task.goal` letter.
 
-Messages are durable. Publishing creates a delivery for each matching
-subscription and nudges the loop. The runner includes pending deliveries in the
-next prompt. Normal completion acknowledges them; harness errors, timeouts, and
-kills preserve them for bounded redelivery.
+Letters are durable. Sending a letter to the agent stores it in its inbox and
+nudges the loop. The runner includes the open letters in the next prompt. A
+request stays open until the agent replies to it; a notice closes when the
+iteration finishes normally. Harness errors, timeouts, and kills leave both
+open for bounded redelivery.
 
 Stopping the agent prevents new scheduled and message-triggered iterations. It
-does not delete pending messages.
+does not delete open letters.
 
 A stop policy (`on_timeout=stop` or `on_error=stop`) halts the loop with an
 error reason. The agent stays started and shows the `error` state. Start it
@@ -43,7 +44,7 @@ Start with:
 - a soft timeout that fits normal work;
 - a hard timeout that bounds the worst case;
 - a low cost budget;
-- no external subscriptions until the timer path is understood.
+- no external plugins sending mail until the timer path is understood.
 
 Set the interval and timeouts in **Configuration → Loop and timeouts**, or in
 the **Loop** section of the create dialog. Activity shows trigger,
@@ -69,19 +70,18 @@ before timeout enforcement starts.
   iterations. Exports contain sensitive agent data; review the warning before
   downloading them.
 
-After a kill, verify the Activity outcome and pending message state before
-starting the agent again. A killed or failed iteration may leave a message
-eligible for redelivery.
+After a kill, verify the Activity outcome and the agent's open letters before
+starting the agent again. A killed or failed iteration leaves its letters
+open for redelivery.
 
 ## Event-driven progression
 
-Channels and subscriptions are the advanced layer behind message triggers. They
-allow agents and plugins to wake work without polling. Begin with one explicit
-subscription and one observable publisher, then add fan-out and groups after
-the single-agent delivery lifecycle is understood.
+Mail is the layer behind message triggers. It lets agents, plugins, schedules
+and scripts wake work without polling. Begin with one sender writing to one
+agent, then add groups after the single-agent letter lifecycle is understood.
 
-In Desktop an agent's event triggers are managed in **Chat → Channels**. The
-delivery queue, with its Archive and DLQ, is **Chat → Queue**.
+Read an agent's inbox, sent letters and archive, with its dead letters, with
+`tariboy mail inbox --as agent:NAME`, `sent` and `archive`.
 
-See [Messaging architecture](/docs/architecture/messaging) and [Channel
-reference](/docs/reference/channels) for the complete contract.
+See [Mailbox architecture](/docs/architecture/messaging) and the [Mail
+reference](/docs/reference/mail) for the complete contract.

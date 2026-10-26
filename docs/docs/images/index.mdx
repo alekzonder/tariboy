@@ -422,7 +422,7 @@ positions. Work inputs are always grouped in the platform block:
 | `goal` | Compatibility marker; selected Native Task fields appear in Task Processing Order | none; platform-owned |
 | `workdir` | Absolute managed `agents/<agent>/workdir`, independent of the effective CWD | `workdir` |
 | `context` | Durable agent context | `context` |
-| `messages` | Compatibility marker; delivered messages and outstanding requests appear in Task Processing Order | none; platform-owned |
+| `messages` | Compatibility marker; open letters and outstanding requests appear in Task Processing Order; requires the `mail` capability or its `messages` alias | none; platform-owned |
 | `awaiting-replies` | Compatibility marker; outstanding requests appear under Messages in the platform block | none; platform-owned |
 | `user-prompt` | The agent's standing prompt | none; this is task input |
 | `one-shot` | Compatibility marker; single-execution input appears first in Task Processing Order | none; this is task input |
@@ -469,8 +469,7 @@ version, digest, and prompt-template hash for that iteration.
 
 Activation changes only image bytes, plugin capabilities, and image-owned
 shims. It preserves harness, model, effort, environment, interactive and loop
-settings, CWD, context, workdir, messages, history, audit, group, and
-subscriptions. A validation or staging failure leaves the current image active
+settings, CWD, context, workdir, mail, history, audit, and group. A validation or staging failure leaves the current image active
 and exposes a retryable pending error. The pending selection can be replaced or
 cancelled before activation.
 

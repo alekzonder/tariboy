@@ -32,10 +32,9 @@ general-purpose source:
 
 ## Groups
 
-A **group** ties agents together with a designated **lead**. Groups
-auto-provision channels and subscriptions: every member subscribes to
-`group:<g>:broadcast` and to its own `agent:<member>:inbox`; the lead also
-subscribes to `group:<g>:inbox`. Group members can share a working directory.
+A **group** ties agents together with a designated **lead**. A letter to
+`group:<g>` goes to every member except the sender; members ask one another
+with letters to `agent:<member>`. Group members can share a working directory.
 Native Tasks stays daemon-owned and applies live group membership when checking
 task visibility.
 

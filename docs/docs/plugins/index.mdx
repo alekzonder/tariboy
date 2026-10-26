@@ -59,27 +59,46 @@ its type-specific HTTP endpoints.
 
 Types are defined in `internal/plugins`:
 
-- **`channel-source`** publishes inbound events through
-  `POST /api/plugin/publish`.
-- **`channel-sink`** receives subscribed bus messages at `POST /deliver`, with
-  durable redelivery and a dead-letter queue. The bus wakes the sink's drainer
-  when a new delivery is committed; a 5-second fallback timer retries failed
-  deliveries.
+- **`mail-source`** sends letters through `POST /api/plugin/mail`.
+- **`mail-sink`** receives the letters addressed to it at `POST /deliver`.
 - **`tool`** and **`harness`** are accepted in a manifest, but the daemon
   connects nothing to them yet.
 
-### Providers and parameterized channels
+### Mail
 
-A provider plugin offers a channel that an agent subscribes to with parameters,
-such as a ticket identifier, query, or tick interval. The daemon validates the
-parameters against the channel's `params_schema`, fingerprints them into a
-**watch**, and drives the plugin through `/watches` push or
-`GET /api/plugin/watches` pull. The plugin therefore produces only work that
-has an active consumer.
+A plugin takes part in the [mailbox](/docs/architecture/messaging) as the
+principal `plugin:<name>`. Its manifest declares what it does with mail, and
+each flag needs its type:
 
-An operator queue trigger can turn a provider event into a new task without
-giving the plugin authority over any existing task. The committed bus message is
-matched once and creates an ordinary Native Task. See [Task
+```json
+{
+  "types": ["mail-source", "mail-sink"],
+  "mail": {"send": true, "receive": true}
+}
+```
+
+- **Inbound.** `POST /api/plugin/mail` with `{to, subject, text, kind, data,
+  notice, idempotency_key}`, authenticated by the plugin token
+  (`Authorization: Bearer …` or `X-Plugin-Token`), sends a letter from
+  `plugin:<name>`; it is a request unless `notice` is set. The response holds
+  the letters written. A repeated `idempotency_key` returns the existing letter
+  and writes nothing. When the recipient agent's inbox is at its
+  `messages_max_queue` cap, the letter is stored dead with reason
+  `queue_limit` and the route answers `409 inbox_full`, so the plugin can tell
+  its user. A plugin without `mail.send` gets `403 forbidden`.
+- **Outbound.** The plugin host drains the inbox of `plugin:<name>`: it calls
+  the plugin's `POST /deliver` with `{letter}` for each open letter and closes
+  the letter with `close_note = delivered` when the call succeeds. A failed
+  delivery stays open, is retried, and is dead-lettered after five attempts.
+  The host wakes the drainer after a committed send; a 5-second fallback timer
+  retries failed deliveries. A plugin receives only letters addressed to it, so
+  it never sees its own letters.
+
+There are no subscriptions, matchers or watches: a plugin that wants an agent
+to receive something sends it a letter. An operator queue trigger can turn a
+plugin event into a new task without giving the plugin authority over any
+existing task: the plugin sends a letter to `queue:<prefix>`, which is matched
+once and creates an ordinary Native Task. See [Task
 workflows](/docs/task-workflows#queue-triggers).
 
 ### Installation and versioning
@@ -194,9 +213,15 @@ agent implied:
 `/help` prints the complete list for its topic. `/agent set` permits only
 alias, image, harness, model, effort, working directory, interactive mode, and
 loop interval, timeout, and policy settings; it cannot set environment variables or secrets. Ordinary
-text in a live agent topic travels through `chat:telegram:<agent>` and the
-existing channel/message delivery and acknowledgement path; its Telegram update
-is marked read only after the mapped agent has a non-DLQ delivery. A message
+text in a live agent topic is sent as a letter from `plugin:telegram` to the
+mapped agent, a request whose subject is the first line of the text, cut to
+60 characters. Its
+Telegram update is marked read only after the daemon has stored the letter.
+When the agent's inbox is full, the plugin answers in the topic that the
+message was not delivered. The agent answers with `tmail reply`, which
+addresses `plugin:telegram`, and the plugin's `/deliver` posts each letter
+from `agent:<a>` to that agent's topic. An agent writes to the customer's
+Telegram unprompted with `tmail send --to plugin:telegram`. A message
 without text uses its caption; one with neither, such as a sticker or an
 uncaptioned photo, is dropped. Media files themselves are not delivered.
 
@@ -220,7 +245,7 @@ topics, reactions, edits, and webhooks are not supported.
   capability and its command surface.
 - [Agent capability scripts](/docs/binaries/agent-tools) explains skill-local
   launchers and the `tasks` compatibility shim used inside an agent.
-- [Channels](/docs/reference/channels) defines delivery, subscriptions,
-  provider watches, schedules, and script results.
+- [Mail](/docs/reference/mail) defines letters, `tmail`, the mail routes,
+  schedules, and script results.
 - [Command reference](/docs/reference/commands) lists operator and agent
   commands.

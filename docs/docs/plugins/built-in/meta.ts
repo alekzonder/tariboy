@@ -7,7 +7,7 @@ export default defineMeta({
     "index",
     "whoami",
     "loop",
-    "messages",
+    "mail",
     "context",
     "status",
     "workdir",

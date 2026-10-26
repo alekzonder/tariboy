@@ -13,9 +13,10 @@ Six real binaries are built by `make build`:
 | `tariboyd` | The [daemon](/docs/architecture) — long-running, owns all durable state. |
 | `tariboy` | The [operator CLI](/docs/binaries/operator-cli) — human/CI client over the socket. |
 | `tariboy-tasks` | The Native Tasks client; installers also provide its `ttasks` alias. |
+| `tariboy-mail` | The [mail client](/docs/reference/mail); installers also provide its `tmail` alias. |
 | `tariboy-shim` | Runs [one harness iteration under a watchdog](/docs/architecture/shim). |
 | `tariboy-store` | A standalone [image registry](/docs/binaries/store) server. |
-| `tariboy-plugin-telegram` | The bundled Telegram channel and operator-surface plugin. |
+| `tariboy-plugin-telegram` | The bundled Telegram mail and operator-surface plugin. |
 
 The daemon installs or refreshes the Telegram plugin from its sibling binary at
 startup. Optional external plugins are built and distributed independently.
