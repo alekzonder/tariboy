@@ -24,6 +24,7 @@ export const agentRow = (over: Partial<AgentRow> = {}): AgentRow => ({
   alias: "",
   color: "",
   interactive: false,
+  env: {},
   cwd: "",
   current_goal_task_key: "",
   ai_stall_timeout_s: 0,

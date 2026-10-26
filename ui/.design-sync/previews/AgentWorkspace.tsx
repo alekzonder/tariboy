@@ -25,6 +25,7 @@ const BUILDER = {
   alias: "",
   color: "",
   interactive: true,
+  env: {},
   cwd: "/home/agent/github/tariboy",
   current_goal_task_key: "TB-142",
   ai_stall_timeout_s: 0,
