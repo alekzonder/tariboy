@@ -2979,8 +2979,8 @@ func mustWrite(t *testing.T, path, content string) {
 }
 
 // seedLeakedRows inserts one row per agent-keyed side table PurgeAgentData must
-// clean — the rows a plain Store.Delete leaks today. deliveries hangs off the
-// subscription so we can prove the dependent rows go too.
+// clean — the rows a plain Store.Delete leaks today — and a letter the agent
+// sent, which purging keeps because it sits in another mailbox.
 func seedLeakedRows(t *testing.T, s *store.Store, name string) {
 	t.Helper()
 	exec := func(q string, args ...any) {
@@ -2988,8 +2988,8 @@ func seedLeakedRows(t *testing.T, s *store.Store, name string) {
 			t.Fatalf("seed %q: %v", q, err)
 		}
 	}
-	exec(`INSERT INTO subscriptions(id, agent, channel) VALUES(?,?,?)`, "sub-1", name, "ch")
-	exec(`INSERT INTO deliveries(subscription_id, message_id) VALUES(?,?)`, "sub-1", "msg-1")
+	exec(`INSERT INTO mail(id, sender, recipient, created_at) VALUES(?,?,?,?)`, "m-to", "user:customer", "agent:"+name, "2026-07-13T00:00:00Z")
+	exec(`INSERT INTO mail(id, sender, recipient, created_at) VALUES(?,?,?,?)`, "m-sent", "agent:"+name, "user:customer", "2026-07-13T00:00:00Z")
 	exec(`INSERT INTO schedules(id, agent, kind, spec, recipient, next_fire_at) VALUES(?,?,?,?,?,?)`,
 		"sch-1", name, "oneshot", "2026-07-13T00:00:00Z", "ch", "2026-07-13T00:00:00Z")
 	exec(`INSERT INTO scripts(id, agent, name, description, command, mode, state, created_at) VALUES(?,?,?,?,?,?,?,?)`,
@@ -3012,8 +3012,7 @@ func leakedRowCount(t *testing.T, s *store.Store, name string) int {
 		}
 		total += n
 	}
-	count(`SELECT COUNT(*) FROM subscriptions WHERE agent=?`, name)
-	count(`SELECT COUNT(*) FROM deliveries WHERE subscription_id IN (SELECT id FROM subscriptions WHERE agent=?)`, name)
+	count(`SELECT COUNT(*) FROM mail WHERE recipient=?`, "agent:"+name)
 	count(`SELECT COUNT(*) FROM schedules WHERE agent=?`, name)
 	count(`SELECT COUNT(*) FROM scripts WHERE agent=?`, name)
 	count(`SELECT COUNT(*) FROM script_result_outbox WHERE agent=?`, name)
@@ -3098,6 +3097,10 @@ func TestRemovePreserveThenPurge(t *testing.T) {
 	}
 	if n := leakedRowCount(t, s, name); n != 0 {
 		t.Fatalf("purge remove left %d leaked side-table rows", n)
+	}
+	var sent int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM mail WHERE id = 'm-sent'`).Scan(&sent); err != nil || sent != 1 {
+		t.Fatalf("purge removed the letter the agent sent: %d, %v", sent, err)
 	}
 }
 

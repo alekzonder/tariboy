@@ -409,8 +409,6 @@ func purgeTasks(tx *sql.Tx, cutoff string) (int64, []string, error) {
 	for _, q := range []string{
 		`DELETE FROM task_waiting_for WHERE task_id` + in,
 		`DELETE FROM task_comments WHERE task_id` + in,
-		`DELETE FROM task_notification_state WHERE notification_id IN (SELECT o.notification_id FROM task_notification_outbox o
-			JOIN task_events e ON e.sequence = o.event_sequence WHERE e.task_id` + in + `)`,
 		`DELETE FROM task_notification_outbox WHERE event_sequence IN (SELECT sequence FROM task_events WHERE task_id` + in + `)`,
 		`DELETE FROM task_events WHERE task_id` + in,
 		`DELETE FROM task_relations WHERE source_id` + in + ` OR target_id` + in,

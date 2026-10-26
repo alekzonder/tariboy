@@ -28,11 +28,6 @@ type Action struct {
 	// time from the results of earlier actions. changed is false when the
 	// resolved state already matches.
 	run func(results []json.RawMessage) (changed bool, err error)
-
-	// changedBy, when set, decides from the Call result whether the call
-	// changed anything; Note is then printed after the call, and only for a
-	// change. Unset means a successful Call always changed something.
-	changedBy func(result json.RawMessage) bool
 }
 
 // Resource is one thing the file declares (a group, agent, budget, task

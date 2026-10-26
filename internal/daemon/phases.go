@@ -19,7 +19,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/audit"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/commands"
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/groups"
@@ -162,7 +161,6 @@ type coreParts struct {
 	st            *store.Store
 	metrics       *telemetry.Metrics
 	agents        *agent.Store
-	bus           *bus.Bus
 	mail          *mail.Mail
 	hub           *events.Hub
 	audit         *audit.Registry
@@ -170,8 +168,7 @@ type coreParts struct {
 	customerLogin string
 }
 
-// openStore opens the store and telemetry, and reconciles the agents' inboxes
-// and chats.
+// openStore opens the store, telemetry and the mailbox.
 func openStore(ctx context.Context, proc *process, stack *shutdownStack) (*coreParts, error) {
 	log, p := proc.log, proc.paths
 	st, err := store.Open(p.DB())
@@ -209,16 +206,9 @@ func openStore(ctx context.Context, proc *process, stack *shutdownStack) (*coreP
 	}
 
 	as := agent.NewStore(st)
-	channelBus := bus.New(st, time.Now)
-	if err := reconcileAgentInboxes(as, channelBus); err != nil {
-		return nil, fmt.Errorf("reconcile agent inboxes: %w", err)
-	}
 	customerLogin, err := resolveCustomerLogin(st)
 	if err != nil {
 		return nil, fmt.Errorf("resolve customer login: %w", err)
-	}
-	if err := reconcileAgentChats(as, channelBus, "user:"+customerLogin); err != nil {
-		return nil, fmt.Errorf("reconcile agent chats: %w", err)
 	}
 	hub := events.NewHub()
 	// Per-agent audit log (audit.jsonl). One shared *audit.Log per agent backs
@@ -232,7 +222,7 @@ func openStore(ctx context.Context, proc *process, stack *shutdownStack) (*coreP
 	mailbox.SetAuditHook(rec.Record)
 
 	return &coreParts{
-		st: st, metrics: metrics, agents: as, bus: channelBus, mail: mailbox, hub: hub, audit: auditReg,
+		st: st, metrics: metrics, agents: as, mail: mailbox, hub: hub, audit: auditReg,
 		rec: rec, customerLogin: customerLogin,
 	}, nil
 }
@@ -491,7 +481,7 @@ type managerParts struct {
 	cctx            *registry.Ctx
 }
 
-// buildManager builds the loop manager and wires the bus hooks that need it.
+// buildManager builds the loop manager and wires the mail hooks that need it.
 func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, tk *taskParts, px *proxyParts, pl *pluginParts) *managerParts {
 	log, p, st := proc.log, proc.paths, c.st
 	schedStore := schedule.NewStore(st, time.Now)
@@ -595,19 +585,6 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 		EventsDropped: func(context.Context) int64 { return c.hub.Dropped() },
 	})
 
-	// A publish wakes exactly the agents that received a delivery and feeds the
-	// SSE hub with per-agent message/stream events.
-	c.bus.SetPublishHook(func(msg bus.Message, agents []string) {
-		manager.WakeAgents(agents, loop.WakeMessage)
-		emitMessageEvent(c.hub, msg, agents)
-		if tk.service.WorkflowIngressEnabled() {
-			tk.ingress.Signal()
-		}
-	})
-	// Route bus lifecycle events (message_processed/replied/requeued) to the
-	// per-agent audit.jsonl so the §8.2 operator-vs-agent attribution actually
-	// lands in the audit timeline.
-	c.bus.SetAuditHook(c.rec.Record)
 	// A letter wakes exactly the agents it was sent to, feeds the mail hint
 	// socket, and a letter to a queue wakes workflow ingress.
 	c.mail.SetWakeHook(func(agents []string) { manager.WakeAgents(agents, loop.WakeMessage) })
@@ -621,7 +598,7 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 
 	cctx := &registry.Ctx{
 		Store: st, Log: log, BaseDir: p.Base, Socket: p.Socket(), HTTPAddr: o.HTTPAddr,
-		Version: version.Version, StartedAt: time.Now(), Control: manager, Scripts: manager, Bus: c.bus, Mail: c.mail, Plugins: pl.host,
+		Version: version.Version, StartedAt: time.Now(), Control: manager, Scripts: manager, Mail: c.mail, Plugins: pl.host,
 		Groups:         groupProv,
 		Operator:       tk.service.CustomerLogin(),
 		Retention:      &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},

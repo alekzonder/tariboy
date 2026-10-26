@@ -21,9 +21,9 @@ import (
 
 func clk() time.Time { return time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC) }
 
-// seedBus inserts one row of each bus table (schedules, script definitions and
-// runs, subscriptions, messages produced by the agent, and deliveries for its
-// subscription) scoped to ag.
+// seedBus inserts the agent-scoped rows (schedules, script definitions and
+// runs, and the agent's mail: a letter to it, its reply, and a letter it sent)
+// scoped to ag.
 // IDs are prefixed with the agent name so tests can assert agent-scoping. Rows
 // are inserted in reverse-id order to exercise the dump's stable ORDER BY.
 func seedBus(t *testing.T, s *store.Store, ag string) {
@@ -44,12 +44,10 @@ func seedBus(t *testing.T, s *store.Store, ag string) {
 		ag+"-run-1", ag+"-scr-1", ag, "succeeded", 0, "2026-01-01T00:00:00Z", "2026-01-01T00:00:01Z", "2026-01-01T00:00:02Z", "/old/agents/"+ag+"/scripts/"+ag+"-run-1.log")
 	exec(`INSERT INTO script_result_outbox(idempotency_key, script_id, run_id, agent, payload, next_attempt_at) VALUES(?,?,?,?,?,?)`,
 		"script-result:"+ag+"-run-1", ag+"-scr-1", ag+"-run-1", ag, `{"script_id":"`+ag+`-scr-1","run_id":"`+ag+`-run-1","log_path":"/old/agents/`+ag+`/scripts/`+ag+`-run-1.log"}`, "2026-01-01T00:00:02Z")
-	exec(`INSERT INTO subscriptions(id, agent, channel) VALUES(?,?,?)`,
-		ag+"-sub-1", ag, ag+".inbox")
-	exec(`INSERT INTO messages(id, channel, ts, produced_by_agent) VALUES(?,?,?,?)`,
-		ag+"-msg-1", ag+".inbox", "2026-01-01T00:00:00Z", ag)
-	exec(`INSERT INTO deliveries(subscription_id, message_id) VALUES(?,?)`,
-		ag+"-sub-1", ag+"-msg-1")
+	exec(`INSERT INTO mail(id, sender, recipient, body, created_at, answered_at, answer_id) VALUES(?,?,?,?,?,?,?)`,
+		ag+"-mail-in", "user:customer", "agent:"+ag, "hello", "2026-01-01T00:00:00Z", "2026-01-01T00:00:01Z", ag+"-mail-reply")
+	exec(`INSERT INTO mail(id, sender, recipient, body, in_reply_to, needs_reply, created_at) VALUES(?,?,?,?,?,?,?)`,
+		ag+"-mail-reply", "agent:"+ag, "user:customer", "hi", ag+"-mail-in", 0, "2026-01-01T00:00:01Z")
 }
 
 func seed(t *testing.T) (*store.Store, string) {
@@ -150,7 +148,7 @@ func TestBuildDumpsAllBusTables(t *testing.T) {
 
 	// All agent-scoped durable tables must be present as keys.
 	for _, tbl := range []string{"agents", "iterations", "ai_requests", "secrets",
-		"subscriptions", "schedules", "scripts", "script_runs", "script_result_outbox", "messages", "deliveries"} {
+		"schedules", "scripts", "script_runs", "script_result_outbox", "mail"} {
 		if _, ok := m.Tables[tbl]; !ok {
 			t.Fatalf("table %q missing from dump", tbl)
 		}
@@ -172,15 +170,10 @@ func TestBuildDumpsAllBusTables(t *testing.T) {
 	if got := m.Tables["script_result_outbox"]; len(got) != 1 || got[0]["run_id"] != "bot-run-1" {
 		t.Fatalf("script result outbox not present: %+v", got)
 	}
-	// messages: the message bot produced present.
-	msg := m.Tables["messages"]
-	if len(msg) != 1 || msg[0]["id"] != "bot-msg-1" || msg[0]["produced_by_agent"] != "bot" {
-		t.Fatalf("produced message not present: %+v", msg)
-	}
-	// deliveries: the delivery for bot's subscription present.
-	del := m.Tables["deliveries"]
-	if len(del) != 1 || del[0]["subscription_id"] != "bot-sub-1" || del[0]["message_id"] != "bot-msg-1" {
-		t.Fatalf("delivery not present: %+v", del)
+	// mail: the letter to bot and the reply it sent, in seq order.
+	mail := m.Tables["mail"]
+	if len(mail) != 2 || mail[0]["id"] != "bot-mail-in" || mail[1]["id"] != "bot-mail-reply" || mail[1]["sender"] != "agent:bot" {
+		t.Fatalf("mail not present: %+v", mail)
 	}
 }
 
@@ -208,13 +201,13 @@ func TestBuildAgentScoping(t *testing.T) {
 	// bot's rows present.
 	if !has("schedules", "id", "bot-sch-a") || !has("scripts", "id", "bot-scr-1") ||
 		!has("script_runs", "id", "bot-run-1") || !has("script_result_outbox", "run_id", "bot-run-1") ||
-		!has("messages", "id", "bot-msg-1") || !has("deliveries", "message_id", "bot-msg-1") {
+		!has("mail", "id", "bot-mail-in") || !has("mail", "id", "bot-mail-reply") {
 		t.Fatalf("bot rows missing under scoping: %+v", m.Tables)
 	}
 	// other's rows absent.
 	if has("schedules", "id", "other-sch-a") || has("scripts", "id", "other-scr-1") ||
 		has("script_runs", "id", "other-run-1") || has("script_result_outbox", "run_id", "other-run-1") ||
-		has("messages", "id", "other-msg-1") || has("deliveries", "message_id", "other-msg-1") {
+		has("mail", "id", "other-mail-in") || has("mail", "id", "other-mail-reply") {
 		t.Fatalf("other agent's rows leaked into bot backup: %+v", m.Tables)
 	}
 }
@@ -287,20 +280,18 @@ func TestBuildDeterministic(t *testing.T) {
 }
 
 // TestBackupTablesComeFromRegistry pins the backup table list built from
-// store.AgentTables to the list backup used before the registry existed.
+// store.AgentTables.
 func TestBackupTablesComeFromRegistry(t *testing.T) {
 	want := []tableSpec{
-		{name: "agents", where: "name = ?", orderBy: "name", agentCol: "name"},
-		{name: "iterations", where: "agent = ?", orderBy: "id", agentCol: "agent"},
-		{name: "ai_requests", where: "agent = ?", orderBy: "id", agentCol: "agent"},
-		{name: "secrets", where: "agent = ?", orderBy: "key", agentCol: "agent", maskCols: []string{"value"}},
-		{name: "subscriptions", where: "agent = ?", orderBy: "id", agentCol: "agent"},
-		{name: "schedules", where: "agent = ?", orderBy: "id", agentCol: "agent"},
-		{name: "scripts", where: "agent = ?", orderBy: "id", agentCol: "agent"},
-		{name: "script_runs", where: "agent = ?", orderBy: "id", agentCol: "agent"},
-		{name: "script_result_outbox", where: "agent = ?", orderBy: "idempotency_key", agentCol: "agent"},
-		{name: "messages", where: "produced_by_agent = ?", orderBy: "id", agentCol: "produced_by_agent"},
-		{name: "deliveries", where: "subscription_id IN (SELECT id FROM subscriptions WHERE agent = ?)", orderBy: "subscription_id, message_id"},
+		{name: "agents", where: "name = ?", deleteWhere: "name = ?", orderBy: "name", agentCol: "name"},
+		{name: "iterations", where: "agent = ?", deleteWhere: "agent = ?", orderBy: "id", agentCol: "agent"},
+		{name: "ai_requests", where: "agent = ?", deleteWhere: "agent = ?", orderBy: "id", agentCol: "agent"},
+		{name: "secrets", where: "agent = ?", deleteWhere: "agent = ?", orderBy: "key", agentCol: "agent", maskCols: []string{"value"}},
+		{name: "schedules", where: "agent = ?", deleteWhere: "agent = ?", orderBy: "id", agentCol: "agent"},
+		{name: "scripts", where: "agent = ?", deleteWhere: "agent = ?", orderBy: "id", agentCol: "agent"},
+		{name: "script_runs", where: "agent = ?", deleteWhere: "agent = ?", orderBy: "id", agentCol: "agent"},
+		{name: "script_result_outbox", where: "agent = ?", deleteWhere: "agent = ?", orderBy: "idempotency_key", agentCol: "agent"},
+		{name: "mail", where: "('agent:' || ?) IN (recipient, sender)", deleteWhere: "recipient = 'agent:' || ?", orderBy: "seq"},
 	}
 	if got := registryBackupTables(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("backup tables from registry =\n%#v\nwant\n%#v", got, want)

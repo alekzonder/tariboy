@@ -132,57 +132,6 @@ type AgentSpec struct {
 	Timeout string `yaml:"timeout"`
 	// Loop is the optional loop cadence + failure-policy block. See LoopSpec.
 	Loop *LoopSpec `yaml:"loop"`
-	// Subscribe is the agent's desired bus subscriptions (spec §5.3). Each entry
-	// is either a bare channel string or an object {channel, type, matcher,
-	// params}; SubscribeSpec.UnmarshalYAML accepts both. Reconciled by
-	// convergeSubscriptions on `up`.
-	Subscribe []SubscribeSpec `yaml:"subscribe"`
-}
-
-// SubscribeSpec is one desired subscription for an agent (spec §5.3). It accepts
-// two YAML forms so simple cases stay terse:
-//
-//	subscribe:
-//	  - group:dev:broadcast                                  # string: plain sub
-//	  - {channel: ci:events, type: "run.finished",           # object: filtered
-//	     matcher: {"data.status": failed}}
-//	  - {channel: issue-provider:query, params: {query: "..."}}     # object: parameterized
-//
-// Channel is the only required field. Type is a comma-separated glob list over
-// message type; Matcher is a content filter (dotted paths → globs), both
-// evaluated by the bus at publish-time. Params is opaque provider input,
-// validated against the channel's provider schema by the daemon at apply time.
-type SubscribeSpec struct {
-	Channel string            `yaml:"channel"`
-	Type    string            `yaml:"type"`
-	Matcher map[string]string `yaml:"matcher"`
-	Params  map[string]any    `yaml:"params"`
-}
-
-// UnmarshalYAML lets a subscribe entry be a bare channel string or the full
-// object form. A scalar node decodes straight into Channel; a mapping decodes
-// into the struct (via a type alias to avoid recursing back into this method).
-func (s *SubscribeSpec) UnmarshalYAML(node *yaml.Node) error {
-	if node.Kind == yaml.ScalarNode {
-		return node.Decode(&s.Channel)
-	}
-	if node.Kind != yaml.MappingNode {
-		return fmt.Errorf("subscribe entry must be a channel string or mapping")
-	}
-	allowed := map[string]bool{"channel": true, "type": true, "matcher": true, "params": true}
-	for i := 0; i < len(node.Content); i += 2 {
-		key := node.Content[i].Value
-		if !allowed[key] {
-			return fmt.Errorf("unknown field %q in subscribe entry", key)
-		}
-	}
-	type raw SubscribeSpec
-	var r raw
-	if err := node.Decode(&r); err != nil {
-		return err
-	}
-	*s = SubscribeSpec(r)
-	return nil
 }
 
 // LoopSpec is the per-agent loop cadence + failure policy (mirrors the old
@@ -442,11 +391,6 @@ func (f File) Validate() error {
 			}
 			if a.Loop.MaxIdleIterations != nil && *a.Loop.MaxIdleIterations < 0 {
 				return fmt.Errorf("agent %q loop max_idle_iterations %d must be >= 0", name, *a.Loop.MaxIdleIterations)
-			}
-		}
-		for i, sub := range a.Subscribe {
-			if sub.Channel == "" {
-				return fmt.Errorf("agent %q subscribe[%d] has no channel", name, i)
 			}
 		}
 	}

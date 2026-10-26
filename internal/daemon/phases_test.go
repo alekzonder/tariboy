@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/agent"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/paths"
@@ -167,20 +166,6 @@ func TestBuildProxyDoesNotListen(t *testing.T) {
 	}
 	if addr := px.proxy.Addr(); addr != "" {
 		t.Fatalf("buildProxy bound %s, want no listener", addr)
-	}
-}
-
-func TestBuildPluginsAllowsCoreSubscribes(t *testing.T) {
-	t.Parallel()
-	proc, c, _ := phaseCore(t, phaseOptions(t))
-	pl := buildPlugins(proc, c)
-	if pl.host == nil || pl.api == nil {
-		t.Fatal("plugin parts missing")
-	}
-	// The subscription hook and params validator treat a core channel as
-	// non-provider, so the subscribe succeeds.
-	if _, err := c.bus.Subscribe("phase-agent", bus.InboxChannel("phase-agent"), bus.Matcher{}, nil); err != nil {
-		t.Fatalf("subscribe: %v", err)
 	}
 }
 

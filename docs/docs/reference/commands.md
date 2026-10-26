@@ -50,11 +50,6 @@ tariboy has three command surfaces:
 | `tariboy agent image cancel NAME` | Cancel a pending agent image |
 | `tariboy agent image set NAME IMAGE` | Select an image for the agent's next iteration |
 | `tariboy agent image status NAME` | Show current, pending, and next agent image |
-| `tariboy agent inbox clear NAME` | Physically clear an agent's pending inbox queue |
-| `tariboy agent inbox ls NAME` | List an agent's inbox (operator), newest first |
-| `tariboy agent inbox processed NAME ID` | Mark an inbox message processed (operator ack) |
-| `tariboy agent inbox reply NAME ID` | Reply to an inbox message (operator); auto-processes the row |
-| `tariboy agent inbox requeue NAME ID` | Requeue a DLQ'd inbox message (operator) |
 | `tariboy agent inspect NAME` | Show one agent's full config |
 | `tariboy agent interactive NAME` | Get or set interactive mode (bool); restart the agent to apply |
 | `tariboy agent kill NAME` | Kill the current iteration via its shim |
@@ -78,26 +73,11 @@ tariboy has three command surfaces:
 | `tariboy agent status history NAME` | List an agent's status-message history (from the audit log) |
 | `tariboy agent status show NAME` | Show one agent's runtime status |
 | `tariboy agent stop NAME` | Stop an agent's loop (current iteration lives) |
-| `tariboy agent subscribe NAME CHANNEL` | Subscribe an agent to a channel (operator) |
-| `tariboy agent subscriptions NAME` | List the channels one agent is subscribed to |
-| `tariboy agent unsubscribe NAME CHANNEL` | Unsubscribe an agent from a channel (operator) |
 | `tariboy agent usage NAME` | Per-agent AI usage: grouped rows + time-bucketed series |
 | `tariboy backup TARGET` | Back up an agent (or 'all') to a portable tar.gz |
 | `tariboy budget ls` | List configured budgets |
 | `tariboy budget set` | Set a cost budget (scope agent:\<name\>\|group:\<g\>\|global) |
 | `tariboy budget status` | Show current spend vs limit for each budget |
-| `tariboy channel inspect CHANNEL` | Show a channel's kind and message count |
-| `tariboy channel ls` | List channels |
-| `tariboy channel tail CHANNEL` | Print recent messages on a channel (-f to follow) |
-| `tariboy channel watches CHANNEL` | List a channel's distinct watches (watch, params, subscribers) |
-| `tariboy chat create ID` | Create a chat and put the customer and the named principals in it |
-| `tariboy chat join CHAT PRINCIPAL` | Add a principal to a chat |
-| `tariboy chat leave CHAT PRINCIPAL` | Remove a principal from a chat, keeping its outstanding deliveries |
-| `tariboy chat ls` | List the customer's chats, most recently active first |
-| `tariboy chat messages AGENT` | Read one chat, oldest first, by chat id or agent name |
-| `tariboy chat participants CHAT` | List the principals taking part in a chat |
-| `tariboy chat read AGENT` | Mark a chat read up to a message timestamp, by chat id or agent name |
-| `tariboy chat unanswered CHAT` | List the chat messages a principal has not answered yet |
 | `tariboy compose archive` | Create a compose-only portable team archive; transfer runnable images separately |
 | `tariboy compose build` | Build the file's images |
 | `tariboy compose down` | Remove the file's agents and groups; --volumes also deletes their data |
@@ -186,7 +166,6 @@ tariboy has three command surfaces:
 | `tariboy maintenance get` | Show database maintenance settings and the last run |
 | `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
 | `tariboy maintenance set` | Change database maintenance settings; unset flags keep their value |
-| `tariboy message send` | Publish a message to a channel (operator) |
 | `tariboy plugin action NAME ACTION` | Invoke a generic action on a running plugin |
 | `tariboy plugin contributions` | List enabled plugin CLI and settings contributions |
 | `tariboy plugin inspect NAME` | Show one plugin's manifest, state and socket |

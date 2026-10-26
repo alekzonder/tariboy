@@ -2,7 +2,9 @@ package commands
 
 import (
 	"flag"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/mail"
@@ -12,6 +14,19 @@ import (
 )
 
 var updateMailGolden = flag.Bool("update-mail-golden", false, "rewrite testdata/mail_responses.golden.json")
+
+// steppingClock returns a clock that advances one second per reading, so
+// letter ids and times are deterministic and strictly ordered.
+func steppingClock() func() time.Time {
+	var mu sync.Mutex
+	now := time.Date(2026, 7, 14, 10, 0, 0, 0, time.UTC)
+	return func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		now = now.Add(time.Second)
+		return now
+	}
+}
 
 // mailFixtureIDs names the letters the mail fixture sends.
 type mailFixtureIDs struct {

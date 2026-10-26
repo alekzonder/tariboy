@@ -165,3 +165,17 @@ func mailCommands() []registry.Command {
 		}),
 	}
 }
+
+// AgentMessagesBatch is an agent's letters per iteration after
+// agent.messages.batch.
+type AgentMessagesBatch struct {
+	Name          string `json:"name"`
+	MessagesBatch int    `json:"messages_batch"`
+}
+
+// AgentMessagesMaxQueue is an agent's open inbox cap after
+// agent.messages.max-queue.
+type AgentMessagesMaxQueue struct {
+	Name             string `json:"name"`
+	MessagesMaxQueue int    `json:"messages_max_queue"`
+}

@@ -47,19 +47,20 @@ type Meta struct {
 // orderBy is a stable key so two dumps of the same rows are byte-identical
 // across hosts (SQLite has no guaranteed row order without ORDER BY).
 type tableSpec struct {
-	name     string
-	where    string   // parameterized scoping clause; exactly one ? = agent name
-	orderBy  string   // stable sort key for cross-host determinism
-	agentCol string   // direct agent-scoping column ("" when scoped indirectly, e.g. deliveries)
-	maskCols []string // blanked unless IncludeSecrets
+	name  string
+	where string // parameterized scoping clause; exactly one ? = agent name
+	// deleteWhere scopes what a forced restore deletes first, when it is
+	// narrower than where (mail: the letters to the agent only).
+	deleteWhere string
+	orderBy     string   // stable sort key for cross-host determinism
+	agentCol    string   // direct agent-scoping column ("" when scoped indirectly, e.g. mail)
+	maskCols    []string // blanked unless IncludeSecrets
 }
 
 // backupTables enumerates the agent-scoped tables: the store.AgentTables rows
 // with a BackupOrder, in that order. Every table has
-// an explicit ORDER BY for determinism. messages are scoped to the ones this
-// agent PRODUCED (its footprint) — channel history is cross-agent and not owned
-// by any single agent, so it is intentionally not dumped. deliveries are scoped
-// to the agent's own subscriptions.
+// an explicit ORDER BY for determinism. mail holds the letters to and from
+// the agent: its inbox, archive and sent letters.
 var backupTables = registryBackupTables()
 
 func registryBackupTables() []tableSpec {
@@ -72,7 +73,11 @@ func registryBackupTables() []tableSpec {
 	sort.Slice(tables, func(i, j int) bool { return tables[i].BackupOrder < tables[j].BackupOrder })
 	out := make([]tableSpec, 0, len(tables))
 	for _, at := range tables {
-		out = append(out, tableSpec{name: at.Name, where: at.Where, orderBy: at.OrderBy, agentCol: at.AgentCol, maskCols: at.MaskCols})
+		deleteWhere := at.DeleteWhere
+		if deleteWhere == "" {
+			deleteWhere = at.Where
+		}
+		out = append(out, tableSpec{name: at.Name, where: at.Where, deleteWhere: deleteWhere, orderBy: at.OrderBy, agentCol: at.AgentCol, maskCols: at.MaskCols})
 	}
 	return out
 }

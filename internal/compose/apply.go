@@ -82,17 +82,12 @@ func (r *Runner) Apply(p Plan) Report {
 		if a.run != nil {
 			changed, err = a.run(results)
 		} else {
-			if a.Note != "" && a.changedBy == nil {
+			if a.Note != "" {
 				r.logf("%s", a.Note)
 			}
 			results[i], err = r.call.Call(a.Call.Method, a.Call.Route, a.Call.Body)
-			switch {
-			case err != nil:
+			if err != nil {
 				err = fmt.Errorf("%s: %w", a.Fail, err)
-			case a.changedBy != nil:
-				if changed = a.changedBy(results[i]); changed && a.Note != "" {
-					r.logf("%s", a.Note)
-				}
 			}
 		}
 		switch {

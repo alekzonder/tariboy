@@ -72,7 +72,6 @@ func addTask(t *testing.T, db *sql.DB, id int, parent any, status string, comple
 	seq, _ := res.LastInsertId()
 	nid := "n" + string(rune('a'+id))
 	exec(t, db, `INSERT INTO task_notification_outbox(notification_id,event_sequence,channel,message_type,next_attempt_at) VALUES (?,?,?,?,?)`, nid, seq, "c", "m", ts(400))
-	exec(t, db, `INSERT INTO task_notification_state(customer_principal,notification_id,read_at) VALUES (?,?,?)`, "user:c", nid, ts(400))
 }
 
 func taskExists(t *testing.T, db *sql.DB, id int) bool {
@@ -231,7 +230,7 @@ func TestCleanupDeletesOnlyOldFinishedTrees(t *testing.T) {
 	if res.Deleted["tasks"] != 4 {
 		t.Errorf("deleted tasks = %d, want 4", res.Deleted["tasks"])
 	}
-	for _, table := range []string{"task_comments", "task_waiting_for", "task_events", "task_notification_outbox", "task_notification_state"} {
+	for _, table := range []string{"task_comments", "task_waiting_for", "task_events", "task_notification_outbox"} {
 		if n := count(t, db, `SELECT COUNT(*) FROM `+table); n != 5 {
 			t.Errorf("%s rows = %d, want 5", table, n)
 		}
@@ -438,7 +437,7 @@ func TestChatRetentionPurgesOnlyOldClosedLetters(t *testing.T) {
 	}
 }
 
-// With both periods set, messages expire at the shorter one.
+// With both periods set, closed letters expire at the shorter one.
 func TestChatRetentionIsShorterThanGeneralRetention(t *testing.T) {
 	svc, st, _ := open(t)
 	addChatMessages(t, st.DB) // default settings: 90 days, chat 7 days
@@ -460,7 +459,7 @@ func TestChatRetentionZeroFollowsGeneralRetention(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := letterIDs(t, st.DB); got != "old,pending,recent" {
-		t.Errorf("messages = %s, want old,pending,recent", got)
+		t.Errorf("mail = %s, want old,pending,recent", got)
 	}
 }
 
@@ -519,7 +518,7 @@ func TestBackupDoesNotWaitForTheWriter(t *testing.T) {
 func TestFailedBackupSkipsCleanup(t *testing.T) {
 	svc, st, backups := open(t)
 	exec(t, st.DB, `INSERT INTO ai_requests(id,ts) VALUES ('old',?)`, ts(100))
-	exec(t, st.DB, `INSERT INTO messages(id,channel,ts) VALUES ('old','chat:dm:a',?)`, ts(100))
+	insertLetters(t, st.DB, letterRow{id: "old", createdAt: ts(100), closed: true})
 	// A regular file where the backup directory should be makes the backup fail.
 	if err := os.MkdirAll(filepath.Dir(backups), 0o700); err != nil {
 		t.Fatal(err)
@@ -534,7 +533,7 @@ func TestFailedBackupSkipsCleanup(t *testing.T) {
 	if n := count(t, st.DB, `SELECT COUNT(*) FROM ai_requests`); n != 1 {
 		t.Fatalf("cleanup ran after failed backup")
 	}
-	if n := count(t, st.DB, `SELECT COUNT(*) FROM messages`); n != 1 {
+	if n := count(t, st.DB, `SELECT COUNT(*) FROM mail`); n != 1 {
 		t.Fatalf("chat history purged after failed backup")
 	}
 	if last, _ := svc.LastResult(); last == nil || last.Error == "" {

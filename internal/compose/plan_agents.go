@@ -1,7 +1,6 @@
 package compose
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -13,13 +12,10 @@ type change struct {
 	note  string
 	fail  string
 	call  Call
-	// changedBy reads from the response whether the call changed anything;
-	// nil means it always did.
-	changedBy func(json.RawMessage) bool
 }
 
 func (p *planner) addChange(resource string, c change, deps ...int) int {
-	return p.add(Action{Resource: resource, Kind: c.kind, Note: c.note, Fail: c.fail, Call: c.call, changedBy: c.changedBy}, deps...)
+	return p.add(Action{Resource: resource, Kind: c.kind, Note: c.note, Fail: c.fail, Call: c.call}, deps...)
 }
 
 func (p *planner) planAgents(f File, live map[string]liveAgent) error {
@@ -55,7 +51,7 @@ func (p *planner) planNewAgent(name string, a AgentSpec) error {
 	if err != nil {
 		return err
 	}
-	for _, c := range append(changes, subscribeChanges(name, a)...) {
+	for _, c := range changes {
 		p.addChange(id, c, create)
 	}
 	if a.Loop == nil || a.Loop.Enabled == nil || *a.Loop.Enabled {
@@ -159,7 +155,7 @@ func loopDisabled(a AgentSpec) bool {
 }
 
 // agentChanges lists the settings of an existing agent that differ from the
-// file, in apply order: group, image, cwd, loop, goal, subscriptions.
+// file, in apply order: group, image, cwd, loop, goal.
 func (r *Runner) agentChanges(name string, a AgentSpec, cur liveAgent) ([]change, error) {
 	var out []change
 	if a.Group != "" && cur.Group != a.Group {
@@ -188,7 +184,7 @@ func (r *Runner) agentChanges(name string, a AgentSpec, cur liveAgent) ([]change
 		return nil, err
 	}
 	out = append(append(out, loop...), goal...)
-	return append(out, subscribeChanges(name, a)...), nil
+	return out, nil
 }
 
 func harnessChange(name string, a AgentSpec, cur liveAgent) *change {
@@ -288,53 +284,6 @@ func goalChanges(name string, a AgentSpec, cur liveAgent) ([]change, error) {
 			fail:  "set goal delivery cooldown " + name, call: Call{"POST", "/api/agents/" + name + "/goal-delivery-cooldown", map[string]any{"seconds": seconds}}})
 	}
 	return out, nil
-}
-
-// subscribeChanges POSTs every subscription the file declares for an agent
-// (spec §5.3) with {channel, type?, matcher?, params?}.
-//
-// Unlike the diff-first settings, each entry is re-POSTed on every `up`: the
-// operator subscriptions GET collapses to distinct channels and drops
-// matcher/params, so there is nothing lossless to diff against. The daemon is
-// idempotent on (agent, channel, matcher), with a parameterized entry's watch
-// fingerprint folded into the matcher key, so a re-applied file creates no
-// duplicate, and its response says whether the call added or resumed a
-// subscription (changed): an entry that already exists counts as unchanged,
-// so a converged file reports ok. A response without the field counts as a
-// change. Params are validated against the channel's provider schema at
-// apply time, so bad params fail the POST loudly. Subscriptions are additive:
-// an entry removed from the file is not torn down.
-func subscribeChanges(name string, a AgentSpec) []change {
-	out := make([]change, 0, len(a.Subscribe))
-	for _, sub := range a.Subscribe {
-		body := map[string]any{"channel": sub.Channel}
-		if sub.Type != "" {
-			body["type"] = sub.Type
-		}
-		if len(sub.Matcher) > 0 {
-			body["matcher"] = sub.Matcher
-		}
-		if len(sub.Params) > 0 {
-			body["params"] = sub.Params
-		}
-		out = append(out, change{kind: "subscribe", note: fmt.Sprintf("subscribed %s -> %s", name, sub.Channel),
-			fail:      fmt.Sprintf("subscribe agent %s to %s", name, sub.Channel),
-			call:      Call{"POST", "/api/agents/" + name + "/subscriptions", body},
-			changedBy: subscribeChanged})
-	}
-	return out
-}
-
-// subscribeChanged reads the changed flag of a subscribe response. A missing
-// or unreadable flag counts as a change.
-func subscribeChanged(result json.RawMessage) bool {
-	var res struct {
-		Changed *bool `json:"changed"`
-	}
-	if err := json.Unmarshal(result, &res); err != nil || res.Changed == nil {
-		return true
-	}
-	return *res.Changed
 }
 
 // createBody is the POST /api/agents body for a new agent.

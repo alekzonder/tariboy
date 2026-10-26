@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/schedule"
@@ -37,9 +36,6 @@ var sentinelErrors = []sentinelError{
 	{script.ErrInvalid, http.StatusBadRequest, "invalid_script", ""},
 	{schedule.ErrNotFound, http.StatusNotFound, "not_found", "schedule not found"},
 	{schedule.ErrInvalid, http.StatusBadRequest, "invalid_schedule", ""},
-	{bus.ErrNotFound, http.StatusNotFound, "not_found", bus.ErrNotFound.Error()},
-	{bus.ErrDeadlineUnsupported, http.StatusBadRequest, "deadline_unsupported", bus.ErrDeadlineUnsupported.Error()},
-	{bus.ErrInvalid, http.StatusBadRequest, "invalid_request", ""},
 }
 
 // ErrorResponse is the one mapping from a domain error to the HTTP answer of

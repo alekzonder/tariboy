@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/maintenance"
 	"github.com/alekzonder/tariboy/internal/retention"
@@ -73,7 +72,6 @@ type Ctx struct {
 	StartedAt   time.Time
 	Control     ServiceControl
 	Scripts     ScriptControl
-	Bus         *bus.Bus
 	Mail        *mail.Mail
 	Plugins     PluginControl
 	Groups      GroupControl

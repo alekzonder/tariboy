@@ -14,7 +14,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/api"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/mail/storedir"
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -98,7 +97,7 @@ func ctxWithStore(t *testing.T) (*registry.Ctx, *agent.Store, *fakeControl) {
 	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	fc := &fakeControl{agents: as}
-	return &registry.Ctx{Store: s, Bus: bus.New(s, time.Now), Mail: mail.New(s, time.Now, storedir.New(s, "customer")), Control: fc, BaseDir: t.TempDir()}, as, fc
+	return &registry.Ctx{Store: s, Mail: mail.New(s, time.Now, storedir.New(s, "customer")), Control: fc, BaseDir: t.TempDir()}, as, fc
 }
 
 // h returns the command's handler behind registry.Call, so a test sees
@@ -701,4 +700,13 @@ func TestAgentScheduleInspectAndListProjection(t *testing.T) {
 			t.Fatalf("schedule projection = %#v", got)
 		}
 	}
+}
+
+func isCode(err error, code string) bool {
+	var ue api.UserError
+	if errors.As(err, &ue) {
+		return ue.Code == code
+	}
+	var pe *registry.ParamError
+	return errors.As(err, &pe) && pe.Code == code
 }

@@ -14,9 +14,9 @@ const customerLoginKey = "customer_login"
 
 // resolveCustomerLogin returns the persisted customer login, adopting
 // DefaultCustomerLogin on first run. Adoption carries existing $USER-derived
-// state — tasks, customer notification state, and the customer channel with its
-// message history and subscriptions — over to the new principal in one
-// transaction, so an upgraded daemon does not orphan them.
+// state — tasks, unsent task notifications and the customer's mail — over to
+// the new principal in one transaction, so an upgraded daemon does not orphan
+// them.
 func resolveCustomerLogin(st *store.Store) (string, error) {
 	if value, ok, err := st.ConfigGet(customerLoginKey); err != nil {
 		return "", err
@@ -50,7 +50,7 @@ func resolveCustomerLogin(st *store.Store) (string, error) {
 
 // previousCustomerPrincipals lists the customer principals this database was
 // written with, plus the login this process would have derived from the
-// account, so a server with no tasks still renames its customer channel.
+// account, so a server with no tasks still carries its customer mail over.
 func previousCustomerPrincipals(tx *sql.Tx, current string) ([]string, error) {
 	seen := map[string]bool{current: true}
 	var out []string
@@ -64,7 +64,6 @@ func previousCustomerPrincipals(tx *sql.Tx, current string) ([]string, error) {
 	}
 	for _, query := range []string{
 		`SELECT DISTINCT customer FROM tasks`,
-		`SELECT DISTINCT customer_principal FROM task_notification_state`,
 	} {
 		rows, err := tx.Query(query)
 		if err != nil {
@@ -89,18 +88,14 @@ func previousCustomerPrincipals(tx *sql.Tx, current string) ([]string, error) {
 }
 
 // adoptCustomerPrincipal rewrites every reference to previous so it names
-// current instead. The customer channel is renamed rather than duplicated; when
-// the target channel already exists the stale row is dropped after its messages
-// and subscriptions have moved. A subscription that would collide with an
-// existing one on the new channel is left alone rather than failing startup —
-// the agent already holds the subscription the move was for.
+// current instead: the tasks, the notifications not sent yet, and the letters
+// to and from the customer.
 func adoptCustomerPrincipal(tx *sql.Tx, previous, current string) error {
 	statements := []struct {
 		query string
 		args  []any
 	}{
 		{`UPDATE tasks SET customer = ? WHERE customer = ?`, []any{current, previous}},
-		{`UPDATE task_notification_state SET customer_principal = ? WHERE customer_principal = ?`, []any{current, previous}},
 		{`UPDATE task_waiting_for SET expected_principal = ? WHERE expected_principal = ?`, []any{current, previous}},
 		{`UPDATE task_waiting_for SET requesting_principal = ? WHERE requesting_principal = ?`, []any{current, previous}},
 		{`UPDATE tasks SET author = ? WHERE author = ?`, []any{current, previous}},
@@ -108,10 +103,8 @@ func adoptCustomerPrincipal(tx *sql.Tx, previous, current string) error {
 		{`UPDATE task_comments SET author = ? WHERE author = ?`, []any{current, previous}},
 		{`UPDATE task_events SET actor = ? WHERE actor = ?`, []any{current, previous}},
 		{`UPDATE task_notification_outbox SET channel = ? WHERE channel = ? AND published_at = ''`, []any{current, previous}},
-		{`UPDATE messages SET channel = ? WHERE channel = ?`, []any{current, previous}},
-		{`UPDATE OR IGNORE subscriptions SET channel = ? WHERE channel = ?`, []any{current, previous}},
-		{`INSERT OR IGNORE INTO channels(name, kind) SELECT ?, kind FROM channels WHERE name = ?`, []any{current, previous}},
-		{`DELETE FROM channels WHERE name = ?`, []any{previous}},
+		{`UPDATE mail SET sender = ? WHERE sender = ?`, []any{current, previous}},
+		{`UPDATE mail SET recipient = ? WHERE recipient = ?`, []any{current, previous}},
 	}
 	for _, statement := range statements {
 		if _, err := tx.Exec(statement.query, statement.args...); err != nil {

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/script"
@@ -38,9 +38,8 @@ func TestErrorResponseMapsDomainErrors(t *testing.T) {
 		{"script invalid", fmt.Errorf("%w: interval must be positive", script.ErrInvalid), 400, "invalid_script", "invalid script: interval must be positive"},
 		{"schedule not found", schedule.ErrNotFound, 404, "not_found", "schedule not found"},
 		{"schedule invalid", fmt.Errorf("%w: bad cron", schedule.ErrInvalid), 400, "invalid_schedule", "invalid schedule: bad cron"},
-		{"bus not found", fmt.Errorf("unsubscribe: %w", bus.ErrNotFound), 404, "not_found", "not found"},
-		{"bus deadline unsupported", bus.ErrDeadlineUnsupported, 400, "deadline_unsupported", bus.ErrDeadlineUnsupported.Error()},
-		{"bus invalid", fmt.Errorf("%w: bad deadline", bus.ErrInvalid), 400, "invalid_request", "invalid request: bad deadline"},
+		{"mail not found", fmt.Errorf("show: %w", &mail.Error{Status: 404, Code: "not_found", Msg: "letter m-1 not found"}), 404, "not_found", "letter m-1 not found"},
+		{"mail answer on task", &mail.Error{Status: 409, Code: "answer_on_task", Msg: "answer it on the task"}, 409, "answer_on_task", "answer it on the task"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

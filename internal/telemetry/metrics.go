@@ -98,7 +98,7 @@ func (m *Metrics) RegisterGauges(g GaugeSource) error {
 			}))
 		return err
 	}
-	if err := reg("tariboy.channel.queue_depth", "unacked bus deliveries", g.QueueDepth); err != nil {
+	if err := reg("tariboy.channel.queue_depth", "open letters to agents", g.QueueDepth); err != nil {
 		return err
 	}
 	if err := reg("tariboy.plugins.healthy", "running plugins", g.PluginsHealthy); err != nil {

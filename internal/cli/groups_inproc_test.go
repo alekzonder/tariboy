@@ -21,7 +21,7 @@ func mustCall(t *testing.T, c *client.Client, method, route string, body any) ma
 	return m
 }
 
-func TestGroupCommandsProvisionSubscriptions(t *testing.T) {
+func TestGroupCommandsAndGroupMail(t *testing.T) {
 	t.Parallel()
 	_, _, c := startDaemon(t)
 	source := t.TempDir()
@@ -56,14 +56,11 @@ func TestGroupCommandsProvisionSubscriptions(t *testing.T) {
 		t.Fatalf("scout group = %v", scout["group"])
 	}
 
-	// group-addressed delivery: publishing to the inbox reaches ONLY the lead.
-	// A member subscribed to the inbox would be a bug; assert via the channel's
-	// derived kind and that both publishes succeed (delivery routing is by
-	// subscription, wired in Task 4 and asserted end-to-end in the e2e Task 12).
-	mustCall(t, c, "POST", "/api/messages", map[string]any{
-		"channel": "group:research:inbox", "type": "task", "text": "triage"})
-	mustCall(t, c, "POST", "/api/messages", map[string]any{
-		"channel": "group:research:broadcast", "type": "note", "text": "hi team"})
+	// A letter to group:research reaches every member, one row each.
+	sent := mustCall(t, c, "POST", "/api/mail", map[string]any{"to": "group:research", "text": "hi team"})
+	if letters, _ := sent["letters"].([]any); len(letters) != 2 {
+		t.Fatalf("group letter = %v; want one letter per member", sent)
+	}
 
 	// Assign an ungrouped agent in, then leave — the command surface round-trips.
 	mustCall(t, c, "POST", "/api/agents", map[string]any{

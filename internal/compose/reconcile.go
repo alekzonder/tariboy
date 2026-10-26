@@ -40,8 +40,7 @@ func (r *Runner) logf(format string, a ...any) {
 // not stop the others, so a later Up converges the rest. The report already
 // shows each failure, so Up then returns only a count of the failed resources
 // (which unwraps to the action errors). Idempotent: a converged file plans no
-// mutating action other than subscription requests the daemon reports
-// unchanged.
+// mutating action.
 func (r *Runner) Up(f File) error {
 	if err := f.Validate(); err != nil {
 		return err

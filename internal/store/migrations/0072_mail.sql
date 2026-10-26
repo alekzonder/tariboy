@@ -1,6 +1,16 @@
 -- 0072_mail.sql -- the per-principal mailbox (mailbox design §1). One row per
 -- recipient; a letter is open while answered_at and dead_at are empty. The
--- bus tables stay until the cutover drops them.
+-- channel bus and the chats are dropped without a data migration: mail starts
+-- empty. Children go before the tables they reference.
+DROP TABLE task_workflow_message_sequence;
+DROP TABLE deliveries;
+DROP TABLE subscriptions;
+DROP TABLE messages;
+DROP TABLE chat_participants;
+DROP TABLE chats;
+DROP TABLE channels;
+DROP TABLE task_notification_state;
+
 CREATE TABLE mail (
     seq            INTEGER PRIMARY KEY AUTOINCREMENT, -- monotonic, for ingress
     id             TEXT NOT NULL UNIQUE,              -- m-<ts>-<n>, the public handle

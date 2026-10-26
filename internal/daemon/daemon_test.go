@@ -16,7 +16,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/audit"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/paths"
@@ -280,62 +279,6 @@ func TestWorkflowDispatcherRunsAtStartupOnSignalAndPeriodicallyAndStops(t *testi
 	}
 }
 
-func TestOrdinaryPublishDoesNotSynchronouslyWriteWorkflowStateOrChangeLegacyDelivery(t *testing.T) {
-	t.Parallel()
-	st := storetest.Open(t)
-	agents := agent.NewStore(st)
-	if err := agents.Create(agent.Agent{Name: "legacy"}); err != nil {
-		t.Fatal(err)
-	}
-	b := bus.New(st, time.Now)
-	if _, err := b.Subscribe("legacy", "chat:legacy", nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	signal := newWorkflowIngressSignal()
-	taskService := tasks.NewService(st.DB, "customer", time.Now)
-	b.SetPublishHook(func(bus.Message, []string) {
-		if taskService.WorkflowIngressEnabled() {
-			signal.Signal()
-		}
-	})
-	first, err := b.Publish(bus.Message{Channel: "chat:legacy", Source: "operator", Type: "note", Text: "unchanged legacy payload"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	returned := make(chan error, 1)
-	go func() {
-		_, err := b.Publish(bus.Message{Channel: "chat:legacy", Source: "operator", Type: "note", Text: "second"})
-		returned <- err
-	}()
-	select {
-	case err := <-returned:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("publish blocked on full workflow signal")
-	}
-	if _, err := taskService.ReconcileWorkflowObservations(context.Background(), 100); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-signal.C():
-		t.Fatal("ordinary publish signaled workflow ingress without targets")
-	default:
-	}
-	var created int
-	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM tasks`).Scan(&created); err != nil {
-		t.Fatal(err)
-	}
-	if created != 0 {
-		t.Fatalf("ordinary publish created %d tasks", created)
-	}
-	pending, err := b.Pending("legacy", 10)
-	if err != nil || len(pending) != 2 || pending[0].ID != first.ID || pending[0].Text != "unchanged legacy payload" {
-		t.Fatalf("legacy pending = %#v, %v", pending, err)
-	}
-}
-
 func TestTaskMutationSignalsGoalReconciler(t *testing.T) {
 	t.Parallel()
 	st := storetest.Open(t)
@@ -354,39 +297,6 @@ func TestTaskMutationSignalsGoalReconciler(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("goal signals = %d, want 1", calls)
-	}
-}
-
-// Removing daemon-start reconciliation must make this fail: the legacy agent
-// would still have no durable delivery lane after restart.
-func TestReconcileAgentInboxesRepairsExistingAgentsIdempotently(t *testing.T) {
-	t.Parallel()
-	base := t.TempDir()
-	st := storetest.OpenAt(t, filepath.Join(base, "tariboyd.db"))
-	agents := agent.NewStore(st)
-	for _, name := range []string{"legacy", "already"} {
-		if err := agents.Create(agent.Agent{Name: name}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	channelBus := bus.New(st, time.Now)
-	if _, err := channelBus.Subscribe("already", bus.InboxChannel("already"), bus.Matcher{}, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	for range 2 {
-		if err := reconcileAgentInboxes(agents, channelBus); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, name := range []string{"legacy", "already"} {
-		subs, err := channelBus.ListSubscriptions(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(subs) != 1 || subs[0].Channel != bus.InboxChannel(name) || len(subs[0].Matcher) != 0 || len(subs[0].TypeFilter) != 0 {
-			t.Fatalf("subscriptions for %s = %+v, want one unfiltered own inbox", name, subs)
-		}
 	}
 }
 

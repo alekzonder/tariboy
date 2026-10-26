@@ -20,6 +20,9 @@ type AgentTable struct {
 	Name string
 	// Where scopes rows to the agent with exactly one ? placeholder.
 	Where string
+	// DeleteWhere, when set, scopes the rows agent removal deletes instead of
+	// Where, for a table whose backup holds more rows than removal deletes.
+	DeleteWhere string
 	// Scope prefixes the agent name bound to Where, e.g. "agent:" for budgets.
 	Scope string
 	// AgentCol is the direct agent column, "" when scoped indirectly.
@@ -41,9 +44,6 @@ var AgentTables = []AgentTable{
 	{Name: "secrets", Where: "agent = ?", AgentCol: "agent", OrderBy: "key", MaskCols: []string{"value"}, Phase: PhaseCore, BackupOrder: 4},
 	{Name: "agent_budgets", Where: "agent_name = ?", AgentCol: "agent_name", Phase: PhaseCore},
 	{Name: "agents", Where: "name = ?", AgentCol: "name", OrderBy: "name", Phase: PhaseCore, BackupOrder: 1},
-	// deliveries reference subscriptions by id, so clear them first.
-	{Name: "deliveries", Where: "subscription_id IN (SELECT id FROM subscriptions WHERE agent = ?)", OrderBy: "subscription_id, message_id", Phase: PhaseData, BackupOrder: 11},
-	{Name: "subscriptions", Where: "agent = ?", AgentCol: "agent", OrderBy: "id", Phase: PhaseData, BackupOrder: 5},
 	{Name: "schedules", Where: "agent = ?", AgentCol: "agent", OrderBy: "id", Phase: PhaseData, BackupOrder: 6},
 	{Name: "scripts", Where: "agent = ?", AgentCol: "agent", OrderBy: "id", Phase: PhaseData, BackupOrder: 7},
 	{Name: "script_result_outbox", Where: "agent = ?", AgentCol: "agent", OrderBy: "idempotency_key", Phase: PhaseData, BackupOrder: 9},
@@ -52,8 +52,11 @@ var AgentTables = []AgentTable{
 	{Name: "budgets", Where: "scope = ?", Scope: "agent:", Phase: PhaseData},
 	// script_runs go with their scripts by ON DELETE CASCADE.
 	{Name: "script_runs", Where: "agent = ?", AgentCol: "agent", OrderBy: "id", BackupOrder: 8},
-	// messages are channel history shared with other agents: backed up, kept.
-	{Name: "messages", Where: "produced_by_agent = ?", AgentCol: "produced_by_agent", OrderBy: "id", BackupOrder: 10},
+	// A backup holds the agent's inbox, archive and sent letters; removal
+	// deletes the letters to the agent and keeps the ones it sent, which sit
+	// in other mailboxes.
+	{Name: "mail", Where: "('agent:' || ?) IN (recipient, sender)", DeleteWhere: "recipient = 'agent:' || ?",
+		OrderBy: "seq", Phase: PhaseData, BackupOrder: 10},
 }
 
 // DeleteAgentRows deletes the agent's rows from every registry table of phase,
@@ -64,7 +67,11 @@ func DeleteAgentRows(tx *sql.Tx, name string, phase Phase) (map[string]int64, er
 		if at.Phase != phase || phase == PhaseNone {
 			continue
 		}
-		res, err := tx.Exec(`DELETE FROM `+at.Name+` WHERE `+at.Where, at.Scope+name)
+		where := at.Where
+		if at.DeleteWhere != "" {
+			where = at.DeleteWhere
+		}
+		res, err := tx.Exec(`DELETE FROM `+at.Name+` WHERE `+where, at.Scope+name)
 		if err != nil {
 			return nil, err
 		}
