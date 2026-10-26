@@ -15,6 +15,8 @@ import (
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
+	"github.com/alekzonder/tariboy/internal/mail/storedir"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
@@ -96,7 +98,7 @@ func ctxWithStore(t *testing.T) (*registry.Ctx, *agent.Store, *fakeControl) {
 	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	fc := &fakeControl{agents: as}
-	return &registry.Ctx{Store: s, Bus: bus.New(s, time.Now), Control: fc, BaseDir: t.TempDir()}, as, fc
+	return &registry.Ctx{Store: s, Bus: bus.New(s, time.Now), Mail: mail.New(s, time.Now, storedir.New(s, "customer")), Control: fc, BaseDir: t.TempDir()}, as, fc
 }
 
 // h returns the command's handler behind registry.Call, so a test sees
@@ -471,11 +473,8 @@ func TestAgentStatusIncludesMessageQueueSaturation(t *testing.T) {
 	if err := agents.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", MessagesMaxQueue: 2}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Bus.Subscribe("worker", bus.InboxChannel("worker"), nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	for range 2 {
-		if _, err := c.Bus.Publish(bus.Message{Channel: bus.InboxChannel("worker"), Source: "operator"}); err != nil {
+	for range 3 {
+		if _, err := c.Mail.Send(mail.Letter{From: "user:customer", To: "agent:worker", Body: "x", NeedsReply: true}); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/logrotate"
 	"github.com/alekzonder/tariboy/internal/loop"
 	"github.com/alekzonder/tariboy/internal/mail"
+	"github.com/alekzonder/tariboy/internal/mail/storedir"
 	"github.com/alekzonder/tariboy/internal/maintenance"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugins"
@@ -231,8 +232,12 @@ func openStore(ctx context.Context, proc *process, stack *shutdownStack) (*coreP
 		time.Now,
 	)
 	rec := Recorder{log: log, store: st, audit: auditReg, hub: hub}
-	mailbox := mail.New(st, time.Now, mailDirectory{db: st.DB, agents: as, customer: customerLogin})
+	mailbox := mail.New(st, time.Now, storedir.New(st, customerLogin))
 	mailbox.SetAuditHook(rec.Record)
+	mailbox.SetEventHook(func(h mail.Hint) {
+		hub.Emit(events.Event{Agent: mailHintAgent(h), Type: "mail", Time: h.TS,
+			Data: map[string]any{"id": h.ID, "from": h.From, "to": h.To, "kind": h.Kind}})
+	})
 	return &coreParts{
 		st: st, metrics: metrics, agents: as, bus: channelBus, mail: mailbox, hub: hub, audit: auditReg,
 		rec: rec, customerLogin: customerLogin,
@@ -647,7 +652,7 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 
 	cctx := &registry.Ctx{
 		Store: st, Log: log, BaseDir: p.Base, Socket: p.Socket(), HTTPAddr: o.HTTPAddr,
-		Version: version.Version, StartedAt: time.Now(), Control: manager, Scripts: manager, Bus: c.bus, Plugins: pl.host,
+		Version: version.Version, StartedAt: time.Now(), Control: manager, Scripts: manager, Bus: c.bus, Mail: c.mail, Plugins: pl.host,
 		Groups:         groupProv,
 		Operator:       tk.service.CustomerLogin(),
 		Retention:      &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},

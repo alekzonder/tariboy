@@ -16,6 +16,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/maintenance"
 	"github.com/alekzonder/tariboy/internal/retention"
 	"github.com/alekzonder/tariboy/internal/script"
@@ -73,6 +74,7 @@ type Ctx struct {
 	Control     ServiceControl
 	Scripts     ScriptControl
 	Bus         *bus.Bus
+	Mail        *mail.Mail
 	Plugins     PluginControl
 	Groups      GroupControl
 	Operator    string

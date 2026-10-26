@@ -3938,6 +3938,94 @@
         ],
         "type": "object"
       },
+      "Letter": {
+        "additionalProperties": false,
+        "properties": {
+          "answer_id": {
+            "type": "string"
+          },
+          "answered_at": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "body": {
+            "type": "string"
+          },
+          "close_note": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          },
+          "dead_at": {
+            "type": "string"
+          },
+          "dead_reason": {
+            "type": "string"
+          },
+          "deadline": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "in_reply_to": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "needs_reply": {
+            "type": "boolean"
+          },
+          "produced_in_iteration": {
+            "type": "string"
+          },
+          "read_at": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "from",
+          "to",
+          "subject",
+          "body",
+          "kind",
+          "data",
+          "needs_reply",
+          "in_reply_to",
+          "deadline",
+          "created_at",
+          "read_at",
+          "answered_at",
+          "answer_id",
+          "close_note",
+          "attempts",
+          "dead_at",
+          "dead_reason",
+          "produced_in_iteration"
+        ],
+        "type": "object"
+      },
       "LimitsView": {
         "additionalProperties": false,
         "properties": {
@@ -4092,6 +4180,162 @@
         "required": [
           "name",
           "timeout_s"
+        ],
+        "type": "object"
+      },
+      "MailClearResult": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "type": "object"
+      },
+      "MailCloseResult": {
+        "additionalProperties": false,
+        "properties": {
+          "letter": {
+            "$ref": "#/components/schemas/Letter"
+          }
+        },
+        "required": [
+          "letter"
+        ],
+        "type": "object"
+      },
+      "MailList": {
+        "additionalProperties": false,
+        "properties": {
+          "as": {
+            "type": "string"
+          },
+          "box": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "letters": {
+            "items": {
+              "$ref": "#/components/schemas/Letter"
+            },
+            "type": "array"
+          },
+          "next_before": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "box",
+          "as",
+          "letters",
+          "count",
+          "next_before"
+        ],
+        "type": "object"
+      },
+      "MailReadResult": {
+        "additionalProperties": false,
+        "properties": {
+          "closed_notices": {
+            "type": "integer"
+          },
+          "read": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "closed_notices",
+          "read"
+        ],
+        "type": "object"
+      },
+      "MailReplyResult": {
+        "additionalProperties": false,
+        "properties": {
+          "closed": {
+            "type": "boolean"
+          },
+          "letter": {
+            "$ref": "#/components/schemas/Letter"
+          }
+        },
+        "required": [
+          "letter",
+          "closed"
+        ],
+        "type": "object"
+      },
+      "MailRequeueResult": {
+        "additionalProperties": false,
+        "properties": {
+          "letter": {
+            "$ref": "#/components/schemas/Letter"
+          }
+        },
+        "required": [
+          "letter"
+        ],
+        "type": "object"
+      },
+      "MailSendResult": {
+        "additionalProperties": false,
+        "properties": {
+          "letters": {
+            "items": {
+              "$ref": "#/components/schemas/Letter"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "letters"
+        ],
+        "type": "object"
+      },
+      "MailThread": {
+        "additionalProperties": false,
+        "properties": {
+          "letter": {
+            "$ref": "#/components/schemas/Letter"
+          },
+          "reply": {
+            "$ref": "#/components/schemas/Letter"
+          }
+        },
+        "required": [
+          "letter"
+        ],
+        "type": "object"
+      },
+      "MailUnread": {
+        "additionalProperties": false,
+        "properties": {
+          "as": {
+            "type": "string"
+          },
+          "by_sender": {
+            "items": {
+              "$ref": "#/components/schemas/SenderCount"
+            },
+            "type": "array"
+          },
+          "open": {
+            "type": "integer"
+          },
+          "unread": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "as",
+          "open",
+          "unread",
+          "by_sender"
         ],
         "type": "object"
       },
@@ -5206,6 +5450,26 @@
           "name",
           "key",
           "stored"
+        ],
+        "type": "object"
+      },
+      "SenderCount": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sender",
+          "kind",
+          "count"
         ],
         "type": "object"
       },
@@ -13311,6 +13575,96 @@
         "summary": "Get or set loop timeout (seconds); omit value to read"
       }
     },
+    "/api/agents/{name}/mail/clear": {
+      "post": {
+        "operationId": "agent.mail.clear",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "agent name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailClearResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Delete the open letters in an agent's inbox"
+      }
+    },
     "/api/agents/{name}/messages/batch": {
       "post": {
         "operationId": "agent.messages.batch",
@@ -21210,6 +21564,789 @@
           }
         },
         "summary": "Show an image prompt template"
+      }
+    },
+    "/api/mail": {
+      "get": {
+        "operationId": "mail.ls",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "box",
+            "required": false,
+            "schema": {
+              "description": "inbox, sent or archive",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "most letters to return (default 100)",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "description": "created_at to page before (sent and archive)",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "as",
+            "required": false,
+            "schema": {
+              "description": "principal to act as (default the customer)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailList"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "List one mailbox: inbox, sent or archive"
+      },
+      "post": {
+        "operationId": "mail.send",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "as": {
+                    "description": "principal to act as (default the customer)",
+                    "type": "string"
+                  },
+                  "data": {
+                    "description": "structured data object",
+                    "type": "string"
+                  },
+                  "deadline": {
+                    "description": "reply deadline: a duration such as 5m or an RFC 3339 time",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "description": "kind (default message)",
+                    "type": "string"
+                  },
+                  "notice": {
+                    "description": "send a notice that needs no reply",
+                    "type": "boolean"
+                  },
+                  "subject": {
+                    "description": "subject",
+                    "type": "string"
+                  },
+                  "text": {
+                    "description": "body",
+                    "type": "string"
+                  },
+                  "to": {
+                    "description": "recipient principals, comma separated",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "to"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailSendResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Send a letter: a request unless notice is set"
+      }
+    },
+    "/api/mail/read": {
+      "post": {
+        "operationId": "mail.read",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "as": {
+                    "description": "principal to act as (default the customer)",
+                    "type": "string"
+                  },
+                  "ids": {
+                    "description": "letter ids",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "ids"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailReadResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Mark letters read; a read notice closes"
+      }
+    },
+    "/api/mail/unread": {
+      "get": {
+        "operationId": "mail.unread",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "as",
+            "required": false,
+            "schema": {
+              "description": "principal to act as (default the customer)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailUnread"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Count the open letters by sender and kind"
+      }
+    },
+    "/api/mail/{id}": {
+      "get": {
+        "operationId": "mail.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "letter id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "as",
+            "required": false,
+            "schema": {
+              "description": "principal to act as (default the customer)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailThread"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Show one letter and its reply"
+      }
+    },
+    "/api/mail/{id}/close": {
+      "post": {
+        "operationId": "mail.close",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "letter id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "as": {
+                    "description": "principal to act as (default the customer)",
+                    "type": "string"
+                  },
+                  "note": {
+                    "description": "archive note",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailCloseResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Archive a letter without a reply"
+      }
+    },
+    "/api/mail/{id}/reply": {
+      "post": {
+        "operationId": "mail.reply",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "letter id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "as": {
+                    "description": "principal to act as (default the customer)",
+                    "type": "string"
+                  },
+                  "ask": {
+                    "description": "make the reply a request",
+                    "type": "boolean"
+                  },
+                  "text": {
+                    "description": "reply body",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailReplyResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Reply to a letter, which closes it"
+      }
+    },
+    "/api/mail/{id}/requeue": {
+      "post": {
+        "operationId": "mail.requeue",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "letter id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "as": {
+                    "description": "principal to act as (default the customer)",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailRequeueResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Return a dead letter to the inbox"
       }
     },
     "/api/maintenance": {

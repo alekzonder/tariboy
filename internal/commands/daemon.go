@@ -157,6 +157,9 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, agentInboxProcessed())
 	mustRegister(r, agentInboxReply())
 	mustRegister(r, agentInboxRequeue())
+	for _, cmd := range mailCommands() {
+		mustRegister(r, cmd)
+	}
 	mustRegister(r, scheduleLs())
 	mustRegister(r, scriptLs())
 	mustRegister(r, scriptRunOnce())
@@ -272,6 +275,8 @@ func BuildRegistry() *registry.Registry {
 	mustGroup(r, "tasks.workflow.runs", "Read script runs of workflow tasks")
 	mustGroup(r, "tasks.comments", "Manage native task comments")
 	mustGroup(r, "tasks.relations", "Manage native task relations")
+	mustGroup(r, "mail", "Read and send mail as the customer or another principal")
+	mustGroup(r, "agent.mail", "Manage an agent's mailbox")
 	mustGroup(r, "harness", "Inspect the harnesses installed on the daemon host")
 	mustGroup(r, "harness.codex-approval", "Read or set how this daemon starts codex (--yolo or --approve-for-me)")
 	mustValidate(r)

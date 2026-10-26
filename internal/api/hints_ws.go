@@ -9,19 +9,16 @@ import (
 	"github.com/coder/websocket"
 )
 
-// serveMessages streams live message hints for every agent on this host over one
-// socket, so a chat list and an open conversation both refresh the moment
-// something is published instead of polling. A frame is only a hint: the client
-// refetches over HTTP, which stays authoritative. Nothing is replayed, because a
-// client refetches on connect and on every reconnect anyway.
-func (s *Server) serveMessages(w http.ResponseWriter, r *http.Request) {
-	// "message" excludes terminal stream bytes, which are not conversation.
-	s.serveHints(w, r, []string{"message"}, func(event events.Event) map[string]any {
-		hint := map[string]any{"agent": event.Agent, "ts": event.Time}
-		for _, key := range []string{"id", "channel", "chat", "type", "from"} {
-			if value, present := event.Data[key]; present {
-				hint[key] = value
-			}
+// serveMail streams one hint per written letter, {id, from, to, kind, ts}, so
+// a mailbox refreshes the moment a letter is sent instead of polling. A frame
+// is only a hint: the client refetches over HTTP, which stays authoritative.
+// Nothing is replayed, because a client refetches on connect and on every
+// reconnect anyway.
+func (s *Server) serveMail(w http.ResponseWriter, r *http.Request) {
+	s.serveHints(w, r, []string{"mail"}, func(event events.Event) map[string]any {
+		hint := map[string]any{"ts": event.Time}
+		for _, key := range []string{"id", "from", "to", "kind"} {
+			hint[key] = event.Data[key]
 		}
 		return hint
 	})

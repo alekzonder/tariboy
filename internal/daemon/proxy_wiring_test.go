@@ -19,7 +19,6 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/aiproxy"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
@@ -500,20 +499,10 @@ func TestProxyWiredIntoIteration(t *testing.T) {
 		t.Fatalf("start agent: %v", err)
 	}
 
-	// Subscribe the agent to its own inbox (as its harness normally would) so the
-	// publish below produces a pending delivery that wakes a message iteration.
-	seed, err := store.Open(filepath.Join(base, "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := bus.New(seed, time.Now).Subscribe(created.Name, bus.InboxChannel(created.Name), bus.Matcher{}, nil); err != nil {
-		t.Fatal(err)
-	}
-	seed.Close()
 
-	// Publish through the daemon so its bus hook wakes the engine.
-	if _, err := c.Call("POST", "/api/messages", map[string]any{
-		"channel": bus.InboxChannel(created.Name), "type": "note", "text": "go"}); err != nil {
+	// Send through the daemon so its mail wake hook wakes the engine.
+	if _, err := c.Call("POST", "/api/mail", map[string]any{
+		"to": "agent:" + created.Name, "text": "go"}); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 
@@ -643,17 +632,8 @@ func TestCodexChatGPTProxyWiring(t *testing.T) {
 		t.Fatalf("start agent: %v", err)
 	}
 
-	seed, err := store.Open(filepath.Join(base, "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := bus.New(seed, time.Now).Subscribe(created.Name, bus.InboxChannel(created.Name), bus.Matcher{}, nil); err != nil {
-		seed.Close()
-		t.Fatal(err)
-	}
-	seed.Close()
-	if _, err := c.Call("POST", "/api/messages", map[string]any{
-		"channel": bus.InboxChannel(created.Name), "type": "note", "text": "go",
+	if _, err := c.Call("POST", "/api/mail", map[string]any{
+		"to": "agent:" + created.Name, "text": "go",
 	}); err != nil {
 		t.Fatalf("publish wake message: %v", err)
 	}
@@ -914,17 +894,9 @@ func TestProviderKeysFromAgentEnvAndSecretsReachHarness(t *testing.T) {
 				tc.seed(t, c, created.Name)
 			}
 
-			seed, err := store.Open(filepath.Join(base, "tariboyd.db"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := bus.New(seed, time.Now).Subscribe(created.Name, bus.InboxChannel(created.Name), bus.Matcher{}, nil); err != nil {
-				t.Fatal(err)
-			}
-			seed.Close()
 
-			if _, err := c.Call("POST", "/api/messages", map[string]any{
-				"channel": bus.InboxChannel(created.Name), "type": "note", "text": "go"}); err != nil {
+			if _, err := c.Call("POST", "/api/mail", map[string]any{
+				"to": "agent:" + created.Name, "text": "go"}); err != nil {
 				t.Fatalf("publish: %v", err)
 			}
 			select {

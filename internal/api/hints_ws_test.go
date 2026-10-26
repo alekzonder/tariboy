@@ -19,7 +19,7 @@ import (
 )
 
 func messagesWSURL(httpURL string) string {
-	return "ws" + strings.TrimPrefix(httpURL, "http") + "/api/messages/ws"
+	return "ws" + strings.TrimPrefix(httpURL, "http") + "/api/mail/ws"
 }
 
 func messagesWSServer(t *testing.T) (*httptest.Server, *events.Hub) {
@@ -34,9 +34,9 @@ func messagesWSServer(t *testing.T) (*httptest.Server, *events.Hub) {
 	return httpServer, hub
 }
 
-// One socket per host carries every chat's live hints, so the client refetches
+// One socket per host carries a hint for every letter, so a mailbox refetches
 // immediately instead of polling.
-func TestMessagesWebSocketStreamsEveryAgentsMessageHints(t *testing.T) {
+func TestMailWebSocketStreamsLetterHints(t *testing.T) {
 	t.Parallel()
 	httpServer, hub := messagesWSServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -47,18 +47,16 @@ func TestMessagesWebSocketStreamsEveryAgentsMessageHints(t *testing.T) {
 	}
 	defer ws.CloseNow()
 
-	// The handler subscribes after the handshake completes, so a client can
-	// publish before the subscription exists — which is exactly why a real
-	// client refetches on open. Keep emitting until one frame is read, rather
-	// than racing the accept with a single publish.
+	// The handler subscribes after the handshake completes, so keep emitting
+	// until one frame is read rather than racing the accept with one event.
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
 		ticker := time.NewTicker(25 * time.Millisecond)
 		defer ticker.Stop()
 		for {
-			hub.Emit(events.Event{Agent: "worker", Type: "message", Time: "t", Data: map[string]any{
-				"id": "m1", "channel": "user:customer", "type": "task.question", "from": "agent:worker",
+			hub.Emit(events.Event{Agent: "worker", Type: "mail", Time: "t", Data: map[string]any{
+				"id": "m1", "from": "agent:worker", "to": "user:customer", "kind": "task.question",
 			}})
 			select {
 			case <-stop:
@@ -75,62 +73,18 @@ func TestMessagesWebSocketStreamsEveryAgentsMessageHints(t *testing.T) {
 	if err := json.Unmarshal(raw, &hint); err != nil {
 		t.Fatal(err)
 	}
-	if hint["agent"] != "worker" || hint["channel"] != "user:customer" ||
-		hint["from"] != "agent:worker" || hint["id"] != "m1" {
-		t.Fatalf("hint = %#v", hint)
+	want := map[string]any{"id": "m1", "from": "agent:worker", "to": "user:customer", "kind": "task.question", "ts": "t"}
+	if len(hint) != len(want) {
+		t.Fatalf("hint = %#v; want exactly %#v", hint, want)
 	}
-}
-
-// A chat publish names its chat in the frame, so a client can refetch exactly
-// that conversation. A message outside any chat carries no chat key at all, so
-// existing consumers keep working unchanged.
-func TestMessageHintCarriesTheChatID(t *testing.T) {
-	t.Parallel()
-	httpServer, hub := messagesWSServer(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	ws, _, err := websocket.Dial(ctx, messagesWSURL(httpServer.URL), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ws.CloseNow()
-
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		ticker := time.NewTicker(25 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			hub.Emit(events.Event{Agent: "worker", Type: "message", Time: "t", Data: map[string]any{
-				"id": "m1", "channel": "chat:tasks:worker", "chat": "tasks:worker",
-				"type": "task.assigned", "from": "system:tasks",
-			}})
-			select {
-			case <-stop:
-				return
-			case <-ticker.C:
-			}
+	for k, v := range want {
+		if hint[k] != v {
+			t.Fatalf("hint = %#v; want %#v", hint, want)
 		}
-	}()
-	_, raw, err := ws.Read(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var hint map[string]any
-	if err := json.Unmarshal(raw, &hint); err != nil {
-		t.Fatal(err)
-	}
-	if hint["chat"] != "tasks:worker" {
-		t.Fatalf("a chat publish must name its chat, got %#v", hint)
-	}
-	if hint["agent"] != "worker" {
-		t.Fatalf("the agent field stays for existing consumers, got %#v", hint)
 	}
 }
 
-// Terminal stream bytes are not conversation, so the chat socket must ask the
-// hub for message events only, and for every agent rather than one.
-func TestMessagesWebSocketWatchesEveryAgentAndOnlyMessages(t *testing.T) {
+func TestMailWebSocketWatchesEveryAgentAndOnlyMail(t *testing.T) {
 	t.Parallel()
 	recorder := &recordingEvents{}
 	server := NewServer(registry.New(), &registry.Ctx{
@@ -150,8 +104,8 @@ func TestMessagesWebSocketWatchesEveryAgentAndOnlyMessages(t *testing.T) {
 
 	testutil.WaitFor(3*time.Second, func() bool { return recorder.calls() > 0 })
 	agent, types := recorder.subscription()
-	if agent != "" || len(types) != 1 || types[0] != "message" {
-		t.Fatalf("subscribed as agent %q with types %v; want every agent and [message]", agent, types)
+	if agent != "" || len(types) != 1 || types[0] != "mail" {
+		t.Fatalf("subscribed as agent %q with types %v; want every agent and [mail]", agent, types)
 	}
 }
 
@@ -181,13 +135,13 @@ func (r *recordingEvents) subscription() (string, []string) {
 	return r.agent, r.types
 }
 
-func TestMessagesWebSocketRejectsUntrustedOriginWithoutBearer(t *testing.T) {
+func TestMailWebSocketRejectsUntrustedOriginWithoutBearer(t *testing.T) {
 	t.Parallel()
 	httpServer, _ := messagesWSServer(t)
 	_, response, err := websocket.Dial(context.Background(), messagesWSURL(httpServer.URL),
 		&websocket.DialOptions{HTTPHeader: http.Header{"Origin": {"https://evil.example"}}})
 	if err == nil {
-		t.Fatal("untrusted tokenless origin unexpectedly opened the messages websocket")
+		t.Fatal("untrusted tokenless origin unexpectedly opened the mail websocket")
 	}
 	if response == nil || response.StatusCode != http.StatusForbidden {
 		t.Fatalf("response = %#v, want HTTP 403", response)
