@@ -13,6 +13,7 @@ import { harnessesApi } from "./harnesses";
 import { imageSourcesApi } from "./imageSources";
 import { imagesApi } from "./images";
 import { iterationsApi } from "./iterations";
+import { mailApi } from "./mail";
 import { pluginsApi } from "./plugins";
 import { scriptsApi } from "./scripts";
 import { storesApi } from "./stores";
@@ -31,6 +32,7 @@ export * from "./harnesses";
 export * from "./imageSources";
 export * from "./images";
 export * from "./iterations";
+export * from "./mail";
 export * from "./plugins";
 export * from "./scripts";
 export * from "./stores";
@@ -50,6 +52,7 @@ export interface ApiClient extends Transport {
   readonly imageSources: ReturnType<typeof imageSourcesApi>;
   readonly images: ReturnType<typeof imagesApi>;
   readonly iterations: ReturnType<typeof iterationsApi>;
+  readonly mail: ReturnType<typeof mailApi>;
   readonly plugins: ReturnType<typeof pluginsApi>;
   readonly scripts: ReturnType<typeof scriptsApi>;
   readonly stores: ReturnType<typeof storesApi>;
@@ -76,6 +79,7 @@ export function createApi(target: ApiTarget): ApiClient {
     imageSources: imageSourcesApi(t),
     images: imagesApi(t),
     iterations: iterationsApi(t),
+    mail: mailApi(t),
     plugins: pluginsApi(t),
     scripts: scriptsApi(t),
     stores: storesApi(t),

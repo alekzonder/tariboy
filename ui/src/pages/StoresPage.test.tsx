@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { ApiProvider } from "@/components/ApiProvider";
 import { DaemonProvider } from "@/components/DaemonProvider";

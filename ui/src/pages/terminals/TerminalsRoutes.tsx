@@ -14,6 +14,7 @@ import { agentPath } from "./terminalsHosts";
 
 // Server pages load on first open, so the initial bundle carries only the
 // shell, the agent list and the agent workspace.
+const ServerMailboxTab = lazy(() => import("@/pages/mailbox/ServerMailboxTab"));
 const TasksWorkspace = lazy(() => import("@/pages/tasks/TasksWorkspace"));
 const AllTasksWorkspace = lazy(() => import("@/pages/tasks/AllTasksWorkspace"));
 const ServerActivityPage = lazy(() => import("@/pages/activity/ServerActivityPage"));
@@ -39,6 +40,7 @@ interface ServerRoute {
 
 /** Each server page, or null when its route lacks what the page needs. */
 const SERVER_VIEWS: Record<ServerView, (route: ServerRoute) => ReactNode> = {
+  mail: (route) => <ServerMailboxTab key={route.hostId} hostId={route.hostId} />,
   tasks: (route) => (
     <TasksWorkspace
       initialTaskKey={route.initialTaskKey}

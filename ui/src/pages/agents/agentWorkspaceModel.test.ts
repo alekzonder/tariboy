@@ -12,6 +12,7 @@ const base = "/agents/local/dev";
 describe("agentTabs", () => {
   it("lists every tab in Expert mode", () => {
     expect(agentTabs(false).map(([key]) => key)).toEqual([
+      "mailbox",
       "tasks",
       "console",
       "activity",
@@ -21,7 +22,12 @@ describe("agentTabs", () => {
   });
 
   it("keeps only the Simple tabs in Simple mode", () => {
-    expect(agentTabs(true).map(([key]) => key)).toEqual(["tasks", "console", "configuration"]);
+    expect(agentTabs(true).map(([key]) => key)).toEqual([
+      "mailbox",
+      "tasks",
+      "console",
+      "configuration",
+    ]);
   });
 });
 
@@ -29,6 +35,8 @@ describe("resolveAgentTab", () => {
   it.each<[string, Parameters<typeof resolveAgentTab>[0], ReturnType<typeof resolveAgentTab>]>([
     ["a known tab", { tab: "activity", simple: false, base }, { tab: "activity" }],
     ["a Simple tab", { tab: "tasks", simple: true, base }, { tab: "tasks" }],
+    ["Mailbox in Expert", { tab: "mailbox", simple: false, base }, { tab: "mailbox" }],
+    ["Mailbox in Simple", { tab: "mailbox", simple: true, base }, { tab: "mailbox" }],
     [
       "an unknown tab in Expert",
       { tab: "nope", simple: false, base },

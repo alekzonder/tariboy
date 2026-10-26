@@ -4,7 +4,7 @@ import { createElement, type PropsWithChildren } from "react";
 import { createApi, setLocalBaseURL, type ApiClient } from "@/lib/api";
 import { ApiProvider } from "@/components/ApiProvider";
 import type { Daemon } from "@/lib/daemons";
-import { mailWsUrl, useAgentStatesSocket, useMailSocket } from "./useMessagesSocket";
+import { mailWsUrl, useAgentStatesSocket, useMailSocket } from "./useMailSocket";
 
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];

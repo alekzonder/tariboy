@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useDaemons } from "@/components/daemonContext";
 import { hasLocalDaemon, onTaskNotificationActivated, showTaskNotification } from "@/lib/desktop";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
-import { createApi } from "@/lib/api";
+import { createApi, letterTaskKey } from "@/lib/api";
 import { serverPath } from "@/lib/terminalsHost";
 import {
   CustomerQuestionNotificationsContext,
@@ -65,11 +65,11 @@ export function CustomerQuestionNotifications({ children }: { children: ReactNod
         next.set(hostId, { attention });
         return next;
       });
-      for (const { notification, agentName } of fresh) {
+      for (const { letter, agentName } of fresh) {
         void showTaskNotification({
           host_id: hostId,
-          notification_id: notification.id,
-          task_key: notification.task_key,
+          notification_id: letter.id,
+          task_key: letterTaskKey(letter),
           server_label: label,
           agent_name: agentName,
         }).catch(() => {
@@ -127,12 +127,12 @@ export function CustomerQuestionNotifications({ children }: { children: ReactNod
             if (activation.host_id !== "" && (!target || target.id !== activation.host_id)) return;
             // Each watched host has its own client; the activation names the host.
             await withTimeout(
-              createApi(target ?? null).tasks.markTaskNotificationRead(activation.notification_id),
+              createApi(target ?? null).mail.read([activation.notification_id]),
               CUSTOMER_QUESTION_ACTIVATION_TIMEOUT_MS,
             );
           } catch {
             // The route still identifies the original host and task, so the user
-            // can answer even when marking the inbox row read was interrupted.
+            // can answer even when marking the letter read was interrupted.
           } finally {
             navigate(
               `${serverPath(activation.host_id, "tasks")}?task=${encodeURIComponent(activation.task_key)}`,

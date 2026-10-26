@@ -1,12 +1,13 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { setActiveDaemon, type Task, type TaskNotification } from "@/lib/api";
+import { setActiveDaemon, type Letter, type MailList, type Task } from "@/lib/api";
 import { taskKeys } from "./taskQueries";
 import {
   child,
   deferred,
   detail,
+  inbox,
   mockWorkspaceDefaults,
   notification,
   root,
@@ -25,12 +26,12 @@ const api = vi.hoisted(() => ({
   getQueueWorkflow: vi.fn(),
   listAgentPools: vi.fn(),
   rebindAgentPool: vi.fn(),
-  listTaskNotifications: vi.fn(),
+  mailList: vi.fn(),
   listTaskEvents: vi.fn(),
   listTaskPrincipals: vi.fn(),
   listTaskQueues: vi.fn(),
   listTasks: vi.fn(),
-  markTaskNotificationRead: vi.fn(),
+  mailRead: vi.fn(),
   moveTask: vi.fn(),
   updateTask: vi.fn(),
   updateTaskQueue: vi.fn(),
@@ -55,12 +56,12 @@ const hostArgument = vi.hoisted((): Record<string, number> => ({
   getQueueWorkflow: 1,
   listAgentPools: 1,
   rebindAgentPool: 5,
-  listTaskNotifications: 1,
+  mailList: 2,
   listTaskEvents: 3,
   listTaskPrincipals: 0,
   listTaskQueues: 0,
   listTasks: 1,
-  markTaskNotificationRead: 1,
+  mailRead: 1,
   moveTask: 2,
   updateTask: 2,
   updateTaskQueue: 2,
@@ -73,14 +74,17 @@ vi.mock("@/lib/api", async (importOriginal) => {
       const client = actual.createApi(target);
       const tasks: Record<string, unknown> = { ...client.tasks };
       const workflows: Record<string, unknown> = { ...client.workflows };
+      const mail: Record<string, unknown> = { ...client.mail };
       for (const [name, at] of Object.entries(hostArgument)) {
-        const domain = name in tasks ? tasks : workflows;
-        domain[name] = (...args: unknown[]) => {
+        // mailList and mailRead stand for mail.list and mail.read.
+        const inMail = name.startsWith("mail");
+        const domain = inMail ? mail : name in tasks ? tasks : workflows;
+        domain[inMail ? name.slice(4).toLowerCase() : name] = (...args: unknown[]) => {
           args.splice(at, 0, client.target);
           return (api as Record<string, (...values: unknown[]) => unknown>)[name](...args);
         };
       }
-      return { ...client, tasks, workflows };
+      return { ...client, tasks, workflows, mail };
     },
   };
 });
@@ -108,46 +112,38 @@ beforeEach(() => {
 
 describe("TasksWorkspace", () => {
   it("does not restore unread notifications from a read started during mark-read", async () => {
-    const pendingWrite = deferred<TaskNotification>();
-    const staleInbox = deferred<{ notifications: TaskNotification[]; count: number }>();
-    api.markTaskNotificationRead.mockReturnValue(pendingWrite.promise);
+    const pendingWrite = deferred<{ read: number; closed_notices: number }>();
+    const staleInbox = deferred<MailList>();
+    api.mailRead.mockReturnValue(pendingWrite.promise);
     const mounted = render(<TasksWorkspace />);
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
-    await waitFor(() => expect(api.markTaskNotificationRead).toHaveBeenCalledTimes(1));
-    api.listTaskNotifications.mockReturnValueOnce(staleInbox.promise);
+    await waitFor(() => expect(api.mailRead).toHaveBeenCalledTimes(1));
+    api.mailList.mockReturnValueOnce(staleInbox.promise);
     await act(async () => {
       void mounted.client.invalidateQueries({ queryKey: taskKeys.notifications(null) });
     });
-    api.listTaskNotifications.mockResolvedValue({
-      notifications: [{ ...notification, read_at: "now" }],
-      count: 1,
-    });
-    await act(async () => pendingWrite.resolve({ ...notification, read_at: "now" }));
+    api.mailList.mockResolvedValue(inbox([{ ...notification, read_at: "now" }]));
+    await act(async () => pendingWrite.resolve({ read: 1, closed_notices: 0 }));
     await waitFor(() =>
       expect(
-        mounted.client.getQueryData<{ notifications: TaskNotification[] }>(
-          taskKeys.notifications(null),
-        )?.notifications[0].read_at,
+        mounted.client.getQueryData<Letter[]>(taskKeys.notifications(null))?.[0].read_at,
       ).toBeTruthy(),
     );
-    await act(async () => staleInbox.resolve({ notifications: [notification], count: 1 }));
+    await act(async () => staleInbox.resolve(inbox([notification])));
     expect(
-      mounted.client.getQueryData<{ notifications: TaskNotification[] }>(
-        taskKeys.notifications(null),
-      )?.notifications[0].read_at,
+      mounted.client.getQueryData<Letter[]>(taskKeys.notifications(null))?.[0].read_at,
     ).toBeTruthy();
-    expect(api.markTaskNotificationRead).toHaveBeenCalledTimes(1);
+    expect(api.mailRead).toHaveBeenCalledTimes(1);
   });
 
   it("shows one accessible question indicator only for task rows with active question notifications", async () => {
-    api.listTaskNotifications.mockResolvedValue({
-      notifications: [
+    api.mailList.mockResolvedValue(
+      inbox([
         notification,
-        { ...notification, id: "unrelated", task_key: child.key, type: "task.assigned" },
-        { ...notification, id: "read", task_key: child.key, read_at: root.updated_at },
-      ],
-      count: 3,
-    });
+        { ...notification, id: "unrelated", data: { task_key: child.key }, kind: "task.assigned" },
+        { ...notification, id: "read", data: { task_key: child.key }, read_at: root.updated_at },
+      ]),
+    );
 
     render(<TasksWorkspace />);
 
@@ -171,9 +167,7 @@ describe("TasksWorkspace", () => {
     ).toBeVisible();
     await userEvent.click(within(rootRow).getByRole("button", { name: /Ship native tasks/ }));
 
-    await waitFor(() =>
-      expect(api.markTaskNotificationRead).toHaveBeenCalledWith("notification-1", null),
-    );
+    await waitFor(() => expect(api.mailRead).toHaveBeenCalledWith(["notification-1"], null));
     expect(
       within(await screen.findByTestId("task-row-TEST-1")).queryByRole("img", {
         name: "Unread question notification for TEST-1",
@@ -192,13 +186,12 @@ describe("TasksWorkspace", () => {
     api.getTask.mockImplementation(async (key: string) =>
       key === closed.key ? { ...detail, task: closed } : detail,
     );
-    api.listTaskNotifications.mockResolvedValue({
-      notifications: [
+    api.mailList.mockResolvedValue(
+      inbox([
         notification,
-        { ...notification, id: "closed-question", task_key: closed.key },
-      ],
-      count: 2,
-    });
+        { ...notification, id: "closed-question", data: { task_key: closed.key } },
+      ]),
+    );
 
     render(<TasksWorkspace />);
 
@@ -213,9 +206,7 @@ describe("TasksWorkspace", () => {
     await userEvent.click(
       within(closedRow).getByRole("button", { name: /Closed with a question/ }),
     );
-    await waitFor(() =>
-      expect(api.markTaskNotificationRead).toHaveBeenCalledWith("closed-question", null),
-    );
+    await waitFor(() => expect(api.mailRead).toHaveBeenCalledWith(["closed-question"], null));
   });
 
   it("pulls in only the scoped agent's closed questions", async () => {
@@ -229,17 +220,16 @@ describe("TasksWorkspace", () => {
     api.getTask.mockImplementation(async (key: string) =>
       key === closed.key ? { ...detail, task: closed } : detail,
     );
-    api.listTaskNotifications.mockResolvedValue({
-      notifications: [
+    api.mailList.mockResolvedValue(
+      inbox([
         {
           ...notification,
           id: "other-agent",
-          task_key: closed.key,
-          requesting_principal: "agent:triager",
+          data: { task_key: closed.key },
+          from: "agent:triager",
         },
-      ],
-      count: 1,
-    });
+      ]),
+    );
 
     render(<TasksWorkspace scopeAgent="worker" />);
 
@@ -264,7 +254,7 @@ describe("TasksWorkspace", () => {
     expect(
       await within(rootRow).findByRole("img", { name: "Unread question notification for TEST-1" }),
     ).toBeVisible();
-    api.listTaskNotifications.mockResolvedValue({ notifications: [], count: 0 });
+    api.mailList.mockResolvedValue(inbox([]));
     const onHint = taskSocket.options?.onHint as (hint: {
       sequence: number;
       kind: string;

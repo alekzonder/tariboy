@@ -1,76 +1,91 @@
 import { describe, expect, it } from "vitest";
-import type { TaskNotification } from "@/lib/api";
+import type { MailUnread } from "@/lib/api";
+import { letter } from "@/test/fixtures/mailFixtures";
 import {
   customerQuestionAttentionKey,
-  readQuestionSnapshot,
+  questionAttention,
+  questionsRose,
+  readFreshQuestions,
 } from "./customerQuestionNotificationModel";
 
-function question(id: string, overrides: Partial<TaskNotification> = {}): TaskNotification {
-  return {
+const question = (id: string, over = {}) =>
+  letter({
     id,
-    type: "task.question",
-    text: "question",
-    requesting_principal: "agent:alpha",
-    task_key: `T-${id}`,
-    created_at: "",
-    read_at: "",
-    ...overrides,
+    kind: "task.question",
+    from: "agent:alpha",
+    data: { task_key: `T-${id}` },
+    ...over,
+  });
+
+function unread(...rows: Array<[sender: string, kind: string, count: number]>): MailUnread {
+  return {
+    as: "user:customer",
+    open: rows.reduce((sum, [, , count]) => sum + count, 0),
+    unread: 0,
+    by_sender: rows.map(([sender, kind, count]) => ({ sender, kind, count })),
   };
 }
 
-describe("readQuestionSnapshot", () => {
-  it("keeps the first snapshot silent but records its ids and attention", () => {
-    const snapshot = readQuestionSnapshot("h1", [question("n1")], new Set(), true);
-
-    expect(snapshot.fresh).toEqual([]);
-    expect([...snapshot.observed]).toEqual(["n1"]);
-    expect(snapshot.attention).toEqual(new Map([[customerQuestionAttentionKey("h1", "alpha"), 1]]));
+describe("questionAttention", () => {
+  it("counts open task questions per asking agent", () => {
+    const attention = questionAttention(
+      "h1",
+      unread(
+        ["agent:alpha", "task.question", 2],
+        ["agent:alpha", "message", 4],
+        ["agent:", "task.question", 1],
+        ["user:bob", "task.question", 1],
+      ),
+    );
+    expect(attention).toEqual(new Map([[customerQuestionAttentionKey("h1", "alpha"), 2]]));
   });
 
-  it("gives no new question when a refresh repeats an observed notification", () => {
-    const first = readQuestionSnapshot("h1", [question("n1")], new Set(), true);
-    const repeat = readQuestionSnapshot("h1", [question("n1")], first.observed, false);
-
-    expect(repeat.fresh).toEqual([]);
+  it("questionBadgeDropsWhenLetterCloses", () => {
+    const before = questionAttention("h1", unread(["agent:alpha", "task.question", 1]));
+    const after = questionAttention("h1", unread());
+    expect(before.get(customerQuestionAttentionKey("h1", "alpha"))).toBe(1);
+    expect(after.size).toBe(0);
+    expect(questionsRose(before, after)).toBe(false);
   });
 
-  it("announces a notification first seen after the baseline", () => {
-    const n2 = question("n2", { requesting_principal: "agent:beta" });
-    const snapshot = readQuestionSnapshot("h1", [question("n1"), n2], new Set(["n1"]), false);
+  it("rises only when an agent asks more than before", () => {
+    const one = new Map([["a", 1]]);
+    expect(questionsRose(one, new Map([["a", 1]]))).toBe(false);
+    expect(questionsRose(one, new Map([["a", 2]]))).toBe(true);
+    expect(questionsRose(one, new Map([["b", 1]]))).toBe(true);
+  });
+});
 
-    expect(snapshot.fresh).toEqual([{ notification: n2, agentName: "beta" }]);
-    expect([...snapshot.observed]).toEqual(["n1", "n2"]);
+describe("readFreshQuestions", () => {
+  it("keeps the baseline silent but records its ids", () => {
+    const read = readFreshQuestions([question("n1")], new Set(), true);
+    expect(read.fresh).toEqual([]);
+    expect([...read.observed]).toEqual(["n1"]);
   });
 
-  it("skips a notification without an agent name in attention and announcements", () => {
-    const notifications = [
-      question("n1", { requesting_principal: "agent:" }),
-      question("n2", { requesting_principal: "customer:bob" }),
-      question("n3", { read_at: "2026-01-01T00:00:00Z" }),
-      question("n4", { type: "task.comment" }),
+  it("announces a question first seen after the baseline, once", () => {
+    const n2 = question("n2", { from: "agent:beta" });
+    const read = readFreshQuestions([question("n1"), n2], new Set(["n1"]), false);
+    expect(read.fresh).toEqual([{ letter: n2, agentName: "beta" }]);
+    expect(readFreshQuestions([n2], read.observed, false).fresh).toEqual([]);
+  });
+
+  it("skips read, non-question, non-agent and task-less letters", () => {
+    const letters = [
+      question("n1", { read_at: "2026-01-01T00:00:00Z" }),
+      question("n2", { kind: "message" }),
+      question("n3", { from: "user:bob" }),
+      question("n4", { data: {} }),
+      question("n5", { from: "agent:" }),
     ];
-    const snapshot = readQuestionSnapshot("h1", notifications, new Set(), false);
-
-    expect(snapshot.fresh).toEqual([]);
-    expect(snapshot.attention.size).toBe(0);
-    expect(snapshot.observed.size).toBe(4);
-  });
-
-  it("counts an agent's distinct tasks, not its notifications", () => {
-    const notifications = [
-      question("n1", { task_key: "T-1" }),
-      question("n2", { task_key: "T-1" }),
-      question("n3", { task_key: "T-2" }),
-    ];
-    const snapshot = readQuestionSnapshot("h1", notifications, new Set(), true);
-
-    expect(snapshot.attention).toEqual(new Map([[customerQuestionAttentionKey("h1", "alpha"), 2]]));
+    const read = readFreshQuestions(letters, new Set(), false);
+    expect(read.fresh).toEqual([]);
+    expect(read.observed.size).toBe(5);
   });
 
   it("does not change the observed set it was given", () => {
     const observed = new Set(["n1"]);
-    readQuestionSnapshot("h1", [question("n2")], observed, false);
-
+    readFreshQuestions([question("n2")], observed, false);
     expect([...observed]).toEqual(["n1"]);
   });
 });

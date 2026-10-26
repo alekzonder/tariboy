@@ -28,7 +28,7 @@ it("edits message settings in the shared page draft without its own Save", () =>
     );
   }
   render(<Section />);
-  const batch = screen.getByLabelText("Messages per iteration");
+  const batch = screen.getByLabelText("Mail: letters per iteration");
   fireEvent.change(batch, { target: { value: "20" } });
   expect(batch).toHaveValue(20);
   expect(screen.getByText("1 unsaved change")).toBeInTheDocument();

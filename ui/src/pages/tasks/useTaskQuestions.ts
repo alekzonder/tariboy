@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { useApi } from "@/components/apiContext";
-import type { Task, TaskNotification } from "@/lib/api";
+import type { Letter, Task } from "@/lib/api";
 import { actorAgent, missingQuestionTaskKeys, unreadQuestionsFor } from "@/lib/taskList";
 import { taskKeys, taskQueries } from "./taskQueries";
 
@@ -18,7 +18,7 @@ export function useMissingQuestionTasks({
   scopeAgent,
 }: {
   enabled: boolean;
-  notifications: TaskNotification[];
+  notifications: Letter[];
   tasks: Task[];
   scopeAgent: string | undefined;
 }): Task[] {
@@ -50,18 +50,18 @@ export function useMarkTaskQuestionsRead({
   selectedKey: string;
   /** The open task's loaded detail; each new load checks again. */
   detail: object | null;
-  notifications: TaskNotification[];
+  notifications: Letter[];
   onNotificationsChanged?: () => void;
 }) {
   const api = useApi();
   const client = useQueryClient();
   const markRead = useMutation({
-    mutationFn: async (unread: TaskNotification[]) => {
+    mutationFn: async (unread: Letter[]) => {
       await client.cancelQueries({ queryKey: taskKeys.notifications(api.target) });
       const read = new Set<string>();
       for (const notification of unread) {
         try {
-          await api.tasks.markTaskNotificationRead(notification.id);
+          await api.mail.read([notification.id]);
           read.add(notification.id);
         } catch {
           /* Leave the indicator for the next open. */
@@ -69,17 +69,10 @@ export function useMarkTaskQuestionsRead({
       }
       if (!read.size) return;
       await client.cancelQueries({ queryKey: taskKeys.notifications(api.target) });
-      client.setQueryData(
-        taskKeys.notifications(api.target),
-        (page: { notifications: TaskNotification[]; count: number } | undefined) =>
-          page
-            ? {
-                ...page,
-                notifications: page.notifications.map((item) =>
-                  read.has(item.id) ? { ...item, read_at: new Date().toISOString() } : item,
-                ),
-              }
-            : page,
+      client.setQueryData(taskKeys.notifications(api.target), (letters: Letter[] | undefined) =>
+        letters?.map((item) =>
+          read.has(item.id) ? { ...item, read_at: new Date().toISOString() } : item,
+        ),
       );
       // The next socket/manual read reconciles the inbox; no extra cycle is started here.
       await client.invalidateQueries({

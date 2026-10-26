@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useMailSocket } from "@/hooks/useMailSocket";
 import { useTasksSocket } from "@/hooks/useTasksSocket";
 import { useHostQuestionSnapshot, type HostSnapshotListener } from "./useHostQuestionSnapshot";
 
@@ -28,6 +29,15 @@ export function HostQuestionWatcher({
     onReset: (nextSequence) => {
       raiseSequence(nextSequence);
       void refresh();
+    },
+  });
+
+  // A new task question is a letter: its hint refreshes the counts at once.
+  useMailSocket({
+    target: target ?? null,
+    enabled: socketEnabled,
+    onHint: (hint) => {
+      if (hint.kind === "task.question") void refresh();
     },
   });
 

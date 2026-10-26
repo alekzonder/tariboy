@@ -450,9 +450,11 @@ it("shows only blocks with unsaved changes when Changed only is on", async () =>
   fakeServer();
   render(tree());
   await ready();
-  fireEvent.change(screen.getByLabelText("Messages per iteration"), { target: { value: "20" } });
+  fireEvent.change(screen.getByLabelText("Mail: letters per iteration"), {
+    target: { value: "20" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Changed only (1)" }));
-  expect(block("Messages")).toBeInTheDocument();
+  expect(block("Mail")).toBeInTheDocument();
   expect(queryBlock("Runtime")).not.toBeInTheDocument();
 });
 

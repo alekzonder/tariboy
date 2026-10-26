@@ -36,7 +36,7 @@ function useTaskMetadata() {
   const queueQuery = useApiQuery(taskQueries.queues(api));
   const peopleQuery = useApiQuery(taskQueries.principals(api));
   const inboxQuery = useApiQuery(taskQueries.notifications(api));
-  const notifications = useMemo(() => inboxQuery.data?.notifications ?? [], [inboxQuery.data]);
+  const notifications = useMemo(() => inboxQuery.data ?? [], [inboxQuery.data]);
   return {
     queueQuery,
     peopleQuery,

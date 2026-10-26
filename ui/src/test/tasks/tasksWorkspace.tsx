@@ -1,7 +1,8 @@
 import type { ReactElement } from "react";
 import type { Mock } from "vitest";
 import { ApiProvider } from "@/components/ApiProvider";
-import type { Task, TaskDetail, TaskNotification, Queue } from "@/lib/api";
+import type { Letter, MailList, Task, TaskDetail, Queue } from "@/lib/api";
+import { letter } from "@/test/fixtures/mailFixtures";
 import type { Daemon } from "@/lib/daemons";
 
 // Fixtures shared by the TasksWorkspace test files. Each file keeps its own
@@ -98,15 +99,24 @@ export const detail: TaskDetail = {
   descendants: 0,
   active_descendants: 0,
 };
-export const notification: TaskNotification = {
+export const notification: Letter = letter({
   id: "notification-1",
-  type: "task.question",
-  text: "Need a product decision",
-  requesting_principal: "agent:worker",
-  task_key: root.key,
+  kind: "task.question",
+  body: "Need a product decision",
+  from: "agent:worker",
+  to: "user:owner",
+  data: { task_key: root.key },
   created_at: root.created_at,
-  read_at: "",
-};
+});
+
+/** The customer's inbox holding `letters`. */
+export const inbox = (letters: Letter[]): MailList => ({
+  as: "user:owner",
+  box: "inbox",
+  letters,
+  count: letters.length,
+  next_before: "",
+});
 
 /** Answers every mocked task api call the workspace makes on load. */
 export function mockWorkspaceDefaults(api: Record<string, Mock>) {
@@ -120,7 +130,7 @@ export function mockWorkspaceDefaults(api: Record<string, Mock>) {
   api.getTask.mockResolvedValue(detail);
   api.listAgentPools.mockResolvedValue({ items: [], count: 0 });
   api.getQueueWorkflow.mockResolvedValue(null);
-  api.listTaskNotifications.mockResolvedValue({ notifications: [notification], count: 1 });
+  api.mailList.mockResolvedValue(inbox([notification]));
   api.listTaskEvents.mockResolvedValue({
     events: [
       {
@@ -148,6 +158,6 @@ export function mockWorkspaceDefaults(api: Record<string, Mock>) {
   api.addTaskRelation.mockResolvedValue(detail.relations[0]);
   api.deleteTaskRelation.mockResolvedValue({ deleted: true, relation_id: 9 });
   api.moveTask.mockResolvedValue({ ...child, parent_key: "", revision: 2 });
-  api.markTaskNotificationRead.mockResolvedValue({ ...notification, read_at: root.updated_at });
+  api.mailRead.mockResolvedValue({ read: 1, closed_notices: 0 });
   api.createTaskQueue.mockResolvedValue({ ...queue, prefix: "OPS", name: "Operations" });
 }

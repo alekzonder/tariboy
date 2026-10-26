@@ -1,6 +1,7 @@
 import type { AgentBudget, AgentView } from "@/lib/api";
 
 const TABS = [
+  ["mailbox", "Mailbox"],
   ["tasks", "Tasks"],
   ["console", "Terminal"],
   ["activity", "Activity"],
@@ -8,7 +9,7 @@ const TABS = [
   ["advanced", "Advanced"],
 ] as const;
 // The tabs Simple mode keeps; the header, Start/Stop included, is the same in both.
-const SIMPLE_TABS: ReadonlySet<string> = new Set(["tasks", "console", "configuration"]);
+const SIMPLE_TABS: ReadonlySet<string> = new Set(["mailbox", "tasks", "console", "configuration"]);
 
 export type AgentTab = (typeof TABS)[number][0];
 export type AgentTabEntry = (typeof TABS)[number];
