@@ -1,3 +1,65 @@
+## [0.95.0] - 2026-10-26
+
+### Added
+
+- A per-principal mailbox replaces the channel bus. Agents, the customer,
+  plugins and queues each have a mailbox of letters (one row per recipient):
+  notices and requests with deadlines, replies, an inbox cap and dead letters
+  that can be requeued. The open letters an agent receives, with requests
+  first, are rendered into the `## Messages` prompt block, up to
+  `messages_batch` (default 10) letters per prompt.
+- `tmail` (`tariboy-mail`) is the mail client: in agent mode it uses the tools
+  socket, and in operator mode it uses the daemon socket. `tariboy mail` runs it
+  in operator mode. It is built and packaged everywhere `ttasks` is.
+- HTTP mail commands `mail.ls`, `mail.show`, `mail.send`, `mail.reply`,
+  `mail.close`, `mail.read`, `mail.requeue`, `mail.unread` and
+  `agent.mail.clear` act as the customer unless `as` names another principal.
+  `GET /api/mail/ws` streams one hint per letter, and the agent status counts
+  open letters.
+- Desktop **Server → Mailbox** (the customer's mailbox) and **Agent → Mailbox**
+  (an agent's mailbox, read and answered on its behalf) offer Inbox, Sent and
+  Archive, **Requeue** for dead letters and **Clear inbox**.
+- The Desktop agent Tasks tab highlights the row of the agent's current Goal
+  task.
+
+### Changed
+
+- Goal letters, task notifications, schedules, script results and budget
+  warnings are delivered as letters. A schedule sends to a recipient (its
+  `channel` becomes an agent principal). An answer on a task closes the
+  question letters it answers.
+- A queue trigger fires for a letter to `queue:<prefix>` whose sender matches
+  its glob. The migration restarts the ingress cursor.
+- A plugin declares `mail {send, receive}` in its manifest. It sends with
+  `POST /api/plugin/mail` (`409 inbox_full` at the cap) and receives its
+  inbox on `/deliver`. Telegram sends topic messages to the agent and delivers
+  replies by sender.
+- Agents reach mail through the `mail` capability; `messages` stays an alias.
+- Customer question badges and native notifications count the customer's open
+  `task.question` letters.
+
+### Removed
+
+- **Incompatible:** the channel bus and chats, together with the `channel`,
+  `chat`, `message` and `inbox` commands, `/api/messages/ws`, the plugin
+  publish, subscription and watch routes, `compose subscribe`, the customer
+  notification list and its routes, the Desktop Chat tab, the channels page
+  and the agent inbox and subscription views. Migration `0072_mail.sql` drops
+  channels, messages, subscriptions, deliveries, chats and task notification
+  state **without a data migration**: mail starts empty, and undelivered
+  channel messages and chat history are lost on upgrade. Agent images,
+  plugins and compose files that use channels or subscriptions must move to
+  mail.
+
+### Fixed
+
+- `compose down`, `compose stop` and `compose kill` skip members that the
+  daemon does not know instead of failing with `rm_failed` / `stop_failed:
+  not found`, so a partly present project can be cleaned up. Starting or
+  restarting an absent member still fails.
+
+[0.95.0]: https://github.com/alekzonder/tariboy/compare/v0.94.0...v0.95.0
+
 ## [0.94.0] - 2026-10-25
 
 ### Added
