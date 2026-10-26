@@ -373,6 +373,41 @@ func agentInteractive() registry.Command {
 	})
 }
 
+// agentEnv gets or replaces the agent's environment. The loop reads it when it
+// builds each iteration launch, so a new value applies from the next iteration
+// without a restart.
+func agentEnv() registry.Command {
+	return registry.WithResult[AgentEnvResult](registry.Command{
+		Path:    "agent.env",
+		Summary: "Get or replace the agent environment (omit value to read); applies from the next iteration",
+		Args: []registry.Arg{
+			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
+			{Name: "value", Type: registry.String, Help: "comma-separated K=V env pairs that replace the env (omit to read)", Schema: map[string]any{"oneOf": []any{
+				map[string]any{"type": "string"},
+				map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}},
+			}}},
+		},
+		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/env"},
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
+			if err != nil {
+				return nil, err
+			}
+			if p.Has("value") {
+				env, err := parseAgentEnv(p.Params["value"])
+				if err != nil {
+					return nil, api.UserError{Code: "bad_env", Msg: err.Error()}
+				}
+				a.Env = env
+				if err := agentStore(c).Update(a); err != nil {
+					return nil, err
+				}
+			}
+			return AgentEnvResult{Name: a.Name, Env: envView(a.Env)}, nil
+		},
+	})
+}
+
 // validHarnessTypes are the harness types internal/harness.Get() knows about.
 var validHarnessTypes = map[string]bool{
 	"claude":   true,

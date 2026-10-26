@@ -131,7 +131,7 @@ func TestStatusReportsHarnessDrift(t *testing.T) {
 }
 
 // TestStatusDisclosesUncheckedFields pins that Status always prints a
-// one-line disclaimer noting model/env/plugins drift is not checked, so an
+// one-line disclaimer noting model/plugins drift is not checked, so an
 // operator reading "ok"/"drift: N" is not misled into a full convergence
 // guarantee.
 func TestStatusDisclosesUncheckedFields(t *testing.T) {
@@ -144,7 +144,7 @@ func TestStatusDisclosesUncheckedFields(t *testing.T) {
 		t.Fatalf("status: %v", err)
 	}
 	out := buf.String()
-	if strings.Count(out, "note: model/env/plugins drift not checked") != 1 {
+	if strings.Count(out, "note: model/plugins drift not checked") != 1 {
 		t.Fatalf("expected exactly one disclaimer line, got:\n%s", out)
 	}
 }

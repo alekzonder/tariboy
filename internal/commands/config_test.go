@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/agent"
@@ -80,6 +81,44 @@ func TestAgentInteractiveRejectsNonBool(t *testing.T) {
 	}
 }
 
+func TestAgentEnvReadsAndReplaces(t *testing.T) {
+	t.Parallel()
+	c, _ := seedAgent(t)
+	res, err := registry.Call(c, context.Background(), agentEnv(), registry.Params{"name": "a1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.(AgentEnvResult); got.Name != "a1" || got.Env == nil || len(got.Env) != 0 {
+		t.Fatalf("read = %#v, want an empty env", got)
+	}
+	want := map[string]string{"A": "1", "B": "x=y"}
+	for _, value := range []any{map[string]any{"A": "1", "B": "x=y"}, "A=1,B=x=y"} {
+		if _, err := registry.Call(c, context.Background(), agentEnv(), registry.Params{"name": "a1", "value": map[string]any{"OLD": "gone"}}); err != nil {
+			t.Fatal(err)
+		}
+		res, err := registry.Call(c, context.Background(), agentEnv(), registry.Params{"name": "a1", "value": value})
+		if err != nil {
+			t.Fatal(err)
+		}
+		a, _ := getAgent(c, "a1")
+		if !maps.Equal(a.Env, want) || !maps.Equal(res.(AgentEnvResult).Env, want) {
+			t.Fatalf("value %#v: stored %v, echoed %v, want %v", value, a.Env, res.(AgentEnvResult).Env, want)
+		}
+	}
+}
+
+func TestAgentEnvRejectsBadValueAndUnknownAgent(t *testing.T) {
+	t.Parallel()
+	c, _ := seedAgent(t)
+	_, err := registry.Call(c, context.Background(), agentEnv(), registry.Params{"name": "a1", "value": map[string]any{"A": 1}})
+	if ue, ok := err.(api.UserError); !ok || ue.Code != "bad_env" {
+		t.Fatalf("want bad_env UserError, got %#v", err)
+	}
+	if _, err := registry.Call(c, context.Background(), agentEnv(), registry.Params{"name": "nope"}); err == nil {
+		t.Fatal("unknown agent should fail")
+	}
+}
+
 func TestAgentHarnessSet(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
@@ -139,6 +178,7 @@ func TestConfigCommandsRegistered(t *testing.T) {
 		"agent.model":              "POST /api/agents/{name}/model",
 		"agent.effort":             "POST /api/agents/{name}/effort",
 		"agent.interactive":        "POST /api/agents/{name}/interactive",
+		"agent.env":                "POST /api/agents/{name}/env",
 		"agent.harness":            "POST /api/agents/{name}/harness",
 		"agent.messages.batch":     "POST /api/agents/{name}/messages/batch",
 		"agent.messages.max-queue": "POST /api/agents/{name}/messages/max-queue",

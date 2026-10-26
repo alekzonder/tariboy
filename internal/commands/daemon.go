@@ -128,6 +128,7 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, agentMessageSetting("agent.messages.max-queue", "messages_max_queue"))
 	mustRegister(r, agentCwd())
 	mustRegister(r, agentInteractive())
+	mustRegister(r, agentEnv())
 	mustRegister(r, agentHarness())
 	mustRegister(r, agentAlias())
 	mustRegister(r, agentAliasGet())

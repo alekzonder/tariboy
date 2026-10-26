@@ -39,6 +39,16 @@
     "effort": "low",
     "name": "alpha"
   },
+  "agent.env read": {
+    "env": {},
+    "name": "alpha"
+  },
+  "agent.env set": {
+    "env": {
+      "MODE": "test"
+    },
+    "name": "alpha"
+  },
   "agent.exec": {
     "name": "alpha",
     "status": "queued"

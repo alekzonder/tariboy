@@ -183,6 +183,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/agents/{name}/env": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Get or replace the agent environment (omit value to read); applies from the next iteration */
+    post: operations["agent.env"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/agents/{name}/exec": {
     parameters: {
       query?: never;
@@ -2976,6 +2993,12 @@ export interface components {
       effort: string;
       name: string;
     };
+    AgentEnvResult: {
+      env: {
+        [key: string]: string;
+      };
+      name: string;
+    };
     AgentExecResult: {
       name: string;
       status: string;
@@ -3109,6 +3132,9 @@ export interface components {
       current_goal_task_key: string;
       cwd: string;
       enabled: boolean;
+      env: {
+        [key: string]: string;
+      };
       error_reason?: string;
       goal_delivery_cooldown_s: number;
       goal_enabled: boolean;
@@ -4751,6 +4777,7 @@ export type AgentColorResult = components["schemas"]["AgentColorResult"];
 export type AgentContextResult = components["schemas"]["AgentContextResult"];
 export type AgentCwdResult = components["schemas"]["AgentCwdResult"];
 export type AgentEffortResult = components["schemas"]["AgentEffortResult"];
+export type AgentEnvResult = components["schemas"]["AgentEnvResult"];
 export type AgentExecResult = components["schemas"]["AgentExecResult"];
 export type AgentFileContent = components["schemas"]["AgentFileContent"];
 export type AgentFileCreated = components["schemas"]["AgentFileCreated"];
@@ -5826,6 +5853,58 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["AgentEffortResult"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "agent.env": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          value?:
+            | string
+            | {
+                [key: string]: string;
+              };
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["AgentEnvResult"];
           };
         };
       };

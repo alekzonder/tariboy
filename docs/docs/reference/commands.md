@@ -39,6 +39,7 @@ tariboy has four command surfaces:
 | `tariboy agent color set NAME` | Get or set the agent accent color (omit value to read, empty to clear) |
 | `tariboy agent cwd NAME` | Get or set the agent working directory (omit value to read, empty to clear); applies next iteration |
 | `tariboy agent effort NAME` | Get or set the agent effort (omit value to read); applies next iteration |
+| `tariboy agent env NAME` | Get or replace the agent environment (omit value to read); applies from the next iteration |
 | `tariboy agent exec NAME` | Run a manual iteration now, with an optional one-shot prompt |
 | `tariboy agent file create NAME PATH` | Create a file or folder in an agent's cwd (jailed) |
 | `tariboy agent file delete NAME PATH` | Delete a file or folder in an agent's cwd (jailed) |

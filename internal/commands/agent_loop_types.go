@@ -44,6 +44,12 @@ type AgentInteractiveResult struct {
 	Interactive bool   `json:"interactive"`
 }
 
+// AgentEnvResult is the result of agent.env.
+type AgentEnvResult struct {
+	Name string            `json:"name"`
+	Env  map[string]string `json:"env"`
+}
+
 // AgentAliasResult is the result of agent.alias.get and agent.alias.set.
 type AgentAliasResult struct {
 	Name  string `json:"name"`

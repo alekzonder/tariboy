@@ -11,21 +11,23 @@ import (
 // reads. The daemon serves the row as a JSON object; a contract test in
 // internal/commands pins that every field below is present in it.
 type liveAgent struct {
-	Name                     string `json:"name"`
-	State                    string `json:"state"`
-	Image                    string `json:"image"`
-	Harness                  string `json:"harness"`
-	Enabled                  bool   `json:"enabled"`
-	Group                    string `json:"group"`
-	Cwd                      string `json:"cwd"`
-	TimeoutS                 int    `json:"timeout_s"`
-	IntervalS                int    `json:"interval_s"`
-	OnTimeout                string `json:"on_timeout"`
-	OnError                  string `json:"on_error"`
-	MaxIdleIterations        int    `json:"max_idle_iterations"`
-	GoalEnabled              bool   `json:"goal_enabled"`
-	GoalWaitCustomerTimeoutS int    `json:"goal_wait_customer_timeout_s"`
-	GoalDeliveryCooldownS    int    `json:"goal_delivery_cooldown_s"`
+	Name                     string            `json:"name"`
+	State                    string            `json:"state"`
+	Image                    string            `json:"image"`
+	Harness                  string            `json:"harness"`
+	Enabled                  bool              `json:"enabled"`
+	Group                    string            `json:"group"`
+	Cwd                      string            `json:"cwd"`
+	TimeoutS                 int               `json:"timeout_s"`
+	IntervalS                int               `json:"interval_s"`
+	OnTimeout                string            `json:"on_timeout"`
+	OnError                  string            `json:"on_error"`
+	MaxIdleIterations        int               `json:"max_idle_iterations"`
+	GoalEnabled              bool              `json:"goal_enabled"`
+	GoalWaitCustomerTimeoutS int               `json:"goal_wait_customer_timeout_s"`
+	GoalDeliveryCooldownS    int               `json:"goal_delivery_cooldown_s"`
+	Interactive              bool              `json:"interactive"`
+	Env                      map[string]string `json:"env"`
 }
 
 // liveGroup is the part of a GET /api/groups row the reconciler reads.

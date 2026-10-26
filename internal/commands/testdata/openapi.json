@@ -183,6 +183,25 @@
         ],
         "type": "object"
       },
+      "AgentEnvResult": {
+        "additionalProperties": false,
+        "properties": {
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "env"
+        ],
+        "type": "object"
+      },
       "AgentExecResult": {
         "additionalProperties": false,
         "properties": {
@@ -701,6 +720,12 @@
           "enabled": {
             "type": "boolean"
           },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
           "error_reason": {
             "type": "string"
           },
@@ -776,6 +801,7 @@
           "max_idle_iterations",
           "ai_stall_timeout_s",
           "interactive",
+          "env",
           "goal_enabled",
           "goal_wait_customer_timeout_s",
           "goal_delivery_cooldown_s",
@@ -8945,6 +8971,110 @@
           }
         },
         "summary": "Get or set the agent effort (omit value to read); applies next iteration"
+      }
+    },
+    "/api/agents/{name}/env": {
+      "post": {
+        "operationId": "agent.env",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "agent name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "value": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "type": "object"
+                      }
+                    ]
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/AgentEnvResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Get or replace the agent environment (omit value to read); applies from the next iteration"
       }
     },
     "/api/agents/{name}/exec": {

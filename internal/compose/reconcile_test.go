@@ -139,8 +139,28 @@ func (f *fakeCaller) Call(method, route string, body any) (json.RawMessage, erro
 		if harness == "" {
 			harness = "claude" // the daemon's default harness
 		}
+		env := map[string]any{}
+		if list, _ := m["env"].(string); list != "" {
+			for pair := range strings.SplitSeq(list, ",") {
+				k, v, _ := strings.Cut(pair, "=")
+				env[k] = v
+			}
+		}
 		f.agents[name] = map[string]any{"name": name, "state": "stopped",
-			"group": m["group"], "image": m["image"], "cwd": m["cwd"], "enabled": false, "harness": harness}
+			"group": m["group"], "image": m["image"], "cwd": m["cwd"], "enabled": false, "harness": harness,
+			"env": env, "interactive": m["interactive"]}
+		return mustJSON(map[string]any{"name": name}), nil
+	case method == "POST" && strings.HasSuffix(route, "/env"):
+		name := route[len("/api/agents/") : len(route)-len("/env")]
+		if a := f.agents[name]; a != nil {
+			a["env"] = body.(map[string]any)["value"]
+		}
+		return mustJSON(map[string]any{"name": name}), nil
+	case method == "POST" && strings.HasSuffix(route, "/interactive"):
+		name := route[len("/api/agents/") : len(route)-len("/interactive")]
+		if a := f.agents[name]; a != nil {
+			a["interactive"] = body.(map[string]any)["value"]
+		}
 		return mustJSON(map[string]any{"name": name}), nil
 	case method == "POST" && strings.HasSuffix(route, "/harness"):
 		name := route[len("/api/agents/") : len(route)-len("/harness")]
