@@ -27,6 +27,7 @@ import { useServerActions, type ServerDialogState } from "./useServerActions";
 import { useSidebarReorder } from "./useSidebarReorder";
 
 export type ServerView =
+  | "mail"
   | "tasks"
   | "activity"
   | "images"

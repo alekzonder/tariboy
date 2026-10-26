@@ -285,6 +285,8 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.includes("/api/daemon/config")) return json({});
   if (url.includes("/api/task-queues"))
     return json({ queues: [{ prefix: "TB", title: "Tariboy", description: "" }], count: 1 });
+  if (url.includes("/api/mail/unread"))
+    return json({ as: "user:customer", open: 0, unread: 0, by_sender: [] });
   if (url.includes("/api/mail"))
     return json({ box: "inbox", as: "user:customer", letters: [], count: 0, next_before: "" });
   if (url.includes("/api/task-principals"))

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useCoalesced } from "@/hooks/useCoalesced";
-import { useAgentStatesSocket, useMailSocket } from "@/hooks/useMessagesSocket";
+import { useAgentStatesSocket, useMailSocket } from "@/hooks/useMailSocket";
 import { targetFor } from "@/lib/terminalsHost";
 
 /** Two sockets per server. It renders nothing: its only job is to turn a new

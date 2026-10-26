@@ -236,8 +236,10 @@ describe("AgentWorkspace", () => {
       </DaemonProvider>,
     );
 
-    expect(await screen.findByText("Message queue full: 100 / 100")).toHaveClass(
-      "text-destructive",
+    expect(await screen.findByText("Inbox full: 100 / 100")).toHaveClass("text-destructive");
+    const nav = screen.getByRole("navigation", { name: "Agent workspace" });
+    expect(within(nav).getByRole("link", { name: /Mailbox/ })).toContainElement(
+      screen.getByRole("img", { name: "100 open letters" }),
     );
   });
 
@@ -477,7 +479,7 @@ describe("AgentWorkspace", () => {
     expect(inspections).toBeGreaterThanOrEqual(2);
   });
 
-  it("orders the workspace tabs with Tasks first", async () => {
+  it("orders the workspace tabs with Mailbox and Tasks first", async () => {
     render(
       <DaemonProvider>
         <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
@@ -498,7 +500,7 @@ describe("AgentWorkspace", () => {
       within(nav)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Tasks", "Terminal", "Activity", "Configuration", "Advanced"]);
+    ).toEqual(["Mailbox", "Tasks", "Terminal", "Activity", "Configuration", "Advanced"]);
   });
 
   it("keeps host and agent identity in every tab link", async () => {
@@ -659,7 +661,7 @@ describe("AgentWorkspace in Simple mode", () => {
 
   beforeEach(() => localStorage.removeItem(UI_MODE_KEY));
 
-  it("shows only Tasks, Terminal and Configuration with the full header", async () => {
+  it("shows only Mailbox, Tasks, Terminal and Configuration with the full header", async () => {
     renderAt("/agents/local/worker/tasks");
 
     const nav = await screen.findByRole("navigation", { name: "Agent workspace" });
@@ -667,7 +669,7 @@ describe("AgentWorkspace in Simple mode", () => {
       within(nav)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Tasks", "Terminal", "Configuration"]);
+    ).toEqual(["Mailbox", "Tasks", "Terminal", "Configuration"]);
     expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "IMPROVE-37" })).toBeInTheDocument();
   });

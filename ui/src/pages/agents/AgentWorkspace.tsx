@@ -4,7 +4,7 @@ import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import { ApiProvider } from "@/components/ApiProvider";
 import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
 import { targetFor } from "@/lib/terminalsHost";
-import type { AgentRow } from "@/lib/api";
+import type { AgentRow, AgentView } from "@/lib/api";
 import { LazyBoundary } from "@/components/LazyBoundary";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
@@ -15,6 +15,7 @@ import { useAgentWorkspaceStatus } from "./useAgentWorkspaceStatus";
 
 // Each tab loads on first open: the terminal brings xterm, Tasks the rich text
 // editor.
+const AgentMailboxTab = lazy(() => import("./AgentMailboxTab"));
 const AgentConsoleTab = lazy(() => import("./AgentConsoleTab"));
 const AgentActivityTab = lazy(() => import("./AgentActivityTab"));
 const AgentConfigurationTab = lazy(() => import("./AgentConfigurationTab"));
@@ -33,6 +34,7 @@ type AgentWorkspaceProps = {
 type TabContext = {
   hostId: string;
   agent: AgentRow;
+  view: AgentView | null;
   refresh: () => void;
   execCount: number;
   initialTaskKey?: string;
@@ -40,6 +42,9 @@ type TabContext = {
 };
 
 const TAB_CONTENT: Record<AgentTab, (ctx: TabContext) => ReactNode> = {
+  mailbox: ({ hostId, agent, view }) => (
+    <AgentMailboxTab hostId={hostId} name={agent.name} batch={view?.messages_batch} />
+  ),
   console: ({ hostId, agent, refresh, execCount }) => (
     <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} execCount={execCount} />
   ),
@@ -112,6 +117,7 @@ function AgentWorkspaceContent({
   const content = TAB_CONTENT[tab]({
     hostId,
     agent,
+    view: currentView,
     refresh,
     execCount,
     initialTaskKey: route.initialTaskKey,

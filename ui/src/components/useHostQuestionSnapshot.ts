@@ -3,7 +3,9 @@ import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import { createApi, type ApiClient } from "@/lib/api";
 import {
   CUSTOMER_QUESTION_RETRY_MS,
-  readQuestionSnapshot,
+  questionAttention,
+  questionsRose,
+  readFreshQuestions,
   type FreshQuestion,
 } from "./customerQuestionNotificationModel";
 
@@ -14,7 +16,7 @@ export type HostSnapshotListener = (
   fresh: FreshQuestion[],
 ) => void;
 
-/** Keeps one host's question inbox: a silent baseline at mount, retries until it
+/** Keeps one host's open task questions: a silent baseline at mount, retries until it
  *  lands, coalesced refreshes, and a silent re-baseline after a failed refresh. */
 export function useHostQuestionSnapshot({
   hostId,
@@ -37,6 +39,7 @@ export function useHostQuestionSnapshot({
     null,
   );
   const observedIds = useRef<ReadonlySet<string>>(new Set<string>());
+  const attentionRef = useRef<ReadonlyMap<string, number>>(new Map());
   const refreshState = useRef({ running: false, pending: false });
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const generationRef = useRef(0);
@@ -50,20 +53,25 @@ export function useHostQuestionSnapshot({
 
   const readAuthoritativeSnapshot = useCallback(
     async (client: ApiClient, baseline: boolean, generation: number) => {
-      const [inbox, taskPage] = await Promise.all([
-        client.tasks.listTaskNotifications(),
+      const [unread, taskPage] = await Promise.all([
+        client.mail.unread(),
         client.tasks.listTasks({ limit: 1, status_view: "all" }),
       ]);
       if (generationRef.current !== generation) return false;
+      const attention = questionAttention(hostId, unread);
+      let fresh: FreshQuestion[] = [];
+      // Counts carry no ids: the inbox is read for the baseline, and again only
+      // when an agent asks more than before.
+      if (baseline || questionsRose(attentionRef.current, attention)) {
+        const inbox = await client.mail.list({ box: "inbox", limit: 500 });
+        if (generationRef.current !== generation) return false;
+        const read = readFreshQuestions(inbox.letters, observedIds.current, baseline);
+        observedIds.current = read.observed;
+        fresh = read.fresh;
+      }
+      attentionRef.current = attention;
       if (baseline) refreshClientRef.current = client;
-      const snapshot = readQuestionSnapshot(
-        hostId,
-        inbox.notifications ?? [],
-        observedIds.current,
-        baseline,
-      );
-      observedIds.current = snapshot.observed;
-      onSnapshot(hostId, labelRef.current, snapshot.attention, snapshot.fresh);
+      onSnapshot(hostId, labelRef.current, attention, fresh);
       const nextSequence = taskPage.sequence ?? 0;
       if (baseline) setSequence(nextSequence);
       else setSequence((current) => Math.max(current, nextSequence));

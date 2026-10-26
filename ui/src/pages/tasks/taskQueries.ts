@@ -76,7 +76,11 @@ export const taskQueries = {
   notifications: (api: ApiClient) =>
     queryOptions({
       queryKey: taskKeys.notifications(api.target),
-      queryFn: ({ signal }) => api.tasks.listTaskNotifications(signal),
+      // The customer's open task questions, newest first.
+      queryFn: async ({ signal }) =>
+        (await api.mail.list({ box: "inbox", limit: 500 }, signal)).letters
+          .filter((letter) => letter.kind === "task.question")
+          .reverse(),
     }),
   sequence: (api: ApiClient) =>
     queryOptions({

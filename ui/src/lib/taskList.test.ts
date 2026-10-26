@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Task, TaskNotification } from "./api";
+import type { Task } from "./api";
+import { letter } from "@/test/fixtures/mailFixtures";
 import {
   missingQuestionTaskKeys,
   tasksWithQuestionsAndOpen,
@@ -8,15 +9,11 @@ import {
   unreadQuestionsFor,
 } from "./taskList";
 
-const question = (over: Partial<TaskNotification>): TaskNotification =>
-  ({
-    id: "n-1",
-    type: "task.question",
-    task_key: "T-1",
-    requesting_principal: "agent:dev",
-    read_at: "",
-    ...over,
-  }) as TaskNotification;
+const question = ({
+  task_key = "T-1",
+  ...over
+}: Partial<Parameters<typeof letter>[0]> & { task_key?: string }) =>
+  letter({ kind: "task.question", from: "agent:dev", data: { task_key }, ...over });
 
 const task = (key: string): Task => ({ key }) as Task;
 
@@ -49,8 +46,8 @@ describe("task questions", () => {
     question({ id: "1", task_key: "T-1" }),
     question({ id: "2", task_key: "T-2", read_at: "2026-01-01T00:00:00Z" }),
     question({ id: "3", task_key: "T-3", read_at: "2026-01-02T00:00:00Z" }),
-    question({ id: "4", task_key: "T-4", type: "task.comment" }),
-    question({ id: "5", task_key: "T-5", requesting_principal: "agent:other" }),
+    question({ id: "4", task_key: "T-4", kind: "task.comment" }),
+    question({ id: "5", task_key: "T-5", from: "agent:other" }),
     question({ id: "6", task_key: "T-1" }),
   ];
 

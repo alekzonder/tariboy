@@ -6,9 +6,9 @@ import type { Daemon } from "@/lib/daemons";
 const RECONNECT_MIN_MS = 250;
 const RECONNECT_MAX_MS = 5000;
 
-/** One letter written on this host: a frame of /api/mail/ws, which is not in
- *  the OpenAPI spec. It is a hint, not the letter: the client refetches over
- *  HTTP, which stays authoritative. */
+/** One letter written on this host: a frame of /api/mail/ws. Hand-written
+ *  because the socket is outside the OpenAPI spec. It is a hint, not the
+ *  letter: the client refetches over HTTP, which stays authoritative. */
 export interface MailHint {
   id: string;
   from: string;
@@ -25,7 +25,7 @@ export interface AgentStateHint {
   ts: string;
 }
 
-export type MessagesSocketStatus = "connecting" | "open" | "closed";
+export type HintSocketStatus = "connecting" | "open" | "closed";
 
 function hintWsUrl(target: Daemon | null, path: string): string {
   if (target && !target.baseURL) {
@@ -69,7 +69,7 @@ type HintSocketOptions<T> = {
  * nothing, so the caller refetches on mount and on every reconnect; that, not a
  * cursor, is what makes a missed frame harmless.
  */
-export function useMailSocket(options: HintSocketOptions<MailHint>): MessagesSocketStatus {
+export function useMailSocket(options: HintSocketOptions<MailHint>): HintSocketStatus {
   return useHintSocket(
     "/api/mail/ws",
     (parsed) => {
@@ -85,9 +85,7 @@ export function useMailSocket(options: HintSocketOptions<MailHint>): MessagesSoc
  * and the agent status can poll slowly and refetch on a hint instead. A host
  * without this socket keeps it closed, and the caller keeps its short poll.
  */
-export function useAgentStatesSocket(
-  options: HintSocketOptions<AgentStateHint>,
-): MessagesSocketStatus {
+export function useAgentStatesSocket(options: HintSocketOptions<AgentStateHint>): HintSocketStatus {
   return useHintSocket(
     "/api/agent-states/ws",
     (parsed) => {
@@ -102,8 +100,8 @@ function useHintSocket<T>(
   path: string,
   accept: (parsed: unknown) => T | null,
   { target, enabled = true, onHint, onOpen }: HintSocketOptions<T>,
-): MessagesSocketStatus {
-  const [status, setStatus] = useState<MessagesSocketStatus>(enabled ? "connecting" : "closed");
+): HintSocketStatus {
+  const [status, setStatus] = useState<HintSocketStatus>(enabled ? "connecting" : "closed");
   const onHintRef = useRef(onHint);
   const onOpenRef = useRef(onOpen);
   const acceptRef = useRef(accept);

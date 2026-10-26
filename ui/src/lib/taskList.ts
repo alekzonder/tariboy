@@ -1,4 +1,5 @@
-import type { Task, TaskFilters, TaskNotification, TaskStatusView } from "./api";
+import type { Letter, Task, TaskFilters, TaskStatusView } from "./api";
+import { letterTaskKey } from "./letters";
 import { errorText } from "./errors";
 
 export function actorAgent(name: string): string {
@@ -52,20 +53,16 @@ export function taskListFilters({
   };
 }
 
-const isUnreadQuestion = (notification: TaskNotification) =>
-  notification.type === "task.question" && !notification.read_at;
+const isUnreadQuestion = (letter: Letter) => letter.kind === "task.question" && !letter.read_at;
 
 /** The tasks with a question nobody has read yet. */
-export function unreadQuestionTaskKeys(notifications: readonly TaskNotification[]): Set<string> {
-  return new Set(notifications.filter(isUnreadQuestion).map((item) => item.task_key));
+export function unreadQuestionTaskKeys(notifications: readonly Letter[]): Set<string> {
+  return new Set(notifications.filter(isUnreadQuestion).map(letterTaskKey));
 }
 
 /** The unread questions on one task, which opening it reads. */
-export function unreadQuestionsFor(
-  notifications: readonly TaskNotification[],
-  taskKey: string,
-): TaskNotification[] {
-  return notifications.filter((item) => item.task_key === taskKey && isUnreadQuestion(item));
+export function unreadQuestionsFor(notifications: readonly Letter[], taskKey: string): Letter[] {
+  return notifications.filter((item) => letterTaskKey(item) === taskKey && isUnreadQuestion(item));
 }
 
 /** Tasks with an unread question that the list did not return, sorted; with a
@@ -75,16 +72,14 @@ export function missingQuestionTaskKeys({
   tasks,
   requester,
 }: {
-  notifications: readonly TaskNotification[];
+  notifications: readonly Letter[];
   tasks: readonly Task[];
   requester: string | undefined;
 }): string[] {
   const listed = new Set(tasks.map((task) => task.key));
   const keys = notifications
-    .filter(
-      (item) => isUnreadQuestion(item) && (!requester || item.requesting_principal === requester),
-    )
-    .map((item) => item.task_key);
+    .filter((item) => isUnreadQuestion(item) && (!requester || item.from === requester))
+    .map(letterTaskKey);
   return [...new Set(keys)].filter((key) => !listed.has(key)).sort();
 }
 

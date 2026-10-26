@@ -1,9 +1,14 @@
+import { lazy, Suspense } from "react";
 import { NavLink } from "react-router-dom";
 import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
 import { serverPath, type ServerSection } from "@/lib/terminalsHost";
 import { cn } from "@/lib/utils";
 
+// The count brings the host client and the query helpers: it loads after the shell.
+const OpenMailCount = lazy(() => import("@/pages/mailbox/OpenMailCount"));
+
 const SECTIONS: Array<{ section: ServerSection; label: string }> = [
+  { section: "mail", label: "Mailbox" },
   { section: "tasks", label: "Tasks" },
   { section: "activity", label: "Activity" },
   { section: "images", label: "Images" },
@@ -41,6 +46,11 @@ export function ServerContextBar({ hostId, label }: { hostId: string; label: str
           }
         >
           {sectionLabel}
+          {section === "mail" && (
+            <Suspense fallback={null}>
+              <OpenMailCount hostId={hostId} />
+            </Suspense>
+          )}
         </NavLink>
       ))}
     </nav>

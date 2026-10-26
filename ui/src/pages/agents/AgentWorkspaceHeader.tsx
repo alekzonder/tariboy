@@ -148,7 +148,7 @@ function AgentCwdRow({
 }
 
 // Why the loop is off: a halted loop (including a failed iteration launch,
-// which never creates an iteration row), and a full message queue.
+// which never creates an iteration row), and a full inbox.
 function AgentStatusNotes({ status }: { status: AgentStatus | null }) {
   return (
     <>
@@ -165,7 +165,7 @@ function AgentStatusNotes({ status }: { status: AgentStatus | null }) {
       )}
       {status?.messages_queue_full && (
         <p className="px-4 pb-2 text-caption font-medium text-destructive">
-          Message queue full: {status.messages_pending} / {status.messages_max_queue}
+          Inbox full: {status.messages_pending} / {status.messages_max_queue}
         </p>
       )}
     </>
@@ -237,6 +237,7 @@ export function AgentWorkspaceHeader(props: AgentWorkspaceHeaderProps) {
         tabs={props.tabs}
         base={base}
         questionTasks={props.questionTasks}
+        openLetters={status?.messages_pending ?? 0}
         stripRef={props.stripRef}
       />
     </header>

@@ -1,8 +1,6 @@
 import type {
   AgentPool,
   CommentResult,
-  MailList,
-  MailReadResult,
   PrincipalInfo,
   Queue,
   Relation,
@@ -34,20 +32,6 @@ export type {
 } from "../api-types.generated";
 // Comment and Event would shadow the DOM globals of those names.
 export type { Comment as TaskComment, Event as TaskEvent } from "../api-types.generated";
-
-// A customer task question: one of the customer's open task.question letters,
-// which the tasks service closes when the question is answered on the task.
-// Not a response type but the UI view the question badges and native
-// notifications read; the spec types the letter itself (Letter).
-export interface TaskNotification {
-  id: string;
-  type: string;
-  task_key: string;
-  requesting_principal: string;
-  text: string;
-  created_at: string;
-  read_at: string;
-}
 
 export type TaskCategory = Task["category"];
 export type TaskStatus = TaskCategory;
@@ -219,32 +203,6 @@ export function tasksApi(t: Transport) {
       ),
     listTaskPrincipals: (signal?: AbortSignal) =>
       t.request<PrincipalInfo>("GET", "/api/task-principals", undefined, signal),
-    // The customer's open task questions, newest first, from the customer's
-    // inbox (GET /api/mail acts as the customer).
-    listTaskNotifications: async (signal?: AbortSignal) => {
-      const inbox = await t.request<MailList>(
-        "GET",
-        queryPath("/api/mail", { box: "inbox", limit: 500 }),
-        undefined,
-        signal,
-      );
-      const notifications: TaskNotification[] = inbox.letters
-        .filter((letter) => letter.kind === "task.question")
-        .map((letter) => ({
-          id: letter.id,
-          type: letter.kind,
-          task_key: typeof letter.data.task_key === "string" ? letter.data.task_key : "",
-          requesting_principal: letter.from,
-          text: letter.body,
-          created_at: letter.created_at,
-          read_at: letter.read_at,
-        }))
-        .reverse();
-      return { notifications, count: notifications.length };
-    },
-    // Reading a question letter keeps it open: the answer on the task closes it.
-    markTaskNotificationRead: (id: string) =>
-      t.post<MailReadResult>("/api/mail/read", { ids: [id] }),
   };
 }
 export type TasksApi = ReturnType<typeof tasksApi>;

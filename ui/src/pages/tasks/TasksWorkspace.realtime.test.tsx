@@ -24,12 +24,12 @@ const api = vi.hoisted(() => ({
   getQueueWorkflow: vi.fn(),
   listAgentPools: vi.fn(),
   rebindAgentPool: vi.fn(),
-  listTaskNotifications: vi.fn(),
+  mailList: vi.fn(),
   listTaskEvents: vi.fn(),
   listTaskPrincipals: vi.fn(),
   listTaskQueues: vi.fn(),
   listTasks: vi.fn(),
-  markTaskNotificationRead: vi.fn(),
+  mailRead: vi.fn(),
   moveTask: vi.fn(),
   updateTask: vi.fn(),
   updateTaskQueue: vi.fn(),
@@ -54,12 +54,12 @@ const hostArgument = vi.hoisted((): Record<string, number> => ({
   getQueueWorkflow: 1,
   listAgentPools: 1,
   rebindAgentPool: 5,
-  listTaskNotifications: 1,
+  mailList: 2,
   listTaskEvents: 3,
   listTaskPrincipals: 0,
   listTaskQueues: 0,
   listTasks: 1,
-  markTaskNotificationRead: 1,
+  mailRead: 1,
   moveTask: 2,
   updateTask: 2,
   updateTaskQueue: 2,
@@ -72,14 +72,17 @@ vi.mock("@/lib/api", async (importOriginal) => {
       const client = actual.createApi(target);
       const tasks: Record<string, unknown> = { ...client.tasks };
       const workflows: Record<string, unknown> = { ...client.workflows };
+      const mail: Record<string, unknown> = { ...client.mail };
       for (const [name, at] of Object.entries(hostArgument)) {
-        const domain = name in tasks ? tasks : workflows;
-        domain[name] = (...args: unknown[]) => {
+        // mailList and mailRead stand for mail.list and mail.read.
+        const inMail = name.startsWith("mail");
+        const domain = inMail ? mail : name in tasks ? tasks : workflows;
+        domain[inMail ? name.slice(4).toLowerCase() : name] = (...args: unknown[]) => {
           args.splice(at, 0, client.target);
           return (api as Record<string, (...values: unknown[]) => unknown>)[name](...args);
         };
       }
-      return { ...client, tasks, workflows };
+      return { ...client, tasks, workflows, mail };
     },
   };
 });
@@ -254,7 +257,7 @@ describe("TasksWorkspace", () => {
     });
     const metadataCalls = api.listTaskQueues.mock.calls.length;
     const principalCalls = api.listTaskPrincipals.mock.calls.length;
-    const notificationCalls = api.listTaskNotifications.mock.calls.length;
+    const notificationCalls = api.mailList.mock.calls.length;
     api.listTasks.mockReturnValueOnce(refreshPage.promise);
 
     const onHint = taskSocket.options?.onHint as (hint: {
@@ -275,7 +278,7 @@ describe("TasksWorkspace", () => {
     expect(api.listTasks).toHaveBeenCalledTimes(2);
     expect(api.listTaskQueues).toHaveBeenCalledTimes(metadataCalls + 1);
     expect(api.listTaskPrincipals).toHaveBeenCalledTimes(principalCalls + 1);
-    expect(api.listTaskNotifications).toHaveBeenCalledTimes(notificationCalls + 1);
+    expect(api.mailList).toHaveBeenCalledTimes(notificationCalls + 1);
   });
 
   it("runs one trailing refresh when a hint arrives during an active refresh", async () => {

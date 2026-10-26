@@ -7,15 +7,17 @@ type AgentWorkspaceTabsProps = {
   tabs: readonly AgentTabEntry[];
   base: string;
   questionTasks: number;
+  /** The agent's open inbox letters. */
+  openLetters: number;
   stripRef: RefObject<HTMLElement | null>;
 };
 
-function TaskQuestionsBadge({ count }: { count: number }) {
+function CountBadge({ count, label }: { count: number; label: string }) {
   return (
     <span
       role="img"
-      aria-label={`${count} task${count === 1 ? "" : "s"} with unread agent questions`}
-      title={`${count} task${count === 1 ? "" : "s"} with unread agent questions`}
+      aria-label={label}
+      title={label}
       className="ml-1.5 rounded-full bg-primary px-1.5 text-caption font-medium leading-4 text-primary-foreground"
     >
       {count}
@@ -27,6 +29,7 @@ export function AgentWorkspaceTabs({
   tabs,
   base,
   questionTasks,
+  openLetters,
   stripRef,
 }: AgentWorkspaceTabsProps) {
   return (
@@ -47,7 +50,18 @@ export function AgentWorkspaceTabs({
           }
         >
           {label}
-          {key === "tasks" && questionTasks > 0 && <TaskQuestionsBadge count={questionTasks} />}
+          {key === "tasks" && questionTasks > 0 && (
+            <CountBadge
+              count={questionTasks}
+              label={`${questionTasks} open agent question${questionTasks === 1 ? "" : "s"}`}
+            />
+          )}
+          {key === "mailbox" && openLetters > 0 && (
+            <CountBadge
+              count={openLetters}
+              label={`${openLetters} open letter${openLetters === 1 ? "" : "s"}`}
+            />
+          )}
         </NavLink>
       ))}
     </nav>

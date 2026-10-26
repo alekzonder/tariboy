@@ -9,11 +9,12 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import type { Task, TaskDetail, TaskNotification } from "@/lib/api";
+import type { Letter, Task, TaskDetail } from "@/lib/api";
+import { letter } from "@/test/fixtures/mailFixtures";
 
 const model = vi.hoisted(() => ({
   daemons: [] as Array<{ id: string; label: string }>,
-  snapshots: new Map<string, TaskNotification[]>(),
+  snapshots: new Map<string, Letter[]>(),
   sequences: new Map<string, number>(),
   failures: new Set<string>(),
   shown: [] as Array<{
@@ -31,7 +32,7 @@ const model = vi.hoisted(() => ({
       setStatus: (status: "connecting" | "open" | "closed") => void;
     }
   >(),
-  deferredInbox: null as Promise<{ notifications: TaskNotification[]; count: number }> | null,
+  deferredInbox: null as Promise<unknown> | null,
   activation: undefined as
     | undefined
     | ((payload: { host_id: string; notification_id: string; task_key: string }) => void),
@@ -71,15 +72,68 @@ vi.mock("@/lib/api/tasks", async (importOriginal) => {
   };
 });
 
+// The customer's mail on each host, read from the same model.
+vi.mock("@/lib/api/mail", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/mail")>();
+  return {
+    ...actual,
+    mailApi: (t: Parameters<typeof actual.mailApi>[0]) => ({
+      ...actual.mailApi(t),
+      ...hostMail(t.target),
+    }),
+  };
+});
+
+vi.mock("@/hooks/useMailSocket", () => ({ useMailSocket: () => "closed" }));
+
+const openLetters = (hostId: string) =>
+  (model.snapshots.get(hostId) ?? []).filter((item) => !item.answered_at && !item.dead_at);
+
+function hostMail(target: { id?: string } | null) {
+  const hostId = target?.id ?? "";
+  return {
+    unread: async () => {
+      if (model.failures.has(hostId)) throw new Error(`inbox failed for ${hostId || "local"}`);
+      if (model.deferredInbox) await model.deferredInbox;
+      const counts = new Map<string, number>();
+      for (const item of openLetters(hostId)) {
+        const key = JSON.stringify([item.from, item.kind]);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+      const open = openLetters(hostId);
+      return {
+        as: "user:customer",
+        open: open.length,
+        unread: open.filter((item) => !item.read_at).length,
+        by_sender: [...counts].map(([key, count]) => {
+          const [sender, kind] = JSON.parse(key) as [string, string];
+          return { sender, kind, count };
+        }),
+      };
+    },
+    list: async () => {
+      if (model.failures.has(hostId)) throw new Error(`inbox failed for ${hostId || "local"}`);
+      const letters = openLetters(hostId);
+      return { as: "user:customer", box: "inbox", letters, count: letters.length, next_before: "" };
+    },
+    read: async (ids: string[]) => {
+      const [notificationId] = ids;
+      model.readAttempts.push({ notificationId, hostId: target?.id });
+      if (model.rejectRead) throw new Error("read failed");
+      if (model.markReadPromise) await model.markReadPromise;
+      model.snapshots.set(
+        hostId,
+        (model.snapshots.get(hostId) ?? []).map((item) =>
+          item.id === notificationId ? { ...item, read_at: "2026-08-18T12:05:00Z" } : item,
+        ),
+      );
+      return { read: 1, closed_notices: 0 };
+    },
+  };
+}
+
 function hostTasks(target: { id?: string } | null) {
   return {
-    listTaskNotifications: async (_includeDismissed?: boolean) => {
-      const hostId = target?.id ?? "";
-      if (model.failures.has(hostId)) throw new Error(`inbox failed for ${hostId || "local"}`);
-      if (model.deferredInbox) return model.deferredInbox;
-      const notifications = model.snapshots.get(hostId) ?? [];
-      return { notifications, count: notifications.length };
-    },
     listTasks: async (_filters?: unknown) => {
       const hostId = target?.id ?? "";
       if (model.failures.has(hostId)) throw new Error(`tasks failed for ${hostId || "local"}`);
@@ -92,19 +146,6 @@ function hostTasks(target: { id?: string } | null) {
       const detail = model.taskDetails.get(key);
       if (!detail) throw new Error(`missing task ${key}`);
       return detail;
-    },
-    markTaskNotificationRead: async (notificationId: string) => {
-      const hostId = target?.id;
-      model.readAttempts.push({ notificationId, hostId });
-      if (model.rejectRead) throw new Error("read failed");
-      if (model.markReadPromise) await model.markReadPromise;
-      const id = hostId ?? "";
-      model.snapshots.set(
-        id,
-        (model.snapshots.get(id) ?? []).map((item) =>
-          item.id === notificationId ? { ...item, read_at: "2026-08-18T12:05:00Z" } : item,
-        ),
-      );
     },
   };
 }
@@ -157,17 +198,22 @@ import { ApiProvider } from "./ApiProvider";
 import { useCustomerQuestionNotifications } from "./customerQuestionNotificationsContext";
 import TasksWorkspace from "@/pages/tasks/TasksWorkspace";
 
-function notification(overrides: Partial<TaskNotification> = {}): TaskNotification {
-  return {
+// A task.question letter to the customer; task_key and the sender read as before.
+function notification({
+  task_key = "ASK-1",
+  requesting_principal = "agent:alice",
+  type = "task.question",
+  ...overrides
+}: Partial<Letter> & { task_key?: string; requesting_principal?: string; type?: string } = {}) {
+  return letter({
     id: "notification-1",
-    type: "task.question",
-    text: "alice needs your answer",
-    requesting_principal: "agent:alice",
-    task_key: "ASK-1",
+    kind: type,
+    from: requesting_principal,
+    body: "alice needs your answer",
+    data: { task_key },
     created_at: "2026-08-18T12:00:00Z",
-    read_at: "",
     ...overrides,
-  };
+  });
 }
 
 function AttentionProbe() {
@@ -342,7 +388,7 @@ describe("CustomerQuestionNotifications", () => {
     expect(model.shown).toEqual([]);
   });
 
-  it("counts distinct tasks with unread questions per agent", async () => {
+  it("counts the open questions per agent, read or not", async () => {
     model.daemons = [{ id: "remote-1", label: "prod" }];
     model.snapshots.set("remote-1", [
       notification(),
@@ -355,7 +401,7 @@ describe("CustomerQuestionNotifications", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("attention-counts")).toHaveTextContent(
-        JSON.stringify([[JSON.stringify(["remote-1", "alice"]), 2]]),
+        JSON.stringify([[JSON.stringify(["remote-1", "alice"]), 4]]),
       );
     });
   });
@@ -384,6 +430,19 @@ describe("CustomerQuestionNotifications", () => {
     ]);
   });
 
+  it("drops attention when the answer on the task closes the question", async () => {
+    model.snapshots.set("", [notification()]);
+    renderCoordinator();
+    await expectAttention('["","alice"]');
+    await waitFor(() => expect(model.sockets.has("")).toBe(true));
+
+    model.snapshots.set("", [notification({ answered_at: "2026-08-18T12:10:00Z" })]);
+    await hint("");
+
+    await expectAttention();
+    expect(model.shown).toEqual([]);
+  });
+
   it("does not duplicate a notification across repeated hints or snapshots", async () => {
     model.snapshots.set("", [notification({ id: "baseline" })]);
     renderCoordinator();
@@ -404,7 +463,7 @@ describe("CustomerQuestionNotifications", () => {
     await expectAttention('["remote-1","alice"]');
     await waitFor(() => expect(model.sockets.has("")).toBe(true));
 
-    const pending = deferred<{ notifications: TaskNotification[]; count: number }>();
+    const pending = deferred<undefined>();
     model.deferredInbox = pending.promise;
     await hint("remote-1");
     model.daemons = [{ id: "remote-1", label: "Production" }];
@@ -417,7 +476,7 @@ describe("CustomerQuestionNotifications", () => {
     );
 
     await act(async () => {
-      pending.resolve({ notifications: [notification()], count: 1 });
+      pending.resolve(undefined);
       await pending.promise;
     });
 
@@ -425,7 +484,7 @@ describe("CustomerQuestionNotifications", () => {
     expect(model.shown).toEqual([]);
   });
 
-  it("ignores read, non-question, and non-agent notifications", async () => {
+  it("ignores non-question and non-agent letters; a read question still waits", async () => {
     model.snapshots.set("", [
       notification({ id: "read", read_at: "2026-08-18T12:05:00Z" }),
       notification({ id: "assigned", type: "task.assigned" }),
@@ -434,7 +493,7 @@ describe("CustomerQuestionNotifications", () => {
 
     renderCoordinator();
 
-    await expectAttention();
+    await expectAttention('["","alice"]');
     expect(model.shown).toEqual([]);
   });
 
@@ -588,7 +647,7 @@ describe("CustomerQuestionNotifications", () => {
     }
   });
 
-  it("reads an activated remote question, clears attention, and opens its encoded task route", async () => {
+  it("reads an activated remote question and opens its encoded task route", async () => {
     const taskKey = "ASK-8/needs-answer";
     model.daemons = [{ id: "remote-1", label: "prod" }];
     model.snapshots.set("remote-1", [notification({ task_key: taskKey })]);
@@ -614,11 +673,12 @@ describe("CustomerQuestionNotifications", () => {
     expect(await screen.findByRole("textbox", { name: "Description" })).toHaveTextContent(
       "The customer needs a decision",
     );
-    await expectAttention();
+    // Reading keeps the question waiting; the answer on the task closes it.
+    await expectAttention('["remote-1","alice"]');
     expect(model.readAttempts).toEqual([{ notificationId: "notification-1", hostId: "remote-1" }]);
   });
 
-  it("clears attention when activation arrives as soon as baseline attention renders", async () => {
+  it("reads the question when activation arrives as soon as baseline attention renders", async () => {
     const taskKey = "ASK-8";
     model.daemons = [{ id: "remote-1", label: "prod" }];
     model.snapshots.set("remote-1", [notification({ task_key: taskKey })]);
@@ -636,7 +696,8 @@ describe("CustomerQuestionNotifications", () => {
       ),
     );
     expect(await screen.findByRole("heading", { name: taskKey })).toBeInTheDocument();
-    await expectAttention();
+    // Reading keeps the question waiting; the answer on the task closes it.
+    await expectAttention('["remote-1","alice"]');
     expect(model.readAttempts).toEqual([{ notificationId: "notification-1", hostId: "remote-1" }]);
   });
 

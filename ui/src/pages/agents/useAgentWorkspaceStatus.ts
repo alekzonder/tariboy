@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useDaemons } from "@/components/daemonContext";
 import { useApi } from "@/components/apiContext";
 import { isConnectionError, type AgentStatus, type AgentView } from "@/lib/api";
-import { useAgentStatesSocket } from "@/hooks/useMessagesSocket";
+import { useAgentStatesSocket } from "@/hooks/useMailSocket";
 import { useCoalesced } from "@/hooks/useCoalesced";
 
 type Connection = "selecting" | "ready" | "unavailable";

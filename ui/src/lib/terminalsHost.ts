@@ -6,7 +6,14 @@ import { cachedDaemon, unresolvedDaemon, type Daemon } from "@/lib/daemons";
 const LOCAL_PARAM = "local";
 export const hostToParam = (id: string): string => (id === "" ? LOCAL_PARAM : id);
 export const paramToHost = (p: string): string => (p === LOCAL_PARAM ? "" : p);
-export type ServerSection = "tasks" | "activity" | "images" | "workflows" | "stores" | "settings";
+export type ServerSection =
+  | "mail"
+  | "tasks"
+  | "activity"
+  | "images"
+  | "workflows"
+  | "stores"
+  | "settings";
 export const serverPath = (hostId: string, section: ServerSection): string =>
   `/servers/${encodeURIComponent(hostToParam(hostId))}/${section}`;
 

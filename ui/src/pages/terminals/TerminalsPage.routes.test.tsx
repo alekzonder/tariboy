@@ -163,6 +163,23 @@ describe("TerminalsPage agent routes", () => {
     );
   });
 
+  it("opens the server Mailbox, the first server section, at /servers/<host>/mail", async () => {
+    serversTab();
+    renderAt("/servers/local/tasks");
+
+    const bar = await screen.findByRole("navigation", { name: "Server workspace" });
+    const links = within(bar).getAllByRole("link");
+    expect(links[0]).toHaveTextContent("Mailbox");
+    expect(links[1]).toHaveTextContent("Tasks");
+    fireEvent.click(links[0]);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent("/servers/local/mail"),
+    );
+    expect(await screen.findByRole("radiogroup", { name: "Mailbox" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Compose" })).toBeInTheDocument();
+  });
+
   it("shows server context above agent context with distinct selected states", async () => {
     serversTab();
     renderAt("/agents/local/a1/console");
@@ -176,20 +193,20 @@ describe("TerminalsPage agent routes", () => {
     expect(screen.getByRole("button", { name: "Open a1" })).toHaveAttribute("aria-current", "page");
   });
 
-  it("counts the agent's tasks with unread questions on the Tasks tab", async () => {
+  it("counts the agent's open questions on the Tasks tab", async () => {
     renderAt("/agents/local/a1/console", new Map([[JSON.stringify(["", "a1"]), 2]]));
 
-    const count = await screen.findByLabelText("2 tasks with unread agent questions");
+    const count = await screen.findByLabelText("2 open agent questions");
     expect(count).toHaveTextContent("2");
     const nav = screen.getByRole("navigation", { name: "Agent workspace" });
     expect(within(nav).getByRole("link", { name: /Tasks/ })).toContainElement(count);
   });
 
-  it("shows no Tasks count without unread agent questions", async () => {
+  it("shows no Tasks count without open agent questions", async () => {
     renderAt("/agents/local/a1/console");
 
     expect(await screen.findByRole("navigation", { name: "Agent workspace" })).toBeInTheDocument();
-    expect(screen.queryByLabelText(/unread agent question/)).toBeNull();
+    expect(screen.queryByLabelText(/open agent question/)).toBeNull();
   });
 
   it("opens a sidebar agent in Terminal", async () => {

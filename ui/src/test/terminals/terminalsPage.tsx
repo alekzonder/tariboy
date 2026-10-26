@@ -136,6 +136,7 @@ export function renderAt(path: string, attention: ReadonlyMap<string, number> = 
                 <Route path="/terminals/:hostId/:agent" element={<TerminalsPage />} />
                 <Route path="/agents/:hostId/:agent/:tab" element={<TerminalsPage />} />
                 <Route path="/agents/:hostId/teams/:team" element={<TerminalsPage />} />
+                <Route path="/servers/:hostId/mail" element={<TerminalsPage serverView="mail" />} />
                 <Route path="/servers/:hostId/tasks" element={<TerminalsPage />} />
               </Routes>
             </SidebarStateProvider>

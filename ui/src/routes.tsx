@@ -40,6 +40,7 @@ export function AppRoutes() {
       <Route path="/agents/new" element={<CanonicalCreateRedirect />} />
       <Route path="/agents/:hostId/teams/:team" element={<TerminalsPage />} />
       <Route path="/agents/:hostId/:agent/:tab/*" element={<TerminalsPage />} />
+      <Route path="/servers/:hostId/mail" element={<TerminalsPage serverView="mail" />} />
       <Route path="/servers/:hostId/tasks" element={<TerminalsPage serverView="tasks" />} />
       <Route path="/servers/:hostId/activity" element={<TerminalsPage serverView="activity" />} />
 
