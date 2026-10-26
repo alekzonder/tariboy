@@ -94,7 +94,7 @@ func add(tx *sql.Tx, sch Schedule, now time.Time) (Schedule, error) {
 		return Schedule{}, err
 	}
 	_, err = tx.Exec(`INSERT INTO schedules
-		(id, agent, kind, spec, channel, message_template, next_fire_at, enabled, created_at, correlation_id)
+		(id, agent, kind, spec, recipient, message_template, next_fire_at, enabled, created_at, correlation_id)
 		VALUES (?,?,?,?,?,?,?,1,?,?)`,
 		sch.ID, sch.Agent, sch.Kind, sch.Spec, sch.Channel, sch.MessageTemplate, sch.NextFireAt, sch.CreatedAt,
 		nullable(sch.CorrelationID))
@@ -120,7 +120,7 @@ func nextScheduleID(x dbtx, agent string, now time.Time) (string, error) {
 }
 
 func (s *Store) List(agent string) ([]Schedule, error) {
-	rows, err := s.db.Query(`SELECT id, agent, kind, spec, channel, message_template, next_fire_at, enabled, created_at
+	rows, err := s.db.Query(`SELECT id, agent, kind, spec, recipient, message_template, next_fire_at, enabled, created_at
 		FROM schedules WHERE agent=? ORDER BY created_at, id`, agent)
 	if err != nil {
 		return nil, err
@@ -164,7 +164,7 @@ func (s *Store) Cancel(agent, id string) error {
 
 // DueBefore returns enabled schedules whose next_fire_at is <= t.
 func (s *Store) DueBefore(t time.Time) ([]Schedule, error) {
-	rows, err := s.db.Query(`SELECT id, agent, kind, spec, channel, message_template, next_fire_at, enabled, created_at
+	rows, err := s.db.Query(`SELECT id, agent, kind, spec, recipient, message_template, next_fire_at, enabled, created_at
 		FROM schedules WHERE enabled=1 AND next_fire_at<=? ORDER BY next_fire_at, id`,
 		store.FormatTime(t))
 	if err != nil {

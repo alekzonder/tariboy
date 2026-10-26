@@ -408,10 +408,10 @@ func TestScriptRunsMigrationPreservesLegacyHistoryAndBusSchedules(t *testing.T) 
 		t.Fatalf("migrated interruption outbox = run %q payload %q", outboxRunID, payload)
 	}
 	var scheduleSnapshot string
-	if err := upgraded.DB.QueryRow(`SELECT id||'|'||agent||'|'||kind||'|'||spec||'|'||channel||'|'||message_template||'|'||next_fire_at||'|'||enabled||'|'||created_at||'|'||correlation_id FROM schedules WHERE id='schedule-1'`).Scan(&scheduleSnapshot); err != nil {
+	if err := upgraded.DB.QueryRow(`SELECT id||'|'||agent||'|'||kind||'|'||spec||'|'||recipient||'|'||message_template||'|'||next_fire_at||'|'||enabled||'|'||created_at||'|'||correlation_id FROM schedules WHERE id='schedule-1'`).Scan(&scheduleSnapshot); err != nil {
 		t.Fatal(err)
 	}
-	if want := `schedule-1|alice|oneshot|2026-08-21T00:00:00Z|inbox:alice|{"text":"wake"}|2026-08-21T00:00:00.000000000Z|1|2026-08-20T00:00:00.000000000Z|request-1`; scheduleSnapshot != want {
+	if want := `schedule-1|alice|oneshot|2026-08-21T00:00:00Z|agent:alice|{"text":"wake"}|2026-08-21T00:00:00.000000000Z|1|2026-08-20T00:00:00.000000000Z|request-1`; scheduleSnapshot != want {
 		t.Fatalf("schedule changed: got %q want %q", scheduleSnapshot, want)
 	}
 }

@@ -34,9 +34,9 @@ func seedBus(t *testing.T, s *store.Store, ag string) {
 		}
 	}
 	// Two schedules inserted b-then-a so ORDER BY id must reorder them.
-	exec(`INSERT INTO schedules(id, agent, kind, spec, channel, next_fire_at) VALUES(?,?,?,?,?,?)`,
+	exec(`INSERT INTO schedules(id, agent, kind, spec, recipient, next_fire_at) VALUES(?,?,?,?,?,?)`,
 		ag+"-sch-b", ag, "cron", "* * * * *", ag+".inbox", "2026-01-01T00:00:00Z")
-	exec(`INSERT INTO schedules(id, agent, kind, spec, channel, next_fire_at) VALUES(?,?,?,?,?,?)`,
+	exec(`INSERT INTO schedules(id, agent, kind, spec, recipient, next_fire_at) VALUES(?,?,?,?,?,?)`,
 		ag+"-sch-a", ag, "oneshot", "2026-01-01T00:00:00Z", ag+".inbox", "2026-01-01T00:00:00Z")
 	exec(`INSERT INTO scripts(id, agent, name, description, command, mode, state, created_at) VALUES(?,?,?,?,?,?,?,?)`,
 		ag+"-scr-1", ag, "deploy", "", "echo hi", "once", "completed", "2026-01-01T00:00:00Z")

@@ -437,7 +437,7 @@ if mode == "SEED":
               ("sub-sentinel", agent, "chan-sentinel"))
     c.execute("INSERT INTO deliveries(subscription_id,message_id) VALUES(?,?)",
               ("sub-sentinel", "msg-sentinel"))
-    c.execute("INSERT INTO schedules(id,agent,kind,spec,channel,next_fire_at) VALUES(?,?,?,?,?,?)",
+    c.execute("INSERT INTO schedules(id,agent,kind,spec,recipient,next_fire_at) VALUES(?,?,?,?,?,?)",
               ("sch-sentinel", agent, "oneshot", "2099-01-01T00:00:00Z",
                "inbox:" + agent, "2099-01-01T00:00:00Z"))
     c.execute("INSERT INTO scripts(id,agent,name,description,command,mode,state,created_at) VALUES(?,?,?,?,?,?,?,?)",

@@ -3098,7 +3098,7 @@ func seedLeakedRows(t *testing.T, s *store.Store, name string) {
 	}
 	exec(`INSERT INTO subscriptions(id, agent, channel) VALUES(?,?,?)`, "sub-1", name, "ch")
 	exec(`INSERT INTO deliveries(subscription_id, message_id) VALUES(?,?)`, "sub-1", "msg-1")
-	exec(`INSERT INTO schedules(id, agent, kind, spec, channel, next_fire_at) VALUES(?,?,?,?,?,?)`,
+	exec(`INSERT INTO schedules(id, agent, kind, spec, recipient, next_fire_at) VALUES(?,?,?,?,?,?)`,
 		"sch-1", name, "oneshot", "2026-07-13T00:00:00Z", "ch", "2026-07-13T00:00:00Z")
 	exec(`INSERT INTO scripts(id, agent, name, description, command, mode, state, created_at) VALUES(?,?,?,?,?,?,?,?)`,
 		"scr-1", name, "s", "test", "echo hi", "once", "completed", "2026-07-13T00:00:00Z")
