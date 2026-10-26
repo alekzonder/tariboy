@@ -22,7 +22,7 @@ when the daemon is down.
 | `cp` | Upload `LOCAL_FILE` to the shared server directory, or download `AGENT:SRC LOCAL_DST` |
 | `files` | `upload` base64 content to the shared server directory |
 | `loop` | `enable`, `disable`, `interval`, `timeout`, `hard-timeout`, `on-timeout`, `on-error` |
-| `channel` / `message` | `channel ls`/`inspect`/`tail`, `message send` |
+| `mail` | the [`tmail`](/docs/reference/mail) client in operator mode: `inbox`, `sent`, `archive`, `show`, `send`, `reply`, `requeue`, `close`, `read`, `unread`, `clear` |
 | `group` | `create`, `assign`, `inspect`, `ls`, `rm` |
 | `plugin` | `install`, `ls`, `inspect`, `logs`, `rm` |
 | `telegram` | contributed by the running bundled plugin: `configure`, `chat setup`, `status` |

@@ -24,8 +24,8 @@
 ## Architecture
 
 - [Daemon architecture](https://alekzonder.github.io/tariboy/architecture): How tariboyd owns durable state, agent execution, APIs, plugins, policy, and recovery.
-- [Agents & the iteration loop](https://alekzonder.github.io/tariboy/architecture/iteration-loop): An agent runs a series of supervised iterations, driven by a timer or by messages, on top of a whoami / loop / channels core.
-- [The channel bus & messaging](https://alekzonder.github.io/tariboy/architecture/messaging): Messages move over a store-backed fan-out bus — six tables, per-agent delivery queues, and durable ack with redelivery.
+- [Agents & the iteration loop](https://alekzonder.github.io/tariboy/architecture/iteration-loop): An agent runs a series of supervised iterations, driven by a timer or by mail, on top of a whoami / loop / mail core.
+- [The mailbox](https://alekzonder.github.io/tariboy/architecture/messaging): Every message is a letter from one principal to another, stored as one row of the mail table; an agent's inbox wakes its loop until each letter is answered or read.
 - [The shim](https://alekzonder.github.io/tariboy/architecture/shim): tariboy-shim runs a single harness iteration under a watchdog, so a runaway iteration can be killed without touching the daemon.
 - [State model — the DB is the source of truth](https://alekzonder.github.io/tariboy/architecture/state-model): The SQLite DB is the single source of configuration; live state is computed, not stored, which is why test daemons must be isolated.
 - [The AI proxy & the audit log](https://alekzonder.github.io/tariboy/architecture/ai-proxy): Every LLM call routes through the in-process AI proxy, which enforces budgets and writes a per-iteration audit transcript.
@@ -48,11 +48,11 @@
 - [Built-in plugins](https://alekzonder.github.io/tariboy/plugins/built-in): Reference for daemon-owned capabilities and instruction plugins shipped with Tariboy.
 - [whoami](https://alekzonder.github.io/tariboy/plugins/built-in/whoami): Inspect the authenticated agent identity, working directory, active iteration, and client/daemon versions.
 - [loop](https://alekzonder.github.io/tariboy/plugins/built-in/loop): Complete an iteration and control the current agent's autonomous loop through identity-bound tools.
-- [messages](https://alekzonder.github.io/tariboy/plugins/built-in/messages): Publish, receive, acknowledge, reply to, and subscribe to durable channel messages.
+- [mail](https://alekzonder.github.io/tariboy/plugins/built-in/mail): Read the inbox, send letters, and reply to them with tmail.
 - [context](https://alekzonder.github.io/tariboy/plugins/built-in/context): Read and atomically replace the durable working memory carried between agent iterations.
 - [status](https://alekzonder.github.io/tariboy/plugins/built-in/status): Publish an operator-visible progress message intended to stay on one line without completing the current iteration.
 - [workdir](https://alekzonder.github.io/tariboy/plugins/built-in/workdir): Expose an agent's absolute managed workdir as an explicit schema-v2 prompt instruction.
-- [schedule](https://alekzonder.github.io/tariboy/plugins/built-in/schedule): Create agent-owned one-shot or cron schedules that wake the agent or publish to a channel.
+- [schedule](https://alekzonder.github.io/tariboy/plugins/built-in/schedule): Create agent-owned one-shot or cron schedules that send a letter to the agent or another principal.
 - [scripts](https://alekzonder.github.io/tariboy/plugins/built-in/scripts): Run asynchronous one-shot or fixed-interval local commands with durable per-run logs.
 - [image-creator](https://alekzonder.github.io/tariboy/plugins/built-in/image-creator): Build a runnable Tariboy image from any source directory readable by the daemon.
 - [goal](https://alekzonder.github.io/tariboy/plugins/built-in/goal): Receive or set the selected Native Task and AI usage attribution.
@@ -65,4 +65,4 @@
 ## Reference
 
 - [Command reference](https://alekzonder.github.io/tariboy/reference/commands): The full command reference — operator commands and agent capability scripts.
-- [Channel bus reference](https://alekzonder.github.io/tariboy/reference/channels): How messages move through channels, how agents receive them, how deliveries are acknowledged, and which agent settings affect message handling.
+- [Mail reference](https://alekzonder.github.io/tariboy/reference/mail): The tmail and tariboy mail commands, the mail routes, the prompt block, the agent settings, and how to debug an agent through its inbox, sent and archive.

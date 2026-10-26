@@ -413,9 +413,9 @@ the bounded Codex prompt prefix. It cannot override `HOME`, `CODEX_HOME`, or
 ## Built-in contract and procedure split
 
 Schema-v2 images declare capabilities, Agent Skills, and ordered prompt layers
-separately. Built-in `messages`, `scripts`, and `tasks` package conditional
+separately. Built-in `mail`, `scripts`, and `tasks` package conditional
 procedures as Agent Skills. Their prompt layers retain rules that must apply
-before skill selection, such as closing every delivered message and respecting
+before skill selection, such as answering every request and respecting
 a managed task packet's least-privilege boundary.
 
 Images using `image-creator` or `schedule` should package the

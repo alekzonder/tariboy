@@ -162,7 +162,7 @@ support-bundle allowlist.
 
 Database backups written by nightly maintenance live in the owner-only
 `<base-dir>/backups/db/` directory, and each backup file is mode `0600`. A
-backup is a complete, unmasked copy of `tariboyd.db`: task text, messages,
+backup is a complete, unmasked copy of `tariboyd.db`: task text, mail,
 Usage rows, and **agent and queue secret values in plaintext**. Unlike
 `tariboy backup`, nothing is masked, and a deleted or rotated secret remains in
 each kept backup until rotation removes it. Treat backups like the database
@@ -262,7 +262,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.94.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.95.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

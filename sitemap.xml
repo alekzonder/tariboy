@@ -22,7 +22,7 @@
   <url><loc>https://alekzonder.github.io/tariboy/plugins/built-in/goal</loc></url>
   <url><loc>https://alekzonder.github.io/tariboy/plugins/built-in/image-creator</loc></url>
   <url><loc>https://alekzonder.github.io/tariboy/plugins/built-in/loop</loc></url>
-  <url><loc>https://alekzonder.github.io/tariboy/plugins/built-in/messages</loc></url>
+  <url><loc>https://alekzonder.github.io/tariboy/plugins/built-in/mail</loc></url>
   <url><loc>https://alekzonder.github.io/tariboy/plugins/built-in/schedule</loc></url>
   <url><loc>https://alekzonder.github.io/tariboy/plugins/built-in/scripts</loc></url>
   <url><loc>https://alekzonder.github.io/tariboy/plugins/built-in/status</loc></url>
@@ -32,8 +32,8 @@
   <url><loc>https://alekzonder.github.io/tariboy/plugins/built-in</loc></url>
   <url><loc>https://alekzonder.github.io/tariboy/plugins</loc></url>
   <url><loc>https://alekzonder.github.io/tariboy/quickstart</loc></url>
-  <url><loc>https://alekzonder.github.io/tariboy/reference/channels</loc></url>
   <url><loc>https://alekzonder.github.io/tariboy/reference/commands</loc></url>
+  <url><loc>https://alekzonder.github.io/tariboy/reference/mail</loc></url>
   <url><loc>https://alekzonder.github.io/tariboy/remote-hosts</loc></url>
   <url><loc>https://alekzonder.github.io/tariboy/security-controls</loc></url>
   <url><loc>https://alekzonder.github.io/tariboy/support</loc></url>

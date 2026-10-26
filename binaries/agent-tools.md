@@ -22,12 +22,11 @@ must therefore include it.
 | `scripts/loop.sh done` | finish this iteration (`i-am-done`) |
 | `scripts/context.sh get` / `set <text>` | read / overwrite durable working memory |
 | `scripts/goal.sh set <TASK-KEY>` | select an assigned active Goal for this iteration |
-| `scripts/messages.sh message send --channel C …` | publish to a channel |
-| `scripts/messages.sh message ls` / `processed` / `reply` | inbox handling |
-| `scripts/messages.sh channel subscribe`/`unsubscribe`/`ls`, `scripts/messages.sh sources` | manage subscriptions |
+| `tmail inbox`/`sent`/`archive`/`show` | read the mailbox |
+| `tmail send --to P …` / `tmail reply ID TEXT` | send a letter, answer one |
 | `scripts/schedule.sh add`/`ls`/`cancel` | agent-owned scheduled wake-ups |
 | `scripts/scripts.sh run`/`schedule`/`rerun`/`ls`/`runs`/`logs`/`cancel`/`rm` | local asynchronous commands and run history |
-| `scripts/messages.sh group info`/`status`/`send`/`request`/`loop` | group coordination |
+| `GET /tools/group/info`, `status`, `observe/{member}`, `POST /tools/group/loop` | group coordination; group sends are `tmail send --to group:<g>` or `agent:<member>` |
 
 `tariboy-tasks` is installed globally with the `ttasks` alias. Packaged daemons
 also expose it through a shared runtime `bin/ttasks` symlink on their baseline
@@ -109,7 +108,7 @@ scripts/scripts.sh rm scr-agent-...
 
 Each run's combined stdout and stderr is kept in its own agent scripts log. Exit
 `0` records success; every other exit, including `2`, records failure. Both
-deliver `script.result` so the next iteration can act. The message carries
+send a `script.result` letter from `system:scripts` so the next iteration can act. The letter carries
 script/run IDs, name, mode, status, optional exit code, and the absolute
 `log_path`, without embedding stdout or stderr. Read that file when the result
 details are needed.

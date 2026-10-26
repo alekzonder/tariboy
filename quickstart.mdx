@@ -6,13 +6,13 @@ sidebar:
   icon: rocket
 ---
 
-This path is for the `0.94.0` alpha on an Apple Silicon Mac.
+This path is for the `0.95.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.94.0_aarch64.dmg`;
+- a verified `Tariboy_0.95.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -123,8 +123,8 @@ iterations.
 ## 6. Let Autopilot run
 
 Open **Configuration → Loop and timeouts**. Set a conservative interval and
-timeout, then save. While the agent is started, a matching message creates a
-durable pending delivery and nudges the loop; a timer can also trigger it.
+timeout, then save. While the agent is started, a letter to it stays open in
+its inbox and nudges the loop; a timer can also trigger it.
 
 ## 7. Inspect and stop safely
 

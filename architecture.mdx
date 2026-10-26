@@ -12,7 +12,7 @@ sidebar:
 (`cmd/tariboyd`, `internal/daemon`). It owns:
 
 - the **agent lifecycle** — create, start/stop the loop, run iterations, reap;
-- the **message bus** — channels, subscriptions, deliveries;
+- the **mailbox** — letters between agents, the customer, plugins and daemon components;
 - **native Tasks** — queues, recursive task trees, comments, dependencies,
   per-agent sticky goal selection, agent pools, queue triggers, events, and a
   durable notification outbox;
@@ -51,7 +51,7 @@ flowchart LR
   manager -->|one supervised iteration| shim[tariboy-shim and harness]
   shim -->|identity-bound capability calls| agentapi
   shim -->|short-lived scoped token| proxy
-  plugins -->|declared channels and API| daemon
+  plugins -->|mail and declared API| daemon
 ```
 
 | Surface | Typical client | Boundary and identity |
@@ -77,15 +77,15 @@ controls](/docs/security-controls) for the full transport and credential rules.
 | Agent store and loop manager | Agent configuration, per-agent engines, iteration adoption, shim refresh, and orphan-session reaping | Harness business logic |
 | Loop engine and shim runner | At most one iteration per agent, prompt preparation, timeouts, completion, and process supervision | Task state rules |
 | Image store and builder | Built plugin/prompt artifacts addressed by ref id, source provenance, runnable import/export, and Store path resolution | Harness/model/runtime policy or editable source snapshots |
-| Bus | Channels, subscriptions, deliveries, acknowledgement, and redelivery | Direct process-to-process delivery guarantees |
+| Mail | Letters, recipient checks, inbox caps, attempts, dead letters, and the wake and hint hooks | Direct process-to-process delivery guarantees |
 | Native Tasks service | Queues, task trees, comments, relations, pools, triggers, notifications, workflow bindings, queue secrets, transition requests, and script run records | Agent authentication or running script processes |
 | Workflow script worker | Executing pending check and watch runs: environment, working directory, process group, timeout, run log, and result parsing | What a verdict means for the task |
-| Plugin host | Plugin process lifecycle, plugin tokens, and provider-channel watches | Provider credentials in plugin environments |
+| Plugin host | Plugin process lifecycle, plugin tokens, and delivery of each plugin's inbox to its `/deliver` | Provider credentials in plugin environments |
 | AI proxy and pricing catalog | Provider routing, scoped tokens, budgets, immutable request costs, daily model-price refresh, usage, and transcripts | Durable provider keys or proxy leases in SQLite |
 | API and event hub | Command registry, REST responses, and resumable event hints | State changes outside their owning services |
 
 The daemon creates a shared audit recorder for each agent. Loop lifecycle
-entries, bus actions, proxy decisions, and shim log tails therefore describe
+entries, mail actions, proxy decisions, and shim log tails therefore describe
 one coherent agent timeline, while a WebSocket event remains only a replayable
 delivery hint.
 
@@ -115,7 +115,7 @@ declared oversized body before reading it, also bounds unknown-length streams,
 and removes its partial file and unique directory after any failed upload.
 
 The data directory also holds each agent's working/configuration files and
-iteration evidence. SQLite owns agents, iterations, channels/deliveries, tasks,
+iteration evidence. SQLite owns agents, iterations, mail, tasks,
 idempotency keys, and durable outboxes. The
 global agent shell script is the deliberate filesystem-backed exception:
 `<base-dir>/global-agent-shell.sh`; an agent may additionally have
@@ -143,7 +143,7 @@ sequenceDiagram
   O->>D: start with paths and listener options
   D->>D: resolve PATH, paths, socket guard, and PID file
   D->>S: open database and run migrations
-  D->>D: reconcile agent inboxes; ensure the bare image and proxy defaults
+  D->>D: ensure the bare image and proxy defaults
   D->>D: read and validate local model-price cache
   D->>S: replace managed price rows when the cache is valid
   D->>M: refresh shims; adopt and reconcile live iterations
@@ -258,12 +258,12 @@ An agent has one on/off switch, **enabled**, set by Start and cleared by Stop;
 launches autonomous iterations only while the agent is enabled, carries no stop
 policy `error_reason`, and does not use the terminal-only `bare:latest` image.
 Its loop engine serializes work: a timer, explicit trigger,
-or message delivery may request work, but only one iteration
+or a letter in its inbox may request work, but only one iteration
 runs at a time.
 
 ```mermaid
 sequenceDiagram
-  participant B as Bus or timer
+  participant B as Mail or timer
   participant E as Agent loop engine
   participant R as Shim runner
   participant H as Harness
@@ -275,18 +275,19 @@ sequenceDiagram
   E->>R: start one iteration
   R->>DB: persist a running iteration
   R->>H: launch tariboy-shim and harness
-  H->>T: identity-bound messages, tasks, and completion
+  H->>T: identity-bound mail, tasks, and completion
   T->>DB: durable mutation plus audit/event state
   H-->>R: done, error, timeout, or killed
   R->>DB: persist terminal outcome
   E->>DB: apply timeout, error, and idle policy
 ```
 
-Message-triggered work requires an enabled loop and pending delivery, but no
-positive timer interval. Pending messages enter the prompt in chronological,
-bounded batches. The runner acknowledges them only after `done` or
-`no_i_am_done`; a harness error, timeout, or kill leaves them eligible for
-redelivery. See [Agents and the iteration
+Message-triggered work requires an enabled loop and an open letter in the
+agent's inbox, but no positive timer interval. Open letters enter the prompt
+in bounded batches, requests before notices. A request closes only when the
+agent replies to it; a notice closes only after an iteration that ends
+`done`. Any other outcome, including `no_i_am_done`, a harness error, a
+timeout, or a kill, leaves both open for redelivery. See [Agents and the iteration
 loop](/docs/architecture/iteration-loop) and [The shim](/docs/architecture/shim)
 for the detailed scheduler and watchdog behavior.
 
@@ -296,8 +297,8 @@ flowchart LR
   transaction --> state[Authoritative rows and event]
   transaction --> outbox[Durable outbox intent]
   outbox --> publisher[Background publisher]
-  publisher --> bus[Bus delivery]
-  bus --> wake[Coalesced loop wake]
+  publisher --> mail[Letter in the inbox]
+  mail --> wake[Coalesced loop wake]
   wake --> read[Agent reads current state]
   state -. reconnect and replay .-> client[Desktop or operator]
 ```
@@ -307,8 +308,8 @@ flowchart LR
 | Condition | Automatic behavior | Evidence or operator action |
 | --- | --- | --- |
 | Daemon restart during a live shim | Replacement daemon adopts persisted running iterations and proxy handoff leases. It reaps a tmux session only when no live iteration owns it. | Inspect agent/iteration state and audit; never start a second daemon against the same base directory. |
-| Harness timeout or error | The shim records a terminal outcome; loop policy may restart or stop future work. Unacknowledged messages can redeliver. | Review result, shim logs, audit, and agent loop policy. |
-| Plugin failure | The host health-checks and restarts enabled plugins; provider watches can be pulled again. | Inspect plugin status/logs; never place upstream AI credentials in plugin configuration. |
+| Harness timeout or error | The shim records a terminal outcome; loop policy may restart or stop future work. Open letters render again. | Review result, shim logs, audit, and agent loop policy. |
+| Plugin failure | The host health-checks and restarts enabled plugins; open letters to a plugin are delivered again. | Inspect plugin status/logs; never place upstream AI credentials in plugin configuration. |
 | Model-price refresh failure | The proxy keeps the last valid runtime generation, or built-in fallbacks when none has loaded. The next daily check retries. | Inspect `pricing_catalog_error` daemon logs/events; fields are bounded to source, generation time, model count, and a stable error class. |
 | Missed notification or daemon crash | The durable outbox and the ingress reconciler replay pending intent; task state remains in SQLite. | Inspect task event history; the publisher retries on its own. |
 | Budget denial | Proxy rejects/reports before provider access and records usage/audit evidence. | Inspect usage, budgets, and the sensitive per-iteration transcript. |
@@ -330,7 +331,7 @@ rotates the access log at 50 MB and keeps three old copies
 a daemon. `tariboy daemon logs` shows only `tariboyd.log`.
 
 The daemon has one SQLite writer connection for all writes. The reads that the
-UI polls — daemon status, the agents list, the chat list, the task list and
+UI polls — daemon status, the agents list, the mailbox, the task list and
 the image list — use a separate pool of four read-only connections. WAL mode
 lets those reads see the last committed state while a write is open, so they do
 not wait behind the writer. OTLP stays off until an endpoint is explicitly configured. Proxy
@@ -490,11 +491,11 @@ than launching the binary directly. See
 
 <CardGroup>
   <Card title="Agents & the iteration loop" href="/docs/architecture/iteration-loop" icon="repeat">
-    What an iteration is, how the loop wakes, and the whoami / loop / channels
+    What an iteration is, how the loop wakes, and the whoami / loop / mail
     core.
   </Card>
-  <Card title="The channel bus" href="/docs/architecture/messaging" icon="radio">
-    Store-backed fan-out, per-agent queues, and ack/redelivery.
+  <Card title="The mailbox" href="/docs/architecture/messaging" icon="mail">
+    Letters between principals, requests and notices, and redelivery.
   </Card>
   <Card title="The shim" href="/docs/architecture/shim" icon="shield">
     One harness iteration under a watchdog.

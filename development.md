@@ -115,7 +115,7 @@ entries. They may not override `HOME`, `CODEX_HOME`, or `XDG_CONFIG_HOME`.
 | Path | Responsibility |
 | --- | --- |
 | `cmd/` | Go binary entry points: daemon, CLI, shim, and store service. |
-| `internal/` | Go domain logic, APIs, persistence, loop, bus, proxy, plugins, and embedded store UI. |
+| `internal/` | Go domain logic, APIs, persistence, loop, mail, proxy, plugins, and embedded store UI. |
 | `ui/` | Shared React/TypeScript source and the Desktop and store UI build targets. |
 | `desktop/src-tauri/` | Rust/Tauri native host, daemon lifecycle, SSH, Keychain, tunnels, support export, and packaging resources. |
 | `~/github/tariboy-store/` | Separate repository containing canonical image sources and Agent Skills. |
@@ -138,7 +138,7 @@ not need to read unrelated subsystems.
 | --- | --- |
 | Daemon, API, persistence, lifecycle | [Architecture overview](/docs/architecture) and [State model](/docs/architecture/state-model) |
 | Iteration loop, harness execution, terminal, tmux | [Iteration loop](/docs/architecture/iteration-loop) and [Shim](/docs/architecture/shim) |
-| Channels, messages, delivery, events | [Messaging](/docs/architecture/messaging) and [Channels reference](/docs/reference/channels) |
+| Mail, letters, delivery, events | [Mailbox](/docs/architecture/messaging) and [Mail reference](/docs/reference/mail) |
 | AI proxy, usage, budgets, pricing, audit | [AI proxy and audit](/docs/architecture/ai-proxy) and [Security and controls](/docs/security-controls) |
 | React UI and frontend behavior | [Web UI architecture](/docs/architecture/web-ui) |
 | Desktop native host, SSH, Keychain, tunnels, packaging | [Remote hosts](/docs/remote-hosts), [Security and controls](/docs/security-controls), and this guide |
@@ -292,7 +292,7 @@ their checksums, publishes a versioned release under
 Native Tasks changes normally need focused tests under `internal/tasks`, the
 operator route/OpenAPI registry tests under `internal/commands`, and the agent
 command contracts in the separate `tariboy-store` repository's `make check`.
-Changes to queue-trigger delivery also exercise bus/daemon recovery; Compose
+Changes to queue-trigger delivery also exercise mail ingress and daemon recovery; Compose
 changes exercise `internal/compose`. The isolated Tasks mode path is
 `scripts/tariboy-tasks-e2e.sh`, which runs inside `backend-check`.
 

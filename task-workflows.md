@@ -1683,17 +1683,28 @@ queue, and open its **Pools** tab.
 
 ## Queue triggers
 
-A queue trigger listens to an external plugin channel and creates a task in the
-queue for each matching message. In a bound queue the created task follows the
-queue's workflow like any other new task; otherwise it is a flexible task.
+A queue trigger creates a task in its queue for each matching letter to the
+queue. A plugin that wants a workflow event to create a task sends a
+[letter](/docs/architecture/messaging#queue-triggers) to `queue:<prefix>`, for
+example `queue:DEV`. Such a letter is stored closed, because nothing reads a
+queue's inbox; it exists for ingress. In a bound queue the created task follows
+the queue's workflow like any other new task; otherwise it is a flexible task.
 
-Triggers accept only external namespaces from plugin-produced messages; the
-`agent`, `group`, `user`, and `system` namespaces are rejected. The only action
-is `create_task`. An optional correlation key must match exactly.
+A trigger of queue `<prefix>` fires for a letter whose recipient is
+`queue:<prefix>` and whose sender matches the trigger's `pattern`. The pattern
+is a sender glob: one principal such as `plugin:telegram`, or every principal
+of a kind such as `plugin:*`. Only the `agent`, `user`, `plugin`, and `system`
+prefixes are accepted; any other pattern is refused with
+`invalid_sender_pattern`. The only action is `create_task`. An optional
+correlation key must equal the letter's `data.correlation_key` exactly. The
+task title is the letter's subject, or its body when the subject is empty; the
+description carries the letter id, sender, kind, correlation key, body and
+`data`. A letter to an agent never fires a trigger: a plugin that wants both
+sends two letters.
 
 ```bash
-ttasks queue trigger create DEV --pattern external:incidents --action create_task
-ttasks queue trigger create DEV --pattern external:incidents --action create_task --correlation-key prod
+ttasks queue trigger create DEV --pattern 'plugin:*' --action create_task
+ttasks queue trigger create DEV --pattern plugin:incidents --action create_task --correlation-key prod
 ttasks queue trigger list DEV
 ttasks queue trigger delete DEV 4
 ```
@@ -1709,13 +1720,14 @@ Deleting a trigger does not remove tasks it already created.
 ```bash
 curl -H 'Content-Type: application/json' -X POST \
   http://127.0.0.1:9990/api/task-queues/DEV/workflow-triggers \
-  -d '{"pattern":"external:incidents","correlation_key":"prod","action":"create_task"}'
+  -d '{"pattern":"plugin:incidents","correlation_key":"prod","action":"create_task"}'
 ```
 
 A token-protected listener also requires its normal `Authorization: Bearer ...`
-header. Messages are matched in the order the daemon committed them, using a
-persisted cursor, so a restart can replay a message without creating a second
-task. A new trigger matches only messages committed after it was created.
+header. Letters are matched in the order the daemon committed them (`mail.seq`),
+using a persisted cursor, so a restart can replay a letter without creating a
+second task. A new trigger matches only letters committed after it was created.
+Maintenance never purges a letter to a queue that ingress has not consumed.
 
 The routes keep their `workflow-triggers` path for compatibility.
 

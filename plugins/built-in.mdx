@@ -17,18 +17,18 @@ runtime prompt entries explicitly. Neither kind starts a supervised subprocess.
 | --- | --- | :---: | --- | --- |
 | [`whoami`](/docs/plugins/built-in/whoami) | Historical core | Yes | `scripts/whoami.sh` | None |
 | [`loop`](/docs/plugins/built-in/loop) | Historical core | Yes | `i-am-done`, `scripts/loop.sh …` | Iteration and loop state |
-| [`messages`](/docs/plugins/built-in/messages) | Historical core | Yes | `scripts/messages.sh message …`, `request`, channels | Bus messages, deliveries, subscriptions |
+| [`mail`](/docs/plugins/built-in/mail) | Historical core | Yes, as `messages` | `tmail …` | Letters in the `mail` table |
 | [`context`](/docs/plugins/built-in/context) | Optional | Yes | `scripts/context.sh get/set` | Per-agent `CONTEXT.md` |
 | [`status`](/docs/plugins/built-in/status) | Optional | Yes | `scripts/status.sh [set]` | Agent row and audit timeline |
 | [`workdir`](/docs/plugins/built-in/workdir) | Instruction-only | Yes | Prompt only | None |
 | [`goal`](/docs/plugins/built-in/goal) | Optional | Yes | `scripts/goal.sh set <TASK-KEY>` | Selected task and AI usage attribution on the iteration lease |
-| [`schedule`](/docs/plugins/built-in/schedule) | Optional | No | `scripts/schedule.sh …` | Schedules and resulting bus messages |
+| [`schedule`](/docs/plugins/built-in/schedule) | Optional | No | `scripts/schedule.sh …` | Schedules and the letters they send |
 | [`scripts`](/docs/plugins/built-in/scripts) | Optional | Yes | `scripts/scripts.sh …` | Script records and logs |
 | [`image-creator`](/docs/plugins/built-in/image-creator) | Optional | No | `scripts/image_creator.sh build` | Built image in the host image store |
 | [`tasks`](/docs/plugins/built-in/tasks) | Optional | Yes | Bare `tasks` command | Native Tasks in SQLite |
 
 “Historical core” describes schema-v1 resolution, where `whoami`, `loop`, and
-`messages` were added automatically. It does **not** mean schema-v2 images
+`mail` (then named `messages`) were added automatically. It does **not** mean schema-v2 images
 receive them automatically.
 
 ## Enable a capability
@@ -40,13 +40,13 @@ schema_version: 2
 plugins:
   - name: whoami
   - name: loop
-  - name: messages
+  - name: mail
   - name: context
   - name: workdir
 skills:
   - dir: ../../skills/whoami
   - dir: ../../skills/loop
-  - dir: ../../skills/messages
+  - dir: ../../skills/mail
   - dir: ../../skills/context
   - dir: ../../skills/workdir
 prompts:
@@ -77,6 +77,9 @@ The official Store's `basic` source declares nine built-ins:
 whoami, loop, messages, context, status, workdir, scripts, goal, tasks
 ```
 
+It lists `messages`, the alias of `mail`, until the Store moves its images to
+the `mail` plugin and skill.
+
 It deliberately excludes `schedule` and `image-creator`. Register and refresh
 the Store, then build it. Existing agents
 remain pinned to their assigned image digest until an image change is activated
@@ -95,7 +98,7 @@ the active image.
 Canonical skills and the mandatory finish prompt live in the image source. A
 schema-v2 image packages each enabled skill and chooses the
 exact position of runtime values and mandatory prompt layers. Changing an image does not
-delete daemon-owned agent data such as context, audit, messages, schedules,
+delete daemon-owned agent data such as context, audit, mail, schedules,
 scripts, or Tasks.
 
 For the image schema and runtime marker list, see [Images](/docs/images). For

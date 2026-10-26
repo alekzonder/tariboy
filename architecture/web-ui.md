@@ -58,12 +58,9 @@ Application settings also choose the **Interface mode**: **Simple**, the
 default, or **Expert**. The choice persists in WebView localStorage under
 `app:ui-mode:v1` and applies at once; any other stored value, or unavailable
 storage, means Simple. Simple changes only what the agent workspace shows: its
-tabs are **Chat**, **Tasks**, **Terminal**, and **Configuration**, an agent
-opens on Chat, and a route to a hidden tab (Activity, Advanced) is
-redirected to Chat. Its Chat tab is the personal conversation alone, with the toolbar
-starting at message search: there is no **Chat**/**Channels**/**Queue** switch,
-no chat tablist, and no **New chat**; a `?view=channels` or `?view=queue` link
-opens that personal chat. The sidebar, the server row, and the agent
+tabs are **Mailbox**, **Tasks**, **Terminal**, and **Configuration**, an agent
+opens on Tasks, and a route to a hidden tab (Activity, Advanced) is
+redirected to Tasks. The Mailbox tab is the same in both modes. The sidebar, the server row, and the agent
 header — Start/Stop and Exec included — are the same in both modes. Expert is
 the complete workspace described below. The mode hides interface only; it is
 not an access control, and the API and CLI are unchanged.
@@ -143,7 +140,7 @@ in Desktop, across every server, because only Desktop sees all of them; a host
 whose daemon serves no chats simply contributes no conversation dates.
 An unanswered question therefore lifts a row, but adds no marker of its own: the
 one badge a row carries is the count of unread messages from that agent. The
-question itself is readable in that agent's **Chat**, and its task is marked in
+question itself is a letter in the server **Mailbox**, and its task is marked in
 **Tasks**. A
 row's context menu pins and unpins it, and the Desktop WebView remembers the
 pinned set in `terminals:sidebar-pinned:v1`. The **Groups** tab is hidden for
@@ -224,7 +221,7 @@ selected host.
 The agent's Configuration, Activity, and Advanced tabs and the server Activity
 page share one frame, `TabPage`: 16 px side and top padding, 24 px bottom
 padding, and 16 px between blocks. Configuration is a centered column of at
-most `max-w-5xl`; the others use the full width. Chat, Tasks, and Terminal fill
+most `max-w-5xl`; the others use the full width. Mailbox, Tasks, and Terminal fill
 the tab without a frame.
 
 ## Iteration tags in Activity
@@ -271,7 +268,9 @@ The Agent workspace header shows the agent's configured runtime as one compact
 selected harness does not report. It is read from the agent view alongside the
 header's status poll, so a Configuration change is reflected within one poll.
 The **Goal** task key opens the task panel over the current tab instead of
-switching to the Tasks tab.
+switching to the Tasks tab. On the agent's **Tasks** tab, the row of that Goal
+task has a green tint and a green left stripe. If the current filter or a
+collapsed parent hides the Goal task, no row is highlighted.
 
 Every Agent workspace header shows the agent's complete effective working
 directory. A following **Open in VS Code** action opens local paths as local
@@ -439,11 +438,17 @@ modules; it holds no requests of its own.
   a `Daemon` = that host).
 - One module per domain: `agents`, `iterations`, `usage`, `daemon`,
   `harnesses`, `plugins`, `scripts`, `files`, `images`, `imageSources`,
-  `groups`, `stores`, `messages`, `audit`, `tasks`, and `workflows`. Each
+  `groups`, `stores`, `mail`, `audit`, `tasks`, and `workflows`. Each
   module re-exports the types of its responses (see [API types](#api-types))
   and exports a factory that receives a transport bound to one host. Domain
   methods never take a target. `lib/tasks.ts` and `lib/audit.ts` keep only
   presentation helpers.
+- `mail.ts` is the mailbox client: `list`, `show`, `send`, `reply`, `close`,
+  `read`, `requeue`, `unread`, and `clear` (an agent's inbox). Each call takes
+  an optional `as`, the principal it acts as; without it the daemon acts as
+  the customer. `lib/letters.ts` holds `letterTaskKey(letter)`, the string
+  `data.task_key` of a letter or `""`, apart from the client so the shell's
+  eager modules can read a letter without loading it.
 
 `createApi(target)` returns an `ApiClient`: the bound transport plus one
 section per domain, such as `api.tasks.getTask(key)` or
@@ -493,9 +498,9 @@ for the workflow after an API change.
 Each schema is a top-level type with the Go type's name, such as `AgentRow`
 or `TaskDetail`. A domain module re-exports the types that its callers need,
 for example `export type { AgentRow, AgentView } from "../api-types.generated"`,
-and components import them from `@/lib/api`. `Comment`, `Event`, and
-`Notification` would shadow DOM globals, so `tasks.ts` re-exports them as
-`TaskComment`, `TaskEvent`, and `TaskNotification`. Where the spec has a plain
+and components import them from `@/lib/api`. `Comment` and `Event` would
+shadow DOM globals, so `tasks.ts` re-exports them as `TaskComment` and
+`TaskEvent`. Where the spec has a plain
 string and the UI needs a union, the module narrows it at one place, such as
 `taskPriority(task)`.
 
@@ -509,7 +514,7 @@ that says why the spec does not cover it:
 
 - Responses that `internal/api/server.go` serves outside the command
   registry: the agent event stream (`AgentEvent`), the tasks WebSocket frame
-  (`TaskEventHint`), and the image, team, and workflow image archive imports.
+  (`TaskEventHint`), the mail WebSocket frame (`MailHint`), and the image, team, and workflow image archive imports.
 - The transcript calls of `audit.ts`, which the spec describes only as
   objects.
 - Request bodies and filters, such as `CreateAgentSpec` and `TaskFilters`, and
@@ -545,8 +550,11 @@ or file clears the error.
 `build.rolldownOptions.output.codeSplitting.groups`, the Vite 8 replacement for
 `manualChunks`: `react` (React, React DOM, and the router), `codemirror`,
 `tiptap` (TipTap and ProseMirror), `xterm`, and `markdown` (react-markdown,
-remark, rehype, and highlight.js). Only `react` is part of the first download;
-each other group loads with the first screen that needs it. Keep a group
+remark, rehype, and highlight.js). One more group, `api`, holds the app's own
+HTTP client (`src/lib/api/`, `lib/daemons.ts`, and `lib/storage.ts`): the shell
+and most lazy screens share it, and without the group the bundler folds it into
+the entry chunk once enough screens share it. Only `react` and `api` are part of
+the first download; each other group loads with the first screen that needs it. Keep a group
 narrow: if the shell imports one module of a group, the whole group becomes
 part of the first download.
 
@@ -571,8 +579,10 @@ Their internal modules separate form state, requests, and presentation:
   file actions. `FileBrowser` keeps the public API and source reset boundary.
 - `agents/configuration` owns the configuration blocks. The existing draft and
   commit modules still own the single Save operation for the page.
-- `agents/chat` separates the toolbar and feed from loading, read markers, and
-  scroll position. It keeps its existing loader.
+- `mailbox` is one two-pane mailbox for both Mailbox tabs: `Mailbox` holds
+  the box switch and the panes, `MailboxList`, `MailboxLetter` and
+  `MailboxCompose` render them, `mailboxModel` holds the pure readings, and
+  `mailQueries` the query keys and the live refetch.
 - Tasks separates local view state, panel sizing, query composition, and write
   actions. `TaskDetail` keeps one draft with its original revision. Its fields,
   relations, history, and dialogs render that state without another server cache.
@@ -673,7 +683,6 @@ stays in the registry only so it can be read once, like `terminals:workspace:v1`
 | `terminals:workspace:v1` | local | sidebar (legacy, read once) | JSON record of the removed canvas | none |
 | `terminals:sidebar-tab:v1` | local | sidebar | `servers` or `agents` | `servers` |
 | `terminals:sidebar-pinned:v1` | local | sidebar | JSON pinned agents | none |
-| `terminals:chat-types:v1` | local | agent chat | JSON message types | default types |
 | `tui:draft:<agent>:<section>` | local | inject modal | draft text | empty |
 | `tasks:columns:v1` | local | task tables | JSON column order and widths | default layout |
 | `tasks:workspace:v1` | local | task detail panel | JSON detail width | half the window |
@@ -745,7 +754,7 @@ Keep selection, drafts, expansion, sizing, and focus in the component.
 Pass the query's AbortSignal through every paginated read. The shared layer
 discards cancelled results. New resources need keys for every response parameter.
 
-Terminals, AgentChat, the aggregate task list, the attention coordinator, and
+Terminals, the aggregate task list, the attention coordinator, and
 standalone queue forms retain their existing loaders. Their migration belongs
 to separate work. The drawer opened from those screens already shares the
 Tasks queries. Specialized workflow actions and log readers retain their own
@@ -780,7 +789,7 @@ The sheet is one `--card` island with its own scroll and a sticky identity
 header carrying the task key, title, status and assignee. A single banner under
 that header reports what needs a person — an unanswered customer question — and
 other statuses speak through the status pill alone. The sheet opens as soon as a task is
-chosen, in Tasks or from a chat, showing the task key and a loading line until
+chosen, in Tasks or from a letter, showing the task key and a loading line until
 the task and its history arrive; refreshing the task already open keeps the
 loaded panel in place. History rows read as time, kind, a
 one-line `key value · key value` payload summary and actor; the panel never
@@ -794,7 +803,7 @@ one the workspace has. Arrow keys move it, Shift increases the step, Home and
 double-click restore its default, and the clamped width persists in the
 versioned WebView localStorage record `tasks:workspace:v1`. Route changes and
 app reloads restore that record; a record written before the task rail was
-removed still reads, its rail width ignored. A task opened from a chat uses
+removed still reads, its rail width ignored. A task opened from a letter uses
 the same sheet, separator, and stored width, clamped to the window instead of
 the workspace, so a resize in either place carries over to the other.
 
@@ -981,117 +990,58 @@ Beside **Send comment**, a secondary **Send Ok** action includes the selected
 Ask mention and posts `Ok` without changing the Ask selection. It is hidden
 as soon as the comment contains text.
 
-The agent **Chat** tab is the first tab, directly before **Tasks**, and is the
-one place for everything in an agent's messaging: the conversation, the
-channels it is subscribed to, and its delivery queue. No other tab edits
-subscriptions or shows the queue. **Chat** is its default
-view: the conversation with that agent — the customer's messages in its inbox
-merged with its messages in the customer's channel — rendered as one thread.
-There is no separate conversation list: the sidebar's selected agent is the
-conversation, and that agent's three chats — **Chat**, **Tasks** and
-**Service** — are a tablist in the toolbar. **Chat** is the conversation with
-the customer, **Tasks** the task notifications addressed to the agent, and
-**Service** its own wake-ups: script results, goal reconciliation and schedule
-alarms. Any shared chat the agent takes part in — one the customer created,
-belonging to no single agent and possibly holding several — follows those three
-in the same tablist, and a **New chat** button beside them starts one with this
-agent and any others picked. **Chat** and a shared chat have a composer; the
-other two are the agent's feeds, and the customer is an observer in the service
-one. A shared chat names its participants where the conversation names its
-message count, because in a multi-agent thread the author cannot be deduced from
-the thread itself. A task key in any of them is
-still a chip that opens the task panel, which is how a task is answered from
-its notification. Consecutive messages from one author are grouped under a
-single header, and a continuation row shows its own time in the avatar column
-on hover.
+### Mailbox
 
-The tab has one 48px toolbar: the **Chat**/**Channels**/**Queue** switch, kept
-in the URL as `?view=chat|channels|queue` (an unknown value opens Chat), the chat
-tablist, search over the loaded page, `you + <agent> · N messages` (the
-participants in a shared chat), the read action,
-transcript export, and a menu. The message-type filter lives in that menu; it
-still starts from the daemon's default conversation types, still offers an
-agent's own wakes (`task.goal`, `script.result`, schedule alarms) explicitly,
-and the chosen set still persists in the Desktop WebView under
-`terminals:chat-types:v1`. Only the thread scrolls below the toolbar, and the
-composer stays at the bottom.
+Mail is the only messaging surface. There are two **Mailbox** tabs, and both
+render one component, `pages/mailbox/Mailbox.tsx`. It shows one principal's
+mailbox: a segmented **Inbox** / **Sent** / **Archive** switch, where Inbox
+carries the open letter count from `GET /api/mail/unread`, and **Compose**.
+The list is on the left and the selected letter on the right. Below the
+`DRAWER_QUERY` breakpoint only one pane shows: the list, or the letter with a
+**Back** button. A row shows the sender (the recipient in Sent), the subject
+with tags for a kind other than `message`, a notice, and a dead letter
+(`dead · <reason>`), a one-line preview, the time, and a dot while the letter is
+unread. The letter shows From, To, Received and its state (open, answered,
+archived with its note, dead), a line naming the letter it replies to (read
+with `mail.show`), and the body as Markdown through the task pipeline, with no
+raw HTML. Sent and Archive load more pages with **Load more**.
 
-Message text renders as Markdown through the same pipeline task comments use —
-`react-markdown` with `remark-gfm`, no raw HTML — so a message can no more
-execute script than a task comment can. Fenced blocks carry their language and
-a copy action. A task key written in the text becomes a link, rewritten in the
-Markdown tree rather than in the raw string so a key inside a code span or a
-fenced block is left alone; a key the daemon attached to the message instead
-appears as a chip under it. Opening either one opens the task panel over the
-chat — the same detail panel Tasks shows, with its own load, its own live
-refresh and its own writes, so status, priority, assignee, pull request,
-description, comments and relations are all editable there without leaving
-Chat. Closing it returns to the conversation. A message also offers reply,
-copy, and **Create a task from this message**, which opens a task in a chosen
-queue with the message as its description and the agent as its assignee.
+Opening an unread Inbox letter marks it read. The daemon closes a read notice,
+so it moves to Archive and stays open in the right pane; a request stays in the
+Inbox until **Reply** or **Archive**. A letter with a string `data.task_key`
+links to `/servers/<host>/tasks?task=<key>`, the Tasks route that opens the
+task drawer. A `task.question` letter is answered on its task: it shows
+**Answer on the task**, that link, and no **Reply**. **Compose** opens a dialog
+with the recipient, the subject, the text and a **No reply needed** switch: off
+sends a request, on sends a notice. Every write shows a toast with the daemon's
+message on failure and refetches; nothing changes optimistically. The lists
+refetch on every `/api/mail/ws` hint for the mailbox's principal (every hint for
+the customer) and on every reconnect, through `useMailSocket` in
+`hooks/useMailSocket.ts`.
 
-Unread belongs to the conversation, not to the tab. It is the read mark of the
-customer's participant row in each chat. One sidebar row stands for the whole
-agent, so the dot on the **Chat** tab and the badge on the sidebar row are the
-sum over that agent's three chats and the row previews whichever of them moved
-last — an unread task notification cannot hide behind a quiet conversation. Only
-a participant's message counts: a notice from a non-participant sender, such as
-a `system:workflow` task assignment in the **Tasks** chat, is shown in the feed
-but never counted or marked as unread. The toolbar's own state is the open chat's mark, and all of them survive a remount.
-Opening the chat still marks it read at the timestamp of the newest message
-actually shown, never at the current time. The feed carries the read mark the
-chat was opened at, and the unread rule — a `N new messages` pill — is drawn
-once, above the first message from the agent newer than that mark; an empty
-mark means nothing has been read, exactly as the daemon counts it. The rule
-holds its place while the customer reads and while further messages arrive: it
-is dismissed only by **Mark read**, by sending a message, or by leaving the tab
-or agent, never by scrolling. While it is off screen a floating **N new**
-button scrolls back to it. The thread follows new messages only when the reader
-is already at its end. **Mark unread** is the one request that moves the
-daemon's mark backwards — it sends `exact` with the timestamp before the
-agent's last message — and it also suppresses the mark-read this visit would
-otherwise perform, so the chat is still unread after navigating away.
+**Server → Mailbox** (`/servers/<host>/mail`) is the first server section,
+before Tasks. It is the customer's mailbox: no `as` is sent, so the daemon acts
+as the customer. The recipient picker lists the host's agents. The section
+label carries the customer's open letter count, kept live by the mail socket.
 
-The composer publishes into the agent's inbox carrying the customer channel as
-its reply target. It offers Markdown marks, Attach, a preview, and a
-two-to-six row auto-growing field; `⌘↵`/`Ctrl↵` sends and `Esc` leaves the
-field. The customer's own messages carry a receipt. There is no per-message
-delivery record for them, so it is derived and bounded: one tick while the
-publish is in flight, two quiet ticks once the daemon has stored it, and two
-primary ticks with `Read by <agent> · HH:MM` once the agent has spoken after
-it — shown once per run of own messages. A true receipt would need the agent
-side to record message consumption.
+**Agent → Mailbox** is the first agent tab, in Simple and Expert mode. It is
+that agent's mailbox, read with `as=agent:<name>`, so the operator replies on
+the agent's behalf. **Compose** writes from the customer to that agent; the
+recipient is fixed. The toolbar shows `batch N · inbox K/M`: N is the agent's
+`messages_batch` (letters per iteration), K its open inbox (`messages_pending`)
+and M its cap (`messages_max_queue`). A letter over the cap is dead on arrival
+and shows in Archive with its tag and **Requeue**. **Clear inbox** opens a
+destructive confirmation; confirming posts `/api/agents/<name>/mail/clear`,
+which deletes the agent's open letters, and reports how many. The tab carries
+the open inbox count as a badge, and the header shows **Inbox full: K / M**
+when the inbox is at its cap. Configuration names the two fields
+**Mail: letters per iteration** and **Mail: maximum open inbox**.
 
-**Channels** is the same section's second view, under the same 48px toolbar,
-which names the selected channel and its number of provider watches. On the
-left is the agent's subscription list — its event triggers: protected
-rows (its own inbox, `group:*`) are read-only, ad-hoc rows have
-**Unsubscribe**, and a combobox picks an existing channel or validates a typed
-one before **Subscribe**. On the right is the selected channel: its tail polled
-every 2s with time, source, type and text; a collapsible **Watches** block with
-each watch's params and subscribers; and a send row with a message `type` and
-text. The server-wide **Settings → Advanced → Channels** screen keeps the
-browse-all-channels list in the same layout.
-
-**Queue** is the third view: the agent's delivery queue, not the conversation.
-Its toolbar carries the **Queue**/**Archive**/**DLQ** sub-views, the row count
-and, on Queue, **Clear queue**. Queue rows can be marked processed or replied
-to, DLQ rows requeued, Archive rows show their result, and any row expands its
-`subject` and `data`.
-
-**Advanced** opens on Prompt and no longer holds Channels or Messages; a saved
-`advanced?view=channels` or `advanced?view=messages` link is replaced with
-`chat?view=channels` or `chat?view=queue`.
-
-Live updates ride one `/api/messages/ws` socket per server. Its frames are
+The sidebar mounts one `/api/mail/ws` socket per server. Its frames are
 refetch hints, never authority: a hint reloads the typed HTTP response, and a
 reconnect reloads unconditionally because the socket replays nothing. A frame
-for a publication a chat owns names that chat — `{chat, agent, id, channel,
-type, from, ts}` — so an open conversation refetches only when its own chat is
-named; `chat` is absent for a channel no chat owns, and such a frame still
-falls back to the agent it concerns, which is what existing consumers read. The
-sidebar mounts one such socket per configured host, so the chat order changes as
-a message lands rather than on the next poll.
+names the letter: `{id, from, to, kind, ts}`. The sidebar refetches its agents
+on a hint, so it changes as a letter lands rather than on the next poll.
 
 Beside it, the sidebar mounts one `/api/agent-states/ws` socket per host. Its
 frames `{agent, type, ts}` say that an iteration event or a state change
@@ -1101,16 +1051,7 @@ on these hints, and the agent header refetches its status on a hint for its own
 agent. While every host's state socket is open, the sidebar polls every 15
 seconds and the agent header every 15 seconds as a fallback. A host without the
 socket (an older daemon) keeps the 3-second polls. The daemon banner probes
-`/api/daemon/status` every 10 seconds. **Chat → Queue**
-(Queue/Archive/DLQ) refreshes from the agent event stream with a 3s poll.
-
-An agent's **Chat → Queue** view can still mark one row processed. Its
-**Clear queue** bulk action instead opens an in-app destructive confirmation:
-pending deliveries for the selected agent are physically deleted and cannot be
-recovered, while Archive, DLQ, shared messages, and other agents' deliveries
-remain. The dialog cannot be dismissed or submitted twice while the one bulk
-request is running. Success reports the server's delivery/message counters and
-reloads Queue; failure keeps the authoritative rows visible for retry.
+`/api/daemon/status` every 10 seconds.
 
 An agent's **Scripts** view exposes **Exec** for any completed definition —
 including a recurring one that stopped after publishing its result — and for an
@@ -1118,39 +1059,45 @@ active recurring definition with no pending or running attempt. Exec queues the
 stored command through the ordinary script worker; a recurring definition
 resumes its fixed post-completion delay from there while its runs stay quiet.
 
-The workspace has no notification inbox: customer-only queue administration is
-the queue sheet, and the notification state is rendered
-as one indicator. A small red indicator on a task row identifies an unread,
-non-dismissed `task.question` notification for that task, and opening that task
-marks those notifications read, which is the only thing that clears the
-indicator in the UI. The unfiltered **Active** view, without a search, also
+The Tasks workspace has no inbox of its own: the questions are letters, and
+the workspace renders them as one indicator. It reads the customer's Inbox
+(`GET /api/mail?box=inbox`) and keeps the `task.question` letters. A small red
+indicator on a task row identifies an unread question for that task, and
+opening that task marks those letters read, which is the only thing that clears
+the indicator in the UI. The unfiltered **Active** view, without a search, also
 lists a closed task that still has such an unread question (in an agent's
 workspace, one asked by that agent), read by its key, so the question can be
-opened and cleared; it leaves the view once read. `ttasks notifications` remains the operator command for
-reading and dismissing inbox rows. A route-independent coordinator still
-watches every configured host and derives the requesting agent from the
-notification's event actor projection, not from display text; that shared
-attention orders the agent list and puts a count on the agent workspace's
-**Tasks** tab: the number of that agent's tasks with an unread question. The
-count drops only when such a task is opened; reading Chat leaves it unchanged.
+opened and cleared; it leaves the view once read.
+
+A route-independent coordinator watches every configured host. Its source is
+`GET /api/mail/unread` for the customer: the open letters counted by sender and
+kind. The `task.question` rows from an `agent:` sender make the shared
+attention, which orders the agent list and puts a count on the agent
+workspace's **Tasks** tab: the number of open questions from that agent, the
+questions waiting for the customer's answer. Reading a question does not lower
+it; the answer recorded on the task closes the letter, and the count drops.
 Customer-authored questions contribute to neither.
 
-Each host watcher treats typed HTTP task and notification responses as
-authoritative. The resumable task WebSocket supplies refresh hints and sequence
-progress only; a hint triggers an HTTP refetch and never mutates attention by
-itself. Initial host discovery and recovery both establish a silent baseline:
-current unread questions populate the in-app indicators, but do not replay native
-notifications. Observed notification IDs and per-host snapshots exist only in
+Each host watcher treats typed HTTP task and mail responses as
+authoritative. The resumable task WebSocket and the mail WebSocket (a
+`task.question` hint) supply refresh hints, and the task socket sequence
+progress; a hint triggers an HTTP refetch and never mutates attention by
+itself. The counts carry no letter ids, so the watcher also reads the
+customer's Inbox for the baseline, and again only when an agent's question
+count rises. Initial host discovery and recovery both establish a silent
+baseline: current questions populate the in-app indicators, but do not replay
+native notifications. Observed letter IDs and per-host snapshots exist only in
 React memory for the current Desktop session. They are not written to Web
 Storage or persisted by the daemon, and current-session ID tracking deduplicates
 repeated hints and snapshots.
 
-For a newly observed agent question after the baseline, the coordinator asks
-the native bridge to show one notification with only `host_id`,
-`notification_id`, and `task_key` in its activation payload. Native permission
+For a newly observed unread agent question after the baseline, the
+coordinator asks the native bridge to show one notification with only
+`host_id`, `notification_id` (the letter id), and `task_key` in its activation
+payload. Native permission
 denial, unsupported notification delivery, and send failures are fallbacks:
 they do not alter the authoritative HTTP snapshot or remove in-app attention.
-Activation uses the original explicit host, marks the exact notification read,
+Activation uses the original explicit host, marks the exact letter read,
 refreshes that host, and navigates to
 `/servers/:hostId/tasks?task=<key>` (the packaged hash route is
 `#/servers/:hostId/tasks?task=<key>`), where the task detail is selected. A
@@ -1161,9 +1108,7 @@ Task changes arrive over the resumable `/api/tasks/ws?after=<sequence>` socket.
 Hints trigger typed HTTP refetches; they never replace authoritative task
 responses. A surface opens the socket only once it knows the host's current
 sequence, read from the authoritative HTTP snapshot it already loads, so it
-never asks the daemon to replay the whole task log; the panel opened over a
-chat message reads that sequence for itself and refetches only for hints about
-its own task. Remote targets map HTTP(S) to WS(S) and put the existing bearer
+never asks the daemon to replay the whole task log. Remote targets map HTTP(S) to WS(S) and put the existing bearer
 token in the WebSocket query because browser sockets cannot set an
 Authorization header.
 
@@ -1174,8 +1119,8 @@ phases from title prefixes or assignee. Operator history remains available after
 [Task workflows](/docs/task-workflows).
 
 The navigation hierarchy is **Server → Agent**.
-A selected server owns Tasks, Activity, Images, Workflow images, Stores, and Settings, and its
-context row remains visible above the selected agent's Chat, Tasks, Terminal,
+A selected server owns Mailbox, Tasks, Activity, Images, Workflow images, Stores, and Settings, and its
+context row remains visible above the selected agent's Mailbox, Tasks, Terminal,
 Activity, Configuration, and Advanced tabs. There is no Autopilot tab: an old
 `/autopilot` route is treated as an unknown tab. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
@@ -1264,9 +1209,9 @@ as an assignee.
 Selecting another agent in the sidebar while an agent workspace is open keeps
 the tab that is currently open and shows the new agent in it, so the same view
 answers the same question about the next agent. An unknown tab still falls back
-to Terminal (Chat in Simple mode), and a selected task in the Tasks query is dropped because it belongs
+to Terminal (Tasks in Simple mode), and a selected task in the Tasks query is dropped because it belongs
 to the agent being left. Selecting an agent from anywhere else — a
-team, or a freshly created agent — still opens Terminal, or Chat in Simple mode.
+team, or a freshly created agent — still opens Terminal, or Tasks in Simple mode.
 Start and Stop live only in the agent header; a stopped agent's Terminal tab says so
 without a Start button of its own.
 
@@ -1291,7 +1236,7 @@ restart page loads.
 
 While the host has no endpoint, background loads are skipped rather than
 failed. When the new endpoint arrives, each page re-reads once in place:
-the task list, the open task, the agent header, Configuration and Chat. A
+the task list, the open task, the agent header, Configuration and Mailbox. A
 background read that cannot reach the host (`host_not_ready`,
 `network_error`) keeps the last data and shows no toast, because the host
 header in the left panel already reports the host as offline with its error.

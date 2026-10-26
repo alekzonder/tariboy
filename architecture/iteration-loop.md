@@ -1,6 +1,6 @@
 ---
 title: Agents & the iteration loop
-description: An agent runs a series of supervised iterations, driven by a timer or by messages, on top of a whoami / loop / channels core.
+description: An agent runs a series of supervised iterations, driven by a timer or by mail, on top of a whoami / loop / mail core.
 sidebar:
   label: Iteration loop
   icon: repeat
@@ -26,8 +26,8 @@ The loop is driven three ways, all requiring the agent to be **enabled**:
 - **Schedule** — an RFC 5545 `RRULE`, set with `tariboy loop schedule`: start
   an iteration at each occurrence, with the trigger `schedule`. See
   [Schedule](#schedule).
-- **Message** — a publish that matches one of the agent's subscriptions nudges
-  the loop to start an iteration now (only if pending deliveries exist).
+- **Message** — a letter sent to the agent nudges the loop to start an
+  iteration now (only while the agent's inbox holds open letters).
 
 Loop policy is per-agent: `interval`, `timeout` (soft), `hard-timeout`,
 `on_timeout` and `on_error` (e.g. `restart`). An iteration ends when it signals
@@ -85,10 +85,10 @@ Equal-priority work does not displace a valid selection. A task's pull request
 URL does not affect Goal selection or release.
 
 At startup, relevant task or agent changes, terminal iteration completion, and
-the bounded one-minute recovery cadence, the reconciler publishes one durable
-`task.goal` inbox message. It follows `Publish -> delivery -> WakeMessage` and
-never starts an iteration directly. An unprocessed Goal delivery outside the DLQ
-blocks another publication. Dead-lettered deliveries are retained but do not
+the bounded one-minute recovery cadence, the reconciler sends one durable
+`task.goal` letter from `system:goal`. The letter wakes the agent like any
+other; the reconciler never starts an iteration directly. An open Goal letter
+blocks another one. Dead letters are retained but do not
 block a new Goal generation; the positive per-agent delivery cooldown
 (60 seconds by default) still blocks rapid repeats. A wait within its grace
 period remains the goal but sends no continuation wake. Disabled agents and
@@ -114,7 +114,7 @@ forms, chosen by the selected task.
   data cannot be loaded the agent gets the flexible text and a note to run
   `ttasks workflow get KEY`. See [The Goal block](/docs/task-workflows#the-goal-block).
 
-The inbox message is only a durable wake hint. Task title, description, artifact
+The Goal letter is only a durable wake hint. Task title, description, artifact
 values, and script messages are untrusted task input, not daemon instructions or
 lifecycle authority; the workflow form renders them as fenced, bounded data.
 Status instructions are trusted image content.
@@ -136,13 +136,15 @@ and `## Goal` subsections always appear. Missing inputs explicitly say that
 there is no one-shot instruction, no incoming messages, or no selected Goal
 for this iteration; the agent is told to continue without running commands
 merely to search for absent input. Outstanding requests remain nested under
-Messages even when no incoming messages exist. Message IDs, threading fields,
-subject/data, and the explicit `message processed` instruction are retained.
+Messages even when no incoming messages exist. Open letters are listed with
+their ids, senders, kinds, attempts, threading fields, subject and data,
+requests before notices, followed by the standing instruction to answer each
+request with `tmail reply`; see [Mail](/docs/reference/mail#the-prompt-block).
 Bare sessions still receive no prompt.
 
 The operator prompt preview uses the same grouping and Goal selection. It
 keeps placeholders for messages and the one-shot supplied at execution time;
-viewing the preview does not drain messages or increment delivery attempts.
+viewing the preview does not render letters or increment their attempts.
 
 ## Harness environment and preflight
 
@@ -280,7 +282,7 @@ are:
 
 - **whoami** — identity: which agent, cwd, current iteration, and client/daemon versions.
 - **loop** — iteration control: signal done, start/stop the loop.
-- **messages** — publish to and receive from channels.
+- **mail** — read, send and answer letters with `tmail` (older images name it `messages`).
 
 On top of the core, an image opts into **optional capabilities**:
 

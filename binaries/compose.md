@@ -21,7 +21,9 @@ tariboy compose down --volumes  # also drop the shared/agent data
 Verbs: `up`, `down`, `build`, `ps`, `status`, `start`/`stop`/`restart`/`kill`,
 `rm`, `exec`, `logs`. Flags include `-f/--file`, `-v/--volumes`, `--no-start`,
 `--tail`. `compose down` then `up` preserves data by default; `--volumes` is the
-purge path.
+purge path. `down`, `stop` and `kill` skip a member that is absent on the
+daemon, so a partly present project still cleans up; any other error still
+fails the command. `start` and `restart` of an absent member fail.
 
 Compose owns agent runtime choices: harness, model, effort, interactive and loop
 settings, CWD, and environment. An agent is interactive only when its
@@ -55,8 +57,6 @@ the file. It then plans the actions that move the daemon toward the file and
 applies them in this order: groups, agents, budgets, task queues, and queue
 workflows. A setting that already matches makes no call, so running `up` again
 on a converged file changes nothing and reports every resource `ok`.
-Subscriptions are the one exception: `up` sends each one again, and the daemon
-reports an existing subscription as unchanged.
 
 An existing agent converges in place:
 
@@ -77,9 +77,7 @@ An existing agent converges in place:
   re-provisioned in place with the file's image, keeping its context,
   iterations, and audit log, and then converges as above.
 - Group membership, CWD, timeout, loop settings, and the Goal settings the file
-  sets converge to the file's values. Subscriptions are sent on every run; the
-  daemon ignores a duplicate and reports it unchanged, so it does not make the
-  agent `changed`.
+  sets converge to the file's values.
 
 Model, effort, environment, and plugins are applied only when compose creates
 an agent; `up` does not change them on an existing agent.
@@ -138,6 +136,10 @@ being ignored. Queue prefixes and pool names use URL-safe ASCII identifiers
 alphanumeric). A pool is an explicit list of compose agents, normalized by agent
 name, and independent of `groups`: putting an agent in a group does not put it in
 a pool, and a pool does not alter group membership.
+
+An agent no longer takes a `subscribe:` key: the mailbox replaced channel
+subscriptions, so the key fails as an unknown field. Remove it from older
+files; group mail and task notifications need no declaration.
 
 The top-level `workflows:` map belonged to the removed task workflow engine. A
 non-empty value is rejected with an error that names the key. An empty

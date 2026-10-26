@@ -81,8 +81,10 @@ operator-only and unavailable to an agent.
 
 Queues, nested tasks, comments, priorities, dependencies, and answer waits are
 durable daemon state. Assignment, question, answer, and triage events use a
-transactional outbox and the normal messages bus, so notifications survive
-restarts and can wake enabled agents.
+transactional outbox and are sent as ordinary letters from the principal that
+caused them, so notifications survive restarts and can wake enabled agents. A
+`task.question` letter is answered on the task with `ttasks comment`, which
+closes the letter.
 
 ## Prompt integration
 

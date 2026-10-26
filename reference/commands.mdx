@@ -8,7 +8,7 @@ sidebar:
 
 # tariboy command reference
 
-tariboy has three command surfaces:
+tariboy has four command surfaces:
 
 1. **Operator commands** — `tariboy <group> <command>` (`sa` below is a
    convenience alias you define yourself, e.g. `alias sa=tariboy`; the build
@@ -23,6 +23,9 @@ tariboy has three command surfaces:
    verbs for an operator or an identity-bound agent. `ttasks --version` reports
    its build and `ttasks --json …` requests JSON output. `tariboy tasks …` runs
    the same client, always in operator mode; the table below does not list it.
+4. **Mail** — `tariboy-mail`, installed as `tmail`, reads, sends and answers
+   letters for an identity-bound agent or an operator. `tariboy mail …` runs the
+   same client, always in operator mode.
 
 ## Operator commands
 
@@ -50,14 +53,10 @@ tariboy has three command surfaces:
 | `tariboy agent image cancel NAME` | Cancel a pending agent image |
 | `tariboy agent image set NAME IMAGE` | Select an image for the agent's next iteration |
 | `tariboy agent image status NAME` | Show current, pending, and next agent image |
-| `tariboy agent inbox clear NAME` | Physically clear an agent's pending inbox queue |
-| `tariboy agent inbox ls NAME` | List an agent's inbox (operator), newest first |
-| `tariboy agent inbox processed NAME ID` | Mark an inbox message processed (operator ack) |
-| `tariboy agent inbox reply NAME ID` | Reply to an inbox message (operator); auto-processes the row |
-| `tariboy agent inbox requeue NAME ID` | Requeue a DLQ'd inbox message (operator) |
 | `tariboy agent inspect NAME` | Show one agent's full config |
 | `tariboy agent interactive NAME` | Get or set interactive mode (bool); restart the agent to apply |
 | `tariboy agent kill NAME` | Kill the current iteration via its shim |
+| `tariboy agent mail clear NAME` | Delete the open letters in an agent's inbox |
 | `tariboy agent messages batch NAME VALUE` | Set the agent messages batch |
 | `tariboy agent messages max-queue NAME VALUE` | Set the agent messages max queue |
 | `tariboy agent model NAME` | Get or set the agent model (omit value to read); applies next iteration |
@@ -77,26 +76,11 @@ tariboy has three command surfaces:
 | `tariboy agent status history NAME` | List an agent's status-message history (from the audit log) |
 | `tariboy agent status show NAME` | Show one agent's runtime status |
 | `tariboy agent stop NAME` | Stop an agent's loop (current iteration lives) |
-| `tariboy agent subscribe NAME CHANNEL` | Subscribe an agent to a channel (operator) |
-| `tariboy agent subscriptions NAME` | List the channels one agent is subscribed to |
-| `tariboy agent unsubscribe NAME CHANNEL` | Unsubscribe an agent from a channel (operator) |
 | `tariboy agent usage NAME` | Per-agent AI usage: grouped rows + time-bucketed series |
 | `tariboy backup TARGET` | Back up an agent (or 'all') to a portable tar.gz |
 | `tariboy budget ls` | List configured budgets |
 | `tariboy budget set` | Set a cost budget (scope agent:\<name\>\|group:\<g\>\|global) |
 | `tariboy budget status` | Show current spend vs limit for each budget |
-| `tariboy channel inspect CHANNEL` | Show a channel's kind and message count |
-| `tariboy channel ls` | List channels |
-| `tariboy channel tail CHANNEL` | Print recent messages on a channel (-f to follow) |
-| `tariboy channel watches CHANNEL` | List a channel's distinct watches (watch, params, subscribers) |
-| `tariboy chat create ID` | Create a chat and put the customer and the named principals in it |
-| `tariboy chat join CHAT PRINCIPAL` | Add a principal to a chat |
-| `tariboy chat leave CHAT PRINCIPAL` | Remove a principal from a chat, keeping its outstanding deliveries |
-| `tariboy chat ls` | List the customer's chats, most recently active first |
-| `tariboy chat messages AGENT` | Read one chat, oldest first, by chat id or agent name |
-| `tariboy chat participants CHAT` | List the principals taking part in a chat |
-| `tariboy chat read AGENT` | Mark a chat read up to a message timestamp, by chat id or agent name |
-| `tariboy chat unanswered CHAT` | List the chat messages a principal has not answered yet |
 | `tariboy compose archive` | Create a compose-only portable team archive; transfer runnable images separately |
 | `tariboy compose build` | Build the file's images |
 | `tariboy compose down` | Remove the file's agents and groups; --volumes also deletes their data |
@@ -128,12 +112,12 @@ tariboy has three command surfaces:
 | `tariboy fs list` | List directories under the daemon filesystem root ($HOME-jailed) |
 | `tariboy group assign NAME AGENT` | Assign an agent to a group (empty group leaves) |
 | `tariboy group create NAME` | Create (or update) a group with an optional lead |
-| `tariboy group inspect NAME` | Show a group's lead, members, channels and shared dir |
+| `tariboy group inspect NAME` | Show a group's lead, members, mail address and shared dir |
 | `tariboy group lead set NAME LEAD` | Set a group's lead to a current member |
 | `tariboy group ls` | List groups (name/lead/member count) |
 | `tariboy group member rm NAME AGENT` | Remove an agent from a group without deleting it |
 | `tariboy group rename NAME NEW-NAME` | Rename a group without deleting its agents |
-| `tariboy group rm NAME` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
+| `tariboy group rm NAME` | Remove a group (detach members; --volumes drops the shared dir) |
 | `tariboy harness codex-approval get` | Read the codex approval mode of this daemon (yolo\|approve-for-me) |
 | `tariboy harness codex-approval set MODE` | Set the codex approval mode of this daemon for the next iterations |
 | `tariboy harness models TYPE` | List the models and efforts a harness supports on the daemon host |
@@ -177,7 +161,6 @@ tariboy has three command surfaces:
 | `tariboy maintenance get` | Show database maintenance settings and the last run |
 | `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
 | `tariboy maintenance set` | Change database maintenance settings; unset flags keep their value |
-| `tariboy message send` | Publish a message to a channel (operator) |
 | `tariboy plugin action NAME ACTION` | Invoke a generic action on a running plugin |
 | `tariboy plugin contributions` | List enabled plugin CLI and settings contributions |
 | `tariboy plugin inspect NAME` | Show one plugin's manifest, state and socket |
@@ -186,7 +169,7 @@ tariboy has three command surfaces:
 | `tariboy plugin ls` | List installed plugins (name/version/types/state/health) |
 | `tariboy plugin restart NAME` | Restart a single plugin in place (stop + start) without touching others |
 | `tariboy plugin rm NAME` | Stop and remove a plugin |
-| `tariboy plugin routes NAME` | Show a plugin's external channel routes |
+| `tariboy plugin routes NAME` | Show a plugin's external routes, such as its chat bindings |
 | `tariboy prompt get NAME` | Preview the agent's assembled next-iteration prompt |
 | `tariboy prune AGENT` | Prune old iterations for an agent now (or 'all'); --dry-run lists victims |
 | `tariboy pull REF` | Pull an image from a tariboy-store registry into the local image store |
@@ -306,12 +289,7 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/loop.sh done` | Signal this iteration is finished (i-am-done) |
 | `scripts/context.sh get` | Print the durable working memory (CONTEXT.md) |
 | `scripts/context.sh set <text>` | Overwrite the durable working memory |
-| `scripts/messages.sh message send --channel C [--type T] [--subject k=v,…] [--text … \| --data JSON]` | Publish a message to a channel |
-| `scripts/messages.sh channel subscribe C [--matcher JSON] [--type globs]` | Subscribe to a channel |
-| `scripts/messages.sh channel unsubscribe ID` | Remove a subscription |
-| `scripts/messages.sh channel ls` | List your subscriptions |
-| `scripts/messages.sh sources` | List available channels |
-| `scripts/schedule.sh add --kind cron\|oneshot --spec S [--channel C] [--message JSON]` | Schedule a future wake-up |
+| `scripts/schedule.sh add --kind cron\|oneshot --spec S [--message JSON]` | Schedule a future letter; without a recipient it writes to you |
 | `scripts/schedule.sh ls` | List your schedules |
 | `scripts/schedule.sh cancel ID` | Cancel a schedule |
 | `scripts/scripts.sh ls` | List your scripts |
@@ -321,6 +299,29 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/scripts.sh rerun SCRIPT_ID` | Run a completed one-shot or idle recurring definition immediately |
 | `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
 | `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v2 image from a daemon-readable source directory (`image-creator` only); relative paths start at the managed workdir |
+
+## Mail (`tmail …`)
+
+`tariboy-mail` is the real executable and `tmail` its managed alias. A
+non-empty `TARIBOY_TOOLS_SOCKET` selects agent mode: the sender is the calling
+agent and every read is scoped to its mailbox. Without the variable, the
+client uses the host Unix daemon socket and acts as the customer unless `--as`
+names another principal. `tariboy mail …` is the same client, always in
+operator mode. See the [Mail
+reference](/docs/reference/mail) for flags, routes and debugging.
+
+| Command | Purpose |
+| --- | --- |
+| `tmail inbox [--all] [--limit N] [--before TIME]` | List open letters, oldest first; `--all` lists every letter, newest first |
+| `tmail sent` / `tmail archive` | List the letters you sent / your closed and dead letters |
+| `tmail show ID` | Show one letter and its reply |
+| `tmail send --to P[,P] --subject S --text T [--kind K] [--deadline D] [--notice] [--data JSON]` | Send a letter; a request unless `--notice` |
+| `tmail reply ID TEXT [--ask]` | Answer a letter, which closes it |
+| `tmail requeue ID` | Return a dead letter to the inbox |
+| `tmail close ID [--note T]` | Archive without a reply (operator only) |
+| `tmail read ID...` | Mark letters read; a read notice closes (operator only) |
+| `tmail unread` | Count open letters by sender and kind (operator only) |
+| `tmail clear --as agent:NAME [--yes]` | Delete an agent's open letters (operator only) |
 
 ## Native Tasks (`ttasks …`)
 
@@ -400,7 +401,7 @@ checks and watch statuses.
 The following administration roots are operator-only and are documented by
 `ttasks --help-json`: `queue` (including pools and triggers; see
 [Task workflows](/docs/task-workflows)), `events`, `principals`,
-`notifications`, and `activity` (`GET /api/task-activity`: the work on tasks in
+and `activity` (`GET /api/task-activity`: the work on tasks in
 a `--since`/`--until` window, optionally for one `--agent`). They are
 unavailable to agent mode.
 
@@ -410,7 +411,6 @@ Resource identifiers are positional (or named flags), for example:
 ttasks queue get OPS
 ttasks queue update OPS --name Operations --revision 2
 ttasks queue pool list OPS
-ttasks notifications read 1
 ttasks events OPS-1 --after 7 --limit 10
 ```
 

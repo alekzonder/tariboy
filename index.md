@@ -121,7 +121,7 @@ deadlines, stop the agent, or kill current work when needed.
   </div>
   <div className="feature-detail">
 
-Group agents with a **lead, shared channels, and individually configured
+Group agents with a **lead, group mail, and individually configured
 roles**. Each member keeps its own image, harness, model, and runtime settings.
 
 Native Tasks helps you decompose work, delegate it, track progress, and keep
