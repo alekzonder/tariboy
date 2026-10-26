@@ -104,7 +104,7 @@ for (const route of [
   "/servers/local/settings",
   "/servers/local/settings/hosts",
   "/servers/local/settings/advanced",
-  ...["usage", "budgets", "plugins", "ops", "daemons", "groups", "channels"].map(
+  ...["usage", "budgets", "plugins", "ops", "daemons", "groups"].map(
     (page) => `/servers/local/settings/advanced/${page}`,
   ),
   "/app-settings",
@@ -114,7 +114,7 @@ for (const route of [
   });
 }
 
-for (const tab of ["chat", "tasks", "activity", "configuration", "advanced"]) {
+for (const tab of ["tasks", "activity", "configuration", "advanced"]) {
   test(`agent ${tab} tab fits the window`, async ({ page }) => {
     await expectFits(page, `/agents/local/${AGENT}/${tab}`);
     await expect(page.getByRole("heading", { name: AGENT })).toBeVisible();
@@ -122,7 +122,7 @@ for (const tab of ["chat", "tasks", "activity", "configuration", "advanced"]) {
 }
 
 test("agent header controls never cover the agent's details", async ({ page }) => {
-  await page.goto(`${fixture}/agents/local/${AGENT}/chat`);
+  await page.goto(`${fixture}/agents/local/${AGENT}/tasks`);
   const heading = page.getByRole("heading", { name: AGENT });
   await expect(heading).toBeVisible();
   const controls = page.getByTestId("agent-controls");
@@ -144,7 +144,7 @@ test("the agent list is a drawer on compact screens and a column on wide ones", 
   page,
 }) => {
   const width = page.viewportSize()!.width;
-  await page.goto(`${fixture}/agents/local/${AGENT}/chat`);
+  await page.goto(`${fixture}/agents/local/${AGENT}/tasks`);
   await expect(page.getByRole("heading", { name: AGENT })).toBeVisible();
   if (width >= COMPACT) {
     await expect(page.getByTestId("agents-sidebar")).toBeVisible();
@@ -164,5 +164,5 @@ test("the agent list is a drawer on compact screens and a column on wide ones", 
   await drawer.getByRole("tab", { name: "Agents" }).click();
   await drawer.getByText(AGENT, { exact: true }).click();
   await expect(drawer).toHaveCount(0);
-  await expect(page).toHaveURL(new RegExp(`/agents/local/${AGENT}/chat`));
+  await expect(page).toHaveURL(new RegExp(`/agents/local/${AGENT}/tasks`));
 });
