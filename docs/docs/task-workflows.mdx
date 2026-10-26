@@ -486,7 +486,9 @@ so a single free agent does not collect every waiting task.
 
 ### Changing the holder
 
-The customer can give a task in a pool status to another member of that pool:
+The customer can give a task in a pool status to another member of that pool.
+The same command assigns a task that waits unassigned because no member was
+free, without waiting for the next dispatch pass:
 
 ```bash
 ttasks workflow reassign DEV-ab12 --agent dev-2

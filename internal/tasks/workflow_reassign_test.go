@@ -50,6 +50,37 @@ func TestReassignWorkflowHandsThePoolStatusToTheChosenMember(t *testing.T) {
 	}
 }
 
+func TestReassignWorkflowAssignsAnUnassignedTask(t *testing.T) {
+	svc, actor, _ := requestFixture(t)
+	ctx := context.Background()
+	// With no member free for Goal, dispatch leaves the new task unassigned.
+	setAgent(t, svc, "dev-2", `goal_enabled = 0`)
+	waiting, err := taskByKey(ctx, svc.db, mustCreateDev(t, svc, actor, "waiting").Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if waiting.Assignee != "" || waiting.Status != StatusOpen {
+		t.Fatalf("waiting = %#v", waiting)
+	}
+	got, err := svc.ReassignWorkflow(ctx, actor, waiting.Key, "dev-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Assignee != "agent:dev-2" || got.Status != StatusInProgress || got.WorkflowStatus != "develop" {
+		t.Fatalf("assigned = %#v", got)
+	}
+	if agent, released := holderRow(t, svc, waiting, "developers"); agent != "dev-2" || released {
+		t.Fatalf("holder = %s released %v", agent, released)
+	}
+	payload := eventPayload(t, svc, waiting, "workflow.reassigned")
+	if payload["from"] != "" || payload["to"] != "agent:dev-2" {
+		t.Fatalf("reassigned payload = %v", payload)
+	}
+	if n := countRows(t, svc, assignedNotifications, waiting.ID, principalChannel("agent:dev-2")); n != 1 {
+		t.Fatalf("assignment notifications to dev-2 = %d", n)
+	}
+}
+
 func TestReassignWorkflowToTheHolderChangesNothing(t *testing.T) {
 	svc, actor, task := requestFixture(t)
 	got, err := svc.ReassignWorkflow(context.Background(), actor, task.Key, "dev-1")

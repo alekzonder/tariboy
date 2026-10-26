@@ -302,6 +302,35 @@ it("changes the agent of a workflow task in a pool status to another member of t
   expect(onSave).not.toHaveBeenCalled();
 });
 
+it("assigns an unassigned workflow task in a pool status to a member of that pool", async () => {
+  api.getTaskWorkflow.mockResolvedValue(poolView);
+  api.listAgentPools.mockResolvedValue({
+    items: [agentPool("writers", ["writer", "editor"], 1, "REL")],
+    count: 1,
+  });
+  const waiting: Task = { ...heldTask, assignee: "", category: "open" };
+  api.reassignTaskWorkflow.mockResolvedValue({
+    ...waiting,
+    assignee: "agent:editor",
+    category: "in_progress",
+    revision: 5,
+  });
+  const { onTaskChanged } = renderDetail(waiting);
+  const select = await screen.findByRole("combobox", { name: "Assignee" });
+  await waitFor(() =>
+    expect(
+      within(select)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["Unassigned", "agent:writer", "agent:editor"]),
+  );
+  expect(select).toHaveValue("");
+  expect(within(select).getByRole("option", { name: "Unassigned" })).toBeDisabled();
+  await userEvent.selectOptions(select, "agent:editor");
+  await waitFor(() => expect(api.reassignTaskWorkflow).toHaveBeenCalledWith("REL-1", "editor"));
+  await waitFor(() => expect(onTaskChanged).toHaveBeenCalled());
+});
+
 it("shows why the daemon refused to change the agent", async () => {
   api.getTaskWorkflow.mockResolvedValue(poolView);
   api.listAgentPools.mockResolvedValue({
