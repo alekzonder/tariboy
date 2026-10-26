@@ -4,7 +4,7 @@ import { createElement, type PropsWithChildren } from "react";
 import { createApi, setLocalBaseURL, type ApiClient } from "@/lib/api";
 import { ApiProvider } from "@/components/ApiProvider";
 import type { Daemon } from "@/lib/daemons";
-import { messagesWsUrl, useAgentStatesSocket, useMessagesSocket } from "./useMessagesSocket";
+import { mailWsUrl, useAgentStatesSocket, useMailSocket } from "./useMessagesSocket";
 
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
@@ -31,62 +31,23 @@ afterEach(() => {
   setLocalBaseURL("");
 });
 
-describe("messages websocket", () => {
+describe("mail websocket", () => {
   it("builds local and remote URLs with the existing token convention", () => {
-    expect(messagesWsUrl(null)).toMatch(/^ws:\/\/.*\/api\/messages\/ws$/);
+    expect(mailWsUrl(null)).toMatch(/^ws:\/\/.*\/api\/mail\/ws$/);
     const remote: Daemon = {
       id: "prod",
       label: "Production",
       baseURL: "https://chat.example.test/",
       token: "secret token",
     };
-    expect(messagesWsUrl(remote)).toBe(
-      "wss://chat.example.test/api/messages/ws?token=secret+token",
-    );
-  });
-
-  it("carries the chat id and keeps a chat frame that names no agent", () => {
-    const onHint = vi.fn();
-    renderHook(() => useMessagesSocket({ target: null, onHint }));
-    const socket = FakeWebSocket.instances[0];
-    act(() => {
-      socket.onmessage?.(
-        new MessageEvent("message", {
-          data: JSON.stringify({
-            agent: "worker",
-            chat: "tasks:worker",
-            id: "m1",
-            channel: "chat:tasks:worker",
-            type: "task.assigned",
-            from: "system:tasks",
-            ts: "t",
-          }),
-        }),
-      );
-      // A shared chat belongs to no single agent, so the frame names only the chat.
-      socket.onmessage?.(
-        new MessageEvent("message", {
-          data: JSON.stringify({
-            chat: "release-team",
-            id: "m2",
-            channel: "chat:release-team",
-            type: "message",
-            from: "user:customer",
-            ts: "t",
-          }),
-        }),
-      );
-    });
-    expect(onHint).toHaveBeenCalledTimes(2);
-    expect(onHint.mock.calls[0][0].chat).toBe("tasks:worker");
-    expect(onHint.mock.calls[1][0].chat).toBe("release-team");
+    expect(mailWsUrl(remote)).toBe("wss://chat.example.test/api/mail/ws?token=secret+token");
   });
 
   it("delivers hints and refetches on every (re)connect instead of replaying", () => {
     vi.useFakeTimers();
     const onHint = vi.fn();
     const onOpen = vi.fn();
-    renderHook(() => useMessagesSocket({ target: null, onHint, onOpen }));
+    renderHook(() => useMailSocket({ target: null, onHint, onOpen }));
     const first = FakeWebSocket.instances[0];
 
     act(() => {
@@ -98,20 +59,23 @@ describe("messages websocket", () => {
       first.onmessage?.(
         new MessageEvent("message", {
           data: JSON.stringify({
-            agent: "worker",
-            id: "m1",
-            channel: "user:customer",
-            type: "message",
+            id: "m-1",
             from: "agent:worker",
+            to: "user:customer",
+            kind: "task.question",
             ts: "t",
           }),
         }),
       );
       first.onmessage?.(new MessageEvent("message", { data: "not json" }));
-      first.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ id: "m2" }) }));
+      first.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ from: "agent:x" }) }));
     });
     expect(onHint).toHaveBeenCalledTimes(1);
-    expect(onHint.mock.calls[0][0].agent).toBe("worker");
+    expect(onHint.mock.calls[0][0]).toMatchObject({
+      id: "m-1",
+      to: "user:customer",
+      kind: "task.question",
+    });
 
     act(() => {
       first.onclose?.(new CloseEvent("close"));
@@ -163,13 +127,13 @@ describe("socket host", () => {
 
   it("watches the provider's host and survives ordinary re-renders", () => {
     let client: ApiClient = createApi(remote);
-    const { rerender } = renderHook(() => useMessagesSocket({ onHint: vi.fn() }), {
+    const { rerender } = renderHook(() => useMailSocket({ onHint: vi.fn() }), {
       wrapper: ({ children }: PropsWithChildren) =>
         // oxlint-disable-next-line react/no-children-prop -- ApiProvider types children as a required prop, so createElement passes it there
         createElement(ApiProvider, { client, children }),
     });
     expect(FakeWebSocket.instances).toHaveLength(1);
-    expect(FakeWebSocket.instances[0].url).toBe("wss://r.example/api/messages/ws?token=one");
+    expect(FakeWebSocket.instances[0].url).toBe("wss://r.example/api/mail/ws?token=one");
     client = createApi({ ...remote });
     rerender();
     expect(FakeWebSocket.instances).toHaveLength(1);

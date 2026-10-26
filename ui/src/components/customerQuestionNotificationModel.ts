@@ -7,8 +7,7 @@ export function customerQuestionAttentionKey(hostId: string, agentName: string):
 }
 
 function requestingAgent(notification: TaskNotification): string | null {
-  if (notification.read_at || notification.dismissed_at || notification.type !== "task.question")
-    return null;
+  if (notification.read_at || notification.type !== "task.question") return null;
   return notification.requesting_principal.startsWith("agent:")
     ? notification.requesting_principal.slice("agent:".length)
     : null;

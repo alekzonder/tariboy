@@ -10,13 +10,13 @@ func TestResolveWithExternal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"whoami", "loop", "messages", "context", "status"}
+	want := []string{"whoami", "loop", "mail", "context", "status"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ResolveWithExternal = %v, want %v", got, want)
 	}
 	// dedupe: requesting a CORE plugin does not duplicate it
 	got, _ = ResolveWithExternal([]string{"whoami", "context"}, nil)
-	if !reflect.DeepEqual(got, []string{"whoami", "loop", "messages", "context"}) {
+	if !reflect.DeepEqual(got, []string{"whoami", "loop", "mail", "context"}) {
 		t.Fatalf("dedupe failed: %v", got)
 	}
 	if _, err := ResolveWithExternal([]string{"nope"}, nil); err == nil {

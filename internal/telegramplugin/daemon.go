@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"net/url"
+	"strings"
 	"time"
 )
 
@@ -17,8 +18,8 @@ type AgentInfo struct {
 	Alias string `json:"alias"`
 }
 
-type PublishedMessage struct {
-	Channel    string
+// InboundLetter is one topic message the plugin sends to the topic's agent.
+type InboundLetter struct {
 	Agent      string
 	Text       string
 	UpdateID   int64
@@ -28,9 +29,23 @@ type PublishedMessage struct {
 
 type DaemonAPI interface {
 	ListAgents(context.Context) ([]AgentInfo, error)
-	Subscribe(context.Context, string, string) error
-	Publish(context.Context, PublishedMessage) error
+	Send(context.Context, InboundLetter) error
 	Call(context.Context, string, string, any, any) error
+}
+
+// DaemonError is an error answer of the daemon with its code.
+type DaemonError struct {
+	Code    string
+	Message string
+}
+
+func (e *DaemonError) Error() string { return "daemon " + e.Code + ": " + e.Message }
+
+// IsInboxFull reports whether err is the daemon refusing a letter because the
+// recipient's inbox is full.
+func IsInboxFull(err error) bool {
+	var de *DaemonError
+	return errors.As(err, &de) && de.Code == "inbox_full"
 }
 
 type DaemonClient struct {
@@ -58,35 +73,27 @@ func (c *DaemonClient) ListAgents(ctx context.Context) ([]AgentInfo, error) {
 	return result.Agents, nil
 }
 
-func (c *DaemonClient) Subscribe(ctx context.Context, agent, channel string) error {
-	return c.Call(ctx, http.MethodPost, "/api/agents/"+url.PathEscape(agent)+"/subscriptions", map[string]any{
-		"name": agent, "channel": channel,
-	}, nil)
-}
-
-func (c *DaemonClient) Publish(ctx context.Context, message PublishedMessage) error {
-	data := map[string]any{"telegram_update_id": message.UpdateID}
-	if len(message.Forward) > 0 {
-		data["telegram_forward"] = message.Forward
+// Send sends a topic message to agent:<Agent> as a request from
+// plugin:telegram: the customer wrote and expects an answer.
+func (c *DaemonClient) Send(ctx context.Context, letter InboundLetter) error {
+	data := map[string]any{"telegram_update_id": letter.UpdateID}
+	if len(letter.Forward) > 0 {
+		data["telegram_forward"] = letter.Forward
 	}
 	body := map[string]any{
-		"channel": message.Channel, "type": "chat.message", "text": message.Text,
-		"idempotency_key":        message.ExternalID,
-		"require_delivery_agent": message.Agent,
-		"data":                   data,
+		"to": "agent:" + letter.Agent, "subject": letterSubject(letter.Text), "text": letter.Text,
+		"kind": "message", "idempotency_key": letter.ExternalID, "data": data,
 	}
-	var result struct {
-		DeliveredAgents []string `json:"delivered_agents"`
+	return c.do(ctx, http.MethodPost, "/api/plugin/mail", body, nil, true)
+}
+
+// letterSubject is the first line of text, cut to 60 characters.
+func letterSubject(text string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(text), "\n")
+	if runes := []rune(line); len(runes) > 60 {
+		line = string(runes[:60]) + "…"
 	}
-	if err := c.do(ctx, http.MethodPost, "/api/plugin/publish", body, &result, true); err != nil {
-		return err
-	}
-	for _, agent := range result.DeliveredAgents {
-		if agent == message.Agent {
-			return nil
-		}
-	}
-	return fmt.Errorf("daemon did not deliver message to agent %q", message.Agent)
+	return "Telegram: " + line
 }
 
 func (c *DaemonClient) Call(ctx context.Context, method, path string, body, result any) error {
@@ -134,7 +141,7 @@ func (c *DaemonClient) do(ctx context.Context, method, path string, body, result
 	}
 	if response.StatusCode/100 != 2 || !envelope.OK {
 		if envelope.Error != nil {
-			return fmt.Errorf("daemon %s: %s", envelope.Error.Code, envelope.Error.Message)
+			return &DaemonError{Code: envelope.Error.Code, Message: envelope.Error.Message}
 		}
 		return fmt.Errorf("daemon request failed (%d)", response.StatusCode)
 	}

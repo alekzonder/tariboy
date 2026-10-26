@@ -1,0 +1,431 @@
+{
+  "agent.mail.clear": {
+    "deleted": 3
+  },
+  "agent.messages.batch": {
+    "messages_batch": 7,
+    "name": "worker"
+  },
+  "agent.messages.max-queue": {
+    "messages_max_queue": 70,
+    "name": "worker"
+  },
+  "mail.close": {
+    "letter": {
+      "answer_id": "",
+      "answered_at": "2026-07-14T10:00:10.000000000Z",
+      "attempts": 0,
+      "body": "Which database?",
+      "close_note": "handled elsewhere",
+      "created_at": "2026-07-14T10:00:03.000000000Z",
+      "data": {
+        "task_key": "DEV-1"
+      },
+      "dead_at": "",
+      "dead_reason": "",
+      "deadline": "",
+      "from": "agent:worker",
+      "id": "m-20260714T100003Z-000003",
+      "in_reply_to": "",
+      "kind": "task.question",
+      "needs_reply": true,
+      "produced_in_iteration": "",
+      "read_at": "2026-07-14T10:00:09.000000000Z",
+      "seq": 3,
+      "subject": "Question on DEV-1",
+      "to": "user:customer"
+    }
+  },
+  "mail.ls archive as worker": {
+    "as": "agent:worker",
+    "box": "archive",
+    "count": 1,
+    "letters": [
+      {
+        "answer_id": "",
+        "answered_at": "2026-07-14T10:00:05.000000000Z",
+        "attempts": 5,
+        "body": "stale",
+        "close_note": "",
+        "created_at": "2026-07-14T10:00:05.000000000Z",
+        "data": {},
+        "dead_at": "2026-07-14T10:00:05.000000000Z",
+        "dead_reason": "attempts",
+        "deadline": "",
+        "from": "agent:other",
+        "id": "m-20260714T100005Z-000005",
+        "in_reply_to": "",
+        "kind": "message",
+        "needs_reply": true,
+        "produced_in_iteration": "",
+        "read_at": "",
+        "seq": 5,
+        "subject": "Old",
+        "to": "agent:worker"
+      }
+    ],
+    "next_before": ""
+  },
+  "mail.ls inbox": {
+    "as": "user:customer",
+    "box": "inbox",
+    "count": 3,
+    "letters": [
+      {
+        "answer_id": "",
+        "answered_at": "",
+        "attempts": 0,
+        "body": "May I deploy?",
+        "close_note": "",
+        "created_at": "2026-07-14T10:00:01.000000000Z",
+        "data": {
+          "env": "prod"
+        },
+        "dead_at": "",
+        "dead_reason": "",
+        "deadline": "2026-07-15T00:00:00.000000000Z",
+        "from": "agent:worker",
+        "id": "m-20260714T100001Z-000001",
+        "in_reply_to": "",
+        "kind": "message",
+        "needs_reply": true,
+        "produced_in_iteration": "",
+        "read_at": "",
+        "seq": 1,
+        "subject": "Deploy?",
+        "to": "user:customer"
+      },
+      {
+        "answer_id": "",
+        "answered_at": "",
+        "attempts": 0,
+        "body": "Deployed.",
+        "close_note": "",
+        "created_at": "2026-07-14T10:00:02.000000000Z",
+        "data": {},
+        "dead_at": "",
+        "dead_reason": "",
+        "deadline": "",
+        "from": "agent:other",
+        "id": "m-20260714T100002Z-000002",
+        "in_reply_to": "",
+        "kind": "message",
+        "needs_reply": false,
+        "produced_in_iteration": "",
+        "read_at": "",
+        "seq": 2,
+        "subject": "Done",
+        "to": "user:customer"
+      },
+      {
+        "answer_id": "",
+        "answered_at": "",
+        "attempts": 0,
+        "body": "Which database?",
+        "close_note": "",
+        "created_at": "2026-07-14T10:00:03.000000000Z",
+        "data": {
+          "task_key": "DEV-1"
+        },
+        "dead_at": "",
+        "dead_reason": "",
+        "deadline": "",
+        "from": "agent:worker",
+        "id": "m-20260714T100003Z-000003",
+        "in_reply_to": "",
+        "kind": "task.question",
+        "needs_reply": true,
+        "produced_in_iteration": "",
+        "read_at": "",
+        "seq": 3,
+        "subject": "Question on DEV-1",
+        "to": "user:customer"
+      }
+    ],
+    "next_before": ""
+  },
+  "mail.ls sent as worker": {
+    "as": "agent:worker",
+    "box": "sent",
+    "count": 2,
+    "letters": [
+      {
+        "answer_id": "",
+        "answered_at": "",
+        "attempts": 0,
+        "body": "Which database?",
+        "close_note": "",
+        "created_at": "2026-07-14T10:00:03.000000000Z",
+        "data": {
+          "task_key": "DEV-1"
+        },
+        "dead_at": "",
+        "dead_reason": "",
+        "deadline": "",
+        "from": "agent:worker",
+        "id": "m-20260714T100003Z-000003",
+        "in_reply_to": "",
+        "kind": "task.question",
+        "needs_reply": true,
+        "produced_in_iteration": "",
+        "read_at": "",
+        "seq": 3,
+        "subject": "Question on DEV-1",
+        "to": "user:customer"
+      },
+      {
+        "answer_id": "",
+        "answered_at": "",
+        "attempts": 0,
+        "body": "May I deploy?",
+        "close_note": "",
+        "created_at": "2026-07-14T10:00:01.000000000Z",
+        "data": {
+          "env": "prod"
+        },
+        "dead_at": "",
+        "dead_reason": "",
+        "deadline": "2026-07-15T00:00:00.000000000Z",
+        "from": "agent:worker",
+        "id": "m-20260714T100001Z-000001",
+        "in_reply_to": "",
+        "kind": "message",
+        "needs_reply": true,
+        "produced_in_iteration": "",
+        "read_at": "",
+        "seq": 1,
+        "subject": "Deploy?",
+        "to": "user:customer"
+      }
+    ],
+    "next_before": ""
+  },
+  "mail.read": {
+    "closed_notices": 1,
+    "read": 2
+  },
+  "mail.reply": {
+    "closed": true,
+    "letter": {
+      "answer_id": "",
+      "answered_at": "",
+      "attempts": 0,
+      "body": "Yes",
+      "close_note": "",
+      "created_at": "2026-07-14T10:00:07.000000000Z",
+      "data": {},
+      "dead_at": "",
+      "dead_reason": "",
+      "deadline": "",
+      "from": "user:customer",
+      "id": "m-20260714T100007Z-000008",
+      "in_reply_to": "m-20260714T100001Z-000001",
+      "kind": "message",
+      "needs_reply": false,
+      "produced_in_iteration": "",
+      "read_at": "",
+      "seq": 8,
+      "subject": "Re: Deploy?",
+      "to": "agent:worker"
+    }
+  },
+  "mail.reply on behalf": {
+    "closed": true,
+    "letter": {
+      "answer_id": "",
+      "answered_at": "",
+      "attempts": 0,
+      "body": "Fine",
+      "close_note": "",
+      "created_at": "2026-07-14T10:00:08.000000000Z",
+      "data": {
+        "on_behalf": "operator"
+      },
+      "dead_at": "",
+      "dead_reason": "",
+      "deadline": "",
+      "from": "agent:worker",
+      "id": "m-20260714T100008Z-000009",
+      "in_reply_to": "m-20260714T100004Z-000004",
+      "kind": "message",
+      "needs_reply": true,
+      "produced_in_iteration": "",
+      "read_at": "",
+      "seq": 9,
+      "subject": "Re: Status",
+      "to": "user:customer"
+    }
+  },
+  "mail.requeue": {
+    "letter": {
+      "answer_id": "",
+      "answered_at": "",
+      "attempts": 0,
+      "body": "stale",
+      "close_note": "",
+      "created_at": "2026-07-14T10:00:05.000000000Z",
+      "data": {},
+      "dead_at": "",
+      "dead_reason": "",
+      "deadline": "",
+      "from": "agent:other",
+      "id": "m-20260714T100005Z-000005",
+      "in_reply_to": "",
+      "kind": "message",
+      "needs_reply": true,
+      "produced_in_iteration": "",
+      "read_at": "",
+      "seq": 5,
+      "subject": "Old",
+      "to": "agent:worker"
+    }
+  },
+  "mail.send": {
+    "letters": [
+      {
+        "answer_id": "",
+        "answered_at": "",
+        "attempts": 0,
+        "body": "hello",
+        "close_note": "",
+        "created_at": "2026-07-14T10:00:06.000000000Z",
+        "data": {
+          "k": "v"
+        },
+        "dead_at": "",
+        "dead_reason": "",
+        "deadline": "",
+        "from": "user:customer",
+        "id": "m-20260714T100006Z-000006",
+        "in_reply_to": "",
+        "kind": "message",
+        "needs_reply": false,
+        "produced_in_iteration": "",
+        "read_at": "",
+        "seq": 6,
+        "subject": "Hi",
+        "to": "agent:worker"
+      },
+      {
+        "answer_id": "",
+        "answered_at": "",
+        "attempts": 0,
+        "body": "hello",
+        "close_note": "",
+        "created_at": "2026-07-14T10:00:06.000000000Z",
+        "data": {
+          "k": "v"
+        },
+        "dead_at": "",
+        "dead_reason": "",
+        "deadline": "",
+        "from": "user:customer",
+        "id": "m-20260714T100006Z-000007",
+        "in_reply_to": "",
+        "kind": "message",
+        "needs_reply": false,
+        "produced_in_iteration": "",
+        "read_at": "",
+        "seq": 7,
+        "subject": "Hi",
+        "to": "agent:other"
+      }
+    ]
+  },
+  "mail.show": {
+    "letter": {
+      "answer_id": "",
+      "answered_at": "",
+      "attempts": 0,
+      "body": "May I deploy?",
+      "close_note": "",
+      "created_at": "2026-07-14T10:00:01.000000000Z",
+      "data": {
+        "env": "prod"
+      },
+      "dead_at": "",
+      "dead_reason": "",
+      "deadline": "2026-07-15T00:00:00.000000000Z",
+      "from": "agent:worker",
+      "id": "m-20260714T100001Z-000001",
+      "in_reply_to": "",
+      "kind": "message",
+      "needs_reply": true,
+      "produced_in_iteration": "",
+      "read_at": "",
+      "seq": 1,
+      "subject": "Deploy?",
+      "to": "user:customer"
+    }
+  },
+  "mail.show answered": {
+    "letter": {
+      "answer_id": "m-20260714T100007Z-000008",
+      "answered_at": "2026-07-14T10:00:07.000000000Z",
+      "attempts": 0,
+      "body": "May I deploy?",
+      "close_note": "",
+      "created_at": "2026-07-14T10:00:01.000000000Z",
+      "data": {
+        "env": "prod"
+      },
+      "dead_at": "",
+      "dead_reason": "",
+      "deadline": "2026-07-15T00:00:00.000000000Z",
+      "from": "agent:worker",
+      "id": "m-20260714T100001Z-000001",
+      "in_reply_to": "",
+      "kind": "message",
+      "needs_reply": true,
+      "produced_in_iteration": "",
+      "read_at": "",
+      "seq": 1,
+      "subject": "Deploy?",
+      "to": "user:customer"
+    },
+    "reply": {
+      "answer_id": "",
+      "answered_at": "",
+      "attempts": 0,
+      "body": "Yes",
+      "close_note": "",
+      "created_at": "2026-07-14T10:00:07.000000000Z",
+      "data": {},
+      "dead_at": "",
+      "dead_reason": "",
+      "deadline": "",
+      "from": "user:customer",
+      "id": "m-20260714T100007Z-000008",
+      "in_reply_to": "m-20260714T100001Z-000001",
+      "kind": "message",
+      "needs_reply": false,
+      "produced_in_iteration": "",
+      "read_at": "",
+      "seq": 8,
+      "subject": "Re: Deploy?",
+      "to": "agent:worker"
+    }
+  },
+  "mail.unread": {
+    "as": "user:customer",
+    "by_sender": [
+      {
+        "count": 1,
+        "kind": "message",
+        "sender": "agent:other"
+      },
+      {
+        "count": 1,
+        "kind": "message",
+        "sender": "agent:worker"
+      },
+      {
+        "count": 1,
+        "kind": "task.question",
+        "sender": "agent:worker"
+      }
+    ],
+    "open": 3,
+    "unread": 3
+  }
+}

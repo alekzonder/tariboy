@@ -129,13 +129,21 @@ func (s *WorkflowEngine) enterStatusTx(ctx context.Context, tx *sql.Tx, task *Ta
 // questions holder asked the task's customer. Waits requested by anyone else,
 // or expecting another principal, stay open.
 func resolveWorkflowWaitsTx(ctx context.Context, tx *sql.Tx, task Task, holder, now string) error {
-	_, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, `
 		UPDATE task_waiting_for SET resolved_at = ?
 		WHERE task_id = ? AND resolved_at = '' AND (
 			requesting_principal = ? OR
 			(? <> '' AND requesting_principal = ? AND expected_principal = ?))`,
-		now, task.ID, workflowActor, holder, holder, task.Customer)
-	return err
+		now, task.ID, workflowActor, holder, holder, task.Customer); err != nil {
+		return err
+	}
+	// The workflow asks only the customer, so the letters these waits sent
+	// are the customer's questions from the workflow and from holder.
+	askers := []string{workflowActor}
+	if holder != "" {
+		askers = append(askers, holder)
+	}
+	return closeQuestionLettersTx(ctx, tx, task, task.Customer, askers, "task-outcome:"+task.WorkflowStatus, now)
 }
 
 // openStatusWaitTx asks the customer for an outcome the way a comment with a

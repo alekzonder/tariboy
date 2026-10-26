@@ -28,7 +28,7 @@ func missingNames(r Result) []string {
 }
 
 func TestCheckReadyWhenEveryToolIsOnPath(t *testing.T) {
-	fakePath(t, "tmux", "bash", "python3", "git", "npx", "tariboy", "ttasks", "codex")
+	fakePath(t, "tmux", "bash", "python3", "git", "npx", "tariboy", "ttasks", "tmail", "codex")
 	r := Check()
 	if r.State != "ready" || len(r.MissingTools) != 0 || r.Message != "" {
 		t.Fatalf("Check() = %+v, want ready", r)
@@ -41,7 +41,7 @@ func TestCheckReportsEachMissingTool(t *testing.T) {
 	if r.State != "error" {
 		t.Fatalf("state = %q, want error", r.State)
 	}
-	if got, want := missingNames(r), []string{"tmux", "npx"}; !reflect.DeepEqual(got, want) {
+	if got, want := missingNames(r), []string{"tmux", "npx", "tmail"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("missing = %v, want %v", got, want)
 	}
 	for _, tool := range r.MissingTools {
@@ -55,7 +55,7 @@ func TestCheckReportsEachMissingTool(t *testing.T) {
 }
 
 func TestCheckRequiresAtLeastOneHarness(t *testing.T) {
-	fakePath(t, "tmux", "bash", "python3", "git", "npx", "tariboy", "ttasks")
+	fakePath(t, "tmux", "bash", "python3", "git", "npx", "tariboy", "ttasks", "tmail")
 	r := Check()
 	if r.State != "error" || len(r.MissingTools) != 1 || !strings.Contains(r.MissingTools[0].Name, "claude") {
 		t.Fatalf("Check() = %+v, want one missing harness entry", r)

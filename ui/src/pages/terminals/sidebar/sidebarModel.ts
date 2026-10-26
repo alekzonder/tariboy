@@ -1,5 +1,5 @@
 import type { HostAgents } from "@/lib/aggregate";
-import type { AgentRow, ChatSummaryRow } from "@/lib/api";
+import type { AgentRow } from "@/lib/api";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
 
 /** Identity of one agent across the whole sidebar. The same encoding the
@@ -16,31 +16,6 @@ export interface SidebarAgent {
   hostError?: string;
   group: string;
   agent: AgentRow;
-  /** This agent's chats folded into one row, when it has any. */
-  chat?: ChatSummaryRow;
-}
-
-/**
- * One sidebar row stands for the whole agent, and an agent owns three chats —
- * its conversation, its task notifications and its service wake-ups. The row
- * shows whichever of them moved last and counts every one of them as unread,
- * so a task the customer has not read cannot hide behind a quiet conversation.
- */
-function foldAgentChats(chats: ChatSummaryRow[]): Map<string, ChatSummaryRow> {
-  const byAgent = new Map<string, ChatSummaryRow>();
-  for (const chat of chats) {
-    if (!chat.agent) continue;
-    const seen = byAgent.get(chat.agent);
-    if (!seen) {
-      byAgent.set(chat.agent, { ...chat });
-      continue;
-    }
-    seen.unread += chat.unread;
-    if (chat.last_ts > seen.last_ts) {
-      Object.assign(seen, chat, { unread: seen.unread });
-    }
-  }
-  return byAgent;
 }
 
 /** Sort `items` by an explicit id order, keeping unlisted items in their
@@ -58,7 +33,6 @@ function ordered<T>(items: T[], ids: string[], id: (item: T) => string): T[] {
 
 /** Agents of one host in the operator's saved order. */
 export function hostAgents(host: HostAgents): SidebarAgent[] {
-  const chats = foldAgentChats(host.chats ?? []);
   return ordered(host.agents, host.sidebarOrder?.agents ?? [], (agent) => agent.name).map(
     (agent) => ({
       key: agentKey(host.host.id, agent.name),
@@ -67,7 +41,6 @@ export function hostAgents(host: HostAgents): SidebarAgent[] {
       hostError: host.error,
       group: agent.group?.trim() ?? "",
       agent,
-      chat: chats.get(agent.name),
     }),
   );
 }
@@ -102,8 +75,7 @@ export function allAgents(hosts: HostAgents[]): SidebarAgent[] {
 /**
  * The Agents tab order, and the only place that decides it: pinned agents on
  * top, then the ones calling for a person (an unread customer question), then
- * the rest as a chat list — most recent conversation first, silent agents last
- * in the operator's own order. The whole sort happens here, across every
+ * the rest in the operator's own order. The whole sort happens here, across every
  * server, because only the Desktop sees all of them.
  */
 export function rankAgents(
@@ -112,18 +84,12 @@ export function rankAgents(
   attention: ReadonlyMap<string, number>,
 ): { pinned: SidebarAgent[]; rest: SidebarAgent[] } {
   const band = (row: SidebarAgent) => (attention.has(row.key) ? 0 : 1);
-  const spokeAt = (row: SidebarAgent) => row.chat?.last_ts ?? "";
   return {
     pinned: agents.filter((row) => pinned.has(row.key)),
     rest: agents
       .filter((row) => !pinned.has(row.key))
       .map((row, index) => ({ row, index }))
-      .sort(
-        (left, right) =>
-          band(left.row) - band(right.row) ||
-          spokeAt(right.row).localeCompare(spokeAt(left.row)) ||
-          left.index - right.index,
-      )
+      .sort((left, right) => band(left.row) - band(right.row) || left.index - right.index)
       .map(({ row }) => row),
   };
 }

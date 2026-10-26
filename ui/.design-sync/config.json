@@ -11,7 +11,6 @@
   "componentSrcMap": {
     "AgentControls": "src/components/AgentControls.tsx",
     "AgentRow": "src/components/AgentRow.tsx",
-    "AgentSubscriptions": "src/components/AgentSubscriptions.tsx",
     "AgentWorkspace": "src/pages/agents/AgentWorkspace.tsx",
     "AlertDialog": "src/components/ui/alert-dialog.tsx",
     "AppSettings": "src/components/DesktopUpdates.tsx",
@@ -71,9 +70,6 @@
   },
   "overrides": {
     "AgentControls": {
-      "cardMode": "column"
-    },
-    "AgentSubscriptions": {
       "cardMode": "column"
     },
     "AgentWorkspace": {

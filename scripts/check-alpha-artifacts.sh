@@ -21,7 +21,7 @@ for arch in $SERVER_ARCHES; do
   archive="tariboy_${VERSION}_linux-${arch}.tar.gz"
   EXPECTED_SERVER_ARCHIVES="$EXPECTED_SERVER_ARCHIVES $archive"
 done
-SERVER_PAYLOAD="tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram"
+SERVER_PAYLOAD="tariboyd tariboy tariboy-tasks tariboy-mail tariboy-shim tariboy-plugin-telegram"
 MOUNT=""
 STRING_DUMP=""
 ARCHIVE_DIR=""
@@ -207,7 +207,7 @@ binary_contains "$APP_EXE" "$VERSION" || {
 
 for platform in darwin-arm64 linux-x86_64 linux-aarch64; do
   expected_format="$(elf_format "$platform")"
-  for binary in tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram; do
+  for binary in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-shim tariboy-plugin-telegram; do
     path="$APP/Contents/Resources/bin/$platform/$binary"
     [ -x "$path" ] || { echo "FAIL: missing bundled binary: $path" >&2; exit 1; }
     description="$(file "$path")"
@@ -221,9 +221,11 @@ for platform in darwin-arm64 linux-x86_64 linux-aarch64; do
         echo "FAIL: $path reports $reported, expected $VERSION" >&2; exit 1; }
     fi
   done
-  alias_path="$APP/Contents/Resources/bin/$platform/ttasks"
-  [ ! -e "$alias_path" ] && [ ! -L "$alias_path" ] || {
-    echo "FAIL: ttasks must be an installed alias, not a bundled payload" >&2; exit 1; }
+  for alias in ttasks tmail; do
+    alias_path="$APP/Contents/Resources/bin/$platform/$alias"
+    [ ! -e "$alias_path" ] && [ ! -L "$alias_path" ] || {
+      echo "FAIL: $alias must be an installed alias, not a bundled payload" >&2; exit 1; }
+  done
   [ "$(tr -d '\r\n' < "$APP/Contents/Resources/bin/$platform/VERSION")" = "$VERSION" ] || {
     echo "FAIL: $platform/VERSION does not equal $VERSION" >&2; exit 1; }
   # Every set is uploadable to an SSH server of its platform.

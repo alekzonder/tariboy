@@ -438,20 +438,6 @@ type PrincipalInfo struct {
 	Groups   []string `json:"groups"`
 }
 
-type Notification struct {
-	ID                  string `json:"id"`
-	Channel             string `json:"channel"`
-	Type                string `json:"type"`
-	Text                string `json:"text"`
-	RequestingPrincipal string `json:"requesting_principal"`
-	TaskKey             string `json:"task_key"`
-	EventSeq            int64  `json:"event_sequence"`
-	CreatedAt           string `json:"created_at"`
-	PublishedAt         string `json:"published_at"`
-	ReadAt              string `json:"read_at"`
-	DismissedAt         string `json:"dismissed_at"`
-}
-
 func normalizeAssignee(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" || strings.Contains(value, ":") {

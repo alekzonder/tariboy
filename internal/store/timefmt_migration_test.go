@@ -53,15 +53,15 @@ func TestCanonicalTimestampsMigration(t *testing.T) {
 	}
 
 	// SQL defaults write the canonical format too.
-	if _, err := s.DB.Exec(`INSERT INTO channels(name, kind) VALUES ('c', 'topic')`); err != nil {
+	if _, err := s.DB.Exec(`INSERT INTO plugins(name) VALUES ('c')`); err != nil {
 		t.Fatal(err)
 	}
 	var created string
-	if err := s.DB.QueryRow(`SELECT created_at FROM channels WHERE name = 'c'`).Scan(&created); err != nil {
+	if err := s.DB.QueryRow(`SELECT installed_at FROM plugins WHERE name = 'c'`).Scan(&created); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ParseTime(created); err != nil {
-		t.Fatalf("default created_at = %q is not canonical", created)
+		t.Fatalf("default installed_at = %q is not canonical", created)
 	}
 	var check string
 	if err := s.DB.QueryRow(`PRAGMA integrity_check`).Scan(&check); err != nil || check != "ok" {

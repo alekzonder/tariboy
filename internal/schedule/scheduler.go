@@ -4,32 +4,33 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
-// Publisher is the slice of the bus the scheduler needs.
-type Publisher interface {
-	Publish(bus.Message) (bus.Message, error)
+// Sender is the slice of the mail service the scheduler needs: a send that
+// writes only while guard, run in the same transaction, allows it.
+type Sender interface {
+	SendGuarded(mail.Letter, func(*sql.Tx) error) ([]mail.Letter, error)
 }
 
-type guardedPublisher interface {
-	PublishWithGuard(bus.Message, func(*sql.Tx, time.Time) error) (bus.Message, error)
-}
+// SenderSchedule is the sender of every letter a schedule fires.
+const SenderSchedule = "system:schedule"
 
 type Scheduler struct {
 	store *Store
-	pub   Publisher
+	pub   Sender
 	log   *slog.Logger
 	clock func() time.Time
 	after func(time.Duration) <-chan time.Time
 }
 
-func NewScheduler(st *Store, pub Publisher, log *slog.Logger,
+func NewScheduler(st *Store, pub Sender, log *slog.Logger,
 	clock func() time.Time, after func(time.Duration) <-chan time.Time) *Scheduler {
 	if clock == nil {
 		clock = time.Now
@@ -54,7 +55,8 @@ func (s *Scheduler) Run(ctx context.Context) {
 	}
 }
 
-// fireDue publishes every schedule due at/before now and advances/disables each.
+// fireDue sends the letter of every schedule due at/before now and
+// advances/disables each.
 func (s *Scheduler) fireDue(now time.Time) (int, error) {
 	due, err := s.store.DueBefore(now)
 	if err != nil {
@@ -62,21 +64,9 @@ func (s *Scheduler) fireDue(now time.Time) (int, error) {
 	}
 	fired := 0
 	for _, sch := range due {
-		msg := renderTemplate(sch)
-		var publishErr error
-		if sch.Channel != "" {
-			guarded, ok := s.pub.(guardedPublisher)
-			if !ok {
-				publishErr = fmt.Errorf("scheduled channel publisher does not support atomic guards")
-			} else {
-				_, publishErr = guarded.PublishWithGuard(msg, scheduleGuard(sch))
-			}
-		} else {
-			_, publishErr = s.pub.Publish(msg)
-		}
-		if publishErr != nil {
-			if publishErr != bus.ErrPublishGuardDenied {
-				s.log.Error("schedule publish", "id", sch.ID, "err", publishErr)
+		if _, err := s.pub.SendGuarded(renderTemplate(sch), scheduleGuard(sch)); err != nil {
+			if !errors.Is(err, mail.ErrGuardDenied) {
+				s.log.Error("schedule send", "id", sch.ID, "err", err)
 			}
 			continue
 		}
@@ -89,14 +79,16 @@ func (s *Scheduler) fireDue(now time.Time) (int, error) {
 	return fired, nil
 }
 
-func scheduleGuard(sch Schedule) func(*sql.Tx, time.Time) error {
-	return func(tx *sql.Tx, now time.Time) error {
+// scheduleGuard lets the letter through only while the schedule is still
+// enabled at the firing it was read for, so a cancel racing the tick wins.
+func scheduleGuard(sch Schedule) func(*sql.Tx) error {
+	return func(tx *sql.Tx) error {
 		var live int
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM schedules WHERE id=? AND enabled=1 AND next_fire_at=?`, sch.ID, sch.NextFireAt).Scan(&live); err != nil {
 			return err
 		}
 		if live == 0 {
-			return bus.ErrPublishGuardDenied
+			return mail.ErrGuardDenied
 		}
 		return nil
 	}
@@ -116,20 +108,43 @@ func (s *Scheduler) advance(sch *Schedule, now time.Time) {
 	}
 }
 
-func renderTemplate(sch Schedule) bus.Message {
+// renderTemplate builds the letter of one firing from the schedule's message
+// template {kind, subject, text, data, notice}. The older template field type
+// names the kind when kind is absent, and an object subject is kept in data.
+func renderTemplate(sch Schedule) mail.Letter {
 	var tpl struct {
-		Type    string         `json:"type"`
-		Subject map[string]any `json:"subject"`
-		Text    string         `json:"text"`
-		Data    map[string]any `json:"data"`
+		Kind    string          `json:"kind"`
+		Type    string          `json:"type"`
+		Subject json.RawMessage `json:"subject"`
+		Text    string          `json:"text"`
+		Data    map[string]any  `json:"data"`
+		Notice  bool            `json:"notice"`
 	}
 	tidy.Log(nil, "schedule message template is not valid JSON; using defaults", json.Unmarshal([]byte(sch.MessageTemplate), &tpl), "schedule", sch.ID)
-	if tpl.Type == "" {
-		tpl.Type = "schedule.fire"
+	kind := tpl.Kind
+	if kind == "" {
+		kind = tpl.Type
 	}
-	return bus.Message{
-		Channel: sch.Channel, Type: tpl.Type, Subject: tpl.Subject, Text: tpl.Text, Data: tpl.Data,
-		Source: "schedule", ProducedByAgent: sch.Agent,
+	if kind == "" {
+		kind = "schedule.fire"
+	}
+	if tpl.Data == nil {
+		tpl.Data = map[string]any{}
+	}
+	tpl.Data["schedule_id"] = sch.ID
+	subject := ""
+	if len(tpl.Subject) > 0 && json.Unmarshal(tpl.Subject, &subject) != nil {
+		var obj map[string]any
+		if json.Unmarshal(tpl.Subject, &obj) == nil && obj != nil {
+			tpl.Data["subject"] = obj
+		}
+	}
+	if subject == "" {
+		subject = fmt.Sprintf("Schedule %s", sch.ID)
+	}
+	return mail.Letter{
+		From: SenderSchedule, To: sch.Recipient, Subject: subject, Body: tpl.Text, Kind: kind,
+		Data: tpl.Data, NeedsReply: !tpl.Notice,
 		IdempotencyKey: "schedule:" + sch.ID + ":" + sch.NextFireAt,
 	}
 }

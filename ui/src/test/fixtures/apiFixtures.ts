@@ -1,4 +1,4 @@
-import type { AgentRow, AgentView, ChatSummaryRow, ImageSummary } from "@/lib/api";
+import type { AgentRow, AgentView, ImageSummary } from "@/lib/api";
 
 /** Complete API responses for tests; each test overrides only what it checks. */
 
@@ -67,21 +67,5 @@ export const imageSummary = (over: Partial<ImageSummary> = {}): ImageSummary => 
   schema_version: 2,
   current_agents: null,
   pending_agents: null,
-  ...over,
-});
-
-export const chatSummaryRow = (over: Partial<ChatSummaryRow> = {}): ChatSummaryRow => ({
-  id: "dm:worker",
-  kind: "direct",
-  title: "worker",
-  channel: "",
-  agent: "worker",
-  last_ts: "",
-  last_from: "",
-  last_type: "",
-  last_text: "",
-  unread: 0,
-  read_ts: "",
-  participants: [],
   ...over,
 });

@@ -124,20 +124,6 @@ func TestParseRejectsUnknownComposeField(t *testing.T) {
 	}
 }
 
-func TestParseRejectsUnknownSubscribeObjectField(t *testing.T) {
-	_, err := Parse([]byte(`version: 1
-agents:
-  dev:
-    image: basic:latest
-    subscribe:
-      - channel: logs:api
-        macher: {service: api}
-`))
-	if err == nil || !strings.Contains(err.Error(), "macher") {
-		t.Fatalf("unknown subscribe field error = %v", err)
-	}
-}
-
 func TestValidateRejectsUnsafePoolRouteSegments(t *testing.T) {
 	for _, bad := range []string{"bad/name", "bad?name", "bad#name", "bad:name", "разработка"} {
 		f := File{Version: 1, Agents: map[string]AgentSpec{"dev": {Image: "basic:latest"}}, TaskQueues: map[string]TaskQueueSpec{"DEV": {Name: "Development", Pools: map[string][]string{bad: {"dev"}, "developers": {"dev"}}}}}

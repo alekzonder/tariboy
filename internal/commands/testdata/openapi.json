@@ -833,9 +833,6 @@
       "AgentSchedule": {
         "additionalProperties": false,
         "properties": {
-          "channel": {
-            "type": "string"
-          },
           "enabled": {
             "type": "boolean"
           },
@@ -850,13 +847,16 @@
           },
           "spec": {
             "type": "string"
+          },
+          "to": {
+            "type": "string"
           }
         },
         "required": [
           "id",
           "kind",
           "spec",
-          "channel",
+          "to",
           "next_fire_at",
           "enabled"
         ],
@@ -1769,507 +1769,6 @@
         ],
         "type": "object"
       },
-      "ChannelInspectView": {
-        "additionalProperties": false,
-        "properties": {
-          "kind": {
-            "type": "string"
-          },
-          "messages": {
-            "type": "integer"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "kind",
-          "messages"
-        ],
-        "type": "object"
-      },
-      "ChannelList": {
-        "additionalProperties": false,
-        "properties": {
-          "channels": {
-            "items": {
-              "$ref": "#/components/schemas/ChannelRow"
-            },
-            "type": "array"
-          },
-          "count": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "channels",
-          "count"
-        ],
-        "type": "object"
-      },
-      "ChannelMessage": {
-        "additionalProperties": false,
-        "properties": {
-          "correlation_id": {
-            "type": "string"
-          },
-          "data": {
-            "type": "object"
-          },
-          "deadline": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "in_reply_to": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "produced_by_agent": {
-            "type": "string"
-          },
-          "produced_in_iteration": {
-            "type": "string"
-          },
-          "reply_to": {
-            "type": "string"
-          },
-          "source": {
-            "type": "string"
-          },
-          "subject": {
-            "type": "object"
-          },
-          "text": {
-            "type": "string"
-          },
-          "ts": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "ts",
-          "type",
-          "source",
-          "text",
-          "produced_by_agent",
-          "produced_in_iteration"
-        ],
-        "type": "object"
-      },
-      "ChannelRow": {
-        "additionalProperties": false,
-        "properties": {
-          "kind": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "kind"
-        ],
-        "type": "object"
-      },
-      "ChannelTail": {
-        "additionalProperties": false,
-        "properties": {
-          "count": {
-            "type": "integer"
-          },
-          "messages": {
-            "items": {
-              "$ref": "#/components/schemas/ChannelMessage"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "messages",
-          "count"
-        ],
-        "type": "object"
-      },
-      "ChannelWatch": {
-        "additionalProperties": false,
-        "properties": {
-          "params": {
-            "nullable": true,
-            "type": "object"
-          },
-          "subscribers": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "watch": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "watch",
-          "params",
-          "subscribers"
-        ],
-        "type": "object"
-      },
-      "ChannelWatchList": {
-        "additionalProperties": false,
-        "properties": {
-          "count": {
-            "type": "integer"
-          },
-          "watches": {
-            "items": {
-              "$ref": "#/components/schemas/ChannelWatch"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "watches",
-          "count"
-        ],
-        "type": "object"
-      },
-      "ChatFeed": {
-        "additionalProperties": false,
-        "properties": {
-          "agent": {
-            "type": "string"
-          },
-          "channel": {
-            "type": "string"
-          },
-          "chat": {
-            "type": "string"
-          },
-          "count": {
-            "type": "integer"
-          },
-          "customer": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "messages": {
-            "items": {
-              "$ref": "#/components/schemas/ChatMessage"
-            },
-            "type": "array"
-          },
-          "read_ts": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "customer",
-          "agent",
-          "chat",
-          "channel",
-          "kind",
-          "title",
-          "messages",
-          "count",
-          "read_ts"
-        ],
-        "type": "object"
-      },
-      "ChatList": {
-        "additionalProperties": false,
-        "properties": {
-          "chats": {
-            "items": {
-              "$ref": "#/components/schemas/ChatSummaryRow"
-            },
-            "type": "array"
-          },
-          "count": {
-            "type": "integer"
-          },
-          "customer": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "customer",
-          "chats",
-          "count"
-        ],
-        "type": "object"
-      },
-      "ChatMessage": {
-        "additionalProperties": false,
-        "properties": {
-          "channel": {
-            "type": "string"
-          },
-          "correlation_id": {
-            "type": "string"
-          },
-          "data": {
-            "type": "object"
-          },
-          "deadline": {
-            "type": "string"
-          },
-          "from": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "in_reply_to": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "produced_by_agent": {
-            "type": "string"
-          },
-          "produced_in_iteration": {
-            "type": "string"
-          },
-          "reply_to": {
-            "type": "string"
-          },
-          "source": {
-            "type": "string"
-          },
-          "subject": {
-            "type": "object"
-          },
-          "text": {
-            "type": "string"
-          },
-          "ts": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "ts",
-          "type",
-          "source",
-          "text",
-          "produced_by_agent",
-          "produced_in_iteration",
-          "channel",
-          "from"
-        ],
-        "type": "object"
-      },
-      "ChatParticipantList": {
-        "additionalProperties": false,
-        "properties": {
-          "chat": {
-            "type": "string"
-          },
-          "count": {
-            "type": "integer"
-          },
-          "participants": {
-            "items": {
-              "$ref": "#/components/schemas/ChatParticipantRow"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "chat",
-          "participants",
-          "count"
-        ],
-        "type": "object"
-      },
-      "ChatParticipantRow": {
-        "additionalProperties": false,
-        "properties": {
-          "joined_at": {
-            "type": "string"
-          },
-          "muted": {
-            "type": "boolean"
-          },
-          "principal": {
-            "type": "string"
-          },
-          "read_ts": {
-            "type": "string"
-          },
-          "role": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "principal",
-          "role",
-          "joined_at",
-          "read_ts",
-          "muted"
-        ],
-        "type": "object"
-      },
-      "ChatReadResult": {
-        "additionalProperties": false,
-        "properties": {
-          "agent": {
-            "type": "string"
-          },
-          "chat": {
-            "type": "string"
-          },
-          "read_ts": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "agent",
-          "chat",
-          "read_ts"
-        ],
-        "type": "object"
-      },
-      "ChatSummaryRow": {
-        "additionalProperties": false,
-        "properties": {
-          "agent": {
-            "type": "string"
-          },
-          "channel": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "last_from": {
-            "type": "string"
-          },
-          "last_text": {
-            "type": "string"
-          },
-          "last_ts": {
-            "type": "string"
-          },
-          "last_type": {
-            "type": "string"
-          },
-          "participants": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "read_ts": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "unread": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "title",
-          "channel",
-          "agent",
-          "last_ts",
-          "last_from",
-          "last_type",
-          "last_text",
-          "unread",
-          "read_ts",
-          "participants"
-        ],
-        "type": "object"
-      },
-      "ChatUnansweredList": {
-        "additionalProperties": false,
-        "properties": {
-          "chat": {
-            "type": "string"
-          },
-          "count": {
-            "type": "integer"
-          },
-          "messages": {
-            "items": {
-              "$ref": "#/components/schemas/ChatMessage"
-            },
-            "type": "array"
-          },
-          "principal": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "chat",
-          "principal",
-          "messages",
-          "count"
-        ],
-        "type": "object"
-      },
-      "ChatView": {
-        "additionalProperties": false,
-        "properties": {
-          "agent": {
-            "type": "string"
-          },
-          "channel": {
-            "type": "string"
-          },
-          "chat": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "participants": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "chat",
-          "kind",
-          "title",
-          "channel",
-          "agent",
-          "participants"
-        ],
-        "type": "object"
-      },
       "CheckView": {
         "additionalProperties": false,
         "properties": {
@@ -2662,9 +2161,6 @@
           "broadcast": {
             "type": "string"
           },
-          "inbox": {
-            "type": "string"
-          },
           "lead": {
             "type": "string"
           },
@@ -2686,7 +2182,6 @@
           "lead",
           "members",
           "broadcast",
-          "inbox",
           "shared_dir"
         ],
         "type": "object"
@@ -3565,183 +3060,6 @@
         ],
         "type": "object"
       },
-      "InboxClearResult": {
-        "additionalProperties": false,
-        "properties": {
-          "deleted_deliveries": {
-            "type": "integer"
-          },
-          "deleted_messages": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "deleted_deliveries",
-          "deleted_messages"
-        ],
-        "type": "object"
-      },
-      "InboxList": {
-        "additionalProperties": false,
-        "properties": {
-          "count": {
-            "type": "integer"
-          },
-          "messages": {
-            "items": {
-              "$ref": "#/components/schemas/InboxMessage"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "messages",
-          "count"
-        ],
-        "type": "object"
-      },
-      "InboxMessage": {
-        "additionalProperties": false,
-        "properties": {
-          "attempts": {
-            "type": "integer"
-          },
-          "channel": {
-            "type": "string"
-          },
-          "correlation_id": {
-            "type": "string"
-          },
-          "data": {
-            "type": "object"
-          },
-          "deadline": {
-            "type": "string"
-          },
-          "delivered_at": {
-            "type": "string"
-          },
-          "dlq": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          },
-          "in_reply_to": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "processed_at": {
-            "type": "string"
-          },
-          "produced_by_agent": {
-            "type": "string"
-          },
-          "produced_in_iteration": {
-            "type": "string"
-          },
-          "reply_to": {
-            "type": "string"
-          },
-          "result": {
-            "type": "string"
-          },
-          "source": {
-            "type": "string"
-          },
-          "subject": {
-            "type": "object"
-          },
-          "text": {
-            "type": "string"
-          },
-          "ts": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "channel",
-          "ts",
-          "source",
-          "type",
-          "text",
-          "attempts",
-          "dlq",
-          "produced_by_agent",
-          "produced_in_iteration"
-        ],
-        "type": "object"
-      },
-      "InboxProcessedResult": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "processed_at": {
-            "type": "string"
-          },
-          "result": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "processed_at",
-          "result"
-        ],
-        "type": "object"
-      },
-      "InboxReplyResult": {
-        "additionalProperties": false,
-        "properties": {
-          "channel": {
-            "type": "string"
-          },
-          "correlation_id": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "in_reply_to": {
-            "type": "string"
-          },
-          "replied": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "channel",
-          "in_reply_to",
-          "correlation_id",
-          "replied"
-        ],
-        "type": "object"
-      },
-      "InboxRequeueResult": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "requeued": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "requeued"
-        ],
-        "type": "object"
-      },
       "IterationList": {
         "additionalProperties": false,
         "properties": {
@@ -3942,6 +3260,94 @@
         ],
         "type": "object"
       },
+      "Letter": {
+        "additionalProperties": false,
+        "properties": {
+          "answer_id": {
+            "type": "string"
+          },
+          "answered_at": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "body": {
+            "type": "string"
+          },
+          "close_note": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          },
+          "dead_at": {
+            "type": "string"
+          },
+          "dead_reason": {
+            "type": "string"
+          },
+          "deadline": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "in_reply_to": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "needs_reply": {
+            "type": "boolean"
+          },
+          "produced_in_iteration": {
+            "type": "string"
+          },
+          "read_at": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "from",
+          "to",
+          "subject",
+          "body",
+          "kind",
+          "data",
+          "needs_reply",
+          "in_reply_to",
+          "deadline",
+          "created_at",
+          "read_at",
+          "answered_at",
+          "answer_id",
+          "close_note",
+          "attempts",
+          "dead_at",
+          "dead_reason",
+          "produced_in_iteration"
+        ],
+        "type": "object"
+      },
       "LimitsView": {
         "additionalProperties": false,
         "properties": {
@@ -4099,6 +3505,162 @@
         ],
         "type": "object"
       },
+      "MailClearResult": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "type": "object"
+      },
+      "MailCloseResult": {
+        "additionalProperties": false,
+        "properties": {
+          "letter": {
+            "$ref": "#/components/schemas/Letter"
+          }
+        },
+        "required": [
+          "letter"
+        ],
+        "type": "object"
+      },
+      "MailList": {
+        "additionalProperties": false,
+        "properties": {
+          "as": {
+            "type": "string"
+          },
+          "box": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "letters": {
+            "items": {
+              "$ref": "#/components/schemas/Letter"
+            },
+            "type": "array"
+          },
+          "next_before": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "box",
+          "as",
+          "letters",
+          "count",
+          "next_before"
+        ],
+        "type": "object"
+      },
+      "MailReadResult": {
+        "additionalProperties": false,
+        "properties": {
+          "closed_notices": {
+            "type": "integer"
+          },
+          "read": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "closed_notices",
+          "read"
+        ],
+        "type": "object"
+      },
+      "MailReplyResult": {
+        "additionalProperties": false,
+        "properties": {
+          "closed": {
+            "type": "boolean"
+          },
+          "letter": {
+            "$ref": "#/components/schemas/Letter"
+          }
+        },
+        "required": [
+          "letter",
+          "closed"
+        ],
+        "type": "object"
+      },
+      "MailRequeueResult": {
+        "additionalProperties": false,
+        "properties": {
+          "letter": {
+            "$ref": "#/components/schemas/Letter"
+          }
+        },
+        "required": [
+          "letter"
+        ],
+        "type": "object"
+      },
+      "MailSendResult": {
+        "additionalProperties": false,
+        "properties": {
+          "letters": {
+            "items": {
+              "$ref": "#/components/schemas/Letter"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "letters"
+        ],
+        "type": "object"
+      },
+      "MailThread": {
+        "additionalProperties": false,
+        "properties": {
+          "letter": {
+            "$ref": "#/components/schemas/Letter"
+          },
+          "reply": {
+            "$ref": "#/components/schemas/Letter"
+          }
+        },
+        "required": [
+          "letter"
+        ],
+        "type": "object"
+      },
+      "MailUnread": {
+        "additionalProperties": false,
+        "properties": {
+          "as": {
+            "type": "string"
+          },
+          "by_sender": {
+            "items": {
+              "$ref": "#/components/schemas/SenderCount"
+            },
+            "type": "array"
+          },
+          "open": {
+            "type": "integer"
+          },
+          "unread": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "as",
+          "open",
+          "unread",
+          "by_sender"
+        ],
+        "type": "object"
+      },
       "MaintenanceLastRun": {
         "additionalProperties": false,
         "nullable": true,
@@ -4246,78 +3808,6 @@
         ],
         "type": "object"
       },
-      "MessageSendResult": {
-        "additionalProperties": false,
-        "properties": {
-          "channel": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "sent": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "channel",
-          "sent"
-        ],
-        "type": "object"
-      },
-      "Notification": {
-        "additionalProperties": false,
-        "properties": {
-          "channel": {
-            "type": "string"
-          },
-          "created_at": {
-            "type": "string"
-          },
-          "dismissed_at": {
-            "type": "string"
-          },
-          "event_sequence": {
-            "type": "integer"
-          },
-          "id": {
-            "type": "string"
-          },
-          "published_at": {
-            "type": "string"
-          },
-          "read_at": {
-            "type": "string"
-          },
-          "requesting_principal": {
-            "type": "string"
-          },
-          "task_key": {
-            "type": "string"
-          },
-          "text": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "channel",
-          "type",
-          "text",
-          "requesting_principal",
-          "task_key",
-          "event_sequence",
-          "created_at",
-          "published_at",
-          "read_at",
-          "dismissed_at"
-        ],
-        "type": "object"
-      },
       "OperatorArg": {
         "additionalProperties": false,
         "properties": {
@@ -4412,36 +3902,6 @@
       },
       "PluginActionResult": {
         "description": "Plugin-defined action result; the plugin defines the shape, which may be any JSON value."
-      },
-      "PluginChannels": {
-        "additionalProperties": false,
-        "properties": {
-          "provide": {
-            "items": {
-              "$ref": "#/components/schemas/PluginProvidedChannel"
-            },
-            "type": "array"
-          },
-          "publish": {
-            "items": {
-              "type": "string"
-            },
-            "nullable": true,
-            "type": "array"
-          },
-          "subscribe": {
-            "items": {
-              "type": "string"
-            },
-            "nullable": true,
-            "type": "array"
-          }
-        },
-        "required": [
-          "publish",
-          "subscribe"
-        ],
-        "type": "object"
       },
       "PluginContribution": {
         "additionalProperties": false,
@@ -4553,19 +4013,19 @@
         ],
         "type": "object"
       },
-      "PluginProvidedChannel": {
+      "PluginMail": {
         "additionalProperties": false,
         "properties": {
-          "channel": {
-            "type": "string"
+          "receive": {
+            "type": "boolean"
           },
-          "help": {
-            "type": "string"
-          },
-          "params_schema": true
+          "send": {
+            "type": "boolean"
+          }
         },
         "required": [
-          "channel"
+          "send",
+          "receive"
         ],
         "type": "object"
       },
@@ -4635,9 +4095,6 @@
       "PluginView": {
         "additionalProperties": false,
         "properties": {
-          "channels": {
-            "$ref": "#/components/schemas/PluginChannels"
-          },
           "enabled": {
             "type": "boolean"
           },
@@ -4646,6 +4103,9 @@
           },
           "installed_at": {
             "type": "string"
+          },
+          "mail": {
+            "$ref": "#/components/schemas/PluginMail"
           },
           "name": {
             "type": "string"
@@ -4680,7 +4140,7 @@
           "protocol_version",
           "exec",
           "source_path",
-          "channels",
+          "mail",
           "enabled",
           "state",
           "installed_at",
@@ -5265,6 +4725,26 @@
         ],
         "type": "object"
       },
+      "SenderCount": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sender",
+          "kind",
+          "count"
+        ],
+        "type": "object"
+      },
       "SettingAction": {
         "additionalProperties": false,
         "properties": {
@@ -5698,79 +5178,6 @@
         "required": [
           "name",
           "version"
-        ],
-        "type": "object"
-      },
-      "SubscribeResult": {
-        "additionalProperties": false,
-        "properties": {
-          "changed": {
-            "type": "boolean"
-          },
-          "channel": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "params": {
-            "type": "object"
-          },
-          "watch": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "channel",
-          "kind",
-          "id",
-          "changed"
-        ],
-        "type": "object"
-      },
-      "SubscriptionChannel": {
-        "additionalProperties": false,
-        "properties": {
-          "kind": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "protected": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "name",
-          "kind",
-          "protected"
-        ],
-        "type": "object"
-      },
-      "SubscriptionChannelList": {
-        "additionalProperties": false,
-        "properties": {
-          "channels": {
-            "items": {
-              "$ref": "#/components/schemas/SubscriptionChannel"
-            },
-            "type": "array"
-          },
-          "count": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "channels",
-          "count"
         ],
         "type": "object"
       },
@@ -6236,25 +5643,6 @@
         "required": [
           "count",
           "events"
-        ],
-        "type": "object"
-      },
-      "TaskNotificationList": {
-        "additionalProperties": false,
-        "properties": {
-          "count": {
-            "type": "integer"
-          },
-          "notifications": {
-            "items": {
-              "$ref": "#/components/schemas/Notification"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "count",
-          "notifications"
         ],
         "type": "object"
       },
@@ -7039,26 +6427,6 @@
         "required": [
           "on",
           "to"
-        ],
-        "type": "object"
-      },
-      "UnsubscribeResult": {
-        "additionalProperties": false,
-        "properties": {
-          "channel": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "removed": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "name",
-          "channel",
-          "removed"
         ],
         "type": "object"
       },
@@ -10969,512 +10337,6 @@
         "summary": "Select an image for the agent's next iteration"
       }
     },
-    "/api/agents/{name}/inbox": {
-      "get": {
-        "operationId": "agent.inbox.ls",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "agent name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "required": false,
-            "schema": {
-              "description": "pending|processed|dlq|all (default all)",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "description": "max rows (default 100)",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "before",
-            "required": false,
-            "schema": {
-              "description": "page the archive: only ids before this cursor",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/InboxList"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "List an agent's inbox (operator), newest first"
-      }
-    },
-    "/api/agents/{name}/inbox/clear": {
-      "post": {
-        "operationId": "agent.inbox.clear",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "agent name",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {},
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/InboxClearResult"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Physically clear an agent's pending inbox queue"
-      }
-    },
-    "/api/agents/{name}/inbox/{id}/processed": {
-      "post": {
-        "operationId": "agent.inbox.processed",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "agent name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "description": "message id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "result": {
-                    "description": "handling result (mandatory)",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "result"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/InboxProcessedResult"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Mark an inbox message processed (operator ack)"
-      }
-    },
-    "/api/agents/{name}/inbox/{id}/reply": {
-      "post": {
-        "operationId": "agent.inbox.reply",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "agent name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "description": "message id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "text": {
-                    "description": "reply text",
-                    "type": "string"
-                  }
-                },
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/InboxReplyResult"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Reply to an inbox message (operator); auto-processes the row"
-      }
-    },
-    "/api/agents/{name}/inbox/{id}/requeue": {
-      "post": {
-        "operationId": "agent.inbox.requeue",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "agent name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "description": "message id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {},
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/InboxRequeueResult"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Requeue a DLQ'd inbox message (operator)"
-      }
-    },
     "/api/agents/{name}/interactive": {
       "post": {
         "operationId": "agent.interactive",
@@ -13384,6 +12246,96 @@
           }
         },
         "summary": "Get or set loop timeout (seconds); omit value to read"
+      }
+    },
+    "/api/agents/{name}/mail/clear": {
+      "post": {
+        "operationId": "agent.mail.clear",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "agent name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailClearResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Delete the open letters in an agent's inbox"
       }
     },
     "/api/agents/{name}/messages/batch": {
@@ -16005,291 +14957,6 @@
         "summary": "Stop an agent's loop (current iteration lives)"
       }
     },
-    "/api/agents/{name}/subscriptions": {
-      "delete": {
-        "operationId": "agent.unsubscribe",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "agent name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "channel",
-            "required": true,
-            "schema": {
-              "description": "channel name",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/UnsubscribeResult"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Unsubscribe an agent from a channel (operator)"
-      },
-      "get": {
-        "operationId": "agent.subscriptions",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "agent name",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/SubscriptionChannelList"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "List the channels one agent is subscribed to"
-      },
-      "post": {
-        "operationId": "agent.subscribe",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "agent name",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "channel": {
-                    "description": "channel name",
-                    "type": "string"
-                  },
-                  "matcher": {
-                    "oneOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "object"
-                      }
-                    ]
-                  },
-                  "params": {
-                    "oneOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "object"
-                      }
-                    ]
-                  },
-                  "type": {
-                    "description": "comma-separated message type globs",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "channel"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/SubscribeResult"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Subscribe an agent to a channel (operator)"
-      }
-    },
     "/api/agents/{name}/usage": {
       "get": {
         "operationId": "agent.usage",
@@ -16911,1064 +15578,6 @@
           }
         },
         "summary": "Show current spend vs limit for each budget"
-      }
-    },
-    "/api/channels": {
-      "get": {
-        "operationId": "channel.ls",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/ChannelList"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "List channels"
-      }
-    },
-    "/api/channels/{channel}": {
-      "get": {
-        "operationId": "channel.inspect",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "channel",
-            "required": true,
-            "schema": {
-              "description": "channel name",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/ChannelInspectView"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Show a channel's kind and message count"
-      }
-    },
-    "/api/channels/{channel}/messages": {
-      "get": {
-        "operationId": "channel.tail",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "channel",
-            "required": true,
-            "schema": {
-              "description": "channel name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "since",
-            "required": false,
-            "schema": {
-              "description": "return messages after this id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "follow",
-            "required": false,
-            "schema": {
-              "description": "poll for new messages",
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/ChannelTail"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Print recent messages on a channel (-f to follow)"
-      }
-    },
-    "/api/channels/{channel}/watches": {
-      "get": {
-        "operationId": "channel.watches",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "channel",
-            "required": true,
-            "schema": {
-              "description": "channel name",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/ChannelWatchList"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "List a channel's distinct watches (watch, params, subscribers)"
-      }
-    },
-    "/api/chats": {
-      "get": {
-        "operationId": "chat.ls",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "types",
-            "required": false,
-            "schema": {
-              "description": "comma-separated message type globs",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/ChatList"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "List the customer's chats, most recently active first"
-      },
-      "post": {
-        "operationId": "chat.create",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "id": {
-                    "description": "chat id, a lowercase slug",
-                    "type": "string"
-                  },
-                  "participants": {
-                    "description": "comma-separated user:\u003clogin\u003e or agent:\u003cname\u003e principals",
-                    "type": "string"
-                  },
-                  "title": {
-                    "description": "display title (defaults to the id)",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "id"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/ChatView"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Create a chat and put the customer and the named principals in it"
-      }
-    },
-    "/api/chats/{agent}": {
-      "get": {
-        "operationId": "chat.messages",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "agent",
-            "required": true,
-            "schema": {
-              "description": "chat id or agent name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "types",
-            "required": false,
-            "schema": {
-              "description": "comma-separated message type globs",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "description": "max messages (default 200)",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "before",
-            "required": false,
-            "schema": {
-              "description": "page older: only messages before this timestamp",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/ChatFeed"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Read one chat, oldest first, by chat id or agent name"
-      }
-    },
-    "/api/chats/{agent}/read": {
-      "post": {
-        "operationId": "chat.read",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "agent",
-            "required": true,
-            "schema": {
-              "description": "chat id or agent name",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "exact": {
-                    "description": "set the mark to ts even when that moves it backwards (mark unread)",
-                    "type": "boolean"
-                  },
-                  "ts": {
-                    "description": "timestamp of the newest message shown",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "ts"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/ChatReadResult"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Mark a chat read up to a message timestamp, by chat id or agent name"
-      }
-    },
-    "/api/chats/{chat}/participants": {
-      "get": {
-        "operationId": "chat.participants",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chat",
-            "required": true,
-            "schema": {
-              "description": "chat id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/ChatParticipantList"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "List the principals taking part in a chat"
-      },
-      "post": {
-        "operationId": "chat.join",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chat",
-            "required": true,
-            "schema": {
-              "description": "chat id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "principal": {
-                    "description": "user:\u003clogin\u003e or agent:\u003cname\u003e",
-                    "type": "string"
-                  },
-                  "role": {
-                    "description": "member (default) or observer",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "principal"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/ChatView"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Add a principal to a chat"
-      }
-    },
-    "/api/chats/{chat}/participants/{principal}": {
-      "delete": {
-        "operationId": "chat.leave",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chat",
-            "required": true,
-            "schema": {
-              "description": "chat id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "principal",
-            "required": true,
-            "schema": {
-              "description": "user:\u003clogin\u003e or agent:\u003cname\u003e",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/ChatView"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Remove a principal from a chat, keeping its outstanding deliveries"
-      }
-    },
-    "/api/chats/{chat}/unanswered": {
-      "get": {
-        "operationId": "chat.unanswered",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chat",
-            "required": true,
-            "schema": {
-              "description": "chat id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "principal",
-            "required": true,
-            "schema": {
-              "description": "user:\u003clogin\u003e or agent:\u003cname\u003e",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/ChatUnansweredList"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "List the chat messages a principal has not answered yet"
       }
     },
     "/api/daemon/agent-shell-script": {
@@ -21287,6 +18896,789 @@
         "summary": "Show an image prompt template"
       }
     },
+    "/api/mail": {
+      "get": {
+        "operationId": "mail.ls",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "box",
+            "required": false,
+            "schema": {
+              "description": "inbox, sent or archive",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "most letters to return (default 100)",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "description": "created_at to page before (sent and archive)",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "as",
+            "required": false,
+            "schema": {
+              "description": "principal to act as (default the customer)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailList"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "List one mailbox: inbox, sent or archive"
+      },
+      "post": {
+        "operationId": "mail.send",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "as": {
+                    "description": "principal to act as (default the customer)",
+                    "type": "string"
+                  },
+                  "data": {
+                    "description": "structured data object",
+                    "type": "string"
+                  },
+                  "deadline": {
+                    "description": "reply deadline: a duration such as 5m or an RFC 3339 time",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "description": "kind (default message)",
+                    "type": "string"
+                  },
+                  "notice": {
+                    "description": "send a notice that needs no reply",
+                    "type": "boolean"
+                  },
+                  "subject": {
+                    "description": "subject",
+                    "type": "string"
+                  },
+                  "text": {
+                    "description": "body",
+                    "type": "string"
+                  },
+                  "to": {
+                    "description": "recipient principals, comma separated",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "to"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailSendResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Send a letter: a request unless notice is set"
+      }
+    },
+    "/api/mail/read": {
+      "post": {
+        "operationId": "mail.read",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "as": {
+                    "description": "principal to act as (default the customer)",
+                    "type": "string"
+                  },
+                  "ids": {
+                    "description": "letter ids",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "ids"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailReadResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Mark letters read; a read notice closes"
+      }
+    },
+    "/api/mail/unread": {
+      "get": {
+        "operationId": "mail.unread",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "as",
+            "required": false,
+            "schema": {
+              "description": "principal to act as (default the customer)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailUnread"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Count the open letters by sender and kind"
+      }
+    },
+    "/api/mail/{id}": {
+      "get": {
+        "operationId": "mail.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "letter id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "as",
+            "required": false,
+            "schema": {
+              "description": "principal to act as (default the customer)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailThread"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Show one letter and its reply"
+      }
+    },
+    "/api/mail/{id}/close": {
+      "post": {
+        "operationId": "mail.close",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "letter id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "as": {
+                    "description": "principal to act as (default the customer)",
+                    "type": "string"
+                  },
+                  "note": {
+                    "description": "archive note",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailCloseResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Archive a letter without a reply"
+      }
+    },
+    "/api/mail/{id}/reply": {
+      "post": {
+        "operationId": "mail.reply",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "letter id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "as": {
+                    "description": "principal to act as (default the customer)",
+                    "type": "string"
+                  },
+                  "ask": {
+                    "description": "make the reply a request",
+                    "type": "boolean"
+                  },
+                  "text": {
+                    "description": "reply body",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailReplyResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Reply to a letter, which closes it"
+      }
+    },
+    "/api/mail/{id}/requeue": {
+      "post": {
+        "operationId": "mail.requeue",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "letter id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "as": {
+                    "description": "principal to act as (default the customer)",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailRequeueResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Return a dead letter to the inbox"
+      }
+    },
     "/api/maintenance": {
       "get": {
         "operationId": "maintenance.get",
@@ -21538,113 +19930,6 @@
           }
         },
         "summary": "Back up the database, delete expired data, and compact it now"
-      }
-    },
-    "/api/messages": {
-      "post": {
-        "operationId": "message.send",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "channel": {
-                    "description": "channel name",
-                    "type": "string"
-                  },
-                  "data": {
-                    "description": "JSON data payload",
-                    "type": "string"
-                  },
-                  "reply_to": {
-                    "description": "channel an agent reply should land on",
-                    "type": "string"
-                  },
-                  "subject": {
-                    "description": "comma-separated k=v subject",
-                    "type": "string"
-                  },
-                  "text": {
-                    "description": "message text",
-                    "type": "string"
-                  },
-                  "type": {
-                    "description": "message type",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "channel"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/MessageSendResult"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Publish a message to a channel (operator)"
       }
     },
     "/api/plugin-contributions": {
@@ -23091,265 +21376,6 @@
           }
         },
         "summary": "Summarize work on tasks in a time window"
-      }
-    },
-    "/api/task-notifications": {
-      "get": {
-        "operationId": "tasks.notifications.list",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "include_dismissed",
-            "required": false,
-            "schema": {
-              "description": "Include dismissed notifications",
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/TaskNotificationList"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "List customer task notifications"
-      }
-    },
-    "/api/task-notifications/{id}/dismiss": {
-      "post": {
-        "operationId": "tasks.notifications.dismiss",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "description": "Resource id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {},
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/Notification"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Dismiss a task notification"
-      }
-    },
-    "/api/task-notifications/{id}/read": {
-      "post": {
-        "operationId": "tasks.notifications.read",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "description": "Resource id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {},
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "result": {
-                      "$ref": "#/components/schemas/Notification"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "result"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "description": "May include current_revision and current state for revision_conflict",
-                          "type": "object"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Typed error"
-          }
-        },
-        "summary": "Mark a task notification read"
       }
     },
     "/api/task-principals": {
@@ -25163,11 +23189,11 @@
                     "type": "string"
                   },
                   "correlation_key": {
-                    "description": "Correlation selector",
+                    "description": "Value the letter's data.correlation_key must equal",
                     "type": "string"
                   },
                   "pattern": {
-                    "description": "Allowed channel pattern",
+                    "description": "Sender glob a letter to the queue must match, such as plugin:* or plugin:telegram",
                     "type": "string"
                   }
                 },

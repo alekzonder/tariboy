@@ -28,12 +28,12 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// fakePluginMain is a minimal channel-source+sink plugin: it prints its
+// fakePluginMain is a minimal mail-source+sink plugin: it prints its
 // handshake line, listens on the assigned socket, serves /health and /deliver.
 func fakePluginMain() {
 	name := os.Getenv("TARIBOY_PLUGIN_NAME")
 	sock := os.Getenv("TARIBOY_PLUGIN_SOCKET")
-	fmt.Printf(`{"name":%q,"version":"0.0.1","types":["channel-source","channel-sink"],"protocol_version":1,"socket":%q}`+"\n", name, sock)
+	fmt.Printf(`{"name":%q,"version":"0.0.1","types":["mail-source","mail-sink"],"protocol_version":1,"socket":%q}`+"\n", name, sock)
 	os.Stdout.Sync()
 	_ = os.Remove(sock)
 	ln, err := net.Listen("unix", sock)

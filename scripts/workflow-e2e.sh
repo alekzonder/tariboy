@@ -639,4 +639,25 @@ contains "$ALL_READS" '[redacted]' || fail "no read shows [redacted]"
 LOG="$(op workflow log "$KEY" "$QUEUE_RUN")"
 contains "$LOG" 'checking with token [redacted]' || fail "the log route did not redact the secret"
 
+step "a letter to queue:E2E from the customer creates one task through a sender-glob trigger, pinned to the workflow"
+op queue trigger create E2E --pattern 'user:*' --action create_task >/dev/null || fail "create the queue trigger"
+TRIGGERS="$(op queue trigger list E2E --json)"
+contains "$TRIGGERS" '"pattern":"user:*"' || fail "the trigger is not listed: $TRIGGERS"
+MAIL_TITLE="mail ingress $$-$RANDOM"
+env -u TARIBOY_TOOLS_SOCKET "$BIN/tariboy-mail" send --to queue:E2E --subject "$MAIL_TITLE" --text "from the e2e" >/dev/null \
+  || fail "the customer could not mail queue:E2E"
+# mail_task_count prints how many tasks in E2E carry the letter's subject as title.
+mail_task_count() {
+  op list --queue E2E --text "$MAIL_TITLE" --view all --json | python3 -c 'import json,sys
+print(sum(1 for t in json.load(sys.stdin)["tasks"] if t["title"]==sys.argv[1]))' "$MAIL_TITLE"
+}
+mail_task_exists() { [ "$(mail_task_count)" -ge 1 ]; }
+wait_for 30 "the trigger to create a task from the letter" mail_task_exists
+sleep 1
+[ "$(mail_task_count)" = 1 ] || fail "the letter created $(mail_task_count) tasks, want exactly 1"
+KEY_M="$(op list --queue E2E --text "$MAIL_TITLE" --view all --json | field tasks.0.key)"
+VM="$(view "$KEY_M")"
+contains "$VM" '"name":"e2e-flow"' || fail "the task created from the letter does not pin the workflow: $VM"
+op cancel "$KEY_M" >/dev/null || fail "cancel of $KEY_M failed"
+
 echo "PASS: workflow e2e in $((SECONDS - STARTED_AT))s"

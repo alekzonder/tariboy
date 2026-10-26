@@ -53,7 +53,7 @@ func tasksFixture(t *testing.T) (*registry.Ctx, *tasks.Service) {
 // Catches a task command response changing the JSON a client sees: the set
 // of keys, their JSON types, and their values must match the recorded
 // responses. The native service answers the task, queue, comment, relation,
-// event, notification, pool and trigger commands; the workflow stub answers
+// event, pool and trigger commands; the workflow stub answers
 // the commands that need a workflow engine.
 func TestTasksResponsesMatchGolden(t *testing.T) {
 	c, svc := tasksFixture(t)
@@ -125,21 +125,11 @@ func TestTasksResponsesMatchGolden(t *testing.T) {
 		tasksGoldenCall{"tasks.comments.list empty", "tasks.comments.list", registry.Params{"key": parent}},
 		tasksGoldenCall{"tasks.comments.add mention", "tasks.comments.add", registry.Params{"key": other, "body": "Please look, @agent:dev-a"}},
 	)
-	// An agent's question to the customer is what files a notification.
+	// An agent's question to the customer, answered below.
 	if _, err := svc.AddComment(t.Context(), tasks.AgentActor("dev-a"), parent, tasks.AddCommentInput{Body: "Need input from @user:customer"}); err != nil {
 		t.Fatal(err)
 	}
-	notifications, err := svc.ListNotifications(t.Context(), tasks.CustomerActor("customer"), false)
-	if err != nil || len(notifications) != 1 {
-		t.Fatalf("notifications = %#v, %v", notifications, err)
-	}
-	recorder.replacements = append(recorder.replacements, notifications[0].ID, "$NOTIFICATION")
 	runAll(
-		tasksGoldenCall{"tasks.notifications.list", "tasks.notifications.list", registry.Params{}},
-		tasksGoldenCall{"tasks.notifications.read", "tasks.notifications.read", registry.Params{"id": notifications[0].ID}},
-		tasksGoldenCall{"tasks.notifications.dismiss", "tasks.notifications.dismiss", registry.Params{"id": notifications[0].ID}},
-		tasksGoldenCall{"tasks.notifications.list without dismissed", "tasks.notifications.list", registry.Params{}},
-		tasksGoldenCall{"tasks.notifications.list with dismissed", "tasks.notifications.list", registry.Params{"include_dismissed": true}},
 		tasksGoldenCall{"tasks.comments.add answer", "tasks.comments.add", registry.Params{"key": parent, "body": "Answered", "idempotency_key": "answer"}},
 		tasksGoldenCall{"tasks.comments.list", "tasks.comments.list", registry.Params{"key": parent}},
 		tasksGoldenCall{"tasks.relations.list empty", "tasks.relations.list", registry.Params{"key": other}},
@@ -191,8 +181,8 @@ func TestTasksResponsesMatchGolden(t *testing.T) {
 		tasksGoldenCall{"tasks.queue.pool.list", "tasks.queue.pool.list", registry.Params{"queue": "GLD"}},
 		tasksGoldenCall{"tasks.queue.pool.list empty", "tasks.queue.pool.list", registry.Params{"queue": "EMP"}},
 		tasksGoldenCall{"tasks.queue.trigger.list empty", "tasks.queue.trigger.list", registry.Params{"queue": "GLD"}},
-		tasksGoldenCall{"tasks.queue.trigger.create", "tasks.queue.trigger.create", registry.Params{"queue": "GLD", "pattern": "incident:*", "action": "create_task"}},
-		tasksGoldenCall{"tasks.queue.trigger.create correlated", "tasks.queue.trigger.create", registry.Params{"queue": "GLD", "pattern": "alert:*", "correlation_key": "data.id", "action": "create_task"}},
+		tasksGoldenCall{"tasks.queue.trigger.create", "tasks.queue.trigger.create", registry.Params{"queue": "GLD", "pattern": "plugin:*", "action": "create_task"}},
+		tasksGoldenCall{"tasks.queue.trigger.create correlated", "tasks.queue.trigger.create", registry.Params{"queue": "GLD", "pattern": "plugin:alerts", "correlation_key": "alert-7", "action": "create_task"}},
 		tasksGoldenCall{"tasks.queue.trigger.list", "tasks.queue.trigger.list", registry.Params{"queue": "GLD"}},
 	)
 	triggers, err := svc.ListQueueWorkflowTriggers(t.Context(), tasks.CustomerActor("customer"), "GLD")

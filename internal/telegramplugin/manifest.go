@@ -5,9 +5,9 @@ import "github.com/alekzonder/tariboy/internal/plugins"
 func Manifest(version string) plugins.Manifest {
 	return plugins.Manifest{
 		Name: "telegram", Version: version, ProtocolVersion: plugins.ProtocolVersion,
-		Types: []string{"channel-source", "channel-sink"}, Exec: "tariboy-plugin-telegram",
+		Types: []string{"mail-source", "mail-sink"}, Exec: "tariboy-plugin-telegram",
 		Description: "Telegram forum topics for Tariboy agents",
-		Channels:    plugins.Channels{Publish: []string{"chat:telegram:*"}, Subscribe: []string{"chat:telegram:*"}},
+		Mail:        plugins.MailCaps{Send: true, Receive: true},
 		OperatorCommands: []plugins.OperatorCommand{
 			{Path: "configure", Summary: "Configure the Telegram bot token and allowed user IDs", Action: "configure", Args: []plugins.OperatorArg{
 				{Name: "token", Flag: "token-file", Type: "secret-file", Help: "owner-only token file, or - for stdin"},

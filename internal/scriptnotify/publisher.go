@@ -1,5 +1,5 @@
-// Package scriptnotify publishes durable local-script result intents through
-// the normal agent inbox bus.
+// Package scriptnotify sends durable local-script result intents to the
+// agent's mailbox, as letters from system:scripts.
 package scriptnotify
 
 import (
@@ -10,17 +10,21 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/store"
 )
 
-type MessagePublisher interface {
-	Publish(bus.Message) (bus.Message, error)
+// Sender is the slice of the mail service the publisher needs.
+type Sender interface {
+	Send(mail.Letter) ([]mail.Letter, error)
 }
+
+// SenderScripts is the sender of every script result letter.
+const SenderScripts = "system:scripts"
 
 type Publisher struct {
 	db    *sql.DB
-	bus   MessagePublisher
+	mail  Sender
 	clock func() time.Time
 	log   *slog.Logger
 	wake  chan struct{}
@@ -34,14 +38,14 @@ type outboxRow struct {
 	attempts       int
 }
 
-func New(db *sql.DB, messageBus MessagePublisher, clock func() time.Time, log *slog.Logger) *Publisher {
+func New(db *sql.DB, sender Sender, clock func() time.Time, log *slog.Logger) *Publisher {
 	if clock == nil {
 		clock = time.Now
 	}
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Publisher{db: db, bus: messageBus, clock: clock, log: log, wake: make(chan struct{}, 1)}
+	return &Publisher{db: db, mail: sender, clock: clock, log: log, wake: make(chan struct{}, 1)}
 }
 
 func (p *Publisher) Wake() {
@@ -79,14 +83,16 @@ func (p *Publisher) Flush(ctx context.Context) error {
 		if err := json.Unmarshal([]byte(row.payload), &data); err != nil {
 			return fmt.Errorf("decode script result %s: %w", row.runID, err)
 		}
-		message, publishErr := p.bus.Publish(bus.Message{
-			IdempotencyKey:  row.idempotencyKey,
-			Channel:         bus.ChatChannelFor(bus.ChatIDService(row.agent)),
-			Source:          "script",
-			Type:            "script.result",
-			ProducedByAgent: row.agent,
-			Text:            resultText(data),
-			Data:            data,
+		// A request: the agent reports what it did with the result.
+		letters, publishErr := p.mail.Send(mail.Letter{
+			IdempotencyKey: row.idempotencyKey,
+			From:           SenderScripts,
+			To:             "agent:" + row.agent,
+			Subject:        resultSubject(data),
+			Kind:           "script.result",
+			Body:           resultText(data),
+			Data:           data,
+			NeedsReply:     true,
 		})
 		if publishErr != nil {
 			attempts := row.attempts + 1
@@ -95,14 +101,20 @@ func (p *Publisher) Flush(ctx context.Context) error {
 			if _, err := p.db.ExecContext(ctx, `UPDATE script_result_outbox SET attempts=?,next_attempt_at=?,last_error=? WHERE idempotency_key=? AND published_at=''`, attempts, next, publishErr.Error(), row.idempotencyKey); err != nil {
 				return err
 			}
-			p.log.Warn("script result publish failed", "run", row.runID, "attempts", attempts, "err", publishErr)
+			p.log.Warn("script result send failed", "run", row.runID, "attempts", attempts, "err", publishErr)
 			continue
 		}
-		if _, err := p.db.ExecContext(ctx, `UPDATE script_result_outbox SET attempts=attempts+1,published_at=?,message_id=?,last_error='' WHERE idempotency_key=? AND published_at=''`, store.FormatTime(now), message.ID, row.idempotencyKey); err != nil {
+		if _, err := p.db.ExecContext(ctx, `UPDATE script_result_outbox SET attempts=attempts+1,published_at=?,message_id=?,last_error='' WHERE idempotency_key=? AND published_at=''`, store.FormatTime(now), letters[0].ID, row.idempotencyKey); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func resultSubject(data map[string]any) string {
+	name, _ := data["name"].(string)
+	status, _ := data["status"].(string)
+	return fmt.Sprintf("Script %s %s", name, status)
 }
 
 func resultText(data map[string]any) string {

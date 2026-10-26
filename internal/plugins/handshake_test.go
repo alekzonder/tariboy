@@ -7,7 +7,7 @@ import (
 
 func TestReadHandshake(t *testing.T) {
 	t.Parallel()
-	line := `{"name":"echo","version":"0.1.0","types":["channel-sink"],"protocol_version":1,"socket":"/tmp/echo.sock"}` + "\n"
+	line := `{"name":"echo","version":"0.1.0","types":["mail-sink"],"protocol_version":1,"socket":"/tmp/echo.sock"}` + "\n"
 	h, err := ReadHandshake(strings.NewReader(line + "extra stdout noise\n"))
 	if err != nil {
 		t.Fatal(err)

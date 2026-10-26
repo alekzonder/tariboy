@@ -89,11 +89,14 @@ test("opens an agent customer question from the production Desktop notification 
     if (window.__customerQuestionNotification) return window.__customerQuestionNotification;
     if (window.__customerQuestionNotificationPending) return null;
     window.__customerQuestionNotificationPending = true;
-    fetch(window.__customerQuestionBaseURL + "/api/task-notifications")
+    fetch(window.__customerQuestionBaseURL + "/api/mail?box=inbox")
       .then((response) => response.json())
       .then((envelope) => {
-        window.__customerQuestionNotification = envelope.result.notifications
-          .find((item) => item.task_key === window.__customerQuestionTaskKey) || null;
+        const letter = envelope.result.letters.find((item) =>
+          item.kind === "task.question" && item.data.task_key === window.__customerQuestionTaskKey);
+        window.__customerQuestionNotification = letter
+          ? { id: letter.id, task_key: letter.data.task_key }
+          : null;
       })
       .finally(() => { window.__customerQuestionNotificationPending = false; });
     return null;

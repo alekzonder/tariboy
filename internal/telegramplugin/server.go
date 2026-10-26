@@ -196,10 +196,6 @@ func (s *Server) chatSetup(w http.ResponseWriter, r *http.Request, body map[stri
 				}
 				pending = s.state.Snapshot().PendingChat
 			}
-			if err := s.daemon.Subscribe(r.Context(), agent.Name, "chat:telegram:"+agent.Name); err != nil {
-				writeJSON(w, http.StatusBadGateway, map[string]any{"error": "subscribe_agent_failed"})
-				return
-			}
 		}
 	}
 	if err := s.state.CommitPendingChat(chatID); err != nil {

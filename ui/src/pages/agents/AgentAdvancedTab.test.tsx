@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render, screen } from "@/test/queryRender";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import AgentAdvancedTab from "./AgentAdvancedTab";
 import { AgentNameContext } from "@/lib/agent";
 
@@ -19,18 +19,12 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-function Location() {
-  const location = useLocation();
-  return <div data-testid="location">{location.pathname + location.search}</div>;
-}
-
 function renderAdvanced(path: string) {
   render(
     <MemoryRouter initialEntries={[path]}>
       <AgentNameContext.Provider value="worker">
         <Routes>
           <Route path="/agents/:hostId/:agent/advanced/*" element={<AgentAdvancedTab />} />
-          <Route path="/agents/:hostId/:agent/chat/*" element={<Location />} />
         </Routes>
       </AgentNameContext.Provider>
     </MemoryRouter>,
@@ -48,18 +42,8 @@ it("opens on Prompt and no longer lists Channels or Messages", async () => {
   );
 });
 
-it("sends an old Channels link to Chat → Channels", async () => {
+it("opens an old Channels or Messages link on the default view", async () => {
   renderAdvanced("/agents/local/worker/advanced?view=channels");
 
-  expect(await screen.findByTestId("location")).toHaveTextContent(
-    "/agents/local/worker/chat?view=channels",
-  );
-});
-
-it("sends an old Messages link to Chat → Queue", async () => {
-  renderAdvanced("/agents/local/worker/advanced?view=messages");
-
-  expect(await screen.findByTestId("location")).toHaveTextContent(
-    "/agents/local/worker/chat?view=queue",
-  );
+  expect(await screen.findByTestId("prompt-view")).toBeInTheDocument();
 });

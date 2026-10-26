@@ -239,9 +239,6 @@ func TestOperatorAdministrationArguments(t *testing.T) {
 	}{
 		{[]string{"queue", "get", "OPS"}, "GET", "/api/task-queues/OPS", map[string]string{}},
 		{[]string{"queue", "update", "OPS", "--name", "Operations", "--revision", "2"}, "PATCH", "/api/task-queues/OPS", map[string]any{"name": "Operations", "revision": 2}},
-		{[]string{"notifications", "read", "1"}, "POST", "/api/task-notifications/1/read", map[string]any{}},
-		{[]string{"notifications", "dismiss", "1"}, "POST", "/api/task-notifications/1/dismiss", map[string]any{}},
-		{[]string{"notifications", "list", "--include-dismissed"}, "GET", "/api/task-notifications", map[string]string{"include_dismissed": "true"}},
 		{[]string{"queue", "pool", "get", "OPS", "reviewers"}, "GET", "/api/task-queues/OPS/pools/reviewers", map[string]string{}},
 		{[]string{"queue", "pool", "set", "OPS", "reviewers", "--agents", "worker", "--revision", "0", "--idempotency-key", "pool-1"}, "PATCH", "/api/task-queues/OPS/pools/reviewers", map[string]any{"agents": "worker", "revision": 0, "idempotency_key": "pool-1"}},
 		{[]string{"queue", "trigger", "create", "OPS", "--pattern", "external:incidents", "--action", "create_task"}, "POST", "/api/task-queues/OPS/workflow-triggers", map[string]any{"pattern": "external:incidents", "action": "create_task"}},
@@ -281,7 +278,7 @@ func TestHelpJSONCoversRunnableTaskRootsWithoutSocket(t *testing.T) {
 	if err := json.Unmarshal([]byte(out.String()), &tree); err != nil {
 		t.Fatalf("help = %q, tree = %#v, err = %v", out.String(), tree, err)
 	}
-	for _, root := range []string{"list", "mine", "ready", "show", "assign", "ask", "queue", "events", "principals", "notifications", "advance", "artifacts", "workflow", "cancel", "requeue"} {
+	for _, root := range []string{"list", "mine", "ready", "show", "assign", "ask", "queue", "events", "principals", "advance", "artifacts", "workflow", "cancel", "requeue"} {
 		if tree[root] == nil {
 			t.Fatalf("help tree missing runnable root %q: %#v", root, tree)
 		}

@@ -3,12 +3,12 @@
     "count": 1,
     "schedules": [
       {
-        "channel": "agent.alice.inbox",
         "enabled": true,
         "id": "sch-alice-20260714100000-000000001",
         "kind": "cron",
         "next_fire_at": "2026-07-15T09:00:00.000000000Z",
-        "spec": "0 9 * * *"
+        "spec": "0 9 * * *",
+        "to": "agent:alice"
       }
     ]
   },

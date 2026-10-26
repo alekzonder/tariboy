@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/maintenance"
 	"github.com/alekzonder/tariboy/internal/retention"
 	"github.com/alekzonder/tariboy/internal/script"
@@ -72,7 +72,7 @@ type Ctx struct {
 	StartedAt   time.Time
 	Control     ServiceControl
 	Scripts     ScriptControl
-	Bus         *bus.Bus
+	Mail        *mail.Mail
 	Plugins     PluginControl
 	Groups      GroupControl
 	Operator    string
@@ -124,8 +124,6 @@ type TaskControl interface {
 	DeleteRelation(context.Context, tasks.Actor, string, tasks.DeleteRelationInput) error
 	ListEvents(context.Context, tasks.Actor, string, int64, int) ([]tasks.Event, error)
 	TaskActivity(context.Context, tasks.Actor, tasks.ActivityFilter) ([]tasks.TaskActivity, error)
-	ListNotifications(context.Context, tasks.Actor, bool) ([]tasks.Notification, error)
-	MarkNotification(context.Context, tasks.Actor, string, string) (tasks.Notification, error)
 	Principals(context.Context, tasks.Actor) (tasks.PrincipalInfo, error)
 	AgentAction(context.Context, tasks.Actor, string, map[string]any) (any, error)
 	RebindAgentPool(context.Context, tasks.Actor, string, string, []string, int64, string) (tasks.AgentPool, error)
@@ -288,7 +286,6 @@ type PluginControl interface {
 	Logs(name string, tail int) ([]string, error)
 	PluginRoutes(name string) (map[string]any, error)
 	PluginAction(name string, body map[string]any) (map[string]any, error)
-	ApplyActionSubscriptions(name string, response map[string]any) error
 }
 
 // GroupControl is the daemon-side group lifecycle, implemented by

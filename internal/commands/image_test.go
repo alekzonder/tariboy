@@ -18,7 +18,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/api"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/imageportable"
@@ -1282,7 +1281,7 @@ func TestImageBuildDuringIterationPreservesActiveAndAdvancesNext(t *testing.T) {
 			spawner := heldImageSpawner{started: make(chan string, 2)}
 			m := loop.NewManager(loop.ManagerConfig{
 				AgentsDir: filepath.Join(c.BaseDir, "agents"), RuntimeDir: runtime,
-				Store: as, ImgStore: imageStore(c), Log: c.Log, Clock: time.Now, Bus: bus.New(c.Store, time.Now),
+				Store: as, ImgStore: imageStore(c), Log: c.Log, Clock: time.Now,
 				Spawner: spawner, ShimBin: "/unused/fake-shim",
 			})
 			t.Cleanup(m.Shutdown)

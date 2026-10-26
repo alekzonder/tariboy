@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# E2E for the request primitive behind the Messages skill group request (spec §4.2, EPIC R
-# R3). Brings up a fully ISOLATED tariboyd (own base/runtime dirs, web off,
-# never touches the user's live daemon), creates a dev group, and drives the
-# lead through the stub harness to send a group request with a short --deadline.
-# With NO reply the daemon's deadline seam must arm a one-shot schedule that
-# publishes a type=timeout event into the lead's inbox once the deadline passes.
+# E2E for a mail request with a deadline between two group members (mailbox
+# design §2). Brings up a fully ISOLATED tariboyd (own base/runtime dirs, web
+# off, never touches the user's live daemon), creates a dev group, and drives
+# the lead through the stub harness to mail the worker a request with a short
+# deadline. With NO reply the deadline arms a one-shot schedule that mails the
+# lead a kind=deadline notice from system:schedule once the deadline passes,
+# with data.request_id naming the request.
 #
 # This is the wall-clock leg (scheduler ticks once a second); the reply-cancels
-# leg and the arming/threading are covered deterministically by the unit +
-# integration tests (internal/schedule, internal/loop, internal/bus).
+# leg and the arming are covered deterministically by the unit + integration
+# tests (internal/schedule, internal/loop, internal/mail).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -50,7 +51,7 @@ sa agent run basic-example:latest --name manager --harness stub --interactive fa
 sa agent run basic-example:latest --name worker --harness stub --interactive false --group dev-team \
   --env "STUB_CALL_DONE=1" | grep -q "name: worker" || { echo "FAIL: run worker"; exit 1; }
 
-echo "--- lead iteration sends the group request"
+echo "--- lead iteration mails the worker a request with a deadline"
 sa agent exec manager >/dev/null || { echo "FAIL: exec manager"; exit 1; }
 DONE=0
 for _ in $(seq 1 100); do
@@ -59,23 +60,27 @@ for _ in $(seq 1 100); do
 done
 [ "$DONE" = 1 ] || { echo "FAIL: manager iteration did not finish"; exit 1; }
 
-echo "--- request landed on the member's group direct channel as kind=request"
-sa --json channel tail "group:dev-team:direct:worker" | tee "$BASE/direct.json" | grep -q '"kind":"request"' \
-  || { echo "FAIL: request not on direct channel"; cat "$BASE/direct.json"; exit 1; }
-CORR="$(grep -o '"correlation_id":"[^"]*"' "$BASE/direct.json" | head -n1 | cut -d'"' -f4)"
-[ -n "$CORR" ] || { echo "FAIL: request has no correlation id"; exit 1; }
-echo "    correlation_id=$CORR"
+echo "--- the request is in the worker's mailbox"
+sa --json mail sent --as agent:manager | tee "$BASE/sent.json" | grep -q '"to":"agent:worker"' \
+  || { echo "FAIL: request not sent to the worker"; cat "$BASE/sent.json"; exit 1; }
+REQ="$(jq -r '[.letters[] | select(.to == "agent:worker" and .needs_reply and .deadline != "")][0].id // empty' "$BASE/sent.json")"
+[ -n "$REQ" ] || { echo "FAIL: no request with a deadline in the lead's sent box"; cat "$BASE/sent.json"; exit 1; }
+sa --json mail inbox --as agent:worker --all | grep -q "\"id\":\"$REQ\"" \
+  || { echo "FAIL: request missing from the worker's mailbox"; sa --json mail inbox --as agent:worker --all; exit 1; }
+echo "    request_id=$REQ"
 
-echo "--- no reply: waiting for the deadline timeout to fire into the lead inbox"
+deadline_notice() {
+  sa --json mail inbox --as agent:manager --all \
+    | jq -e --arg req "$REQ" '[.letters[] | select(.from == "system:schedule" and .kind == "deadline" and .data.request_id == $req)] | length > 0' >/dev/null
+}
+
+echo "--- no reply: waiting for the deadline notice in the lead's mailbox"
 FIRED=0
 for _ in $(seq 1 80); do   # up to ~8s (deadline 3s + scheduler tick)
-  if sa --json channel tail "agent:manager:inbox" | grep -q '"type":"timeout"'; then FIRED=1; break; fi
+  if deadline_notice; then FIRED=1; break; fi
   sleep 0.1
 done
-sa --json channel tail "agent:manager:inbox" | tee "$BASE/inbox.json" >/dev/null
-[ "$FIRED" = 1 ] || { echo "FAIL: timeout never arrived"; cat "$BASE/inbox.json"; exit 1; }
+sa --json mail inbox --as agent:manager --all >"$BASE/inbox.json"
+[ "$FIRED" = 1 ] || { echo "FAIL: deadline notice never arrived"; cat "$BASE/inbox.json"; exit 1; }
 
-echo "--- timeout event carries the request's correlation id"
-grep -q "$CORR" "$BASE/inbox.json" || { echo "FAIL: timeout missing correlation id"; cat "$BASE/inbox.json"; exit 1; }
-
-echo "PASS: group request armed a deadline; no reply -> type=timeout delivered to lead inbox (corr=$CORR)"
+echo "PASS: request armed a deadline; no reply -> kind=deadline notice from system:schedule in the lead's mailbox (request=$REQ)"

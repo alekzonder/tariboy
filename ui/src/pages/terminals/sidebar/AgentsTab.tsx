@@ -2,8 +2,8 @@ import { SidebarAgentRow, type AgentRowActions } from "./SidebarAgentRow";
 import type { SidebarAgent } from "./sidebarModel";
 
 /**
- * Every agent of every server in one list, ordered the way a chat list is:
- * pinned on top, then whoever is calling for a person. The separator only
+ * Every agent of every server in one list: pinned on top, then whoever is
+ * calling for a person, then the operator's own order. The separator only
  * appears when there is something pinned to separate.
  */
 export function AgentsTab({

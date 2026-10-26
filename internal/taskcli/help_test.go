@@ -58,7 +58,7 @@ func TestHelpExplainsTaskFormsAndFlags(t *testing.T) {
 		path  string
 		wants []string
 	}{
-		{"", []string{"tariboy-tasks", "TARIBOY_TOOLS_SOCKET", "operator", "agent", "queue", "notifications"}},
+		{"", []string{"tariboy-tasks", "TARIBOY_TOOLS_SOCKET", "operator", "agent", "queue"}},
 		{"ask", []string{"KEY", "PRINCIPAL", "TEXT", "--idempotency-key"}},
 		{"create", []string{"--title", "--queue", "--parent", "P0", "P3", "filed"}},
 		{"move", []string{"--to-root", "--before", "--parent"}},

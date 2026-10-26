@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"regexp"
 	"slices"
@@ -119,14 +120,12 @@ func (s *TaskService) resolveCommentWaitsTx(
 		commentID, now, task.ID, actor.Principal, workflowActor); err != nil {
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE task_notification_state SET read_at = ?
-		WHERE customer_principal = ? AND read_at = '' AND notification_id IN (
-			SELECT o.notification_id
-			FROM task_notification_outbox o
-			JOIN task_events e ON e.sequence = o.event_sequence
-			WHERE o.message_type = 'task.question' AND e.task_id = ?
-		)`, now, userPrincipal(s.customer), task.ID); err != nil {
+	askers := make([]string, 0, len(resolved))
+	for _, wait := range resolved {
+		askers = append(askers, wait.RequestingPrincipal)
+	}
+	if err := closeQuestionLettersTx(ctx, tx, task, actor.Principal, askers,
+		fmt.Sprintf("task-comment:%d", commentID), now); err != nil {
 		return nil, err
 	}
 	for i := range resolved {

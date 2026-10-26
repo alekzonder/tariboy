@@ -1,5 +1,5 @@
-// Package tasknotify publishes native Task notification outbox rows through
-// the existing durable channel Bus.
+// Package tasknotify sends native Task notification outbox rows as letters
+// from the principal that caused them.
 package tasknotify
 
 import (
@@ -9,30 +9,35 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
-type MessagePublisher interface {
-	Publish(bus.Message) (bus.Message, error)
+// Sender is the slice of the mail service the publisher needs.
+type Sender interface {
+	Send(mail.Letter) ([]mail.Letter, error)
 }
+
+// SenderTasks sends a notification whose causing principal is not known or
+// can no longer send, such as a deleted agent.
+const SenderTasks = "system:tasks"
 
 type Publisher struct {
 	db    *sql.DB
-	bus   MessagePublisher
+	mail  Sender
 	clock func() time.Time
 	log   *slog.Logger
 }
 
-func New(db *sql.DB, messageBus MessagePublisher, clock func() time.Time, log *slog.Logger) *Publisher {
+func New(db *sql.DB, sender Sender, clock func() time.Time, log *slog.Logger) *Publisher {
 	if clock == nil {
 		clock = time.Now
 	}
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Publisher{db: db, bus: messageBus, clock: clock, log: log}
+	return &Publisher{db: db, mail: sender, clock: clock, log: log}
 }
 
 type outboxRow struct {
@@ -70,19 +75,14 @@ func (p *Publisher) Flush(ctx context.Context) error {
 		return err
 	}
 	for _, row := range pending {
-		subject := map[string]any{}
 		data := map[string]any{}
-		tidy.Log(p.log, "notification subject is not valid JSON", json.Unmarshal([]byte(row.subject), &subject), "row", row.id)
 		tidy.Log(p.log, "notification data is not valid JSON", json.Unmarshal([]byte(row.data), &data), "row", row.id)
-		message, publishErr := p.bus.Publish(bus.Message{
-			IdempotencyKey: row.id,
-			Channel:        row.channel,
-			Source:         "system:tasks",
-			Type:           row.typ,
-			Subject:        subject,
-			Text:           row.text,
-			Data:           data,
-		})
+		letter := notificationLetter(row, data)
+		letters, publishErr := p.mail.Send(letter)
+		if mail.ErrorCode(publishErr) == "unknown_sender" {
+			letter.From = SenderTasks
+			letters, publishErr = p.mail.Send(letter)
+		}
 		if publishErr != nil {
 			attempts := row.attempt + 1
 			delay := time.Second * time.Duration(1<<min(attempts, 8))
@@ -94,7 +94,7 @@ func (p *Publisher) Flush(ctx context.Context) error {
 				attempts, next, publishErr.Error(), row.id); err != nil {
 				return err
 			}
-			p.log.Warn("task notification publish failed",
+			p.log.Warn("task notification send failed",
 				"notification", row.id, "attempts", attempts, "err", publishErr)
 			continue
 		}
@@ -103,11 +103,46 @@ func (p *Publisher) Flush(ctx context.Context) error {
 			SET attempts = attempts + 1, published_message = ?, published_at = ?,
 			    last_error = ''
 			WHERE notification_id = ? AND published_at = ''`,
-			message.ID, store.FormatTime(now), row.id); err != nil {
+			letters[0].ID, store.FormatTime(now), row.id); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// notificationLetter is the letter of one outbox row: from the causing
+// principal to the notified one. A task.question is a request, answered on
+// the task; every other notification is a notice.
+func notificationLetter(row outboxRow, data map[string]any) mail.Letter {
+	from, _ := data["from"].(string)
+	if from == "" {
+		from = SenderTasks
+	}
+	key, _ := data["task_key"].(string)
+	return mail.Letter{
+		IdempotencyKey: row.id,
+		From:           from,
+		To:             row.channel,
+		Kind:           row.typ,
+		Subject:        notificationSubject(row.typ, key),
+		Body:           row.text,
+		Data:           data,
+		NeedsReply:     row.typ == mail.KindTaskQuestion,
+	}
+}
+
+func notificationSubject(kind, key string) string {
+	switch kind {
+	case "task.assigned":
+		return "Assigned " + key
+	case mail.KindTaskQuestion:
+		return "Question on " + key
+	case "task.answered":
+		return "Answer on " + key
+	case "task.triage":
+		return "Triage " + key
+	}
+	return kind + " " + key
 }
 
 func (p *Publisher) Run(ctx context.Context) {

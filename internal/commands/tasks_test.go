@@ -160,7 +160,7 @@ func TestPoolAndTriggerOperatorHTTPKeepsTypedRoutesWithoutWorkflowEngine(t *test
 		t.Fatalf("flexible status update = %d/%+v", status, env)
 	}
 	status, env = taskRequest(t, httpServer.Client(), http.MethodPost,
-		httpServer.URL+"/api/task-queues/FLOW/workflow-triggers", map[string]any{"pattern": "incident:*", "action": "create_task"})
+		httpServer.URL+"/api/task-queues/FLOW/workflow-triggers", map[string]any{"pattern": "plugin:*", "action": "create_task"})
 	if status != http.StatusOK || !env.OK {
 		t.Fatalf("create trigger = %d/%+v", status, env)
 	}

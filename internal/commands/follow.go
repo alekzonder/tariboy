@@ -59,50 +59,5 @@ func followAgentLogs(ctx context.Context, sock string, p registry.Params, out io
 	}
 }
 
-// tailPollInterval is how often `channel tail -f` re-queries for new messages.
+// tailPollInterval is how often `logs -f` re-queries for new events.
 var tailPollInterval = 500 * time.Millisecond
-
-// followChannelTail is the CLI-local `channel tail -f` composite: it polls the
-// channel's messages endpoint every tailPollInterval, printing rows newer than
-// the last id it has seen (via ?since=<id>), until ctx is cancelled. The first
-// poll prints the recent backlog; subsequent polls fetch only new messages.
-func followChannelTail(ctx context.Context, sock string, p registry.Params, out io.Writer) error {
-	c := client.New(sock)
-	route := "/api/channels/" + url.PathEscape(p.String("channel")) + "/messages"
-	last := p.String("since")
-	ticker := time.NewTicker(tailPollInterval)
-	defer ticker.Stop()
-	for {
-		q := map[string]string{}
-		if last != "" {
-			q["since"] = last
-		}
-		raw, err := c.Call("GET", route, q)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-			return err
-		}
-		var res struct {
-			Messages []struct {
-				ID     string `json:"id"`
-				Type   string `json:"type"`
-				Source string `json:"source"`
-				Text   string `json:"text"`
-			} `json:"messages"`
-		}
-		if err := json.Unmarshal(raw, &res); err != nil {
-			return err
-		}
-		for _, m := range res.Messages {
-			fmt.Fprintf(out, "[%s] %s %s: %s\n", m.ID, m.Type, m.Source, m.Text)
-			last = m.ID
-		}
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-ticker.C:
-		}
-	}
-}

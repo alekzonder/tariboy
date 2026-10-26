@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/store"
@@ -26,19 +27,35 @@ type dbtx interface {
 }
 
 type Schedule struct {
-	ID              string
-	Agent           string
-	Kind            string // oneshot | cron
-	Spec            string
-	Channel         string
-	MessageTemplate string // JSON: {type, subject, text, data}
+	ID    string
+	Agent string
+	Kind  string // oneshot | cron
+	Spec  string
+	// Recipient is the principal the schedule's letters go to.
+	Recipient       string
+	MessageTemplate string // JSON: {kind, subject, text, data, notice}
 	NextFireAt      string // store.TimeLayout
 	Enabled         bool
 	CreatedAt       string
-	// CorrelationID tags a request-deadline one-shot (spec §4.2) with the
-	// request's correlation id so a reply landing first can cancel exactly that
-	// entry via CancelByCorrelation. Empty for ordinary schedules.
+	// CorrelationID tags a request-deadline one-shot with the request letter's
+	// id so the reply that closes the request cancels exactly that entry via
+	// CancelByCorrelation. Empty for ordinary schedules.
 	CorrelationID string
+}
+
+// RecipientForChannel maps the channel of an older schedule call to the
+// recipient the 0072 migration gives it: the service chat and the inbox of an
+// agent become that agent, anything else the agent that owns the schedule.
+func RecipientForChannel(agent, channel string) string {
+	if name, ok := strings.CutPrefix(channel, "chat:service:"); ok && name != "" && !strings.Contains(name, ":") {
+		return "agent:" + name
+	}
+	if rest, ok := strings.CutPrefix(channel, "agent:"); ok {
+		if name, ok := strings.CutSuffix(rest, ":inbox"); ok && name != "" && !strings.Contains(name, ":") {
+			return "agent:" + name
+		}
+	}
+	return "agent:" + agent
 }
 
 type Store struct {
@@ -94,9 +111,9 @@ func add(tx *sql.Tx, sch Schedule, now time.Time) (Schedule, error) {
 		return Schedule{}, err
 	}
 	_, err = tx.Exec(`INSERT INTO schedules
-		(id, agent, kind, spec, channel, message_template, next_fire_at, enabled, created_at, correlation_id)
+		(id, agent, kind, spec, recipient, message_template, next_fire_at, enabled, created_at, correlation_id)
 		VALUES (?,?,?,?,?,?,?,1,?,?)`,
-		sch.ID, sch.Agent, sch.Kind, sch.Spec, sch.Channel, sch.MessageTemplate, sch.NextFireAt, sch.CreatedAt,
+		sch.ID, sch.Agent, sch.Kind, sch.Spec, sch.Recipient, sch.MessageTemplate, sch.NextFireAt, sch.CreatedAt,
 		nullable(sch.CorrelationID))
 	return sch, err
 }
@@ -120,7 +137,7 @@ func nextScheduleID(x dbtx, agent string, now time.Time) (string, error) {
 }
 
 func (s *Store) List(agent string) ([]Schedule, error) {
-	rows, err := s.db.Query(`SELECT id, agent, kind, spec, channel, message_template, next_fire_at, enabled, created_at
+	rows, err := s.db.Query(`SELECT id, agent, kind, spec, recipient, message_template, next_fire_at, enabled, created_at
 		FROM schedules WHERE agent=? ORDER BY created_at, id`, agent)
 	if err != nil {
 		return nil, err
@@ -164,7 +181,7 @@ func (s *Store) Cancel(agent, id string) error {
 
 // DueBefore returns enabled schedules whose next_fire_at is <= t.
 func (s *Store) DueBefore(t time.Time) ([]Schedule, error) {
-	rows, err := s.db.Query(`SELECT id, agent, kind, spec, channel, message_template, next_fire_at, enabled, created_at
+	rows, err := s.db.Query(`SELECT id, agent, kind, spec, recipient, message_template, next_fire_at, enabled, created_at
 		FROM schedules WHERE enabled=1 AND next_fire_at<=? ORDER BY next_fire_at, id`,
 		store.FormatTime(t))
 	if err != nil {
@@ -224,7 +241,7 @@ func scanSchedules(rows *sql.Rows) ([]Schedule, error) {
 	for rows.Next() {
 		var sch Schedule
 		var enabled int
-		if err := rows.Scan(&sch.ID, &sch.Agent, &sch.Kind, &sch.Spec, &sch.Channel,
+		if err := rows.Scan(&sch.ID, &sch.Agent, &sch.Kind, &sch.Spec, &sch.Recipient,
 			&sch.MessageTemplate, &sch.NextFireAt, &enabled, &sch.CreatedAt); err != nil {
 			return nil, err
 		}

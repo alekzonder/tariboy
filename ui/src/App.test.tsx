@@ -52,9 +52,7 @@ beforeEach(() => {
           }
         : url.includes("/api/groups")
           ? { groups: [], count: 0 }
-          : url.includes("/api/channels")
-            ? { channels: [] }
-            : { agents: [], count: 0 };
+          : { agents: [], count: 0 };
       return {
         ok: true,
         status: 200,
@@ -207,10 +205,10 @@ describe("product routing", () => {
     );
   });
 
-  it("redirects a legacy terminal route to Chat in Simple mode", async () => {
+  it("redirects a legacy terminal route to Tasks in Simple mode", async () => {
     renderAt("/terminals/local/worker");
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/chat"),
+      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/tasks"),
     );
   });
 
@@ -244,7 +242,6 @@ describe("product routing", () => {
     ["/usage", "/settings/advanced/usage"],
     ["/groups", "/settings/advanced/groups"],
     ["/ops", "/settings/advanced/ops"],
-    ["/channels", "/settings/advanced/channels"],
   ])("redirects operator route %s under Settings", async (from, to) => {
     renderAt(from);
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(to));
@@ -303,7 +300,7 @@ describe("compact screens", () => {
   });
 
   it("keeps the agent list behind a menu button and closes it after a pick", async () => {
-    renderAt("/agents/local/alice/chat");
+    renderAt("/agents/local/alice/tasks");
 
     expect(screen.queryByTestId("agents-sidebar")).toBeNull();
     const titlebar = screen.getByTestId("app-titlebar");
@@ -320,7 +317,7 @@ describe("compact screens", () => {
     fireEvent.click(await within(drawer).findByRole("button", { name: "Open bob" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Agents" })).toBeNull());
-    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/chat");
+    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/tasks");
     // The wide layout's saved state is not touched by the drawer.
     expect(localStorage.getItem("terminals:sidebar:v1")).toBeNull();
   });
@@ -336,7 +333,7 @@ describe("compact screens", () => {
     }
     render(
       <MemoryRouter
-        initialEntries={["/agents/local/bob/chat", "/agents/local/alice/chat"]}
+        initialEntries={["/agents/local/bob/tasks", "/agents/local/alice/tasks"]}
         initialIndex={1}
       >
         <App />
@@ -355,7 +352,7 @@ describe("compact screens", () => {
     });
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Agents" })).toBeNull());
-    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/chat");
+    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/tasks");
   });
 
   it("drops the macOS traffic-light gap outside the Desktop app", () => {
@@ -385,7 +382,7 @@ describe("medium screens", () => {
   });
 
   it("shows the agent column with a toggle that collapses it", async () => {
-    renderAt("/agents/local/alice/chat");
+    renderAt("/agents/local/alice/tasks");
 
     expect(await screen.findByTestId("agents-sidebar")).toBeInTheDocument();
     const titlebar = screen.getByTestId("app-titlebar");

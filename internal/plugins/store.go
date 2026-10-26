@@ -1,8 +1,8 @@
 // Package plugins is the external plugin host: tariboyd owns the
 // lifecycle of executable plugins installed under <base>/plugins/<name>/. It
-// starts, supervises (health/backoff/graceful stop), and drains the two
-// bus-facing plugin types (channel-source publishes in, channel-sink delivers
-// out). store.go owns the persisted plugins table so enabled plugins are
+// starts, supervises (health/backoff/graceful stop), and connects the two
+// mail plugin types (mail-source sends letters in, mail-sink receives the
+// letters of its inbox). store.go owns the persisted plugins table so enabled plugins are
 // re-launched after a restart.
 package plugins
 
@@ -24,7 +24,7 @@ type Record struct {
 	ProtocolVersion int
 	Exec            string
 	SourcePath      string
-	Channels        Channels
+	Mail            MailCaps
 	Enabled         bool
 	InstalledAt     string
 	State           string // installed | running | unhealthy | stopped
@@ -45,7 +45,7 @@ func NewStore(s *store.Store, clock func() time.Time) *Store {
 
 func (s *Store) Upsert(r Record) error {
 	types, _ := json.Marshal(r.Types)
-	chans, _ := json.Marshal(r.Channels)
+	chans, _ := json.Marshal(r.Mail)
 	installed := r.InstalledAt
 	if installed == "" {
 		installed = store.FormatTime(s.clock())
@@ -59,11 +59,11 @@ func (s *Store) Upsert(r Record) error {
 		r.Health = "{}"
 	}
 	_, err := s.db.Exec(`INSERT INTO plugins
-		(name, version, types, protocol_version, exec, source_path, channels, enabled, installed_at, state, health)
+		(name, version, types, protocol_version, exec, source_path, mail, enabled, installed_at, state, health)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(name) DO UPDATE SET
 			version=excluded.version, types=excluded.types, protocol_version=excluded.protocol_version,
-			exec=excluded.exec, source_path=excluded.source_path, channels=excluded.channels,
+			exec=excluded.exec, source_path=excluded.source_path, mail=excluded.mail,
 			enabled=excluded.enabled, state=excluded.state, health=excluded.health`,
 		r.Name, r.Version, string(types), r.ProtocolVersion, r.Exec, r.SourcePath, string(chans),
 		boolToInt(r.Enabled), installed, r.State, r.Health)
@@ -72,7 +72,7 @@ func (s *Store) Upsert(r Record) error {
 
 func (s *Store) Get(name string) (Record, bool, error) {
 	row := s.db.QueryRow(`SELECT name, version, types, protocol_version, exec, source_path,
-		channels, enabled, installed_at, state, health FROM plugins WHERE name=?`, name)
+		mail, enabled, installed_at, state, health FROM plugins WHERE name=?`, name)
 	r, err := scanRecord(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Record{}, false, nil
@@ -85,7 +85,7 @@ func (s *Store) Get(name string) (Record, bool, error) {
 
 func (s *Store) List() ([]Record, error) {
 	rows, err := s.db.Query(`SELECT name, version, types, protocol_version, exec, source_path,
-		channels, enabled, installed_at, state, health FROM plugins ORDER BY name`)
+		mail, enabled, installed_at, state, health FROM plugins ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -158,8 +158,8 @@ func scanRecord(row rowScanner) (Record, error) {
 	if err := json.Unmarshal([]byte(types), &r.Types); err != nil {
 		return Record{}, fmt.Errorf("plugin %s: bad types json: %w", r.Name, err)
 	}
-	if err := json.Unmarshal([]byte(chans), &r.Channels); err != nil {
-		return Record{}, fmt.Errorf("plugin %s: bad channels json: %w", r.Name, err)
+	if err := json.Unmarshal([]byte(chans), &r.Mail); err != nil {
+		return Record{}, fmt.Errorf("plugin %s: bad mail json: %w", r.Name, err)
 	}
 	r.Enabled = enabled != 0
 	return r, nil

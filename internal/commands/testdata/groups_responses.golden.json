@@ -12,16 +12,14 @@
     "group": "core"
   },
   "group.create core": {
-    "broadcast": "group:core:broadcast",
-    "inbox": "group:core:inbox",
+    "broadcast": "group:core",
     "lead": "",
     "members": [],
     "name": "core",
     "shared_dir": "$BASE/groups/core/shared"
   },
   "group.create core lead": {
-    "broadcast": "group:core:broadcast",
-    "inbox": "group:core:inbox",
+    "broadcast": "group:core",
     "lead": "lead1",
     "members": [
       "dev1",
@@ -32,16 +30,14 @@
     "shared_dir": "$BASE/groups/core/shared"
   },
   "group.create empty": {
-    "broadcast": "group:empty:broadcast",
-    "inbox": "group:empty:inbox",
+    "broadcast": "group:empty",
     "lead": "",
     "members": [],
     "name": "empty",
     "shared_dir": "$BASE/groups/empty/shared"
   },
   "group.inspect core": {
-    "broadcast": "group:core:broadcast",
-    "inbox": "group:core:inbox",
+    "broadcast": "group:core",
     "lead": "lead1",
     "members": [
       "dev1",
@@ -52,16 +48,14 @@
     "shared_dir": "$BASE/groups/core/shared"
   },
   "group.inspect empty": {
-    "broadcast": "group:empty:broadcast",
-    "inbox": "group:empty:inbox",
+    "broadcast": "group:empty",
     "lead": "",
     "members": [],
     "name": "empty",
     "shared_dir": "$BASE/groups/empty/shared"
   },
   "group.lead.set core": {
-    "broadcast": "group:core:broadcast",
-    "inbox": "group:core:inbox",
+    "broadcast": "group:core",
     "lead": "dev1",
     "members": [
       "dev1",
@@ -91,8 +85,7 @@
     "group": ""
   },
   "group.rename core": {
-    "broadcast": "group:crew:broadcast",
-    "inbox": "group:crew:inbox",
+    "broadcast": "group:crew",
     "lead": "dev1",
     "members": [
       "dev1",
@@ -111,7 +104,7 @@
   },
   "team.compose core": {
     "name": "core",
-    "yaml": "version: 1\nimages:\n    worker:\n        context: ./images/worker\ngroups:\n    core:\n        lead: dev1\n        budget: null\nagents:\n    dev1:\n        image: worker:latest\n        group: core\n        cwd: /srv/dev1\n        harness:\n            type: stub\n            model: m1\n            effort: high\n            interactive: true\n        env: {}\n        plugins:\n            - context\n        budget: null\n        goal: null\n        timeout: 1m30s\n        loop:\n            enabled: true\n            interval: \"\"\n            timeout: \"\"\n            on_timeout: \"\"\n            on_error: \"\"\n            max_idle_iterations: null\n        subscribe: []\n    lead1:\n        image: worker:latest\n        group: core\n        cwd: /srv/lead1\n        harness:\n            type: stub\n            model: m1\n            effort: high\n            interactive: true\n        env: {}\n        plugins:\n            - context\n        budget: null\n        goal: null\n        timeout: 1m30s\n        loop:\n            enabled: true\n            interval: \"\"\n            timeout: \"\"\n            on_timeout: \"\"\n            on_error: \"\"\n            max_idle_iterations: null\n        subscribe: []\ntask_queues: {}\n"
+    "yaml": "version: 1\nimages:\n    worker:\n        context: ./images/worker\ngroups:\n    core:\n        lead: dev1\n        budget: null\nagents:\n    dev1:\n        image: worker:latest\n        group: core\n        cwd: /srv/dev1\n        harness:\n            type: stub\n            model: m1\n            effort: high\n            interactive: true\n        env: {}\n        plugins:\n            - context\n        budget: null\n        goal: null\n        timeout: 1m30s\n        loop:\n            enabled: true\n            interval: \"\"\n            timeout: \"\"\n            on_timeout: \"\"\n            on_error: \"\"\n            max_idle_iterations: null\n    lead1:\n        image: worker:latest\n        group: core\n        cwd: /srv/lead1\n        harness:\n            type: stub\n            model: m1\n            effort: high\n            interactive: true\n        env: {}\n        plugins:\n            - context\n        budget: null\n        goal: null\n        timeout: 1m30s\n        loop:\n            enabled: true\n            interval: \"\"\n            timeout: \"\"\n            on_timeout: \"\"\n            on_error: \"\"\n            max_idle_iterations: null\ntask_queues: {}\n"
   },
   "team.import.archive.apply refs": {
     "agents": [
@@ -124,7 +117,7 @@
     "groups": 1,
     "import_id": "$IMPORTA",
     "operation": {
-      "compose_yaml": "version: 1\nimages: {}\ngroups:\n    fresh:\n        lead: newbie\n        budget: null\nagents:\n    newbie:\n        image: worker:latest\n        group: fresh\n        cwd: \"\"\n        harness: null\n        env: {}\n        plugins: []\n        budget: null\n        goal: null\n        timeout: \"\"\n        loop: null\n        subscribe: []\ntask_queues: {}\n",
+      "compose_yaml": "version: 1\nimages: {}\ngroups:\n    fresh:\n        lead: newbie\n        budget: null\nagents:\n    newbie:\n        image: worker:latest\n        group: fresh\n        cwd: \"\"\n        harness: null\n        env: {}\n        plugins: []\n        budget: null\n        goal: null\n        timeout: \"\"\n        loop: null\ntask_queues: {}\n",
       "import_id": "$IMPORTA",
       "resolved_refs": {
         "ghost:1": "worker:latest"
@@ -168,7 +161,7 @@
     }
   },
   "team.import.archive.status complete": {
-    "compose_yaml": "version: 1\nimages: {}\ngroups:\n    fresh:\n        lead: newbie\n        budget: null\nagents:\n    newbie:\n        image: worker:latest\n        group: fresh\n        cwd: \"\"\n        harness: null\n        env: {}\n        plugins: []\n        budget: null\n        goal: null\n        timeout: \"\"\n        loop: null\n        subscribe: []\ntask_queues: {}\n",
+    "compose_yaml": "version: 1\nimages: {}\ngroups:\n    fresh:\n        lead: newbie\n        budget: null\nagents:\n    newbie:\n        image: worker:latest\n        group: fresh\n        cwd: \"\"\n        harness: null\n        env: {}\n        plugins: []\n        budget: null\n        goal: null\n        timeout: \"\"\n        loop: null\ntask_queues: {}\n",
     "import_id": "$IMPORTA",
     "resolved_refs": {
       "ghost:1": "worker:latest"

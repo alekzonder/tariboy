@@ -70,12 +70,12 @@ func Restore(r io.Reader, s *store.Store, agentsDir string, opts RestoreOptions)
 		return Manifest{}, err
 	}
 	if exists {
-		// Delete children-first (reverse table order) so indirectly-scoped tables
-		// (deliveries, via a subquery on subscriptions) are cleared while their
-		// parent rows still exist. Generic + transactional so restore is idempotent.
+		// Delete children-first (reverse table order) so an indirectly scoped
+		// table is cleared while its parent rows still exist. Generic +
+		// transactional so restore is idempotent.
 		for i := len(backupTables) - 1; i >= 0; i-- {
 			ts := backupTables[i]
-			if _, err := tx.Exec(`DELETE FROM `+ts.name+` WHERE `+ts.where, newName); err != nil {
+			if _, err := tx.Exec(`DELETE FROM `+ts.name+` WHERE `+ts.deleteWhere, newName); err != nil {
 				tx.Rollback()
 				return Manifest{}, err
 			}
@@ -103,6 +103,19 @@ func Restore(r io.Reader, s *store.Store, agentsDir string, opts RestoreOptions)
 			}
 			if ts.name == "script_result_outbox" {
 				remapScriptResultOutbox(row, rec, agentsDir, oldName, newName, idMaps)
+			}
+			if ts.name == "mail" {
+				// The live table numbers its rows; a letter the agent sent
+				// survives its removal and is not inserted twice.
+				delete(row, "seq")
+				var present int
+				if err := tx.QueryRow(`SELECT COUNT(*) FROM mail WHERE id = ?`, row["id"]).Scan(&present); err != nil {
+					tx.Rollback()
+					return Manifest{}, err
+				}
+				if present > 0 {
+					continue
+				}
 			}
 			for c := range row {
 				if !live[c] {
@@ -231,6 +244,14 @@ func remapRow(rec map[string]any, ts tableSpec, oldName, newName string, ids map
 			out[ts.agentCol] = newName
 		}
 	}
+	if ts.name == "mail" {
+		// A letter names the agent by its principal.
+		for _, col := range []string{"sender", "recipient"} {
+			if out[col] == "agent:"+oldName {
+				out[col] = "agent:" + newName
+			}
+		}
+	}
 	for _, ref := range remapRefs[ts.name] {
 		if value, ok := out[ref.column].(string); ok && value != "" {
 			if mapped, owned := ids[ref.owner][value]; owned {
@@ -247,19 +268,17 @@ type remapRef struct {
 }
 
 // remapRefs identifies ownership rather than merely columns that look like IDs.
-// A delivery may reference a message produced by another agent, and optional
-// iteration references may be empty; neither is owned by this archive and both
-// must survive a rename byte-for-byte.
+// A letter may answer a letter outside this archive, and optional iteration
+// references may be empty; neither is owned by this archive and both must
+// survive a rename byte-for-byte.
 var remapRefs = map[string][]remapRef{
 	"iterations":           {{"id", "iterations"}},
 	"ai_requests":          {{"id", "ai_requests"}, {"iteration", "iterations"}},
-	"subscriptions":        {{"id", "subscriptions"}},
 	"schedules":            {{"id", "schedules"}},
 	"scripts":              {{"id", "scripts"}},
 	"script_runs":          {{"id", "script_runs"}, {"script_id", "scripts"}},
 	"script_result_outbox": {{"script_id", "scripts"}, {"run_id", "script_runs"}},
-	"messages":             {{"id", "messages"}, {"produced_in_iteration", "iterations"}},
-	"deliveries":           {{"subscription_id", "subscriptions"}, {"message_id", "messages"}},
+	"mail":                 {{"id", "mail"}, {"in_reply_to", "mail"}, {"answer_id", "mail"}, {"produced_in_iteration", "iterations"}},
 }
 
 func buildIDMaps(tx *sql.Tx, tables map[string][]map[string]any, oldName, newName string) (map[string]map[string]string, error) {
@@ -267,7 +286,7 @@ func buildIDMaps(tx *sql.Tx, tables map[string][]map[string]any, oldName, newNam
 	if oldName == newName {
 		return result, nil
 	}
-	for _, table := range []string{"iterations", "ai_requests", "subscriptions", "schedules", "scripts", "script_runs", "messages"} {
+	for _, table := range []string{"iterations", "ai_requests", "schedules", "scripts", "script_runs", "mail"} {
 		mapped := map[string]string{}
 		reserved := map[string]bool{}
 		for _, row := range tables[table] {
@@ -366,11 +385,10 @@ func remapID(s, oldName, newName string) string {
 	if remapped := reprefix(s, oldName, newName); remapped != s {
 		return remapped
 	}
-	// Current bus IDs are opaque and are not required to start with the agent
-	// name (for example sub-<agent>-<timestamp> and channel-derived message
-	// IDs). A rename restored into the source database must still allocate a
-	// distinct key. Prefixing the entire opaque value is deterministic and the
-	// same transformation is applied to deliveries' foreign keys.
+	// Letter ids are opaque and do not start with the agent name. A rename
+	// restored into the source database must still allocate a distinct key.
+	// Prefixing the entire opaque value is deterministic and the same
+	// transformation is applied to the letters' references to each other.
 	return newName + "-" + s
 }
 

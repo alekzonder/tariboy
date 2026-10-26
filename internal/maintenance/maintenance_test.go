@@ -72,7 +72,6 @@ func addTask(t *testing.T, db *sql.DB, id int, parent any, status string, comple
 	seq, _ := res.LastInsertId()
 	nid := "n" + string(rune('a'+id))
 	exec(t, db, `INSERT INTO task_notification_outbox(notification_id,event_sequence,channel,message_type,next_attempt_at) VALUES (?,?,?,?,?)`, nid, seq, "c", "m", ts(400))
-	exec(t, db, `INSERT INTO task_notification_state(customer_principal,notification_id,read_at) VALUES (?,?,?)`, "user:c", nid, ts(400))
 }
 
 func taskExists(t *testing.T, db *sql.DB, id int) bool {
@@ -231,7 +230,7 @@ func TestCleanupDeletesOnlyOldFinishedTrees(t *testing.T) {
 	if res.Deleted["tasks"] != 4 {
 		t.Errorf("deleted tasks = %d, want 4", res.Deleted["tasks"])
 	}
-	for _, table := range []string{"task_comments", "task_waiting_for", "task_events", "task_notification_outbox", "task_notification_state"} {
+	for _, table := range []string{"task_comments", "task_waiting_for", "task_events", "task_notification_outbox"} {
 		if n := count(t, db, `SELECT COUNT(*) FROM `+table); n != 5 {
 			t.Errorf("%s rows = %d, want 5", table, n)
 		}
@@ -326,18 +325,45 @@ func TestCleanupRemovesTheFilesOfPurgedTasks(t *testing.T) {
 	}
 }
 
-func TestCleanupAIRequestsMessagesAndEvents(t *testing.T) {
+// letter inserts one mail row created at createdAt. closed sets answered_at
+// and dead marks it dead; to defaults to agent:a.
+type letterRow struct {
+	id, to, createdAt string
+	closed, dead      bool
+}
+
+func insertLetters(t *testing.T, db *sql.DB, rows ...letterRow) {
+	t.Helper()
+	for _, r := range rows {
+		if r.to == "" {
+			r.to = "agent:a"
+		}
+		answered, dead := "", ""
+		if r.closed || r.dead {
+			answered = r.createdAt
+		}
+		if r.dead {
+			dead = r.createdAt
+		}
+		exec(t, db, `INSERT INTO mail(id, sender, recipient, created_at, answered_at, dead_at) VALUES (?,?,?,?,?,?)`,
+			r.id, "user:customer", r.to, r.createdAt, answered, dead)
+	}
+}
+
+func TestCleanupAIRequestsMailAndEvents(t *testing.T) {
 	svc, st, _ := open(t)
 	db := st.DB
 	exec(t, db, `INSERT INTO ai_requests(id,ts) VALUES ('old',?),('new',?)`, ts(100), ts(1))
 	exec(t, db, `INSERT INTO events(ts,kind) VALUES (?,'old'),(?,'new')`, ts(100), ts(1))
-	for _, m := range []struct{ id, ts string }{{"acked", ts(100)}, {"dlq", ts(100)}, {"pending", ts(100)}, {"fresh", ts(1)}, {"uningested", ts(100)}, {"unsequenced", ts(100)}} {
-		exec(t, db, `INSERT INTO messages(id,channel,ts) VALUES (?,'c',?)`, m.id, m.ts)
-	}
-	exec(t, db, `INSERT INTO deliveries(subscription_id,message_id,acked_at,dlq) VALUES
-		('s','acked',?,0),('s','dlq',NULL,1),('s','pending',NULL,0),('s2','pending',?,0),('s','fresh',?,0)`, ts(99), ts(99), ts(1))
-	exec(t, db, `INSERT INTO task_workflow_message_sequence(sequence,message_id) VALUES (1,'acked'),(2,'dlq'),(3,'uningested')`)
-	exec(t, db, `UPDATE task_workflow_ingress_state SET last_message_sequence=2`)
+	insertLetters(t, db,
+		letterRow{id: "answered", createdAt: ts(100), closed: true},
+		letterRow{id: "dead", createdAt: ts(100), dead: true},
+		letterRow{id: "open", createdAt: ts(100)},
+		letterRow{id: "fresh", createdAt: ts(1), closed: true},
+		letterRow{id: "ingested", to: "queue:OPS", createdAt: ts(100), closed: true},
+		letterRow{id: "uningested", to: "queue:OPS", createdAt: ts(100), closed: true})
+	// The ingress consumed the first queue letter only.
+	exec(t, db, `UPDATE task_workflow_ingress_state SET last_message_sequence=(SELECT seq FROM mail WHERE id='ingested')`)
 
 	res, err := svc.Run()
 	if err != nil || res.Error != "" {
@@ -349,31 +375,17 @@ func TestCleanupAIRequestsMessagesAndEvents(t *testing.T) {
 	if n := count(t, db, `SELECT COUNT(*) FROM events WHERE kind='old'`); n != 0 {
 		t.Errorf("old events remain")
 	}
-	var ids []string
-	rows, _ := db.Query(`SELECT id FROM messages ORDER BY id`)
-	for rows.Next() {
-		var id string
-		rows.Scan(&id)
-		ids = append(ids, id)
+	if got := letterIDs(t, db); got != "fresh,open,uningested" {
+		t.Errorf("mail = %v, want fresh,open,uningested", got)
 	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	rows.Close()
-	if strings.Join(ids, ",") != "fresh,pending,uningested,unsequenced" {
-		t.Errorf("messages = %v, want fresh,pending,uningested,unsequenced", ids)
-	}
-	if n := count(t, db, `SELECT COUNT(*) FROM deliveries`); n != 3 {
-		t.Errorf("deliveries = %d, want 3", n)
-	}
-	if res.Deleted["ai_requests"] != 1 || res.Deleted["messages"] != 2 || res.Deleted["events"] < 1 {
+	if res.Deleted["ai_requests"] != 1 || res.Deleted["mail"] != 3 || res.Deleted["events"] < 1 {
 		t.Errorf("deleted = %v", res.Deleted)
 	}
 }
 
-func messageIDs(t *testing.T, db *sql.DB) string {
+func letterIDs(t *testing.T, db *sql.DB) string {
 	t.Helper()
-	rows, err := db.Query(`SELECT id FROM messages ORDER BY id`)
+	rows, err := db.Query(`SELECT id FROM mail ORDER BY id`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,26 +406,16 @@ func messageIDs(t *testing.T, db *sql.DB) string {
 
 func addChatMessages(t *testing.T, db *sql.DB) {
 	t.Helper()
-	for _, m := range []struct{ id, ts string }{{"old", ts(8)}, {"recent", ts(6)}, {"pending", ts(8)}} {
-		exec(t, db, `INSERT INTO messages(id,channel,ts) VALUES (?,'chat:dm:a',?)`, m.id, m.ts)
-	}
-	exec(t, db, `INSERT INTO deliveries(subscription_id,message_id,acked_at,dlq) VALUES
-		('s','old',?,0),('s','recent',?,0),('s','pending',NULL,0)`, ts(8), ts(6))
+	insertLetters(t, db,
+		letterRow{id: "old", createdAt: ts(8), closed: true},
+		letterRow{id: "recent", createdAt: ts(6), closed: true},
+		letterRow{id: "pending", createdAt: ts(8)})
 	exec(t, db, `INSERT INTO ai_requests(id,ts) VALUES ('usage',?)`, ts(8))
-	ingestAllMessages(t, db)
 }
 
-// ingestAllMessages marks every message as consumed by workflow ingress, so
-// only delivery state and age decide retention.
-func ingestAllMessages(t *testing.T, db *sql.DB) {
-	t.Helper()
-	exec(t, db, `INSERT OR IGNORE INTO task_workflow_message_sequence(message_id) SELECT id FROM messages ORDER BY rowid`)
-	exec(t, db, `UPDATE task_workflow_ingress_state SET last_message_sequence=(SELECT MAX(sequence) FROM task_workflow_message_sequence)`)
-}
-
-// Chat history has its own shorter period that applies even when general
+// Mail history has its own shorter period that applies even when general
 // retention keeps everything, and leaves the other data alone.
-func TestChatRetentionPurgesOnlyOldAckedMessages(t *testing.T) {
+func TestChatRetentionPurgesOnlyOldClosedLetters(t *testing.T) {
 	svc, st, _ := open(t)
 	if err := svc.SetSettings(Settings{Enabled: true, Time: "03:00", KeepBackups: 7, RetentionDays: 0, ChatRetentionDays: 7}); err != nil {
 		t.Fatal(err)
@@ -424,29 +426,26 @@ func TestChatRetentionPurgesOnlyOldAckedMessages(t *testing.T) {
 	if err != nil || res.Error != "" {
 		t.Fatalf("run: %+v %v", res, err)
 	}
-	if got := messageIDs(t, st.DB); got != "pending,recent" {
-		t.Errorf("messages = %s, want pending,recent", got)
-	}
-	if n := count(t, st.DB, `SELECT COUNT(*) FROM deliveries`); n != 2 {
-		t.Errorf("deliveries = %d, want 2", n)
+	if got := letterIDs(t, st.DB); got != "pending,recent" {
+		t.Errorf("mail = %s, want pending,recent", got)
 	}
 	if n := count(t, st.DB, `SELECT COUNT(*) FROM ai_requests`); n != 1 {
 		t.Errorf("ai_requests = %d, want 1", n)
 	}
-	if res.Deleted["messages"] != 1 {
+	if res.Deleted["mail"] != 1 {
 		t.Errorf("deleted = %v", res.Deleted)
 	}
 }
 
-// With both periods set, messages expire at the shorter one.
+// With both periods set, closed letters expire at the shorter one.
 func TestChatRetentionIsShorterThanGeneralRetention(t *testing.T) {
 	svc, st, _ := open(t)
 	addChatMessages(t, st.DB) // default settings: 90 days, chat 7 days
 	if _, err := svc.Run(); err != nil {
 		t.Fatal(err)
 	}
-	if got := messageIDs(t, st.DB); got != "pending,recent" {
-		t.Errorf("messages = %s, want pending,recent", got)
+	if got := letterIDs(t, st.DB); got != "pending,recent" {
+		t.Errorf("mail = %s, want pending,recent", got)
 	}
 }
 
@@ -459,8 +458,8 @@ func TestChatRetentionZeroFollowsGeneralRetention(t *testing.T) {
 	if _, err := svc.Run(); err != nil {
 		t.Fatal(err)
 	}
-	if got := messageIDs(t, st.DB); got != "old,pending,recent" {
-		t.Errorf("messages = %s, want old,pending,recent", got)
+	if got := letterIDs(t, st.DB); got != "old,pending,recent" {
+		t.Errorf("mail = %s, want old,pending,recent", got)
 	}
 }
 
@@ -519,7 +518,7 @@ func TestBackupDoesNotWaitForTheWriter(t *testing.T) {
 func TestFailedBackupSkipsCleanup(t *testing.T) {
 	svc, st, backups := open(t)
 	exec(t, st.DB, `INSERT INTO ai_requests(id,ts) VALUES ('old',?)`, ts(100))
-	exec(t, st.DB, `INSERT INTO messages(id,channel,ts) VALUES ('old','chat:dm:a',?)`, ts(100))
+	insertLetters(t, st.DB, letterRow{id: "old", createdAt: ts(100), closed: true})
 	// A regular file where the backup directory should be makes the backup fail.
 	if err := os.MkdirAll(filepath.Dir(backups), 0o700); err != nil {
 		t.Fatal(err)
@@ -534,7 +533,7 @@ func TestFailedBackupSkipsCleanup(t *testing.T) {
 	if n := count(t, st.DB, `SELECT COUNT(*) FROM ai_requests`); n != 1 {
 		t.Fatalf("cleanup ran after failed backup")
 	}
-	if n := count(t, st.DB, `SELECT COUNT(*) FROM messages`); n != 1 {
+	if n := count(t, st.DB, `SELECT COUNT(*) FROM mail`); n != 1 {
 		t.Fatalf("chat history purged after failed backup")
 	}
 	if last, _ := svc.LastResult(); last == nil || last.Error == "" {

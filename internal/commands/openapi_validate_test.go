@@ -310,7 +310,7 @@ func taskTypedCalls() []typedCall {
 		{"PATCH", "/api/task-queues/{queue}/pools/{pool}", "/api/task-queues/FLOW/pools/developers", map[string]any{"agents": []string{"dev-a"}, "revision": 0, "idempotency_key": "pool"}},
 		{"GET", "/api/task-queues/{queue}/pools/{pool}", "/api/task-queues/FLOW/pools/developers", nil},
 		{"GET", "/api/task-queues/{queue}/pools", "/api/task-queues/FLOW/pools", nil},
-		{"POST", "/api/task-queues/{queue}/workflow-triggers", "/api/task-queues/FLOW/workflow-triggers", map[string]any{"pattern": "incident:*", "action": "create_task"}},
+		{"POST", "/api/task-queues/{queue}/workflow-triggers", "/api/task-queues/FLOW/workflow-triggers", map[string]any{"pattern": "plugin:*", "action": "create_task"}},
 		{"GET", "/api/task-queues/{queue}/workflow-triggers", "/api/task-queues/FLOW/workflow-triggers", nil},
 		{"PUT", "/api/task-queues/{queue}/workflow", "/api/task-queues/FLOW/workflow", map[string]any{"ref": "flow:1.0.0"}},
 		{"GET", "/api/task-queues/{queue}/workflow", "/api/task-queues/FLOW/workflow", nil},

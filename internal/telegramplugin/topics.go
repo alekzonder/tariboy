@@ -30,9 +30,6 @@ func (s *Server) ReconcileTopics(ctx context.Context) error {
 			}
 			state.AgentTopics[agent.Name] = topic
 		}
-		if err := s.daemon.Subscribe(ctx, agent.Name, "chat:telegram:"+agent.Name); err != nil {
-			return err
-		}
 	}
 	return nil
 }

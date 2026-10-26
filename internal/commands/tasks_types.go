@@ -36,13 +36,6 @@ type TaskEventList struct {
 	Events []tasks.Event `json:"events"`
 }
 
-// TaskNotificationList is the customer's task notifications
-// (tasks.notifications.list).
-type TaskNotificationList struct {
-	Count         int                  `json:"count"`
-	Notifications []tasks.Notification `json:"notifications"`
-}
-
 // TaskAgentPoolList is the logical workflow pools of a queue
 // (tasks.queue.pool.list).
 type TaskAgentPoolList struct {

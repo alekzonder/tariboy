@@ -400,9 +400,7 @@ func TestPluginRoutesMounted(t *testing.T) {
 	}))
 	h := srv.Handler()
 	cases := []struct{ method, path string }{
-		{"POST", "/api/plugin/publish"},
-		{"GET", "/api/plugin/subscriptions"},
-		{"GET", "/api/plugin/watches"},
+		{"POST", "/api/plugin/mail"},
 	}
 	for _, c := range cases {
 		rr := httptest.NewRecorder()

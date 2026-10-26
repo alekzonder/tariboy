@@ -112,67 +112,60 @@ ITER_ID="$(sa --json iteration ls smoke | grep -o 'smoke-[0-9]*-[0-9]*' | head -
 sa --json iteration inspect smoke "$ITER_ID" | grep -q '"done":true' \
   || { echo "FAIL: iteration inspect done flag"; exit 1; }
 
-echo "--- bus: create agent B subscribed to a shared channel"
+echo "--- mail: create agent B (loop started, no interval: only mail wakes it)"
 sa agent run basic-example:latest --name bob --harness stub --interactive false \
-  --env "STUB_SUBSCRIBE=chat:team,STUB_CALL_DONE=1" | grep -q "name: bob" \
+  --env "STUB_CALL_DONE=1" | grep -q "name: bob" \
   || { echo "FAIL: run bob"; exit 1; }
 sa agent start bob >/dev/null || { echo "FAIL: start bob"; exit 1; }
-# First iteration subscribes bob to chat:team.
-sa agent exec bob >/dev/null || { echo "FAIL: exec bob subscribe"; exit 1; }
-SUBBED=0
-for _ in $(seq 1 100); do
-  if sa --json iteration ls bob | grep -q '"status":"done"'; then SUBBED=1; break; fi
-  sleep 0.1
-done
-[ "$SUBBED" = 1 ] || { echo "FAIL: bob subscribe iteration"; exit 1; }
+bobiters() { sa --json iteration ls bob | { grep -o '"id"' || true; } | wc -l | tr -d ' '; }
+BOB_BEFORE="$(bobiters)"
 
-echo "--- bus: agent A publishes to chat:team"
+echo "--- mail: agent A mails agent B"
 sa agent run basic-example:latest --name alice --harness stub --interactive false \
-  --env "STUB_SEND=chat:team|hello-from-alice,STUB_CALL_DONE=1" | grep -q "name: alice" \
+  --env "STUB_SEND=agent:bob|hello-from-alice,STUB_CALL_DONE=1" | grep -q "name: alice" \
   || { echo "FAIL: run alice"; exit 1; }
-BOB_BEFORE="$(sa --json iteration ls bob | grep -o '"id"' | wc -l)"
-sa agent exec alice >/dev/null || { echo "FAIL: exec alice publish"; exit 1; }
+sa agent exec alice >/dev/null || { echo "FAIL: exec alice send"; exit 1; }
 
-echo "--- bus: channel tail shows the message with attribution"
-TAILED=0
+echo "--- mail: the letter is in alice's sent box and bob's mailbox"
+SENT=0
 for _ in $(seq 1 100); do
-  if sa --json channel tail chat:team | grep -q "hello-from-alice"; then TAILED=1; break; fi
+  if sa --json mail sent --as agent:alice | grep -q "hello-from-alice"; then SENT=1; break; fi
   sleep 0.1
 done
-[ "$TAILED" = 1 ] || { echo "FAIL: channel tail"; sa --json channel tail chat:team; exit 1; }
-sa --json channel tail chat:team | grep -q '"produced_by_agent":"alice"' \
-  || { echo "FAIL: attribution missing"; exit 1; }
+[ "$SENT" = 1 ] || { echo "FAIL: mail sent"; sa --json mail sent --as agent:alice; exit 1; }
+sa --json mail sent --as agent:alice | grep -q '"to":"agent:bob"' \
+  || { echo "FAIL: sent letter not addressed to bob"; sa --json mail sent --as agent:alice; exit 1; }
+sa --json mail inbox --as agent:bob --all | grep -q '"from":"agent:alice"' \
+  || { echo "FAIL: letter missing from bob's mailbox"; sa --json mail inbox --as agent:bob --all; exit 1; }
+sa --json mail sent --as agent:alice | grep -q '"produced_in_iteration":"alice-' \
+  || { echo "FAIL: letter not attributed to alice's iteration"; sa --json mail sent --as agent:alice; exit 1; }
 
-echo "--- bus: bob runs a message-triggered iteration"
+echo "--- mail: bob runs a message-triggered iteration"
 WOKE=0
 for _ in $(seq 1 100); do
-  BOB_NOW="$(sa --json iteration ls bob | grep -o '"id"' | wc -l)"
-  if [ "$BOB_NOW" -gt "$BOB_BEFORE" ]; then WOKE=1; break; fi
+  if [ "$(bobiters)" -gt "$BOB_BEFORE" ]; then WOKE=1; break; fi
   sleep 0.1
 done
-[ "$WOKE" = 1 ] || { echo "FAIL: bob not woken by message"; sa --json iteration ls bob >&2; sa --json agent subscriptions bob >&2; sa --json agent ps >&2; exit 1; }
+[ "$WOKE" = 1 ] || { echo "FAIL: bob not woken by mail"; sa --json iteration ls bob >&2; sa --json mail inbox --as agent:bob --all >&2; sa --json agent ps >&2; exit 1; }
 sa --json iteration ls bob | grep -q '"trigger":"message"' \
   || { echo "FAIL: bob iteration not message-triggered"; sa --json iteration ls bob; exit 1; }
 
-echo "--- bus: channel ls lists chat:team and the agent channels"
-sa channel ls | grep -q "chat:team" || { echo "FAIL: channel ls"; exit 1; }
-
-echo "--- clean up bus agents"
+echo "--- clean up mail agents"
 sa agent rm alice --force --purge >/dev/null || { echo "FAIL: rm alice"; exit 1; }
 sa agent rm bob --force --purge >/dev/null || { echo "FAIL: rm bob"; exit 1; }
 
 # Opt-in wall-clock schedule check (timing-sensitive; off by default). A one-shot
-# ~2s out fires into the agent's service chat and triggers an extra iteration:
-# the participant subscription provisioned with that chat carries the delivery.
+# ~2s out with no recipient mails the agent itself from system:schedule, and the
+# letter triggers an extra iteration.
 if [ -n "${E2E_SLOW:-}" ]; then
   echo "--- schedule: agent arms a one-shot that wakes it (E2E_SLOW)"
   sa agent run basic-example:latest --name sched --harness stub --interactive false \
     --plugins context,status,schedule \
-    --env "STUB_SUBSCRIBE=agent:sched:inbox,STUB_SCHEDULE=2,STUB_CALL_DONE=1" | grep -q "name: sched" \
+    --env "STUB_SCHEDULE=2,STUB_CALL_DONE=1" | grep -q "name: sched" \
     || { echo "FAIL: run sched"; exit 1; }
   sa agent start sched >/dev/null || { echo "FAIL: start sched"; exit 1; }
-  # First iteration subscribes to its own inbox and arms the one-shot; the
-  # schedule takes no channel, so it targets chat:service:sched.
+  # First iteration arms the one-shot; the schedule names no recipient, so its
+  # letter goes to agent:sched itself.
   sa agent exec sched >/dev/null || { echo "FAIL: exec sched"; exit 1; }
   SCHED_ARMED=0
   for _ in $(seq 1 100); do
@@ -191,6 +184,8 @@ if [ -n "${E2E_SLOW:-}" ]; then
   [ "$SCHED_FIRED" = 1 ] || { echo "FAIL: schedule did not wake sched"; sa --json iteration ls sched; exit 1; }
   sa --json iteration ls sched | grep -q '"trigger":"message"' \
     || { echo "FAIL: schedule iteration not message-triggered"; exit 1; }
+  sa --json mail inbox --as agent:sched --all | grep -q '"from":"system:schedule"' \
+    || { echo "FAIL: schedule letter not from system:schedule"; sa --json mail inbox --as agent:sched --all; exit 1; }
   sa agent rm sched --force --purge >/dev/null || { echo "FAIL: rm sched"; exit 1; }
 fi
 
@@ -288,7 +283,7 @@ sa image build --name analyst --tag latest --path "$TEST_IMAGE_SOURCE" | grep -q
   || { echo "FAIL: compose image build"; exit 1; }
 
 # The two members run the stub harness so message-triggered iterations complete
-# with no real API key (delivery is observable as an iteration; see below). The
+# with no real API key (a received letter is observable as an iteration; see below). The
 # non-lead (writer) also drives one AI call per iteration (STUB_AI) so the
 # per-group budget can be enforced end to end against the fake upstream.
 mkdir -p "$BASE/test-bin"
@@ -325,11 +320,9 @@ sa --json group inspect research-team | grep -q '"scout"' \
 sa --json group inspect research-team | grep -q '"writer"' \
   || { echo "FAIL: group member writer"; exit 1; }
 
-# The group broadcast + inbox channels exist.
-sa --json channel ls | grep -q 'group:research-team:broadcast' \
-  || { echo "FAIL: broadcast channel missing"; exit 1; }
-sa --json channel ls | grep -q 'group:research-team:inbox' \
-  || { echo "FAIL: inbox channel missing"; exit 1; }
+# The group's mail address is group:<name>.
+sa group inspect research-team | grep -q 'broadcast: group:research-team' \
+  || { echo "FAIL: group broadcast address"; sa group inspect research-team; exit 1; }
 
 # The group budget is applied (compose group budget -> group:<name> scope).
 sa --json budget ls | grep -q 'group:research-team' \
@@ -339,55 +332,38 @@ sa --json budget ls | grep -q 'group:research-team' \
 "$BIN/tariboy" --socket "$SOCK" compose -f "$COMPOSE" status | grep -q "drift: 0" \
   || { echo "FAIL: compose status drift"; exit 1; }
 
-# --- Discriminant lead routing.
+# --- Group mail fan-out.
 # Both members are loop-enabled and event-only (no interval), so an iteration
-# can ONLY appear from a message delivery: iteration counts are a faithful proxy
-# for "did this member receive the message". The daemon wakes exactly the agents
-# a publish was delivered to, so these counts distinguish correct routing from a
-# mis-subscription. (`|| true` masks grep's no-match exit under pipefail so an
-# empty count reads as 0 instead of aborting the script.)
+# can ONLY appear from a letter: iteration counts are a faithful proxy for "did
+# this member receive the letter". (`|| true` masks grep's no-match exit under
+# pipefail so an empty count reads as 0 instead of aborting the script.)
 witers() { sa --json iteration ls writer | { grep -o '"id"' || true; } | wc -l | tr -d ' '; }
 sciters() { sa --json iteration ls scout | { grep -o '"id"' || true; } | wc -l | tr -d ' '; }
 
 # Baseline: nobody has run.
-[ "$(witers)" = 0 ] || { echo "FAIL: writer ran before any publish"; sa --json iteration ls writer; exit 1; }
-[ "$(sciters)" = 0 ] || { echo "FAIL: scout ran before any publish"; sa --json iteration ls scout; exit 1; }
+[ "$(witers)" = 0 ] || { echo "FAIL: writer ran before any letter"; sa --json iteration ls writer; exit 1; }
+[ "$(sciters)" = 0 ] || { echo "FAIL: scout ran before any letter"; sa --json iteration ls scout; exit 1; }
 
-# Publish to the group INBOX: only the lead (scout) subscribes to it.
-sa message send -c group:research-team:inbox --type task --text "triage this" >/dev/null \
-  || { echo "FAIL: send to group inbox"; exit 1; }
-# The lead wakes with a message-triggered iteration.
-LEAD_WOKE=0
-for _ in $(seq 1 100); do
-  if sa --json iteration ls scout | grep -q '"trigger":"message"'; then LEAD_WOKE=1; break; fi
-  sleep 0.1
-done
-[ "$LEAD_WOKE" = 1 ] || { echo "FAIL: lead did not receive the group inbox"; sa --json iteration ls scout; exit 1; }
-# DISCRIMINANT: the non-lead must NOT receive the inbox. Waking is delivery-
-# scoped, so once the lead has processed the message a non-lead subscribed by
-# mistake would already have woken too. Grace, then assert writer is untouched.
-sleep 0.5
-[ "$(witers)" = 0 ] \
-  || { echo "FAIL: non-lead received the group inbox (lead routing broken)"; sa --json iteration ls writer; exit 1; }
-
-# Publish to BROADCAST: both members subscribe, so both must wake.
-SC_BEFORE="$(sciters)"
-sa message send -c group:research-team:broadcast --type note --text "hello team" >/dev/null \
-  || { echo "FAIL: send to broadcast"; exit 1; }
-# DISCRIMINANT: the non-lead (writer), which had ZERO iterations, now wakes.
+# The customer mails group:research-team: it expands to every member.
+sa mail send --to group:research-team --subject "hello team" --text "hello team" --notice >/dev/null \
+  || { echo "FAIL: send to group"; exit 1; }
+sa --json mail sent | grep -q '"to":"agent:scout"' \
+  || { echo "FAIL: group letter not expanded to scout"; sa --json mail sent; exit 1; }
+sa --json mail sent | grep -q '"to":"agent:writer"' \
+  || { echo "FAIL: group letter not expanded to writer"; sa --json mail sent; exit 1; }
+# Both members wake with a message-triggered iteration.
 W_WOKE=0
 for _ in $(seq 1 100); do
-  if [ "$(witers)" -ge 1 ] && sa --json iteration ls writer | grep -q '"trigger":"message"'; then W_WOKE=1; break; fi
+  if sa --json iteration ls writer | grep -q '"trigger":"message"'; then W_WOKE=1; break; fi
   sleep 0.1
 done
-[ "$W_WOKE" = 1 ] || { echo "FAIL: broadcast did not reach the non-lead"; sa --json iteration ls writer; exit 1; }
-# The lead also receives broadcast (its iteration count strictly increases).
-SC_UP=0
+[ "$W_WOKE" = 1 ] || { echo "FAIL: group letter did not reach writer"; sa --json iteration ls writer; exit 1; }
+SC_WOKE=0
 for _ in $(seq 1 100); do
-  if [ "$(sciters)" -gt "$SC_BEFORE" ]; then SC_UP=1; break; fi
+  if sa --json iteration ls scout | grep -q '"trigger":"message"'; then SC_WOKE=1; break; fi
   sleep 0.1
 done
-[ "$SC_UP" = 1 ] || { echo "FAIL: broadcast did not reach the lead"; sa --json iteration ls scout; exit 1; }
+[ "$SC_WOKE" = 1 ] || { echo "FAIL: group letter did not reach scout"; sa --json iteration ls scout; exit 1; }
 
 # --- Discriminant per-group budget enforcement (red/green) via the fake upstream.
 # GREEN: under the group's 50 USD budget, a member's AI call reaches the upstream

@@ -2,8 +2,8 @@ GO      ?= go
 BINDIR  := bin
 PREFIX  ?= $(HOME)/.local
 INSTALLDIR := $(PREFIX)/bin
-BINARIES := tariboyd tariboy tariboy-tasks tariboy-shim tariboy-store tariboy-plugin-telegram
-MANAGED_LINKS := tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-shim:tariboy-shim tariboy-store:tariboy-store tariboy-plugin-telegram:tariboy-plugin-telegram
+BINARIES := tariboyd tariboy tariboy-tasks tariboy-mail tariboy-shim tariboy-store tariboy-plugin-telegram
+MANAGED_LINKS := tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-mail:tariboy-mail tmail:tariboy-mail tariboy-shim:tariboy-shim tariboy-store:tariboy-store tariboy-plugin-telegram:tariboy-plugin-telegram
 SA := $(BINDIR)/tariboy
 LONG_SOCKET_TESTS := TestHostInstallDrainTimeoutRestartsRolledBackActiveVersion|TestStartupRefreshReadsCurrentWatchesAtDeliveryBoundary
 # Desktop E2E specs receive separate owner-only state from their fixture, so
@@ -41,6 +41,7 @@ build:
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-store ./cmd/tariboy-store
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-plugin-telegram ./cmd/tariboy-plugin-telegram
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-tasks ./cmd/tariboy-tasks
+	$(GO) build -trimpath -o $(BINDIR)/tariboy-mail ./cmd/tariboy-mail
 
 install:
 	$(MAKE) build
@@ -271,7 +272,7 @@ RELEASE_VERSION := $(shell cat scripts/release-version.txt 2>/dev/null)
 # macOS bundle metadata uses x.y.z. Keep the full canonical string available to
 # Rust as TARIBOY_VERSION while SEMVER owns the Cargo/Tauri comparison.
 SEMVER      := $(firstword $(subst -, ,$(VERSION)))
-DESKTOP_BINARIES := tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram
+DESKTOP_BINARIES := tariboyd tariboy tariboy-tasks tariboy-mail tariboy-shim tariboy-plugin-telegram
 # Resolved once so every desktop gate below agrees on what host it is running on.
 HOST_OS     := $(shell uname -s)
 HOST_ARCH   := $(shell uname -m)

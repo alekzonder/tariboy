@@ -7,32 +7,23 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
-func newProvisioner(t *testing.T) (*Provisioner, *agent.Store, *bus.Bus, string) {
+func newProvisioner(t *testing.T) (*Provisioner, *agent.Store, string) {
 	t.Helper()
 	s := storetest.Open(t)
-	// Advancing clock (one ns per call), matching the bus test convention: a
-	// fixed clock makes the bus mint colliding subscription ids when one agent
-	// subscribes to several channels in the same tick. Production uses time.Now.
-	tick := int64(0)
-	clock := func() time.Time {
-		tick++
-		return time.Date(2026, 7, 5, 9, 0, 0, int(tick), time.UTC)
-	}
+	clock := func() time.Time { return time.Date(2026, 7, 5, 9, 0, 0, 0, time.UTC) }
 	as := agent.NewStore(s)
-	b := bus.New(s, clock)
 	groupsDir := filepath.Join(t.TempDir(), "groups")
 	p := NewProvisioner(ProvisionerConfig{
-		Groups: NewStore(s, clock), Agents: as, Bus: b, GroupsDir: groupsDir, Clock: clock,
+		Groups: NewStore(s, clock), Agents: as, GroupsDir: groupsDir, Clock: clock,
 	})
-	return p, as, b, groupsDir
+	return p, as, groupsDir
 }
 
 func TestEnsureGroupCreatesRowAndDir(t *testing.T) {
-	p, _, _, groupsDir := newProvisioner(t)
+	p, _, groupsDir := newProvisioner(t)
 	if err := p.EnsureGroup("research", "scout"); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +48,7 @@ func TestEnsureGroupCreatesRowAndDir(t *testing.T) {
 }
 
 func TestEnsureGroupRejectsTraversingName(t *testing.T) {
-	p, _, _, groupsDir := newProvisioner(t)
+	p, _, groupsDir := newProvisioner(t)
 	if err := p.EnsureGroup("../evil", ""); err == nil {
 		t.Fatal("traversing group name must be rejected")
 	}
@@ -67,7 +58,7 @@ func TestEnsureGroupRejectsTraversingName(t *testing.T) {
 }
 
 func TestRenameAndRemoveMemberPreserveAgent(t *testing.T) {
-	p, agents, _, groupsDir := newProvisioner(t)
+	p, agents, groupsDir := newProvisioner(t)
 	if err := agents.Create(agent.Agent{Name: "lead", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)
 	}

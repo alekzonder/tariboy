@@ -69,7 +69,7 @@ func TestProcessUpdatePublishesOnlyAuthorizedLiveAgentTopic(t *testing.T) {
 		t.Fatalf("published = %#v", daemon.published)
 	}
 	got := daemon.published[0]
-	if got.Channel != "chat:telegram:worker" || got.Text != "hello agent" || got.UpdateID != 20 {
+	if got.Agent != "worker" || got.Text != "hello agent" || got.UpdateID != 20 || got.ExternalID != "telegram:20" {
 		t.Fatalf("published message = %#v", got)
 	}
 }

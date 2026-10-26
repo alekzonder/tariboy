@@ -339,6 +339,9 @@ func managedHome(t *testing.T, version string) string {
 	if err := os.Symlink(filepath.Join(release, "tariboy-tasks"), filepath.Join(bin, "ttasks")); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Symlink(filepath.Join(release, "tariboy-mail"), filepath.Join(bin, "tmail")); err != nil {
+		t.Fatal(err)
+	}
 	writeSums(t, release)
 	return home
 }
@@ -359,7 +362,7 @@ func writeSums(t *testing.T, dir string) {
 	}
 }
 
-// buildArchive produces the same payload layout the release publishes: the five
+// buildArchive produces the same payload layout the release publishes: the six
 // binaries, VERSION, SHA256SUMS, and the installer script.
 func buildArchive(t *testing.T, version string) []byte {
 	t.Helper()

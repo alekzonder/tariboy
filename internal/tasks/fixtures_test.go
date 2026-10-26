@@ -16,7 +16,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -292,57 +291,46 @@ func rewriteDefinition(t *testing.T, svc *Service, task Task, def workflowfile.F
 	editManifest(t, svc, task.WorkflowDigest, func(m *workflowimage.Manifest) { m.Definition = def })
 }
 
-// legacyMessage is a bus message row written with a chosen id and timestamp.
-type legacyMessage struct {
-	ID, Channel, TS, Source, Type, Text string
-	// Sequenced also records the message's commit sequence, as the bus does
-	// for every message it publishes; a row without one is what a database
-	// written before sequences existed holds.
-	Sequenced bool
+// queueLetter is a letter to a queue written with a chosen id and time.
+type queueLetter struct {
+	ID, Sender, Queue, CreatedAt, Kind, Subject, Body string
+	Data                                              map[string]any
 }
 
-// insertMessage writes msg the way the bus stores it, with the id and
-// timestamp the bus would otherwise choose itself, and returns its commit
-// sequence (0 when unsequenced). q may be a transaction.
-func insertMessage(t *testing.T, q interface {
+// insertQueueLetter writes l the way mail stores a letter to queue:<Queue>,
+// stored closed, with the id and time mail would otherwise choose itself, and
+// returns its mail.seq. q may be a transaction.
+func insertQueueLetter(t *testing.T, q interface {
 	Exec(string, ...any) (sql.Result, error)
-}, msg legacyMessage) int64 {
+}, l queueLetter) int64 {
 	t.Helper()
-	if msg.Source == "" {
-		msg.Source = "plugin:test"
+	if l.Sender == "" {
+		l.Sender = "plugin:test"
 	}
-	if msg.Type == "" {
-		msg.Type = "event"
+	if l.Queue == "" {
+		l.Queue = "DEV"
 	}
-	if _, err := q.Exec(`INSERT INTO channels(name,kind,created_at) VALUES(?,'chat',?) ON CONFLICT DO NOTHING`, msg.Channel, msg.TS); err != nil {
-		t.Fatal(err)
+	if l.Kind == "" {
+		l.Kind = "event"
 	}
-	if _, err := q.Exec(`INSERT INTO messages(id,channel,ts,source,type,subject,text,data,kind) VALUES(?,?,?,?,?,'{}',?,'{}','event')`,
-		msg.ID, msg.Channel, msg.TS, msg.Source, msg.Type, msg.Text); err != nil {
-		t.Fatal(err)
+	if l.Data == nil {
+		l.Data = map[string]any{}
 	}
-	if !msg.Sequenced {
-		return 0
-	}
-	res, err := q.Exec(`INSERT INTO task_workflow_message_sequence(message_id) VALUES(?)`, msg.ID)
+	data, err := json.Marshal(l.Data)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sequence, err := res.LastInsertId()
+	res, err := q.Exec(`INSERT INTO mail(id, sender, recipient, subject, body, kind, data, needs_reply, created_at, answered_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+		l.ID, l.Sender, "queue:"+l.Queue, l.Subject, l.Body, l.Kind, string(data), l.CreatedAt, l.CreatedAt)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return sequence
-}
-
-// messageSequence returns the commit sequence recorded for a message.
-func messageSequence(t *testing.T, svc *Service, id string) int64 {
-	t.Helper()
-	var sequence int64
-	if err := svc.db.QueryRow(`SELECT sequence FROM task_workflow_message_sequence WHERE message_id = ?`, id).Scan(&sequence); err != nil {
+	seq, err := res.LastInsertId()
+	if err != nil {
 		t.Fatal(err)
 	}
-	return sequence
+	return seq
 }
 
 // ingressCursor returns the last message sequence workflow ingress consumed;
@@ -612,7 +600,7 @@ func lastRequestID(t *testing.T, svc *Service, task Task) int64 {
 // clearMessages deletes every bus message, as retention does.
 func clearMessages(t *testing.T, svc *Service) {
 	t.Helper()
-	if _, err := svc.db.Exec(`DELETE FROM messages`); err != nil {
+	if _, err := svc.db.Exec(`DELETE FROM mail`); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -654,14 +642,13 @@ func commentOf(detail TaskDetail, id int64) Comment {
 	return Comment{}
 }
 
-// publishMessage publishes msg through the bus at the service clock.
-func publishMessage(t *testing.T, svc *Service, msg bus.Message) bus.Message {
+// sendQueueLetter writes l at the service clock.
+func sendQueueLetter(t *testing.T, svc *Service, l queueLetter) int64 {
 	t.Helper()
-	published, err := workflowBus(svc).Publish(msg)
-	if err != nil {
-		t.Fatal(err)
+	if l.CreatedAt == "" {
+		l.CreatedAt = svc.now()
 	}
-	return published
+	return insertQueueLetter(t, svc.db, l)
 }
 
 // forceAgentHolders applies SQL assignments to every holder row of agent.

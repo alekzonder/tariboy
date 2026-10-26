@@ -52,12 +52,14 @@ fi
 
 export PATH="$tools:$PATH"
 
-binaries=(tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram tariboy-tasks)
+binaries=(tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram tariboy-tasks tariboy-mail)
 links=(
   tariboyd:tariboyd
   tariboy:tariboy
   tariboy-tasks:tariboy-tasks
   ttasks:tariboy-tasks
+  tariboy-mail:tariboy-mail
+  tmail:tariboy-mail
   tariboy-shim:tariboy-shim
   tariboy-plugin-telegram:tariboy-plugin-telegram
   tariboy-store:tariboy-store
@@ -123,11 +125,14 @@ done
 test "$(cat "$home/.local/lib/tariboy/old/tariboy")" = old
 test -f "$home/.local/lib/tariboy/$version/tariboy-tasks"
 test ! -e "$home/.local/lib/tariboy/$version/ttasks"
+test -f "$home/.local/lib/tariboy/$version/tariboy-mail"
+test ! -e "$home/.local/lib/tariboy/$version/tmail"
 
-# A pre-Tasks release has neither payload nor alias. Reactivation removes the
-# newer managed names, and selecting the new release again restores them.
+# A pre-Tasks release has neither the Tasks nor the mail payload nor their
+# aliases. Reactivation removes the newer managed names, and selecting the new
+# release again restores them.
 old_release="$home/.local/lib/tariboy/old"
-rm "$old_release/tariboy-tasks"
+rm "$old_release/tariboy-tasks" "$old_release/tariboy-mail"
 printf 'old\n' >"$old_release/VERSION"
 (cd "$old_release" && sha256sum tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram >SHA256SUMS)
 if HOME="$home" PATH="$tools:$PATH" TARIBOY_TEST_FAIL_MV_TO="$home/.local/bin/tariboy-shim" \
@@ -139,7 +144,7 @@ for pair in "${links[@]}"; do
   test "$(readlink "$home/.local/bin/${pair%%:*}")" = "$home/.local/lib/tariboy/$version/${pair#*:}"
 done
 HOME="$home" sh "$ROOT/desktop/src-tauri/src/remote-install.sh" old .stage-rollback activate "$version"
-for name in tariboy-tasks ttasks; do
+for name in tariboy-tasks ttasks tariboy-mail tmail; do
   if test -e "$home/.local/bin/$name" || test -L "$home/.local/bin/$name"; then
     echo "pre-Tasks activation left a Tasks link: $name" >&2
     exit 1
@@ -150,6 +155,7 @@ for name in tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram;
 done
 HOME="$home" sh "$ROOT/desktop/src-tauri/src/remote-install.sh" "$version" .stage-reactivate activate old
 test "$("$home/.local/bin/ttasks" --version)" = "$version"
+test "$("$home/.local/bin/tmail" --version)" = "$version"
 
 # An incomplete checksum list must not allow absent mandatory payloads.
 rm "$old_release/tariboy-shim"

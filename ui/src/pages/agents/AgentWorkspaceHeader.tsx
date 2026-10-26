@@ -26,7 +26,6 @@ type AgentWorkspaceHeaderProps = {
   base: string;
   tabs: readonly AgentTabEntry[];
   stripRef: RefObject<HTMLElement | null>;
-  unreadChat: number;
   questionTasks: number;
   refresh: () => void;
   onExec: () => void;
@@ -237,8 +236,6 @@ export function AgentWorkspaceHeader(props: AgentWorkspaceHeaderProps) {
       <AgentWorkspaceTabs
         tabs={props.tabs}
         base={base}
-        agentName={agent.name}
-        unreadChat={props.unreadChat}
         questionTasks={props.questionTasks}
         stripRef={props.stripRef}
       />

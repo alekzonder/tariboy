@@ -8,27 +8,32 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 type fakeBus struct {
-	messages []bus.Message
+	messages []mail.Letter
 	fail     bool
+	// refuse is a sender the fake refuses as unknown.
+	refuse string
 }
 
-func (f *fakeBus) Publish(message bus.Message) (bus.Message, error) {
+func (f *fakeBus) Send(message mail.Letter) ([]mail.Letter, error) {
+	if f.refuse != "" && message.From == f.refuse {
+		return nil, &mail.Error{Status: 400, Code: "unknown_sender", Msg: "unknown sender"}
+	}
 	f.messages = append(f.messages, message)
 	if f.fail {
-		return bus.Message{}, errors.New("bus unavailable")
+		return nil, errors.New("mail unavailable")
 	}
 	message.ID = "message-" + message.IdempotencyKey
-	return message, nil
+	return []mail.Letter{message}, nil
 }
 
-func TestFlushPublishesAssignmentQuestionAnswerAndTriageChannels(t *testing.T) {
+func TestNotificationOutboxSendsFromCausingPrincipal(t *testing.T) {
 	st := storetest.Open(t)
 	now := time.Date(2026, 7, 31, 13, 0, 0, 0, time.UTC)
 	svc := tasks.NewService(st.DB, "customer", func() time.Time { return now })
@@ -51,35 +56,41 @@ func TestFlushPublishesAssignmentQuestionAnswerAndTriageChannels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.AddComment(ctx, customer, assigned.Key, tasks.AddCommentInput{
-		Body: "Answer",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
 	fake := &fakeBus{}
 	publisher := New(st.DB, fake, func() time.Time { return now },
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err := publisher.Flush(ctx); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := svc.AddComment(ctx, customer, assigned.Key, tasks.AddCommentInput{
+		Body: "Answer",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := publisher.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
 
-	got := map[string]string{}
+	type route struct{ from, to string }
+	got := map[string]route{}
 	for _, message := range fake.messages {
-		got[message.Type] = message.Channel
-		if message.IdempotencyKey == "" {
-			t.Fatalf("%s has no idempotency key", message.Type)
+		got[message.Kind] = route{message.From, message.To}
+		if message.IdempotencyKey == "" || message.Data["task_key"] == nil {
+			t.Fatalf("%s has no idempotency key or task key: %+v", message.Kind, message)
+		}
+		if message.NeedsReply != (message.Kind == "task.question") {
+			t.Fatalf("%s needs_reply = %v", message.Kind, message.NeedsReply)
 		}
 	}
-	want := map[string]string{
-		"task.triage":   "chat:tasks:triager",
-		"task.assigned": "chat:tasks:worker",
-		"task.question": "user:customer",
-		"task.answered": "chat:tasks:worker",
+	want := map[string]route{
+		"task.triage":   {"user:customer", "agent:triager"},
+		"task.assigned": {"user:customer", "agent:worker"},
+		"task.question": {"agent:worker", "user:customer"},
+		"task.answered": {"user:customer", "agent:worker"},
 	}
-	for typ, channel := range want {
-		if got[typ] != channel {
-			t.Fatalf("%s channel = %q; want %q (all=%v)", typ, got[typ], channel, got)
+	for kind, r := range want {
+		if got[kind] != r {
+			t.Fatalf("%s = %+v; want %+v (all=%v)", kind, got[kind], r, got)
 		}
 	}
 	count := len(fake.messages)
@@ -164,5 +175,44 @@ func TestRetryIsNotPublishedBeforeItIsDueWithinOneSecond(t *testing.T) {
 	}
 	if len(fake.messages) != 1 {
 		t.Fatalf("published %d messages when due; want 1", len(fake.messages))
+	}
+}
+
+// A question answered on the task before the outbox sent it never arrives;
+// a sender that can no longer send falls back to system:tasks.
+func TestAnsweredQuestionIsNotSentAndUnknownSenderFallsBack(t *testing.T) {
+	st := storetest.Open(t)
+	now := time.Date(2026, 7, 31, 13, 0, 0, 0, time.UTC)
+	svc := tasks.NewService(st.DB, "customer", func() time.Time { return now })
+	ctx := context.Background()
+	customer := tasks.CustomerActor("customer")
+	if _, err := svc.CreateQueue(ctx, customer, tasks.CreateQueueInput{Prefix: "NOTE", Name: "Notify"}); err != nil {
+		t.Fatal(err)
+	}
+	task, err := svc.CreateTask(ctx, customer, tasks.CreateTaskInput{Queue: "NOTE", Title: "t", Assignee: "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddComment(ctx, tasks.AgentActor("worker"), task.Key, tasks.AddCommentInput{Body: "@user:customer ?"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddComment(ctx, customer, task.Key, tasks.AddCommentInput{Body: "yes"}); err != nil {
+		t.Fatal(err)
+	}
+	fake := &fakeBus{refuse: "user:customer"}
+	publisher := New(st.DB, fake, func() time.Time { return now }, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := publisher.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, message := range fake.messages {
+		if message.Kind == "task.question" {
+			t.Fatalf("an answered question was sent: %+v", message)
+		}
+		if message.From != SenderTasks {
+			t.Fatalf("%s from %s; want the system:tasks fallback", message.Kind, message.From)
+		}
+	}
+	if len(fake.messages) != 2 {
+		t.Fatalf("sent %d letters; want the assignment and the answer", len(fake.messages))
 	}
 }

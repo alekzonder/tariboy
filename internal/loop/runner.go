@@ -24,9 +24,9 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/harness"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tasks"
@@ -59,77 +59,91 @@ func AssemblePrompt(p PromptParts) string {
 	return strings.Join(kept, "\n\n") + "\n"
 }
 
-// messageProcessedInstruction is the standing block appended to every rendered
-// message batch. Deliveries are no longer auto-acked on iteration success (spec
-// §3.2): an agent MUST explicitly process each message by its id, mirroring the
-// old system. A message stays pending (and is re-rendered next iteration) until
-// it is processed — Pending's attempts++/DLQ-after-5 and the loop-hot HasPending
-// behaviour then give re-prompt-until-processed semantics for free.
-const messageProcessedInstruction = `When you have handled a message you MUST run:
-    scripts/messages.sh message processed <id> "<what you did / result>"
-Both arguments are mandatory. Handling can be: doing the work, filing a task
-(name it in the result), or replying (a reply auto-processes the message).`
+// mailInstruction is the standing instruction after the rendered letters
+// (mailbox design §3). It names tmail, which is platform-provided, so an agent
+// whose image still ships the old messages skill is told the right command.
+const mailInstruction = `Requests: answer each one. A reply closes it:
+    tmail reply <id> "<your answer>"
+A task.question is answered on its task, not by mail; the letter closes
+itself. A request you do not answer is shown again next iteration and is
+dead-lettered after 5 attempts. A reply to a system:* sender records your
+result; nobody reads it, so state what you did.
+Notices: read them; they close when this iteration finishes.`
 
-// FormatMessages renders a pending batch into the prompt's Messages section in a
-// stable, greppable layout (spec §3.2, §5.3). Each message is rendered WITH its
-// id and per-message state (kind + threading fields), followed by the standing
-// processing instruction.
-func FormatMessages(msgs []bus.Message) string {
-	if len(msgs) == 0 {
+// FormatMessages renders the open letters of an iteration into the prompt's
+// Messages section (mailbox design §3): requests first, then notices, each
+// with its id, sender, kind and attempts, followed by the standing
+// instruction. The body is indented so its text cannot open a heading.
+func FormatMessages(letters []mail.Letter) string {
+	if len(letters) == 0 {
 		return ""
 	}
-	var b strings.Builder
-	b.WriteString("# Messages\nIncoming messages for this iteration (newest last). Each is listed with its id:\n")
-	for _, m := range msgs {
-		fmt.Fprintf(&b, "\n- id %s [%s] %s: %s", m.ID, m.Type, m.Source, m.Text)
-		if m.Kind != "" && m.Kind != "event" {
-			fmt.Fprintf(&b, "\n  kind: %s", m.Kind)
-		}
-		if m.InReplyTo != "" {
-			fmt.Fprintf(&b, "\n  in_reply_to: %s", m.InReplyTo)
-		}
-		if m.CorrelationID != "" {
-			fmt.Fprintf(&b, "\n  correlation_id: %s", m.CorrelationID)
-		}
-		if m.ReplyTo != "" {
-			fmt.Fprintf(&b, "\n  reply_to: %s", m.ReplyTo)
-		}
-		if m.Deadline != "" {
-			fmt.Fprintf(&b, "\n  deadline: %s", m.Deadline)
-		}
-		if len(m.Subject) > 0 {
-			if j, err := json.Marshal(m.Subject); err == nil {
-				fmt.Fprintf(&b, "\n  subject: %s", string(j))
-			}
-		}
-		if len(m.Data) > 0 {
-			if j, err := json.Marshal(m.Data); err == nil {
-				fmt.Fprintf(&b, "\n  data: %s", string(j))
-			}
+	var requests, notices []mail.Letter
+	for _, l := range letters {
+		if l.NeedsReply {
+			requests = append(requests, l)
+		} else {
+			notices = append(notices, l)
 		}
 	}
-	b.WriteString("\n\n")
-	b.WriteString(messageProcessedInstruction)
+	var b strings.Builder
+	b.WriteString("# Messages\nOpen letters for this iteration, oldest first. Each is listed with its id.\n")
+	for _, group := range []struct {
+		title   string
+		letters []mail.Letter
+	}{{"Requests", requests}, {"Notices", notices}} {
+		if len(group.letters) == 0 {
+			continue
+		}
+		fmt.Fprintf(&b, "\n### %s\n", group.title)
+		for _, l := range group.letters {
+			formatLetter(&b, l)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(mailInstruction)
 	return b.String()
 }
 
-// FormatAwaitingReplies renders the agent's outstanding requests — kind=request
-// messages with no reply yet — into the prompt's "# Awaiting replies" section
-// (spec §3.2, §7). Derived from bus.PendingRequests; empty ⇒ "" so the section is
-// skipped. now anchors each request's age.
-func FormatAwaitingReplies(msgs []bus.Message, now time.Time) string {
-	if len(msgs) == 0 {
+func formatLetter(b *strings.Builder, l mail.Letter) {
+	fmt.Fprintf(b, "\n- id %s  from %s  kind %s  attempts %d", l.ID, l.From, l.Kind, l.Attempts)
+	fmt.Fprintf(b, "\n  subject: %s", l.Subject)
+	if l.InReplyTo != "" {
+		fmt.Fprintf(b, "\n  in_reply_to: %s", l.InReplyTo)
+	}
+	if l.Deadline != "" {
+		fmt.Fprintf(b, "\n  deadline: %s", l.Deadline)
+	}
+	if len(l.Data) > 0 {
+		if j, err := json.Marshal(l.Data); err == nil {
+			fmt.Fprintf(b, "\n  data: %s", string(j))
+		}
+	}
+	if key, _ := l.Data["task_key"].(string); l.Kind == mail.KindTaskQuestion && key != "" {
+		fmt.Fprintf(b, "\n  answer: ttasks comment %s \"<answer>\"", key)
+	}
+	for _, line := range strings.Split(l.Body, "\n") {
+		b.WriteString("\n  " + line)
+	}
+}
+
+// FormatAwaitingReplies renders the requests the agent sent with a deadline
+// that have no answer yet into the prompt's "# Awaiting replies" section.
+// Empty renders "" so the section is skipped. now anchors each request's age.
+func FormatAwaitingReplies(letters []mail.Letter, now time.Time) string {
+	if len(letters) == 0 {
 		return ""
 	}
 	var b strings.Builder
 	b.WriteString("# Awaiting replies\nRequests you sent that have no reply yet:\n")
-	for _, m := range msgs {
-		fmt.Fprintf(&b, "\n- id %s  channel %s", m.ID, m.Channel)
-		if age, ok := messageAge(m.TS, now); ok {
+	for _, l := range letters {
+		fmt.Fprintf(&b, "\n- id %s  to %s", l.ID, l.To)
+		if age, ok := messageAge(l.CreatedAt, now); ok {
 			fmt.Fprintf(&b, "  age %s", age)
 		}
-		if m.Deadline != "" {
-			fmt.Fprintf(&b, "  deadline %s", m.Deadline)
+		if l.Deadline != "" {
+			fmt.Fprintf(&b, "  deadline %s", l.Deadline)
 		}
 	}
 	return b.String()
@@ -405,7 +419,7 @@ type RunnerConfig struct {
 	PollInterval time.Duration
 	DoneGrace    time.Duration
 	Logger       *slog.Logger
-	Bus          *bus.Bus
+	Mail         *mail.Mail
 	Proxy        ProxyBinder
 	CurrentGoal  func(string, time.Time) (tasks.Task, bool, error)
 	// WorkflowGoals supplies the workflow data for the Goal block of a workflow
@@ -604,10 +618,24 @@ func (r *ShimRunner) Run(ctx context.Context, ag agent.Agent, trigger, iteration
 	if err == nil && outcome.Status == agent.IterationHarnessError && outcome.Error == "" {
 		outcome.Error = harnessExitReason(outcome.ExitCode, l.HarnessStderr(iterationID), ag.Interactive)
 	}
-	// No auto-ack of the message batch here (spec §3.2). Deliveries are drained
-	// only by an explicit `tools message processed` (bus.MarkProcessed); anything
-	// unprocessed re-renders next iteration and eventually dead-letters.
+	// The notices rendered into a successful iteration are read; after an
+	// error, a timeout or a kill they stay open and render again (mailbox
+	// design §1). Requests close only by a reply.
+	if err == nil && outcome.Status == agent.IterationDone {
+		r.closeReadNotices(ag.Name, iterationID, prep.letterIDs)
+	}
 	return outcome, err
+}
+
+// closeReadNotices closes the notices an iteration rendered. A failure leaves
+// them open, so they render again: the safe direction.
+func (r *ShimRunner) closeReadNotices(agentName, iterationID string, ids []string) {
+	if r.cfg.Mail == nil || len(ids) == 0 {
+		return
+	}
+	if _, err := r.cfg.Mail.CloseRead(agentName, ids); err != nil {
+		r.cfg.Logger.Warn("close read notices", "agent", agentName, "iteration", iterationID, "err", err)
+	}
 }
 
 // recordLaunch logs the masked harness launch and records the
@@ -780,6 +808,9 @@ type preparedRun struct {
 	// logs and the launching_harness audit event — never for the actual spawn.
 	maskedArgv []string
 	maskedEnv  []string
+	// letterIDs are the letters rendered into the prompt; the notices among
+	// them close when the iteration finishes successfully.
+	letterIDs []string
 }
 
 type activatedImageContextKey struct{}
@@ -824,7 +855,8 @@ func (r *ShimRunner) prepareSteps(ctx context.Context, ag agent.Agent, l agentdi
 		return preparedRun{}, err
 	}
 	in.activated, _ = ctx.Value(activatedImageContextKey{}).(activatedImage)
-	if err := r.writePrompt(ctx, ag, l, iterationID, oneShot, in); err != nil {
+	letterIDs, err := r.writePrompt(ctx, ag, l, iterationID, oneShot, in)
+	if err != nil {
 		return preparedRun{}, err
 	}
 	adapter, cwd, secrets, err := r.resolveHarness(ag, l, in)
@@ -850,6 +882,7 @@ func (r *ShimRunner) prepareSteps(ctx context.Context, ag agent.Agent, l agentdi
 	// Success: the caller takes ownership of the token and defers its revoke
 	// for the rest of the iteration instead.
 	revoke = false
+	prep.letterIDs = letterIDs
 	return prep, nil
 }
 
@@ -889,35 +922,36 @@ func (r *ShimRunner) readPrepareInputs(ag agent.Agent, iterationID string) (prep
 }
 
 // writePrompt assembles and writes the prompt, records the iteration_prepared
-// audit event, and stores the prompt path on the iteration row.
-func (r *ShimRunner) writePrompt(ctx context.Context, ag agent.Agent, l agentdir.Layout, iterationID, oneShot string, in prepareInputs) error {
+// audit event, stores the prompt path on the iteration row, and returns the
+// ids of the letters it rendered.
+func (r *ShimRunner) writePrompt(ctx context.Context, ag agent.Agent, l agentdir.Layout, iterationID, oneShot string, in prepareInputs) ([]string, error) {
 	prompt := ""
-	var batch []bus.Message
+	var batch []mail.Letter
 	if !in.bare {
 		var err error
 		prompt, batch, err = r.assemblePrompt(ctx, ag, l, iterationID, oneShot, in)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if in.activated.Skills.PromptPrefix != "" {
 		prompt = in.activated.Skills.PromptPrefix + prompt
 	}
 	if err := os.WriteFile(l.PromptPath(iterationID), []byte(prompt), 0o600); err != nil {
-		return err
+		return nil, err
 	}
-	// Preserve stable evidence references without leaking prompt or message
+	letterIDs := make([]string, 0, len(batch))
+	for _, letter := range batch {
+		letterIDs = append(letterIDs, letter.ID)
+	}
+	// Preserve stable evidence references without leaking prompt or letter
 	// bodies into the audit timeline.
 	if r.cfg.AuditFor != nil {
 		if rec := r.cfg.AuditFor(ag.Name); rec != nil {
 			sum := sha256.Sum256([]byte(prompt))
-			deliveryIDs := make([]string, 0, len(batch))
-			for _, msg := range batch {
-				deliveryIDs = append(deliveryIDs, msg.ID)
-			}
 			rec.Record("iteration_prepared", "system", iterationID, map[string]any{
 				"prompt_sha256": hex.EncodeToString(sum[:]),
-				"delivery_ids":  deliveryIDs,
+				"letter_ids":    letterIDs,
 			})
 		}
 	}
@@ -928,30 +962,26 @@ func (r *ShimRunner) writePrompt(ctx context.Context, ag agent.Agent, l agentdir
 	if err := r.cfg.Store.SetIterationPromptPath(iterationID, l.PromptPath(iterationID)); err != nil {
 		r.cfg.Logger.Warn("record prompt path", "agent", ag.Name, "id", iterationID, "err", err)
 	}
-	return nil
+	return letterIDs, nil
 }
 
-// pendingMessages drains a batch of pending messages (spec §5.3) and the
-// agent's outstanding requests. Rendering increments each delivery's attempts;
-// the batch is no longer acked on success — the agent drains it explicitly via
-// `tools message processed` (spec §3.2).
-func (r *ShimRunner) pendingMessages(ag agent.Agent) (batch, awaiting []bus.Message) {
-	if r.cfg.Bus == nil {
+// pendingMessages renders the agent's open letters (mailbox design §3), which
+// counts one attempt on each, and reads its requests awaiting a reply.
+func (r *ShimRunner) pendingMessages(ag agent.Agent) (batch, awaiting []mail.Letter) {
+	if r.cfg.Mail == nil {
 		return nil, nil
 	}
 	n := ag.MessagesBatch
 	if n <= 0 {
 		n = 10
 	}
-	if msgs, err := r.cfg.Bus.Pending(ag.Name, n); err != nil {
-		r.cfg.Logger.Warn("pending messages", "agent", ag.Name, "err", err)
+	if letters, err := r.cfg.Mail.RenderBatch(ag.Name, n); err != nil {
+		r.cfg.Logger.Warn("render mail batch", "agent", ag.Name, "err", err)
 	} else {
-		batch = msgs
+		batch = letters
 	}
-	// Derived "# Awaiting replies" section: the agent's own outstanding
-	// requests with no reply yet (spec §3.2, §4.2).
-	if reqs, err := r.cfg.Bus.PendingRequests(ag.Name); err != nil {
-		r.cfg.Logger.Warn("pending requests", "agent", ag.Name, "err", err)
+	if reqs, err := r.cfg.Mail.Awaiting(ag.Name); err != nil {
+		r.cfg.Logger.Warn("awaiting replies", "agent", ag.Name, "err", err)
 	} else {
 		awaiting = reqs
 	}
@@ -960,7 +990,7 @@ func (r *ShimRunner) pendingMessages(ag agent.Agent) (batch, awaiting []bus.Mess
 
 // assemblePrompt renders the prompt of a non-bare image from its schema-v2
 // template or its schema-v1 PROMPT.md, and returns the rendered message batch.
-func (r *ShimRunner) assemblePrompt(ctx context.Context, ag agent.Agent, l agentdir.Layout, iterationID, oneShot string, in prepareInputs) (string, []bus.Message, error) {
+func (r *ShimRunner) assemblePrompt(ctx context.Context, ag agent.Agent, l agentdir.Layout, iterationID, oneShot string, in prepareInputs) (string, []mail.Letter, error) {
 	contextText := ""
 	if data, err := os.ReadFile(l.ContextPath()); err == nil {
 		contextText = string(data)

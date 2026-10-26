@@ -16,7 +16,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/audit"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/paths"
@@ -29,10 +28,21 @@ import (
 
 func TestTasksRuntimeAliasRefreshAndOwnership(t *testing.T) {
 	t.Parallel()
+	for _, alias := range []struct{ payload, link string }{{"tariboy-tasks", "ttasks"}, {"tariboy-mail", "tmail"}} {
+		t.Run(alias.link, func(t *testing.T) {
+			t.Parallel()
+			testRuntimeAlias(t, alias.payload, alias.link)
+		})
+	}
+}
+
+// testRuntimeAlias checks that a runtime link follows the newest payload and
+// never replaces a command it does not own.
+func testRuntimeAlias(t *testing.T, payloadName, linkName string) {
 	runtimeDir := t.TempDir()
 	for _, value := range []string{"old", "new"} {
 		bundle := t.TempDir()
-		payload := filepath.Join(bundle, "tariboy-tasks")
+		payload := filepath.Join(bundle, payloadName)
 		if err := os.WriteFile(payload, []byte("#!/bin/sh\nprintf '"+value+"\\n'\n"), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -40,7 +50,7 @@ func TestTasksRuntimeAliasRefreshAndOwnership(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		out, err := exec.Command(filepath.Join(binDir, "ttasks")).Output()
+		out, err := exec.Command(filepath.Join(binDir, linkName)).Output()
 		if err != nil || strings.TrimSpace(string(out)) != value {
 			t.Fatalf("alias output = %q, err = %v", out, err)
 		}
@@ -48,14 +58,14 @@ func TestTasksRuntimeAliasRefreshAndOwnership(t *testing.T) {
 	for _, kind := range []string{"file", "foreign-link", "directory"} {
 		t.Run(kind, func(t *testing.T) {
 			bundle, runtimeDir := t.TempDir(), t.TempDir()
-			if err := os.WriteFile(filepath.Join(bundle, "tariboy-tasks"), []byte("#!/bin/sh\n"), 0o700); err != nil {
+			if err := os.WriteFile(filepath.Join(bundle, payloadName), []byte("#!/bin/sh\n"), 0o700); err != nil {
 				t.Fatal(err)
 			}
 			binDir := filepath.Join(runtimeDir, "bin")
 			if err := os.Mkdir(binDir, 0o700); err != nil {
 				t.Fatal(err)
 			}
-			link := filepath.Join(binDir, "ttasks")
+			link := filepath.Join(binDir, linkName)
 			switch kind {
 			case "file":
 				if err := os.WriteFile(link, []byte("user-owned"), 0o600); err != nil {
@@ -269,62 +279,6 @@ func TestWorkflowDispatcherRunsAtStartupOnSignalAndPeriodicallyAndStops(t *testi
 	}
 }
 
-func TestOrdinaryPublishDoesNotSynchronouslyWriteWorkflowStateOrChangeLegacyDelivery(t *testing.T) {
-	t.Parallel()
-	st := storetest.Open(t)
-	agents := agent.NewStore(st)
-	if err := agents.Create(agent.Agent{Name: "legacy"}); err != nil {
-		t.Fatal(err)
-	}
-	b := bus.New(st, time.Now)
-	if _, err := b.Subscribe("legacy", "chat:legacy", nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	signal := newWorkflowIngressSignal()
-	taskService := tasks.NewService(st.DB, "customer", time.Now)
-	b.SetPublishHook(func(bus.Message, []string) {
-		if taskService.WorkflowIngressEnabled() {
-			signal.Signal()
-		}
-	})
-	first, err := b.Publish(bus.Message{Channel: "chat:legacy", Source: "operator", Type: "note", Text: "unchanged legacy payload"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	returned := make(chan error, 1)
-	go func() {
-		_, err := b.Publish(bus.Message{Channel: "chat:legacy", Source: "operator", Type: "note", Text: "second"})
-		returned <- err
-	}()
-	select {
-	case err := <-returned:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("publish blocked on full workflow signal")
-	}
-	if _, err := taskService.ReconcileWorkflowObservations(context.Background(), 100); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-signal.C():
-		t.Fatal("ordinary publish signaled workflow ingress without targets")
-	default:
-	}
-	var created int
-	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM tasks`).Scan(&created); err != nil {
-		t.Fatal(err)
-	}
-	if created != 0 {
-		t.Fatalf("ordinary publish created %d tasks", created)
-	}
-	pending, err := b.Pending("legacy", 10)
-	if err != nil || len(pending) != 2 || pending[0].ID != first.ID || pending[0].Text != "unchanged legacy payload" {
-		t.Fatalf("legacy pending = %#v, %v", pending, err)
-	}
-}
-
 func TestTaskMutationSignalsGoalReconciler(t *testing.T) {
 	t.Parallel()
 	st := storetest.Open(t)
@@ -343,39 +297,6 @@ func TestTaskMutationSignalsGoalReconciler(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("goal signals = %d, want 1", calls)
-	}
-}
-
-// Removing daemon-start reconciliation must make this fail: the legacy agent
-// would still have no durable delivery lane after restart.
-func TestReconcileAgentInboxesRepairsExistingAgentsIdempotently(t *testing.T) {
-	t.Parallel()
-	base := t.TempDir()
-	st := storetest.OpenAt(t, filepath.Join(base, "tariboyd.db"))
-	agents := agent.NewStore(st)
-	for _, name := range []string{"legacy", "already"} {
-		if err := agents.Create(agent.Agent{Name: name}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	channelBus := bus.New(st, time.Now)
-	if _, err := channelBus.Subscribe("already", bus.InboxChannel("already"), bus.Matcher{}, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	for range 2 {
-		if err := reconcileAgentInboxes(agents, channelBus); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, name := range []string{"legacy", "already"} {
-		subs, err := channelBus.ListSubscriptions(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(subs) != 1 || subs[0].Channel != bus.InboxChannel(name) || len(subs[0].Matcher) != 0 || len(subs[0].TypeFilter) != 0 {
-			t.Fatalf("subscriptions for %s = %+v, want one unfiltered own inbox", name, subs)
-		}
 	}
 }
 
@@ -512,8 +433,8 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 
 	select {
 	case <-spawner.fired:
-		// interval_s=0 leaves the ordinary bus publish hook as the only route
-		// that can wake this agent and reach the injected spawner.
+		// interval_s=0 leaves the mail wake hook as the only route that can
+		// wake this agent and reach the injected spawner.
 	case err := <-done:
 		cancel()
 		t.Fatalf("daemon returned before reminder wake: %v", err)
@@ -542,13 +463,13 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	var channel, typ, source, data, idempotencyKey string
-	if err := reopened.DB.QueryRow(`SELECT channel,type,source,data,idempotency_key
-		FROM messages WHERE idempotency_key='task-goal:worker:GOAL-9xk2:1:'`).Scan(&channel, &typ, &source, &data, &idempotencyKey); err != nil {
+	var recipient, kind, sender, data, answeredAt string
+	if err := reopened.DB.QueryRow(`SELECT recipient,kind,sender,data,answered_at
+		FROM mail WHERE idempotency_key='task-goal:worker:GOAL-9xk2:1:'`).Scan(&recipient, &kind, &sender, &data, &answeredAt); err != nil {
 		t.Fatal(err)
 	}
-	if channel != "chat:service:worker" || typ != "task.goal" || source != "tasks" || idempotencyKey != "task-goal:worker:GOAL-9xk2:1:" {
-		t.Fatalf("goal = channel:%q type:%q source:%q idempotency:%q", channel, typ, source, idempotencyKey)
+	if recipient != "agent:worker" || kind != "task.goal" || sender != "system:goal" || answeredAt != "" {
+		t.Fatalf("goal = recipient:%q kind:%q sender:%q answered_at:%q", recipient, kind, sender, answeredAt)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(data), &payload); err != nil {
@@ -557,13 +478,12 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 	if payload["reason"] != "selected" || payload["task_key"] != "GOAL-9xk2" {
 		t.Fatalf("payload = %#v", payload)
 	}
-	var deliveries int
-	if err := reopened.DB.QueryRow(`SELECT COUNT(*) FROM deliveries d
-		JOIN messages m ON m.id=d.message_id WHERE m.type='task.goal'`).Scan(&deliveries); err != nil {
+	var letters int
+	if err := reopened.DB.QueryRow(`SELECT COUNT(*) FROM mail WHERE kind='task.goal'`).Scan(&letters); err != nil {
 		t.Fatal(err)
 	}
-	if deliveries != 1 {
-		t.Fatalf("durable deliveries = %d, want one unprocessed Goal delivery", deliveries)
+	if letters != 1 {
+		t.Fatalf("Goal letters = %d, want one open Goal letter", letters)
 	}
 }
 

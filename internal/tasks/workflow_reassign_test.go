@@ -42,7 +42,7 @@ func TestReassignWorkflowHandsThePoolStatusToTheChosenMember(t *testing.T) {
 		payload["actor"] != "user:customer" || payload["status"] != "develop" {
 		t.Fatalf("reassigned payload = %v", payload)
 	}
-	if n := countRows(t, svc, assignedNotifications, task.ID, principalChannel("agent:dev-2")); n != 1 {
+	if n := countRows(t, svc, assignedNotifications, task.ID, notificationRecipient("agent:dev-2")); n != 1 {
 		t.Fatalf("assignment notifications to dev-2 = %d", n)
 	}
 	if _, err := svc.Advance(ctx, AgentActor("dev-1"), task.Key, AdvanceInput{Outcome: "ask"}); ErrorCode(err) != "not_found" {

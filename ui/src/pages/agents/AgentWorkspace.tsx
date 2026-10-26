@@ -8,19 +8,17 @@ import type { AgentRow } from "@/lib/api";
 import { LazyBoundary } from "@/components/LazyBoundary";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
-import { useChatUnread } from "./chat/useChatUnread";
 import type { AgentTab } from "./agentWorkspaceModel";
 import { AgentWorkspaceHeader } from "./AgentWorkspaceHeader";
 import { useAgentWorkspaceRoute } from "./useAgentWorkspaceRoute";
 import { useAgentWorkspaceStatus } from "./useAgentWorkspaceStatus";
 
-// Each tab loads on first open: the terminal brings xterm, the chat Markdown
-// and highlighting, Tasks the rich text editor.
+// Each tab loads on first open: the terminal brings xterm, Tasks the rich text
+// editor.
 const AgentConsoleTab = lazy(() => import("./AgentConsoleTab"));
 const AgentActivityTab = lazy(() => import("./AgentActivityTab"));
 const AgentConfigurationTab = lazy(() => import("./AgentConfigurationTab"));
 const AgentAdvancedTab = lazy(() => import("./AgentAdvancedTab"));
-const AgentChatTab = lazy(() => import("./AgentChatTab"));
 const TasksWorkspace = lazy(() => import("@/pages/tasks/TasksWorkspace"));
 const TaskDrawer = lazy(() => import("@/pages/tasks/TaskDrawer"));
 
@@ -54,14 +52,13 @@ const TAB_CONTENT: Record<AgentTab, (ctx: TabContext) => ReactNode> = {
       onNotificationsChanged={onNotificationsChanged}
     />
   ),
-  chat: ({ hostId }) => <AgentChatTab hostId={hostId} />,
   configuration: ({ refresh }) => <AgentConfigurationTab refresh={refresh} />,
   advanced: () => <AgentAdvancedTab />,
 };
 
 // The workspace is a server-selection boundary: the agent lives on the host the
 // route names, which need not be the active one, so everything inside it
-// (tabs, chat, configuration, tasks, controls) addresses that host. A new
+// (tabs, configuration, tasks, controls) addresses that host. A new
 // endpoint or token for the same host swaps the client without remounting.
 export default function AgentWorkspace(props: AgentWorkspaceProps) {
   return (
@@ -105,9 +102,6 @@ function AgentWorkspaceContent({
   // The Goal task opens over whichever tab is showing, not in Tasks.
   const [goalTask, setGoalTask] = useState("");
   const { attention, refreshHost } = useCustomerQuestionNotifications();
-  // The Chat tab's dot. It is the daemon's own unread count rather than tab
-  // state, so it is right while another tab is open and survives a remount.
-  const unreadChat = useChatUnread(agent.name, connection === "ready" && !unavailable);
   const tabStrip = useActiveLinkIntoView<HTMLElement>();
 
   if ("redirect" in route) return <Navigate to={route.redirect} replace />;
@@ -139,7 +133,6 @@ function AgentWorkspaceContent({
             base={route.base}
             tabs={route.tabs}
             stripRef={tabStrip}
-            unreadChat={unreadChat}
             questionTasks={attention.get(customerQuestionAttentionKey(hostId, agent.name)) ?? 0}
             refresh={refresh}
             onExec={() => setExecCount((n) => n + 1)}

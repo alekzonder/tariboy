@@ -11,11 +11,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 )
 
-// recordingPlugin serves /health 200 and records /deliver bodies.
-func recordingPlugin(t *testing.T, sock string) *[]MessageDTO {
+// recordingPlugin serves /health 200 and records the letters of /deliver.
+func recordingPlugin(t *testing.T, sock string) *[]mail.Letter {
 	t.Helper()
 	_ = os.MkdirAll(filepath.Dir(sock), 0o700)
 	_ = os.Remove(sock)
@@ -24,17 +24,17 @@ func recordingPlugin(t *testing.T, sock string) *[]MessageDTO {
 		t.Fatal(err)
 	}
 	var mu sync.Mutex
-	got := &[]MessageDTO{}
+	got := &[]mail.Letter{}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	mux.HandleFunc("/deliver", func(w http.ResponseWriter, r *http.Request) {
 		var env struct {
-			Message MessageDTO `json:"message"`
+			Letter mail.Letter `json:"letter"`
 		}
 		b, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(b, &env)
 		mu.Lock()
-		*got = append(*got, env.Message)
+		*got = append(*got, env.Letter)
 		mu.Unlock()
 		w.WriteHeader(200)
 	})
@@ -44,69 +44,44 @@ func recordingPlugin(t *testing.T, sock string) *[]MessageDTO {
 	return got
 }
 
-func TestSinkDrainDeliversAndAcks(t *testing.T) {
+func TestDrainDeliversTheLetterAndClosesIt(t *testing.T) {
 	t.Parallel()
-	h, b, _ := newHost(t, nil)
+	h, b, ps := newHost(t, nil)
+	if err := ps.Upsert(sampleRecord("echo")); err != nil {
+		t.Fatal(err)
+	}
 	sock := h.SocketPath("echo")
 	got := recordingPlugin(t, sock)
-	subscriber := "plugin:echo"
-	if _, err := b.Subscribe(subscriber, "chat:in", bus.Matcher{}, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := b.Publish(bus.Message{Channel: "chat:in", Type: "chat.msg", Text: "hey"}); err != nil {
-		t.Fatal(err)
-	}
-	h.drainOnce(context.Background(), "echo", subscriber, NewClient(sock))
-	if len(*got) != 1 || (*got)[0].Text != "hey" {
+	sent := sendToPlugin(t, b, "echo", "hey")
+	h.drainOnce(context.Background(), "echo", "plugin:echo", NewClient(sock))
+	if len(*got) != 1 || (*got)[0].ID != sent.ID || (*got)[0].Body != "hey" || (*got)[0].From != "agent:alice" {
 		t.Fatalf("delivered = %+v", *got)
 	}
-	// Acked -> no longer pending.
-	if has, _ := b.HasPending(subscriber); has {
-		t.Fatal("message still pending after successful deliver")
+	if open := openLetters(t, b, "plugin:echo"); len(open) != 0 {
+		t.Fatalf("delivered letter still open: %+v", open)
 	}
 }
 
-// A kind=reply delivery must carry its routing fields (kind, in_reply_to,
-// correlation_id) through to the plugin, so a channel-sink can implement the
-// reply-forwarding contract — map the reply back to its external
-// entity. Guards toDTO against silently dropping those fields.
-func TestSinkDrainForwardsReplyRoutingFields(t *testing.T) {
+// A delivery that fails leaves the letter open, and each attempt counts, so a
+// plugin that keeps failing gets the letter dead-lettered after five.
+func TestDrainLeavesTheLetterOpenOnFailureAndDeadLettersIt(t *testing.T) {
 	t.Parallel()
-	h, b, _ := newHost(t, nil)
-	sock := h.SocketPath("echo")
-	got := recordingPlugin(t, sock)
-	subscriber := "plugin:echo"
-	if _, err := b.Subscribe(subscriber, "chat:in", bus.Matcher{}, nil); err != nil {
+	h, b, ps := newHost(t, nil)
+	if err := ps.Upsert(sampleRecord("echo")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.Publish(bus.Message{
-		Channel: "chat:in", Type: "chat.reply", Text: "answer",
-		Kind: "reply", InReplyTo: "orig-1", CorrelationID: "corr-1",
-		ProducedByAgent: "alice",
-	}); err != nil {
-		t.Fatal(err)
+	// No plugin server listening on the socket: every deliver fails.
+	sent := sendToPlugin(t, b, "echo", "hey")
+	client := NewClient(h.SocketPath("echo"))
+	for range 5 {
+		h.drainOnce(context.Background(), "echo", "plugin:echo", client)
 	}
-	h.drainOnce(context.Background(), "echo", subscriber, NewClient(sock))
-	if len(*got) != 1 {
-		t.Fatalf("delivered %d messages, want 1: %+v", len(*got), *got)
+	if open := openLetters(t, b, "plugin:echo"); len(open) != 1 || open[0].Attempts != 5 {
+		t.Fatalf("after five failed deliveries = %+v; want one open letter with five attempts", open)
 	}
-	d := (*got)[0]
-	if d.Kind != "reply" || d.InReplyTo != "orig-1" || d.CorrelationID != "corr-1" {
-		t.Fatalf("routing fields not forwarded: kind=%q in_reply_to=%q correlation_id=%q",
-			d.Kind, d.InReplyTo, d.CorrelationID)
-	}
-}
-
-func TestSinkDrainLeavesUnackedOnFailure(t *testing.T) {
-	t.Parallel()
-	h, b, _ := newHost(t, nil)
-	// No plugin server listening on the socket -> deliver fails.
-	subscriber := "plugin:echo"
-	b.Subscribe(subscriber, "chat:in", bus.Matcher{}, nil)
-	b.Publish(bus.Message{Channel: "chat:in", Type: "chat.msg", Text: "hey"})
-	h.drainOnce(context.Background(), "echo", subscriber, NewClient(h.SocketPath("echo")))
-	// Delivery failed -> still pending for redelivery.
-	if has, _ := b.HasPending(subscriber); !has {
-		t.Fatal("failed delivery should leave the message pending")
+	h.drainOnce(context.Background(), "echo", "plugin:echo", client)
+	got, _, err := b.Show("plugin:echo", sent.ID)
+	if err != nil || got.DeadReason != mail.DeadAttempts {
+		t.Fatalf("letter after a sixth drain = %+v, %v; want dead with reason attempts", got, err)
 	}
 }

@@ -10,13 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/aiproxy"
-	"github.com/alekzonder/tariboy/internal/bus"
-	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/loop"
 	"github.com/alekzonder/tariboy/internal/pricingcatalog"
 	"github.com/alekzonder/tariboy/internal/schedule"
@@ -76,8 +73,8 @@ type workflowObservationReconciler interface {
 	ReconcileWorkflowObservations(context.Context, int) (int, error)
 }
 
-// workflowIngressSignal is a level-triggered, coalescing wakeup. Publish never
-// waits for Tasks/SQLite work: durable bus sequence is the actual queue.
+// workflowIngressSignal is a level-triggered, coalescing wakeup. A send never
+// waits for Tasks/SQLite work: mail.seq is the actual queue.
 type workflowIngressSignal struct{ ch chan struct{} }
 
 func newWorkflowIngressSignal() *workflowIngressSignal {
@@ -280,34 +277,6 @@ func pricingErrorClass(d pricingcatalog.Diagnostic) string {
 	}
 }
 
-// reconcileAgentChats provisions every persisted agent's chats and their
-// participants. It runs beside the inbox reconciliation at startup, so an agent
-// created before the chats migration gets its conversations on the next start.
-func reconcileAgentChats(agents *agent.Store, channelBus *bus.Bus, customerPrincipal string) error {
-	rows, err := agents.List()
-	if err != nil {
-		return err
-	}
-	names := make([]string, 0, len(rows))
-	for _, row := range rows {
-		names = append(names, row.Name)
-	}
-	return channelBus.ReconcileChats(names, customerPrincipal)
-}
-
-func reconcileAgentInboxes(agents *agent.Store, channelBus *bus.Bus) error {
-	rows, err := agents.List()
-	if err != nil {
-		return err
-	}
-	for _, row := range rows {
-		if _, err := channelBus.Subscribe(row.Name, bus.InboxChannel(row.Name), bus.Matcher{}, nil); err != nil {
-			return fmt.Errorf("reconcile inbox for agent %q: %w", row.Name, err)
-		}
-	}
-	return nil
-}
-
 // UserPathResolver resolves the effective PATH for a login shell at startup.
 // A nil Options.UserPathResolver selects the platform resolver.
 type UserPathResolver func(context.Context, string) (string, error)
@@ -318,11 +287,34 @@ const userPathFallbackWarning = "resolve user PATH: keeping inherited PATH"
 // the account's login shell (Desktop does; a terminal or SSH launch does not).
 const shellEnvMarker = "TARIBOY_SHELL_ENV"
 
-// installTasksAlias exposes the one sibling payload to all daemon children,
-// including fresh Desktop agents before optional CLI installation. The stable
-// runtime path survives daemon handoff; explicit agent PATH overrides still win.
+// runtimeAliases are the agent commands linked into <runtime>/bin, each to
+// its sibling payload.
+var runtimeAliases = []struct{ payload, link string }{
+	{"tariboy-tasks", "ttasks"},
+	{"tariboy-mail", "tmail"},
+}
+
+// installTasksAlias exposes the sibling payloads ttasks and tmail to all
+// daemon children, including fresh Desktop agents before optional CLI
+// installation. The stable runtime path survives daemon handoff; explicit
+// agent PATH overrides still win. It returns the runtime bin directory, or ""
+// when no payload is present.
 func installTasksAlias(exeDir, runtimeDir string) (string, error) {
-	source := filepath.Join(exeDir, "tariboy-tasks")
+	installed := ""
+	for _, alias := range runtimeAliases {
+		binDir, err := installRuntimeAlias(exeDir, runtimeDir, alias.payload, alias.link)
+		if err != nil {
+			return "", err
+		}
+		if binDir != "" {
+			installed = binDir
+		}
+	}
+	return installed, nil
+}
+
+func installRuntimeAlias(exeDir, runtimeDir, payload, name string) (string, error) {
+	source := filepath.Join(exeDir, payload)
 	info, err := os.Stat(source)
 	if os.IsNotExist(err) {
 		return "", nil // Direct development builds may contain only tariboyd.
@@ -331,7 +323,7 @@ func installTasksAlias(exeDir, runtimeDir string) (string, error) {
 		return "", err
 	}
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-		return "", errors.New("payload of tariboy-tasks is not executable")
+		return "", fmt.Errorf("payload of %s is not executable", payload)
 	}
 	binDir := filepath.Join(runtimeDir, "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil {
@@ -340,21 +332,21 @@ func installTasksAlias(exeDir, runtimeDir string) (string, error) {
 	if info, err := os.Lstat(binDir); err != nil || !info.IsDir() {
 		return "", errors.New("runtime bin must be a directory")
 	}
-	link := filepath.Join(binDir, "ttasks")
+	link := filepath.Join(binDir, name)
 	if info, err := os.Lstat(link); err == nil && info.Mode()&os.ModeSymlink == 0 {
-		return "", errors.New("refusing to replace non-symlink Tasks command")
+		return "", fmt.Errorf("refusing to replace non-symlink %s command", name)
 	} else if err != nil && !os.IsNotExist(err) {
 		return "", err
 	}
-	if target, err := os.Readlink(link); err == nil && (!filepath.IsAbs(target) || filepath.Base(target) != "tariboy-tasks") {
-		return "", errors.New("refusing to replace foreign Tasks command symlink")
+	if target, err := os.Readlink(link); err == nil && (!filepath.IsAbs(target) || filepath.Base(target) != payload) {
+		return "", fmt.Errorf("refusing to replace foreign %s command symlink", name)
 	}
-	stage, err := os.MkdirTemp(binDir, ".tasks-")
+	stage, err := os.MkdirTemp(binDir, "."+name+"-")
 	if err != nil {
 		return "", err
 	}
 	defer os.RemoveAll(stage)
-	temporary := filepath.Join(stage, "ttasks")
+	temporary := filepath.Join(stage, name)
 	if err := os.Symlink(source, temporary); err != nil {
 		return "", err
 	}
@@ -364,7 +356,7 @@ func installTasksAlias(exeDir, runtimeDir string) (string, error) {
 	return binDir, nil
 }
 
-// ensureLocalBin appends ~/.local/bin, where the managed tariboy and ttasks
+// ensureLocalBin appends ~/.local/bin, where the managed tariboy, ttasks and tmail
 // links live, so agents find them even when the account PATH lacks it.
 func ensureLocalBin(home string) {
 	dir := filepath.Join(home, ".local", "bin")
@@ -444,61 +436,4 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
-}
-
-// emitMessageEvent turns a bus publish into per-agent live events. An agent's own
-// stream/inbox channel emits for that agent; other channels emit for each
-// delivered-to agent. A message on the customer's own channel has no agent
-// recipient at all, so it is attributed to its sending agent instead — that is
-// the half of a chat the customer receives.
-func emitMessageEvent(hub *events.Hub, msg bus.Message, agents []string) {
-	typ := "message"
-	if strings.HasSuffix(msg.Channel, ":stream") {
-		typ = "stream"
-	}
-	from := bus.MessageFrom(msg)
-	targets := agents
-	// An agent's own inbox/stream always concerns that agent even with no sub.
-	if a, ok := ownerOfChannel(msg.Channel); ok {
-		targets = appendUnique(targets, a)
-	}
-	chatID, inChat := bus.ChatIDFromChannel(msg.Channel)
-	// A message an agent wrote reaches no agent delivery, so without attributing
-	// it to its author the half of the conversation the customer receives would
-	// never reach a live client.
-	if inChat || strings.HasPrefix(msg.Channel, "user:") {
-		if sender, ok := strings.CutPrefix(from, "agent:"); ok {
-			targets = appendUnique(targets, sender)
-		}
-	}
-	for _, a := range targets {
-		data := map[string]any{"id": msg.ID, "channel": msg.Channel, "type": msg.Type,
-			"source": msg.Source, "from": from, "text": msg.Text}
-		// The chat id is the channel's own suffix, so naming the chat costs no
-		// lookup and a non-chat channel carries no chat key at all.
-		if inChat {
-			data["chat"] = chatID
-		}
-		hub.Emit(events.Event{Agent: a, Type: typ, Time: msg.TS, Data: data})
-	}
-}
-
-func ownerOfChannel(channel string) (string, bool) {
-	if !strings.HasPrefix(channel, "agent:") {
-		return "", false
-	}
-	rest := strings.TrimPrefix(channel, "agent:")
-	if i := strings.LastIndex(rest, ":"); i > 0 {
-		return rest[:i], true
-	}
-	return "", false
-}
-
-func appendUnique(list []string, v string) []string {
-	for _, x := range list {
-		if x == v {
-			return list
-		}
-	}
-	return append(list, v)
 }

@@ -3,7 +3,6 @@ import {
   createApi,
   type AgentListResult,
   type AgentRow,
-  type ChatSummaryRow,
   type DaemonConfig,
   type GroupList,
   type GroupRow,
@@ -16,9 +15,6 @@ export interface HostAgents {
   agents: AgentRow[];
   groups?: GroupRow[];
   sidebarOrder?: { version: 1; groups: string[]; agents: string[] };
-  /** One entry per agent this host holds a conversation with. Absent on a
-   *  daemon too old to project chats — that host simply has no chat order. */
-  chats?: ChatSummaryRow[];
   error?: string;
 }
 
@@ -35,18 +31,12 @@ export async function fetchAllAgents(): Promise<HostAgents[]> {
     targets.map(async (t) => {
       try {
         const api = createApi(await resolveDaemon(t.id));
-        const [res, groupResult, config, chats] = await Promise.all([
+        const [res, groupResult, config] = await Promise.all([
           api.request<AgentListResult>("GET", "/api/agents"),
           api.request<GroupList>("GET", "/api/groups"),
           api
             .request<DaemonConfig>("GET", "/api/daemon/config?key=sidebar_order_v1")
             .catch((): DaemonConfig => ({})),
-          // Chats are additive: a host whose daemon does not project them yet
-          // degrades to no chat order rather than to an unreachable host.
-          api.messages
-            .chatList()
-            .then((r) => r.chats ?? [])
-            .catch((): ChatSummaryRow[] => []),
         ]);
         let sidebarOrder: HostAgents["sidebarOrder"];
         try {
@@ -70,7 +60,6 @@ export async function fetchAllAgents(): Promise<HostAgents[]> {
           agents: res.agents ?? [],
           groups: groupResult.groups ?? [],
           sidebarOrder,
-          chats,
         };
       } catch (e) {
         // Surface the error code alongside the message (e.g. "unauthorized:

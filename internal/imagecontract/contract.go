@@ -29,8 +29,11 @@ type Input struct {
 }
 
 var builtins = map[string]Capability{
-	"whoami":        {Plugin: "whoami", Skill: "whoami"},
-	"loop":          {Plugin: "loop", Skill: "loop", Launcher: "scripts/loop.sh"},
+	"whoami": {Plugin: "whoami", Skill: "whoami"},
+	"loop":   {Plugin: "loop", Skill: "loop", Launcher: "scripts/loop.sh"},
+	"mail":   {Plugin: "mail", Skill: "mail"},
+	// messages is the name of mail before the mailbox; images built before it
+	// keep provisioning with their messages skill.
 	"messages":      {Plugin: "messages", Skill: "messages"},
 	"context":       {Plugin: "context", Skill: "context"},
 	"status":        {Plugin: "status", Skill: "status"},
@@ -47,8 +50,8 @@ var runtimes = map[string]Capability{
 	"goal":             {Plugin: "goal", Skill: "goal"},
 	"workdir":          {Plugin: "workdir", Skill: "workdir"},
 	"context":          {Plugin: "context", Skill: "context"},
-	"messages":         {Plugin: "messages", Skill: "messages"},
-	"awaiting-replies": {Plugin: "messages", Skill: "messages"},
+	"messages":         {Plugin: "mail", Skill: "mail"},
+	"awaiting-replies": {Plugin: "mail", Skill: "mail"},
 	"user-prompt":      {},
 	"one-shot":         {},
 }
@@ -61,6 +64,12 @@ func Builtin(name string) (Capability, bool) {
 func Runtime(name string) (Capability, bool) {
 	capability, ok := runtimes[name]
 	return capability, ok
+}
+
+// HasPlugin reports whether plugins holds name, or holds messages when name is
+// mail: an image built before the mailbox lists messages.
+func HasPlugin(plugins map[string]bool, name string) bool {
+	return plugins[name] || (name == "mail" && plugins["messages"])
 }
 
 func Validate(input Input, resolver ExternalResolver) error {
@@ -89,7 +98,7 @@ func Validate(input Input, resolver ExternalResolver) error {
 		if !ok {
 			return fmt.Errorf("unknown runtime placeholder %q", name)
 		}
-		if capability.Plugin != "" && !plugins[capability.Plugin] {
+		if capability.Plugin != "" && !HasPlugin(plugins, capability.Plugin) {
 			return fmt.Errorf("runtime placeholder %q requires plugin %q", name, capability.Plugin)
 		}
 	}

@@ -408,10 +408,10 @@ func TestScriptRunsMigrationPreservesLegacyHistoryAndBusSchedules(t *testing.T) 
 		t.Fatalf("migrated interruption outbox = run %q payload %q", outboxRunID, payload)
 	}
 	var scheduleSnapshot string
-	if err := upgraded.DB.QueryRow(`SELECT id||'|'||agent||'|'||kind||'|'||spec||'|'||channel||'|'||message_template||'|'||next_fire_at||'|'||enabled||'|'||created_at||'|'||correlation_id FROM schedules WHERE id='schedule-1'`).Scan(&scheduleSnapshot); err != nil {
+	if err := upgraded.DB.QueryRow(`SELECT id||'|'||agent||'|'||kind||'|'||spec||'|'||recipient||'|'||message_template||'|'||next_fire_at||'|'||enabled||'|'||created_at||'|'||correlation_id FROM schedules WHERE id='schedule-1'`).Scan(&scheduleSnapshot); err != nil {
 		t.Fatal(err)
 	}
-	if want := `schedule-1|alice|oneshot|2026-08-21T00:00:00Z|inbox:alice|{"text":"wake"}|2026-08-21T00:00:00.000000000Z|1|2026-08-20T00:00:00.000000000Z|request-1`; scheduleSnapshot != want {
+	if want := `schedule-1|alice|oneshot|2026-08-21T00:00:00Z|agent:alice|{"text":"wake"}|2026-08-21T00:00:00.000000000Z|1|2026-08-20T00:00:00.000000000Z|request-1`; scheduleSnapshot != want {
 		t.Fatalf("schedule changed: got %q want %q", scheduleSnapshot, want)
 	}
 }
@@ -489,7 +489,6 @@ func TestTaskWorkflowMigrationKeepsPoolsTriggersAndTaskColumns(t *testing.T) {
 	for _, table := range []string{
 		"task_workflow_versions", "task_agent_pools", "task_agent_pool_members",
 		"task_queue_workflow_triggers", "task_workflow_ingress_state",
-		"task_workflow_message_sequence",
 	} {
 		requireTable(t, s.DB, table)
 	}
@@ -584,13 +583,12 @@ func TestWorkflowEngineRemovalMigration(t *testing.T) {
 		"task_workflow_versions": 0,
 		// 0055 recreates these two names with the new engine's shapes; the
 		// removal must not have carried any old rows over.
-		"task_artifacts":                 0,
-		"task_queue_workflows":           0,
-		"task_agent_pools":               1,
-		"task_agent_pool_members":        1,
-		"task_queue_workflow_triggers":   1,
-		"task_workflow_ingress_state":    1,
-		"task_workflow_message_sequence": 0,
+		"task_artifacts":               0,
+		"task_queue_workflows":         0,
+		"task_agent_pools":             1,
+		"task_agent_pool_members":      1,
+		"task_queue_workflow_triggers": 1,
+		"task_workflow_ingress_state":  1,
 	} {
 		var count int
 		if err := s.DB.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil {
@@ -1107,37 +1105,6 @@ func requireColumn(t *testing.T, db *sql.DB, table, column string) {
 		t.Fatal(err)
 	}
 	t.Fatalf("column %s.%s is missing", table, column)
-}
-
-func TestMessageSenderMigrationBackfillsExistingMessages(t *testing.T) {
-	t.Parallel()
-	path := filepath.Join(t.TempDir(), "message-sender.db")
-	db := createDatabaseBeforeMigration(t, path, "0048_message_sender.sql")
-	if _, err := db.Exec(`INSERT INTO messages(id, channel, ts, source, data, produced_by_agent) VALUES
-		('m1', 'user:customer', '1', 'system:tasks', '{"from":"agent:worker"}', NULL),
-		('m2', 'agent:worker:inbox', '2', 'user:customer', NULL, NULL),
-		('m3', 'user:customer', '3', 'operator', 'not json', 'worker'),
-		('m4', 'user:customer', '4', 'operator', '{"from":""}', NULL)`); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	s, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	want := map[string]string{"m1": "agent:worker", "m2": "user:customer", "m3": "agent:worker", "m4": "system"}
-	for id, sender := range want {
-		var got string
-		if err := s.DB.QueryRow(`SELECT sender FROM messages WHERE id = ?`, id).Scan(&got); err != nil {
-			t.Fatal(err)
-		}
-		if got != sender {
-			t.Errorf("sender of %s = %q, want %q", id, got, sender)
-		}
-	}
 }
 
 func TestTaskStartedAtMigrationBackfillsTheFirstStartFromEvents(t *testing.T) {

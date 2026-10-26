@@ -160,16 +160,12 @@ import TasksWorkspace from "@/pages/tasks/TasksWorkspace";
 function notification(overrides: Partial<TaskNotification> = {}): TaskNotification {
   return {
     id: "notification-1",
-    channel: "user:customer",
     type: "task.question",
     text: "alice needs your answer",
     requesting_principal: "agent:alice",
     task_key: "ASK-1",
-    event_sequence: 1,
     created_at: "2026-08-18T12:00:00Z",
-    published_at: "2026-08-18T12:00:00Z",
     read_at: "",
-    dismissed_at: "",
     ...overrides,
   };
 }
@@ -429,10 +425,9 @@ describe("CustomerQuestionNotifications", () => {
     expect(model.shown).toEqual([]);
   });
 
-  it("ignores read, dismissed, non-question, and non-agent notifications", async () => {
+  it("ignores read, non-question, and non-agent notifications", async () => {
     model.snapshots.set("", [
       notification({ id: "read", read_at: "2026-08-18T12:05:00Z" }),
-      notification({ id: "dismissed", dismissed_at: "2026-08-18T12:05:00Z" }),
       notification({ id: "assigned", type: "task.assigned" }),
       notification({ id: "customer", requesting_principal: "user:customer" }),
     ]);

@@ -44,7 +44,7 @@ func groupsFixture(t *testing.T) *registry.Ctx {
 		t.Fatal(err)
 	}
 	c.Groups = groups.NewProvisioner(groups.ProvisionerConfig{
-		Groups: groups.NewStore(c.Store, time.Now), Agents: as, Bus: c.Bus,
+		Groups: groups.NewStore(c.Store, time.Now), Agents: as,
 		GroupsDir: filepath.Join(c.BaseDir, "groups"), Clock: time.Now,
 	})
 	for _, name := range []string{"lead1", "dev1", "dev2"} {

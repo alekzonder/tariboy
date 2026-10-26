@@ -9,7 +9,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentapi"
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/api"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/script"
@@ -44,7 +43,6 @@ type loopController interface {
 type groupTools interface {
 	groupToolsInfo(caller string) (map[string]any, error)
 	groupToolsStatus(caller, member string) (map[string]any, error)
-	groupToolsSend(caller, iterationID, member, typ, text, deadline string) (map[string]any, error)
 	groupToolsObserve(caller, member string, tail int) (map[string]any, error)
 	groupToolsLoop(caller, member, action string) (map[string]any, error)
 }
@@ -83,7 +81,6 @@ func (f toolsFacade) deps(ag agent.Agent, l agentdir.Layout) agentapi.Deps {
 	d := agentapi.Deps{
 		Log:   f.cfg.Log,
 		Agent: ag.Name, Cwd: cwdOf(ag, l), ContextPath: l.ContextPath(), Plugins: ag.Plugins,
-		ProvidedChannels: f.cfg.ProvidedChannels,
 		BuildImage: func(name, tag, path string) (map[string]any, error) {
 			res, err := buildImageForAgent(f.cfg.ImgStore, l.Workdir(), name, tag, path, f.pluginResolver())
 			if err != nil {
@@ -95,8 +92,7 @@ func (f toolsFacade) deps(ag agent.Agent, l agentdir.Layout) agentapi.Deps {
 		},
 	}
 	f.lifecycleDeps(&d)
-	f.messageDeps(&d)
-	f.requestDeps(&d)
+	f.mailDeps(&d)
 	f.scheduleDeps(&d)
 	f.scriptDeps(&d)
 	f.groupDeps(&d)
@@ -198,113 +194,41 @@ func (f toolsFacade) setGoal(key string) (map[string]any, error) {
 	return result, err
 }
 
-// messageDeps wires publish, subscriptions and the inbox.
-func (f toolsFacade) messageDeps(d *agentapi.Deps) {
-	agName := f.agent
-	d.Publish = func(msg bus.Message) (bus.Message, error) {
-		if f.cfg.Bus == nil {
-			return bus.Message{}, fmt.Errorf("bus not configured")
+// mailDeps wires the agent's mailbox: every action runs as this agent.
+func (f toolsFacade) mailDeps(d *agentapi.Deps) {
+	d.MailAction = func(action string, body map[string]any) (any, error) {
+		if f.cfg.Mail == nil {
+			return nil, api.UserError{Status: http.StatusServiceUnavailable, Code: "unavailable",
+				Msg: "mail is unavailable"}
 		}
-		return f.cfg.Bus.Publish(msg)
-	}
-	d.Subscribe = func(channel string, matcher bus.Matcher, tf []string) (bus.Subscription, error) {
-		if f.cfg.Bus == nil {
-			return bus.Subscription{}, fmt.Errorf("bus not configured")
-		}
-		return f.cfg.Bus.Subscribe(agName, channel, matcher, tf)
-	}
-	d.Unsubscribe = func(id string) error {
-		if f.cfg.Bus == nil {
-			return fmt.Errorf("bus not configured")
-		}
-		return f.cfg.Bus.Unsubscribe(agName, id)
-	}
-	d.ListSubscriptions = func() ([]bus.Subscription, error) {
-		if f.cfg.Bus == nil {
-			return nil, nil
-		}
-		return f.cfg.Bus.ListSubscriptions(agName)
-	}
-	d.Channels = func() ([]bus.Channel, error) {
-		if f.cfg.Bus == nil {
-			return nil, nil
-		}
-		return f.cfg.Bus.Channels()
-	}
-	d.Inbox = func(status string, limit int, before string) ([]bus.InboxItem, error) {
-		if f.cfg.Bus == nil {
-			return nil, nil
-		}
-		return f.cfg.Bus.Inbox(agName, status, limit, before)
-	}
-	d.MarkProcessed = func(msgID, result string) (bus.InboxItem, error) {
-		if f.cfg.Bus == nil {
-			return bus.InboxItem{}, fmt.Errorf("bus not configured")
-		}
-		return f.cfg.Bus.MarkProcessed(agName, msgID, result)
-	}
-	d.SubscribeParams = func(channel string, matcher bus.Matcher, tf []string, params map[string]any) (bus.Subscription, error) {
-		if f.cfg.Bus == nil {
-			return bus.Subscription{}, fmt.Errorf("bus not configured")
-		}
-		return f.cfg.Bus.SubscribeParams(agName, channel, matcher, tf, params)
-	}
-	d.UnsubscribeChannel = func(channel string) (int, error) {
-		if f.cfg.Bus == nil {
-			return 0, fmt.Errorf("bus not configured")
-		}
-		return f.cfg.Bus.UnsubscribeChannel(agName, channel)
-	}
-}
-
-// requestDeps wires replies, requests and their bookkeeping.
-func (f toolsFacade) requestDeps(d *agentapi.Deps) {
-	agName := f.agent
-	d.Reply = func(msgID, text string, data map[string]any, typeOverride string) (bus.Message, error) {
-		if f.cfg.Bus == nil {
-			return bus.Message{}, fmt.Errorf("bus not configured")
-		}
-		return f.cfg.Bus.Reply(agName, msgID, text, data, typeOverride)
-	}
-	d.Request = func(channel, text, deadline string) (bus.Message, error) {
-		if f.cfg.Bus == nil {
-			return bus.Message{}, fmt.Errorf("bus not configured")
-		}
-		return f.cfg.Bus.Request(agName, channel, text, deadline)
-	}
-	d.Requeue = func(msgID string) error {
-		if f.cfg.Bus == nil {
-			return fmt.Errorf("bus not configured")
-		}
-		return f.cfg.Bus.Requeue(agName, msgID)
-	}
-	d.Unanswered = func() (map[string][]bus.Message, error) {
-		if f.cfg.Bus == nil {
-			return nil, fmt.Errorf("bus not configured")
-		}
-		return f.cfg.Bus.UnansweredForPrincipal("agent:" + agName)
+		return f.cfg.Mail.AgentAction(f.agent, f.iterations.currentIterationID(f.agent), action, body)
 	}
 }
 
 // scheduleDeps wires the agent's own message schedules.
 func (f toolsFacade) scheduleDeps(d *agentapi.Deps) {
 	agName := f.agent
-	d.AddSchedule = func(kind, spec, channel, tpl string) (map[string]any, error) {
+	d.AddSchedule = func(kind, spec, to, channel, tpl string) (map[string]any, error) {
 		if f.cfg.Schedules == nil {
 			return nil, fmt.Errorf("schedule store not configured")
 		}
-		if channel == "" {
-			// A schedule the agent set for itself is service traffic; an
-			// explicit channel still wins, so an existing schedule and a
-			// deliberate chat target both keep working.
-			channel = bus.ChatChannelFor(bus.ChatIDService(agName))
+		// Without to, the schedule wakes the agent itself; the channel older
+		// skills send maps to a recipient by the 0072 migration rule.
+		recipient := to
+		if recipient == "" {
+			recipient = schedule.RecipientForChannel(agName, channel)
+		}
+		if f.cfg.Mail != nil {
+			if err := f.cfg.Mail.ValidateRecipient(schedule.SenderSchedule, recipient); err != nil {
+				return nil, err
+			}
 		}
 		sch, err := f.cfg.Schedules.Add(schedule.Schedule{
-			Agent: agName, Kind: kind, Spec: spec, Channel: channel, MessageTemplate: tpl})
+			Agent: agName, Kind: kind, Spec: spec, Recipient: recipient, MessageTemplate: tpl})
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"id": sch.ID, "kind": sch.Kind, "channel": sch.Channel,
+		return map[string]any{"id": sch.ID, "kind": sch.Kind, "to": sch.Recipient,
 			"next_fire_at": sch.NextFireAt}, nil
 	}
 	d.ListSchedules = func() ([]map[string]any, error) {
@@ -318,7 +242,7 @@ func (f toolsFacade) scheduleDeps(d *agentapi.Deps) {
 		rows := make([]map[string]any, 0, len(list))
 		for _, s := range list {
 			rows = append(rows, map[string]any{"id": s.ID, "kind": s.Kind, "spec": s.Spec,
-				"channel": s.Channel, "next_fire_at": s.NextFireAt, "enabled": s.Enabled})
+				"to": s.Recipient, "next_fire_at": s.NextFireAt, "enabled": s.Enabled})
 		}
 		return rows, nil
 	}
@@ -349,9 +273,6 @@ func (f toolsFacade) groupDeps(d *agentapi.Deps) {
 	agName, g := f.agent, f.groups
 	d.GroupInfo = func() (map[string]any, error) { return g.groupToolsInfo(agName) }
 	d.GroupStatus = func(member string) (map[string]any, error) { return g.groupToolsStatus(agName, member) }
-	d.GroupSend = func(member, typ, text, deadline string) (map[string]any, error) {
-		return g.groupToolsSend(agName, f.iterations.currentIterationID(agName), member, typ, text, deadline)
-	}
 	d.GroupObserve = func(member string, tail int) (map[string]any, error) {
 		return g.groupToolsObserve(agName, member, tail)
 	}

@@ -140,45 +140,32 @@
     ]
   },
   "plugin.inspect echo": {
-    "channels": {
-      "provide": [
-        {
-          "channel": "echo:feed",
-          "help": "feed",
-          "params_schema": {
-            "type": "object"
-          }
-        }
-      ],
-      "publish": [
-        "echo:*"
-      ],
-      "subscribe": [
-        "chat:in"
-      ]
-    },
     "enabled": true,
     "exec": "run.sh",
     "installed_at": "2026-07-14T10:00:00.000000000Z",
+    "mail": {
+      "receive": true,
+      "send": true
+    },
     "name": "echo",
     "protocol_version": 1,
     "socket": "$BASE/plugins/echo/plugin.sock",
     "source_path": "/src/echo",
     "state": "installed",
     "types": [
-      "channel-source",
-      "channel-sink"
+      "mail-source",
+      "mail-sink"
     ],
     "version": "1.0.0"
   },
   "plugin.inspect quiet": {
-    "channels": {
-      "publish": null,
-      "subscribe": null
-    },
     "enabled": false,
     "exec": "run.sh",
     "installed_at": "2026-07-14T10:00:00.000000000Z",
+    "mail": {
+      "receive": false,
+      "send": false
+    },
     "name": "quiet",
     "protocol_version": 1,
     "socket": "$BASE/plugins/quiet/plugin.sock",
@@ -191,7 +178,7 @@
     "installed": true,
     "name": "widget",
     "types": [
-      "channel-sink"
+      "mail-sink"
     ],
     "version": "2.0.0"
   },
@@ -219,8 +206,8 @@
         "name": "echo",
         "state": "installed",
         "types": [
-          "channel-source",
-          "channel-sink"
+          "mail-source",
+          "mail-sink"
         ],
         "version": "1.0.0"
       },

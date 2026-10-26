@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
@@ -169,20 +169,6 @@ func TestBuildProxyDoesNotListen(t *testing.T) {
 	}
 }
 
-func TestBuildPluginsAllowsCoreSubscribes(t *testing.T) {
-	t.Parallel()
-	proc, c, _ := phaseCore(t, phaseOptions(t))
-	pl := buildPlugins(proc, c)
-	if pl.host == nil || pl.api == nil {
-		t.Fatal("plugin parts missing")
-	}
-	// The subscription hook and params validator treat a core channel as
-	// non-provider, so the subscribe succeeds.
-	if _, err := c.bus.Subscribe("phase-agent", bus.InboxChannel("phase-agent"), bus.Matcher{}, nil); err != nil {
-		t.Fatalf("subscribe: %v", err)
-	}
-}
-
 func TestBuildManagerWiresRegistryContext(t *testing.T) {
 	t.Parallel()
 	o := phaseOptions(t)
@@ -204,42 +190,39 @@ func TestBuildManagerWiresRegistryContext(t *testing.T) {
 	}
 }
 
-// A request deadline arms a one-shot timeout schedule in the caller's
-// transaction, and the reply's cancel removes exactly that entry.
-func TestDeadlineHooksArmAndCancelOneShot(t *testing.T) {
+// buildManager wires request deadlines: a request with a deadline arms a
+// one-shot schedule keyed on the letter, and the reply cancels it.
+func TestBuildManagerWiresMailDeadlines(t *testing.T) {
 	t.Parallel()
-	_, c, _ := phaseCore(t, phaseOptions(t))
-	sched := schedule.NewStore(c.st, time.Now)
-	arm, cancelDeadline := deadlineHooks(sched)
-	tx, err := c.st.DB.Begin()
+	o := phaseOptions(t)
+	proc, c, _ := phaseCore(t, o)
+	tk, err := buildTasks(context.Background(), proc, c)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := arm(tx, "phase-agent", "corr-1", "5m"); err != nil {
+	px, err := buildProxy(context.Background(), o, proc, c)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tx.Commit(); err != nil {
+	mg := buildManager(context.Background(), o, proc, c, tk, px, buildPlugins(proc, c))
+	for _, name := range []string{"asker", "helper"} {
+		if err := c.agents.Create(agent.Agent{Name: name, ImageRef: "basic:latest"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sent, err := c.mail.Send(mail.Letter{From: "agent:asker", To: "agent:helper", Body: "?", NeedsReply: true, Deadline: "5m"})
+	if err != nil {
 		t.Fatal(err)
 	}
-	list, err := sched.List("phase-agent")
-	if err != nil || len(list) != 1 || list[0].Kind != "oneshot" || !strings.Contains(list[0].MessageTemplate, "corr-1") {
+	list, err := mg.schedules.List("asker")
+	if err != nil || len(list) != 1 || list[0].Kind != "oneshot" || !strings.Contains(list[0].MessageTemplate, sent[0].ID) {
 		t.Fatalf("schedules = %+v, err = %v", list, err)
 	}
-	tx, err = c.st.DB.Begin()
-	if err != nil {
+	if _, _, err := c.mail.Reply(mail.ReplyRequest{As: "agent:helper", ID: sent[0].ID, Text: "done"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := cancelDeadline(tx, "corr-1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	if list, _ := sched.List("phase-agent"); len(list) != 0 {
-		t.Fatalf("schedules after cancel = %+v", list)
-	}
-	if err := arm(nil, "phase-agent", "corr-2", "soon"); err == nil {
-		t.Fatal("arm accepted a malformed deadline")
+	if list, _ := mg.schedules.List("asker"); len(list) != 0 {
+		t.Fatalf("schedules after the reply = %+v", list)
 	}
 }
 

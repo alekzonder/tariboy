@@ -89,13 +89,14 @@ func TestRestoreUnderNewNameRemapsOpaqueIDsOnSameHost(t *testing.T) {
 	if err := agent.NewStore(s).Create(agent.Agent{Name: "opaque", ImageRef: "img:1"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DB.Exec(`INSERT INTO subscriptions(id, agent, channel) VALUES('sub-opaque-1','opaque','opaque.inbox')`); err != nil {
+	if _, err := s.DB.Exec(`INSERT INTO mail(id, sender, recipient, created_at) VALUES('m-opaque-1','user:customer','agent:opaque','t'),
+		('m-opaque-2','agent:opaque','user:customer','t')`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DB.Exec(`INSERT INTO messages(id, channel, ts, produced_by_agent) VALUES('msg-opaque-1','opaque.inbox','2026-01-01T00:00:00Z','opaque')`); err != nil {
+	if _, err := s.DB.Exec(`UPDATE mail SET answer_id = 'm-opaque-2' WHERE id = 'm-opaque-1'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DB.Exec(`INSERT INTO deliveries(subscription_id, message_id) VALUES('sub-opaque-1','msg-opaque-1')`); err != nil {
+	if _, err := s.DB.Exec(`UPDATE mail SET in_reply_to = 'm-opaque-1' WHERE id = 'm-opaque-2'`); err != nil {
 		t.Fatal(err)
 	}
 	var arc bytes.Buffer
@@ -105,22 +106,18 @@ func TestRestoreUnderNewNameRemapsOpaqueIDsOnSameHost(t *testing.T) {
 	if _, err := Restore(bytes.NewReader(arc.Bytes()), s, agentsDir, RestoreOptions{NewName: "clone"}); err != nil {
 		t.Fatal(err)
 	}
-	var subID, messageID string
-	if err := s.DB.QueryRow(`SELECT id FROM subscriptions WHERE agent='clone'`).Scan(&subID); err != nil {
+	var inID, answerID, replyID, inReplyTo string
+	if err := s.DB.QueryRow(`SELECT id, answer_id FROM mail WHERE recipient='agent:clone'`).Scan(&inID, &answerID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DB.QueryRow(`SELECT id FROM messages WHERE produced_by_agent='clone'`).Scan(&messageID); err != nil {
+	if err := s.DB.QueryRow(`SELECT id, in_reply_to FROM mail WHERE sender='agent:clone'`).Scan(&replyID, &inReplyTo); err != nil {
 		t.Fatal(err)
 	}
-	if subID == "sub-opaque-1" || messageID == "msg-opaque-1" {
-		t.Fatalf("opaque ids were not remapped: subscription=%q message=%q", subID, messageID)
+	if inID == "m-opaque-1" || replyID == "m-opaque-2" {
+		t.Fatalf("opaque ids were not remapped: in=%q reply=%q", inID, replyID)
 	}
-	var deliverySub, deliveryMessage string
-	if err := s.DB.QueryRow(`SELECT subscription_id, message_id FROM deliveries WHERE subscription_id=?`, subID).Scan(&deliverySub, &deliveryMessage); err != nil {
-		t.Fatal(err)
-	}
-	if deliverySub != subID || deliveryMessage != messageID {
-		t.Fatalf("delivery refs=%q/%q, want %q/%q", deliverySub, deliveryMessage, subID, messageID)
+	if answerID != replyID || inReplyTo != inID {
+		t.Fatalf("letter refs = answer %q / in_reply_to %q, want %q / %q", answerID, inReplyTo, replyID, inID)
 	}
 }
 
@@ -159,14 +156,12 @@ func TestRestoreRenameMapsOwnedIDsButPreservesExternalReferencesAndEmptyValues(t
 			t.Fatal(err)
 		}
 	}
-	exec(`INSERT INTO subscriptions(id,agent,channel) VALUES('sub-owned','opaque','opaque.inbox')`)
-	exec(`INSERT INTO messages(id,channel,ts,produced_by_agent,produced_in_iteration) VALUES('msg-owned','opaque.inbox','t','opaque','')`)
-	exec(`INSERT INTO messages(id,channel,ts,produced_by_agent) VALUES('shared-msg','shared','t','other')`)
-	// Occupy the first deterministic rename candidate to force collision-safe
-	// allocation for the owned message without rewriting the shared row.
-	exec(`INSERT INTO messages(id,channel,ts,produced_by_agent) VALUES('clone-msg-owned','shared','t','other')`)
-	exec(`INSERT INTO deliveries(subscription_id,message_id) VALUES('sub-owned','msg-owned')`)
-	exec(`INSERT INTO deliveries(subscription_id,message_id) VALUES('sub-owned','shared-msg')`)
+	// A letter to opaque that answers a letter outside the archive, and a
+	// row on the first deterministic rename candidate to force a
+	// collision-safe id.
+	exec(`INSERT INTO mail(id,sender,recipient,in_reply_to,produced_in_iteration,created_at) VALUES('m-owned','agent:other','agent:opaque','m-shared','','t')`)
+	exec(`INSERT INTO mail(id,sender,recipient,created_at) VALUES('m-shared','agent:opaque','agent:other','t')`)
+	exec(`INSERT INTO mail(id,sender,recipient,created_at) VALUES('clone-m-owned','agent:other','agent:x','t')`)
 	exec(`INSERT INTO ai_requests(id,ts,agent,iteration) VALUES('request-empty','t','opaque','')`)
 
 	var arc bytes.Buffer
@@ -177,15 +172,21 @@ func TestRestoreRenameMapsOwnedIDsButPreservesExternalReferencesAndEmptyValues(t
 		t.Fatal(err)
 	}
 
-	var clonedSub, clonedMessage, producedIteration, requestIteration string
-	if err := s.DB.QueryRow(`SELECT id FROM subscriptions WHERE agent='clone'`).Scan(&clonedSub); err != nil {
+	var cloned, inReplyTo, producedIteration, requestIteration string
+	if err := s.DB.QueryRow(`SELECT id,in_reply_to,produced_in_iteration FROM mail WHERE recipient='agent:clone'`).Scan(&cloned, &inReplyTo, &producedIteration); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DB.QueryRow(`SELECT id,produced_in_iteration FROM messages WHERE produced_by_agent='clone'`).Scan(&clonedMessage, &producedIteration); err != nil {
+	if cloned == "m-owned" || cloned == "clone-m-owned" {
+		t.Fatalf("owned letter collision was not remapped safely: %q", cloned)
+	}
+	// m-shared is in the archive too (opaque sent it), so the reference
+	// follows its new id; the original row stays for agent:other.
+	var sharedClone string
+	if err := s.DB.QueryRow(`SELECT id FROM mail WHERE sender='agent:clone'`).Scan(&sharedClone); err != nil {
 		t.Fatal(err)
 	}
-	if clonedMessage == "msg-owned" || clonedMessage == "clone-msg-owned" {
-		t.Fatalf("owned message collision was not remapped safely: %q", clonedMessage)
+	if inReplyTo != sharedClone {
+		t.Fatalf("in_reply_to = %q, want the restored letter %q", inReplyTo, sharedClone)
 	}
 	if producedIteration != "" {
 		t.Fatalf("empty produced_in_iteration remapped to %q", producedIteration)
@@ -196,39 +197,42 @@ func TestRestoreRenameMapsOwnedIDsButPreservesExternalReferencesAndEmptyValues(t
 	if requestIteration != "" {
 		t.Fatalf("empty ai request iteration remapped to %q", requestIteration)
 	}
-	rows, err := s.DB.Query(`SELECT message_id FROM deliveries WHERE subscription_id=? ORDER BY message_id`, clonedSub)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	var delivered []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatal(err)
-		}
-		delivered = append(delivered, id)
-	}
-	if len(delivered) != 2 || !containsTestString(delivered, clonedMessage) || !containsTestString(delivered, "shared-msg") {
-		t.Fatalf("cloned deliveries=%v, want owned %q plus shared-msg", delivered, clonedMessage)
-	}
 	var fkProblems int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_foreign_key_check`).Scan(&fkProblems); err != nil || fkProblems != 0 {
 		t.Fatalf("foreign key check=%d, err=%v", fkProblems, err)
 	}
 }
 
-func containsTestString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
+// TestRestoreKeepsSentLettersThatOutlivedTheAgent: removing an agent keeps
+// the letters it sent, so restoring it on the same host does not insert them
+// twice.
+func TestRestoreKeepsSentLettersThatOutlivedTheAgent(t *testing.T) {
+	s, agentsDir := seed(t)
+	var arc bytes.Buffer
+	if _, err := Build(&arc, s, agentsDir, "bot", Options{}, clk); err != nil {
+		t.Fatal(err)
 	}
-	return false
+	if err := agent.NewStore(s).Delete("bot"); err != nil {
+		t.Fatal(err)
+	}
+	if err := agent.NewStore(s).PurgeAgentData("bot"); err != nil {
+		t.Fatal(err)
+	}
+	var kept int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM mail WHERE sender='agent:bot'`).Scan(&kept); err != nil || kept != 1 {
+		t.Fatalf("letters bot sent after removal = %d, %v; want 1", kept, err)
+	}
+	if _, err := Restore(bytes.NewReader(arc.Bytes()), s, agentsDir, RestoreOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	var total int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM mail WHERE 'agent:bot' IN (sender, recipient)`).Scan(&total); err != nil || total != 2 {
+		t.Fatalf("bot letters after restore = %d, %v; want 2", total, err)
+	}
 }
 
-// assertRemappedBus checks that every agent-scoped bus id was consistently
-// re-prefixed old->new and that foreign refs (deliveries) still line up.
+// assertRemappedBus checks that every agent-scoped id was consistently
+// re-prefixed old->new and that the letters' references still line up.
 func assertRemappedBus(t *testing.T, s *store.Store, newName string) {
 	t.Helper()
 	q := func(query string, args ...any) string {
@@ -238,17 +242,15 @@ func assertRemappedBus(t *testing.T, s *store.Store, newName string) {
 		}
 		return v
 	}
-	if got := q(`SELECT id FROM subscriptions WHERE agent=?`, newName); got != newName+"-sub-1" {
-		t.Fatalf("subscription id not remapped: %q", got)
+	if got := q(`SELECT id FROM mail WHERE recipient=?`, "agent:"+newName); got != newName+"-mail-in" {
+		t.Fatalf("letter id not remapped: %q", got)
 	}
-	if got := q(`SELECT id FROM messages WHERE produced_by_agent=?`, newName); got != newName+"-msg-1" {
-		t.Fatalf("message id not remapped: %q", got)
+	// The letters' references follow the remapped ids.
+	if got := q(`SELECT answer_id FROM mail WHERE recipient=?`, "agent:"+newName); got != newName+"-mail-reply" {
+		t.Fatalf("answer_id not remapped: %q", got)
 	}
-	// The delivery's FK refs must match the remapped subscription/message ids.
-	sub := q(`SELECT subscription_id FROM deliveries`)
-	msg := q(`SELECT message_id FROM deliveries`)
-	if sub != newName+"-sub-1" || msg != newName+"-msg-1" {
-		t.Fatalf("delivery refs not remapped consistently: sub=%q msg=%q", sub, msg)
+	if got := q(`SELECT in_reply_to FROM mail WHERE sender=?`, "agent:"+newName); got != newName+"-mail-in" {
+		t.Fatalf("in_reply_to not remapped: %q", got)
 	}
 	if got := q(`SELECT id FROM schedules WHERE agent=? ORDER BY id LIMIT 1`, newName); got != newName+"-sch-a" {
 		t.Fatalf("schedule id not remapped: %q", got)
@@ -316,9 +318,9 @@ func TestRestoreRoundTrip(t *testing.T) {
 	if n != 2 {
 		t.Fatalf("schedules not restored: %d", n)
 	}
-	dst.DB.QueryRow(`SELECT COUNT(*) FROM deliveries`).Scan(&n)
-	if n != 1 {
-		t.Fatalf("deliveries not restored: %d", n)
+	dst.DB.QueryRow(`SELECT COUNT(*) FROM mail`).Scan(&n)
+	if n != 2 {
+		t.Fatalf("mail not restored: %d", n)
 	}
 	var runLogPath string
 	if err := dst.DB.QueryRow(`SELECT log_path FROM script_runs WHERE agent='bot'`).Scan(&runLogPath); err != nil {
@@ -474,7 +476,7 @@ func TestRestoreCanonicalizesLegacyTimes(t *testing.T) {
 		"UPDATE schedules SET next_fire_at = \"2026-01-01T00:00:00.123Z\" WHERE id = \"bot-sch-a\"",
 		"UPDATE schedules SET next_fire_at = \"2026-01-01T03:00:00+03:00\" WHERE id = \"bot-sch-b\"",
 		"UPDATE script_runs SET started_at = \"2026-01-01T00:00:01.000000001Z\", finished_at = \"\" WHERE id = \"bot-run-1\"",
-		"UPDATE messages SET ts = \"2026-01-01T00:00:00Z\" WHERE id = \"bot-msg-1\"",
+		"UPDATE mail SET created_at = \"2026-01-01T00:00:00Z\" WHERE id = \"bot-mail-in\"",
 	}
 	for _, q := range legacy {
 		if _, err := src.DB.Exec(strings.ReplaceAll(q, "\"", "\x27")); err != nil {
@@ -495,7 +497,7 @@ func TestRestoreCanonicalizesLegacyTimes(t *testing.T) {
 		{"SELECT next_fire_at FROM schedules WHERE id = \"bot-sch-b\"", "2026-01-01T00:00:00.000000000Z"},
 		{"SELECT started_at FROM script_runs WHERE id = \"bot-run-1\"", "2026-01-01T00:00:01.000000001Z"},
 		{"SELECT finished_at FROM script_runs WHERE id = \"bot-run-1\"", ""},
-		{"SELECT ts FROM messages WHERE id = \"bot-msg-1\"", "2026-01-01T00:00:00.000000000Z"},
+		{"SELECT created_at FROM mail WHERE id = \"bot-mail-in\"", "2026-01-01T00:00:00.000000000Z"},
 		// A column outside the time registry keeps its text.
 		{"SELECT spec FROM schedules WHERE id = \"bot-sch-a\"", "2026-01-01T00:00:00Z"},
 	}

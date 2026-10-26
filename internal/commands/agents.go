@@ -578,11 +578,11 @@ func agentStatus() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			b, err := requireBus(c)
+			m, err := requireMail(c)
 			if err != nil {
 				return nil, err
 			}
-			messagesPending, err := b.PendingCount(a.Name)
+			messagesPending, err := m.OpenCount(a.Name)
 			if err != nil {
 				return nil, err
 			}

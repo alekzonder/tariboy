@@ -100,7 +100,6 @@ export const storageKeys = {
   terminalsLegacyWorkspace: jsonKey("local", "terminals:workspace:v1", 1),
   terminalsSidebarTab: oneOfKey("terminals:sidebar-tab:v1", 1, ["servers", "agents"], "servers"),
   terminalsSidebarPinned: jsonKey("local", "terminals:sidebar-pinned:v1", 1),
-  chatTypes: jsonKey("local", "terminals:chat-types:v1", 1),
   taskColumns: jsonKey("local", "tasks:columns:v1", 1),
   taskPanelWidths: jsonKey("local", "tasks:workspace:v1", 1),
   newTaskQueue: jsonKey("local", "tasks:new-task-queue:v1", 1),

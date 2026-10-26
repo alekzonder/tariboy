@@ -87,21 +87,10 @@ type fakeCaller struct {
 	agents  map[string]map[string]any
 	groups  map[string]map[string]any
 	budgets map[string]map[string]any // keyed by scope, in budget.ls shape
-	// subs models the daemon's subscription rows keyed by agent name. The POST
-	// handler dedups by the same identity the real daemon uses (channel + the
-	// filter/params triple), so a re-applied compose file creates no duplicate.
-	subs    map[string][]subRow
 	logsFor func(name string) json.RawMessage
 	// fail makes the named "METHOD route" call return its error, so a test
 	// can fail one action and watch the rest of the reconcile continue.
 	fail map[string]error
-}
-
-// subRow is a recorded subscription in the fake daemon: the channel plus the
-// canonical form of its filter/provider inputs used as the dedup identity.
-type subRow struct {
-	channel string
-	key     string // canonical (type|matcher|params) fingerprint
 }
 
 func newFake() *fakeCaller {
@@ -109,7 +98,6 @@ func newFake() *fakeCaller {
 		agents:  map[string]map[string]any{},
 		groups:  map[string]map[string]any{},
 		budgets: map[string]map[string]any{},
-		subs:    map[string][]subRow{},
 	}
 }
 
@@ -173,22 +161,6 @@ func (f *fakeCaller) Call(method, route string, body any) (json.RawMessage, erro
 		}
 		pending, _ := a["pending_image"].(string)
 		return mustJSON(map[string]any{"name": name, "pending": map[string]any{"ref": pending}}), nil
-	case method == "POST" && strings.HasSuffix(route, "/subscriptions"):
-		name := route[len("/api/agents/") : len(route)-len("/subscriptions")]
-		m := body.(map[string]any)
-		channel := m["channel"].(string)
-		// Canonical dedup identity: the daemon is idempotent on channel + the
-		// filter/params triple (params folds into the watch, watch into the
-		// matcher key). Model that so a re-applied file creates no duplicate.
-		key := string(mustJSON([]any{m["type"], m["matcher"], m["params"]}))
-		row := subRow{channel: channel, key: key}
-		for _, existing := range f.subs[name] {
-			if existing == row {
-				return mustJSON(map[string]any{"channel": channel, "id": "sub-existing", "changed": false}), nil
-			}
-		}
-		f.subs[name] = append(f.subs[name], row)
-		return mustJSON(map[string]any{"channel": channel, "id": fmt.Sprintf("sub-%d", len(f.subs[name])), "changed": true}), nil
 	case method == "POST" && len(route) > 5 && route[len(route)-4:] == "/cwd":
 		name := route[len("/api/agents/") : len(route)-len("/cwd")]
 		m := body.(map[string]any)
@@ -1011,10 +983,9 @@ func TestStatusReportsMaxIdleDrift(t *testing.T) {
 	}
 }
 
-// TestSubscribeParsesBothForms proves a subscribe: list accepts both the bare
-// string form (channel only) and the object form {channel, type, matcher,
-// params} in one document.
-func TestSubscribeParsesBothForms(t *testing.T) {
+// TestComposeRejectsSubscribe: subscriptions are gone with the channel bus, so
+// a subscribe: key on an agent is an unknown field.
+func TestComposeRejectsSubscribe(t *testing.T) {
 	const y = `
 version: 1
 agents:
@@ -1022,151 +993,8 @@ agents:
     image: img:latest
     subscribe:
       - group:dev:broadcast
-      - channel: ci:events
-        type: "run.finished"
-        matcher:
-          data.status: failed
-      - channel: issue-provider:query
-        params:
-          query: "Queue: PROJ AND Status: Open"
 `
-	f, err := Parse([]byte(y))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if err := f.Validate(); err != nil {
-		t.Fatalf("validate: %v", err)
-	}
-	subs := f.Agents["a"].Subscribe
-	if len(subs) != 3 {
-		t.Fatalf("want 3 subscribe entries, got %d: %#v", len(subs), subs)
-	}
-	// String form -> channel only, no filters/params.
-	if subs[0].Channel != "group:dev:broadcast" || subs[0].Type != "" ||
-		len(subs[0].Matcher) != 0 || len(subs[0].Params) != 0 {
-		t.Fatalf("string form parsed wrong: %#v", subs[0])
-	}
-	// Filtered object form.
-	if subs[1].Channel != "ci:events" || subs[1].Type != "run.finished" ||
-		subs[1].Matcher["data.status"] != "failed" || len(subs[1].Params) != 0 {
-		t.Fatalf("filtered object form parsed wrong: %#v", subs[1])
-	}
-	// Parameterized object form.
-	if subs[2].Channel != "issue-provider:query" ||
-		subs[2].Params["query"] != "Queue: PROJ AND Status: Open" {
-		t.Fatalf("parameterized object form parsed wrong: %#v", subs[2])
-	}
-}
-
-// TestValidateRejectsSubscribeWithoutChannel pins that an object-form entry with
-// no channel is a schema error, not a silent no-op sub.
-func TestValidateRejectsSubscribeWithoutChannel(t *testing.T) {
-	const y = `
-version: 1
-agents:
-  a:
-    image: img:latest
-    subscribe:
-      - type: "run.finished"
-`
-	f, _ := Parse([]byte(y))
-	err := f.Validate()
-	if err == nil || !strings.Contains(err.Error(), "no channel") {
-		t.Fatalf("want a 'no channel' validation error, got %v", err)
-	}
-}
-
-// TestUpSubscribesBothForms proves Up() POSTs one subscription per declared
-// entry to /api/agents/{name}/subscriptions, forwarding type/matcher/params
-// unchanged so the daemon can filter and validate provider params at apply time.
-func TestUpSubscribesBothForms(t *testing.T) {
-	const y = `
-version: 1
-agents:
-  a:
-    image: img:latest
-    subscribe:
-      - group:dev:broadcast
-      - channel: ci:events
-        type: "run.finished"
-        matcher:
-          data.status: failed
-      - channel: issue-provider:query
-        params:
-          query: "Q1"
-`
-	fc := newFake()
-	r := NewRunner(fc, "", io.Discard)
-	f, _ := Parse([]byte(y))
-	upNoBuild(t, r, f)
-
-	if n := countCalls(fc, "POST /api/agents/a/subscriptions"); n != 3 {
-		t.Fatalf("want 3 subscribe POSTs, got %d", n)
-	}
-	if len(fc.subs["a"]) != 3 {
-		t.Fatalf("fake daemon holds %d subs, want 3: %#v", len(fc.subs["a"]), fc.subs["a"])
-	}
-	// The parameterized entry's body must carry params verbatim.
-	var paramBody map[string]any
-	for i, c := range fc.calls {
-		if c != "POST /api/agents/a/subscriptions" {
-			continue
-		}
-		if m, ok := fc.bodies[i].(map[string]any); ok && m["channel"] == "issue-provider:query" {
-			paramBody = m
-		}
-	}
-	if paramBody == nil {
-		t.Fatal("no subscribe POST for issue-provider:query recorded")
-	}
-	params, ok := paramBody["params"].(map[string]any)
-	if !ok || params["query"] != "Q1" {
-		t.Fatalf("params not forwarded on parameterized sub: %#v", paramBody)
-	}
-	// The plain entry carries neither matcher nor params.
-	var plainBody map[string]any
-	for i, c := range fc.calls {
-		if c != "POST /api/agents/a/subscriptions" {
-			continue
-		}
-		if m, ok := fc.bodies[i].(map[string]any); ok && m["channel"] == "group:dev:broadcast" {
-			plainBody = m
-		}
-	}
-	if plainBody == nil {
-		t.Fatal("no subscribe POST for group:dev:broadcast recorded")
-	}
-	if _, has := plainBody["matcher"]; has {
-		t.Fatalf("plain sub should not carry matcher: %#v", plainBody)
-	}
-	if _, has := plainBody["params"]; has {
-		t.Fatalf("plain sub should not carry params: %#v", plainBody)
-	}
-}
-
-// TestUpSubscribeIdempotent proves re-applying a converged file creates no
-// duplicate subscription: the daemon dedups on channel + filter/params, so a
-// second Up leaves the fake daemon holding exactly the desired set (same params
-// -> same watch -> same row).
-func TestUpSubscribeIdempotent(t *testing.T) {
-	const y = `
-version: 1
-agents:
-  a:
-    image: img:latest
-    subscribe:
-      - group:dev:broadcast
-      - channel: issue-provider:query
-        params:
-          query: "Q1"
-`
-	fc := newFake()
-	r := NewRunner(fc, "", io.Discard)
-	f, _ := Parse([]byte(y))
-	upNoBuild(t, r, f)
-	upNoBuild(t, r, f)
-	if len(fc.subs["a"]) != 2 {
-		t.Fatalf("after re-apply the daemon holds %d subs, want 2 (no duplicates): %#v",
-			len(fc.subs["a"]), fc.subs["a"])
+	if _, err := Parse([]byte(y)); err == nil || !strings.Contains(err.Error(), "subscribe") {
+		t.Fatalf("parse = %v; want an unknown field error naming subscribe", err)
 	}
 }

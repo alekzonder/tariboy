@@ -48,7 +48,7 @@ func (f *fakePlugins) Restart(name string) error {
 	return nil
 }
 func (f *fakePlugins) List() ([]map[string]any, error) {
-	return []map[string]any{{"name": "echo", "state": "running", "types": []string{"channel-sink"}}}, nil
+	return []map[string]any{{"name": "echo", "state": "running", "types": []string{"mail-sink"}}}, nil
 }
 func (f *fakePlugins) Inspect(name string) (map[string]any, error) {
 	if name != "echo" {

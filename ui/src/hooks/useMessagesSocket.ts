@@ -6,17 +6,14 @@ import type { Daemon } from "@/lib/daemons";
 const RECONNECT_MIN_MS = 250;
 const RECONNECT_MAX_MS = 5000;
 
-/** One live publication on this host. It is a hint, not the message: the client
- *  refetches over HTTP, which stays authoritative. */
-export interface MessageHint {
-  agent: string;
-  /** The chat the publication landed in, absent for a message on a channel no
-   *  chat owns. A client that knows it refetches only that conversation. */
-  chat?: string;
+/** One letter written on this host: a frame of /api/mail/ws, which is not in
+ *  the OpenAPI spec. It is a hint, not the letter: the client refetches over
+ *  HTTP, which stays authoritative. */
+export interface MailHint {
   id: string;
-  channel: string;
-  type: string;
   from: string;
+  to: string;
+  kind: string;
   ts: string;
 }
 
@@ -54,8 +51,8 @@ function hintWsUrl(target: Daemon | null, path: string): string {
   return `${base}${path}${qs ? `?${qs}` : ""}`;
 }
 
-export function messagesWsUrl(target: Daemon | null): string {
-  return hintWsUrl(target, "/api/messages/ws");
+export function mailWsUrl(target: Daemon | null): string {
+  return hintWsUrl(target, "/api/mail/ws");
 }
 
 type HintSocketOptions<T> = {
@@ -68,20 +65,16 @@ type HintSocketOptions<T> = {
 };
 
 /**
- * Watch every chat on one host over a single socket. The socket replays
+ * Watch every letter on one host over a single socket. The socket replays
  * nothing, so the caller refetches on mount and on every reconnect; that, not a
  * cursor, is what makes a missed frame harmless.
  */
-export function useMessagesSocket(options: HintSocketOptions<MessageHint>): MessagesSocketStatus {
+export function useMailSocket(options: HintSocketOptions<MailHint>): MessagesSocketStatus {
   return useHintSocket(
-    "/api/messages/ws",
+    "/api/mail/ws",
     (parsed) => {
-      const hint = parsed as Partial<MessageHint>;
-      // A shared chat belongs to no single agent, so a frame that names its
-      // chat is addressed even without one.
-      if (!hint || typeof hint.id !== "string") return null;
-      if (typeof hint.agent !== "string" && typeof hint.chat !== "string") return null;
-      return hint as MessageHint;
+      const hint = parsed as Partial<MailHint>;
+      return hint && typeof hint.id === "string" ? (hint as MailHint) : null;
     },
     options,
   );

@@ -6,14 +6,14 @@ import "github.com/alekzonder/tariboy/internal/teamportable"
 // its type with registry.WithResult, which derives the OpenAPI result schema
 // from it.
 
-// GroupView is one group's lead, members, channels and shared directory
-// (group.inspect, group.create, group.rename, group.lead.set).
+// GroupView is one group's lead, members, mail address and shared directory
+// (group.inspect, group.create, group.rename, group.lead.set). Broadcast is
+// the group:<name> address a letter to every other member is sent to.
 type GroupView struct {
 	Name      string   `json:"name"`
 	Lead      string   `json:"lead"`
 	Members   []string `json:"members"`
 	Broadcast string   `json:"broadcast"`
-	Inbox     string   `json:"inbox"`
 	SharedDir string   `json:"shared_dir"`
 }
 
@@ -24,7 +24,6 @@ func groupViewFrom(m map[string]any) GroupView {
 	view.Lead, _ = m["lead"].(string)
 	view.Members, _ = m["members"].([]string)
 	view.Broadcast, _ = m["broadcast"].(string)
-	view.Inbox, _ = m["inbox"].(string)
 	view.SharedDir, _ = m["shared_dir"].(string)
 	return view
 }

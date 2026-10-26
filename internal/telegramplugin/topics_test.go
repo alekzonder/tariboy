@@ -12,8 +12,8 @@ import (
 
 type fakeDaemon struct {
 	agents     []AgentInfo
-	subscribed []string
-	published  []PublishedMessage
+	published  []InboundLetter
+	sendErr    error
 	calls      []daemonCall
 	callResult any
 }
@@ -24,13 +24,9 @@ type daemonCall struct {
 }
 
 func (d *fakeDaemon) ListAgents(context.Context) ([]AgentInfo, error) { return d.agents, nil }
-func (d *fakeDaemon) Subscribe(_ context.Context, agent, channel string) error {
-	d.subscribed = append(d.subscribed, agent+"="+channel)
-	return nil
-}
-func (d *fakeDaemon) Publish(_ context.Context, message PublishedMessage) error {
-	d.published = append(d.published, message)
-	return nil
+func (d *fakeDaemon) Send(_ context.Context, letter InboundLetter) error {
+	d.published = append(d.published, letter)
+	return d.sendErr
 }
 func (d *fakeDaemon) Call(_ context.Context, method, path string, body, result any) error {
 	d.calls = append(d.calls, daemonCall{method: method, path: path, body: body})
@@ -103,9 +99,6 @@ func TestChatSetupRequiresForumSupergroupAndTopicPermission(t *testing.T) {
 	if got.ChatID != -100123 || got.ManagementTopicID != 9 || got.AgentTopics["worker"].ThreadID != 10 {
 		t.Fatalf("state = %+v", got)
 	}
-	if len(daemon.subscribed) != 1 || daemon.subscribed[0] != "worker=chat:telegram:worker" {
-		t.Fatalf("subscriptions = %v", daemon.subscribed)
-	}
 }
 
 func TestReconcileCreatesMissingAgentTopicsAndRetainsDeletedMappings(t *testing.T) {
@@ -136,8 +129,8 @@ func TestReconcileCreatesMissingAgentTopicsAndRetainsDeletedMappings(t *testing.
 	if err := server.ReconcileTopics(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if len(created) != 2 || len(state.Snapshot().AgentTopics) != 2 || len(daemon.subscribed) != 2 {
-		t.Fatalf("created=%v topics=%v subscriptions=%v", created, state.Snapshot().AgentTopics, daemon.subscribed)
+	if len(created) != 2 || len(state.Snapshot().AgentTopics) != 2 {
+		t.Fatalf("created=%v topics=%v", created, state.Snapshot().AgentTopics)
 	}
 	daemon.agents = []AgentInfo{{Name: "worker"}}
 	if err := server.ReconcileTopics(context.Background()); err != nil {

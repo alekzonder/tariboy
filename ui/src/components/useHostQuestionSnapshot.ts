@@ -51,7 +51,7 @@ export function useHostQuestionSnapshot({
   const readAuthoritativeSnapshot = useCallback(
     async (client: ApiClient, baseline: boolean, generation: number) => {
       const [inbox, taskPage] = await Promise.all([
-        client.tasks.listTaskNotifications(false),
+        client.tasks.listTaskNotifications(),
         client.tasks.listTasks({ limit: 1, status_view: "all" }),
       ]);
       if (generationRef.current !== generation) return false;

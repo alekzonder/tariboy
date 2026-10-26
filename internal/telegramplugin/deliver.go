@@ -7,24 +7,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/plugins"
+	"github.com/alekzonder/tariboy/internal/mail"
 )
 
 func (s *Server) deliver(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Message plugins.MessageDTO `json:"message"`
+		Letter mail.Letter `json:"letter"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20)).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad_delivery"})
 		return
 	}
-	message := body.Message
-	if message.ProducedByAgent == "" || message.ProducedByPlugin == "telegram" {
-		writeJSON(w, http.StatusOK, map[string]any{"delivered": false})
-		return
-	}
-	agent := strings.TrimPrefix(message.Channel, "chat:telegram:")
-	if agent == message.Channel || agent != message.ProducedByAgent {
+	letter := body.Letter
+	// A letter from agent:<a> goes to that agent's topic; any other sender
+	// has no topic.
+	agent, ok := strings.CutPrefix(letter.From, "agent:")
+	if !ok || agent == "" {
 		writeJSON(w, http.StatusOK, map[string]any{"delivered": false})
 		return
 	}
@@ -35,7 +33,7 @@ func (s *Server) deliver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	threadID := topic.ThreadID
-	for _, part := range splitTelegramText(message.Text) {
+	for _, part := range splitTelegramText(letter.Body) {
 		_, err := s.bot.SendMessage(r.Context(), state.Token, state.ChatID, threadID, part)
 		var botErr *BotError
 		if errors.As(err, &botErr) && botErr.Code == http.StatusTooManyRequests && botErr.RetryAfter > 0 &&

@@ -26,9 +26,9 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/harness"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
@@ -208,34 +208,31 @@ func TestAssemblePromptMessagesOrder(t *testing.T) {
 
 func TestFormatMessages(t *testing.T) {
 	t.Parallel()
-	out := FormatMessages([]bus.Message{
-		{ID: "m1", Type: "deploy.requested", Source: "agent:alice", Text: "ship it",
-			Subject: map[string]any{"env": "prod"}},
-		{ID: "m2", Type: "note", Source: "operator", Text: "fyi"},
+	out := FormatMessages([]mail.Letter{
+		{ID: "m-2", From: "agent:alice", Kind: "message", Subject: "fyi", Body: "notice body", Attempts: 1, Data: map[string]any{}},
+		{ID: "m-1", From: "user:customer", Kind: "message", Subject: "Re: TARI-42", Body: "line one\n# not a heading",
+			NeedsReply: true, InReplyTo: "m-0", Deadline: "2026-10-26T11:00:00Z", Attempts: 2, Data: map[string]any{"task_key": "TARI-42"}},
+		{ID: "m-3", From: "agent:bob", Kind: "task.question", Subject: "Question on DEV-7", Body: "which db?",
+			NeedsReply: true, Attempts: 1, Data: map[string]any{"task_key": "DEV-7"}},
 	})
-	// Each message is rendered with its id, and the standing processing
-	// instruction is appended (spec §3.2): both are required now that the runner
-	// no longer auto-acks the batch.
 	for _, want := range []string{
-		"# Messages", "deploy.requested", "agent:alice", "ship it", "env", "note", "fyi",
-		"m1", "m2", `scripts/messages.sh message processed <id> "<what you did / result>"`,
+		"# Messages\n",
+		"- id m-1  from user:customer  kind message  attempts 2\n  subject: Re: TARI-42\n  in_reply_to: m-0\n  deadline: 2026-10-26T11:00:00Z\n  data: {\"task_key\":\"TARI-42\"}\n  line one\n  # not a heading",
+		"- id m-3  from agent:bob  kind task.question  attempts 1",
+		`answer: ttasks comment DEV-7 "<answer>"`,
+		"- id m-2  from agent:alice  kind message  attempts 1\n  subject: fyi\n  notice body",
+		mailInstruction,
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("FormatMessages missing %q:\n%s", want, out)
 		}
 	}
-}
-
-func TestFormatMessagesRendersThreadingState(t *testing.T) {
-	t.Parallel()
-	out := FormatMessages([]bus.Message{
-		{ID: "r1", Type: "answer", Source: "agent:bob", Text: "done",
-			Kind: "reply", InReplyTo: "req-9", CorrelationID: "corr-9"},
-	})
-	for _, want := range []string{"kind: reply", "in_reply_to: req-9", "correlation_id: corr-9"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("FormatMessages missing per-message state %q:\n%s", want, out)
-		}
+	// Requests come first, then notices.
+	if r, n := strings.Index(out, "### Requests"), strings.Index(out, "### Notices"); r < 0 || n < r || strings.Index(out, "m-2") < n {
+		t.Fatalf("requests are not listed before notices:\n%s", out)
+	}
+	if strings.Contains(out, "id m-2  from agent:alice  kind message  attempts 1\n  subject: fyi\n  data:") {
+		t.Fatalf("an empty data object is rendered:\n%s", out)
 	}
 }
 
@@ -250,10 +247,10 @@ func TestFormatAwaitingReplies(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 7, 12, 12, 0, 30, 0, time.UTC)
 	sent := store.FormatTime(now.Add(-90 * time.Second))
-	out := FormatAwaitingReplies([]bus.Message{
-		{ID: "req-1", Channel: "ops:deploys", TS: sent, Deadline: "2026-07-12T12:05:00Z"},
+	out := FormatAwaitingReplies([]mail.Letter{
+		{ID: "req-1", To: "agent:bob", CreatedAt: sent, Deadline: "2026-07-12T12:05:00Z"},
 	}, now)
-	for _, want := range []string{"# Awaiting replies", "req-1", "ops:deploys", "age 1m30s", "deadline 2026-07-12T12:05:00Z"} {
+	for _, want := range []string{"# Awaiting replies", "req-1", "to agent:bob", "age 1m30s", "deadline 2026-07-12T12:05:00Z"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("FormatAwaitingReplies missing %q:\n%s", want, out)
 		}
@@ -1469,16 +1466,15 @@ func TestSessionBlockedOnlyInteractive(t *testing.T) {
 	}
 }
 
-// newPromptProbe builds a runner wired to a real Bus over an isolated store,
+// newPromptProbe builds a runner wired to real mail over an isolated store,
 // with the image PROMPT.md and an iteration row in place, so tests can call
-// prepare()/Run() and inspect the assembled prompt file for the message-batch
-// behaviour of dev-t-25j.3.
-func newPromptProbe(t *testing.T) (*ShimRunner, agent.Agent, agentdir.Layout, *bus.Bus, string) {
+// prepare()/Run() and inspect the assembled prompt file.
+func newPromptProbe(t *testing.T) (*ShimRunner, agent.Agent, agentdir.Layout, *mail.Mail, string) {
 	t.Helper()
 	base := t.TempDir()
 	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
-	bs := bus.New(s, time.Now)
+	ml := newTestMail(s, "alice", "bob")
 
 	ag := agent.Agent{Name: "alice", ImageRef: "img:latest", HarnessType: "stub", Plugins: []string{"context"}}
 	if err := as.Create(ag); err != nil {
@@ -1503,9 +1499,9 @@ func newPromptProbe(t *testing.T) (*ShimRunner, agent.Agent, agentdir.Layout, *b
 
 	r := NewShimRunner(RunnerConfig{
 		AgentsDir: agentsDir, Store: as, ShimBin: "/opt/tariboy-shim",
-		Bus: bs, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Mail: ml, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
-	return r, ag, l, bs, iterID
+	return r, ag, l, ml, iterID
 }
 
 // prepAndReadPrompt runs prepare and returns the assembled prompt written to disk.
@@ -1521,115 +1517,113 @@ func prepAndReadPrompt(t *testing.T, r *ShimRunner, ag agent.Agent, l agentdir.L
 	return string(data)
 }
 
-// TestRunDoesNotAckBatch is the core regression for dev-t-25j.3: a successful
-// iteration must NOT ack the drained message batch. The delivery stays pending so
-// it re-renders next iteration until the agent processes it explicitly.
-func TestRunDoesNotAckBatch(t *testing.T) {
-	t.Parallel()
-	r, ag, l, bs, iterID := newPromptProbe(t)
-	if _, err := bs.Subscribe(ag.Name, bus.InboxChannel(ag.Name), bus.Matcher{}, nil); err != nil {
+func sendTo(t *testing.T, ml *mail.Mail, l mail.Letter) mail.Letter {
+	t.Helper()
+	out, err := ml.Send(l)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := bs.Publish(bus.Message{Channel: bus.InboxChannel(ag.Name), Type: "note", Text: "hi"}); err != nil {
-		t.Fatal(err)
-	}
+	return out[0]
+}
 
+func letterOf(t *testing.T, ml *mail.Mail, as, id string) mail.Letter {
+	t.Helper()
+	l, _, err := ml.Show(as, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return l
+}
+
+// TestRunClosesReadNoticesOnSuccess: an iteration that finishes successfully
+// has read the notices rendered into it; its requests stay open until answered.
+func TestRunClosesReadNoticesOnSuccess(t *testing.T) {
+	t.Parallel()
+	r, ag, l, ml, iterID := newPromptProbe(t)
+	notice := sendTo(t, ml, mail.Letter{From: "agent:bob", To: "agent:alice", Body: "fyi"})
+	request := sendTo(t, ml, mail.Letter{From: "agent:bob", To: "agent:alice", Body: "?", NeedsReply: true})
+	if err := r.cfg.Store.SetIterationDone(iterID, true); err != nil {
+		t.Fatal(err)
+	}
 	r.cfg.Spawner = &fakeProxySpawner{resultPath: l.ResultPath(iterID)}
 	out, err := r.Run(context.Background(), ag, "manual", iterID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Status != "no_i_am_done" {
-		t.Fatalf("status = %q, want no_i_am_done", out.Status)
+	if out.Status != agent.IterationDone {
+		t.Fatalf("status = %q, want done", out.Status)
 	}
-
-	pending, err := bs.HasPending(ag.Name)
-	if err != nil {
-		t.Fatal(err)
+	if got := letterOf(t, ml, "agent:alice", notice.ID); got.Open() || got.CloseNote != mail.CloseNoteRead {
+		t.Fatalf("notice after a successful iteration = %+v; want closed with note read", got)
 	}
-	if !pending {
-		t.Fatal("message was acked on iteration success; it must stay pending until explicitly processed")
+	if got := letterOf(t, ml, "agent:alice", request.ID); !got.Open() || got.Attempts != 1 {
+		t.Fatalf("request after a successful iteration = %+v; want open with one attempt", got)
 	}
 }
 
-// TestPrepareReRendersUntilProcessed asserts a message keeps rendering into the
-// prompt across iterations until MarkProcessed drains it.
-func TestPrepareReRendersUntilProcessed(t *testing.T) {
+// TestNoticeStaysOpenAfterFailedIteration: a notice rendered into an iteration
+// that does not finish successfully stays open, renders again, and is
+// dead-lettered after five renders like a request.
+func TestNoticeStaysOpenAfterFailedIteration(t *testing.T) {
 	t.Parallel()
-	r, ag, l, bs, iterID := newPromptProbe(t)
-	if _, err := bs.Subscribe(ag.Name, bus.InboxChannel(ag.Name), bus.Matcher{}, nil); err != nil {
-		t.Fatal(err)
-	}
-	m, err := bs.Publish(bus.Message{Channel: bus.InboxChannel(ag.Name), Type: "note", Text: "hi"})
+	r, ag, l, ml, iterID := newPromptProbe(t)
+	notice := sendTo(t, ml, mail.Letter{From: "agent:bob", To: "agent:alice", Body: "fyi"})
+	r.cfg.Spawner = &fakeProxySpawner{resultPath: l.ResultPath(iterID)}
+	out, err := r.Run(context.Background(), ag, "manual", iterID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Two successive prepares both render the message id — it is not auto-drained.
-	for i := 0; i < 2; i++ {
-		if got := prepAndReadPrompt(t, r, ag, l, iterID); !strings.Contains(got, m.ID) {
-			t.Fatalf("iteration %d: message id %q not re-rendered:\n%s", i, m.ID, got)
+	if out.Status == agent.IterationDone {
+		t.Fatalf("status = %q; the test needs an iteration that did not finish", out.Status)
+	}
+	if got := letterOf(t, ml, "agent:alice", notice.ID); !got.Open() || got.Attempts != 1 {
+		t.Fatalf("notice after a failed iteration = %+v; want open with one attempt", got)
+	}
+	for i := 2; i <= 5; i++ {
+		if got := prepAndReadPrompt(t, r, ag, l, iterID); !strings.Contains(got, notice.ID) {
+			t.Fatalf("render %d: notice %q missing:\n%s", i, notice.ID, got)
 		}
 	}
+	if got := prepAndReadPrompt(t, r, ag, l, iterID); strings.Contains(got, notice.ID) {
+		t.Fatalf("notice rendered a sixth time:\n%s", got)
+	}
+	if got := letterOf(t, ml, "agent:alice", notice.ID); got.DeadReason != mail.DeadAttempts {
+		t.Fatalf("notice after five renders = %+v; want dead with reason attempts", got)
+	}
+}
 
-	// Once processed, it drops out of the batch and leaves the explicit empty state.
-	if _, err := bs.MarkProcessed(ag.Name, m.ID, "handled"); err != nil {
+// TestPrepareReRendersUntilAnswered: a request keeps rendering until a reply
+// closes it, and the empty state is explicit.
+func TestPrepareReRendersUntilAnswered(t *testing.T) {
+	t.Parallel()
+	r, ag, l, ml, iterID := newPromptProbe(t)
+	m := sendTo(t, ml, mail.Letter{From: "agent:bob", To: "agent:alice", Body: "hi", NeedsReply: true})
+	for i := 0; i < 2; i++ {
+		if got := prepAndReadPrompt(t, r, ag, l, iterID); !strings.Contains(got, m.ID) {
+			t.Fatalf("iteration %d: letter id %q not re-rendered:\n%s", i, m.ID, got)
+		}
+	}
+	if _, _, err := ml.Reply(mail.ReplyRequest{As: "agent:alice", ID: m.ID, Text: "handled"}); err != nil {
 		t.Fatal(err)
 	}
 	got := prepAndReadPrompt(t, r, ag, l, iterID)
 	if strings.Contains(got, m.ID) {
-		t.Fatalf("processed message still rendered:\n%s", got)
+		t.Fatalf("answered letter still rendered:\n%s", got)
 	}
 	if !strings.Contains(got, "## Messages\n\nNo incoming messages for this iteration.") {
 		t.Fatalf("Messages section should report the empty batch:\n%s", got)
 	}
 }
 
-// TestPrepareDropsMessageAfterDLQ verifies the existing attempts++/DLQ-after-5
-// path still fires through the runner: an unprocessed message re-renders until it
-// is dead-lettered, after which it no longer appears in the prompt.
-func TestPrepareDropsMessageAfterDLQ(t *testing.T) {
-	t.Parallel()
-	r, ag, l, bs, iterID := newPromptProbe(t)
-	if _, err := bs.Subscribe(ag.Name, bus.InboxChannel(ag.Name), bus.Matcher{}, nil); err != nil {
-		t.Fatal(err)
-	}
-	m, err := bs.Publish(bus.Message{Channel: bus.InboxChannel(ag.Name), Type: "note", Text: "hi"})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// maxAttempts is 5; the delivery is returned on renders 1..6 and dead-lettered
-	// on the 6th. Drain enough times to trip the DLQ.
-	for i := 0; i < 6; i++ {
-		if got := prepAndReadPrompt(t, r, ag, l, iterID); !strings.Contains(got, m.ID) {
-			t.Fatalf("render %d: message id %q missing before DLQ:\n%s", i+1, m.ID, got)
-		}
-	}
-	// After dead-lettering, the message is gone from the pending batch.
-	if got := prepAndReadPrompt(t, r, ag, l, iterID); strings.Contains(got, m.ID) {
-		t.Fatalf("dead-lettered message still rendered:\n%s", got)
-	}
-	if pending, err := bs.HasPending(ag.Name); err != nil || pending {
-		t.Fatalf("HasPending = %v (err %v), want false after DLQ", pending, err)
-	}
-}
-
-// TestPrepareRendersAwaitingReplies asserts an outstanding request produces the
-// derived "# Awaiting replies" prompt section.
+// TestPrepareRendersAwaitingReplies asserts a request with a deadline and no
+// reply produces the "Awaiting replies" prompt section.
 func TestPrepareRendersAwaitingReplies(t *testing.T) {
 	t.Parallel()
-	r, ag, l, bs, iterID := newPromptProbe(t)
-	req, err := bs.Request(ag.Name, "ops:deploys", "status?", "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	r, ag, l, ml, iterID := newPromptProbe(t)
+	req := sendTo(t, ml, mail.Letter{From: "agent:alice", To: "agent:bob", Body: "status?", NeedsReply: true, Deadline: "5m"})
 	got := prepAndReadPrompt(t, r, ag, l, iterID)
-	if !strings.Contains(got, "# Awaiting replies") {
-		t.Fatalf("awaiting-replies section missing:\n%s", got)
-	}
-	if !strings.Contains(got, req.ID) {
-		t.Fatalf("outstanding request id %q missing:\n%s", req.ID, got)
+	if !strings.Contains(got, "### Awaiting replies") || !strings.Contains(got, req.ID) {
+		t.Fatalf("awaiting-replies section missing %q:\n%s", req.ID, got)
 	}
 }
 

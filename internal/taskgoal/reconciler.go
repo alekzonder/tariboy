@@ -10,19 +10,23 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	basestore "github.com/alekzonder/tariboy/internal/store"
 )
 
 const DefaultReconcileInterval = time.Minute
 
-type MessagePublisher interface {
-	Publish(bus.Message) (bus.Message, error)
+// SenderGoal is the sender of every Goal letter.
+const SenderGoal = "system:goal"
+
+// Sender is the slice of the mail service the reconciler needs.
+type Sender interface {
+	Send(mail.Letter) ([]mail.Letter, error)
 }
 
 type ReconcilerConfig struct {
 	Store    *basestore.Store
-	Bus      MessagePublisher
+	Mail     Sender
 	Clock    func() time.Time
 	Interval time.Duration
 	Log      *slog.Logger
@@ -31,7 +35,7 @@ type ReconcilerConfig struct {
 type Reconciler struct {
 	agents   *agent.Store
 	store    *Store
-	bus      MessagePublisher
+	mail     Sender
 	clock    func() time.Time
 	interval time.Duration
 	log      *slog.Logger
@@ -50,7 +54,7 @@ func NewReconciler(config ReconcilerConfig) *Reconciler {
 		config.Log = slog.Default()
 	}
 	return &Reconciler{
-		agents: agent.NewStore(config.Store), store: NewStore(config.Store), bus: config.Bus,
+		agents: agent.NewStore(config.Store), store: NewStore(config.Store), mail: config.Mail,
 		clock: config.Clock, interval: config.Interval, log: config.Log, signals: make(chan struct{}, 1),
 	}
 }
@@ -63,7 +67,7 @@ func (r *Reconciler) Signal() {
 	}
 }
 
-// IterationCompleted publishes the next durable wake after a terminal
+// IterationCompleted sends the next durable wake after a terminal
 // iteration, keyed by the stable iteration ID.
 func (r *Reconciler) IterationCompleted(agentName, iterationID string) {
 	if err := r.Reconcile(context.Background(), agentName, iterationID); err != nil {
@@ -71,7 +75,8 @@ func (r *Reconciler) IterationCompleted(agentName, iterationID string) {
 	}
 }
 
-// Reconcile selects current goals and publishes each non-waiting selection.
+// Reconcile selects current goals and sends a Goal letter for each
+// non-waiting selection.
 // Empty agentName scans every agent; failures are joined so later agents still
 // receive their wake.
 func (r *Reconciler) Reconcile(ctx context.Context, agentName, iterationID string) error {
@@ -124,8 +129,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, agentName, iterationID strin
 		} else {
 			goal.Reason = "iteration_completed"
 		}
-		if _, err := r.bus.Publish(goalMessage(goal, generation)); err != nil {
-			failures = append(failures, fmt.Errorf("publish task goal for %s: %w", name, err))
+		if _, err := r.mail.Send(goalLetter(goal, generation)); err != nil {
+			failures = append(failures, fmt.Errorf("send task goal for %s: %w", name, err))
 		} else if err := r.store.MarkGoalDelivered(name, r.clock().UTC()); err != nil {
 			failures = append(failures, fmt.Errorf("record task goal delivery for %s: %w", name, err))
 		}
@@ -143,13 +148,18 @@ func (r *Reconciler) latestTerminalIteration(agentName string) (string, error) {
 	return id, err
 }
 
-func goalMessage(goal Goal, iterationID string) bus.Message {
-	return bus.Message{
+// goalLetter is the request that wakes the agent for its Goal; its reply is
+// the agent's report on it.
+func goalLetter(goal Goal, iterationID string) mail.Letter {
+	return mail.Letter{
 		IdempotencyKey: fmt.Sprintf("task-goal:%s:%s:%d:%s", goal.Agent, goal.TaskKey, goal.Revision, iterationID),
-		Channel:        bus.ChatChannelFor(bus.ChatIDService(goal.Agent)),
-		Source:         "tasks",
-		Type:           "task.goal",
+		From:           SenderGoal,
+		To:             "agent:" + goal.Agent,
+		Kind:           "task.goal",
+		Subject:        "Goal " + goal.TaskKey,
+		Body:           fmt.Sprintf("Work your Goal %s (%s): read the Goal block of this prompt.", goal.TaskKey, goal.Reason),
 		Data:           map[string]any{"task_key": goal.TaskKey, "reason": goal.Reason},
+		NeedsReply:     true,
 	}
 }
 

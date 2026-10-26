@@ -15,10 +15,10 @@ func newStore(t *testing.T) *Store {
 
 func sampleRecord(name string) Record {
 	return Record{
-		Name: name, Version: "0.1.0", Types: []string{"channel-source", "channel-sink"},
+		Name: name, Version: "0.1.0", Types: []string{"mail-source", "mail-sink"},
 		ProtocolVersion: 1, Exec: "echo.py", SourcePath: "/tmp/" + name,
-		Channels: Channels{Publish: []string{"chat:*"}, Subscribe: []string{"chat:in"}},
-		Enabled:  true, State: "installed", Health: "{}",
+		Mail:    MailCaps{Send: true, Receive: true},
+		Enabled: true, State: "installed", Health: "{}",
 	}
 }
 
@@ -38,7 +38,7 @@ func TestUpsertGetListDelete(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("get echo ok=%v err=%v", ok, err)
 	}
-	if got.Version != "0.2.0" || len(got.Types) != 2 || got.Channels.Subscribe[0] != "chat:in" {
+	if got.Version != "0.2.0" || len(got.Types) != 2 || !got.Mail.Receive {
 		t.Fatalf("record = %+v", got)
 	}
 	if got.InstalledAt == "" {

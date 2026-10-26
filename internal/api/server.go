@@ -72,9 +72,8 @@ func NewHTTPServer(h http.Handler) *http.Server {
 // route GET /api/agents/{name}/events is registered.
 func (s *Server) SetEventSource(src events.Source) { s.events = src }
 
-// SetPluginAPI installs the plugin-facing routes (POST /api/plugin/publish,
-// GET /api/plugin/subscriptions, GET /api/plugin/watches), called by plugins
-// with their plugin-token over the daemon unix socket.
+// SetPluginAPI installs the plugin-facing route POST /api/plugin/mail, called
+// by plugins with their plugin-token over the daemon unix socket.
 func (s *Server) SetPluginAPI(h http.Handler) { s.plugins = h }
 
 // SetAccessLog installs the logger that receives one line per API request
@@ -102,7 +101,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	if s.events != nil {
 		mux.HandleFunc("GET /api/agents/{name}/events", s.serveEvents)
-		mux.HandleFunc("GET /api/messages/ws", s.serveMessages)
+		mux.HandleFunc("GET /api/mail/ws", s.serveMail)
 		mux.HandleFunc("GET /api/agent-states/ws", s.serveAgentStates)
 	}
 	mux.HandleFunc("GET /api/agents/{name}/terminal", s.serveTerminal)
@@ -122,9 +121,7 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /api/tasks/ws", s.serveTasks)
 	}
 	if s.plugins != nil {
-		mux.Handle("POST /api/plugin/publish", s.plugins)
-		mux.Handle("GET /api/plugin/subscriptions", s.plugins)
-		mux.Handle("GET /api/plugin/watches", s.plugins)
+		mux.Handle("POST /api/plugin/mail", s.plugins)
 	}
 	if s.support != nil {
 		mux.HandleFunc("GET /api/daemon/support-bundle", s.serveSupportBundle)

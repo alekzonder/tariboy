@@ -7,20 +7,35 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	basestore "github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
-type fakePublisher struct{ msgs []bus.Message }
+type fakeSender struct{ letters []mail.Letter }
 
-func (f *fakePublisher) Publish(m bus.Message) (bus.Message, error) {
-	m.ID = "m"
-	f.msgs = append(f.msgs, m)
-	return m, nil
+func (f *fakeSender) SendGuarded(l mail.Letter, _ func(*sql.Tx) error) ([]mail.Letter, error) {
+	l.ID = "m"
+	f.letters = append(f.letters, l)
+	return []mail.Letter{l}, nil
 }
-func (f *fakePublisher) PublishWithGuard(m bus.Message, _ func(*sql.Tx, time.Time) error) (bus.Message, error) {
-	return f.Publish(m)
+
+// agentsDirectory knows a fixed set of agents and nothing else.
+type agentsDirectory map[string]bool
+
+func (d agentsDirectory) AgentExists(name string) (bool, error)     { return d[name], nil }
+func (agentsDirectory) InboxCap(string) (int, error)                { return 0, nil }
+func (agentsDirectory) CustomerLogin() string                       { return "customer" }
+func (agentsDirectory) PluginInstalled(string) (bool, error)        { return false, nil }
+func (agentsDirectory) QueueExists(string) (bool, error)            { return false, nil }
+func (agentsDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
+
+func newMail(st *basestore.Store, clock func() time.Time, agents ...string) *mail.Mail {
+	dir := agentsDirectory{}
+	for _, a := range agents {
+		dir[a] = true
+	}
+	return mail.New(st, clock, dir)
 }
 
 func TestSchedulerFiresOneshotAndCron(t *testing.T) {
@@ -28,11 +43,11 @@ func TestSchedulerFiresOneshotAndCron(t *testing.T) {
 	st := newStore(t, now)
 	// oneshot due at 10:01; cron every 5 min.
 	one, _ := st.Add(Schedule{Agent: "smoke", Kind: "oneshot", Spec: now.Add(time.Minute).Format(time.RFC3339),
-		Channel: bus.InboxChannel("smoke"), MessageTemplate: `{"type":"wake","text":"rise"}`})
+		Recipient: "agent:smoke", MessageTemplate: `{"type":"wake","text":"rise"}`})
 	cron, _ := st.Add(Schedule{Agent: "smoke", Kind: "cron", Spec: "*/5 * * * *",
-		Channel: bus.InboxChannel("smoke"), MessageTemplate: `{"type":"tick"}`})
+		Recipient: "agent:smoke", MessageTemplate: `{"kind":"tick","notice":true}`})
 
-	pub := &fakePublisher{}
+	pub := &fakeSender{}
 	sc := NewScheduler(st, pub, slog.New(slog.NewTextHandler(io.Discard, nil)), func() time.Time { return now }, time.After)
 
 	// Fire everything due by 10:06: oneshot (10:01) and one cron tick (10:05).
@@ -43,18 +58,22 @@ func TestSchedulerFiresOneshotAndCron(t *testing.T) {
 	if n != 2 {
 		t.Fatalf("fired %d, want 2", n)
 	}
-	if len(pub.msgs) != 2 {
-		t.Fatalf("published %d messages", len(pub.msgs))
+	if len(pub.letters) != 2 {
+		t.Fatalf("sent %d letters", len(pub.letters))
 	}
-	// The oneshot published its templated type/text with schedule attribution.
-	var sawWake bool
-	for _, m := range pub.msgs {
-		if m.Type == "wake" && m.Text == "rise" && m.Source == "schedule" && m.ProducedByAgent == "smoke" {
+	// The oneshot sent its templated kind and text from system:schedule as a
+	// request; the cron template asked for a notice.
+	var sawWake, sawTick bool
+	for _, l := range pub.letters {
+		if l.Kind == "wake" && l.Body == "rise" && l.From == SenderSchedule && l.To == "agent:smoke" && l.NeedsReply {
 			sawWake = true
 		}
+		if l.Kind == "tick" && !l.NeedsReply && l.Data["schedule_id"] == cron.ID {
+			sawTick = true
+		}
 	}
-	if !sawWake {
-		t.Fatalf("templated oneshot message not published: %+v", pub.msgs)
+	if !sawWake || !sawTick {
+		t.Fatalf("templated letters not sent: %+v", pub.letters)
 	}
 	// oneshot disabled; cron re-armed (next_fire_at advanced past 10:05).
 	list, _ := st.List("smoke")
@@ -70,82 +89,69 @@ func TestSchedulerFiresOneshotAndCron(t *testing.T) {
 	}
 }
 
-func TestSchedulerFailsClosedWithoutAtomicGuardPublisher(t *testing.T) {
-	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
-	st := newStore(t, now)
-	_, _ = st.Add(Schedule{Agent: "smoke", Kind: "oneshot", Spec: now.Add(time.Minute).Format(time.RFC3339), Channel: "chat:ops"})
-	pub := &unguardedPublisher{}
-	sc := NewScheduler(st, pub, slog.New(slog.NewTextHandler(io.Discard, nil)), func() time.Time { return now }, time.After)
-	if n, err := sc.fireDue(now.Add(2 * time.Minute)); err != nil || n != 0 || len(pub.msgs) != 0 {
-		t.Fatalf("fail-closed fire n=%d msgs=%v err=%v", n, pub.msgs, err)
-	}
-}
-
-type unguardedPublisher struct{ msgs []bus.Message }
-
-func (f *unguardedPublisher) Publish(m bus.Message) (bus.Message, error) {
-	f.msgs = append(f.msgs, m)
-	return m, nil
-}
-
-func TestSchedulerRetryPublishesOnce(t *testing.T) {
+func TestSchedulerRetrySendsOnce(t *testing.T) {
 	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
 	db := storetest.Open(t)
-	b := bus.New(db, func() time.Time { return now })
+	m := newMail(db, func() time.Time { return now }, "smoke")
 	st := NewStore(db, func() time.Time { return now })
-	channel := bus.InboxChannel("smoke")
-	if _, err := b.Subscribe("smoke", channel, nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.Add(Schedule{Agent: "smoke", Kind: "oneshot", Spec: now.Add(time.Minute).Format(time.RFC3339), Channel: channel}); err != nil {
+	if _, err := st.Add(Schedule{Agent: "smoke", Kind: "oneshot", Spec: now.Add(time.Minute).Format(time.RFC3339), Recipient: "agent:smoke"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.DB.Exec(`CREATE TRIGGER fail_schedule_mark BEFORE UPDATE ON schedules BEGIN SELECT RAISE(ABORT, 'fail'); END`); err != nil {
 		t.Fatal(err)
 	}
-	scheduler := NewScheduler(st, b, slog.New(slog.NewTextHandler(io.Discard, nil)), func() time.Time { return now }, nil)
+	scheduler := NewScheduler(st, m, slog.New(slog.NewTextHandler(io.Discard, nil)), func() time.Time { return now }, nil)
 	_, _ = scheduler.fireDue(now.Add(2 * time.Minute))
 	if _, err := db.DB.Exec(`DROP TRIGGER fail_schedule_mark`); err != nil {
 		t.Fatal(err)
 	}
 	_, _ = scheduler.fireDue(now.Add(2 * time.Minute))
-	items, err := b.Inbox("smoke", "pending", 10, "")
-	if err != nil || len(items) != 1 {
-		t.Fatalf("scheduled retry delivered %d messages: %+v err=%v", len(items), items, err)
+	if n, err := m.OpenCount("smoke"); err != nil || n != 1 {
+		t.Fatalf("scheduled retry left %d open letters, err=%v; want 1", n, err)
 	}
 }
 
-type cancelingPublisher struct {
-	b      *bus.Bus
+// cancelingSender cancels the schedule between the tick's read and its send.
+type cancelingSender struct {
+	m      *mail.Mail
 	cancel func()
 }
 
-func (p *cancelingPublisher) Publish(m bus.Message) (bus.Message, error) { return p.b.Publish(m) }
-func (p *cancelingPublisher) PublishWithGuard(m bus.Message, guard func(*sql.Tx, time.Time) error) (bus.Message, error) {
+func (p *cancelingSender) SendGuarded(l mail.Letter, guard func(*sql.Tx) error) ([]mail.Letter, error) {
 	p.cancel()
-	return p.b.PublishWithGuard(m, guard)
+	return p.m.SendGuarded(l, guard)
 }
 
-func TestSchedulerDoesNotPublishStaleCancelledSchedule(t *testing.T) {
+func TestSchedulerDoesNotSendStaleCancelledSchedule(t *testing.T) {
 	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
 	db := storetest.Open(t)
-	b := bus.New(db, func() time.Time { return now })
+	m := newMail(db, func() time.Time { return now }, "smoke")
 	st := NewStore(db, func() time.Time { return now })
-	channel := bus.InboxChannel("smoke")
-	if _, err := b.Subscribe("smoke", channel, nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	sch, err := st.Add(Schedule{Agent: "smoke", Kind: "oneshot", Spec: now.Add(time.Minute).Format(time.RFC3339), Channel: channel})
+	sch, err := st.Add(Schedule{Agent: "smoke", Kind: "oneshot", Spec: now.Add(time.Minute).Format(time.RFC3339), Recipient: "agent:smoke"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	pub := &cancelingPublisher{b: b, cancel: func() { _ = st.Cancel("smoke", sch.ID) }}
+	pub := &cancelingSender{m: m, cancel: func() { _ = st.Cancel("smoke", sch.ID) }}
 	scheduler := NewScheduler(st, pub, slog.New(slog.NewTextHandler(io.Discard, nil)), func() time.Time { return now }, nil)
 	if n, err := scheduler.fireDue(now.Add(2 * time.Minute)); err != nil || n != 0 {
 		t.Fatalf("cancelled schedule fired: n=%d err=%v", n, err)
 	}
-	items, err := b.Inbox("smoke", "pending", 10, "")
-	if err != nil || len(items) != 0 {
-		t.Fatalf("cancelled schedule delivered: %+v err=%v", items, err)
+	if n, err := m.OpenCount("smoke"); err != nil || n != 0 {
+		t.Fatalf("cancelled schedule sent %d letters, err=%v", n, err)
+	}
+}
+
+func TestRecipientForChannelFollowsTheMigrationRule(t *testing.T) {
+	for channel, want := range map[string]string{
+		"":                     "agent:owner",
+		"chat:service:bob":     "agent:bob",
+		"agent:bob:inbox":      "agent:bob",
+		"chat:ops":             "agent:owner",
+		"agent:bob:inbox:more": "agent:owner",
+		"chat:service:a:b":     "agent:owner",
+	} {
+		if got := RecipientForChannel("owner", channel); got != want {
+			t.Errorf("RecipientForChannel(%q) = %q; want %q", channel, got, want)
+		}
 	}
 }

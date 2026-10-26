@@ -44,3 +44,21 @@ func TestValidateNamesTheMissingImageCapability(t *testing.T) {
 		t.Fatalf("valid image: %v", err)
 	}
 }
+
+func TestImageContractAcceptsMessagesAlias(t *testing.T) {
+	skills := []Skill{{Name: "messages"}, {Name: "mail"}}
+	// An image built before the mailbox lists plugin messages and renders the
+	// messages and awaiting-replies placeholders; it still provisions.
+	if err := Validate(Input{Plugins: []string{"messages"}, Runtimes: []string{"messages", "awaiting-replies"}, Skills: skills}, nil); err != nil {
+		t.Fatalf("old image with plugin messages: %v", err)
+	}
+	if err := Validate(Input{Plugins: []string{"mail"}, Runtimes: []string{"messages", "awaiting-replies"}, Skills: skills}, nil); err != nil {
+		t.Fatalf("image with plugin mail: %v", err)
+	}
+	if err := Validate(Input{Runtimes: []string{"messages"}}, nil); err == nil {
+		t.Fatal("the messages placeholder without mail or messages must be refused")
+	}
+	if err := Validate(Input{Plugins: []string{"mail"}}, nil); err == nil {
+		t.Fatal("plugin mail without its packaged skill must be refused")
+	}
+}

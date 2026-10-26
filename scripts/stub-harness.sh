@@ -5,9 +5,10 @@
 #   STUB_SLEEP     seconds to sleep before finishing        (default 0.2)
 #   STUB_CALL_DONE 1 to call i-am-done, 0 to skip           (default 1)
 #   STUB_EXIT      exit code                                (default 0)
-#   STUB_SUBSCRIBE channel to subscribe to before finishing  (default unset)
-#   STUB_SEND      "channel|text" to publish before finishing (default unset)
+#   STUB_SEND      "to|text" to mail a request before finishing (default unset)
 #   STUB_SCHEDULE  seconds ahead to arm a one-shot (once)     (default unset)
+#   STUB_GROUP_REQUEST "member|text|deadline" to mail a request with a deadline (once)
+#   STUB_REPLY_INBOX "text" to reply to the first open letter, then drain requests
 #   STUB_IMAGE_BUILD "name:tag|path" to author+build an image via the gated tool (default unset)
 #   STUB_AI  set to 1 to POST one AI request through the proxy before finishing (default unset)
 #   STUB_STDOUT    line to print before finishing             (default unset)
@@ -37,18 +38,13 @@ if [ -n "${STUB_STDOUT:-}" ]; then
   printf '%s\n' "$STUB_STDOUT"
 fi
 
-# Optional: subscribe this agent to a channel before finishing.
-#   STUB_SUBSCRIBE="chat:room"
-if [ -n "${STUB_SUBSCRIBE:-}" ]; then
-  tool_post /tools/channel/subscribe "{\"channel\":\"$STUB_SUBSCRIBE\"}" >/dev/null 2>&1 || true
-fi
-
-# Optional: emit a message before finishing.
-#   STUB_SEND="chat:room|hello from A"
+# Optional: mail a letter (a request) before finishing. The recipient is a
+# principal such as agent:bob or group:team.
+#   STUB_SEND="agent:bob|hello from A"
 if [ -n "${STUB_SEND:-}" ]; then
-  SEND_CHANNEL="${STUB_SEND%%|*}"
+  SEND_TO="${STUB_SEND%%|*}"
   SEND_TEXT="${STUB_SEND#*|}"
-  tool_post /tools/message/send "{\"channel\":\"$SEND_CHANNEL\",\"text\":\"$SEND_TEXT\"}" >/dev/null 2>&1 || true
+  tool_post /tools/mail/send "{\"to\":\"$SEND_TO\",\"subject\":\"$SEND_TEXT\",\"text\":\"$SEND_TEXT\"}" >/dev/null 2>&1 || true
 fi
 
 # Optional: arm a one-shot schedule N seconds ahead, exactly once (a marker in
@@ -62,17 +58,17 @@ if [ -n "${STUB_SCHEDULE:-}" ] && [ ! -f .stub_scheduled ]; then
   fi
 fi
 
-# Optional: send a group request to a teammate, exactly once (a marker in the
-# agent cwd prevents re-sending on later iterations). Drives the request
-# primitive (spec §4.2) end to end: kind=request onto the member's group direct
-# channel with an armed --deadline.
+# Optional: mail a request with a deadline to a teammate, exactly once (a
+# marker in the agent cwd prevents re-sending on later iterations). The deadline
+# arms a one-shot schedule; with no reply the sender gets a kind=deadline notice
+# from system:schedule.
 #   STUB_GROUP_REQUEST="member|text|deadline"   e.g. "worker|blocking?|3s"
 if [ -n "${STUB_GROUP_REQUEST:-}" ] && [ ! -f .stub_group_req ]; then
   GR_MEMBER="${STUB_GROUP_REQUEST%%|*}"
   GR_REST="${STUB_GROUP_REQUEST#*|}"
   GR_TEXT="${GR_REST%%|*}"
   GR_DEADLINE="${GR_REST#*|}"
-  tool_post /tools/group/request "{\"member\":\"$GR_MEMBER\",\"text\":\"$GR_TEXT\",\"deadline\":\"$GR_DEADLINE\"}" >/dev/null 2>&1 || true
+  tool_post /tools/mail/send "{\"to\":\"agent:$GR_MEMBER\",\"subject\":\"$GR_TEXT\",\"text\":\"$GR_TEXT\",\"deadline\":\"$GR_DEADLINE\"}" >/dev/null 2>&1 || true
   : > .stub_group_req
 fi
 
@@ -101,36 +97,31 @@ fi
 
 # Optional: dump this iteration's rendered prompt to a file so an e2e can assert
 # on the inline Messages section (subject/data.files a source plugin published).
-# APPENDS (with a separator) rather than overwrites: an agent subscribed to a
-# channel it also replies on runs extra message-triggered iterations, and a plain
-# overwrite would leave only the last one's prompt. Accumulating keeps every
-# iteration's Messages section greppable.
+# APPENDS (with a separator) rather than overwrites: an agent runs extra
+# message-triggered iterations while letters stay open, and a plain overwrite
+# would leave only the last one's prompt. Accumulating keeps every iteration's
+# Messages section greppable.
 #   STUB_DUMP_PROMPT=/abs/file
 if [ -n "${STUB_DUMP_PROMPT:-}" ] && [ -n "$PROMPT_PATH" ] && [ -f "$PROMPT_PATH" ]; then
   { printf '\n===== iteration prompt =====\n'; cat "$PROMPT_PATH"; } >> "$STUB_DUMP_PROMPT" 2>/dev/null || true
 fi
 
-# Optional: reply to the FIRST inbox message rendered into the prompt, then drain
-# the rest. The Messages section lists each pending message as
-# "- id <ID> [type] source: text"; replying kind=reply auto-processes the target
-# and (for a message a sink plugin can route) threads the outbound against the
-# original — driving the source->agent->sink round-trip. The reply fires exactly
-# once (a marker in the agent cwd guards it); every remaining pending message is
-# then processed so an agent that receives its own reply back (it is subscribed to
-# the channel it replied on) drains its inbox and the loop goes quiet instead of
-# re-prompting forever.
+# Optional: reply to the FIRST open letter in this agent's inbox, exactly once
+# (a marker in the agent cwd guards it), then drain by replying to every other
+# open request so the loop goes quiet instead of re-prompting forever. Open
+# notices close on their own when this iteration finishes successfully.
 #   STUB_REPLY_INBOX="reply text"
-if [ -n "${STUB_REPLY_INBOX:-}" ] && [ -n "$PROMPT_PATH" ] && [ -f "$PROMPT_PATH" ]; then
-  IDS="$(sed -n 's/^- id \([^ ]*\).*/\1/p' "$PROMPT_PATH")"
-  if [ -n "$IDS" ] && [ ! -f .stub_replied ]; then
-    FIRST_ID="$(printf '%s\n' "$IDS" | head -n1)"
-    tool_post /tools/message/reply "{\"id\":\"$FIRST_ID\",\"text\":\"$STUB_REPLY_INBOX\"}" >"${STUB_REPLY_INBOX_OUT:-/dev/null}" 2>&1 || true
+#   STUB_REPLY_INBOX_OUT=/abs/file  (optional: capture the first reply result)
+if [ -n "${STUB_REPLY_INBOX:-}" ]; then
+  INBOX="$(tool_post /tools/mail/inbox '{}' 2>/dev/null || true)"
+  FIRST_ID="$(printf '%s' "$INBOX" | jq -r '.letters[0].id // empty' 2>/dev/null || true)"
+  if [ -n "$FIRST_ID" ] && [ ! -f .stub_replied ]; then
+    tool_post /tools/mail/reply "{\"id\":\"$FIRST_ID\",\"text\":\"$STUB_REPLY_INBOX\"}" >"${STUB_REPLY_INBOX_OUT:-/dev/null}" 2>&1 || true
     : > .stub_replied
   fi
-  # Drain any still-pending messages (the just-replied one auto-processed; a
-  # no-op re-process is harmless).
-  for MID in $IDS; do
-    tool_post /tools/message/processed "{\"id\":\"$MID\",\"result\":\"e2e-drain\"}" >/dev/null 2>&1 || true
+  for MID in $(printf '%s' "$INBOX" | jq -r '.letters[] | select(.needs_reply) | .id' 2>/dev/null || true); do
+    [ "$MID" = "$FIRST_ID" ] && continue
+    tool_post /tools/mail/reply "{\"id\":\"$MID\",\"text\":\"e2e-drain\"}" >/dev/null 2>&1 || true
   done
 fi
 

@@ -14,25 +14,60 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
-func newHost(t *testing.T, runner Runner) (*Host, *bus.Bus, *Store) {
+// pluginDirectory knows the plugins of the store, agent alice and the
+// customer; it is the recipient directory of the test mail.
+type pluginDirectory struct{ ps *Store }
+
+func (pluginDirectory) AgentExists(name string) (bool, error) { return name == "alice", nil }
+func (pluginDirectory) InboxCap(string) (int, error)          { return 0, nil }
+func (pluginDirectory) CustomerLogin() string                 { return "customer" }
+func (d pluginDirectory) PluginInstalled(name string) (bool, error) {
+	_, ok, err := d.ps.Get(name)
+	return ok, err
+}
+func (pluginDirectory) QueueExists(string) (bool, error)            { return false, nil }
+func (pluginDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
+
+func newHost(t *testing.T, runner Runner) (*Host, *mail.Mail, *Store) {
 	t.Helper()
 	s := storetest.Open(t)
 	clock := func() time.Time { return time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC) }
-	b := bus.New(s, clock)
 	ps := NewStore(s, clock)
+	b := mail.New(s, clock, pluginDirectory{ps})
 	h := NewHost(HostConfig{
-		Store: ps, Bus: b, Tokens: NewTokenRegistry(nil),
+		Store: ps, Mail: b, Tokens: NewTokenRegistry(nil),
 		PluginsDir: filepath.Join(t.TempDir(), "plugins"), DaemonSocket: "/tmp/d.sock",
 		Runner: runner, Clock: clock,
 		After: func(time.Duration) <-chan time.Time { return time.After(time.Millisecond) },
 		Log:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
+	b.SetPluginWakeHook(h.WakePlugins)
 	return h, b, ps
+}
+
+// openLetters is the open inbox of principal.
+func openLetters(t *testing.T, m *mail.Mail, principal string) []mail.Letter {
+	t.Helper()
+	letters, _, err := m.List(mail.BoxInbox, principal, 100, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return letters
+}
+
+// sendToPlugin sends a request from agent alice to plugin:name.
+func sendToPlugin(t *testing.T, m *mail.Mail, name, text string) mail.Letter {
+	t.Helper()
+	out, err := m.Send(mail.Letter{From: "agent:alice", To: "plugin:" + name, Body: text, NeedsReply: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out[0]
 }
 
 func TestPluginActionNotRunning(t *testing.T) {
@@ -56,14 +91,14 @@ func TestHostContributionsReturnsEnabledInstalledManifests(t *testing.T) {
 		}
 		manifest := fmt.Sprintf(`{
   "name":%q,"version":"1.0.0","protocol_version":1,
-  "types":["channel-source"],"exec":"run.sh",
+  "types":["mail-source"],"exec":"run.sh",
   "channels":{"publish":["chat:%s:*"] ,"subscribe":[]},
   "operator_commands":[{"path":"status","summary":"Show status","action":"status"}]
 }`, name, name)
 		if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(manifest), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if err := ps.Upsert(Record{Name: name, Version: "1.0.0", ProtocolVersion: 1, Types: []string{"channel-source"}, Exec: "run.sh", Enabled: enabled}); err != nil {
+		if err := ps.Upsert(Record{Name: name, Version: "1.0.0", ProtocolVersion: 1, Types: []string{"mail-source"}, Exec: "run.sh", Enabled: enabled}); err != nil {
 			t.Fatal(err)
 		}
 		if err := ps.SetActiveVersion(name, "1.0.0"); err != nil {
@@ -112,9 +147,9 @@ func waitRunning(t *testing.T, h *Host, name string) {
 	}
 }
 
-func TestHostStartReachesRunningAndEmitsEvent(t *testing.T) {
+func TestHostStartReachesRunning(t *testing.T) {
 	t.Parallel()
-	h, b, ps := newHost(t, nil) // runner set per-plugin below via a health server + fake
+	h, _, ps := newHost(t, nil) // runner set per-plugin below via a health server + fake
 	rec := sampleRecord("echo")
 	if err := ps.Upsert(rec); err != nil {
 		t.Fatal(err)
@@ -128,7 +163,7 @@ func TestHostStartReachesRunningAndEmitsEvent(t *testing.T) {
 	writeExec(t, h, "echo")
 	status := 200
 	healthServer(t, sock, &status)
-	h.cfg.Runner = &fakeRunner{line: `{"name":"echo","version":"0.1.0","types":["channel-sink"],"protocol_version":1,"socket":"` + sock + `"}`}
+	h.cfg.Runner = &fakeRunner{line: `{"name":"echo","version":"0.1.0","types":["mail-sink"],"protocol_version":1,"socket":"` + sock + `"}`}
 
 	if err := h.StartAll(context.Background()); err != nil {
 		t.Fatal(err)
@@ -140,18 +175,6 @@ func TestHostStartReachesRunningAndEmitsEvent(t *testing.T) {
 		return len(list) == 1 && list[0]["state"] == "running"
 	}) {
 		t.Fatalf("plugin never running: %+v", list)
-	}
-	// A system:plugins event was published. onState flips the live state to
-	// "running" (observed by the poll loop above) BEFORE its Bus.Publish call
-	// completes, so under heavy -race scheduling a single Tail read right after
-	// the state flip can race the publish and miss it. Poll with a bounded
-	// deadline instead of reading once, to close that happens-before gap
-	// deterministically without weakening the assertion.
-	if !testutil.WaitFor(2*time.Second, func() bool {
-		msgs, _ := b.Tail("system:plugins", 10)
-		return len(msgs) > 0
-	}) {
-		t.Fatal("no system:plugins event")
 	}
 	// A token was minted for the plugin.
 	if h.cfg.Tokens.Count() != 1 {
@@ -218,7 +241,7 @@ func TestHostInjectsSocketAndTokenEnv(t *testing.T) {
 	writeExec(t, h, "echo")
 	status := 200
 	healthServer(t, sock, &status)
-	er := &envRunner{line: `{"name":"echo","version":"0.1.0","types":["channel-sink"],"protocol_version":1,"socket":"` + sock + `"}`}
+	er := &envRunner{line: `{"name":"echo","version":"0.1.0","types":["mail-sink"],"protocol_version":1,"socket":"` + sock + `"}`}
 	h.cfg.Runner = er
 
 	if err := h.StartAll(context.Background()); err != nil {
@@ -269,7 +292,7 @@ func TestHostScrubsRealProviderKeys(t *testing.T) {
 	writeExec(t, h, "echo")
 	status := 200
 	healthServer(t, sock, &status)
-	er := &envRunner{line: `{"name":"echo","version":"0.1.0","types":["channel-sink"],"protocol_version":1,"socket":"` + sock + `"}`}
+	er := &envRunner{line: `{"name":"echo","version":"0.1.0","types":["mail-sink"],"protocol_version":1,"socket":"` + sock + `"}`}
 	h.cfg.Runner = er
 
 	if err := h.StartAll(context.Background()); err != nil {
@@ -338,7 +361,7 @@ func TestHostStopAllDrainsBeforeClose(t *testing.T) {
 type nameRunner struct{}
 
 func (nameRunner) Start(spec SpawnSpec, logw io.Writer) (ProcHandle, error) {
-	line := `{"name":"` + spec.Name + `","version":"0.1.0","types":["channel-sink"],"protocol_version":1,"socket":"` + spec.Socket + `"}`
+	line := `{"name":"` + spec.Name + `","version":"0.1.0","types":["mail-sink"],"protocol_version":1,"socket":"` + spec.Socket + `"}`
 	h := &fakeHandle{hs: make(chan HandshakeResult, 1), done: make(chan struct{})}
 	h.hs <- HandshakeResult{Line: []byte(line)}
 	return h, nil
@@ -402,7 +425,7 @@ func (r *countingNameRunner) Start(spec SpawnSpec, logw io.Writer) (ProcHandle, 
 	}
 	r.spawns[spec.Name]++
 	r.mu.Unlock()
-	line := `{"name":"` + spec.Name + `","version":"0.1.0","types":["channel-sink"],"protocol_version":1,"socket":"` + spec.Socket + `"}`
+	line := `{"name":"` + spec.Name + `","version":"0.1.0","types":["mail-sink"],"protocol_version":1,"socket":"` + spec.Socket + `"}`
 	h := &fakeHandle{hs: make(chan HandshakeResult, 1), done: make(chan struct{})}
 	h.hs <- HandshakeResult{Line: []byte(line)}
 	return h, nil
@@ -528,7 +551,7 @@ func TestHostInstallRemove(t *testing.T) {
 
 	// Build a minimal source plugin tree with a valid manifest + exec.
 	src := t.TempDir()
-	manifest := `{"name":"widget","version":"1.0.0","protocol_version":1,"types":["channel-sink"],"exec":"run.sh","channels":{"publish":["chat:*"],"subscribe":["chat:in"]}}`
+	manifest := `{"name":"widget","version":"1.0.0","protocol_version":1,"types":["mail-sink"],"exec":"run.sh","mail":{"receive":true}}`
 	if err := os.WriteFile(filepath.Join(src, "plugin.json"), []byte(manifest), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -833,7 +856,7 @@ func TestHostInstallFailureRestoresPreviousActiveVersion(t *testing.T) {
 // same-dir exec still starts.
 func TestStartRefusesSymlinkEscapeExec(t *testing.T) {
 	t.Parallel()
-	h, b, ps := newHost(t, nil)
+	h, _, ps := newHost(t, nil)
 	h.cfg.Runner = &nameRunner{}
 
 	// evil: exec is a symlink pointing outside the plugin dir.
@@ -875,11 +898,6 @@ func TestStartRefusesSymlinkEscapeExec(t *testing.T) {
 			t.Fatalf("evil state = %v, want error", e["state"])
 		}
 	}
-	// The error was announced on system:plugins.
-	if msgs, _ := b.Tail("system:plugins", 10); len(msgs) == 0 {
-		t.Fatal("no system:plugins event for the refused plugin")
-	}
-
 	// A normal same-dir exec still starts.
 	good := sampleRecord("good")
 	if err := ps.Upsert(good); err != nil {
@@ -911,7 +929,7 @@ func TestHostInstallRejectsSymlinkInTree(t *testing.T) {
 	h.cfg.Runner = &nameRunner{}
 
 	src := t.TempDir()
-	manifest := `{"name":"sneaky","version":"1.0.0","protocol_version":1,"types":["channel-sink"],"exec":"sub/run.sh","channels":{"publish":["chat:*"],"subscribe":["chat:in"]}}`
+	manifest := `{"name":"sneaky","version":"1.0.0","protocol_version":1,"types":["mail-sink"],"exec":"sub/run.sh","mail":{"receive":true}}`
 	if err := os.WriteFile(filepath.Join(src, "plugin.json"), []byte(manifest), 0o600); err != nil {
 		t.Fatal(err)
 	}

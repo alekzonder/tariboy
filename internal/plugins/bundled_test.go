@@ -12,7 +12,6 @@ func TestEnsureBundledInstallsUpgradesAndPreservesWorkdir(t *testing.T) {
 	manifest := Manifest{
 		Name: "telegram", Version: "1.0.0", ProtocolVersion: ProtocolVersion,
 		Types: []string{"tool"}, Exec: "tariboy-plugin-telegram",
-		Channels: Channels{},
 	}
 	executable := filepath.Join(t.TempDir(), manifest.Exec)
 	if err := os.WriteFile(executable, []byte("version one"), 0o700); err != nil {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import AgentPrompt from "@/pages/AgentPrompt";
 import AgentContext from "@/pages/AgentContext";
 import AgentFiles from "@/pages/AgentFiles";
@@ -21,10 +21,6 @@ const VIEWS = [
   ["raw", "Raw settings"],
 ] as const;
 type View = (typeof VIEWS)[number][0];
-
-// Channels and Messages moved to the Chat tab (Channels and Queue); links saved
-// before the move land there instead of on an unrelated default view.
-const MOVED: Record<string, string> = { channels: "channels", messages: "queue" };
 
 function isView(value: string | null): value is View {
   return VIEWS.some(([key]) => key === value);
@@ -49,11 +45,6 @@ function RawSnapshot() {
 export default function AgentAdvancedTab() {
   const [params, setParams] = useSearchParams();
   const requested = params.get("view");
-  const moved = requested ? MOVED[requested] : undefined;
-  if (moved)
-    return (
-      <Navigate to={{ pathname: "../chat", search: `?view=${moved}` }} relative="path" replace />
-    );
   const view: View = isView(requested) ? requested : "prompt";
   const content =
     view === "prompt" ? (

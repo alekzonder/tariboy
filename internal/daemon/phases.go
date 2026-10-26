@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,12 +15,10 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
-	"github.com/alekzonder/tariboy/internal/agentapi"
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/audit"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/commands"
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/groups"
@@ -29,6 +26,8 @@ import (
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/logrotate"
 	"github.com/alekzonder/tariboy/internal/loop"
+	"github.com/alekzonder/tariboy/internal/mail"
+	"github.com/alekzonder/tariboy/internal/mail/storedir"
 	"github.com/alekzonder/tariboy/internal/maintenance"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugins"
@@ -162,15 +161,14 @@ type coreParts struct {
 	st            *store.Store
 	metrics       *telemetry.Metrics
 	agents        *agent.Store
-	bus           *bus.Bus
+	mail          *mail.Mail
 	hub           *events.Hub
 	audit         *audit.Registry
 	rec           Recorder
 	customerLogin string
 }
 
-// openStore opens the store and telemetry, and reconciles the agents' inboxes
-// and chats.
+// openStore opens the store, telemetry and the mailbox.
 func openStore(ctx context.Context, proc *process, stack *shutdownStack) (*coreParts, error) {
 	log, p := proc.log, proc.paths
 	st, err := store.Open(p.DB())
@@ -208,20 +206,9 @@ func openStore(ctx context.Context, proc *process, stack *shutdownStack) (*coreP
 	}
 
 	as := agent.NewStore(st)
-	channelBus := bus.New(st, time.Now)
-	// Wired before any publish: workflow ingress numbers every message in its
-	// publish transaction and keeps messages it has not consumed yet.
-	channelBus.SetPublishTxHook(tasks.RecordWorkflowMessageSequence)
-	channelBus.SetMessageRetention(tasks.WorkflowMessageRetainedSQL)
-	if err := reconcileAgentInboxes(as, channelBus); err != nil {
-		return nil, fmt.Errorf("reconcile agent inboxes: %w", err)
-	}
 	customerLogin, err := resolveCustomerLogin(st)
 	if err != nil {
 		return nil, fmt.Errorf("resolve customer login: %w", err)
-	}
-	if err := reconcileAgentChats(as, channelBus, "user:"+customerLogin); err != nil {
-		return nil, fmt.Errorf("reconcile agent chats: %w", err)
 	}
 	hub := events.NewHub()
 	// Per-agent audit log (audit.jsonl). One shared *audit.Log per agent backs
@@ -230,10 +217,13 @@ func openStore(ctx context.Context, proc *process, stack *shutdownStack) (*coreP
 		func(a string) string { return agentdir.New(p.AgentsDir(), a).AuditLog() },
 		time.Now,
 	)
+	rec := Recorder{log: log, store: st, audit: auditReg, hub: hub}
+	mailbox := mail.New(st, time.Now, storedir.New(st, customerLogin))
+	mailbox.SetAuditHook(rec.Record)
+
 	return &coreParts{
-		st: st, metrics: metrics, agents: as, bus: channelBus, hub: hub, audit: auditReg,
-		rec:           Recorder{log: log, store: st, audit: auditReg, hub: hub},
-		customerLogin: customerLogin,
+		st: st, metrics: metrics, agents: as, mail: mailbox, hub: hub, audit: auditReg,
+		rec: rec, customerLogin: customerLogin,
 	}, nil
 }
 
@@ -270,7 +260,7 @@ func buildTasks(ctx context.Context, proc *process, c *coreParts) (*taskParts, e
 	taskService.SetGlobalEnv(globalEnv)
 	taskService.SetLogger(log)
 	goalReconciler := taskgoal.NewReconciler(taskgoal.ReconcilerConfig{
-		Store: st, Bus: c.bus, Clock: time.Now, Log: log,
+		Store: st, Mail: c.mail, Clock: time.Now, Log: log,
 	})
 	// A task change, an agent change, and a finished iteration wake both the
 	// goal reconciler and the workflow dispatcher.
@@ -305,7 +295,7 @@ func buildTasks(ctx context.Context, proc *process, c *coreParts) (*taskParts, e
 	}
 	return &taskParts{
 		service: taskService, hub: taskHub,
-		publisher: tasknotify.New(st.DB, c.bus, time.Now, log),
+		publisher: tasknotify.New(st.DB, c.mail, time.Now, log),
 		goal:      goalReconciler, goalStore: taskgoal.NewStore(st),
 		ingress: newWorkflowIngressSignal(), dispatch: workflowDispatch,
 		goalSignal: goalSignal, goalIterationCompleted: goalIterationCompleted,
@@ -394,10 +384,12 @@ func buildProxy(ctx context.Context, o Options, proc *process, c *coreParts) (*p
 			c.metrics.RecordProxyRequest(ctx, status, float64(lat), in, out, cost)
 		},
 		Warn: func(agent string, d aiproxy.Decision) {
-			_, _ = c.bus.Publish(bus.Message{Channel: bus.InboxChannel(agent), Type: "budget.warn",
-				Source: "proxy", ProducedByAgent: agent,
-				Text: "AI budget warning: spend exceeded limit",
-				Data: map[string]any{"scope": d.Scope, "limit_usd": d.LimitUSD, "spent_usd": d.SpentUSD}})
+			if _, err := c.mail.Send(mail.Letter{From: "system:proxy", To: "agent:" + agent, Kind: "budget.warn",
+				Subject: "AI budget warning",
+				Body:    "AI budget warning: spend exceeded limit",
+				Data:    map[string]any{"scope": d.Scope, "limit_usd": d.LimitUSD, "spent_usd": d.SpentUSD}}); err != nil {
+				log.Warn("send budget warning", "agent", agent, "err", err)
+			}
 			c.rec.Record(agent, "budget_warn", fmt.Sprintf(`{"scope":%q,"spent_usd":%g}`, d.Scope, d.SpentUSD))
 		},
 		Audit: c.rec.Record,
@@ -458,123 +450,24 @@ type pluginParts struct {
 	api   http.Handler
 }
 
-// buildPlugins builds the plugin host and API and wires the provider contract
-// into the bus. One TokenRegistry is shared between the host (which mints
-// per-plugin tokens) and the plugin API (which resolves them).
+// buildPlugins builds the plugin host and API and connects them to mail. One
+// TokenRegistry is shared between the host (which mints per-plugin tokens)
+// and the plugin API (which resolves them).
 func buildPlugins(proc *process, c *coreParts) *pluginParts {
 	log, p := proc.log, proc.paths
 	pluginTokens := plugins.NewTokenRegistry(nil)
 	pluginStore := plugins.NewStore(c.st, time.Now)
 	pluginHost := plugins.NewHost(plugins.HostConfig{
-		Store: pluginStore, Bus: c.bus, Tokens: pluginTokens,
+		Store: pluginStore, Mail: c.mail, Tokens: pluginTokens,
 		PluginsDir: p.PluginsDir(), DaemonSocket: p.Socket(),
 		Clock: time.Now, After: time.After, Log: log,
 	})
-	pluginAPI := plugins.NewAPI(pluginTokens, c.bus, log, func(plugin, action, detail string) {
+	pluginAPI := plugins.NewAPI(pluginTokens, c.mail, log, func(plugin, action, detail string) {
 		c.rec.Record("", "plugin_"+action, fmt.Sprintf(`{"plugin":%q,"detail":%q}`, plugin, detail))
 	})
-
-	// Provider contract (spec §6.1): gate parameterized subscribes on the target
-	// channel's declared params_schema. Records are read fresh per subscribe (an
-	// infrequent op) so newly installed providers take effect without a restart. A
-	// transient store-read failure treats the channel as non-provider and allows
-	// the subscribe (ParamsValidatorFor) rather than failing every subscribe —
-	// core channels never needed the plugin store.
-	c.bus.SetParamsValidator(plugins.ParamsValidatorFor(pluginStore,
-		func(channel string, err error) {
-			log.Warn("params validator: list plugins", "channel", channel, "err", err)
-		}))
-
-	// Provider watch lifecycle (spec §6.2): after any subscribe/unsubscribe, map
-	// the affected channel to its provider plugin and push the channel's full
-	// current watch list to that plugin's socket. Non-provider channels are a
-	// no-op. The push is best-effort (async, capped backoff inside the host); the
-	// plugin's GET /api/plugin/watches pull path guarantees eventual consistency.
-	c.bus.SetSubscriptionHook(func(channel string) {
-		recs, err := pluginStore.List()
-		if err != nil {
-			log.Warn("subscription hook: list plugins", "channel", channel, "err", err)
-			return
-		}
-		owner, _, ok := plugins.ProviderFor(recs, channel)
-		if !ok {
-			return // not a provided channel — no provider to notify
-		}
-		watches, err := c.bus.WatchList(channel)
-		if err != nil {
-			log.Warn("subscription hook: watch list", "channel", channel, "err", err)
-			return
-		}
-		pluginHost.PushWatches(owner, channel, watches)
-	})
+	// A letter to plugin:<name> wakes that plugin's inbox drainer.
+	c.mail.SetPluginWakeHook(pluginHost.WakePlugins)
 	return &pluginParts{store: pluginStore, host: pluginHost, api: pluginAPI}
-}
-
-// providedChannels feeds the Messages skill provider-declared channels from
-// installed plugin manifests (spec §6.1), read fresh per call so a newly
-// installed provider is annotated without a restart.
-func providedChannels(pluginStore *plugins.Store) func() ([]agentapi.ProvidedChannel, error) {
-	return func() ([]agentapi.ProvidedChannel, error) {
-		recs, err := pluginStore.List()
-		if err != nil {
-			return nil, err
-		}
-		infos := plugins.ProvidedChannels(recs)
-		out := make([]agentapi.ProvidedChannel, len(infos))
-		for i, in := range infos {
-			out[i] = agentapi.ProvidedChannel{
-				Channel: in.Channel, Provider: in.Provider,
-				Params: in.Params, Help: in.Help,
-			}
-		}
-		return out, nil
-	}
-}
-
-// parseDeadline is the single source of truth for the request deadline format,
-// shared by the pre-publish validator and the arm hook so both accept exactly
-// the same strings (Go durations, e.g. 5m/3s/1h).
-func parseDeadline(deadline string) (time.Duration, error) {
-	dur, err := time.ParseDuration(deadline)
-	if err != nil {
-		return 0, fmt.Errorf("request deadline %q: %w", deadline, err)
-	}
-	return dur, nil
-}
-
-// deadlineHooks wire request deadlines (spec §4.2) to the schedule subsystem:
-// arm adds a one-shot schedule that publishes a type=timeout event into the
-// requester's inbox at the deadline; cancel removes exactly that entry by its
-// correlation id when a reply lands first.
-func deadlineHooks(sched *schedule.Store) (arm func(*sql.Tx, string, string, string) error, cancel func(*sql.Tx, string) error) {
-	arm = func(tx *sql.Tx, agent, correlationID, deadline string) error {
-		dur, err := parseDeadline(deadline)
-		if err != nil {
-			return err
-		}
-		fireAt := store.FormatTime(time.Now().Add(dur))
-		tmpl, err := json.Marshal(map[string]any{
-			"type": "timeout",
-			"text": "request timed out with no reply",
-			"data": map[string]any{"correlation_id": correlationID},
-		})
-		if err != nil {
-			return err
-		}
-		_, err = sched.AddTx(tx, schedule.Schedule{
-			Agent:           agent,
-			Kind:            "oneshot",
-			Spec:            fireAt,
-			Channel:         bus.InboxChannel(agent),
-			MessageTemplate: string(tmpl),
-			CorrelationID:   correlationID,
-		})
-		return err
-	}
-	cancel = func(tx *sql.Tx, correlationID string) error {
-		return sched.CancelByCorrelationTx(tx, correlationID)
-	}
-	return arm, cancel
 }
 
 // managerParts are the loop manager, the stores it drives, and the registry
@@ -588,26 +481,20 @@ type managerParts struct {
 	cctx            *registry.Ctx
 }
 
-// buildManager builds the loop manager and wires the bus hooks that need it.
+// buildManager builds the loop manager and wires the mail hooks that need it.
 func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, tk *taskParts, px *proxyParts, pl *pluginParts) *managerParts {
 	log, p, st := proc.log, proc.paths, c.st
 	schedStore := schedule.NewStore(st, time.Now)
 	scriptStore := script.NewStore(st, time.Now)
-	scriptPublisher := scriptnotify.New(st.DB, c.bus, time.Now, log)
+	scriptPublisher := scriptnotify.New(st.DB, c.mail, time.Now, log)
 	groupProv := groups.NewProvisioner(groups.ProvisionerConfig{
 		Groups:    groups.NewStore(st, time.Now),
 		Agents:    c.agents,
-		Bus:       c.bus,
 		GroupsDir: filepath.Join(p.Base, "groups"),
 		Clock:     time.Now,
 	})
 	var _ loop.GroupProvisioner = groupProv
-
-	c.bus.SetDeadlineValidator(func(deadline string) error {
-		_, err := parseDeadline(deadline)
-		return err
-	})
-	c.bus.SetDeadlineHooks(deadlineHooks(schedStore))
+	c.mail.SetDeadlines(schedule.Deadlines{Store: schedStore})
 
 	// Retention (spec §12): the nightly maintenance run archives and prunes
 	// every agent's iterations per its policy after the database backup.
@@ -637,7 +524,7 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 	manager := loop.NewManager(loop.ManagerConfig{
 		AgentsDir: p.AgentsDir(), RuntimeDir: p.RuntimeDir(),
 		ShimBin:  firstNonEmpty(os.Getenv("TARIBOY_SHIM_BIN"), filepath.Join(firstNonEmpty(proc.exeDir, "."), "tariboy-shim")),
-		ImgStore: tk.images, Store: c.agents, Log: log, Clock: time.Now, Bus: c.bus,
+		ImgStore: tk.images, Store: c.agents, Log: log, Clock: time.Now, Mail: c.mail,
 		Schedules: schedStore, Scripts: scriptStore, ScriptResults: scriptPublisher, Emit: c.hub.Emit, Proxy: px.proxy,
 		Groups: groupProv,
 		CodexApproval: func() string {
@@ -661,9 +548,8 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 			_, err := tk.goalStore.Set(agent, key, time.Now().UTC(), activate)
 			return err
 		},
-		ProvidedChannels: providedChannels(pl.store),
-		AuditFor:         func(a string) loop.Recorder { return c.audit.For(a) },
-		Metrics:          c.metrics,
+		AuditFor: func(a string) loop.Recorder { return c.audit.For(a) },
+		Metrics:  c.metrics,
 		// UsageLookup adapts aiStore.IterationUsage (which returns an error) into
 		// the error-less accessor the loop expects: swallow the error and return
 		// zeros so a lookup failure never propagates into an iteration.
@@ -677,11 +563,12 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 			}
 		},
 	})
-	// Register the observable gauges exactly once (spec §14): bus queue depth,
-	// healthy plugins, active agent loops. No-op instruments when OTel is off.
+	// Register the observable gauges exactly once (spec §14): open letters to
+	// agents, healthy plugins, active agent loops. No-op instruments when OTel
+	// is off.
 	_ = c.metrics.RegisterGauges(telemetry.GaugeSource{ // gauges are optional telemetry; registration failure must not stop the daemon
 		QueueDepth: func(context.Context) int64 {
-			n, _ := c.bus.PendingTotal()
+			n, _ := c.mail.OpenAgentTotal()
 			return int64(n)
 		},
 		PluginsHealthy: func(context.Context) int64 {
@@ -698,23 +585,20 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 		EventsDropped: func(context.Context) int64 { return c.hub.Dropped() },
 	})
 
-	// A publish wakes exactly the agents that received a delivery and feeds the
-	// SSE hub with per-agent message/stream events.
-	c.bus.SetPublishHook(func(msg bus.Message, agents []string) {
-		manager.WakeAgents(agents, loop.WakeMessage)
-		emitMessageEvent(c.hub, msg, agents)
-		if tk.service.WorkflowIngressEnabled() {
+	// A letter wakes exactly the agents it was sent to, feeds the mail hint
+	// socket, and a letter to a queue wakes workflow ingress.
+	c.mail.SetWakeHook(func(agents []string) { manager.WakeAgents(agents, loop.WakeMessage) })
+	c.mail.SetEventHook(func(h mail.Hint) {
+		c.hub.Emit(events.Event{Agent: mailHintAgent(h), Type: "mail", Time: h.TS,
+			Data: map[string]any{"id": h.ID, "from": h.From, "to": h.To, "kind": h.Kind}})
+		if strings.HasPrefix(h.To, "queue:") && tk.service.WorkflowIngressEnabled() {
 			tk.ingress.Signal()
 		}
 	})
-	// Route bus lifecycle events (message_processed/replied/requeued) to the
-	// per-agent audit.jsonl so the §8.2 operator-vs-agent attribution actually
-	// lands in the audit timeline.
-	c.bus.SetAuditHook(c.rec.Record)
 
 	cctx := &registry.Ctx{
 		Store: st, Log: log, BaseDir: p.Base, Socket: p.Socket(), HTTPAddr: o.HTTPAddr,
-		Version: version.Version, StartedAt: time.Now(), Control: manager, Scripts: manager, Bus: c.bus, Plugins: pl.host,
+		Version: version.Version, StartedAt: time.Now(), Control: manager, Scripts: manager, Mail: c.mail, Plugins: pl.host,
 		Groups:         groupProv,
 		Operator:       tk.service.CustomerLogin(),
 		Retention:      &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},
@@ -762,7 +646,7 @@ func startWorkers(ctx context.Context, o Options, proc *process, c *coreParts, t
 		cancel()
 		wg.Wait()
 	})
-	scheduler := schedule.NewScheduler(mg.schedules, c.bus, log, time.Now, time.After)
+	scheduler := schedule.NewScheduler(mg.schedules, c.mail, log, time.Now, time.After)
 	wg.Go(func() {
 		if o.schedulerRun != nil {
 			o.schedulerRun(gctx, scheduler)

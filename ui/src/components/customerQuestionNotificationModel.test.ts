@@ -8,16 +8,12 @@ import {
 function question(id: string, overrides: Partial<TaskNotification> = {}): TaskNotification {
   return {
     id,
-    channel: "customer",
     type: "task.question",
     text: "question",
     requesting_principal: "agent:alpha",
     task_key: `T-${id}`,
-    event_sequence: 1,
     created_at: "",
-    published_at: "",
     read_at: "",
-    dismissed_at: "",
     ...overrides,
   };
 }

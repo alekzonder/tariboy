@@ -1,7 +1,6 @@
 import type { AgentBudget, AgentView } from "@/lib/api";
 
 const TABS = [
-  ["chat", "Chat"],
   ["tasks", "Tasks"],
   ["console", "Terminal"],
   ["activity", "Activity"],
@@ -9,7 +8,7 @@ const TABS = [
   ["advanced", "Advanced"],
 ] as const;
 // The tabs Simple mode keeps; the header, Start/Stop included, is the same in both.
-const SIMPLE_TABS: ReadonlySet<string> = new Set(["chat", "tasks", "console", "configuration"]);
+const SIMPLE_TABS: ReadonlySet<string> = new Set(["tasks", "console", "configuration"]);
 
 export type AgentTab = (typeof TABS)[number][0];
 export type AgentTabEntry = (typeof TABS)[number];
@@ -18,7 +17,7 @@ export function agentTabs(simple: boolean): readonly AgentTabEntry[] {
   return simple ? TABS.filter(([key]) => SIMPLE_TABS.has(key)) : TABS;
 }
 
-// An unknown or hidden tab opens the default one: Terminal, or Chat in Simple.
+// An unknown or hidden tab opens the default one: Terminal, or Tasks in Simple.
 export function resolveAgentTab({
   tab,
   simple,
@@ -30,7 +29,7 @@ export function resolveAgentTab({
 }): { tab: AgentTab } | { redirect: string } {
   const known = agentTabs(simple).find(([key]) => key === tab);
   if (known) return { tab: known[0] };
-  return { redirect: `${base}/${simple ? "chat" : "console"}` };
+  return { redirect: `${base}/${simple ? "tasks" : "console"}` };
 }
 
 // Configured runtime, compactly: whatever the harness actually reports.

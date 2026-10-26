@@ -8,10 +8,11 @@ import (
 )
 
 var (
-	CORE = []string{"whoami", "loop", "messages"}
+	CORE = []string{"whoami", "loop", "mail"}
 	// OPTIONAL contains built-in capabilities selectable in an image. External
 	// capabilities are accepted only through a resolver for installed manifests.
-	OPTIONAL = []string{"context", "status", "schedule", "scripts", "goal", "image-creator", "tasks"}
+	// messages is the old name of mail, still accepted from older images.
+	OPTIONAL = []string{"context", "status", "schedule", "scripts", "goal", "image-creator", "tasks", "messages"}
 	// INSTRUCTION_ONLY contains schema-v2 built-ins that contribute no route,
 	// command, or shim.
 	INSTRUCTION_ONLY = []string{"workdir"}

@@ -15,7 +15,6 @@ const question = (over: Partial<TaskNotification>): TaskNotification =>
     task_key: "T-1",
     requesting_principal: "agent:dev",
     read_at: "",
-    dismissed_at: "",
     ...over,
   }) as TaskNotification;
 
@@ -49,13 +48,13 @@ describe("task questions", () => {
   const notifications = [
     question({ id: "1", task_key: "T-1" }),
     question({ id: "2", task_key: "T-2", read_at: "2026-01-01T00:00:00Z" }),
-    question({ id: "3", task_key: "T-3", dismissed_at: "2026-01-01T00:00:00Z" }),
+    question({ id: "3", task_key: "T-3", read_at: "2026-01-02T00:00:00Z" }),
     question({ id: "4", task_key: "T-4", type: "task.comment" }),
     question({ id: "5", task_key: "T-5", requesting_principal: "agent:other" }),
     question({ id: "6", task_key: "T-1" }),
   ];
 
-  it("keeps only unread, undismissed questions", () => {
+  it("keeps only unread questions", () => {
     expect([...unreadQuestionTaskKeys(notifications)]).toEqual(["T-1", "T-5"]);
     expect(unreadQuestionsFor(notifications, "T-1").map((item) => item.id)).toEqual(["1", "6"]);
   });

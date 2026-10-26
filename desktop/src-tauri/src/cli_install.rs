@@ -293,7 +293,7 @@ mod tests {
     }
 
     #[test]
-    fn installs_all_commands_with_tasks_alias() {
+    fn installs_all_commands_with_tasks_and_mail_aliases() {
         let dir = tempfile::tempdir().unwrap();
         let source_dir = bundled_set(dir.path(), "Tariboy.app");
         let link_dir = dir.path().join("local-bin");
@@ -308,10 +308,15 @@ mod tests {
                 source_dir.join(binary)
             );
         }
-        for name in ["tariboy-tasks", "ttasks"] {
+        for (name, source) in [
+            ("tariboy-tasks", "tariboy-tasks"),
+            ("ttasks", "tariboy-tasks"),
+            ("tariboy-mail", "tariboy-mail"),
+            ("tmail", "tariboy-mail"),
+        ] {
             assert_eq!(
                 std::fs::read_link(link_dir.join(name)).unwrap(),
-                source_dir.join("tariboy-tasks")
+                source_dir.join(source)
             );
         }
         assert_eq!(
@@ -321,27 +326,29 @@ mod tests {
     }
 
     #[test]
-    fn occupied_tasks_alias_preserves_every_original_link() {
-        let dir = tempfile::tempdir().unwrap();
-        let old = bundled_set(&dir.path().join("old"), "Tariboy.app");
-        let new = bundled_set(&dir.path().join("new"), "Tariboy.app");
-        let link_dir = dir.path().join("local-bin");
-        std::fs::create_dir_all(&link_dir).unwrap();
-        for binary in BINARIES {
-            symlink(&old.join(binary), &link_dir.join(binary)).unwrap();
+    fn occupied_tasks_or_mail_alias_preserves_every_original_link() {
+        for alias in ["ttasks", "tmail"] {
+            let dir = tempfile::tempdir().unwrap();
+            let old = bundled_set(&dir.path().join("old"), "Tariboy.app");
+            let new = bundled_set(&dir.path().join("new"), "Tariboy.app");
+            let link_dir = dir.path().join("local-bin");
+            std::fs::create_dir_all(&link_dir).unwrap();
+            for binary in BINARIES {
+                symlink(&old.join(binary), &link_dir.join(binary)).unwrap();
+            }
+            std::fs::write(link_dir.join(alias), b"foreign").unwrap();
+            assert!(matches!(
+                install_all(&link_dir, &new, &MANAGED_LINKS).unwrap(),
+                Outcome::Occupied { .. }
+            ));
+            for binary in BINARIES {
+                assert_eq!(
+                    std::fs::read_link(link_dir.join(binary)).unwrap(),
+                    old.join(binary)
+                );
+            }
+            assert_eq!(std::fs::read(link_dir.join(alias)).unwrap(), b"foreign");
         }
-        std::fs::write(link_dir.join("ttasks"), b"foreign").unwrap();
-        assert!(matches!(
-            install_all(&link_dir, &new, &MANAGED_LINKS).unwrap(),
-            Outcome::Occupied { .. }
-        ));
-        for binary in BINARIES {
-            assert_eq!(
-                std::fs::read_link(link_dir.join(binary)).unwrap(),
-                old.join(binary)
-            );
-        }
-        assert_eq!(std::fs::read(link_dir.join("ttasks")).unwrap(), b"foreign");
     }
 
     #[test]

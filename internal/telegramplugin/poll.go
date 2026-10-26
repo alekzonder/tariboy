@@ -226,10 +226,22 @@ func (s *Server) ProcessUpdate(ctx context.Context, update Update) error {
 	} else if handled {
 		return discard()
 	}
-	if err := s.daemon.Publish(ctx, PublishedMessage{
-		Channel: "chat:telegram:" + agent, Agent: agent, Text: text, Forward: forward,
+	err = s.daemon.Send(ctx, InboundLetter{
+		Agent: agent, Text: text, Forward: forward,
 		UpdateID: update.UpdateID, ExternalID: "telegram:" + strconv.FormatInt(update.UpdateID, 10),
-	}); err != nil {
+	})
+	if IsInboxFull(err) {
+		// The letter is stored dead and a retry would get the same answer:
+		// tell the sender and move on.
+		if s.bot != nil {
+			if _, sendErr := s.bot.SendMessage(ctx, state.Token, state.ChatID, message.MessageThreadID,
+				"The inbox of "+agent+" is full; this message was not delivered. Try again later."); sendErr != nil {
+				return sendErr
+			}
+		}
+		return discard()
+	}
+	if err != nil {
 		return err
 	}
 	return discard()

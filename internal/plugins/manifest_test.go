@@ -11,10 +11,10 @@ const goodManifest = `{
   "name": "echo",
   "version": "0.1.0",
   "protocol_version": 1,
-  "types": ["channel-source", "channel-sink"],
+  "types": ["mail-source", "mail-sink"],
   "exec": "echo.py",
   "description": "echo plugin",
-  "channels": {"publish": ["chat:echo-out"], "subscribe": ["chat:echo-in"]}
+  "mail": {"send": true, "receive": true}
 }`
 
 func TestParseAndValidate(t *testing.T) {
@@ -23,11 +23,11 @@ func TestParseAndValidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.Name != "echo" || m.ProtocolVersion != 1 || !m.HasType("channel-sink") {
+	if m.Name != "echo" || m.ProtocolVersion != 1 || !m.HasType("mail-sink") {
 		t.Fatalf("manifest = %+v", m)
 	}
-	if m.Channels.Publish[0] != "chat:echo-out" {
-		t.Fatalf("channels = %+v", m.Channels)
+	if !m.Mail.Send || !m.Mail.Receive {
+		t.Fatalf("mail = %+v", m.Mail)
 	}
 	if err := m.Validate(); err != nil {
 		t.Fatalf("valid manifest rejected: %v", err)
@@ -43,7 +43,7 @@ func TestValidateRejects(t *testing.T) {
 		"abs exec":                       func(m *Manifest) { m.Exec = "/usr/bin/evil" },
 		"escaping exec":                  func(m *Manifest) { m.Exec = "../../evil" },
 		"empty exec":                     func(m *Manifest) { m.Exec = "" },
-		"unknown type":                   func(m *Manifest) { m.Types = []string{"channel-source", "wat"} },
+		"unknown type":                   func(m *Manifest) { m.Types = []string{"mail-source", "wat"} },
 		"no types":                       func(m *Manifest) { m.Types = nil },
 		"bad protocol":                   func(m *Manifest) { m.ProtocolVersion = 2 },
 		"reserved version active marker": func(m *Manifest) { m.Version = "active-version" },
@@ -52,6 +52,9 @@ func TestValidateRejects(t *testing.T) {
 		"reserved version socket":        func(m *Manifest) { m.Version = "plugin.sock" },
 		"abs prompt":                     func(m *Manifest) { m.Prompt = "/etc/passwd" },
 		"escaping prompt":                func(m *Manifest) { m.Prompt = "../../secret.md" },
+		"send without mail-source":       func(m *Manifest) { m.Types = []string{"mail-sink"} },
+		"receive without mail-sink":      func(m *Manifest) { m.Types = []string{"mail-source"} },
+		"old channel type":               func(m *Manifest) { m.Types = []string{"channel-source"} },
 	}
 	for name, mutate := range cases {
 		m := base()
@@ -66,8 +69,8 @@ func TestValidateRejectsOperatorCommandWithoutAction(t *testing.T) {
 	t.Parallel()
 	m, err := ParseManifest([]byte(`{
   "name":"telegram","version":"0.1.0","protocol_version":1,
-  "types":["channel-source"],"exec":"telegram",
-  "channels":{"publish":["chat:telegram:*"],"subscribe":[]},
+  "types":["mail-source"],"exec":"telegram",
+  "mail":{"send":true},
   "operator_commands":[{"path":"configure","summary":"Configure Telegram","action":""}]
 }`))
 	if err != nil {
@@ -82,8 +85,8 @@ func TestValidateOperatorContributions(t *testing.T) {
 	t.Parallel()
 	valid := `{
   "name":"telegram","version":"0.1.0","protocol_version":1,
-  "types":["channel-source","channel-sink"],"exec":"telegram",
-  "channels":{"publish":["chat:telegram:*"],"subscribe":["chat:telegram:*"]},
+  "types":["mail-source","mail-sink"],"exec":"telegram",
+  "mail":{"send":true},
   "operator_commands":[{
     "path":"configure","summary":"Configure Telegram","action":"configure",
     "args":[
@@ -144,8 +147,8 @@ func TestValidateOperatorActionData(t *testing.T) {
 	t.Parallel()
 	m, err := ParseManifest([]byte(`{
   "name":"telegram","version":"0.1.0","protocol_version":1,
-  "types":["channel-source"],"exec":"telegram",
-  "channels":{"publish":["chat:telegram:*"] ,"subscribe":[]},
+  "types":["mail-source"],"exec":"telegram",
+  "mail":{"send":true},
   "operator_commands":[{
     "path":"configure","summary":"Configure","action":"configure",
     "args":[
@@ -178,68 +181,6 @@ func TestValidateOperatorActionData(t *testing.T) {
 	}
 }
 
-const provideManifest = `{
-  "name": "issue-provider",
-  "version": "0.1.0",
-  "protocol_version": 1,
-  "types": ["channel-source"],
-  "exec": "plugin.py",
-  "description": "issue-provider provider",
-  "channels": {
-    "publish": ["issue-provider:*"],
-    "subscribe": ["issue-provider:outbox"],
-    "provide": [
-      {"channel": "issue-provider:query",
-       "params_schema": {"type": "object", "required": ["query"],
-                         "properties": {"query": {"type": "string"}}},
-       "help": "Subscribe with {query: ...}"}
-    ]
-  }
-}`
-
-func TestValidateAcceptsProvide(t *testing.T) {
-	t.Parallel()
-	m, err := ParseManifest([]byte(provideManifest))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := m.Validate(); err != nil {
-		t.Fatalf("valid provide manifest rejected: %v", err)
-	}
-	if len(m.Channels.Provide) != 1 || m.Channels.Provide[0].Channel != "issue-provider:query" {
-		t.Fatalf("provide not parsed: %+v", m.Channels.Provide)
-	}
-}
-
-func TestValidateRejectsProvide(t *testing.T) {
-	t.Parallel()
-	base := func() Manifest { m, _ := ParseManifest([]byte(provideManifest)); return m }
-	cases := map[string]func(*Manifest){
-		"provide outside publish scope": func(m *Manifest) {
-			m.Channels.Provide[0].Channel = "other:query" // not matched by issue-provider:*
-		},
-		"provide empty channel": func(m *Manifest) {
-			m.Channels.Provide[0].Channel = ""
-		},
-		"duplicate provided channel": func(m *Manifest) {
-			m.Channels.Provide = append(m.Channels.Provide, m.Channels.Provide[0])
-		},
-		"malformed params_schema type": func(m *Manifest) {
-			m.Channels.Provide[0].ParamsSchema = []byte(`{"type": "objekt"}`)
-		},
-		"non-object params_schema": func(m *Manifest) {
-			m.Channels.Provide[0].ParamsSchema = []byte(`"not a schema"`)
-		},
-	}
-	for name, mutate := range cases {
-		m := base()
-		mutate(&m)
-		if err := m.Validate(); err == nil {
-			t.Errorf("%s: expected validation error, got nil", name)
-		}
-	}
-}
-
 func TestLoadManifest(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -262,8 +203,7 @@ const promptManifest = `{
   "types": ["tool"],
   "exec": "plugin.py",
   "description": "sample plugin",
-  "prompt": "PROMPT.md",
-  "channels": {"publish": [], "subscribe": []}
+  "prompt": "PROMPT.md"
 }`
 
 func TestLoadPrompt(t *testing.T) {
@@ -337,8 +277,8 @@ func TestResolveInstalledDistinguishesPromptlessPluginFromMissing(t *testing.T) 
 	}
 	manifest := `{
   "name":"issue-provider","version":"1.0.0","protocol_version":1,
-  "types":["channel-source"],"exec":"issue-provider",
-  "channels":{"publish":["issue:*"],"subscribe":[]}
+  "types":["mail-source"],"exec":"issue-provider",
+  "mail":{"send":true}
 }`
 	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(manifest), 0o600); err != nil {
 		t.Fatal(err)
