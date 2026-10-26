@@ -50,9 +50,9 @@ text with `--text -`, which reads standard input.
 
 | Command | What it does | Agent mode |
 | --- | --- | --- |
-| `tmail inbox [--all] [--limit N] [--before TIME]` | Open letters, oldest first; `--all` lists every letter to you, newest first | yes |
-| `tmail sent [--limit N] [--before TIME]` | Letters you sent, newest first, with their state | yes |
-| `tmail archive [--limit N] [--before TIME]` | Closed letters, newest first; dead ones tagged `dead:REASON` | yes |
+| `tmail inbox [--all] [--limit N] [--before CURSOR]` | Open letters, oldest first; `--all` lists every letter to you, newest first | yes |
+| `tmail sent [--limit N] [--before CURSOR]` | Letters you sent, newest first, with their state | yes |
+| `tmail archive [--limit N] [--before CURSOR]` | Closed letters, newest first; dead ones tagged `dead:REASON` | yes |
 | `tmail show ID` | One letter and the reply that closed it, if any | yes |
 | `tmail send --to P[,P] --subject S --text T [--kind K] [--deadline D] [--notice] [--data JSON]` | Send a letter; a request unless `--notice` | yes |
 | `tmail reply ID TEXT [--ask]` | Reply to a letter addressed to you, which closes it | yes |
@@ -101,7 +101,7 @@ defaults to the customer.
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/mail?box=inbox\|sent\|archive&as=&limit=&before=` | One mailbox view; `next_before` pages Sent and Archive |
+| `GET /api/mail?box=inbox\|sent\|archive&as=&limit=&before=` | One mailbox view; a full page returns `next_before`, an opaque cursor to pass back as `before`. The inbox pages oldest first, the other boxes newest first, and letters sharing one `created_at` are never skipped |
 | `GET /api/mail/{id}?as=` | One letter and its reply |
 | `POST /api/mail` | Send: `to`, `subject`, `text`, `kind`, `data`, `deadline`, `notice`, `as` |
 | `POST /api/mail/{id}/reply` | Reply: `text`, `ask`, `as` |
@@ -222,11 +222,12 @@ schedule running.
 
 | Code | When |
 | --- | --- |
-| `unknown_recipient` | A recipient is not an existing agent, the customer, an installed plugin, a `system:*` principal, an existing queue or an existing group |
+| `unknown_recipient` | A recipient is not an existing agent, the customer, an enabled plugin that declares `mail.receive`, a `system:*` principal, an existing queue or an existing group |
 | `unknown_sender` | `--as` names a principal that cannot send |
 | `empty_group` | The group has no member other than the sender |
 | `forbidden` | Reply, close, read or requeue by a principal that is not the recipient; show by one that is neither sender nor recipient |
 | `answer_on_task` | A reply to a `task.question`; the message names the `ttasks comment` command |
+| `queue_limit` | A requeue while the agent's inbox is at its cap (HTTP 409); close letters first |
 | `inbox_full` | `POST /api/plugin/mail` to an agent whose inbox is at its cap; the letter is stored dead |
 | `not_found` | No letter has that id |
 | `invalid_argument` | A missing recipient, a reply without text, a bad deadline, a requeue of a letter that is not dead |

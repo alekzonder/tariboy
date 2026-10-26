@@ -39,7 +39,7 @@ the letter row. Answering never deletes a letter.
 | --- | --- | --- |
 | `agent:<name>` | an agent | must exist; its inbox wakes its loop |
 | `user:<login>` | the customer | must be the customer login; read in the Desktop or with `tariboy mail` |
-| `plugin:<name>` | a plugin | must be installed; the plugin host delivers the letter to the plugin's `/deliver` |
+| `plugin:<name>` | a plugin | must be installed, enabled and declare `mail.receive` (type `mail-sink`), because only such a plugin has a drainer; the plugin host delivers the letter to the plugin's `/deliver` |
 | `system:<component>` | a daemon component | always accepted; stored closed, because nothing reads a system inbox |
 | `queue:<prefix>` | a task queue | must exist; stored closed; exists for [queue triggers](#queue-triggers) |
 | `group:<name>` | an alias | expands to every group member except the sender |
@@ -66,11 +66,16 @@ Every letter is a **request** or a **notice**, chosen by its sender:
 A reply goes to the original sender with subject `Re: <subject>` and
 `in_reply_to` set, and closes the original in the same transaction. A reply is
 a notice unless the sender marks it as a request (`tmail reply --ask`).
+A subject is one line: send replaces line breaks and other control characters
+with spaces, and the prompt renders a subject the same way.
 Without this split every answer would be a new obligation: two agents would
 answer each other until the attempt limit, and every answer to the customer
 would wait in the customer's inbox.
 
 A reply to a closed letter is recorded and reopens nothing. A reply to a
+letter whose sender no longer exists (a deleted agent, an uninstalled or
+disabled plugin) is stored closed, like a letter to `system:*`, and still
+closes the original, so the recipient can finish the request. A reply to a
 `task.question` letter is refused with `answer_on_task`: the answer belongs on
 the task, and the tasks service closes the letter.
 
@@ -104,7 +109,10 @@ stays open and is rendered again next iteration, like a request.
 - A row whose `data` does not decode is marked dead with reason
   `decode_error`; the other letters are still rendered.
 - A dead letter sits in the recipient's Archive. **Requeue** clears its dead
-  state, attempts and close fields and puts it back in the inbox.
+  state, attempts and close fields and puts it back in the inbox. Requeue is
+  refused with `409 queue_limit` while the agent's inbox is at its cap; close
+  letters first. A requeued request whose deadline is still ahead gets its
+  deadline armed again; a passed deadline is cleared.
 - A send with an idempotency key that the recipient already holds returns the
   existing letter and writes nothing. Native Tasks' notification outbox,
   schedules, the Goal reconciler, script results and plugins use it.
@@ -177,7 +185,9 @@ mentions, waits and answers live on the task. A `task.question` letter is
 answered on the task (`ttasks comment`, or the task drawer in the Desktop);
 when the wait resolves, the tasks service closes the matching open question
 letters with `close_note = task-comment:<id>`, for an agent recipient and the
-customer alike. A workflow outcome that resolves the customer's open wait
+customer alike. The asker is matched by `data.from`, so a question the outbox
+sent as `system:tasks` closes too. A notification whose recipient no longer
+exists is marked failed in the outbox with `last_error` and is not retried. A workflow outcome that resolves the customer's open wait
 closes its question letters with `task-outcome:<status>`.
 
 ## Groups

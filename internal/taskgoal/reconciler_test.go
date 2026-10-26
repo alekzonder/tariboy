@@ -270,11 +270,12 @@ func (d goalDirectory) AgentExists(name string) (bool, error) {
 	err := d.base.DB.QueryRow(`SELECT COUNT(*) FROM agents WHERE name=?`, name).Scan(&n)
 	return n > 0, err
 }
-func (goalDirectory) InboxCap(string) (int, error)                { return 0, nil }
-func (goalDirectory) CustomerLogin() string                       { return "customer" }
-func (goalDirectory) PluginInstalled(string) (bool, error)        { return false, nil }
-func (goalDirectory) QueueExists(string) (bool, error)            { return false, nil }
-func (goalDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
+func (goalDirectory) InboxCap(string) (int, error)                   { return 0, nil }
+func (goalDirectory) CustomerLogin() string                          { return "customer" }
+func (goalDirectory) PluginInstalled(string) (bool, error)           { return false, nil }
+func (d goalDirectory) PluginReceivesMail(name string) (bool, error) { return d.PluginInstalled(name) }
+func (goalDirectory) QueueExists(string) (bool, error)               { return false, nil }
+func (goalDirectory) GroupMembers(string) ([]string, bool, error)    { return nil, false, nil }
 
 // goalLetters is every letter sent to agent, newest first.
 func goalLetters(t *testing.T, m *mail.Mail, agent string) []mail.Letter {

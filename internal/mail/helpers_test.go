@@ -12,11 +12,12 @@ import (
 )
 
 // fakeDirectory is the Directory the tests control: agents with their inbox
-// caps, installed plugins, queues and groups.
+// caps, installed plugins, the enabled mail sinks among them, queues and groups.
 type fakeDirectory struct {
 	agents   map[string]int // name -> messages_max_queue
 	customer string
 	plugins  map[string]bool
+	sinks    map[string]bool
 	queues   map[string]bool
 	groups   map[string][]string
 }
@@ -25,7 +26,8 @@ func newDirectory() *fakeDirectory {
 	return &fakeDirectory{
 		agents:   map[string]int{"alice": 100, "bob": 100, "carol": 100},
 		customer: "customer",
-		plugins:  map[string]bool{"telegram": true},
+		plugins:  map[string]bool{"telegram": true, "metrics": true},
+		sinks:    map[string]bool{"telegram": true},
 		queues:   map[string]bool{"OPS": true},
 		groups:   map[string][]string{"dev": {"alice", "bob", "carol"}, "empty": {"alice"}},
 	}
@@ -41,6 +43,10 @@ func (d *fakeDirectory) InboxCap(agent string) (int, error) { return d.agents[ag
 func (d *fakeDirectory) CustomerLogin() string { return d.customer }
 
 func (d *fakeDirectory) PluginInstalled(name string) (bool, error) { return d.plugins[name], nil }
+
+func (d *fakeDirectory) PluginReceivesMail(name string) (bool, error) {
+	return d.plugins[name] && d.sinks[name], nil
+}
 
 func (d *fakeDirectory) QueueExists(prefix string) (bool, error) { return d.queues[prefix], nil }
 

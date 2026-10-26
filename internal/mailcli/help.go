@@ -12,16 +12,16 @@ import (
 const operatorOnlyNote = " Operator-only: agent mode cannot run it."
 
 var helpText = map[string]commandHelp{
-	"inbox": {"List the open letters in the mailbox, oldest first", "inbox [--all] [--limit N] [--before TIME]",
+	"inbox": {"List the open letters in the mailbox, oldest first", "inbox [--all] [--limit N] [--before CURSOR]",
 		"Lists the letters addressed to you that are still open, oldest first: one line per letter with id, sender -> recipient, kind (request or notice), state, and subject. --all adds the closed letters. " +
 			"When more remain, a last line next: prints the command for the next page. Operator mode reads the customer's mailbox unless --as names another principal.",
 		"", "tmail inbox\ntmail inbox --all --limit 20"},
-	"sent": {"List the letters you sent, newest first", "sent [--limit N] [--before TIME]",
+	"sent": {"List the letters you sent, newest first", "sent [--limit N] [--before CURSOR]",
 		"Lists the letters you sent with their state: open, answered, closed, or dead:REASON. Operator mode reads the customer's letters unless --as names another principal.",
 		"", "tmail sent\ntmail sent --limit 10"},
-	"archive": {"List the closed letters, newest first, dead ones tagged", "archive [--limit N] [--before TIME]",
+	"archive": {"List the closed letters, newest first, dead ones tagged", "archive [--limit N] [--before CURSOR]",
 		"Lists the letters addressed to you that are closed: answered, archived without a reply, read notices, and dead letters, tagged dead:REASON. Requeue a dead letter with requeue.",
-		"", "tmail archive\ntmail archive --before 2026-10-26T10:00:00Z"},
+		"", "tmail archive\ntmail archive --limit 20 --before 2026-10-26T10:00:00.000000000Z/42"},
 	"show": {"Show one letter and its reply, if any", "show ID",
 		"Prints the headers of the letter, its body, then the reply that closed it, if any.",
 		"ID  Letter id (required)", "tmail show m-20261026T104200Z-000007"},

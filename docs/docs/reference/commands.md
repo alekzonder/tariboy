@@ -112,12 +112,12 @@ tariboy has four command surfaces:
 | `tariboy fs list` | List directories under the daemon filesystem root ($HOME-jailed) |
 | `tariboy group assign NAME AGENT` | Assign an agent to a group (empty group leaves) |
 | `tariboy group create NAME` | Create (or update) a group with an optional lead |
-| `tariboy group inspect NAME` | Show a group's lead, members, channels and shared dir |
+| `tariboy group inspect NAME` | Show a group's lead, members, mail address and shared dir |
 | `tariboy group lead set NAME LEAD` | Set a group's lead to a current member |
 | `tariboy group ls` | List groups (name/lead/member count) |
 | `tariboy group member rm NAME AGENT` | Remove an agent from a group without deleting it |
 | `tariboy group rename NAME NEW-NAME` | Rename a group without deleting its agents |
-| `tariboy group rm NAME` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
+| `tariboy group rm NAME` | Remove a group (detach members; --volumes drops the shared dir) |
 | `tariboy harness codex-approval get` | Read the codex approval mode of this daemon (yolo\|approve-for-me) |
 | `tariboy harness codex-approval set MODE` | Set the codex approval mode of this daemon for the next iterations |
 | `tariboy harness models TYPE` | List the models and efforts a harness supports on the daemon host |
@@ -158,14 +158,6 @@ tariboy has four command surfaces:
 | `tariboy loop on-timeout NAME` | Get or set loop on-timeout policy; omit value to read |
 | `tariboy loop schedule NAME` | Get, set or clear the loop schedule (RFC 5545 RRULE, whole minutes); omit value to read |
 | `tariboy loop timeout NAME` | Get or set loop timeout (seconds); omit value to read |
-| `tariboy mail close ID` | Archive a letter without a reply |
-| `tariboy mail ls` | List one mailbox: inbox, sent or archive |
-| `tariboy mail read` | Mark letters read; a read notice closes |
-| `tariboy mail reply ID` | Reply to a letter, which closes it |
-| `tariboy mail requeue ID` | Return a dead letter to the inbox |
-| `tariboy mail send` | Send a letter: a request unless notice is set |
-| `tariboy mail show ID` | Show one letter and its reply |
-| `tariboy mail unread` | Count the open letters by sender and kind |
 | `tariboy maintenance get` | Show database maintenance settings and the last run |
 | `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
 | `tariboy maintenance set` | Change database maintenance settings; unset flags keep their value |
@@ -177,7 +169,7 @@ tariboy has four command surfaces:
 | `tariboy plugin ls` | List installed plugins (name/version/types/state/health) |
 | `tariboy plugin restart NAME` | Restart a single plugin in place (stop + start) without touching others |
 | `tariboy plugin rm NAME` | Stop and remove a plugin |
-| `tariboy plugin routes NAME` | Show a plugin's external channel routes |
+| `tariboy plugin routes NAME` | Show a plugin's external routes, such as its chat bindings |
 | `tariboy prompt get NAME` | Preview the agent's assembled next-iteration prompt |
 | `tariboy prune AGENT` | Prune old iterations for an agent now (or 'all'); --dry-run lists victims |
 | `tariboy pull REF` | Pull an image from a tariboy-store registry into the local image store |

@@ -17,12 +17,13 @@ import (
 // plugin echo.
 type capDirectory struct{}
 
-func (capDirectory) AgentExists(name string) (bool, error)       { return name == "alice", nil }
-func (capDirectory) InboxCap(string) (int, error)                { return 2, nil }
-func (capDirectory) CustomerLogin() string                       { return "customer" }
-func (capDirectory) PluginInstalled(name string) (bool, error)   { return name == "echo", nil }
-func (capDirectory) QueueExists(string) (bool, error)            { return false, nil }
-func (capDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
+func (capDirectory) AgentExists(name string) (bool, error)          { return name == "alice", nil }
+func (capDirectory) InboxCap(string) (int, error)                   { return 2, nil }
+func (capDirectory) CustomerLogin() string                          { return "customer" }
+func (capDirectory) PluginInstalled(name string) (bool, error)      { return name == "echo", nil }
+func (d capDirectory) PluginReceivesMail(name string) (bool, error) { return d.PluginInstalled(name) }
+func (capDirectory) QueueExists(string) (bool, error)               { return false, nil }
+func (capDirectory) GroupMembers(string) ([]string, bool, error)    { return nil, false, nil }
 
 func newAPI(t *testing.T) (*API, *mail.Mail, *TokenRegistry) {
 	t.Helper()

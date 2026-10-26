@@ -23,10 +23,13 @@ func (f *fakeSender) SendGuarded(l mail.Letter, _ func(*sql.Tx) error) ([]mail.L
 // agentsDirectory knows a fixed set of agents and nothing else.
 type agentsDirectory map[string]bool
 
-func (d agentsDirectory) AgentExists(name string) (bool, error)     { return d[name], nil }
-func (agentsDirectory) InboxCap(string) (int, error)                { return 0, nil }
-func (agentsDirectory) CustomerLogin() string                       { return "customer" }
-func (agentsDirectory) PluginInstalled(string) (bool, error)        { return false, nil }
+func (d agentsDirectory) AgentExists(name string) (bool, error) { return d[name], nil }
+func (agentsDirectory) InboxCap(string) (int, error)            { return 0, nil }
+func (agentsDirectory) CustomerLogin() string                   { return "customer" }
+func (agentsDirectory) PluginInstalled(string) (bool, error)    { return false, nil }
+func (d agentsDirectory) PluginReceivesMail(name string) (bool, error) {
+	return d.PluginInstalled(name)
+}
 func (agentsDirectory) QueueExists(string) (bool, error)            { return false, nil }
 func (agentsDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
 

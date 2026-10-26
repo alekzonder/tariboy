@@ -30,6 +30,9 @@ func (d pluginDirectory) PluginInstalled(name string) (bool, error) {
 	_, ok, err := d.ps.Get(name)
 	return ok, err
 }
+func (d pluginDirectory) PluginReceivesMail(name string) (bool, error) {
+	return d.PluginInstalled(name)
+}
 func (pluginDirectory) QueueExists(string) (bool, error)            { return false, nil }
 func (pluginDirectory) GroupMembers(string) ([]string, bool, error) { return nil, false, nil }
 

@@ -3,6 +3,8 @@ package mail
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"unicode"
 )
 
 // defaultBatch is the RenderBatch size when the caller gives none.
@@ -100,4 +102,13 @@ func (m *Mail) CloseRead(agent string, ids []string) (int, error) {
 	}
 	n, _ := res.RowsAffected()
 	return int(n), nil
+}
+
+// OneLine is s with every run of line breaks and other control characters
+// replaced by one space, trimmed: a subject is one line in the prompt.
+func OneLine(s string) string {
+	fields := strings.FieldsFunc(s, func(r rune) bool {
+		return unicode.IsControl(r) || r == '\u2028' || r == '\u2029'
+	})
+	return strings.TrimSpace(strings.Join(fields, " "))
 }

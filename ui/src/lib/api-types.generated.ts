@@ -1343,11 +1343,11 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Show a group's lead, members, channels and shared dir */
+    /** Show a group's lead, members, mail address and shared dir */
     get: operations["group.inspect"];
     put?: never;
     post?: never;
-    /** Remove a group (detach members, delete channels; --volumes drops the shared dir) */
+    /** Remove a group (detach members; --volumes drops the shared dir) */
     delete: operations["group.rm"];
     options?: never;
     head?: never;
@@ -1999,7 +1999,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Show a plugin's external channel routes */
+    /** Show a plugin's external routes, such as its chat bindings */
     get: operations["plugin.routes"];
     put?: never;
     post?: never;

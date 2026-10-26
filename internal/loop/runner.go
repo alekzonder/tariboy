@@ -108,7 +108,7 @@ func FormatMessages(letters []mail.Letter) string {
 
 func formatLetter(b *strings.Builder, l mail.Letter) {
 	fmt.Fprintf(b, "\n- id %s  from %s  kind %s  attempts %d", l.ID, l.From, l.Kind, l.Attempts)
-	fmt.Fprintf(b, "\n  subject: %s", l.Subject)
+	fmt.Fprintf(b, "\n  subject: %s", mail.OneLine(l.Subject))
 	if l.InReplyTo != "" {
 		fmt.Fprintf(b, "\n  in_reply_to: %s", l.InReplyTo)
 	}

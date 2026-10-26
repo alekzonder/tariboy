@@ -54,3 +54,25 @@ func TestDirectoryReadsTheDaemonTables(t *testing.T) {
 		t.Fatal("group ghost does not exist")
 	}
 }
+
+func TestPluginReceivesMailNeedsEnabledSink(t *testing.T) {
+	st := storetest.Open(t)
+	for _, q := range []string{
+		`INSERT INTO plugins(name, mail, enabled) VALUES ('telegram', '{"send":true,"receive":true}', 1)`,
+		`INSERT INTO plugins(name, mail, enabled) VALUES ('paused', '{"send":true,"receive":true}', 0)`,
+		`INSERT INTO plugins(name, mail, enabled) VALUES ('metrics', '{"send":true,"receive":false}', 1)`,
+	} {
+		if _, err := st.DB.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d := New(st, "customer")
+	for name, want := range map[string]bool{"telegram": true, "paused": false, "metrics": false, "ghost": false} {
+		if got, err := d.PluginReceivesMail(name); err != nil || got != want {
+			t.Fatalf("PluginReceivesMail(%s) = %v, %v; want %v", name, got, err, want)
+		}
+	}
+	if ok, _ := d.PluginInstalled("paused"); !ok {
+		t.Fatal("a disabled plugin is still installed")
+	}
+}
