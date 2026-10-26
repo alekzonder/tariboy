@@ -21,10 +21,10 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/audit"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/plugins"
@@ -76,7 +76,7 @@ type ManagerConfig struct {
 	// BeforeRestartLaunch is a test seam invoked before a post-adoption
 	// interactive Restart attempts to acquire its launch gate.
 	BeforeRestartLaunch func()
-	Bus                 *bus.Bus
+	Mail                *mail.Mail
 	Schedules           *schedule.Store
 	Scripts             *script.Store
 	ScriptResults       ScriptResultNotifier
@@ -125,15 +125,10 @@ type ManagerConfig struct {
 	CurrentGoal        func(string, time.Time) (tasks.Task, bool, error)
 	// WorkflowGoals supplies the workflow data for the Goal block of a workflow
 	// task; nil renders the flexible text with a notice.
-	WorkflowGoals WorkflowGoalSource
-	SetGoal       func(agent, key string, activate func() (func(), error)) error
-	// ProvidedChannels returns provider-declared channels drawn from installed
-	// plugin manifests, so `tools sources` can list and annotate provider
-	// channels even before their channel row exists (spec §6.1). Wired by the
-	// daemon (loop must not import plugins directly); nil yields no annotations.
-	ProvidedChannels func() ([]agentapi.ProvidedChannel, error)
-	ExternalPlugins  plugincaps.ExternalResolver
-	Tasks            registry.TaskControl
+	WorkflowGoals   WorkflowGoalSource
+	SetGoal         func(agent, key string, activate func() (func(), error)) error
+	ExternalPlugins plugincaps.ExternalResolver
+	Tasks           registry.TaskControl
 	// iterationStore overrides Store for terminal-status finalization only
 	// (finalizeIteration). Unexported on purpose: it is a test seam for
 	// injecting an UpdateIteration failure, not daemon configuration. Unset
@@ -375,7 +370,7 @@ func (m *Manager) runnerFor(ag agent.Agent) IterationRunner {
 	return NewShimRunner(RunnerConfig{
 		AgentsDir: m.cfg.AgentsDir, RuntimeDir: m.cfg.RuntimeDir, BaseEnv: m.cfg.BaseEnv, ShimBin: m.cfg.ShimBin,
 		ImgStore: m.cfg.ImgStore, Store: m.cfg.Store, Spawner: m.cfg.Spawner, Clock: m.cfg.Clock,
-		DoneGrace: m.cfg.DoneGrace, Logger: m.cfg.Log, Bus: m.cfg.Bus, Proxy: m.cfg.Proxy, AuditFor: m.cfg.AuditFor,
+		DoneGrace: m.cfg.DoneGrace, Logger: m.cfg.Log, Mail: m.cfg.Mail, Proxy: m.cfg.Proxy, AuditFor: m.cfg.AuditFor,
 		RecordCursorUsage: m.cfg.RecordCursorUsage, CodexApproval: m.cfg.CodexApproval,
 		CurrentGoal: m.cfg.CurrentGoal, WorkflowGoals: m.cfg.WorkflowGoals, Tasks: m.cfg.Tasks,
 		GoalRead: m.noteIterationGoal,
@@ -799,9 +794,6 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 	if err := m.cfg.Store.Create(ag); err != nil {
 		return "", err
 	}
-	if err := m.ensureOwnInbox(ag.Name); err != nil {
-		return "", err
-	}
 	if spec.Group != "" {
 		if err := m.cfg.Groups.Reconcile(spec.Group); err != nil {
 			return "", err
@@ -906,22 +898,6 @@ func orDefault(v, def int) int {
 	return v
 }
 
-func (m *Manager) ensureOwnInbox(agentName string) error {
-	if m.cfg.Bus == nil {
-		return fmt.Errorf("message bus is not available")
-	}
-	_, err := m.cfg.Bus.Subscribe(agentName, bus.InboxChannel(agentName), bus.Matcher{}, nil)
-	if err != nil {
-		return fmt.Errorf("subscribe agent %q to own inbox: %w", agentName, err)
-	}
-	// A new agent gets its chats here, not only at the next daemon start, so the
-	// customer can open a conversation with it immediately.
-	if err := m.cfg.Bus.EnsureAgentChats(agentName); err != nil {
-		return fmt.Errorf("provision chats for agent %q: %w", agentName, err)
-	}
-	return nil
-}
-
 // newToolsAPIServer builds the per-agent tools server; see toolsFacade.
 func (m *Manager) newToolsAPIServer(ag agent.Agent, l agentdir.Layout) *agentapi.Server {
 	return agentapi.NewServer(toolsFacade{
@@ -971,8 +947,11 @@ func (m *Manager) start(ag agent.Agent) error {
 	engine.metrics = m.cfg.Metrics
 	engine.usageLookup = m.cfg.UsageLookup
 	engine.usageFlush = m.cfg.UsageFlush
-	if m.cfg.Bus != nil {
-		engine.SetMessagePeek(func() (bool, error) { return m.cfg.Bus.HasPending(agName) })
+	if m.cfg.Mail != nil {
+		engine.SetMessagePeek(func() (bool, error) {
+			n, err := m.cfg.Mail.OpenCount(agName)
+			return n > 0, err
+		})
 	}
 	if m.cfg.Emit != nil {
 		engine.SetEmit(m.cfg.Emit)
@@ -1019,9 +998,9 @@ func (m *Manager) start(ag agent.Agent) error {
 		defer m.wg.Done()
 		engine.Run(ectx)
 	}()
-	if m.cfg.Bus != nil {
-		// Nudge the freshly launched engine so a message-capable agent (peek
-		// installed above) that already has unacked pending deliveries drains
+	if m.cfg.Mail != nil {
+		// Nudge the freshly launched engine so a mail-capable agent (peek
+		// installed above) that already has open letters drains
 		// them now instead of waiting on some unrelated future publish. This is
 		// the common entry point for a fresh Run, Start, and every reattach path
 		// (StartAll's direct start and startAfter's post-adoption start), so one
@@ -1644,39 +1623,6 @@ func roleOf(agentName, lead string) string {
 		return "lead"
 	}
 	return "member"
-}
-
-func (m *Manager) groupToolsSend(caller, iterationID, member, typ, text, deadline string) (map[string]any, error) {
-	if m.cfg.Bus == nil {
-		return nil, fmt.Errorf("bus not configured")
-	}
-	_, group, _, err := m.groupMember(caller, member)
-	if err != nil {
-		return nil, err
-	}
-	// group request is the request primitive (spec §4.2): publish kind=request to
-	// the member's group:<g>:direct:<member> channel with a fresh correlation id,
-	// reply_to=caller inbox, and — with a deadline — an armed one-shot timeout.
-	// The member's reply retires the caller's pending (# Awaiting replies) and
-	// cancels the timeout. No bespoke request bookkeeping: this replaces the old
-	// path that hand-stuffed data["deadline"] onto a plain publish and dropped
-	// kind/correlation_id.
-	if typ == "group.request" {
-		req, err := m.cfg.Bus.Request(caller, bus.GroupDirect(group, member), text, deadline)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{"sent": true, "id": req.ID, "target": member, "channel": req.Channel,
-			"type": req.Type, "kind": req.Kind, "correlation_id": req.CorrelationID}, nil
-	}
-	msg, err := m.cfg.Bus.Publish(bus.Message{
-		Channel: bus.InboxChannel(member), Type: typ, Text: text, Source: "agent:" + caller,
-		ProducedByAgent: caller, ProducedInIteration: iterationID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"sent": true, "id": msg.ID, "target": member, "channel": msg.Channel, "type": msg.Type}, nil
 }
 
 func (m *Manager) groupToolsObserve(caller, member string, tail int) (map[string]any, error) {

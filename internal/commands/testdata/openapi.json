@@ -833,9 +833,6 @@
       "AgentSchedule": {
         "additionalProperties": false,
         "properties": {
-          "channel": {
-            "type": "string"
-          },
           "enabled": {
             "type": "boolean"
           },
@@ -850,13 +847,16 @@
           },
           "spec": {
             "type": "string"
+          },
+          "to": {
+            "type": "string"
           }
         },
         "required": [
           "id",
           "kind",
           "spec",
-          "channel",
+          "to",
           "next_fire_at",
           "enabled"
         ],
@@ -2662,9 +2662,6 @@
           "broadcast": {
             "type": "string"
           },
-          "inbox": {
-            "type": "string"
-          },
           "lead": {
             "type": "string"
           },
@@ -2686,7 +2683,6 @@
           "lead",
           "members",
           "broadcast",
-          "inbox",
           "shared_dir"
         ],
         "type": "object"

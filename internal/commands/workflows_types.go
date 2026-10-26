@@ -276,7 +276,7 @@ type AgentSchedule struct {
 	ID         string `json:"id"`
 	Kind       string `json:"kind"`
 	Spec       string `json:"spec"`
-	Channel    string `json:"channel"`
+	To         string `json:"to"`
 	NextFireAt string `json:"next_fire_at"`
 	Enabled    bool   `json:"enabled"`
 }
@@ -288,5 +288,5 @@ type AgentScheduleList struct {
 }
 
 func agentScheduleFrom(s schedule.Schedule) AgentSchedule {
-	return AgentSchedule{ID: s.ID, Kind: s.Kind, Spec: s.Spec, Channel: s.Channel, NextFireAt: s.NextFireAt, Enabled: s.Enabled}
+	return AgentSchedule{ID: s.ID, Kind: s.Kind, Spec: s.Spec, To: s.Recipient, NextFireAt: s.NextFireAt, Enabled: s.Enabled}
 }

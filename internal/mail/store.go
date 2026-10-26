@@ -165,6 +165,14 @@ func (m *Mail) OpenCount(agent string) (int, error) {
 	return openCount(m.db, agentPrincipal(agent))
 }
 
+// OpenAgentTotal is the number of open letters to every agent (the queue
+// depth gauge).
+func (m *Mail) OpenAgentTotal() (int, error) {
+	var n int
+	err := m.db.QueryRow(`SELECT COUNT(*) FROM mail WHERE recipient GLOB 'agent:*' AND ` + openSQL).Scan(&n)
+	return n, err
+}
+
 // List returns one mailbox view of as. The inbox is oldest first; sent and
 // archive are newest first and page with before, a created_at: next is the
 // created_at to pass for the next page, or "" after the last one.
@@ -180,6 +188,8 @@ func (m *Mail) List(box, as string, limit int, before string) ([]Letter, string,
 		where, order = `sender = ?`, `created_at DESC, seq DESC`
 	case BoxArchive:
 		where, order = `recipient = ? AND NOT (`+openSQL+`)`, `created_at DESC, seq DESC`
+	case BoxAll:
+		where, order = `recipient = ?`, `created_at DESC, seq DESC`
 	default:
 		return nil, "", errInvalid("box must be inbox, sent or archive, got %q", box)
 	}
@@ -230,22 +240,22 @@ func (m *Mail) Show(as, id string) (Letter, *Letter, error) {
 }
 
 // Unread counts the open letters of as.
-func (m *Mail) Unread(as string) (Unread, error) {
-	u := Unread{As: as, BySender: []SenderCount{}}
+func (m *Mail) Unread(as string) (MailUnread, error) {
+	u := MailUnread{As: as, BySender: []SenderCount{}}
 	if err := m.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(read_at = ''), 0) FROM mail
 		WHERE recipient = ? AND `+openSQL, as).Scan(&u.Open, &u.Unread); err != nil {
-		return Unread{}, err
+		return MailUnread{}, err
 	}
 	rows, err := m.db.Query(`SELECT sender, kind, COUNT(*) FROM mail WHERE recipient = ? AND `+openSQL+`
 		GROUP BY sender, kind ORDER BY sender, kind`, as)
 	if err != nil {
-		return Unread{}, err
+		return MailUnread{}, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var c SenderCount
 		if err := rows.Scan(&c.Sender, &c.Kind, &c.Count); err != nil {
-			return Unread{}, err
+			return MailUnread{}, err
 		}
 		u.BySender = append(u.BySender, c)
 	}

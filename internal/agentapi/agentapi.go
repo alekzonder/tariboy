@@ -11,13 +11,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/alekzonder/tariboy/internal/api"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/tidy"
 	"github.com/alekzonder/tariboy/internal/version"
@@ -44,38 +42,14 @@ type Deps struct {
 	// iteration's live AI-proxy attribution. Nil yields unavailable.
 	SetGoal func(key string) (map[string]any, error)
 
-	// Bus surface (messages is CORE; nil hooks yield bus_unavailable).
-	Publish           func(bus.Message) (bus.Message, error)
-	Subscribe         func(channel string, matcher bus.Matcher, typeFilter []string) (bus.Subscription, error)
-	Unsubscribe       func(id string) error
-	ListSubscriptions func() ([]bus.Subscription, error)
-	Channels          func() ([]bus.Channel, error)
-
-	// ProvidedChannels returns the provider-declared channels drawn from installed
-	// plugin manifests (spec §6.1). The Messages skill merges these into channel
-	// list so provider channels are listed and annotated (provider, param keys,
-	// help) even before their channel row exists. Nil is treated as "none".
-	ProvidedChannels func() ([]ProvidedChannel, error)
-
-	// Phase P messages surface (design §3.3, §4, §5): inbox listing, the
-	// explicit processed/reply lifecycle, the request primitive, DLQ requeue,
-	// parameterized subscriptions, and the channel-name unsubscribe fallback.
-	// All nil hooks yield bus_unavailable.
-	Inbox              func(status string, limit int, before string) ([]bus.InboxItem, error)
-	MarkProcessed      func(msgID, result string) (bus.InboxItem, error)
-	Reply              func(msgID, text string, data map[string]any, typeOverride string) (bus.Message, error)
-	Request            func(channel, text, deadline string) (bus.Message, error)
-	Requeue            func(msgID string) error
-	SubscribeParams    func(channel string, matcher bus.Matcher, typeFilter []string, params map[string]any) (bus.Subscription, error)
-	UnsubscribeChannel func(channel string) (int, error)
-
-	// Unanswered is the agent's answering obligation across the chats it takes
-	// part in, keyed by chat id (design: replying is a separate act from
-	// processing a delivery).
-	Unanswered func() (map[string][]bus.Message, error)
+	// MailAction runs one /tools/mail/<action> call as this agent. Nil yields
+	// unavailable.
+	MailAction func(action string, body map[string]any) (any, error)
 
 	// Schedule/script surface (OPTIONAL plugins: gated).
-	AddSchedule        func(kind, spec, channel, template string) (map[string]any, error)
+	// AddSchedule's to is the recipient principal; channel is the legacy
+	// field older skills send, mapped to a recipient by the daemon.
+	AddSchedule        func(kind, spec, to, channel, template string) (map[string]any, error)
 	ListSchedules      func() ([]map[string]any, error)
 	CancelSchedule     func(id string) error
 	RunScriptOnce      func(script.CreateOnce) (script.Definition, script.Run, error)
@@ -97,23 +71,12 @@ type Deps struct {
 	// can coordinate only within its own group through the per-agent tools socket.
 	GroupInfo    func() (map[string]any, error)
 	GroupStatus  func(member string) (map[string]any, error)
-	GroupSend    func(member, typ, text, deadline string) (map[string]any, error)
 	GroupObserve func(member string, tail int) (map[string]any, error)
 	GroupLoop    func(member, action string) (map[string]any, error)
 	LoopControl  func(action string) (map[string]any, error)
 	// TaskAction is the native Tasks surface. The daemon binds the caller from
 	// this socket's Agent field; request bodies never carry identity.
 	TaskAction func(action string, body map[string]any) (any, error)
-}
-
-// ProvidedChannel is the daemon-independent view of one plugin provided-channel
-// declaration surfaced by the Messages skill's sources command (spec §6.1).
-// from plugin manifests; agentapi stays decoupled from the plugins package.
-type ProvidedChannel struct {
-	Channel  string   `json:"channel"`
-	Provider string   `json:"provider"`
-	Params   []string `json:"params,omitempty"`
-	Help     string   `json:"help,omitempty"`
 }
 
 type Server struct {
@@ -134,7 +97,8 @@ func (s *Server) has(plugin string) bool {
 		plugins = s.d.CurrentPlugins()
 	}
 	for _, p := range plugins {
-		if p == plugin {
+		// messages is the old name of mail, kept for images built before it.
+		if p == plugin || (plugin == "mail" && p == "messages") {
 			return true
 		}
 	}
@@ -181,19 +145,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /tools/loop/complete", s.gated("loop", completeLoop))
 	mux.HandleFunc("POST /tools/loop/control", s.gated("loop", s.loopControl))
 
-	// Messages capability surface.
-	mux.HandleFunc("POST /tools/message/send", s.gated("messages", s.messageSend))
-	mux.HandleFunc("GET /tools/message/ls", s.gated("messages", s.messageLs))
-	mux.HandleFunc("POST /tools/message/processed", s.gated("messages", s.messageProcessed))
-	mux.HandleFunc("POST /tools/message/reply", s.gated("messages", s.messageReply))
-	mux.HandleFunc("GET /tools/chat/unanswered", s.gated("messages", s.chatUnanswered))
-	mux.HandleFunc("GET /tools/message/dlq", s.gated("messages", s.messageDLQ))
-	mux.HandleFunc("POST /tools/message/dlq/requeue", s.gated("messages", s.messageDLQRequeue))
-	mux.HandleFunc("POST /tools/request", s.gated("messages", s.request))
-	mux.HandleFunc("POST /tools/channel/subscribe", s.gated("messages", s.channelSubscribe))
-	mux.HandleFunc("POST /tools/channel/unsubscribe", s.gated("messages", s.channelUnsubscribe))
-	mux.HandleFunc("GET /tools/channel/ls", s.gated("messages", s.channelLs))
-	mux.HandleFunc("GET /tools/sources", s.gated("messages", s.sources))
+	// Mail capability surface; images that still list the old messages
+	// capability reach it through the alias in has.
+	mux.HandleFunc("POST /tools/mail/{action}", s.gated("mail", s.mailAction))
 
 	// Optional routes: gated by plugin membership.
 	mux.HandleFunc("GET /tools/context/get", s.gated("context", s.contextGet))
@@ -219,8 +173,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /tools/group/info", s.groupInfo)
 	mux.HandleFunc("GET /tools/group/status", s.groupStatus)
 	mux.HandleFunc("GET /tools/group/status/{member}", s.groupStatus)
-	mux.HandleFunc("POST /tools/group/send", s.groupSend)
-	mux.HandleFunc("POST /tools/group/request", s.groupRequest)
 	mux.HandleFunc("GET /tools/group/observe/{member}", s.groupObserve)
 	mux.HandleFunc("POST /tools/group/loop", s.groupLoop)
 
@@ -376,420 +328,26 @@ func (s *Server) writeContextAtomic(data []byte) error {
 	return os.Rename(tmpPath, s.d.ContextPath)
 }
 
-func (s *Server) messageSend(w http.ResponseWriter, r *http.Request) {
-	if s.d.Publish == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "channel bus is not available")
+// mailAction is the agent mail surface (mailbox design §3): the sender and the
+// mailbox are always this socket's agent, never a body field.
+func (s *Server) mailAction(w http.ResponseWriter, r *http.Request) {
+	if s.d.MailAction == nil {
+		api.WriteErr(w, http.StatusServiceUnavailable, "unavailable", "mail is unavailable")
 		return
 	}
-	var body struct {
-		Channel string         `json:"channel"`
-		Type    string         `json:"type"`
-		Subject map[string]any `json:"subject"`
-		Text    string         `json:"text"`
-		Data    map[string]any `json:"data"`
-	}
+	body := map[string]any{}
 	if !api.DecodeJSONBody(w, r, maxBodyBytes, &body) {
 		return
 	}
-	if body.Channel == "" {
-		api.WriteErr(w, http.StatusBadRequest, "missing_channel", "channel is required")
-		return
+	for _, key := range []string{"from", "as", "sender", "principal"} {
+		delete(body, key)
 	}
-	msg, err := s.d.Publish(bus.Message{
-		Channel: body.Channel, Type: body.Type, Subject: body.Subject, Text: body.Text, Data: body.Data,
-		Source: "agent:" + s.d.Agent, ProducedByAgent: s.d.Agent, ProducedInIteration: s.d.CurrentIteration(),
-	})
+	result, err := s.d.MailAction(r.PathValue("action"), body)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	api.WriteOK(w, map[string]any{"id": msg.ID, "channel": msg.Channel, "sent": true})
-}
-
-func (s *Server) channelSubscribe(w http.ResponseWriter, r *http.Request) {
-	if s.d.Subscribe == nil && s.d.SubscribeParams == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "channel bus is not available")
-		return
-	}
-	var body struct {
-		Channel string            `json:"channel"`
-		Matcher map[string]string `json:"matcher"`
-		Type    string            `json:"type"` // comma list of type globs
-		Params  map[string]any    `json:"params"`
-	}
-	if !api.DecodeJSONBody(w, r, maxBodyBytes, &body) {
-		return
-	}
-	if body.Channel == "" {
-		api.WriteErr(w, http.StatusBadRequest, "missing_channel", "channel is required")
-		return
-	}
-	// Parameterized subscriptions describe provider work (§5.1); they need the
-	// params-aware hook. A plain sub prefers SubscribeParams (which folds to
-	// Subscribe on empty params) and falls back to Subscribe when unwired.
-	var sub bus.Subscription
-	var err error
-	switch {
-	case len(body.Params) > 0:
-		if s.d.SubscribeParams == nil {
-			api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "parameterized subscriptions are not available")
-			return
-		}
-		sub, err = s.d.SubscribeParams(body.Channel, bus.Matcher(body.Matcher), splitCSV(body.Type), body.Params)
-	case s.d.SubscribeParams != nil:
-		sub, err = s.d.SubscribeParams(body.Channel, bus.Matcher(body.Matcher), splitCSV(body.Type), nil)
-	default:
-		sub, err = s.d.Subscribe(body.Channel, bus.Matcher(body.Matcher), splitCSV(body.Type))
-	}
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	res := map[string]any{"id": sub.ID, "channel": sub.Channel}
-	if sub.Watch != "" {
-		res["watch"] = sub.Watch
-	}
-	if len(sub.Params) > 0 {
-		res["params"] = sub.Params
-	}
-	api.WriteOK(w, res)
-}
-
-// channelUnsubscribe removes by subscription id (the stable form), and — when
-// no such id exists — falls back to treating the argument as a channel name,
-// dropping all of the agent's own subscriptions on that channel (§5.3).
-func (s *Server) channelUnsubscribe(w http.ResponseWriter, r *http.Request) {
-	if s.d.Unsubscribe == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "channel bus is not available")
-		return
-	}
-	var body struct {
-		ID string `json:"id"`
-	}
-	if !api.DecodeJSONBody(w, r, maxBodyBytes, &body) {
-		return
-	}
-	if body.ID == "" {
-		api.WriteErr(w, http.StatusBadRequest, "missing_id", "subscription id (or channel name) is required")
-		return
-	}
-	err := s.d.Unsubscribe(body.ID)
-	if err == nil {
-		api.WriteOK(w, map[string]any{"unsubscribed": body.ID})
-		return
-	}
-	// Unknown id → try the channel-name fallback before reporting not-found.
-	if errors.Is(err, bus.ErrNotFound) && s.d.UnsubscribeChannel != nil {
-		if n, cerr := s.d.UnsubscribeChannel(body.ID); cerr == nil {
-			api.WriteOK(w, map[string]any{"unsubscribed": body.ID, "removed": n})
-			return
-		}
-	}
-	s.fail(w, r, err)
-}
-
-func (s *Server) channelLs(w http.ResponseWriter, r *http.Request) {
-	if s.d.ListSubscriptions == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "channel bus is not available")
-		return
-	}
-	subs, err := s.d.ListSubscriptions()
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	rows := make([]map[string]any, 0, len(subs))
-	for _, sub := range subs {
-		row := map[string]any{"id": sub.ID, "channel": sub.Channel,
-			"matcher": sub.Matcher, "type_filter": sub.TypeFilter}
-		if sub.Watch != "" {
-			row["watch"] = sub.Watch
-		}
-		if len(sub.Params) > 0 {
-			row["params"] = sub.Params
-		}
-		if sub.Locked {
-			row["locked"] = true
-		}
-		rows = append(rows, row)
-	}
-	api.WriteOK(w, map[string]any{"subscriptions": rows, "count": len(rows)})
-}
-
-// inboxRows renders inbox items for the CLI: immutable message fields plus the
-// per-agent delivery state. Optional threading/state fields are omitted when
-// empty so the common (plain, pending) row stays terse.
-func inboxRows(items []bus.InboxItem) []map[string]any {
-	rows := make([]map[string]any, 0, len(items))
-	for _, it := range items {
-		row := map[string]any{
-			"id": it.ID, "channel": it.Channel, "ts": it.TS, "source": it.Source,
-			"type": it.Type, "text": it.Text, "attempts": it.Attempts, "dlq": it.DLQ,
-		}
-		if it.Kind != "" {
-			row["kind"] = it.Kind
-		}
-		if len(it.Subject) > 0 {
-			row["subject"] = it.Subject
-		}
-		if it.CorrelationID != "" {
-			row["correlation_id"] = it.CorrelationID
-		}
-		if it.InReplyTo != "" {
-			row["in_reply_to"] = it.InReplyTo
-		}
-		if it.ReplyTo != "" {
-			row["reply_to"] = it.ReplyTo
-		}
-		if it.Deadline != "" {
-			row["deadline"] = it.Deadline
-		}
-		if it.ProcessedAt != "" {
-			row["processed_at"] = it.ProcessedAt
-			row["result"] = it.Result
-		}
-		rows = append(rows, row)
-	}
-	return rows
-}
-
-// chatUnanswered lists, per chat, the messages this agent has not replied to
-// yet. A delivery marked processed is NOT an answer: the conversation is
-// answered only by a reply published into it.
-func (s *Server) chatUnanswered(w http.ResponseWriter, r *http.Request) {
-	if s.d.Unanswered == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "channel bus is not available")
-		return
-	}
-	queues, err := s.d.Unanswered()
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	chats := make([]map[string]any, 0, len(queues))
-	total := 0
-	for chatID, msgs := range queues {
-		rows := make([]map[string]any, 0, len(msgs))
-		for _, m := range msgs {
-			rows = append(rows, map[string]any{"id": m.ID, "channel": m.Channel, "ts": m.TS,
-				"from": bus.MessageFrom(m), "type": m.Type, "text": m.Text})
-		}
-		chats = append(chats, map[string]any{"chat": chatID, "messages": rows, "count": len(rows)})
-		total += len(rows)
-	}
-	sort.Slice(chats, func(i, j int) bool {
-		return chats[i]["chat"].(string) < chats[j]["chat"].(string)
-	})
-	api.WriteOK(w, map[string]any{"chats": chats, "count": total})
-}
-
-// messageLs lists the agent's own inbox: pending by default, or the whole
-// archive (pending + processed + dlq) with ?all=true (§7).
-func (s *Server) messageLs(w http.ResponseWriter, r *http.Request) {
-	if s.d.Inbox == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "channel bus is not available")
-		return
-	}
-	status := "pending"
-	if all, _ := strconv.ParseBool(r.URL.Query().Get("all")); all {
-		status = "all"
-	}
-	items, err := s.d.Inbox(status, 0, "")
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	rows := inboxRows(items)
-	api.WriteOK(w, map[string]any{"messages": rows, "count": len(rows)})
-}
-
-// messageProcessed is the explicit ack: a mandatory result is recorded and the
-// message drains from the pending queue (§3.3). Empty result is rejected.
-func (s *Server) messageProcessed(w http.ResponseWriter, r *http.Request) {
-	if s.d.MarkProcessed == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "channel bus is not available")
-		return
-	}
-	var body struct {
-		ID     string `json:"id"`
-		Result string `json:"result"`
-	}
-	if !api.DecodeJSONBody(w, r, maxBodyBytes, &body) {
-		return
-	}
-	if body.ID == "" {
-		api.WriteErr(w, http.StatusBadRequest, "missing_id", "message id is required")
-		return
-	}
-	if strings.TrimSpace(body.Result) == "" {
-		api.WriteErr(w, http.StatusBadRequest, "missing_result",
-			`a result is required: scripts/messages.sh message processed <id> "<result>"`)
-		return
-	}
-	item, err := s.d.MarkProcessed(body.ID, body.Result)
-	if err != nil {
-		if errors.Is(err, bus.ErrNotFound) {
-			api.WriteErr(w, http.StatusNotFound, "not_found", "no such message in your inbox: "+body.ID)
-			return
-		}
-		s.fail(w, r, err)
-		return
-	}
-	api.WriteOK(w, map[string]any{"id": item.ID, "processed": true, "result": item.Result})
-}
-
-// messageReply publishes a threaded reply to a message, which auto-processes the
-// original for this agent (§4.1).
-func (s *Server) messageReply(w http.ResponseWriter, r *http.Request) {
-	if s.d.Reply == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "channel bus is not available")
-		return
-	}
-	var body struct {
-		ID   string         `json:"id"`
-		Text string         `json:"text"`
-		Data map[string]any `json:"data"`
-		Type string         `json:"type"`
-	}
-	if !api.DecodeJSONBody(w, r, maxBodyBytes, &body) {
-		return
-	}
-	if body.ID == "" {
-		api.WriteErr(w, http.StatusBadRequest, "missing_id", "message id is required")
-		return
-	}
-	reply, err := s.d.Reply(body.ID, body.Text, body.Data, body.Type)
-	if err != nil {
-		if errors.Is(err, bus.ErrNotFound) {
-			api.WriteErr(w, http.StatusNotFound, "not_found", "no such message: "+body.ID)
-			return
-		}
-		s.fail(w, r, err)
-		return
-	}
-	api.WriteOK(w, map[string]any{"id": reply.ID, "channel": reply.Channel,
-		"in_reply_to": reply.InReplyTo, "correlation_id": reply.CorrelationID, "replied": true})
-}
-
-// request publishes a request primitive to a channel, optionally arming a
-// deadline timeout that fires into the requester's inbox (§4.2).
-func (s *Server) request(w http.ResponseWriter, r *http.Request) {
-	if s.d.Request == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "channel bus is not available")
-		return
-	}
-	var body struct {
-		Channel  string `json:"channel"`
-		Text     string `json:"text"`
-		Deadline string `json:"deadline"`
-	}
-	if !api.DecodeJSONBody(w, r, maxBodyBytes, &body) {
-		return
-	}
-	if body.Channel == "" {
-		api.WriteErr(w, http.StatusBadRequest, "missing_channel", "channel is required")
-		return
-	}
-	req, err := s.d.Request(body.Channel, body.Text, body.Deadline)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	api.WriteOK(w, map[string]any{"id": req.ID, "channel": req.Channel,
-		"correlation_id": req.CorrelationID, "requested": true})
-}
-
-// messageDLQ lists the agent's dead-lettered messages (§3.3).
-func (s *Server) messageDLQ(w http.ResponseWriter, r *http.Request) {
-	if s.d.Inbox == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "channel bus is not available")
-		return
-	}
-	items, err := s.d.Inbox("dlq", 0, "")
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	rows := inboxRows(items)
-	api.WriteOK(w, map[string]any{"messages": rows, "count": len(rows)})
-}
-
-// messageDLQRequeue clears the DLQ flag and resets attempts, returning a
-// message to the pending queue (§3.3).
-func (s *Server) messageDLQRequeue(w http.ResponseWriter, r *http.Request) {
-	if s.d.Requeue == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "channel bus is not available")
-		return
-	}
-	var body struct {
-		ID string `json:"id"`
-	}
-	if !api.DecodeJSONBody(w, r, maxBodyBytes, &body) {
-		return
-	}
-	if body.ID == "" {
-		api.WriteErr(w, http.StatusBadRequest, "missing_id", "message id is required")
-		return
-	}
-	if err := s.d.Requeue(body.ID); err != nil {
-		if errors.Is(err, bus.ErrNotFound) {
-			api.WriteErr(w, http.StatusNotFound, "not_found", "no such message in your inbox: "+body.ID)
-			return
-		}
-		s.fail(w, r, err)
-		return
-	}
-	api.WriteOK(w, map[string]any{"id": body.ID, "requeued": true})
-}
-
-func (s *Server) sources(w http.ResponseWriter, r *http.Request) {
-	if s.d.Channels == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "channel bus is not available")
-		return
-	}
-	chans, err := s.d.Channels()
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	// Merge existing channel rows with provider declarations from plugin
-	// manifests (spec §6.1). Provider channels are annotated (provider, param
-	// keys, help) and listed even before their channel row exists.
-	byName := make(map[string]map[string]any, len(chans))
-	rows := make([]map[string]any, 0, len(chans))
-	for _, c := range chans {
-		row := map[string]any{"name": c.Name, "kind": c.Kind}
-		byName[c.Name] = row
-		rows = append(rows, row)
-	}
-	if s.d.ProvidedChannels != nil {
-		provided, err := s.d.ProvidedChannels()
-		if err != nil {
-			s.fail(w, r, err)
-			return
-		}
-		for _, p := range provided {
-			row, ok := byName[p.Channel]
-			if !ok {
-				row = map[string]any{"name": p.Channel, "kind": bus.ChannelKind(p.Channel)}
-				byName[p.Channel] = row
-				rows = append(rows, row)
-			}
-			row["provider"] = p.Provider
-			if len(p.Params) > 0 {
-				row["params"] = p.Params
-			}
-			if p.Help != "" {
-				row["help"] = p.Help
-			}
-		}
-	}
-	// Sort unconditionally so channel order is deterministic regardless of
-	// whether the provider dep is wired (review finding #5).
-	sort.Slice(rows, func(i, j int) bool {
-		return rows[i]["name"].(string) < rows[j]["name"].(string)
-	})
-	api.WriteOK(w, map[string]any{"channels": rows, "count": len(rows)})
+	api.WriteOK(w, result)
 }
 
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
@@ -822,8 +380,8 @@ func (s *Server) statusSet(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) scheduleAdd(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Kind, Spec, Channel string
-		Message             json.RawMessage `json:"message"`
+		Kind, Spec, To, Channel string
+		Message                 json.RawMessage `json:"message"`
 	}
 	if !api.DecodeJSONBody(w, r, maxBodyBytes, &body) {
 		return
@@ -832,7 +390,7 @@ func (s *Server) scheduleAdd(w http.ResponseWriter, r *http.Request) {
 	if len(body.Message) > 0 {
 		tpl = string(body.Message)
 	}
-	res, err := s.d.AddSchedule(body.Kind, body.Spec, body.Channel, tpl)
+	res, err := s.d.AddSchedule(body.Kind, body.Spec, body.To, body.Channel, tpl)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -1075,39 +633,6 @@ func (s *Server) groupStatus(w http.ResponseWriter, r *http.Request) {
 	api.WriteOK(w, res)
 }
 
-func (s *Server) groupSend(w http.ResponseWriter, r *http.Request) {
-	s.groupSendTyped(w, r, "group.message")
-}
-
-func (s *Server) groupRequest(w http.ResponseWriter, r *http.Request) {
-	s.groupSendTyped(w, r, "group.request")
-}
-
-func (s *Server) groupSendTyped(w http.ResponseWriter, r *http.Request, typ string) {
-	if s.d.GroupSend == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "unavailable", "group tools are not available")
-		return
-	}
-	var body struct {
-		Member   string `json:"member"`
-		Text     string `json:"text"`
-		Deadline string `json:"deadline"`
-	}
-	if !api.DecodeJSONBody(w, r, maxBodyBytes, &body) {
-		return
-	}
-	if body.Member == "" || body.Text == "" {
-		api.WriteErr(w, http.StatusBadRequest, "missing_args", "member and text are required")
-		return
-	}
-	res, err := s.d.GroupSend(body.Member, typ, body.Text, body.Deadline)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	api.WriteOK(w, res)
-}
-
 func (s *Server) groupObserve(w http.ResponseWriter, r *http.Request) {
 	if s.d.GroupObserve == nil {
 		api.WriteErr(w, http.StatusServiceUnavailable, "unavailable", "group tools are not available")
@@ -1193,13 +718,3 @@ func (s *Server) Shutdown(ctx context.Context) error { return s.http.Shutdown(ct
 
 // maxBodyBytes bounds every agent tool request body.
 const maxBodyBytes = 1 << 20
-
-func splitCSV(s string) []string {
-	var out []string
-	for _, p := range strings.Split(s, ",") {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}

@@ -8,24 +8,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 type fakeBus struct {
-	messages []bus.Message
+	messages []mail.Letter
 	fail     bool
 }
 
-func (f *fakeBus) Publish(message bus.Message) (bus.Message, error) {
+func (f *fakeBus) Send(message mail.Letter) ([]mail.Letter, error) {
 	f.messages = append(f.messages, message)
 	if f.fail {
-		return bus.Message{}, errors.New("bus unavailable")
+		return nil, errors.New("mail unavailable")
 	}
 	message.ID = "message-" + message.IdempotencyKey
-	return message, nil
+	return []mail.Letter{message}, nil
 }
 
 func resultFixture(t *testing.T, now time.Time) (*store.Store, string) {
@@ -58,14 +58,14 @@ func TestPublisherFlushPublishesScriptResultWithRunIdempotency(t *testing.T) {
 		t.Fatalf("messages=%d want 1", len(fake.messages))
 	}
 	message := fake.messages[0]
-	if message.IdempotencyKey != "script-result:"+runID || message.Channel != bus.ChatChannelFor(bus.ChatIDService("alice")) || message.Source != "script" || message.Type != "script.result" || message.ProducedByAgent != "alice" {
+	if message.IdempotencyKey != "script-result:"+runID || message.To != "agent:alice" || message.From != SenderScripts || message.Kind != "script.result" || !message.NeedsReply {
 		t.Fatalf("message=%#v", message)
 	}
 	if message.Data["run_id"] != runID || message.Data["exit_code"] != float64(2) || message.Data["log_path"] != "/tmp/check.log" {
 		t.Fatalf("message data=%#v", message.Data)
 	}
-	if message.Text == "" || message.Text == "make check" {
-		t.Fatalf("unsafe/empty message text=%q", message.Text)
+	if message.Body == "" || message.Body == "make check" {
+		t.Fatalf("unsafe/empty message text=%q", message.Body)
 	}
 	var publishedAt, messageID string
 	if err := db.DB.QueryRow(`SELECT published_at,message_id FROM script_result_outbox WHERE run_id=?`, runID).Scan(&publishedAt, &messageID); err != nil || publishedAt == "" || messageID == "" {

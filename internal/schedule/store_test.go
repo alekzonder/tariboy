@@ -19,7 +19,7 @@ func TestScheduleOneshotFires(t *testing.T) {
 	st := newStore(t, now)
 	fireAt := now.Add(time.Minute).Format(time.RFC3339)
 	sch, err := st.Add(Schedule{Agent: "smoke", Kind: "oneshot", Spec: fireAt,
-		Channel: "agent:smoke:inbox", MessageTemplate: `{"type":"wake"}`})
+		Recipient: "agent:smoke", MessageTemplate: `{"type":"wake"}`})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,12 +56,12 @@ func TestScheduleAddSameInstantDistinctIDs(t *testing.T) {
 	fireAt := now.Add(time.Minute).Format(time.RFC3339)
 
 	sch1, err := st.Add(Schedule{Agent: "smoke", Kind: "oneshot", Spec: fireAt,
-		Channel: "agent:smoke:inbox", MessageTemplate: `{"type":"wake"}`})
+		Recipient: "agent:smoke", MessageTemplate: `{"type":"wake"}`})
 	if err != nil {
 		t.Fatal(err)
 	}
 	sch2, err := st.Add(Schedule{Agent: "smoke", Kind: "oneshot", Spec: fireAt,
-		Channel: "agent:smoke:inbox", MessageTemplate: `{"type":"wake"}`})
+		Recipient: "agent:smoke", MessageTemplate: `{"type":"wake"}`})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestScheduleCronRecurs(t *testing.T) {
 	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
 	st := newStore(t, now)
 	sch, err := st.Add(Schedule{Agent: "smoke", Kind: "cron", Spec: "*/5 * * * *",
-		Channel: "agent:smoke:inbox", MessageTemplate: "{}"})
+		Recipient: "agent:smoke", MessageTemplate: "{}"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,15 +111,15 @@ func TestCancelByCorrelation(t *testing.T) {
 	fireAt := now.Add(time.Minute).Format(time.RFC3339)
 	// Two deadline one-shots for different correlations, plus a plain schedule.
 	if _, err := st.Add(Schedule{Agent: "alice", Kind: "oneshot", Spec: fireAt,
-		Channel: "agent:alice:inbox", MessageTemplate: `{"type":"timeout"}`, CorrelationID: "corr-1"}); err != nil {
+		Recipient: "agent:alice", MessageTemplate: `{"type":"timeout"}`, CorrelationID: "corr-1"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.Add(Schedule{Agent: "alice", Kind: "oneshot", Spec: fireAt,
-		Channel: "agent:alice:inbox", MessageTemplate: `{"type":"timeout"}`, CorrelationID: "corr-2"}); err != nil {
+		Recipient: "agent:alice", MessageTemplate: `{"type":"timeout"}`, CorrelationID: "corr-2"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.Add(Schedule{Agent: "alice", Kind: "oneshot", Spec: fireAt,
-		Channel: "agent:alice:inbox", MessageTemplate: "{}"}); err != nil {
+		Recipient: "agent:alice", MessageTemplate: "{}"}); err != nil {
 		t.Fatal(err)
 	}
 	// Cancelling one correlation leaves the other deadline and the plain schedule.

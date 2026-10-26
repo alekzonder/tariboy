@@ -222,7 +222,7 @@ func TestUnreadCountsOpenLettersBySenderAndKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := mail.Unread{As: "user:customer", Open: 3, Unread: 2, BySender: []mail.SenderCount{
+	want := mail.MailUnread{As: "user:customer", Open: 3, Unread: 2, BySender: []mail.SenderCount{
 		{Sender: "agent:alice", Kind: "task.question", Count: 2},
 		{Sender: "agent:bob", Kind: "message", Count: 1},
 	}}

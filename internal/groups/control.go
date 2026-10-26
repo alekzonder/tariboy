@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/alekzonder/tariboy/internal/agent"
-	"github.com/alekzonder/tariboy/internal/bus"
 )
 
 // Create ensures the group + shared dir, subscribes any existing members and
@@ -56,7 +55,7 @@ func (p *Provisioner) Inspect(name string) (map[string]any, error) {
 	}
 	return map[string]any{
 		"name": g.Name, "lead": g.Lead, "members": names,
-		"broadcast": bus.GroupBroadcast(name), "inbox": bus.GroupInbox(name),
+		"broadcast":  "group:" + name,
 		"shared_dir": p.SharedDir(name),
 	}, nil
 }

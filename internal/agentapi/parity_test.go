@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/api"
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/tasks"
@@ -31,7 +31,8 @@ func TestDomainErrorStatusParity(t *testing.T) {
 		{"script active", script.ErrActive, 409, "script_active"},
 		{"script mode", script.ErrMode, 409, "script_mode"},
 		{"script conflict", script.ErrConflict, 409, "script_conflict"},
-		{"bus not found", bus.ErrNotFound, 404, "not_found"},
+		{"mail not found", &mail.Error{Status: 404, Code: "not_found", Msg: "letter not found"}, 404, "not_found"},
+		{"mail forbidden", &mail.Error{Status: 403, Code: "forbidden", Msg: "not yours"}, 403, "forbidden"},
 		{"tasks 404", &tasks.Error{Status: 404, Code: "not_found", Msg: "task not found"}, 404, "not_found"},
 		{"tasks 409", &tasks.Error{Status: 409, Code: "stale_revision", Msg: "stale"}, 409, "stale_revision"},
 		{"user error default", api.UserError{Code: "bad_input", Msg: "bad"}, 400, "bad_input"},

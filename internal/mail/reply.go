@@ -30,7 +30,8 @@ func (m *Mail) Reply(r ReplyRequest) (Letter, bool, error) {
 			"letter %s is a task question; answer it on the task: ttasks comment %s \"<answer>\"", r.ID, key)
 	}
 	reply := Letter{From: r.As, To: orig.From, Subject: replySubject(orig.Subject), Body: r.Text,
-		Kind: KindMessage, NeedsReply: r.Ask, InReplyTo: orig.ID, Data: map[string]any{}}
+		Kind: KindMessage, NeedsReply: r.Ask, InReplyTo: orig.ID, Data: map[string]any{},
+		ProducedInIteration: r.Iteration}
 	if r.OnBehalf {
 		reply.Data["on_behalf"] = "operator"
 	}

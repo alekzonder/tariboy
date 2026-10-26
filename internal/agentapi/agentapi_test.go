@@ -11,11 +11,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/script"
-	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -98,17 +96,9 @@ func TestExplicitCorePluginsGateTheirCompleteRouteSurface(t *testing.T) {
 		{plugin: "loop", method: http.MethodPost, path: "/tools/loop/done"},
 		{plugin: "loop", method: http.MethodPost, path: "/tools/loop/complete"},
 		{plugin: "loop", method: http.MethodPost, path: "/tools/loop/control"},
-		{plugin: "messages", method: http.MethodPost, path: "/tools/message/send"},
-		{plugin: "messages", method: http.MethodGet, path: "/tools/message/ls"},
-		{plugin: "messages", method: http.MethodPost, path: "/tools/message/processed"},
-		{plugin: "messages", method: http.MethodPost, path: "/tools/message/reply"},
-		{plugin: "messages", method: http.MethodGet, path: "/tools/message/dlq"},
-		{plugin: "messages", method: http.MethodPost, path: "/tools/message/dlq/requeue"},
-		{plugin: "messages", method: http.MethodPost, path: "/tools/request"},
-		{plugin: "messages", method: http.MethodPost, path: "/tools/channel/subscribe"},
-		{plugin: "messages", method: http.MethodPost, path: "/tools/channel/unsubscribe"},
-		{plugin: "messages", method: http.MethodGet, path: "/tools/channel/ls"},
-		{plugin: "messages", method: http.MethodGet, path: "/tools/sources"},
+		{plugin: "mail", method: http.MethodPost, path: "/tools/mail/inbox"},
+		{plugin: "mail", method: http.MethodPost, path: "/tools/mail/send"},
+		{plugin: "mail", method: http.MethodPost, path: "/tools/mail/reply"},
 	}
 
 	for _, tc := range tests {
@@ -235,15 +225,39 @@ func TestNativeTasksActionIsCapabilityGatedAndScrubsForgedIdentity(t *testing.T)
 	}
 }
 
-func TestLegacyIterationKeepsDirectMessaging(t *testing.T) {
-	called := false
-	s := NewServer(Deps{Agent: "alice", Plugins: []string{"messages"}, CurrentIteration: func() string { return "legacy" },
-		Publish: func(message bus.Message) (bus.Message, error) { called = true; message.ID = "m1"; return message, nil },
+func TestMailActionAcceptsMessagesAliasAndScrubsIdentity(t *testing.T) {
+	var gotAction string
+	var gotBody map[string]any
+	s := NewServer(Deps{Agent: "alice", Plugins: []string{"messages"},
+		MailAction: func(action string, body map[string]any) (any, error) {
+			gotAction, gotBody = action, body
+			return map[string]any{"letters": []any{}}, nil
+		},
 	})
 	rr := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/tools/message/send", bytes.NewBufferString(`{"channel":"chat:ops","text":"x"}`)))
-	if rr.Code != http.StatusOK || !called {
-		t.Fatalf("legacy send status=%d body=%s", rr.Code, rr.Body.String())
+	s.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/tools/mail/send",
+		bytes.NewBufferString(`{"to":"agent:bob","text":"x","from":"agent:forged","as":"user:forged","sender":"x","principal":"x"}`)))
+	if rr.Code != http.StatusOK || gotAction != "send" || gotBody["to"] != "agent:bob" {
+		t.Fatalf("send through the messages alias: status=%d action=%q body=%v", rr.Code, gotAction, gotBody)
+	}
+	for _, forged := range []string{"from", "as", "sender", "principal"} {
+		if _, ok := gotBody[forged]; ok {
+			t.Fatalf("forged identity %q reached the mail service: %v", forged, gotBody)
+		}
+	}
+}
+
+func TestMailActionAnswersMailErrors(t *testing.T) {
+	s := NewServer(Deps{Agent: "alice", Plugins: []string{"mail"},
+		MailAction: func(string, map[string]any) (any, error) {
+			return nil, &mail.Error{Status: http.StatusConflict, Code: "answer_on_task", Msg: "answer on the task"}
+		},
+	})
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/tools/mail/reply", bytes.NewBufferString(`{"id":"m-1","text":"x"}`)))
+	ok, e := decode(t, rr.Body.Bytes())
+	if ok || rr.Code != http.StatusConflict || e["code"] != "answer_on_task" {
+		t.Fatalf("reply = %d %v", rr.Code, e)
 	}
 }
 
@@ -414,236 +428,7 @@ func TestStatusSetRoute(t *testing.T) {
 	}
 }
 
-func TestMessageSendAndChannels(t *testing.T) {
-	var published bus.Message
-	subs := []bus.Subscription{}
-	s := NewServer(Deps{
-		Agent: "smoke", Cwd: "/w", Plugins: []string{"whoami", "loop", "messages"},
-		CurrentIteration: func() string { return "iter-1" },
-		SetDone:          func(string, bool) error { return nil },
-		Publish: func(m bus.Message) (bus.Message, error) {
-			m.ID = "m1"
-			published = m
-			return m, nil
-		},
-		Subscribe: func(channel string, matcher bus.Matcher, tf []string) (bus.Subscription, error) {
-			sub := bus.Subscription{ID: "sub-1", Agent: "smoke", Channel: channel, Matcher: matcher, TypeFilter: tf}
-			subs = append(subs, sub)
-			return sub, nil
-		},
-		ListSubscriptions: func() ([]bus.Subscription, error) { return subs, nil },
-		Channels:          func() ([]bus.Channel, error) { return []bus.Channel{{Name: "chat:room", Kind: "chat"}}, nil },
-	})
-	h := s.Handler()
-
-	// send
-	body, _ := json.Marshal(map[string]any{"channel": "chat:room", "type": "note", "text": "hi",
-		"subject": map[string]any{"env": "prod"}})
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest("POST", "/tools/message/send", bytes.NewReader(body)))
-	if ok, _ := decode(t, rr.Body.Bytes()); !ok {
-		t.Fatalf("send failed: %s", rr.Body.String())
-	}
-	if published.Channel != "chat:room" || published.Text != "hi" ||
-		published.ProducedByAgent != "smoke" || published.ProducedInIteration != "iter-1" ||
-		published.Source != "agent:smoke" {
-		t.Fatalf("attribution/publish wrong: %+v", published)
-	}
-
-	// subscribe
-	sbody, _ := json.Marshal(map[string]any{"channel": "chat:room", "matcher": map[string]string{"type": "note"}, "type": "note.*"})
-	rr = httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest("POST", "/tools/channel/subscribe", bytes.NewReader(sbody)))
-	if ok, res := decode(t, rr.Body.Bytes()); !ok || res["id"] != "sub-1" {
-		t.Fatalf("subscribe = %v", res)
-	}
-
-	// channel ls
-	rr = httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest("GET", "/tools/channel/ls", nil))
-	if ok, res := decode(t, rr.Body.Bytes()); !ok || res["count"].(float64) != 1 {
-		t.Fatalf("channel ls = %v", res)
-	}
-
-	// sources
-	rr = httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest("GET", "/tools/sources", nil))
-	if ok, res := decode(t, rr.Body.Bytes()); !ok || res["count"].(float64) != 1 {
-		t.Fatalf("sources = %v", res)
-	}
-}
-
-// TestSourcesMergesProviderAnnotations verifies the sources handler merges the
-// live channel list with provider declarations (spec §6.1): an existing channel
-// row that is also provided gets annotated in place, and a provider channel with
-// no row yet is listed anyway. Rows come back sorted by name.
-func TestSourcesMergesProviderAnnotations(t *testing.T) {
-	s := NewServer(Deps{
-		Agent: "smoke", Cwd: "/w", Plugins: []string{"messages"},
-		CurrentIteration: func() string { return "iter-1" },
-		SetDone:          func(string, bool) error { return nil },
-		Channels: func() ([]bus.Channel, error) {
-			// issue-provider:query already has a row; issue-provider:ticket does not yet.
-			return []bus.Channel{
-				{Name: "chat:room", Kind: "chat"},
-				{Name: "issue-provider:query", Kind: "chat"},
-			}, nil
-		},
-		ProvidedChannels: func() ([]ProvidedChannel, error) {
-			return []ProvidedChannel{
-				{Channel: "issue-provider:query", Provider: "issue-provider", Params: []string{"query"}, Help: "run a query"},
-				{Channel: "issue-provider:ticket", Provider: "issue-provider", Params: []string{"ticket"}, Help: "watch a ticket"},
-			}, nil
-		},
-	})
-	h := s.Handler()
-
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest("GET", "/tools/sources", nil))
-	ok, res := decode(t, rr.Body.Bytes())
-	if !ok {
-		t.Fatalf("sources failed: %s", rr.Body.String())
-	}
-	if res["count"].(float64) != 3 {
-		t.Fatalf("count = %v, want 3 (chat:room + 2 issue-provider channels)", res["count"])
-	}
-	rows := res["channels"].([]any)
-	byName := map[string]map[string]any{}
-	var names []string
-	for _, r := range rows {
-		row := r.(map[string]any)
-		name := row["name"].(string)
-		byName[name] = row
-		names = append(names, name)
-	}
-	// Sorted: chat:room, issue-provider:query, issue-provider:ticket.
-	if len(names) != 3 || names[0] != "chat:room" || names[1] != "issue-provider:query" || names[2] != "issue-provider:ticket" {
-		t.Fatalf("names not sorted as expected: %v", names)
-	}
-	// chat:room is a plain channel — no provider annotation.
-	if _, has := byName["chat:room"]["provider"]; has {
-		t.Fatalf("chat:room should not be annotated: %v", byName["chat:room"])
-	}
-	// issue-provider:query existing row annotated in place.
-	q := byName["issue-provider:query"]
-	if q["provider"] != "issue-provider" || q["help"] != "run a query" {
-		t.Fatalf("issue-provider:query not annotated: %v", q)
-	}
-	if params, _ := q["params"].([]any); len(params) != 1 || params[0] != "query" {
-		t.Fatalf("issue-provider:query params = %v", q["params"])
-	}
-	// issue-provider:ticket listed even without a channel row.
-	tk := byName["issue-provider:ticket"]
-	if tk["provider"] != "issue-provider" || tk["kind"] == nil {
-		t.Fatalf("issue-provider:ticket not listed/annotated: %v", tk)
-	}
-}
-
-// TestSourcesSortedWithoutProvider verifies channel rows are sorted by name even
-// when the ProvidedChannels dep is not wired (review finding #5): the sort used
-// to live inside the `ProvidedChannels != nil` branch, so ordering was whatever
-// the bus returned when no provider was present.
-func TestSourcesSortedWithoutProvider(t *testing.T) {
-	s := NewServer(Deps{
-		Agent: "smoke", Cwd: "/w", Plugins: []string{"messages"},
-		CurrentIteration: func() string { return "iter-1" },
-		SetDone:          func(string, bool) error { return nil },
-		Channels: func() ([]bus.Channel, error) {
-			// Deliberately unsorted; no ProvidedChannels dep.
-			return []bus.Channel{
-				{Name: "zeta:room", Kind: "chat"},
-				{Name: "alpha:room", Kind: "chat"},
-				{Name: "mid:room", Kind: "chat"},
-			}, nil
-		},
-	})
-	h := s.Handler()
-
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest("GET", "/tools/sources", nil))
-	ok, res := decode(t, rr.Body.Bytes())
-	if !ok {
-		t.Fatalf("sources failed: %s", rr.Body.String())
-	}
-	rows := res["channels"].([]any)
-	var names []string
-	for _, r := range rows {
-		names = append(names, r.(map[string]any)["name"].(string))
-	}
-	if len(names) != 3 || names[0] != "alpha:room" || names[1] != "mid:room" || names[2] != "zeta:room" {
-		t.Fatalf("names not sorted without provider dep: %v", names)
-	}
-}
-
-// TestChannelUnsubscribeCrossAgentRejected mirrors exactly how Manager wires
-// agentapi.Deps.Unsubscribe (internal/loop/manager.go): the calling agent is
-// bound into the closure from Deps.Agent, never taken from the request body.
-// This guards against agent B unsubscribing agent A's subscription, even
-// though subscription ids embed the owner's name (sub-<agent>-<ts>) and are
-// therefore guessable.
-func TestChannelUnsubscribeCrossAgentRejected(t *testing.T) {
-	s := storetest.Open(t)
-	bs := bus.New(s, time.Now)
-
-	newAgentServer := func(agentName string) *Server {
-		return NewServer(Deps{
-			Agent: agentName, Cwd: "/w", Plugins: []string{"whoami", "loop", "messages"},
-			CurrentIteration: func() string { return "iter-1" },
-			SetDone:          func(string, bool) error { return nil },
-			Subscribe: func(channel string, matcher bus.Matcher, tf []string) (bus.Subscription, error) {
-				return bs.Subscribe(agentName, channel, matcher, tf)
-			},
-			// Bound exactly like Manager's closure: agentName comes from the
-			// server's own Deps.Agent, never from the request body.
-			Unsubscribe:       func(id string) error { return bs.Unsubscribe(agentName, id) },
-			ListSubscriptions: func() ([]bus.Subscription, error) { return bs.ListSubscriptions(agentName) },
-		})
-	}
-	aliceSrv := newAgentServer("alice")
-	bobSrv := newAgentServer("bob")
-
-	// alice subscribes to her own inbox over her route.
-	sbody, _ := json.Marshal(map[string]any{"channel": bus.InboxChannel("alice")})
-	rr := httptest.NewRecorder()
-	aliceSrv.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/tools/channel/subscribe", bytes.NewReader(sbody)))
-	ok, res := decode(t, rr.Body.Bytes())
-	if !ok {
-		t.Fatalf("alice subscribe failed: %s", rr.Body.String())
-	}
-	subID, _ := res["id"].(string)
-	if subID == "" {
-		t.Fatalf("alice subscribe: no id in %v", res)
-	}
-
-	// bob calls unsubscribe on HIS OWN route/server with alice's (guessed) id.
-	ubody, _ := json.Marshal(map[string]any{"id": subID})
-	rr = httptest.NewRecorder()
-	bobSrv.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/tools/channel/unsubscribe", bytes.NewReader(ubody)))
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("cross-agent unsubscribe status = %d, want 404", rr.Code)
-	}
-	if ok, _ := decode(t, rr.Body.Bytes()); ok {
-		t.Fatal("bob was able to remove alice's subscription")
-	}
-
-	// alice's subscription must still be listed (via alice's own route).
-	rr = httptest.NewRecorder()
-	aliceSrv.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/tools/channel/ls", nil))
-	ok, res = decode(t, rr.Body.Bytes())
-	if !ok || res["count"].(float64) != 1 {
-		t.Fatalf("alice's subscription missing after bob's failed unsubscribe: %v", res)
-	}
-
-	// alice unsubscribing her own id, over her own route, succeeds.
-	rr = httptest.NewRecorder()
-	aliceSrv.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/tools/channel/unsubscribe", bytes.NewReader(ubody)))
-	if ok, _ := decode(t, rr.Body.Bytes()); !ok {
-		t.Fatalf("alice could not unsubscribe her own subscription: %s", rr.Body.String())
-	}
-}
-
-func TestGroupToolsInfoStatusMessagingLoopAndObserve(t *testing.T) {
-	var published bus.Message
+func TestGroupToolsInfoStatusLoopAndObserve(t *testing.T) {
 	var loopStarted, loopStopped string
 	s := NewServer(Deps{
 		Agent: "manager", Cwd: "/w", Plugins: []string{"whoami", "loop", "messages", "status"},
@@ -669,11 +454,6 @@ func TestGroupToolsInfoStatusMessagingLoopAndObserve(t *testing.T) {
 				return map[string]any{"member": rows[1]}, nil
 			}
 			return map[string]any{"members": rows, "count": len(rows)}, nil
-		},
-		GroupSend: func(member, typ, text, deadline string) (map[string]any, error) {
-			published = bus.Message{ID: "m1", Channel: bus.InboxChannel(member), Type: typ, Text: text,
-				Data: map[string]any{"deadline": deadline}}
-			return map[string]any{"sent": true, "id": "m1", "target": member}, nil
 		},
 		GroupObserve: func(member string, tail int) (map[string]any, error) {
 			return map[string]any{"events": []map[string]any{
@@ -715,15 +495,6 @@ func TestGroupToolsInfoStatusMessagingLoopAndObserve(t *testing.T) {
 		t.Fatalf("group status worker = %v", res)
 	}
 
-	body, _ := json.Marshal(map[string]any{"member": "worker", "text": "please check", "deadline": "5m"})
-	rr = httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest("POST", "/tools/group/request", bytes.NewReader(body)))
-	ok, res = decode(t, rr.Body.Bytes())
-	if !ok || !res["sent"].(bool) || published.Channel != "agent:worker:inbox" ||
-		published.Type != "group.request" || published.Text != "please check" || published.Data["deadline"] != "5m" {
-		t.Fatalf("group request res=%v published=%+v", res, published)
-	}
-
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest("GET", "/tools/group/observe/worker?tail=7", nil))
 	ok, res = decode(t, rr.Body.Bytes())
@@ -731,7 +502,7 @@ func TestGroupToolsInfoStatusMessagingLoopAndObserve(t *testing.T) {
 		t.Fatalf("group observe = %v", res)
 	}
 
-	body, _ = json.Marshal(map[string]any{"member": "worker", "action": "start"})
+	body, _ := json.Marshal(map[string]any{"member": "worker", "action": "start"})
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest("POST", "/tools/group/loop", bytes.NewReader(body)))
 	if ok, _ := decode(t, rr.Body.Bytes()); !ok || loopStarted != "worker" {
@@ -786,8 +557,8 @@ func TestScheduleAddAndScriptRun(t *testing.T) {
 	s := NewServer(Deps{
 		Agent: "smoke", Plugins: []string{"whoami", "loop", "messages", "schedule", "scripts"},
 		CurrentIteration: func() string { return "i" }, SetDone: func(string, bool) error { return nil },
-		AddSchedule: func(kind, spec, channel, tpl string) (map[string]any, error) {
-			return map[string]any{"id": "sch-1", "kind": kind, "channel": channel}, nil
+		AddSchedule: func(kind, spec, to, channel, tpl string) (map[string]any, error) {
+			return map[string]any{"id": "sch-1", "kind": kind, "to": to}, nil
 		},
 		ListSchedules: func() ([]map[string]any, error) { return []map[string]any{{"id": "sch-1"}}, nil },
 		RunScriptOnce: func(in script.CreateOnce) (script.Definition, script.Run, error) {
@@ -898,341 +669,22 @@ func TestImageBuildGatedAndDispatched(t *testing.T) {
 	}
 }
 
-// newBusServer wires a bus-backed agentapi Server for one agent exactly as
-// Manager does (agent name bound into the closures, never from the request
-// body). It returns the server, the live bus, and the agent name so tests can
-// drive the Phase P messages surface end-to-end against real storage.
-func newBusServer(t *testing.T, agent string) (*Server, *bus.Bus) {
-	t.Helper()
-	st := storetest.Open(t)
-	bs := bus.New(st, time.Now)
-	s := NewServer(Deps{
-		Agent: agent, Cwd: "/w", Plugins: []string{"whoami", "loop", "messages"},
-		CurrentIteration: func() string { return "iter-1" },
-		SetDone:          func(string, bool) error { return nil },
-		Publish:          func(m bus.Message) (bus.Message, error) { return bs.Publish(m) },
-		Subscribe: func(channel string, matcher bus.Matcher, tf []string) (bus.Subscription, error) {
-			return bs.Subscribe(agent, channel, matcher, tf)
-		},
-		Unsubscribe:       func(id string) error { return bs.Unsubscribe(agent, id) },
-		ListSubscriptions: func() ([]bus.Subscription, error) { return bs.ListSubscriptions(agent) },
-		Channels:          func() ([]bus.Channel, error) { return bs.Channels() },
-		Inbox: func(status string, limit int, before string) ([]bus.InboxItem, error) {
-			return bs.Inbox(agent, status, limit, before)
-		},
-		MarkProcessed: func(msgID, result string) (bus.InboxItem, error) {
-			return bs.MarkProcessed(agent, msgID, result)
-		},
-		Reply: func(msgID, text string, data map[string]any, typ string) (bus.Message, error) {
-			return bs.Reply(agent, msgID, text, data, typ)
-		},
-		Request: func(channel, text, deadline string) (bus.Message, error) {
-			return bs.Request(agent, channel, text, deadline)
-		},
-		Requeue: func(msgID string) error { return bs.Requeue(agent, msgID) },
-		SubscribeParams: func(channel string, matcher bus.Matcher, tf []string, params map[string]any) (bus.Subscription, error) {
-			return bs.SubscribeParams(agent, channel, matcher, tf, params)
-		},
-		UnsubscribeChannel: func(channel string) (int, error) { return bs.UnsubscribeChannel(agent, channel) },
-	})
-	return s, bs
-}
-
-// call is a small helper: run one request against the handler and decode.
-func call(t *testing.T, s *Server, method, route, body string) (bool, map[string]any, int) {
-	t.Helper()
-	var rdr *bytes.Reader
-	if body != "" {
-		rdr = bytes.NewReader([]byte(body))
-	} else {
-		rdr = bytes.NewReader(nil)
-	}
-	rr := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rr, httptest.NewRequest(method, route, rdr))
-	ok, res := decode(t, rr.Body.Bytes())
-	return ok, res, rr.Code
-}
-
-// deliverToInbox subscribes the agent to its own inbox and publishes one message
-// there, so a real delivery row exists for the Phase P lifecycle to act on.
-func deliverToInbox(t *testing.T, s *Server, bs *bus.Bus, agent, text string) string {
-	t.Helper()
-	if _, err := bs.Subscribe(agent, bus.InboxChannel(agent), nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	m, err := bs.Publish(bus.Message{Channel: bus.InboxChannel(agent), Type: "note", Text: text, Source: "agent:other"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return m.ID
-}
-
-func TestMessageLsAndProcessed(t *testing.T) {
-	s, bs := newBusServer(t, "alice")
-	id := deliverToInbox(t, s, bs, "alice", "hello")
-
-	// Pending inbox shows the message.
-	ok, res, _ := call(t, s, "GET", "/tools/message/ls", "")
-	if !ok || res["count"].(float64) != 1 {
-		t.Fatalf("ls pending = %v", res)
-	}
-	msgs := res["messages"].([]any)
-	if msgs[0].(map[string]any)["id"] != id {
-		t.Fatalf("ls id = %v, want %s", msgs[0], id)
-	}
-
-	// Empty result is rejected with a clear error.
-	ok, e, code := call(t, s, "POST", "/tools/message/processed", `{"id":"`+id+`","result":"  "}`)
-	if ok || code != http.StatusBadRequest || e["code"] != "missing_result" {
-		t.Fatalf("empty result not rejected: code=%d err=%v", code, e)
-	}
-
-	// Missing id.
-	ok, e, code = call(t, s, "POST", "/tools/message/processed", `{"result":"done"}`)
-	if ok || code != http.StatusBadRequest || e["code"] != "missing_id" {
-		t.Fatalf("missing id not rejected: code=%d err=%v", code, e)
-	}
-
-	// Unknown id → 404.
-	ok, e, code = call(t, s, "POST", "/tools/message/processed", `{"id":"nope","result":"done"}`)
-	if ok || code != http.StatusNotFound {
-		t.Fatalf("unknown id: code=%d err=%v", code, e)
-	}
-
-	// Process it with a real result.
-	ok, res, _ = call(t, s, "POST", "/tools/message/processed", `{"id":"`+id+`","result":"read it"}`)
-	if !ok || res["processed"] != true || res["result"] != "read it" {
-		t.Fatalf("processed = %v", res)
-	}
-
-	// Pending inbox is now empty; --all still shows the (processed) message.
-	if _, res, _ := call(t, s, "GET", "/tools/message/ls", ""); res["count"].(float64) != 0 {
-		t.Fatalf("pending should be empty after processed: %v", res)
-	}
-	if _, res, _ := call(t, s, "GET", "/tools/message/ls?all=true", ""); res["count"].(float64) != 1 {
-		t.Fatalf("--all should still show processed message: %v", res)
-	}
-}
-
-func TestMessageReplyAutoProcesses(t *testing.T) {
-	s, bs := newBusServer(t, "alice")
-	id := deliverToInbox(t, s, bs, "alice", "please answer")
-
-	ok, res, _ := call(t, s, "POST", "/tools/message/reply", `{"id":"`+id+`","text":"here you go"}`)
-	if !ok || res["replied"] != true || res["in_reply_to"] != id {
-		t.Fatalf("reply = %v", res)
-	}
-	// The original is auto-processed (drains from pending), the reply lands on the
-	// source agent's inbox (not alice's), so alice's pending is empty.
-	if _, res, _ := call(t, s, "GET", "/tools/message/ls", ""); res["count"].(float64) != 0 {
-		t.Fatalf("reply should auto-process original: pending=%v", res)
-	}
-}
-
-// TestMessageReplyToChatChannelNoSelfDelivery is the end-to-end proof for the
-// dev-t-gmb.1 fix against the exact customer scenario, one layer above the bus
-// unit test: it drives the real Messages skill reply path an agent runs during
-// an iteration (POST /tools/message/reply on the per-agent agentapi server,
-// wired to a live bus exactly as loop/manager.go wires it).
-//
-// Scenario: alice is subscribed to a chat channel; a plugin delivers an inbound
-// chat message onto that channel; alice replies. The reply is routed back to the
-// same chat channel (replyTarget: plugin source, no reply_to). A co-subscribed
-// sink must still receive the reply so it can forward it out — but the reply must
-// NOT re-enter alice's own queue.
-//
-// Before the fix this test FAILS: with self-delivery unsuppressed the reply
-// lands a fresh pending delivery on alice's own chat-channel subscription, so her
-// pending count is 1 (the echoed reply) instead of 0. Confirmed both directions:
-// passes on the fixed bus, fails when the author-skip guard in Bus.Publish is
-// removed.
-func TestMessageReplyToChatChannelNoSelfDelivery(t *testing.T) {
-	s, bs := newBusServer(t, "alice")
-	chat := bus.ChatChannel("room")
-
-	// alice (the replying agent) and sink (a plugin sink that forwards replies
-	// out) both subscribe to the chat channel.
-	if _, err := bs.Subscribe("alice", chat, nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := bs.Subscribe("sink", chat, nil, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	// A plugin-sourced inbound chat message (no agent author) fans out to both.
-	inbound, err := bs.Publish(bus.Message{Channel: chat, Type: "chat.message",
-		Text: "hello", Source: "plugin:messenger"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// alice sees the inbound message in her pending queue.
-	if _, res, _ := call(t, s, "GET", "/tools/message/ls", ""); res["count"].(float64) != 1 {
-		t.Fatalf("alice should have the inbound chat message pending: %v", res)
-	}
-
-	// alice replies as herself through the real agent tool.
-	ok, res, _ := call(t, s, "POST", "/tools/message/reply",
-		`{"id":"`+inbound.ID+`","text":"answer"}`)
-	if !ok || res["replied"] != true || res["in_reply_to"] != inbound.ID {
-		t.Fatalf("reply = %v", res)
-	}
-	if res["channel"] != chat {
-		t.Fatalf("reply should land on the chat channel, got %v", res["channel"])
-	}
-	replyID := res["id"].(string)
-
-	// The reply IS delivered to the co-subscribed sink (it must forward it out).
-	sinkPend, err := bs.Inbox("sink", "pending", 0, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !hasInbox(sinkPend, replyID) {
-		t.Fatalf("sink missed the reply it must forward out: %+v", sinkPend)
-	}
-
-	// The reply is NOT echoed back into alice's own queue. Her inbound delivery
-	// was auto-processed by the reply and the reply itself was suppressed, so her
-	// pending queue is empty. Pre-fix, the echoed reply would sit here (count 1).
-	if _, res, _ := call(t, s, "GET", "/tools/message/ls", ""); res["count"].(float64) != 0 {
-		t.Fatalf("reply echoed back into alice's own queue: pending=%v", res)
-	}
-	alicePend, err := bs.Inbox("alice", "pending", 0, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if hasInbox(alicePend, replyID) {
-		t.Fatalf("alice's queue contains her own reply %s: %+v", replyID, alicePend)
-	}
-}
-
-// hasInbox reports whether any inbox item carries the given message id.
-func hasInbox(items []bus.InboxItem, id string) bool {
-	for _, it := range items {
-		if it.Message.ID == id {
-			return true
-		}
-	}
-	return false
-}
-
-func TestRequestPrimitive(t *testing.T) {
-	s, _ := newBusServer(t, "alice")
-
-	ok, e, code := call(t, s, "POST", "/tools/request", `{"text":"hi"}`)
-	if ok || code != http.StatusBadRequest || e["code"] != "missing_channel" {
-		t.Fatalf("missing channel: code=%d err=%v", code, e)
-	}
-
-	ok, res, _ := call(t, s, "POST", "/tools/request", `{"channel":"svc:q","text":"do X"}`)
-	if !ok || res["requested"] != true || res["correlation_id"] == "" {
-		t.Fatalf("request = %v", res)
-	}
-	if res["id"] != res["correlation_id"] {
-		t.Fatalf("request correlation should equal its own id: %v", res)
-	}
-}
-
-func TestDLQListAndRequeue(t *testing.T) {
-	s, bs := newBusServer(t, "alice")
-	id := deliverToInbox(t, s, bs, "alice", "doomed")
-
-	// Drive attempts past maxAttempts (5) so the delivery dead-letters.
-	for i := 0; i < 6; i++ {
-		if _, err := bs.Pending("alice", 100); err != nil {
-			t.Fatal(err)
-		}
-	}
-	ok, res, _ := call(t, s, "GET", "/tools/message/dlq", "")
-	if !ok || res["count"].(float64) != 1 {
-		t.Fatalf("dlq list = %v", res)
-	}
-
-	// Requeue returns it to the pending queue.
-	ok, res, _ = call(t, s, "POST", "/tools/message/dlq/requeue", `{"id":"`+id+`"}`)
-	if !ok || res["requeued"] != true {
-		t.Fatalf("requeue = %v", res)
-	}
-	if _, res, _ := call(t, s, "GET", "/tools/message/dlq", ""); res["count"].(float64) != 0 {
-		t.Fatalf("dlq should be empty after requeue: %v", res)
-	}
-	if _, res, _ := call(t, s, "GET", "/tools/message/ls", ""); res["count"].(float64) != 1 {
-		t.Fatalf("requeued message should be pending again: %v", res)
-	}
-
-	// Requeue of an unknown id → 404.
-	if ok, _, code := call(t, s, "POST", "/tools/message/dlq/requeue", `{"id":"nope"}`); ok || code != http.StatusNotFound {
-		t.Fatalf("requeue unknown id: code=%d", code)
-	}
-}
-
-func TestSubscribeParamsAndUnsubscribeByChannel(t *testing.T) {
-	s, _ := newBusServer(t, "alice")
-
-	// Parameterized subscription: watch fingerprint is returned and echoed by ls.
-	body := `{"channel":"issue-provider:query","params":{"query":"Status: Open"}}`
-	ok, res, _ := call(t, s, "POST", "/tools/channel/subscribe", body)
-	if !ok || res["watch"] == nil || res["watch"] == "" {
-		t.Fatalf("params subscribe should return watch: %v", res)
-	}
-	watch := res["watch"]
-
-	ok, res, _ = call(t, s, "GET", "/tools/channel/ls", "")
-	if !ok || res["count"].(float64) != 1 {
-		t.Fatalf("ls = %v", res)
-	}
-	sub := res["subscriptions"].([]any)[0].(map[string]any)
-	if sub["watch"] != watch || sub["params"] == nil {
-		t.Fatalf("ls row missing params/watch: %v", sub)
-	}
-
-	// Unsubscribe by channel name (fallback) drops the sub.
-	ok, res, _ = call(t, s, "POST", "/tools/channel/unsubscribe", `{"id":"issue-provider:query"}`)
-	if !ok || res["removed"].(float64) != 1 {
-		t.Fatalf("channel-name unsubscribe = %v", res)
-	}
-	if _, res, _ := call(t, s, "GET", "/tools/channel/ls", ""); res["count"].(float64) != 0 {
-		t.Fatalf("subscription should be gone: %v", res)
-	}
-
-	// Unknown id/channel → 404.
-	if ok, _, code := call(t, s, "POST", "/tools/channel/unsubscribe", `{"id":"nope"}`); ok || code != http.StatusNotFound {
-		t.Fatalf("unknown unsubscribe: code=%d", code)
-	}
-}
-
-// TestPhasePBusUnavailable checks every Phase P route degrades to bus_unavailable
-// (503) when its hook is nil, matching the existing messages-surface contract.
-func TestPhasePBusUnavailable(t *testing.T) {
-	s := NewServer(Deps{
-		Agent: "alice", Cwd: "/w", Plugins: []string{"whoami", "loop", "messages"},
-		CurrentIteration: func() string { return "iter-1" },
-		SetDone:          func(string, bool) error { return nil },
-	})
-	cases := []struct{ method, route, body string }{
-		{"GET", "/tools/message/ls", ""},
-		{"POST", "/tools/message/processed", `{"id":"x","result":"y"}`},
-		{"POST", "/tools/message/reply", `{"id":"x","text":"y"}`},
-		{"GET", "/tools/message/dlq", ""},
-		{"POST", "/tools/message/dlq/requeue", `{"id":"x"}`},
-		{"POST", "/tools/request", `{"channel":"c","text":"t"}`},
-	}
-	for _, c := range cases {
-		ok, e, code := call(t, s, c.method, c.route, c.body)
-		if ok || code != http.StatusServiceUnavailable || e["code"] != "bus_unavailable" {
-			t.Fatalf("%s %s: code=%d err=%v, want 503 bus_unavailable", c.method, c.route, code, e)
-		}
-	}
-}
-
-func TestChatRoutesAreNotRegistered(t *testing.T) {
-	s := NewServer(Deps{})
+func TestRemovedMessageRoutesAreNotRegistered(t *testing.T) {
+	s := NewServer(Deps{Plugins: []string{"messages", "mail"}})
 	for _, route := range []struct {
 		method string
 		path   string
 	}{
 		{"POST", "/tools/chat/create"},
-		{"POST", "/tools/chat/bind"},
-		{"GET", "/tools/chat/ls"},
+		{"GET", "/tools/chat/unanswered"},
+		{"POST", "/tools/message/send"},
+		{"GET", "/tools/message/ls"},
+		{"POST", "/tools/message/processed"},
+		{"POST", "/tools/request"},
+		{"POST", "/tools/channel/subscribe"},
+		{"GET", "/tools/sources"},
+		{"POST", "/tools/group/send"},
+		{"POST", "/tools/group/request"},
 	} {
 		rr := httptest.NewRecorder()
 		s.Handler().ServeHTTP(rr, httptest.NewRequest(route.method, route.path, nil))

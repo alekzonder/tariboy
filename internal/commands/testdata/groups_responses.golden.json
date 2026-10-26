@@ -12,16 +12,14 @@
     "group": "core"
   },
   "group.create core": {
-    "broadcast": "group:core:broadcast",
-    "inbox": "group:core:inbox",
+    "broadcast": "group:core",
     "lead": "",
     "members": [],
     "name": "core",
     "shared_dir": "$BASE/groups/core/shared"
   },
   "group.create core lead": {
-    "broadcast": "group:core:broadcast",
-    "inbox": "group:core:inbox",
+    "broadcast": "group:core",
     "lead": "lead1",
     "members": [
       "dev1",
@@ -32,16 +30,14 @@
     "shared_dir": "$BASE/groups/core/shared"
   },
   "group.create empty": {
-    "broadcast": "group:empty:broadcast",
-    "inbox": "group:empty:inbox",
+    "broadcast": "group:empty",
     "lead": "",
     "members": [],
     "name": "empty",
     "shared_dir": "$BASE/groups/empty/shared"
   },
   "group.inspect core": {
-    "broadcast": "group:core:broadcast",
-    "inbox": "group:core:inbox",
+    "broadcast": "group:core",
     "lead": "lead1",
     "members": [
       "dev1",
@@ -52,16 +48,14 @@
     "shared_dir": "$BASE/groups/core/shared"
   },
   "group.inspect empty": {
-    "broadcast": "group:empty:broadcast",
-    "inbox": "group:empty:inbox",
+    "broadcast": "group:empty",
     "lead": "",
     "members": [],
     "name": "empty",
     "shared_dir": "$BASE/groups/empty/shared"
   },
   "group.lead.set core": {
-    "broadcast": "group:core:broadcast",
-    "inbox": "group:core:inbox",
+    "broadcast": "group:core",
     "lead": "dev1",
     "members": [
       "dev1",
@@ -91,8 +85,7 @@
     "group": ""
   },
   "group.rename core": {
-    "broadcast": "group:crew:broadcast",
-    "inbox": "group:crew:inbox",
+    "broadcast": "group:crew",
     "lead": "dev1",
     "members": [
       "dev1",

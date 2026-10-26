@@ -44,6 +44,8 @@ const (
 	BoxInbox   = "inbox"
 	BoxSent    = "sent"
 	BoxArchive = "archive"
+	// BoxAll is every letter to the principal, open and closed (tmail inbox --all).
+	BoxAll = "all"
 )
 
 // Letter is one row of the mail table. The JSON field names are the fixed
@@ -90,6 +92,8 @@ type ReplyRequest struct {
 	Text     string
 	Ask      bool
 	OnBehalf bool
+	// Iteration is the iteration the reply was written in, if any.
+	Iteration string
 }
 
 // Hint is the live refetch hint for one written row (the /api/mail/ws frame).
@@ -101,10 +105,10 @@ type Hint struct {
 	TS   string `json:"ts"`
 }
 
-// Unread counts the open letters of one principal: Unread is the open letters
-// not read yet, and BySender groups every open letter by sender and kind, which
-// is what the Desktop badges count.
-type Unread struct {
+// MailUnread counts the open letters of one principal: Unread is the open
+// letters not read yet, and BySender groups every open letter by sender and
+// kind, which is what the Desktop badges count.
+type MailUnread struct {
 	As       string        `json:"as"`
 	Open     int           `json:"open"`
 	Unread   int           `json:"unread"`

@@ -136,7 +136,7 @@ func addFinishedRun(fake *fakeScriptControl, id string) {
 func addGoldenSchedule(t *testing.T, c *registry.Ctx) {
 	t.Helper()
 	fixed := func() time.Time { return time.Date(2026, 7, 14, 10, 0, 0, 0, time.UTC) }
-	if _, err := schedule.NewStore(c.Store, fixed).Add(schedule.Schedule{Agent: "alice", Kind: "cron", Spec: "0 9 * * *", Channel: "agent.alice.inbox"}); err != nil {
+	if _, err := schedule.NewStore(c.Store, fixed).Add(schedule.Schedule{Agent: "alice", Kind: "cron", Spec: "0 9 * * *", Recipient: "agent:alice"}); err != nil {
 		t.Fatal(err)
 	}
 }

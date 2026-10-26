@@ -14,7 +14,7 @@ func TestScheduleDueComparesSameSecondByTime(t *testing.T) {
 	st := newStore(t, now)
 	fire := now.Add(time.Minute + 11)
 	sch, err := st.Add(Schedule{Agent: "smoke", Kind: "oneshot",
-		Spec: fire.In(time.FixedZone("x", 3600)).Format(time.RFC3339Nano), Channel: "agent:smoke:inbox"})
+		Spec: fire.In(time.FixedZone("x", 3600)).Format(time.RFC3339Nano), Recipient: "agent:smoke"})
 	if err != nil {
 		t.Fatal(err)
 	}

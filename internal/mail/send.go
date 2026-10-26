@@ -2,6 +2,7 @@ package mail
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -24,6 +25,17 @@ type target struct {
 // and nothing new. After the commit Send wakes the recipients of open letters
 // and fires one hint and one audit event per written row.
 func (m *Mail) Send(l Letter) ([]Letter, error) {
+	return m.SendGuarded(l, nil)
+}
+
+// ErrGuardDenied is what a SendGuarded guard returns to drop the send without
+// an error worth logging.
+var ErrGuardDenied = errors.New("mail send guard denied")
+
+// SendGuarded is Send with guard run first inside the write transaction: an
+// error from guard writes nothing and is returned as is. The scheduler uses it
+// so a schedule cancelled during its tick sends nothing.
+func (m *Mail) SendGuarded(l Letter, guard func(*sql.Tx) error) ([]Letter, error) {
 	now := m.now()
 	l, err := normalize(l, now)
 	if err != nil {
@@ -41,6 +53,11 @@ func (m *Mail) Send(l Letter) ([]Letter, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
+	if guard != nil {
+		if err := guard(tx); err != nil {
+			return nil, err
+		}
+	}
 	out, w, err := m.writeTx(tx, l, targets, now)
 	if err != nil {
 		return nil, err
@@ -50,6 +67,13 @@ func (m *Mail) Send(l Letter) ([]Letter, error) {
 	}
 	m.emit(w)
 	return out, nil
+}
+
+// ValidateRecipient checks that to (a comma list) names principals a letter
+// from from can be sent to, without writing anything.
+func (m *Mail) ValidateRecipient(from, to string) error {
+	_, err := m.resolve(from, to)
+	return err
 }
 
 // normalize fills the defaults of an outgoing letter and checks its fields.

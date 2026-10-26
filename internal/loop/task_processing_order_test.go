@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -18,25 +18,25 @@ func TestTaskProcessingOrderIndependentOfTemplate(t *testing.T) {
 			template.Entries = append(template.Entries, image.TemplateEntry{Kind: "runtime", Runtime: name})
 		}
 		template.SHA256 = promptTemplateSHA(t, template)
-		msg := bus.Message{ID: "message-1", Type: "request", Source: "agent:sender", Text: "message body\n# literal message heading", Kind: "request", InReplyTo: "parent-1", CorrelationID: "thread-1", ReplyTo: "agent:sender:inbox", Deadline: "2026-09-11T12:00:00Z", Subject: map[string]any{"subject": "value"}, Data: map[string]any{"data": "value"}}
+		msg := mail.Letter{ID: "message-1", From: "agent:sender", Subject: "subject value", Body: "message body\n# literal message heading", Kind: "message", NeedsReply: true, InReplyTo: "parent-1", Deadline: "2026-09-11T12:00:00Z", Data: map[string]any{"data": "value"}, Attempts: 1}
 		got, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{
 			OneShot:         "one-shot body\n# literal one-shot heading",
-			Messages:        FormatMessages([]bus.Message{msg}),
-			AwaitingReplies: FormatAwaitingReplies([]bus.Message{{ID: "awaiting-1", Channel: "agent:other:inbox", TS: "2026-09-11T10:00:00.000000000Z", Deadline: "2026-09-11T12:00:00Z"}}, time.Date(2026, 9, 11, 10, 1, 0, 0, time.UTC)),
+			Messages:        FormatMessages([]mail.Letter{msg}),
+			AwaitingReplies: FormatAwaitingReplies([]mail.Letter{{ID: "awaiting-1", To: "agent:other", CreatedAt: "2026-09-11T10:00:00.000000000Z", Deadline: "2026-09-11T12:00:00Z"}}, time.Date(2026, 9, 11, 10, 1, 0, 0, time.UTC)),
 			Goal:            FormatRuntimeGoal(tasks.Task{Key: "TEST-1", Title: "goal title", Priority: tasks.PriorityP1, Status: tasks.StatusWaitCustomer, Description: "goal body\n# literal goal heading"}),
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		last := -1
-		for _, want := range []string{"# Task Processing Order\n", "one-shot, then messages, then goal", "## One-shot\n", "one-shot body\n# literal one-shot heading", "## Messages\n", "message body\n# literal message heading", "### Awaiting replies\n", "## Goal\n", "goal body\n# literal goal heading"} {
+		for _, want := range []string{"# Task Processing Order\n", "one-shot, then messages, then goal", "## One-shot\n", "one-shot body\n# literal one-shot heading", "## Messages\n", "  message body\n  # literal message heading", "### Awaiting replies\n", "## Goal\n", "goal body\n# literal goal heading"} {
 			at := strings.Index(got, want)
 			if at <= last || strings.Count(got, want) != 1 {
 				t.Fatalf("missing, duplicated or misordered %q in %s", want, got)
 			}
 			last = at
 		}
-		for _, want := range []string{"id message-1", "kind: request", "in_reply_to: parent-1", "correlation_id: thread-1", "reply_to: agent:sender:inbox", "deadline: 2026-09-11T12:00:00Z", `subject: {"subject":"value"}`, `data: {"data":"value"}`, messageProcessedInstruction, "id awaiting-1  channel agent:other:inbox  age 1m0s  deadline 2026-09-11T12:00:00Z", "key: TEST-1\ntitle: goal title\npriority: P1\nstatus: wait_customer", "wait for the customer answer", "do not merge it yourself"} {
+		for _, want := range []string{"id message-1  from agent:sender  kind message  attempts 1", "in_reply_to: parent-1", "deadline: 2026-09-11T12:00:00Z", "subject: subject value", `data: {"data":"value"}`, mailInstruction, "id awaiting-1  to agent:other  age 1m0s  deadline 2026-09-11T12:00:00Z", "key: TEST-1\ntitle: goal title\npriority: P1\nstatus: wait_customer", "wait for the customer answer", "do not merge it yourself"} {
 			if !strings.Contains(got, want) {
 				t.Fatalf("lost %q in %s", want, got)
 			}

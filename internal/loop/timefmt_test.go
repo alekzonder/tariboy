@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/store"
@@ -19,7 +18,7 @@ func TestScriptSupervisorWritesCanonicalRunTimes(t *testing.T) {
 	at := time.Date(2026, 9, 10, 2, 0, 0, 123456789, time.UTC)
 	m.cfg.Clock = func() time.Time { return at }
 	st := script.NewStore(raw, m.cfg.Clock)
-	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, m.cfg.Clock)
+	m.cfg.Scripts, m.cfg.Mail = st, newTestMail(raw, "worker")
 	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: t.TempDir()}); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +48,7 @@ func TestManagerEventTimesAreCanonical(t *testing.T) {
 	}
 }
 
-// messageAge reads the canonical bus ts.
+// messageAge reads the canonical stored time.
 func TestMessageAgeReadsCanonicalTS(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 10, 2, 1, 30, 0, time.UTC)

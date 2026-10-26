@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/script"
@@ -52,6 +53,10 @@ func ErrorResponse(err error) (status int, code, msg string, data map[string]any
 	var te *tasks.Error
 	if errors.As(err, &te) {
 		return statusOr400(te.Status), te.Code, te.Msg, te.Data, true
+	}
+	var me *mail.Error
+	if errors.As(err, &me) {
+		return statusOr400(me.Status), me.Code, me.Error(), nil, true
 	}
 	var pe *registry.ParamError
 	if errors.As(err, &pe) {

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,11 +27,11 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/audit"
-	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/groups"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -152,7 +151,7 @@ func TestScriptSupervisorKeepsOutputInLogAndPublishesPath(t *testing.T) {
 	}
 	m.cfg.AgentsDir = relativeAgentsDir
 	st := script.NewStore(raw, time.Now)
-	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, time.Now)
+	m.cfg.Scripts, m.cfg.Mail = st, newTestMail(raw, "worker")
 	workdir := t.TempDir()
 	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: workdir}); err != nil {
 		t.Fatal(err)
@@ -177,17 +176,17 @@ func TestScriptSupervisorKeepsOutputInLogAndPublishesPath(t *testing.T) {
 	if len(got) != len(header)+140000 || got[len(header)] != 'o' || got[len(got)-1] != 'e' {
 		t.Fatalf("log size=%d first=%q last=%q", len(got), got[0], got[len(got)-1])
 	}
-	publisher := scriptnotify.New(raw.DB, m.cfg.Bus, time.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	publisher := scriptnotify.New(raw.DB, m.cfg.Mail, time.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err := publisher.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	messages, err := m.cfg.Bus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10)
-	if err != nil || len(messages) != 1 || messages[0].Type != "script.result" {
+	messages, err := inboxOf(m.cfg.Mail, "worker")
+	if err != nil || len(messages) != 1 || messages[0].Kind != "script.result" {
 		t.Fatalf("messages=%#v err=%v", messages, err)
 	}
 	msg := messages[0]
-	if len(msg.Text) >= 1024 || !strings.Contains(msg.Text, r.LogPath) {
-		t.Fatalf("message text does not contain a concise log reference: len=%d contains_path=%t", len(msg.Text), strings.Contains(msg.Text, r.LogPath))
+	if len(msg.Body) >= 1024 || !strings.Contains(msg.Body, r.LogPath) {
+		t.Fatalf("message text does not contain a concise log reference: len=%d contains_path=%t", len(msg.Body), strings.Contains(msg.Body, r.LogPath))
 	}
 	if _, ok := msg.Data["output"]; ok {
 		t.Fatalf("message embeds script output: data keys=%v", msg.Data)
@@ -210,7 +209,7 @@ func TestScriptSupervisorDeprecatedQuietExitTwoStaysQuiet(t *testing.T) {
 	t.Parallel()
 	m, as, _, raw := newManager(t, &fakeRunner{})
 	st := script.NewStore(raw, time.Now)
-	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, time.Now)
+	m.cfg.Scripts, m.cfg.Mail = st, newTestMail(raw, "worker")
 	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: t.TempDir()}); err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +234,7 @@ func TestScriptSupervisorDeprecatedQuietExitTwoStaysQuiet(t *testing.T) {
 	if err := raw.DB.QueryRow(`SELECT COUNT(*) FROM script_result_outbox WHERE run_id=?`, r.ID).Scan(&outboxCount); err != nil || outboxCount != 0 {
 		t.Fatalf("quiet outbox count=%d err=%v", outboxCount, err)
 	}
-	messages, err := m.cfg.Bus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10)
+	messages, err := inboxOf(m.cfg.Mail, "worker")
 	if err != nil || len(messages) != 0 {
 		t.Fatalf("quiet result messages=%#v err=%v", messages, err)
 	}
@@ -245,7 +244,7 @@ func TestScriptSupervisorExportsTheQuietExitCode(t *testing.T) {
 	t.Parallel()
 	m, as, _, raw := newManager(t, &fakeRunner{})
 	st := script.NewStore(raw, time.Now)
-	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, time.Now)
+	m.cfg.Scripts, m.cfg.Mail = st, newTestMail(raw, "worker")
 	// The agent's own value must not replace the protocol constant.
 	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: t.TempDir(), Env: map[string]string{"TARIBOY_QUIET_EXIT": "5"}}); err != nil {
 		t.Fatal(err)
@@ -276,7 +275,7 @@ func TestScriptSupervisorMakeExitTwoCreatesFailureResult(t *testing.T) {
 	t.Parallel()
 	m, as, _, raw := newManager(t, &fakeRunner{})
 	st := script.NewStore(raw, time.Now)
-	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, time.Now)
+	m.cfg.Scripts, m.cfg.Mail = st, newTestMail(raw, "worker")
 	workdir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workdir, "Makefile"), []byte("all:\n\t@exit 2\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -293,12 +292,12 @@ func TestScriptSupervisorMakeExitTwoCreatesFailureResult(t *testing.T) {
 	if run.ExitCode == nil || *run.ExitCode != 2 {
 		t.Fatalf("run=%#v, want failed exit 2", run)
 	}
-	publisher := scriptnotify.New(raw.DB, m.cfg.Bus, time.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	publisher := scriptnotify.New(raw.DB, m.cfg.Mail, time.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err := publisher.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	messages, err := m.cfg.Bus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10)
-	if err != nil || len(messages) != 1 || messages[0].Type != "script.result" || messages[0].Data["exit_code"] != float64(2) {
+	messages, err := inboxOf(m.cfg.Mail, "worker")
+	if err != nil || len(messages) != 1 || messages[0].Kind != "script.result" || messages[0].Data["exit_code"] != float64(2) {
 		t.Fatalf("messages=%#v err=%v", messages, err)
 	}
 }
@@ -307,7 +306,7 @@ func TestFinishScriptDoesNotPublishResultWithoutLogPath(t *testing.T) {
 	t.Parallel()
 	m, as, _, raw := newManager(t, &fakeRunner{})
 	st := script.NewStore(raw, time.Now)
-	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, time.Now)
+	m.cfg.Scripts, m.cfg.Mail = st, newTestMail(raw, "worker")
 	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: t.TempDir()}); err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +317,7 @@ func TestFinishScriptDoesNotPublishResultWithoutLogPath(t *testing.T) {
 
 	m.scripts.finishScript(r.ID, r, -1, errors.New("log path unavailable"), "")
 
-	messages, err := m.cfg.Bus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10)
+	messages, err := inboxOf(m.cfg.Mail, "worker")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -740,7 +739,7 @@ func newManager(t *testing.T, r IterationRunner) (*Manager, *agent.Store, string
 		AgentsDir: filepath.Join(base, "agents"), RuntimeDir: testutil.ShortDir(t),
 		ShimBin: "/opt/tariboy-shim", ImgStore: imgStore, Store: as,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: time.Now,
-		Bus:           bus.New(s, time.Now),
+		Mail:          mail.New(s, time.Now, agentStoreDirectory{as}),
 		RunnerFactory: func(agent.Agent) IterationRunner { return r },
 	})
 	return m, as, filepath.Join(base, "agents"), s
@@ -825,33 +824,6 @@ func TestRestartSignalsGoalReconcilerAfterReenableDuringAdoption(t *testing.T) {
 	}
 	if len(enabled) != 2 || enabled[0] || !enabled[1] {
 		t.Fatalf("enabled states at goal signals = %v, want [false true]", enabled)
-	}
-}
-
-// Removing the own-inbox subscription from Manager.Run must make this fail:
-// a standalone agent would persist successfully but task publication would
-// create no delivery for it.
-func TestRunSubscribesStandaloneAgentToOwnInbox(t *testing.T) {
-	t.Parallel()
-	m, _, _, raw := newManager(t, &fakeRunner{})
-	bs := bus.New(raw, time.Now)
-	m.cfg.Bus = bs
-
-	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "solo"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := bs.Publish(bus.Message{
-		Channel: bus.InboxChannel(name), Type: "task.assigned", Text: "wake",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	got, err := bs.Pending(name, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].Type != "task.assigned" {
-		t.Fatalf("pending = %+v, want one task.assigned delivery", got)
 	}
 }
 
@@ -2317,10 +2289,10 @@ func TestManagerWakesOnPublish(t *testing.T) {
 	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, _, st := newManager(t, r)
-	// Attach a bus and wire the hook exactly as the daemon does.
-	bs := bus.New(st, time.Now)
-	m.cfg.Bus = bs
-	bs.SetPublishHook(func(_ bus.Message, agents []string) { m.WakeAgents(agents, WakeMessage) })
+	// Wire the mail wake hook exactly as the daemon does.
+	ml := mail.New(st, time.Now, agentStoreDirectory{as})
+	m.cfg.Mail = ml
+	ml.SetWakeHook(func(agents []string) { m.WakeAgents(agents, WakeMessage) })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -2345,13 +2317,9 @@ func TestManagerWakesOnPublish(t *testing.T) {
 	if err := m.Start("smoke"); err != nil {
 		t.Fatal(err)
 	}
-	// smoke subscribes to its own inbox and receives a message -> a message
-	// iteration must fire.
-	if _, err := bs.Subscribe("smoke", bus.InboxChannel("smoke"), bus.Matcher{}, nil); err != nil {
-		t.Fatal(err)
-	}
+	// A letter to smoke -> a message iteration must fire.
 	before := iterationCount(t, as, "smoke")
-	if _, err := bs.Publish(bus.Message{Channel: bus.InboxChannel("smoke"), Type: "ping", Text: "hi"}); err != nil {
+	if _, err := ml.Send(mail.Letter{From: "user:customer", To: "agent:smoke", Body: "hi", NeedsReply: true}); err != nil {
 		t.Fatal(err)
 	}
 	testutil.WaitFor(2*time.Second, func() bool { return iterationCount(t, as, "smoke") > before })
@@ -2365,9 +2333,9 @@ func TestManagerRetriesPendingAfterInteractiveOwnerCloses(t *testing.T) {
 	t.Parallel()
 	r := newCollisionRunner()
 	m, as, agentsDir, st := newManager(t, r)
-	bs := bus.New(st, time.Now)
-	m.cfg.Bus = bs
-	bs.SetPublishHook(func(_ bus.Message, agents []string) {
+	ml := mail.New(st, time.Now, agentStoreDirectory{as})
+	m.cfg.Mail = ml
+	ml.SetWakeHook(func(agents []string) {
 		m.WakeAgents(agents, WakeMessage)
 	})
 
@@ -2383,9 +2351,6 @@ func TestManagerRetriesPendingAfterInteractiveOwnerCloses(t *testing.T) {
 	if err := agentdir.New(agentsDir, "smoke").EnsureIteration("bootstrap"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := bs.Subscribe("smoke", bus.InboxChannel("smoke"), bus.Matcher{}, nil); err != nil {
-		t.Fatal(err)
-	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -2394,9 +2359,7 @@ func TestManagerRetriesPendingAfterInteractiveOwnerCloses(t *testing.T) {
 	}
 	t.Cleanup(m.Shutdown)
 
-	if _, err := bs.Publish(bus.Message{
-		Channel: bus.InboxChannel("smoke"), Type: "ping", Text: "hi",
-	}); err != nil {
+	if _, err := ml.Send(mail.Letter{From: "user:customer", To: "agent:smoke", Body: "hi", NeedsReply: true}); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -2420,36 +2383,11 @@ func TestManagerWiresGroupTools(t *testing.T) {
 	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, agentsDir, st := newManager(t, r)
-	bs := bus.New(st, time.Now)
 	prov := groups.NewProvisioner(groups.ProvisionerConfig{
-		Groups: groups.NewStore(st, time.Now), Agents: as, Bus: bs,
+		Groups: groups.NewStore(st, time.Now), Agents: as,
 		GroupsDir: filepath.Join(filepath.Dir(agentsDir), "groups"), Clock: time.Now,
 	})
-	m.cfg.Bus = bs
 	m.cfg.Groups = prov
-	// Wire the request-deadline seam to a schedule store exactly as the daemon
-	// does, so a group request with --deadline arms a one-shot timeout and a
-	// reply cancels it (spec §4.2).
-	schedStore := schedule.NewStore(st, time.Now)
-	bs.SetDeadlineHooks(
-		func(tx *sql.Tx, agentName, correlationID, deadline string) error {
-			dur, err := time.ParseDuration(deadline)
-			if err != nil {
-				return err
-			}
-			_, err = schedStore.AddTx(tx, schedule.Schedule{
-				Agent: agentName, Kind: "oneshot",
-				Spec:            time.Now().UTC().Add(dur).Format(time.RFC3339),
-				Channel:         bus.InboxChannel(agentName),
-				MessageTemplate: `{"type":"timeout"}`,
-				CorrelationID:   correlationID,
-			})
-			return err
-		},
-		func(tx *sql.Tx, correlationID string) error {
-			return schedStore.CancelByCorrelationTx(tx, correlationID)
-		},
-	)
 	m.cfg.AuditFor = func(a string) Recorder { return audit.Open(agentdir.New(agentsDir, a).AuditLog(), time.Now) }
 	if err := prov.EnsureGroup("dev-team", "manager"); err != nil {
 		t.Fatal(err)
@@ -2503,50 +2441,8 @@ func TestManagerWiresGroupTools(t *testing.T) {
 		t.Fatalf("member status = %v", member)
 	}
 
-	raw, err = c.Call("POST", "/tools/group/request", map[string]any{"member": "worker", "text": "what is blocking you?", "deadline": "5m"})
-	if err != nil {
-		t.Fatalf("group request: %v", err)
-	}
-	var reqRes map[string]any
-	if err := json.Unmarshal(raw, &reqRes); err != nil {
-		t.Fatal(err)
-	}
-	// The request rides the Request primitive: kind=request onto the member's
-	// group direct channel, correlation id echoed back (spec §4.2).
-	if reqRes["kind"] != "request" || reqRes["channel"] != bus.GroupDirect("dev-team", "worker") {
-		t.Fatalf("group request result = %v", reqRes)
-	}
-	corr, _ := reqRes["correlation_id"].(string)
-	if corr == "" {
-		t.Fatalf("group request has no correlation id: %v", reqRes)
-	}
-	// The member sees the request pending, threaded as a kind=request with
-	// reply_to pointing back at the manager's inbox.
-	msgs, err := bs.Pending("worker", 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(msgs) != 1 || msgs[0].Kind != "request" || msgs[0].Text != "what is blocking you?" ||
-		msgs[0].ReplyTo != bus.InboxChannel("manager") {
-		t.Fatalf("worker pending = %+v", msgs)
-	}
-	// The manager's request is outstanding (# Awaiting replies) and its deadline
-	// armed a one-shot timeout schedule tagged with the correlation id.
-	if pend, _ := bs.PendingRequests("manager"); len(pend) != 1 || pend[0].CorrelationID != corr {
-		t.Fatalf("manager pending requests = %+v", pend)
-	}
-	if scheds, _ := schedStore.List("manager"); len(scheds) != 1 {
-		t.Fatalf("expected one armed deadline schedule, got %+v", scheds)
-	}
-	// A reply from the member retires the pending request and cancels the timeout.
-	if _, err := bs.Reply("worker", msgs[0].ID, "still setting up", nil, ""); err != nil {
-		t.Fatalf("worker reply: %v", err)
-	}
-	if pend, _ := bs.PendingRequests("manager"); len(pend) != 0 {
-		t.Fatalf("reply should retire pending: %+v", pend)
-	}
-	if scheds, _ := schedStore.List("manager"); len(scheds) != 0 {
-		t.Fatalf("reply should cancel the timeout schedule: %+v", scheds)
+	if _, err := c.Call("POST", "/tools/group/request", map[string]any{"member": "worker", "text": "?"}); err == nil {
+		t.Fatal("group request route is still served; group letters go through tmail send")
 	}
 
 	raw, err = c.Call("GET", "/tools/group/observe/worker?tail=1", nil)
@@ -2604,9 +2500,8 @@ func TestManagerWiresGroupTools(t *testing.T) {
 func TestReattachWakesEventOnlyAgentWithPending(t *testing.T) {
 	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
-	m, as, agentsDir, st := newManager(t, r)
-	bs := bus.New(st, time.Now)
-	m.cfg.Bus = bs
+	m, as, agentsDir, _ := newManager(t, r)
+	ml := m.cfg.Mail
 
 	// Event-only agent: no interval timer, message-triggered only. Persisted as
 	// already running (as it would be across a daemon restart), but its engine
@@ -2622,16 +2517,13 @@ func TestReattachWakesEventOnlyAgentWithPending(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Subscribe and publish BEFORE the engine starts, so a pending delivery
-	// already exists at reattach time.
-	if _, err := bs.Subscribe("smoke", bus.InboxChannel("smoke"), bus.Matcher{}, nil); err != nil {
+	// Send BEFORE the engine starts, so an open letter already exists at
+	// reattach time.
+	if _, err := ml.Send(mail.Letter{From: "user:customer", To: "agent:smoke", Body: "hi", NeedsReply: true}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := bs.Publish(bus.Message{Channel: bus.InboxChannel("smoke"), Type: "ping", Text: "hi"}); err != nil {
-		t.Fatal(err)
-	}
-	if pending, err := bs.HasPending("smoke"); err != nil || !pending {
-		t.Fatalf("setup: expected pending delivery, pending=%v err=%v", pending, err)
+	if n, err := ml.OpenCount("smoke"); err != nil || n != 1 {
+		t.Fatalf("setup: expected one open letter, got %d err=%v", n, err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -3408,9 +3300,8 @@ func buildBasic2(t *testing.T, st *image.Store) {
 	buildTestImage(t, st, "basic2", "BODY2")
 }
 
-// A schedule the agent arms for itself carries no channel, and its wake is
-// service traffic: it belongs in the agent's service chat, not in the inbox.
-func TestAgentScheduleWithoutChannelWakesTheServiceChat(t *testing.T) {
+// A schedule the agent arms for itself without a recipient wakes the agent.
+func TestAgentScheduleWithoutRecipientWakesTheAgent(t *testing.T) {
 	t.Parallel()
 	m, as, agentsDir, st := newManager(t, &fakeRunner{})
 	m.cfg.Schedules = schedule.NewStore(st, time.Now)
@@ -3433,9 +3324,8 @@ func TestAgentScheduleWithoutChannelWakesTheServiceChat(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("schedule add status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
-	want := bus.ChatChannelFor(bus.ChatIDService(name))
-	if !strings.Contains(recorder.Body.String(), want) {
-		t.Fatalf("schedule channel is not the service chat %q: %s", want, recorder.Body.String())
+	if want := `"to":"agent:` + name + `"`; !strings.Contains(recorder.Body.String(), want) {
+		t.Fatalf("schedule recipient is not the agent, want %s: %s", want, recorder.Body.String())
 	}
 }
 
