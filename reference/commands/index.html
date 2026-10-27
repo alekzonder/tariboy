@@ -68,6 +68,10 @@ same client, always in operator mode.</li>
 <td>Get or set the agent effort (omit value to read); applies next iteration</td>
 </tr>
 <tr>
+<td><code>tariboy agent env NAME</code></td>
+<td>Get or replace the agent environment (omit value to read); applies from the next iteration</td>
+</tr>
+<tr>
 <td><code>tariboy agent exec NAME</code></td>
 <td>Run a manual iteration now, with an optional one-shot prompt</td>
 </tr>
@@ -999,11 +1003,11 @@ derives identity from the socket.</p>
 <td>Hand work to an agent name</td>
 </tr>
 <tr>
-<td><code>ttasks comment KEY TEXT</code></td>
+<td><code>ttasks comment KEY [TEXT | --body TEXT | --file PATH]</code> (stdin when absent; up to 64 KiB)</td>
 <td>Add a task comment</td>
 </tr>
 <tr>
-<td><code>ttasks ask KEY agent:name|user:login TEXT</code></td>
+<td><code>ttasks ask KEY agent:name|user:login [TEXT | --file PATH]</code> (stdin when absent; up to 64 KiB)</td>
 <td>Mention a principal and record an open answer wait</td>
 </tr>
 <tr>

@@ -500,7 +500,7 @@ sequenceDiagram
   O->>D: start with paths and listener options
   D->>D: resolve PATH, paths, socket guard, and PID file
   D->>S: open database and run migrations
-  D->>D: ensure the bare image and proxy defaults
+  D->>D: rebuild the bare image for this release and ensure proxy defaults
   D->>D: read and validate local model-price cache
   D->>S: replace managed price rows when the cache is valid
   D->>M: refresh shims; adopt and reconcile live iterations
@@ -901,6 +901,35 @@ the client receives the response uncompressed over loopback. Passing the
 client's header through would leave compressed bytes that the usage parser
 cannot read, and requests would be recorded with no model, tokens or cost.
 
+## Request status
+
+Each `ai_requests` row and transcript entry has a `status`. The HTTP status
+from the upstream stays in `upstream_status`.
+
+| Status | Meaning |
+| --- | --- |
+| `ok` | The upstream answered below 400 and the response arrived complete. |
+| `auth_error` | The request had no valid attribution token or upstream credential. |
+| `budget_block` | A cost budget refused the request before it reached the upstream. |
+| `quota_probe` | The upstream answered 429 to the startup quota probe of Claude Code (`max_tokens` 1, one user message `quota`). This is not a failure. |
+| `rate_limited` | The upstream answered 429 to any other request, for example at a usage limit. |
+| `client_closed` | The client went away before the exchange finished. The daemon stops the session after `loop.sh done`, so an open request at that time gets this status. |
+| `upstream_error` | Every other failure: an upstream status of 400 or more, an unreachable upstream, or a cut response. |
+
+While the newest request of a running iteration is `rate_limited`, the agent
+status endpoint returns `active_iteration.rate_limited_since` with the time of
+that request. The next accepted request clears it.
+
+## Transcript after iteration close
+
+At iteration close the daemon compresses `proxy-transcript.jsonl` into
+`proxy-transcript.jsonl.gz` and removes the plain file. A request that is still
+open when the session stops finishes later. The proxy then adds its entry to
+the `.gz` as a new gzip member, and does not create a new plain file. Go,
+`zcat` and Python read the members as one stream. `tariboy transcript` reads
+the `.gz` first and then a plain file, if one exists. Older daemons left such a
+plain file next to the `.gz`, and its entries come after the archived ones.
+
 Every agent may also have four independent USD limits for the local calendar
 hour, day, ISO week (Monday start), and month. Each defaults to `0` (unlimited)
 and is separate from the legacy global/group rolling budgets. When one or more
@@ -1242,6 +1271,18 @@ does not exist, records the launch error. A harness that exits non-zero records
 `harness exited with code N`, followed for non-interactive agents by up to 20
 trailing lines (2 KiB) of `harness.stderr.log`; the same lines are already teed
 into the audit as `harness_output`.
+
+After `loop.sh done`, the daemon waits for the done grace and then stops the
+session itself. The harness then exits with 143 or 137, or the shim records
+`-1` because tmux wrote no exit status. A `done` iteration therefore stores
+exit code 0, and the daemon log keeps the raw code as `harness exit after
+done`. A non-zero stored exit code means that the harness failed or was killed
+before `loop.sh done`.
+
+The `claude` adapter starts every iteration with
+`CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false`. Prompt suggestions make extra AI
+calls and add suggested user lines to an unattended session. A bare launch
+keeps the Claude default. A value in the agent `env` replaces the adapter value.
 
 For a schema-v2 image with skills, the launch gate prepares
 `agents/<agent>/image-bridges/<image-digest>/<adapter-contract>/<harness>` before
@@ -3408,9 +3449,11 @@ raw HTML. Sent and Archive load more pages with **Load more**.
 Opening an unread Inbox letter marks it read. The daemon closes a read notice,
 so it moves to Archive and stays open in the right pane; a request stays in the
 Inbox until **Reply** or **Archive**. A letter with a string `data.task_key`
-links to `/servers/<host>/tasks?task=<key>`, the Tasks route that opens the
-task drawer. A `task.question` letter is answered on its task: it shows
-**Answer on the task**, that link, and no **Reply**. **Compose** opens a dialog
+shows **Open** with the task key, which opens the task drawer (`TaskDrawer`) over the
+mailbox: the route does not change, the letter stays selected, and closing the
+drawer returns to it. A `task.question` letter is answered on its task: it
+shows **Answer on the task**, which opens that drawer, and no **Reply**.
+**Compose** opens a dialog
 with the recipient, the subject, the text and a **No reply needed** switch: off
 sends a request, on sends a notice. Every write shows a toast with the daemon's
 message on failure and refetches; nothing changes optimistically. The lists
@@ -4254,9 +4297,18 @@ An existing agent converges in place:
   iterations, and audit log, and then converges as above.
 - Group membership, CWD, timeout, loop settings, and the Goal settings the file
   sets converge to the file's values.
+- **Environment and interactive mode.** When a key in the file's `env` is
+  missing from the agent or has another value, `up` sets the agent env to its
+  current env merged with the file's keys. Keys the file does not declare, such
+  as env from the image manifest, are kept; removing a key from the file does
+  not remove it from the agent (use `tariboy agent env NAME` to replace the
+  whole env). When the file has a `harness` block, `up` sets the interactive
+  mode to `harness.interactive`; without a `harness` block it keeps the
+  agent's mode. Neither change restarts the agent: an iteration that is already
+  running keeps its old values, and the next iteration uses the new ones.
 
-Model, effort, environment, and plugins are applied only when compose creates
-an agent; `up` does not change them on an existing agent.
+Model, effort, and plugins are applied only when compose creates an agent; `up`
+does not change them on an existing agent.
 
 A failed action does not stop the run. The actions that depend on it are
 skipped: for example, a failed agent create skips that agent's start and its
@@ -4288,8 +4340,9 @@ again to converge the rest.
 `compose status` reads the same plan without applying it. It prints one line
 per group, agent, budget, task queue, and pool, then `drift: N`. An agent's line
 lists each setting `up` would change; an image that is already pending shows as
-`image pending` until the agent adopts it. Model, environment, and plugins are
-not checked, and status says so on its last line.
+`image pending` until the agent adopts it. Environment drift lists the key
+names only, never their values. Model and plugins are not checked, and status
+says so on its last line.
 
 ## Task queues and pools
 
@@ -4528,9 +4581,14 @@ Install only the toolchains needed for the area you are changing:
   `GET /api/daemon/status` reports `state: error` with the missing tools; see
   [Daemon host tools](/docs/remote-hosts#daemon-host-tools).
 
-Coding agents must run all shell commands through a Bash login shell
-(`bash -lc 'COMMAND'`) so the account's login profile and exported environment
-are loaded. Keep credentials in the environment; never print their values.
+Coding agents run shell commands directly in their tool shell, which already
+has the account's profile environment. Do not wrap a command that carries text
+(a commit message, a pull request body, a task comment or an artifact) in an
+extra `bash -c` or `bash -lc` layer: quotes, backticks and newlines in the text
+break that layer. Write the text to a file with the Write tool and pass the
+file (`git commit -F`, `gh pr create --body-file`, `ttasks ... --file`), or use
+a quoted heredoc at the top level of the command. Keep credentials in the
+environment; never print their values.
 
 Load the Rust environment before Cargo or desktop commands:
 
@@ -4643,7 +4701,8 @@ make full-check      # heavy, tens of minutes, includes check
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
-`staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. Its
+`staticcheck`, `gocyclo`, `test`, Go unit tests, `desktop-rust-check` and
+smoke contracts. Its
 `test` and `tariboy-tasks-e2e` steps also check the HTTP API against the
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
 frontend target runs the UI format check, the generated API types check, UI
@@ -4669,6 +4728,39 @@ first failure. Each step is timed and recorded, and the run ends with a summary
 table naming every step that failed, so one aggregate pass surfaces gofmt drift
 and a UI type error together.
 
+### Checks on a shared host
+
+Several agents can run `make check` on one host at the same time, and together
+they can use all memory and disk. The fast checks therefore limit themselves:
+
+- **Check slot.** A top-level `check`, `backend-check` or `frontend-check` run
+  first takes a host-wide lock on `/tmp/tariboy-check.lock` with `flock`. Every
+  worktree shares that path, so only one check runs at a time. A second run
+  prints `waiting for a check slot (/tmp/tariboy-check.lock)` and starts when
+  the first run ends. The wait has a limit of one hour. After that, the run
+  fails with `no check slot after 3600s` and does not run its steps. A killed
+  run frees its slot. `TARIBOY_CHECK_SLOTS=N` allows N runs at a time,
+  `TARIBOY_CHECK_LOCK` changes the lock path and `TARIBOY_CHECK_LOCK_TIMEOUT`
+  changes the limit in seconds. A host without `flock`, such as macOS, prints
+  `check slot: flock not found, running without a host lock` and runs anyway.
+  An agent that runs `make check` with a tool timeout must run it in the
+  background, because the wait counts against that timeout.
+- **Parallelism.** When `TARIBOY_AGENT` is set, as it is in every agent
+  session, `CHECK_JOBS` defaults to 2. `CHECK_JOBS=N` adds `-p=N` to
+  `GOFLAGS`, unless `GOFLAGS` already sets `-p`, sets the vitest worker count
+  through `TARIBOY_VITEST_MAX_WORKERS`, and passes `--jobs N` to
+  `desktop-rust-check`. Without `TARIBOY_AGENT` or `CHECK_JOBS`, nothing
+  changes. Set `CHECK_JOBS=N` yourself to override the default.
+- **Temporary files.** A top-level run creates `$TMPDIR/tbc.XXXXXX` (or
+  `/tmp/tbc.XXXXXX`) and gives every step `TMPDIR=<run dir>/t`. Test homes,
+  `t.TempDir()` directories, Go build files and npm temporary files go there,
+  and the run removes the directory when it ends. Each run writes its process
+  ID to `<run dir>/pid`. A run that was killed cannot remove its directory, so
+  the next run removes every `tbc.*` directory whose process is gone. Files of
+  commands outside the fast checks, such as a direct `go test`, are not
+  covered. The `internal/plugins` tests keep `TMPDIR=/tmp`: their socket paths
+  are too long for the run directory.
+
 `frontend-check`, `check`, and `full-check` reuse dependencies when a saved
 SHA-256 fingerprint matches `package.json`, `package-lock.json`, and the Node.js
 and npm versions. A fingerprint identifies those inputs by their contents.
@@ -4685,8 +4777,8 @@ Three scripts stay outside `full-check` deliberately and are run by hand:
 `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` require a
 disposable SSH host (the first also requires explicit consent to destroying its
 data), and `scripts/check-alpha-artifacts.sh` is a release gate that takes a
-release directory as its argument. The Rust host tests are outside both targets
-as well; see [Rust desktop host](#rust-desktop-host).
+release directory as its argument. The Rust host tests and clippy are outside
+both targets as well; see [Rust desktop host](#rust-desktop-host).
 
 The individual targets remain callable on their own, so running `make vet` or
 `make e2e` while iterating is still legitimate. Use the smallest relevant
@@ -5145,9 +5237,11 @@ and its real API together:
 make ui-dev
 ```
 
-The target prints the browser URL, builds and starts a daemon with temporary
-isolated data and runtime directories on `127.0.0.1:4176`, and serves the UI on
-`127.0.0.1:4175`. Press Ctrl-C to stop both processes and remove the temporary
+The target asks the OS for two free loopback ports and prints the browser URL
+with the ones it took. It builds and starts a daemon with temporary isolated
+data and runtime directories on the first port and serves the UI on the second,
+so an old dev server that still holds a port does not stop a new one. The
+Playwright suites keep the fixed ports `4175` and `4176`. Press Ctrl-C to stop both processes and remove the temporary
 daemon state. Use the native Desktop gates only when the change depends on the
 Tauri host, WebView behavior, packaging, or generated Desktop assets.
 
@@ -5176,8 +5270,16 @@ RESPONSIVE_SHOTS=/tmp/shots npm run test:responsive-browser -- --project phone-3
 
 ### Rust desktop host
 
-Neither entry point runs the Rust tests or clippy — `full-check` compiles this
-crate through its desktop step, but does not test it. Run them yourself when
+The `desktop-rust-check` step of `backend-check` compiles this crate with
+`cargo check --locked --all-targets`, so `make check` needs the Rust toolchain
+and, on Linux, the native Tauri libraries listed below. A host without `cargo`
+fails the step with the install command. Every worktree shares one target
+directory, `~/.cache/tariboy/desktop-check-target`, which
+`TARIBOY_CARGO_CHECK_DIR` changes. The first run with an empty target directory
+takes several minutes; later runs are incremental. A worktree without
+`desktop/dist` compiles against an empty stub frontend.
+
+Neither entry point runs the Rust tests or clippy. Run them yourself when
 changing `desktop/src-tauri`:
 
 ```bash
@@ -6178,7 +6280,12 @@ for this operation, not source backup or persistent state.
 ## Built-in images and compatibility
 
 - `bare:latest` is daemon-synthesized with no plugins and an empty prompt. Its
-  terminal-only behavior is runtime policy.
+  terminal-only behavior is runtime policy. The daemon rebuilds it on every
+  start, with `image_version` set to the daemon version, so the image always
+  matches the current release. A restart of the same release keeps the same
+  ref id; a new release moves the tag to a new id. Archives from earlier
+  releases, including legacy schema-v1 ones, stay in the store, so agents
+  pinned to them continue to resolve.
 - The official Store's `basic` source explicitly declares every plugin,
   packaged skill, runtime placeholder, and mandatory finish prompt it uses.
   Add the `tariboy` Store, then build `tariboy/basic`; daemon
@@ -7744,9 +7851,14 @@ ttasks create --parent OPS-12 --title "Add regression coverage"
 ttasks assign OPS-12 worker
 ttasks comment OPS-12 "The failing boundary is confirmed"
 ttasks ask OPS-12 user:login "Which behavior should win?"
+ttasks comment OPS-12 --file note.md
 ttasks update OPS-12 --status in_progress --priority P1
 ttasks done OPS-12
 ```
+
+`comment` and `ask` read the text from `--file PATH`, or from stdin when no
+text is given, so Markdown with quotes, backticks or newlines needs no shell
+quoting.
 
 The same surface includes same-queue move/reorder operations, directed blocking
 relations, symmetric related links, and explicit completion despite active
@@ -7957,13 +8069,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.95.0` alpha on an Apple Silicon Mac.
+This path is for the `0.96.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.95.0_aarch64.dmg`;
+- a verified `Tariboy_0.96.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -8132,6 +8244,7 @@ tariboy has four command surfaces:
 | `tariboy agent color set NAME` | Get or set the agent accent color (omit value to read, empty to clear) |
 | `tariboy agent cwd NAME` | Get or set the agent working directory (omit value to read, empty to clear); applies next iteration |
 | `tariboy agent effort NAME` | Get or set the agent effort (omit value to read); applies next iteration |
+| `tariboy agent env NAME` | Get or replace the agent environment (omit value to read); applies from the next iteration |
 | `tariboy agent exec NAME` | Run a manual iteration now, with an optional one-shot prompt |
 | `tariboy agent file create NAME PATH` | Create a file or folder in an agent's cwd (jailed) |
 | `tariboy agent file delete NAME PATH` | Delete a file or folder in an agent's cwd (jailed) |
@@ -8443,8 +8556,8 @@ derives identity from the socket.
 | `ttasks create --parent KEY --title T` | Create a child inheriting queue/context |
 | `ttasks update KEY [--title T] [--description D] [--status S]` | Update fields with optimistic revision |
 | `ttasks assign KEY ASSIGNEE` | Hand work to an agent name |
-| `ttasks comment KEY TEXT` | Add a task comment |
-| `ttasks ask KEY agent:name\|user:login TEXT` | Mention a principal and record an open answer wait |
+| `ttasks comment KEY [TEXT \| --body TEXT \| --file PATH]` (stdin when absent; up to 64 KiB) | Add a task comment |
+| `ttasks ask KEY agent:name\|user:login [TEXT \| --file PATH]` (stdin when absent; up to 64 KiB) | Mention a principal and record an open answer wait |
 | `ttasks move KEY [--parent KEY] [--before KEY] [--to-root]` | Reparent/reorder in the same queue |
 | `ttasks block KEY --by BLOCKER` | Add a directed, cycle-checked blocking relation |
 | `ttasks relate KEY OTHER` | Add a symmetric related link |
@@ -9390,7 +9503,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.95.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.96.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -9504,7 +9617,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.95.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.96.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -10160,7 +10273,9 @@ so a single free agent does not collect every waiting task.
 
 ### Changing the holder
 
-The customer can give a task in a pool status to another member of that pool:
+The customer can give a task in a pool status to another member of that pool.
+The same command assigns a task that waits unassigned because no member was
+free, without waiting for the next dispatch pass:
 
 ```bash
 ttasks workflow reassign DEV-ab12 --agent dev-2
@@ -11108,6 +11223,7 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks queue source log QUEUE RUN [--max-bytes N]` | operator | Read a source run log. |
 | `ttasks workflow get KEY` | agent, operator | The task view. |
 | `ttasks artifacts set KEY NAME [VALUE \| --file PATH]` | holder, operator | Set an artifact; stdin when no value. |
+| `ttasks comment KEY [TEXT \| --file PATH]`, `ttasks ask KEY PRINCIPAL [TEXT \| --file PATH]` | agent, operator | Comment or ask; stdin when no text. |
 | `ttasks artifacts ls KEY` | agent, operator | Current artifacts. |
 | `ttasks artifacts show KEY NAME` | agent, operator | One artifact and its history. |
 | `ttasks advance KEY --outcome NAME [--from STATUS] [--message TEXT] [--no-wait]` | holder, customer | Declare an outcome and wait for its checks. |

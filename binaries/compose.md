@@ -78,9 +78,18 @@ An existing agent converges in place:
   iterations, and audit log, and then converges as above.
 - Group membership, CWD, timeout, loop settings, and the Goal settings the file
   sets converge to the file's values.
+- **Environment and interactive mode.** When a key in the file's `env` is
+  missing from the agent or has another value, `up` sets the agent env to its
+  current env merged with the file's keys. Keys the file does not declare, such
+  as env from the image manifest, are kept; removing a key from the file does
+  not remove it from the agent (use `tariboy agent env NAME` to replace the
+  whole env). When the file has a `harness` block, `up` sets the interactive
+  mode to `harness.interactive`; without a `harness` block it keeps the
+  agent's mode. Neither change restarts the agent: an iteration that is already
+  running keeps its old values, and the next iteration uses the new ones.
 
-Model, effort, environment, and plugins are applied only when compose creates
-an agent; `up` does not change them on an existing agent.
+Model, effort, and plugins are applied only when compose creates an agent; `up`
+does not change them on an existing agent.
 
 A failed action does not stop the run. The actions that depend on it are
 skipped: for example, a failed agent create skips that agent's start and its
@@ -112,8 +121,9 @@ again to converge the rest.
 `compose status` reads the same plan without applying it. It prints one line
 per group, agent, budget, task queue, and pool, then `drift: N`. An agent's line
 lists each setting `up` would change; an image that is already pending shows as
-`image pending` until the agent adopts it. Model, environment, and plugins are
-not checked, and status says so on its last line.
+`image pending` until the agent adopts it. Environment drift lists the key
+names only, never their values. Model and plugins are not checked, and status
+says so on its last line.
 
 ## Task queues and pools
 

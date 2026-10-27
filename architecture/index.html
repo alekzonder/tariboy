@@ -196,7 +196,7 @@ support bundles; see <a href="/tariboy/docs/security-controls#pricing-catalog-bo
   O->>D: start with paths and listener options
   D->>D: resolve PATH, paths, socket guard, and PID file
   D->>S: open database and run migrations
-  D->>D: ensure the bare image and proxy defaults
+  D->>D: rebuild the bare image for this release and ensure proxy defaults
   D->>D: read and validate local model-price cache
   D->>S: replace managed price rows when the cache is valid
   D->>M: refresh shims; adopt and reconcile live iterations

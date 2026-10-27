@@ -189,6 +189,15 @@ does not exist, records the launch error. A harness that exits non-zero records
 <code>harness exited with code N</code>, followed for non-interactive agents by up to 20
 trailing lines (2 KiB) of <code>harness.stderr.log</code>; the same lines are already teed
 into the audit as <code>harness_output</code>.</p>
+<p>After <code>loop.sh done</code>, the daemon waits for the done grace and then stops the
+session itself. The harness then exits with 143 or 137, or the shim records
+<code>-1</code> because tmux wrote no exit status. A <code>done</code> iteration therefore stores
+exit code 0, and the daemon log keeps the raw code as <code>harness exit after done</code>. A non-zero stored exit code means that the harness failed or was killed
+before <code>loop.sh done</code>.</p>
+<p>The <code>claude</code> adapter starts every iteration with
+<code>CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false</code>. Prompt suggestions make extra AI
+calls and add suggested user lines to an unattended session. A bare launch
+keeps the Claude default. A value in the agent <code>env</code> replaces the adapter value.</p>
 <p>For a schema-v2 image with skills, the launch gate prepares
 <code>agents/&lt;agent&gt;/image-bridges/&lt;image-digest&gt;/&lt;adapter-contract&gt;/&lt;harness&gt;</code> before
 an image is promoted or an iteration row is created. The bridge contains copied

@@ -486,7 +486,9 @@ so a single free agent does not collect every waiting task.
 
 ### Changing the holder
 
-The customer can give a task in a pool status to another member of that pool:
+The customer can give a task in a pool status to another member of that pool.
+The same command assigns a task that waits unassigned because no member was
+free, without waiting for the next dispatch pass:
 
 ```bash
 ttasks workflow reassign DEV-ab12 --agent dev-2
@@ -1434,6 +1436,7 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks queue source log QUEUE RUN [--max-bytes N]` | operator | Read a source run log. |
 | `ttasks workflow get KEY` | agent, operator | The task view. |
 | `ttasks artifacts set KEY NAME [VALUE \| --file PATH]` | holder, operator | Set an artifact; stdin when no value. |
+| `ttasks comment KEY [TEXT \| --file PATH]`, `ttasks ask KEY PRINCIPAL [TEXT \| --file PATH]` | agent, operator | Comment or ask; stdin when no text. |
 | `ttasks artifacts ls KEY` | agent, operator | Current artifacts. |
 | `ttasks artifacts show KEY NAME` | agent, operator | One artifact and its history. |
 | `ttasks advance KEY --outcome NAME [--from STATUS] [--message TEXT] [--no-wait]` | holder, customer | Declare an outcome and wait for its checks. |

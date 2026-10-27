@@ -510,7 +510,12 @@ for this operation, not source backup or persistent state.</p>
 <h2 id="built-in-images-and-compatibility"><a class="blume-heading-anchor" href="#built-in-images-and-compatibility">Built-in images and compatibility</a></h2>
 <ul>
 <li><code>bare:latest</code> is daemon-synthesized with no plugins and an empty prompt. Its
-terminal-only behavior is runtime policy.</li>
+terminal-only behavior is runtime policy. The daemon rebuilds it on every
+start, with <code>image_version</code> set to the daemon version, so the image always
+matches the current release. A restart of the same release keeps the same
+ref id; a new release moves the tag to a new id. Archives from earlier
+releases, including legacy schema-v1 ones, stay in the store, so agents
+pinned to them continue to resolve.</li>
 <li>The official Store’s <code>basic</code> source explicitly declares every plugin,
 packaged skill, runtime placeholder, and mandatory finish prompt it uses.
 Add the <code>tariboy</code> Store, then build <code>tariboy/basic</code>; daemon

@@ -65,9 +65,18 @@ re-provisioned in place with the file’s image, keeping its context,
 iterations, and audit log, and then converges as above.</li>
 <li>Group membership, CWD, timeout, loop settings, and the Goal settings the file
 sets converge to the file’s values.</li>
+<li><strong>Environment and interactive mode.</strong> When a key in the file’s <code>env</code> is
+missing from the agent or has another value, <code>up</code> sets the agent env to its
+current env merged with the file’s keys. Keys the file does not declare, such
+as env from the image manifest, are kept; removing a key from the file does
+not remove it from the agent (use <code>tariboy agent env NAME</code> to replace the
+whole env). When the file has a <code>harness</code> block, <code>up</code> sets the interactive
+mode to <code>harness.interactive</code>; without a <code>harness</code> block it keeps the
+agent’s mode. Neither change restarts the agent: an iteration that is already
+running keeps its old values, and the next iteration uses the new ones.</li>
 </ul>
-<p>Model, effort, environment, and plugins are applied only when compose creates
-an agent; <code>up</code> does not change them on an existing agent.</p>
+<p>Model, effort, and plugins are applied only when compose creates an agent; <code>up</code>
+does not change them on an existing agent.</p>
 <p>A failed action does not stop the run. The actions that depend on it are
 skipped: for example, a failed agent create skips that agent’s start and its
 budget, and a failed harness change skips the restart. Independent actions,
@@ -112,8 +121,9 @@ again to converge the rest.</p>
 <p><code>compose status</code> reads the same plan without applying it. It prints one line
 per group, agent, budget, task queue, and pool, then <code>drift: N</code>. An agent’s line
 lists each setting <code>up</code> would change; an image that is already pending shows as
-<code>image pending</code> until the agent adopts it. Model, environment, and plugins are
-not checked, and status says so on its last line.</p>
+<code>image pending</code> until the agent adopts it. Environment drift lists the key
+names only, never their values. Model and plugins are not checked, and status
+says so on its last line.</p>
 <h2 id="task-queues-and-pools"><a class="blume-heading-anchor" href="#task-queues-and-pools">Task queues and pools</a></h2>
 <p>Compose can declare task queues and the explicit agent pools of each queue.</p>
 <pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;overflow-x:auto" tabindex="0" data-language="yaml" data-icon><svg aria-hidden="true" class="blume-lang-icon" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="m0 .97 4.111 6.453v4.09h2.638v-4.09L11.053.969H8.214L5.58 5.125 2.965.969Zm12.093.024-4.47 10.544h2.114l.97-2.345h4.775l.804 2.345h2.26L14.255.994Zm1.133 2.225 1.463 3.87h-3.096zm3.06 9.475v10.29H24v-2.199h-5.454v-8.091zm-12.175.002v10.335h2.217v-7.129l2.32 4.792h1.746l2.4-4.96v7.295h2.127V12.696h-2.904L9.44 17.37l-2.455-4.674Z"></path></svg><code><span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">version</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span></span>
