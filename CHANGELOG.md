@@ -1,3 +1,44 @@
+## [0.96.0] - 2026-10-27
+
+### Added
+
+- The `agent.env` command (`POST /api/agents/{name}/env`) reads or replaces
+  the env of an agent. The `agent.ps` rows now include the env.
+- `agent.status.show` returns `active_iteration.rate_limited_since` when the
+  upstream refused the newest AI request of the running iteration with a rate
+  limit. The next accepted request clears it.
+- `ttasks comment` and `ttasks ask` read the text from `--file PATH`, or from
+  stdin when no text is given.
+
+### Changed
+
+- `compose up` now applies the env and the interactive mode to an agent that
+  already exists, from its next iteration and without a restart. Env keys
+  that the file does not declare stay. `compose status` reports env drift by
+  key name only.
+- The AI proxy stores `quota_probe` for the 429 answer to the startup quota
+  probe, `rate_limited` for any other 429, and `client_closed` when the
+  client went away first. Only other failures stay `upstream_error`.
+- Claude iterations run with prompt suggestions turned off
+  (`CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false`). The agent env can override
+  it. A bare launch keeps the Claude default.
+- In the Desktop mailbox, **Answer on the task** and **Open KEY** open the task
+  in a drawer over the mailbox. Closing the drawer returns to the letter.
+- The daemon rebuilds `bare:latest` on every start, with the daemon version as
+  its `image_version`.
+
+### Fixed
+
+- An iteration that ends after `loop.sh done` stores exit code 0 instead of
+  143, 137 or -1. A non-zero code now means a failure before `loop.sh done`.
+- `tariboy transcript` shows the whole transcript of a closed iteration. A
+  request that finished after the close no longer replaces it with a
+  one-line file. This also repairs iterations written earlier.
+- Creating an agent on `bare` no longer fails with "skill script unavailable"
+  on a store seeded before image schema v2.
+
+[0.96.0]: https://github.com/alekzonder/tariboy/compare/v0.95.0...v0.96.0
+
 ## [0.95.0] - 2026-10-26
 
 ### Added
