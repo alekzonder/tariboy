@@ -22,7 +22,9 @@ if (build.status !== 0) {
   throw new Error(`failed to build Tasks E2E daemon from the working tree (exit ${build.status})`);
 }
 
-const baseURL = "http://127.0.0.1:4176";
+// make ui-dev passes a free port; the Playwright suites use the default.
+const apiAddr = `127.0.0.1:${process.env.TARIBOY_UI_DEV_API_PORT || 4176}`;
+const baseURL = `http://${apiAddr}`;
 let closing = false;
 let forceTimer;
 let resolveDaemonExit;
@@ -41,7 +43,7 @@ const daemonEnv = {
   TARIBOY_RUNTIME_DIR: runtimeDir,
 };
 
-const daemon = spawn(daemonBin, ["--http-addr", "127.0.0.1:4176", "--log-level", "error"], {
+const daemon = spawn(daemonBin, ["--http-addr", apiAddr, "--log-level", "error"], {
   cwd: repoDir,
   env: daemonEnv,
   stdio: "inherit",

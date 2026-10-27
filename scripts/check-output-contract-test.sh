@@ -2,6 +2,8 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
+# Fixture runs are not real checks: they never wait for the host check slot.
+export TARIBOY_CHECK_LOCK_HELD=1
 output="$(mktemp)"
 trap 'rm -f -- "$output"' EXIT
 
@@ -21,13 +23,70 @@ grep -Fq '==> success-step' "$output"
 grep -Eq 'success-step +ok +[0-9]+s' "$output"
 grep -Fq 'failure-step' "$output"
 grep -Eq 'failure-step +FAIL +[0-9]+s' "$output"
-grep -Fq 'command: echo FAILURE_DETAIL; exit 7' "$output"
+grep -Fq 'command: echo FAILURE_DETAIL; echo "TMPDIR=$TMPDIR"; exit 7' "$output"
 grep -Fq 'FAILURE_DETAIL' "$output"
 grep -Fq 'after-step' "$output"
 grep -Eq 'after-step +ok +[0-9]+s' "$output"
 grep -Fq 'check-output-contract-fixture FAILED' "$output"
 
 echo "check output contract ok"
+
+# A top-level check run waits for the host check slot, and the wait has a limit.
+# A private lock and TMPDIR keep these runs apart from the check that runs this.
+run_top_fixture() {
+  env -u TARIBOY_CHECK_LOCK_HELD TARIBOY_CHECK_LOCK="$slot/check.lock" TMPDIR="$slot/tmp" "$@" \
+    make --no-print-directory -C "$repo_root" check-output-contract-fixture >"$output" 2>&1 || true
+}
+slot="$(mktemp -d)"
+trap 'rm -f -- "$output"; rm -rf -- "$slot"' EXIT
+mkdir "$slot/tmp"
+if command -v flock >/dev/null 2>&1; then
+  exec 8>>"$slot/check.lock"
+  flock 8
+  run_top_fixture TARIBOY_CHECK_LOCK_TIMEOUT=1
+  exec 8>&-
+  grep -Fq "waiting for a check slot ($slot/check.lock)" "$output"
+  grep -Fq 'no check slot after 1s' "$output"
+  if grep -Fq 'success-step' "$output"; then
+    echo "FAIL: steps ran without the check slot" >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  run_top_fixture
+  if grep -Fq 'waiting for a check slot' "$output"; then
+    echo "FAIL: a free check slot made the run wait" >&2
+    exit 1
+  fi
+  grep -Eq 'success-step +ok +[0-9]+s' "$output"
+  echo "Check slot contract ok"
+fi
+
+# Each top-level run gives its steps a TMPDIR inside its run directory, removes
+# it at exit, and removes the run directories of killed runs.
+sh -c 'exit 0' &
+dead_pid=$!
+wait "$dead_pid"
+mkdir "$slot/tmp/tbc.dead00" "$slot/tmp/tbc.live00"
+echo "$dead_pid" >"$slot/tmp/tbc.dead00/pid"
+echo "$$" >"$slot/tmp/tbc.live00/pid"
+run_top_fixture
+grep -Eq "TMPDIR=$slot/tmp/tbc\.[A-Za-z0-9]+/t\$" "$output"
+test ! -e "$slot/tmp/tbc.dead00"
+test -d "$slot/tmp/tbc.live00"
+test "$(find "$slot/tmp" -mindepth 1 -maxdepth 1 | wc -l)" -eq 1
+echo "Check run TMPDIR contract ok"
+
+# Agent runs default to two Go packages and two vitest workers at a time.
+env_probe="$slot/probe.mk"
+printf 'include Makefile\nprobe-check-env:\n\t@echo "GOFLAGS=$$GOFLAGS|VITEST=$$TARIBOY_VITEST_MAX_WORKERS"\n' >"$env_probe"
+probe_env() {
+  env -u TARIBOY_AGENT -u CHECK_JOBS -u GOFLAGS -u TARIBOY_VITEST_MAX_WORKERS "$@" \
+    make --no-print-directory -s -C "$repo_root" -f "$env_probe" probe-check-env
+}
+test "$(probe_env TARIBOY_AGENT=x)" = 'GOFLAGS=-p=2|VITEST=2'
+test "$(probe_env TARIBOY_AGENT=x CHECK_JOBS=1 GOFLAGS=-mod=mod)" = 'GOFLAGS=-mod=mod -p=1|VITEST=1'
+test "$(probe_env)" = 'GOFLAGS=|VITEST='
+echo "Agent check parallelism contract ok"
 
 # Fast checks delegate Tasks E2E without invoking the workspace build target.
 # Its script owns isolated builds; here a fixture observes the Make dependency.
@@ -85,7 +144,9 @@ cat >"$fixture/bin/node" <<'EOF'
 [ "$*" = --version ] || exit 1
 printf '%s\n' "${TEST_NODE_VERSION:-v22.0.0}"
 EOF
-chmod +x "$fixture/bin/go" "$fixture/fake-goroot/bin/gofmt" "$fixture/bin/npm" "$fixture/bin/npx" "$fixture/bin/node"
+printf '#!/bin/sh\nprintf "cargo:%%s\\n" "$*" >>%s/events\n' "$fixture" >"$fixture/bin/cargo"
+mkdir -p "$fixture/desktop/src-tauri"
+chmod +x "$fixture/bin/go" "$fixture/fake-goroot/bin/gofmt" "$fixture/bin/npm" "$fixture/bin/npx" "$fixture/bin/node" "$fixture/bin/cargo"
 for script in tariboy-tasks-e2e.sh tariboy-smoke-contract-test.sh package-alpha-contract-test.sh tariboy-branding-contract-test.sh make-clean-contract-test.sh server-install-contract-test.sh publish-docs-contract-test.sh; do
   printf '#!/bin/sh\nexit 0\n' >"$fixture/scripts/$script"
   chmod +x "$fixture/scripts/$script"
@@ -103,6 +164,7 @@ chmod +x "$fixture/scripts/check-output-contract-test.sh" "$fixture/scripts/docs
 : >"$fixture/events"
 PATH="$fixture/bin:$PATH" make --no-print-directory -C "$fixture" GO=go backend-check
 test "$(sed -n '1p' "$fixture/events")" = 'go:mod download'
+grep -Eq '^cargo:check --locked --all-targets' "$fixture/events"
 
 cp "$repo_root/scripts/npm-ci-locked.sh" "$fixture/scripts/"
 printf '{}\n' | tee "$fixture/ui/package-lock.json" "$fixture/docs/package-lock.json" "$fixture/ui/package.json" \

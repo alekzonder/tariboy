@@ -33,6 +33,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 func TestAssemblePromptOrder(t *testing.T) {
@@ -614,7 +615,8 @@ func (s *fakeProxySpawner) Start(argv, env []string, dir string) error {
 
 func newRunnerForProxyTest(t *testing.T, binder ProxyBinder) (*ShimRunner, agent.Agent, agentdir.Layout, *agent.Store) {
 	t.Helper()
-	base := t.TempDir()
+	// The shim socket lives under base; a t.TempDir path can pass the socket limit.
+	base := testutil.ShortDir(t)
 	// The stub harness only needs a path here; the fake spawner writes result.json
 	// directly, so the script is never executed.
 	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))

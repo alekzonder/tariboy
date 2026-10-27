@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ApiProvider } from "@/components/ApiProvider";
 import { useDaemons } from "@/components/daemonContext";
 import { getActiveDaemon } from "@/lib/api";
-import type { Daemon } from "@/lib/daemons";
+import { cachedDaemon, type Daemon } from "@/lib/daemons";
 import { routeHostState } from "./routeHostState";
 
 /** Selects the route's host as the active daemon and reports how that went;
@@ -58,7 +58,10 @@ export function RouteHostBoundary({
   // One tree shape for ready and reconnecting: switching wrappers would
   // remount the page and drop its loaded data and unsent drafts.
   const reconnecting = !hostReady || unavailable;
-  const target = getActiveDaemon();
+  // The host this route resolved, not the global active daemon: another
+  // selection can change that at any time, and a re-render would then send
+  // the requests of this page to the other host.
+  const target = hostId ? (cachedDaemon(hostId) ?? getActiveDaemon()) : null;
   return (
     <div className="flex h-full min-h-0 flex-col">
       {reconnecting && (

@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import { useDaemons } from "@/components/daemonContext";
+import { setActiveDaemon } from "@/lib/api";
 import { addDaemon, updateDaemon } from "@/lib/daemons";
 import { RouteHostBoundary } from "./RouteHostBoundary";
 
@@ -33,6 +34,28 @@ describe("RouteHostBoundary", () => {
     );
 
     expect(await screen.findByTestId("active-host")).toHaveTextContent(remote.id);
+  });
+
+  it("keeps addressing the route host when the active daemon changes underneath", async () => {
+    const remote = await addDaemon({
+      label: "Production",
+      baseURL: "http://127.0.0.1:19992",
+      token: "test-token",
+    });
+    const tree = () => (
+      <DaemonProvider>
+        <RouteHostBoundary hostId={remote.id}>
+          {(target) => <output data-testid="target">{target?.baseURL ?? "local"}</output>}
+        </RouteHostBoundary>
+      </DaemonProvider>
+    );
+    const { rerender } = render(tree());
+    expect(await screen.findByTestId("target")).toHaveTextContent("http://127.0.0.1:19992");
+
+    setActiveDaemon({ id: "other", label: "Other", baseURL: "https://other.example", token: "x" });
+    rerender(tree());
+
+    expect(screen.getByTestId("target")).toHaveTextContent("http://127.0.0.1:19992");
   });
 
   it("fails closed when the explicit route host is unavailable", async () => {

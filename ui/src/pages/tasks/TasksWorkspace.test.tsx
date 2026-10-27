@@ -373,7 +373,9 @@ describe("TasksWorkspace", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
     await userEvent.selectOptions(await screen.findByLabelText("Status"), "wait_customer");
-    await userEvent.type(screen.getByLabelText("Pull request"), "https://example.test/pull/7");
+    // One paste event: typing re-renders the whole workspace once per key.
+    await userEvent.click(screen.getByLabelText("Pull request"));
+    await userEvent.paste("https://example.test/pull/7");
     await userEvent.click(screen.getByRole("button", { name: "Save task" }));
 
     expect(api.updateTask).toHaveBeenNthCalledWith(

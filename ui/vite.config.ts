@@ -20,8 +20,11 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    maxWorkers: 4,
+    // make check lowers this for agents that share one host.
+    maxWorkers: Number(process.env.TARIBOY_VITEST_MAX_WORKERS) || 4,
     pool: "vmThreads",
+    // Workspace tests render whole pages and pass 5 s when agents share a host.
+    testTimeout: 20_000,
     reporters: ["agent"],
     setupFiles: ["./src/test/setup.ts"],
   },

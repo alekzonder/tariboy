@@ -33,12 +33,17 @@ func IsolateEnv() (cleanup func(), err error) {
 	return func() { os.RemoveAll(home) }, nil
 }
 
-// ShortDir returns a new directory under /tmp, removed when the test ends.
-// t.TempDir paths carry the test name and can make a unix socket path longer
-// than the OS limit.
+// ShortDir returns a new directory under TMPDIR, or under /tmp when TMPDIR is
+// long, removed when the test ends. t.TempDir paths carry the test name and can
+// make a unix socket path longer than the OS limit. A make check run sets a
+// short TMPDIR that it removes even after a killed test.
 func ShortDir(t testing.TB) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "tb-")
+	base := os.TempDir()
+	if len(base) > 24 {
+		base = "/tmp"
+	}
+	dir, err := os.MkdirTemp(base, "tb-")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +46,22 @@ func TestShortDirFitsASocketPath(t *testing.T) {
 	}
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		t.Fatalf("ShortDir %q is not a directory: %v", dir, err)
+	}
+}
+
+func TestShortDirUsesAShortTMPDIR(t *testing.T) {
+	base, err := os.MkdirTemp("/tmp", "tb-base-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(base) })
+	t.Setenv("TMPDIR", base)
+	if dir := ShortDir(t); filepath.Dir(dir) != base {
+		t.Fatalf("ShortDir = %q, want a directory under TMPDIR %q", dir, base)
+	}
+	t.Setenv("TMPDIR", filepath.Join(base, strings.Repeat("x", 40)))
+	if dir := ShortDir(t); filepath.Dir(dir) != "/tmp" {
+		t.Fatalf("ShortDir = %q under a long TMPDIR, want a directory under /tmp", dir)
 	}
 }
 

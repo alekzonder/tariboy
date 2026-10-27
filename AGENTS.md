@@ -82,7 +82,8 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   frontend- or documentation-only changes. Run `make check`, which runs both,
   for mixed changes or whenever ownership is unclear. Backend checks cover
   `fmt-check`, `go vet`, `staticcheck`, the `gocyclo` complexity threshold,
-  Go unit tests, Store skills, the Tasks mode E2E (`tariboy-tasks-e2e`), and
+  Go unit tests, the desktop crate compile (`desktop-rust-check`, `cargo
+  check`), Store skills, the Tasks mode E2E (`tariboy-tasks-e2e`), and
   smoke contracts; the `test` and `tariboy-tasks-e2e` steps also check the
   HTTP API against the committed OpenAPI snapshot;
   frontend checks cover the UI format check (oxfmt), the generated API types
@@ -99,7 +100,12 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   `package.json`, `package-lock.json`, and the Node.js and npm versions.
   Use `TARIBOY_NPM_CI_FORCE=1 make check` after manual changes to `node_modules`
   or npm configuration, which the fingerprint does not track.
-  They do not rewrite tracked files or dirty `git status`. Successful
+  They do not rewrite tracked files or dirty `git status`. On a shared host
+  they wait for one host-wide check slot, run agent checks with two Go
+  packages and two vitest workers, and keep temporary files in a run directory
+  that is removed afterwards; see "Checks on a shared host" in
+  `docs/docs/development.mdx`. Run `make check` in the background when a tool
+  timeout applies. Successful
   check-step output is suppressed; each step reports its result and duration
   as it finishes, while a failure also prints its command and complete
   diagnostics.
@@ -116,7 +122,8 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   disposable SSH host, and `scripts/check-alpha-artifacts.sh` is a release gate
   taking a release directory argument. Rust host tests (`cargo test`,
   `cargo clippy --all-targets -- -D warnings` under `desktop/src-tauri`) are
-  outside both targets too; run them when changing that crate.
+  outside both targets too; run them when changing that crate. Both targets
+  compile it with `cargo check`.
 - See the build and verification matrix in `docs/docs/development.mdx` for what
   each step covers.
 - Run `git diff --check` and inspect the complete diff before committing.
