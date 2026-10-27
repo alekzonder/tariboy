@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -251,4 +253,96 @@ func TestAppendTranscriptOpaqueBodies(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAppendAfterGzipExtendsArchive(t *testing.T) {
+	t.Parallel()
+	agentsDir := t.TempDir()
+	l := agentdir.New(agentsDir, "alice")
+	if err := l.EnsureIteration("alice-1"); err != nil {
+		t.Fatal(err)
+	}
+	entry := func(id string) TranscriptEntry {
+		return TranscriptEntry{Meta: AIRequest{ID: id, Agent: "alice", Iteration: "alice-1"}}
+	}
+	for _, id := range []string{"air-1", "air-2"} {
+		if err := AppendTranscript(agentsDir, entry(id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := GzipTranscript(agentsDir, "alice", "alice-1"); err != nil {
+		t.Fatal(err)
+	}
+	// A request still open at session stop finishes after the close-time gzip.
+	if err := AppendTranscript(agentsDir, entry("air-3")); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(l.IterationDir("alice-1"), "proxy-transcript.jsonl")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("plain transcript recreated after gzip: %v", err)
+	}
+	if got := gzipEntryIDs(t, path+".gz"); strings.Join(got, ",") != "air-1,air-2,air-3" {
+		t.Fatalf("archive ids = %v", got)
+	}
+}
+
+func TestAppendAndGzipConcurrentlyLoseNoEntry(t *testing.T) {
+	t.Parallel()
+	agentsDir := t.TempDir()
+	l := agentdir.New(agentsDir, "alice")
+	if err := l.EnsureIteration("alice-1"); err != nil {
+		t.Fatal(err)
+	}
+	const n = 50
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(2)
+		go func(i int) {
+			defer wg.Done()
+			e := TranscriptEntry{Meta: AIRequest{ID: fmt.Sprintf("air-%d", i), Agent: "alice", Iteration: "alice-1"}}
+			if err := AppendTranscript(agentsDir, e); err != nil {
+				t.Error(err)
+			}
+		}(i)
+		go func() {
+			defer wg.Done()
+			if err := GzipTranscript(agentsDir, "alice", "alice-1"); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if err := GzipTranscript(agentsDir, "alice", "alice-1"); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(l.IterationDir("alice-1"), "proxy-transcript.jsonl")
+	if got := gzipEntryIDs(t, path+".gz"); len(got) != n {
+		t.Fatalf("archive has %d entries, want %d", len(got), n)
+	}
+}
+
+func gzipEntryIDs(t *testing.T, path string) []string {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(gz)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, line := range bytes.Split(bytes.TrimSpace(data), []byte("\n")) {
+		var e TranscriptEntry
+		if err := json.Unmarshal(line, &e); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, e.Meta.ID)
+	}
+	return ids
 }
