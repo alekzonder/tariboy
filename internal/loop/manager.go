@@ -697,8 +697,8 @@ func (m *Manager) terminalHarnessError(it *agent.Iteration) {
 func (m *Manager) recordAdopted(l agentdir.Layout, li agentdir.LiveIteration, res shim.IterationResult) {
 	var status agent.IterationStatus
 	committed, _, err := m.finalizeIteration(l, li.Agent, li.ID, func(it *agent.Iteration) {
-		ec, cpu, mem := res.ExitCode, res.CPUMs, res.MemPeakKB
 		it.Status = Classify(res.ExitCode, it.DoneFlag, it.TimeoutTriggeredAt != nil, res.TerminationReason == "hard_timeout")
+		ec, cpu, mem := recordedExitCode(m.cfg.Log, it.Status, res.ExitCode, li.Agent, li.ID), res.CPUMs, res.MemPeakKB
 		it.EndedAt = store.FormatTime(m.cfg.Clock())
 		it.ExitCode, it.CPUMs, it.MemPeakKB = &ec, &cpu, &mem
 		status = it.Status

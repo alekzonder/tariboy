@@ -2132,3 +2132,25 @@ func TestEngineLaunchWithExactSessionLookup(t *testing.T) {
 		})
 	}
 }
+
+func TestRecordedExitCode(t *testing.T) {
+	t.Parallel()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cases := []struct {
+		status agent.IterationStatus
+		code   int
+		want   int
+	}{
+		{agent.IterationDone, 143, 0},
+		{agent.IterationDone, 137, 0},
+		{agent.IterationDone, -1, 0},
+		{agent.IterationDone, 0, 0},
+		{agent.IterationHarnessError, 143, 143},
+		{agent.IterationTimeout, 143, 143},
+	}
+	for _, c := range cases {
+		if got := recordedExitCode(log, c.status, c.code, "smoke", "smoke-1"); got != c.want {
+			t.Fatalf("recordedExitCode(%q, %d) = %d, want %d", c.status, c.code, got, c.want)
+		}
+	}
+}
