@@ -2957,6 +2957,7 @@ export interface components {
       effective_deadline?: string;
       hard_timeout_deadline?: string;
       id: string;
+      rate_limited_since?: string;
       started_at: string;
       timeout_deadline?: string;
       timeout_extensions: number;

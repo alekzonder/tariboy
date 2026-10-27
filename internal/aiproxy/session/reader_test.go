@@ -323,3 +323,42 @@ func TestReadEntriesGzipFallback(t *testing.T) {
 		t.Fatalf("want 1 entry, got %d: %+v", len(entries), entries)
 	}
 }
+
+func TestReadEntriesMergesArchiveAndStrayPlain(t *testing.T) {
+	agentsDir := t.TempDir()
+	dir := agentdir.New(agentsDir, "agent1").IterationDir("iter1")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	line := func(id string) []byte {
+		b, err := json.Marshal(aiproxy.TranscriptEntry{Meta: aiproxy.AIRequest{ID: id}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return append(b, '\n')
+	}
+	var gzBuf bytes.Buffer
+	gw := gzip.NewWriter(&gzBuf)
+	gw.Write(append(line("a1"), line("a2")...))
+	if err := gw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	plain := filepath.Join(dir, "proxy-transcript.jsonl")
+	if err := os.WriteFile(plain+".gz", gzBuf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(plain, line("p1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := ReadEntries(agentsDir, "agent1", "iter1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, e := range entries {
+		ids = append(ids, e.Meta.ID)
+	}
+	if len(ids) != 3 || ids[0] != "a1" || ids[1] != "a2" || ids[2] != "p1" {
+		t.Fatalf("ids = %v, want [a1 a2 p1]", ids)
+	}
+}

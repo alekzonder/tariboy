@@ -38,7 +38,7 @@ type Exchange struct {
 	Model          string
 	CostUSD        float64
 	UpstreamStatus int
-	Status         string // ok | budget_block | auth_error | upstream_error
+	Status         string // ok | budget_block | auth_error | upstream_error | rate_limited | quota_probe | client_closed
 	Start          time.Time
 	LatencyMs      int
 }
@@ -675,7 +675,7 @@ func (p *Proxy) doForward(ex *Exchange) error {
 	client := sameOriginRedirectClient(p.cfg.Client)
 	resp, err := client.Do(outReq)
 	if err != nil {
-		ex.Status = "upstream_error"
+		ex.Status = ex.failureStatus()
 		ex.W.Header().Set("Content-Type", "application/json")
 		ex.W.WriteHeader(http.StatusBadGateway)
 		ex.W.Write([]byte(`{"type":"error","error":{"type":"api_error","message":"upstream unreachable"}}`))
@@ -708,12 +708,54 @@ func (p *Proxy) doForward(ex *Exchange) error {
 			p.parseUsage(ex, body)
 		}
 	}
-	if resp.StatusCode >= 400 {
-		ex.Status = "upstream_error"
-	} else if ex.Status == "" {
+	if resp.StatusCode >= 400 || ex.Status != "" || ex.R.Context().Err() != nil {
+		ex.Status = ex.failureStatus()
+	} else {
 		ex.Status = "ok"
 	}
 	return nil
+}
+
+// failureStatus names a failed exchange. A client that went away first (the
+// session stopped mid-request) is not an upstream fault, and a 429 is a rate
+// limit unless it answers the harness's startup quota probe.
+func (ex *Exchange) failureStatus() string {
+	switch {
+	case ex.R.Context().Err() != nil:
+		return "client_closed"
+	case ex.UpstreamStatus == http.StatusTooManyRequests && isQuotaProbe(ex.ReqBody):
+		return "quota_probe"
+	case ex.UpstreamStatus == http.StatusTooManyRequests:
+		return "rate_limited"
+	}
+	return "upstream_error"
+}
+
+// isQuotaProbe matches the request Claude Code sends at startup to read its
+// quota: max_tokens 1 and one user message "quota". The upstream answers it
+// with 429 even when the account is not limited.
+func isQuotaProbe(body []byte) bool {
+	var req struct {
+		MaxTokens int `json:"max_tokens"`
+		Messages  []struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		} `json:"messages"`
+	}
+	if json.Unmarshal(body, &req) != nil || req.MaxTokens != 1 || len(req.Messages) != 1 || req.Messages[0].Role != "user" {
+		return false
+	}
+	var text string
+	if json.Unmarshal(req.Messages[0].Content, &text) != nil {
+		var blocks []struct {
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(req.Messages[0].Content, &blocks) != nil || len(blocks) != 1 {
+			return false
+		}
+		text = blocks[0].Text
+	}
+	return text == "quota"
 }
 
 func isChatGPTRequest(h http.Header) bool {

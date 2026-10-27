@@ -146,6 +146,9 @@ type AgentActiveIteration struct {
 	TimeoutDeadline     *string `json:"timeout_deadline,omitempty"`
 	HardTimeoutDeadline *string `json:"hard_timeout_deadline,omitempty"`
 	EffectiveDeadline   string  `json:"effective_deadline,omitempty"`
+	// RateLimitedSince is the time of the newest AI request of this iteration
+	// when the upstream refused it with a rate limit (a usage limit).
+	RateLimitedSince string `json:"rate_limited_since,omitempty"`
 }
 
 // AgentAction is the lifecycle verb a lifecycle command applied.

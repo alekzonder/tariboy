@@ -285,6 +285,18 @@ func Classify(exitCode int, done, softTimeout, hardTimeout bool) agent.Iteration
 	return agent.IterationNoIAmDone
 }
 
+// recordedExitCode is the exit code stored for an iteration. After loop.sh done
+// the daemon stops the session itself, so the harness then exits killed (143,
+// 137) or without an exit status (-1). A done iteration stores 0 and logs the
+// raw code, so a non-zero stored code means a failure before done.
+func recordedExitCode(log *slog.Logger, status agent.IterationStatus, code int, agentName, id string) int {
+	if status != agent.IterationDone || code == 0 {
+		return code
+	}
+	log.Info("harness exit after done", "agent", agentName, "iteration", id, "exit_code", code)
+	return 0
+}
+
 // Spawner starts the shim process; the seam lets tests avoid real processes.
 type Spawner interface {
 	Start(argv, env []string, dir string) error
@@ -1229,9 +1241,10 @@ func (r *ShimRunner) await(ctx context.Context, ag agent.Agent, l agentdir.Layou
 	it, err := r.cfg.Store.GetIteration(ag.Name, iterationID)
 	done, productive := r.doneAndProductive(ag.Name, iterationID)
 	soft := res.softHit || (err == nil && it.TimeoutTriggeredAt != nil)
+	status := Classify(res.result.ExitCode, done, soft, res.result.TerminationReason == "hard_timeout")
 	return Outcome{
-		Status:     Classify(res.result.ExitCode, done, soft, res.result.TerminationReason == "hard_timeout"),
-		ExitCode:   res.result.ExitCode,
+		Status:     status,
+		ExitCode:   recordedExitCode(r.cfg.Logger, status, res.result.ExitCode, ag.Name, iterationID),
 		DoneFlag:   done,
 		Productive: productive,
 		CPUMs:      res.result.CPUMs,

@@ -625,12 +625,26 @@ func agentStatus() registry.Command {
 				if it.TimeoutDeadline != nil || it.HardTimeoutDeadline != nil {
 					active.EffectiveDeadline = effectiveDeadline(it.TimeoutDeadline, it.HardTimeoutDeadline)
 				}
+				if active.RateLimitedSince, err = rateLimitedSince(c, a.Name, it.StartedAt); err != nil {
+					return nil, err
+				}
 				out.ActiveIteration = active
 				break
 			}
 			return out, nil
 		},
 	})
+}
+
+// rateLimitedSince returns the time of the newest AI request since the
+// iteration started when the upstream refused it with a rate limit; the next
+// accepted request clears it.
+func rateLimitedSince(c *registry.Ctx, agentName, startedAt string) (string, error) {
+	rows, err := aiproxy.NewStore(c.Store, nil).Requests(aiproxy.UsageFilter{Agent: agentName, Since: startedAt}, 1)
+	if err != nil || len(rows) == 0 || rows[0].Status != "rate_limited" {
+		return "", err
+	}
+	return rows[0].TS, nil
 }
 
 func effectiveDeadline(soft, hard *string) string {

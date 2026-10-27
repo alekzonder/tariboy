@@ -3493,3 +3493,45 @@ func TestGlobalShellEnvHidesDaemonAccessFromTheScript(t *testing.T) {
 		t.Fatalf("env = %v, err = %v; the script saw the daemon socket", env, err)
 	}
 }
+
+func TestRecordAdoptedStoresKillAfterDoneAsExitZero(t *testing.T) {
+	t.Parallel()
+	r := &fakeRunner{}
+	m, as, agentsDir, _ := newManager(t, r)
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Plugins: []string{"context"}}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		id   string
+		done bool
+		code int
+		want int
+	}{
+		{"smoke-done-143", true, 143, 0},
+		{"smoke-done-137", true, 137, 0},
+		{"smoke-done-missing", true, -1, 0},
+		{"smoke-killed-143", false, 143, 143},
+	} {
+		if err := as.CreateIteration(agent.Iteration{ID: tc.id, Agent: ag.Name, Status: "running"}); err != nil {
+			t.Fatal(err)
+		}
+		if tc.done {
+			if err := as.SetIterationDone(tc.id, true); err != nil {
+				t.Fatal(err)
+			}
+		}
+		l := agentdir.New(agentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
+		if err := l.EnsureIteration(tc.id); err != nil {
+			t.Fatal(err)
+		}
+		m.recordAdopted(l, agentdir.LiveIteration{Agent: ag.Name, ID: tc.id}, shim.IterationResult{ExitCode: tc.code})
+		it, err := as.GetIteration(ag.Name, tc.id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if it.ExitCode == nil || *it.ExitCode != tc.want {
+			t.Fatalf("%s: status %q exit code %v, want %d", tc.id, it.Status, it.ExitCode, tc.want)
+		}
+	}
+}

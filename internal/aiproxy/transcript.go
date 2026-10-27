@@ -1,11 +1,14 @@
 package aiproxy
 
 import (
+	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"hash/fnv"
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/alekzonder/tariboy/internal/agentdir"
 )
@@ -29,19 +32,41 @@ func transcriptPath(agentsDir, agent, iteration string) string {
 	return filepath.Join(agentdir.New(agentsDir, agent).IterationDir(iteration), "proxy-transcript.jsonl")
 }
 
-// AppendTranscript synchronously appends one entry (hot path, spec §9).
+// transcriptLocks serialize AppendTranscript and GzipTranscript per path, so
+// an append never lands in a plain file that the close-time gzip just removed.
+var transcriptLocks [64]sync.Mutex
+
+func lockTranscript(path string) func() {
+	h := fnv.New32a()
+	h.Write([]byte(path))
+	mu := &transcriptLocks[h.Sum32()%uint32(len(transcriptLocks))]
+	mu.Lock()
+	return mu.Unlock
+}
+
+// AppendTranscript synchronously appends one entry (hot path, spec §9). After
+// the iteration closed (plain file gone, .gz present) the entry becomes a new
+// gzip member of the archive: a request still open at session stop finishes
+// after the close-time gzip, and readers treat the members as one stream.
 func AppendTranscript(agentsDir string, e TranscriptEntry) error {
 	path := transcriptPath(agentsDir, e.Meta.Agent, e.Meta.Iteration)
+	line, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+	line = append(line, '\n')
+	defer lockTranscript(path)()
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if _, err := os.Stat(path + ".gz"); err == nil {
+			return appendGzipMember(path+".gz", bytes.NewReader(line))
+		}
+	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	line, err := json.Marshal(e)
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(append(line, '\n')); err != nil {
+	if _, err := f.Write(line); err != nil {
 		return err
 	}
 	return f.Sync()
@@ -58,9 +83,11 @@ func RecordUsage(agentsDir string, row AIRequest, ingest func(AIRequest)) error 
 }
 
 // GzipTranscript compresses the JSONL at iteration close and removes the plain
-// file. A missing transcript is not an error (no AI calls that iteration).
+// file. A missing transcript is not an error (no AI calls that iteration). An
+// existing .gz is extended, never truncated, so no earlier entry is lost.
 func GzipTranscript(agentsDir, agent, iteration string) error {
 	path := transcriptPath(agentsDir, agent, iteration)
+	defer lockTranscript(path)()
 	in, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -69,12 +96,21 @@ func GzipTranscript(agentsDir, agent, iteration string) error {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(path+".gz", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err := appendGzipMember(path+".gz", in); err != nil {
+		return err
+	}
+	in.Close()
+	return os.Remove(path)
+}
+
+// appendGzipMember writes src as one gzip member at the end of path.
+func appendGzipMember(path string, src io.Reader) error {
+	out, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
 	gz := gzip.NewWriter(out)
-	if _, err := io.Copy(gz, in); err != nil {
+	if _, err := io.Copy(gz, src); err != nil {
 		gz.Close()
 		out.Close()
 		return err
@@ -83,15 +119,11 @@ func GzipTranscript(agentsDir, agent, iteration string) error {
 		out.Close()
 		return err
 	}
-	// fsync the .gz before removing the plain file: a crash after os.Remove but
-	// before the .gz pages reach disk would otherwise lose the transcript.
+	// fsync the .gz before the caller removes the plain file: a crash after
+	// os.Remove but before the .gz pages reach disk would lose the transcript.
 	if err := out.Sync(); err != nil {
 		out.Close()
 		return err
 	}
-	if err := out.Close(); err != nil {
-		return err
-	}
-	in.Close()
-	return os.Remove(path)
+	return out.Close()
 }

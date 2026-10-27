@@ -15,9 +15,9 @@ import (
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 )
 
-// ReadEntries loads the proxy transcript for one iteration. It prefers the plain
-// proxy-transcript.jsonl and falls back to the gzipped .gz written at iteration
-// close. A missing transcript (no AI calls) returns (nil, nil).
+// ReadEntries loads the proxy transcript for one iteration: the gzipped .gz
+// written at iteration close, then the plain proxy-transcript.jsonl. A missing
+// transcript (no AI calls) returns (nil, nil).
 func ReadEntries(agentsDir, agent, iteration string) ([]aiproxy.TranscriptEntry, error) {
 	var entries []aiproxy.TranscriptEntry
 	err := WalkEntries(context.Background(), agentsDir, agent, iteration, func(_ int, entry aiproxy.TranscriptEntry) error {
@@ -35,41 +35,46 @@ func WalkEntries(ctx context.Context, agentsDir, agent, iteration string, visit 
 	}
 	dir := agentdir.New(agentsDir, agent).IterationDir(iteration)
 	plain := filepath.Join(dir, "proxy-transcript.jsonl")
-	f, err := os.Open(plain)
+	index := 0
+	gf, err := os.Open(plain + ".gz")
 	if err == nil {
-		defer f.Close()
-		return scanEntries(ctx, f, visit)
-	}
-	if !os.IsNotExist(err) {
+		defer gf.Close()
+		gz, err := gzip.NewReader(gf)
+		if err != nil {
+			return err
+		}
+		defer gz.Close()
+		if index, err = scanEntriesFrom(ctx, gz, 0, visit); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
 		return err
 	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	gzPath := plain + ".gz"
-	gf, err := os.Open(gzPath)
+	// A plain file next to the .gz is a stray tail written after the close-time
+	// gzip by an older daemon; its entries come after the archived ones.
+	f, err := os.Open(plain)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 		return err
 	}
-	defer gf.Close()
-	gz, err := gzip.NewReader(gf)
-	if err != nil {
-		return err
-	}
-	defer gz.Close()
-	return scanEntries(ctx, gz, visit)
+	defer f.Close()
+	_, err = scanEntriesFrom(ctx, f, index, visit)
+	return err
 }
 
 func scanEntries(ctx context.Context, r io.Reader, visit func(int, aiproxy.TranscriptEntry) error) error {
+	_, err := scanEntriesFrom(ctx, r, 0, visit)
+	return err
+}
+
+func scanEntriesFrom(ctx context.Context, r io.Reader, index int, visit func(int, aiproxy.TranscriptEntry) error) (int, error) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 64*1024*1024)
-	index := 0
 	for {
 		if err := ctx.Err(); err != nil {
-			return err
+			return index, err
 		}
 		if !sc.Scan() {
 			break
@@ -83,14 +88,14 @@ func scanEntries(ctx context.Context, r io.Reader, visit func(int, aiproxy.Trans
 			continue // skip a corrupt line, keep the rest
 		}
 		if err := visit(index, e); err != nil {
-			return err
+			return index, err
 		}
 		index++
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return index, err
 	}
-	return sc.Err()
+	return index, sc.Err()
 }
 
 // Build folds transcript entries into one SessionTimeline: per-call metadata,
