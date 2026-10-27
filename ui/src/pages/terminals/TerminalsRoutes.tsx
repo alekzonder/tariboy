@@ -40,7 +40,7 @@ interface ServerRoute {
 
 /** Each server page, or null when its route lacks what the page needs. */
 const SERVER_VIEWS: Record<ServerView, (route: ServerRoute) => ReactNode> = {
-  mail: (route) => <ServerMailboxTab key={route.hostId} hostId={route.hostId} />,
+  mail: (route) => <ServerMailboxTab key={route.hostId} />,
   tasks: (route) => (
     <TasksWorkspace
       initialTaskKey={route.initialTaskKey}

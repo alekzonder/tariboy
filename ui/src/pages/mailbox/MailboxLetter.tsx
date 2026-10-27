@@ -1,11 +1,9 @@
 import { ArrowLeft } from "lucide-react";
-import { Link } from "react-router-dom";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { useApiQuery } from "@/hooks/useApiQuery";
 import type { Letter, MailBox } from "@/lib/api";
 import { letterTaskKey } from "@/lib/letters";
-import { serverPath } from "@/lib/terminalsHost";
 import { MarkdownContent } from "@/pages/tasks/TaskMarkdown";
 import { mailKeys } from "./mailQueries";
 import { letterActions, letterState, principalName, type MailboxMode } from "./mailboxModel";
@@ -14,12 +12,10 @@ export interface LetterHandlers {
   onReply: (letter: Letter) => void;
   onArchive: (letter: Letter) => void;
   onRequeue: (letter: Letter) => void;
+  /** Opens the task drawer over the mailbox. */
+  onOpenTask: (key: string) => void;
   busy: boolean;
 }
-
-/** The task drawer route of the server Tasks page. */
-const taskHref = (hostId: string, key: string) =>
-  `${serverPath(hostId, "tasks")}?task=${encodeURIComponent(key)}`;
 
 function ThreadLine({ id, as }: { id: string; as: string }) {
   const api = useApi();
@@ -48,13 +44,11 @@ function LetterActionBar({
   letter,
   box,
   mode,
-  hostId,
   handlers,
 }: {
   letter: Letter;
   box: MailBox;
   mode: MailboxMode;
-  hostId: string;
   handlers: LetterHandlers;
 }) {
   const actions = letterActions(letter, box, mode);
@@ -67,8 +61,8 @@ function LetterActionBar({
         </Button>
       )}
       {actions.answerOnTask && (
-        <Button size="sm" asChild>
-          <Link to={taskHref(hostId, key)}>Answer on the task</Link>
+        <Button size="sm" onClick={() => handlers.onOpenTask(key)}>
+          Answer on the task
         </Button>
       )}
       {actions.archive && (
@@ -92,8 +86,8 @@ function LetterActionBar({
         </Button>
       )}
       {actions.taskLink && (
-        <Button size="sm" variant="ghost" asChild>
-          <Link to={taskHref(hostId, key)}>Open {key}</Link>
+        <Button size="sm" variant="ghost" onClick={() => handlers.onOpenTask(key)}>
+          Open {key}
         </Button>
       )}
     </div>
@@ -106,7 +100,6 @@ export function MailboxLetter({
   box,
   mode,
   as,
-  hostId,
   handlers,
   onBack,
 }: {
@@ -114,7 +107,6 @@ export function MailboxLetter({
   box: MailBox;
   mode: MailboxMode;
   as: string;
-  hostId: string;
   handlers: LetterHandlers;
   /** Shown on narrow screens, where the letter replaces the list. */
   onBack?: () => void;
@@ -135,7 +127,7 @@ export function MailboxLetter({
         <Field label="State">{letterState(letter)}</Field>
       </dl>
       {letter.in_reply_to && <ThreadLine id={letter.in_reply_to} as={as} />}
-      <LetterActionBar letter={letter} box={box} mode={mode} hostId={hostId} handlers={handlers} />
+      <LetterActionBar letter={letter} box={box} mode={mode} handlers={handlers} />
       <div className="border-t pt-3">
         <MarkdownContent>{letter.body}</MarkdownContent>
       </div>

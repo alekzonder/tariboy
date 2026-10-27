@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import { act, render, screen, waitFor, within } from "@/test/queryRender";
 import { fakeApi } from "@/test/api";
@@ -15,6 +15,14 @@ vi.mock("@/hooks/useMailSocket", () => ({
     socket.onHint = options.onHint;
     return "open";
   },
+}));
+vi.mock("@/pages/tasks/TaskDrawer", () => ({
+  default: ({ taskKey, onClose }: { taskKey: string; onClose: () => void }) => (
+    <div data-testid="task-drawer">
+      {taskKey}
+      <button onClick={onClose}>Close drawer</button>
+    </div>
+  ),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -41,10 +49,16 @@ const mail = {
   show: vi.fn(async () => ({ letter: letter({ subject: "Earlier" }) })),
 };
 
+function Location() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname + location.search}</output>;
+}
+
 function renderMailbox(props: Partial<Parameters<typeof Mailbox>[0]> = {}) {
   return render(
-    <MemoryRouter>
-      <Mailbox as="" mode="customer" hostId="" recipients={["agent:dev"]} {...props} />
+    <MemoryRouter initialEntries={["/servers/h1/mail"]}>
+      <Mailbox as="" mode="customer" recipients={["agent:dev"]} {...props} />
+      <Location />
     </MemoryRouter>,
     { api: fakeApi({ mail }) },
   );
@@ -140,5 +154,21 @@ describe("Mailbox", () => {
     expect(mail.list).toHaveBeenCalledTimes(calls);
     await act(async () => socket.onHint?.({ from: "user:customer", to: "agent:dev" }));
     await waitFor(() => expect(mail.list.mock.calls.length).toBeGreaterThan(calls));
+  });
+
+  it("opens the task of a question over the mailbox and keeps the letter", async () => {
+    boxes.inbox = [
+      letter({ id: "q", subject: "Which DB?", kind: "task.question", data: { task_key: "DEV-7" } }),
+    ];
+    renderMailbox();
+
+    await userEvent.click(await screen.findByRole("button", { name: /Which DB\?/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Answer on the task" }));
+
+    expect(await screen.findByTestId("task-drawer")).toHaveTextContent("DEV-7");
+    expect(screen.getByTestId("location")).toHaveTextContent("/servers/h1/mail");
+    await userEvent.click(screen.getByRole("button", { name: "Close drawer" }));
+    expect(screen.queryByTestId("task-drawer")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Which DB?" })).toBeVisible();
   });
 });

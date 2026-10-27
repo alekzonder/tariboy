@@ -411,6 +411,7 @@ describe("CustomerQuestionNotifications", () => {
     model.snapshots.set("remote-1", [notification()]);
     renderCoordinator();
     await expectAttention('["remote-1","alice"]');
+    await waitFor(() => expect(model.sockets.has("remote-1")).toBe(true));
 
     model.snapshots.set("remote-1", [
       notification(),

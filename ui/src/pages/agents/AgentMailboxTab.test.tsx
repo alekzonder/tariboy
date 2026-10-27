@@ -33,7 +33,7 @@ function renderTab() {
   render(
     <MemoryRouter>
       <AgentStatusContext.Provider value={{ status, refresh: refreshStatus }}>
-        <AgentMailboxTab hostId="" name="dev" batch={5} />
+        <AgentMailboxTab name="dev" batch={5} />
       </AgentStatusContext.Provider>
     </MemoryRouter>,
     { api: fakeApi({ mail }) },

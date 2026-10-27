@@ -1,18 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
+import userEvent from "@testing-library/user-event";
 import { render, screen } from "@/test/queryRender";
 import { fakeApi } from "@/test/api";
 import { letter } from "@/test/fixtures/mailFixtures";
 import type { Letter, MailBox } from "@/lib/api";
 import { MailboxLetter } from "./MailboxLetter";
 
-const handlers = { onReply: vi.fn(), onArchive: vi.fn(), onRequeue: vi.fn(), busy: false };
+const handlers = {
+  onReply: vi.fn(),
+  onArchive: vi.fn(),
+  onRequeue: vi.fn(),
+  onOpenTask: vi.fn(),
+  busy: false,
+};
 
 function show(item: Letter, box: MailBox = "inbox", mode: "customer" | "agent" = "customer") {
   const show = vi.fn(async () => ({ letter: letter({ subject: "The question" }) }));
   render(
     <MemoryRouter>
-      <MailboxLetter letter={item} box={box} mode={mode} as="" hostId="h1" handlers={handlers} />
+      <MailboxLetter letter={item} box={box} mode={mode} as="" handlers={handlers} />
     </MemoryRouter>,
     { api: fakeApi({ mail: { show } }) },
   );
@@ -20,23 +27,19 @@ function show(item: Letter, box: MailBox = "inbox", mode: "customer" | "agent" =
 }
 
 describe("MailboxLetter", () => {
-  it("answers a task question on its task, not by Reply", () => {
+  it("answers a task question on its task, not by Reply", async () => {
     show(letter({ kind: "task.question", data: { task_key: "DEV-7" } }));
 
-    expect(screen.getByRole("link", { name: "Answer on the task" })).toHaveAttribute(
-      "href",
-      "/servers/h1/tasks?task=DEV-7",
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Answer on the task" }));
+    expect(handlers.onOpenTask).toHaveBeenCalledWith("DEV-7");
     expect(screen.queryByRole("button", { name: "Reply" })).toBeNull();
   });
 
-  it("links a letter about a task to its task drawer", () => {
+  it("opens the task of a letter about a task", async () => {
     show(letter({ kind: "task.done", needs_reply: false, data: { task_key: "DEV-8" } }));
 
-    expect(screen.getByRole("link", { name: "Open DEV-8" })).toHaveAttribute(
-      "href",
-      "/servers/h1/tasks?task=DEV-8",
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Open DEV-8" }));
+    expect(handlers.onOpenTask).toHaveBeenCalledWith("DEV-8");
     expect(screen.queryByRole("button", { name: "Reply" })).toBeNull();
   });
 

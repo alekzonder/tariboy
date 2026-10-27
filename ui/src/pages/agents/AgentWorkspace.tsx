@@ -42,9 +42,7 @@ type TabContext = {
 };
 
 const TAB_CONTENT: Record<AgentTab, (ctx: TabContext) => ReactNode> = {
-  mailbox: ({ hostId, agent, view }) => (
-    <AgentMailboxTab hostId={hostId} name={agent.name} batch={view?.messages_batch} />
-  ),
+  mailbox: ({ agent, view }) => <AgentMailboxTab name={agent.name} batch={view?.messages_batch} />,
   console: ({ hostId, agent, refresh, execCount }) => (
     <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} execCount={execCount} />
   ),
