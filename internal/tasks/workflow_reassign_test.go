@@ -76,7 +76,7 @@ func TestReassignWorkflowAssignsAnUnassignedTask(t *testing.T) {
 	if payload["from"] != "" || payload["to"] != "agent:dev-2" {
 		t.Fatalf("reassigned payload = %v", payload)
 	}
-	if n := countRows(t, svc, assignedNotifications, waiting.ID, principalChannel("agent:dev-2")); n != 1 {
+	if n := countRows(t, svc, assignedNotifications, waiting.ID, notificationRecipient("agent:dev-2")); n != 1 {
 		t.Fatalf("assignment notifications to dev-2 = %d", n)
 	}
 }
