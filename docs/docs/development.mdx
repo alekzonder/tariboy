@@ -227,7 +227,8 @@ they can use all memory and disk. The fast checks therefore limit themselves:
   ID to `<run dir>/pid`. A run that was killed cannot remove its directory, so
   the next run removes every `tbc.*` directory whose process is gone. Files of
   commands outside the fast checks, such as a direct `go test`, are not
-  covered.
+  covered. The `internal/plugins` tests keep `TMPDIR=/tmp`: their socket paths
+  are too long for the run directory.
 
 `frontend-check`, `check`, and `full-check` reuse dependencies when a saved
 SHA-256 fingerprint matches `package.json`, `package-lock.json`, and the Node.js

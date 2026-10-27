@@ -98,7 +98,8 @@ uninstall:
 	done
 
 # make test adds -tags tmux when tmux is installed, so the shim tests that
-# drive a real tmux run there and stay out of a plain go test.
+# drive a real tmux run there and stay out of a plain go test. The plugin
+# tests keep /tmp: their socket paths do not fit under a make check TMPDIR.
 test:
 	@test_tmp=$$(cd "$${TMPDIR:-/tmp}" && pwd -P) || exit $$?; \
 	packages=$$($(GO) list ./...) || exit $$?; \
@@ -106,7 +107,7 @@ test:
 	tags=; if command -v tmux >/dev/null 2>&1; then tags=-tags=tmux; fi; \
 	TMPDIR="$$test_tmp" $(GO) test $$tags $$packages && \
 	TMPDIR="$$test_tmp" $(GO) test ./internal/cli && \
-	TMPDIR="$$test_tmp" $(GO) test ./internal/plugins -skip '^($(LONG_SOCKET_TESTS))$$' && \
+	TMPDIR=/tmp $(GO) test ./internal/plugins -skip '^($(LONG_SOCKET_TESTS))$$' && \
 	TMPDIR=. $(GO) test ./internal/plugins -run '^($(LONG_SOCKET_TESTS))$$'
 
 smoke-contract-test:
