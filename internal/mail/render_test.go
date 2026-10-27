@@ -280,6 +280,44 @@ func TestCloseTaskQuestionsTxClosesOnlyThatTask(t *testing.T) {
 	}
 }
 
+func TestCloseTaskNoticesTxClosesOnlyTheGivenKindsOfThatTask(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	send := func(kind, key string) mail.Letter {
+		return f.sendOne(t, mail.Letter{From: "system:tasks", To: "agent:alice", Kind: kind, Body: kind,
+			NeedsReply: kind == "task.goal", Data: map[string]any{"task_key": key}})
+	}
+	assigned := send("task.assigned", "OPS-1")
+	goal := send("task.goal", "OPS-1")
+	question := send("task.question", "OPS-1")
+	other := send("task.assigned", "OPS-2")
+	before := *f.now
+	later := send("task.assigned", "OPS-1")
+	tx, err := f.st.DB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := mail.CloseTaskNoticesTx(tx, "agent:alice", "OPS-1", []string{"task.assigned", "task.goal"},
+		before, "iteration-end:it-1", *f.now)
+	if err != nil || n != 2 {
+		_ = tx.Rollback()
+		t.Fatalf("closed = %d, %v; want 2", n, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range []mail.Letter{assigned, goal} {
+		if got := f.show(t, "agent:alice", l.ID); got.AnsweredAt == "" || got.CloseNote != "iteration-end:it-1" {
+			t.Fatalf("%s = %+v", l.Kind, got)
+		}
+	}
+	for _, l := range []mail.Letter{question, other, later} {
+		if got := f.show(t, "agent:alice", l.ID); got.AnsweredAt != "" {
+			t.Fatalf("%s %s closed: %+v", l.Kind, l.ID, got)
+		}
+	}
+}
+
 // pageAll pages box of as with limit until next_before is empty and returns
 // every letter id in page order.
 func pageAll(t *testing.T, m *mail.Mail, box, as string, limit int) []string {

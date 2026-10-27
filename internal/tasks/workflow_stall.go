@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
@@ -52,7 +53,63 @@ func (s *WorkflowEngine) pauseAtLimitTx(ctx context.Context, tx *sql.Tx, task *T
 	return s.pauseTx(ctx, tx, task, manifest, reason, detail)
 }
 
-// RecordIterationEnd counts the iteration as idle for its Goal task when the
+// staleNoticeKinds are the task letters that only announce work: an
+// iteration that worked the task saw it, so they wake nobody afterwards.
+var staleNoticeKinds = []string{"task.goal", "task.assigned", "task.answered"}
+
+// closeIterationNoticesTx closes the notices about key to the agent that were
+// created up to the end of an iteration that ran with key as its Goal, and
+// drops such notifications not sent yet. A later wake comes from the Goal
+// reconciler only when the task still needs the agent.
+func (s *WorkflowEngine) closeIterationNoticesTx(ctx context.Context, end IterationEnd, key string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	recipient := "agent:" + strings.TrimSpace(end.Agent)
+	note := "iteration-end:" + end.IterationID
+	if _, err := mail.CloseTaskNoticesTx(tx, recipient, key, staleNoticeKinds, end.FinishedAt, note, s.clock()); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE task_notification_outbox SET published_at = ?, last_error = 'seen by the iteration before delivery'
+		WHERE published_at = '' AND channel = ? AND message_type IN ('task.assigned', 'task.answered')
+		AND json_extract(data, '$.task_key') = ?
+		AND event_sequence IN (SELECT sequence FROM task_events WHERE created_at <= ?)`,
+		store.FormatTime(s.clock()), recipient, key, store.FormatTime(end.FinishedAt)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// CloseStaleTaskLetters closes the agent's open notices about tasks that are
+// not its work now: closed, assigned to someone else, paused, or in a
+// workflow status a pool does not own. It returns how many it closed. A
+// task.question stays open: the agent still answers it on the task. A
+// task.answered closes only for the assignee: an agent that asked on a task it
+// does not work, such as its customer, still needs the answer.
+func (s *Service) CloseStaleTaskLetters(ctx context.Context, agentName string) (int, error) {
+	recipient := "agent:" + strings.TrimSpace(agentName)
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE mail SET answered_at = ?, close_note = 'task-not-assigned-work'
+		WHERE recipient = ? AND kind IN (?, ?, ?) AND answered_at = '' AND dead_at = '' AND json_valid(data)
+		AND EXISTS (SELECT 1 FROM tasks t
+			WHERE (t.task_key = json_extract(mail.data, '$.task_key')
+				OR t.id = (SELECT task_id FROM task_key_aliases WHERE old_key = json_extract(mail.data, '$.task_key')))
+			AND (mail.kind <> 'task.answered' OR t.assignee = mail.recipient)
+			AND (t.status IN ('done', 'cancelled') OR t.assignee <> mail.recipient
+				OR (t.workflow_digest IS NOT NULL AND (t.workflow_owner_kind <> 'pool' OR t.workflow_paused_reason <> ''))))`,
+		store.FormatTime(s.clock()), recipient, staleNoticeKinds[0], staleNoticeKinds[1], staleNoticeKinds[2])
+	if err != nil {
+		return 0, fmt.Errorf("close stale task letters of %s: %w", agentName, err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
+// RecordIterationEnd closes the agent's notices about its Goal task that the
+// iteration already covered. It counts the iteration as idle for that task when the
 // agent is the holder of a pool status it already held when the iteration
 // started, the status did not change, and the agent made no transition
 // request during the iteration. It pauses the task at the limit.
@@ -60,6 +117,9 @@ func (s *WorkflowEngine) RecordIterationEnd(ctx context.Context, end IterationEn
 	key := strings.TrimSpace(end.GoalTaskKey)
 	if key == "" || strings.TrimSpace(end.Agent) == "" {
 		return nil
+	}
+	if err := s.closeIterationNoticesTx(ctx, end, key); err != nil {
+		return err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

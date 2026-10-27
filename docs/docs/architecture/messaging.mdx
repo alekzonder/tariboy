@@ -190,6 +190,19 @@ sent as `system:tasks` closes too. A notification whose recipient no longer
 exists is marked failed in the outbox with `last_error` and is not retried. A workflow outcome that resolves the customer's open wait
 closes its question letters with `task-outcome:<status>`.
 
+Stale task notices never wake an agent. When an iteration that ran with Goal
+task `T` ends, the tasks service closes the agent's open `task.goal`,
+`task.assigned` and `task.answered` letters about `T` created up to the end of
+the iteration, with `close_note = iteration-end:<iteration>`, and marks such
+notifications not sent yet as sent. The Goal reconciler then sends a fresh
+`task.goal` only when `T` still needs the agent. Before a wake counts open
+letters and before a prompt renders them, the daemon also closes those three
+kinds when their task is `done` or `cancelled`, is assigned to another
+principal, is paused, or is in a workflow status that no pool owns, with
+`close_note = task-not-assigned-work`; a `task.answered` closes this way only
+when its recipient is the task's assignee. Neither rule closes a
+`task.question`.
+
 ## Groups
 
 Group membership is the data `group:<name>` expands over; groups create no

@@ -442,6 +442,9 @@ type RunnerConfig struct {
 	// with ("" for none) and when it was read; the manager reports it when the
 	// iteration ends.
 	GoalRead func(agent, iterationID, key string, at time.Time)
+	// CloseStaleTaskLetters, if set, closes the agent's task notices that are
+	// not its work now before the prompt renders its letters.
+	CloseStaleTaskLetters func(ctx context.Context, agent string) (int, error)
 	// HasTmuxSession reports whether an interactive agent's tmux session is already
 	// alive. Injectable so tests avoid a real tmux. Defaults to tmuxHasSession.
 	HasTmuxSession func(session string) bool
@@ -982,6 +985,11 @@ func (r *ShimRunner) writePrompt(ctx context.Context, ag agent.Agent, l agentdir
 func (r *ShimRunner) pendingMessages(ag agent.Agent) (batch, awaiting []mail.Letter) {
 	if r.cfg.Mail == nil {
 		return nil, nil
+	}
+	if r.cfg.CloseStaleTaskLetters != nil {
+		if _, err := r.cfg.CloseStaleTaskLetters(context.Background(), ag.Name); err != nil {
+			r.cfg.Logger.Warn("close stale task letters", "agent", ag.Name, "err", err)
+		}
 	}
 	n := ag.MessagesBatch
 	if n <= 0 {

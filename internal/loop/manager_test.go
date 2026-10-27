@@ -2545,6 +2545,53 @@ func TestReattachWakesEventOnlyAgentWithPending(t *testing.T) {
 	m.Shutdown()
 }
 
+// TestStaleTaskLettersStartNoIteration: the peek closes task letters that are
+// not the agent's work now before it counts open letters, so an agent whose
+// only letter is such a notice is not woken.
+func TestStaleTaskLettersStartNoIteration(t *testing.T) {
+	t.Parallel()
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, agentsDir, _ := newManager(t, r)
+	ml := m.cfg.Mail
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, IntervalS: 0,
+		OnTimeout: "restart", OnError: "restart", Plugins: []string{"context"}}
+	pinBasicImage(t, m, &ag)
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	if err := agentdir.New(agentsDir, "smoke").EnsureIteration("bootstrap"); err != nil {
+		t.Fatal(err)
+	}
+	sent, err := ml.Send(mail.Letter{From: "system:tasks", To: "agent:smoke", Kind: "task.assigned", Body: "assigned",
+		Data: map[string]any{"task_key": "DEV-1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	m.cfg.CloseStaleTaskLetters = func(_ context.Context, name string) (int, error) {
+		calls.Add(1)
+		if name != "smoke" {
+			t.Errorf("hook agent = %q", name)
+		}
+		_, err := ml.Close("agent:smoke", sent[0].ID, "task-not-assigned-work")
+		return 1, err
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := m.StartAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	testutil.WaitFor(2*time.Second, func() bool { return calls.Load() > 0 })
+	if calls.Load() == 0 {
+		t.Fatal("the peek never closed stale task letters")
+	}
+	time.Sleep(200 * time.Millisecond)
+	if n := iterationCount(t, as, "smoke"); n != 0 {
+		t.Fatalf("iterations = %d; a stale task letter must not wake the agent", n)
+	}
+	m.Shutdown()
+}
+
 func iterationCount(t *testing.T, as *agent.Store, name string) int {
 	t.Helper()
 	its, _ := as.ListIterations(name)
