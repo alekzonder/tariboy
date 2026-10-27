@@ -38,7 +38,7 @@ func (r *Runner) Status(f File) error {
 		}
 	}
 	r.logf("drift: %d", drift)
-	r.logf("note: model/env/plugins drift not checked (not exposed by agent.ps)")
+	r.logf("note: model/plugins drift not checked (not exposed by agent.ps)")
 	return nil
 }
 

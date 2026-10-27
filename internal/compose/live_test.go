@@ -8,7 +8,8 @@ import (
 func TestCheckAgentListContractRejectsMissingAndMistypedFields(t *testing.T) {
 	full := map[string]any{"name": "a", "state": "running", "image": "i:latest", "harness": "claude", "enabled": true,
 		"group": "", "cwd": "/w", "timeout_s": 0, "interval_s": 0, "on_timeout": "", "on_error": "", "max_idle_iterations": 0,
-		"goal_enabled": true, "goal_wait_customer_timeout_s": 0, "goal_delivery_cooldown_s": 0}
+		"goal_enabled": true, "goal_wait_customer_timeout_s": 0, "goal_delivery_cooldown_s": 0,
+		"interactive": false, "env": map[string]any{}}
 	if err := CheckAgentListContract(mustJSON(map[string]any{"agents": []any{full}})); err != nil {
 		t.Fatalf("complete row rejected: %v", err)
 	}

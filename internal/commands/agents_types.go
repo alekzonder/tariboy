@@ -69,29 +69,30 @@ type AgentView struct {
 
 // AgentRow is one agent in the agent.ps list.
 type AgentRow struct {
-	Name                     string      `json:"name"`
-	Image                    string      `json:"image"`
-	State                    string      `json:"state"`
-	Alias                    string      `json:"alias"`
-	Harness                  string      `json:"harness"`
-	Enabled                  bool        `json:"enabled"`
-	Group                    string      `json:"group"`
-	Color                    string      `json:"color"`
-	Cwd                      string      `json:"cwd"`
-	TimeoutS                 int         `json:"timeout_s"`
-	IntervalS                int         `json:"interval_s"`
-	OnTimeout                string      `json:"on_timeout"`
-	OnError                  string      `json:"on_error"`
-	MaxIdleIterations        int         `json:"max_idle_iterations"`
-	AIStallTimeoutS          int         `json:"ai_stall_timeout_s"`
-	Interactive              bool        `json:"interactive"`
-	GoalEnabled              bool        `json:"goal_enabled"`
-	GoalWaitCustomerTimeoutS int         `json:"goal_wait_customer_timeout_s"`
-	GoalDeliveryCooldownS    int         `json:"goal_delivery_cooldown_s"`
-	CurrentGoalTaskKey       string      `json:"current_goal_task_key"`
-	Schedule                 string      `json:"schedule"`
-	ScheduleNextAt           string      `json:"schedule_next_at"`
-	Budget                   AgentBudget `json:"budget"`
+	Name                     string            `json:"name"`
+	Image                    string            `json:"image"`
+	State                    string            `json:"state"`
+	Alias                    string            `json:"alias"`
+	Harness                  string            `json:"harness"`
+	Enabled                  bool              `json:"enabled"`
+	Group                    string            `json:"group"`
+	Color                    string            `json:"color"`
+	Cwd                      string            `json:"cwd"`
+	TimeoutS                 int               `json:"timeout_s"`
+	IntervalS                int               `json:"interval_s"`
+	OnTimeout                string            `json:"on_timeout"`
+	OnError                  string            `json:"on_error"`
+	MaxIdleIterations        int               `json:"max_idle_iterations"`
+	AIStallTimeoutS          int               `json:"ai_stall_timeout_s"`
+	Interactive              bool              `json:"interactive"`
+	Env                      map[string]string `json:"env"`
+	GoalEnabled              bool              `json:"goal_enabled"`
+	GoalWaitCustomerTimeoutS int               `json:"goal_wait_customer_timeout_s"`
+	GoalDeliveryCooldownS    int               `json:"goal_delivery_cooldown_s"`
+	CurrentGoalTaskKey       string            `json:"current_goal_task_key"`
+	Schedule                 string            `json:"schedule"`
+	ScheduleNextAt           string            `json:"schedule_next_at"`
+	Budget                   AgentBudget       `json:"budget"`
 	AgentHalt
 }
 

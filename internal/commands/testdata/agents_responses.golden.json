@@ -293,6 +293,9 @@
         "current_goal_task_key": "",
         "cwd": "/srv/alpha",
         "enabled": true,
+        "env": {
+          "A": "1"
+        },
         "error_reason": "halted: boom",
         "goal_delivery_cooldown_s": 60,
         "goal_enabled": true,
@@ -331,6 +334,7 @@
         "current_goal_task_key": "",
         "cwd": "",
         "enabled": false,
+        "env": {},
         "goal_delivery_cooldown_s": 60,
         "goal_enabled": true,
         "goal_wait_customer_timeout_s": 300,
@@ -368,6 +372,7 @@
         "current_goal_task_key": "",
         "cwd": "",
         "enabled": false,
+        "env": {},
         "goal_delivery_cooldown_s": 60,
         "goal_enabled": true,
         "goal_wait_customer_timeout_s": 300,

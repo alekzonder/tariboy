@@ -2,6 +2,7 @@ package compose
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 )
 
@@ -155,7 +156,7 @@ func loopDisabled(a AgentSpec) bool {
 }
 
 // agentChanges lists the settings of an existing agent that differ from the
-// file, in apply order: group, image, cwd, loop, goal.
+// file, in apply order: group, image, cwd, env, interactive, loop, goal.
 func (r *Runner) agentChanges(name string, a AgentSpec, cur liveAgent) ([]change, error) {
 	var out []change
 	if a.Group != "" && cur.Group != a.Group {
@@ -175,6 +176,7 @@ func (r *Runner) agentChanges(name string, a AgentSpec, cur liveAgent) ([]change
 			note: fmt.Sprintf("setting cwd for agent %s -> %s", name, want), fail: "set cwd " + name,
 			call: Call{"POST", "/api/agents/" + name + "/cwd", map[string]any{"value": want}}})
 	}
+	out = append(out, envChanges(name, a, cur)...)
 	loop, err := loopChanges(name, a, &cur)
 	if err != nil {
 		return nil, err
@@ -185,6 +187,35 @@ func (r *Runner) agentChanges(name string, a AgentSpec, cur liveAgent) ([]change
 	}
 	out = append(append(out, loop...), goal...)
 	return out, nil
+}
+
+// envChanges converges the env keys the file declares and, when the file has a
+// harness block, the interactive mode. Both apply from the next iteration
+// without a restart. The env call sends the live env merged with the file's
+// keys, so keys the file does not declare (for example image manifest env)
+// are kept. The issue names drifted keys only, never their values.
+func envChanges(name string, a AgentSpec, cur liveAgent) []change {
+	var out []change
+	var drifted []string
+	for _, k := range sortedKeys(a.Env) {
+		if have, ok := cur.Env[k]; !ok || have != a.Env[k] {
+			drifted = append(drifted, k)
+		}
+	}
+	if len(drifted) > 0 {
+		merged := make(map[string]string, len(cur.Env)+len(a.Env))
+		maps.Copy(merged, cur.Env)
+		maps.Copy(merged, a.Env)
+		out = append(out, change{kind: "env", issue: "env drift: " + strings.Join(drifted, ","),
+			note: fmt.Sprintf("setting env %s for agent %s (applied from the next iteration)", strings.Join(drifted, ","), name),
+			fail: "set env " + name, call: Call{"POST", "/api/agents/" + name + "/env", map[string]any{"value": merged}}})
+	}
+	if h := a.Harness; h != nil && cur.Interactive != h.Interactive {
+		out = append(out, change{kind: "interactive", issue: fmt.Sprintf("interactive drift: have=%t want=%t", cur.Interactive, h.Interactive),
+			note: fmt.Sprintf("setting interactive for agent %s -> %t (applied from the next iteration)", name, h.Interactive),
+			fail: "set interactive " + name, call: Call{"POST", "/api/agents/" + name + "/interactive", map[string]any{"value": h.Interactive}}})
+	}
+	return out
 }
 
 func harnessChange(name string, a AgentSpec, cur liveAgent) *change {

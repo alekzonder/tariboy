@@ -229,6 +229,14 @@ func parseAgentEnv(value any) (map[string]string, error) {
 	}
 }
 
+// envView is an agent env as served: never null.
+func envView(env map[string]string) map[string]string {
+	if env == nil {
+		return map[string]string{}
+	}
+	return env
+}
+
 func parseAgentPlugins(value any) ([]string, error) {
 	switch list := value.(type) {
 	case string:
@@ -475,6 +483,7 @@ func agentPs() registry.Command {
 					MaxIdleIterations: a.MaxIdleIterations,
 					AIStallTimeoutS:   a.AIStallTimeoutS,
 					Interactive:       a.Interactive,
+					Env:               envView(a.Env),
 					GoalEnabled:       a.GoalEnabled, GoalWaitCustomerTimeoutS: a.GoalWaitCustomerTimeoutS, GoalDeliveryCooldownS: a.GoalDeliveryCooldownS,
 					CurrentGoalTaskKey: a.CurrentGoalTaskKey,
 					Schedule:           a.ScheduleRRule, ScheduleNextAt: scheduleNextAt(a),
