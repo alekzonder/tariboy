@@ -35,6 +35,9 @@
           "id": {
             "type": "string"
           },
+          "rate_limited_since": {
+            "type": "string"
+          },
           "started_at": {
             "type": "string"
           },

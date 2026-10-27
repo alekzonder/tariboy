@@ -466,6 +466,48 @@ func TestAgentStatusIncludesActiveIterationDeadlines(t *testing.T) {
 	}
 }
 
+func TestAgentStatusShowsUsageLimitOfRunningIteration(t *testing.T) {
+	t.Parallel()
+	c, as, _ := ctxWithStore(t)
+	if err := as.Create(agent.Agent{Name: "smoke", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.CreateIteration(agent.Iteration{ID: "smoke-1", Agent: "smoke", Status: "done", StartedAt: "2026-07-14T09:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.CreateIteration(agent.Iteration{ID: "smoke-2", Agent: "smoke", Status: "running", StartedAt: "2026-07-14T10:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	usage := aiproxy.NewStore(c.Store, nil)
+	insert := func(id, ts, iteration, status string) {
+		t.Helper()
+		if err := usage.Insert(aiproxy.AIRequest{ID: id, TS: ts, Agent: "smoke", Iteration: iteration, Status: status}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	limitedSince := func() string {
+		t.Helper()
+		res, err := h(t, "agent.status.show")(c, registry.Params{"name": "smoke"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.(AgentStatus).ActiveIteration.RateLimitedSince
+	}
+	insert("air-1", "2026-07-14T09:30:00Z", "smoke-1", "rate_limited")
+	if got := limitedSince(); got != "" {
+		t.Fatalf("a limit of an earlier iteration shows: %q", got)
+	}
+	insert("air-2", "2026-07-14T10:01:00Z", "smoke-2", "ok")
+	insert("air-3", "2026-07-14T10:02:00Z", "smoke-2", "rate_limited")
+	if got, want := limitedSince(), store.FormatTime(time.Date(2026, 7, 14, 10, 2, 0, 0, time.UTC)); got != want {
+		t.Fatalf("rate_limited_since = %q, want the time of the 429", got)
+	}
+	insert("air-4", "2026-07-14T11:20:00Z", "smoke-2", "ok")
+	if got := limitedSince(); got != "" {
+		t.Fatalf("a later successful request must clear the limit, got %q", got)
+	}
+}
+
 func TestAgentStatusIncludesMessageQueueSaturation(t *testing.T) {
 	t.Parallel()
 	c, agents, _ := ctxWithStore(t)
