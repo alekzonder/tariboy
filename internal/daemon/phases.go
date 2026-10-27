@@ -534,16 +534,17 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 			}
 			return v
 		},
-		RecordCursorUsage:  recordCursorUsage(ctx, proc, c, px),
-		Tasks:              tk.service,
-		ExternalPlugins:    plugins.ResolveEnabledInstalledMetadata(p.PluginsDir(), pl.store),
-		Spawner:            o.Spawner,
-		OnIterationClose:   onIterationClose,
-		GoalSignal:         tk.goalSignal,
-		IterationCompleted: tk.goalIterationCompleted,
-		RecordIterationEnd: tk.service.RecordIterationEnd,
-		CurrentGoal:        tk.goalStore.Current,
-		WorkflowGoals:      loop.TaskWorkflowGoals{Tasks: tk.service, Images: tk.workflowImages.Store, Log: log},
+		RecordCursorUsage:     recordCursorUsage(ctx, proc, c, px),
+		Tasks:                 tk.service,
+		ExternalPlugins:       plugins.ResolveEnabledInstalledMetadata(p.PluginsDir(), pl.store),
+		Spawner:               o.Spawner,
+		OnIterationClose:      onIterationClose,
+		GoalSignal:            tk.goalSignal,
+		IterationCompleted:    tk.goalIterationCompleted,
+		RecordIterationEnd:    tk.service.RecordIterationEnd,
+		CloseStaleTaskLetters: tk.service.CloseStaleTaskLetters,
+		CurrentGoal:           tk.goalStore.Current,
+		WorkflowGoals:         loop.TaskWorkflowGoals{Tasks: tk.service, Images: tk.workflowImages.Store, Log: log},
 		SetGoal: func(agent, key string, activate func() (func(), error)) error {
 			_, err := tk.goalStore.Set(agent, key, time.Now().UTC(), activate)
 			return err

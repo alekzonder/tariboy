@@ -275,3 +275,26 @@ func CloseTaskQuestionsTx(tx *sql.Tx, recipient, taskKey string, askers []string
 	n, _ := res.RowsAffected()
 	return int(n), nil
 }
+
+// CloseTaskNoticesTx closes, inside the caller's transaction, the open
+// letters of kinds to recipient about taskKey created at or before
+// createdBefore, with note as close note, and returns how many it closed.
+// Native Tasks calls it when an iteration that worked the task already saw
+// what those letters announce.
+func CloseTaskNoticesTx(tx *sql.Tx, recipient, taskKey string, kinds []string, createdBefore time.Time, note string, now time.Time) (int, error) {
+	if len(kinds) == 0 {
+		return 0, nil
+	}
+	args := []any{store.FormatTime(now), note, recipient, taskKey, store.FormatTime(createdBefore)}
+	for _, kind := range kinds {
+		args = append(args, kind)
+	}
+	res, err := tx.Exec(`UPDATE mail SET answered_at = ?, close_note = ?
+		WHERE recipient = ? AND CASE WHEN json_valid(data) THEN json_extract(data, '$.task_key') END = ?
+		AND created_at <= ? AND kind IN (`+inPlaceholders(len(kinds))+`) AND `+openSQL, args...)
+	if err != nil {
+		return 0, fmt.Errorf("close task notices of %s: %w", taskKey, err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}

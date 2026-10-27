@@ -122,7 +122,11 @@ type ManagerConfig struct {
 	// with, just before IterationCompleted, so a workflow task this iteration
 	// paused is not woken again. An error is logged and changes nothing else.
 	RecordIterationEnd func(context.Context, tasks.IterationEnd) error
-	CurrentGoal        func(string, time.Time) (tasks.Task, bool, error)
+	// CloseStaleTaskLetters closes the agent's task notices that are not its
+	// work now, before a wake counts open letters and before a prompt renders
+	// them. An error is logged and the letters stay open.
+	CloseStaleTaskLetters func(ctx context.Context, agent string) (int, error)
+	CurrentGoal           func(string, time.Time) (tasks.Task, bool, error)
 	// WorkflowGoals supplies the workflow data for the Goal block of a workflow
 	// task; nil renders the flexible text with a notice.
 	WorkflowGoals   WorkflowGoalSource
@@ -373,7 +377,7 @@ func (m *Manager) runnerFor(ag agent.Agent) IterationRunner {
 		DoneGrace: m.cfg.DoneGrace, Logger: m.cfg.Log, Mail: m.cfg.Mail, Proxy: m.cfg.Proxy, AuditFor: m.cfg.AuditFor,
 		RecordCursorUsage: m.cfg.RecordCursorUsage, CodexApproval: m.cfg.CodexApproval,
 		CurrentGoal: m.cfg.CurrentGoal, WorkflowGoals: m.cfg.WorkflowGoals, Tasks: m.cfg.Tasks,
-		GoalRead: m.noteIterationGoal,
+		GoalRead: m.noteIterationGoal, CloseStaleTaskLetters: m.cfg.CloseStaleTaskLetters,
 	})
 }
 
@@ -949,6 +953,11 @@ func (m *Manager) start(ag agent.Agent) error {
 	engine.usageFlush = m.cfg.UsageFlush
 	if m.cfg.Mail != nil {
 		engine.SetMessagePeek(func() (bool, error) {
+			if m.cfg.CloseStaleTaskLetters != nil {
+				if _, err := m.cfg.CloseStaleTaskLetters(context.Background(), agName); err != nil {
+					m.cfg.Log.Warn("close stale task letters", "agent", agName, "err", err)
+				}
+			}
 			n, err := m.cfg.Mail.OpenCount(agName)
 			return n > 0, err
 		})

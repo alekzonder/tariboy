@@ -463,13 +463,15 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	var recipient, kind, sender, data, answeredAt string
-	if err := reopened.DB.QueryRow(`SELECT recipient,kind,sender,data,answered_at
-		FROM mail WHERE idempotency_key='task-goal:worker:GOAL-9xk2:1:'`).Scan(&recipient, &kind, &sender, &data, &answeredAt); err != nil {
+	// An end of the woken iteration, which ran with this Goal, closes the letter.
+	var recipient, kind, sender, data, closeNote string
+	if err := reopened.DB.QueryRow(`SELECT recipient,kind,sender,data,close_note
+		FROM mail WHERE idempotency_key='task-goal:worker:GOAL-9xk2:1:'`).Scan(&recipient, &kind, &sender, &data, &closeNote); err != nil {
 		t.Fatal(err)
 	}
-	if recipient != "agent:worker" || kind != "task.goal" || sender != "system:goal" || answeredAt != "" {
-		t.Fatalf("goal = recipient:%q kind:%q sender:%q answered_at:%q", recipient, kind, sender, answeredAt)
+	if recipient != "agent:worker" || kind != "task.goal" || sender != "system:goal" ||
+		(closeNote != "" && !strings.HasPrefix(closeNote, "iteration-end:")) {
+		t.Fatalf("goal = recipient:%q kind:%q sender:%q close_note:%q", recipient, kind, sender, closeNote)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(data), &payload); err != nil {
