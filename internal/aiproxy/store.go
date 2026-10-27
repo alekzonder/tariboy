@@ -52,7 +52,7 @@ type AIRequest struct {
 	CacheReadTokens  int
 	CostUSD          float64
 	LatencyMs        int
-	Status           string // ok | budget_block | auth_error | upstream_error
+	Status           string // ok | budget_block | auth_error | upstream_error | rate_limited | quota_probe | client_closed
 	UpstreamStatus   int
 	TaskID           string // native task key; "" when untagged
 	EpicID           string // native top-level root key; "" when untagged
