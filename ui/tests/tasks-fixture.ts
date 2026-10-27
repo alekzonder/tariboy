@@ -1,4 +1,5 @@
-const daemonURL = "http://127.0.0.1:4176";
+// Set by vite.tasks-test.config.ts from TARIBOY_UI_DEV_API_PORT.
+const daemonURL: string = import.meta.env.TARIBOY_UI_DEV_API_URL;
 let callbackID = 0;
 let eventID = 0;
 

@@ -170,7 +170,8 @@ make full-check      # heavy, tens of minutes, includes check
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
-`staticcheck`, `gocyclo`, `test`, Go unit tests and smoke contracts. Its
+`staticcheck`, `gocyclo`, `test`, Go unit tests, `desktop-rust-check` and
+smoke contracts. Its
 `test` and `tariboy-tasks-e2e` steps also check the HTTP API against the
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
 frontend target runs the UI format check, the generated API types check, UI
@@ -196,6 +197,38 @@ first failure. Each step is timed and recorded, and the run ends with a summary
 table naming every step that failed, so one aggregate pass surfaces gofmt drift
 and a UI type error together.
 
+### Checks on a shared host
+
+Several agents can run `make check` on one host at the same time, and together
+they can use all memory and disk. The fast checks therefore limit themselves:
+
+- **Check slot.** A top-level `check`, `backend-check` or `frontend-check` run
+  first takes a host-wide lock on `/tmp/tariboy-check.lock` with `flock`. Every
+  worktree shares that path, so only one check runs at a time. A second run
+  prints `waiting for a check slot (/tmp/tariboy-check.lock)` and starts when
+  the first run ends. The wait has a limit of one hour. After that, the run
+  fails with `no check slot after 3600s` and does not run its steps. A killed
+  run frees its slot. `TARIBOY_CHECK_SLOTS=N` allows N runs at a time,
+  `TARIBOY_CHECK_LOCK` changes the lock path and `TARIBOY_CHECK_LOCK_TIMEOUT`
+  changes the limit in seconds. A host without `flock`, such as macOS, prints
+  `check slot: flock not found, running without a host lock` and runs anyway.
+  An agent that runs `make check` with a tool timeout must run it in the
+  background, because the wait counts against that timeout.
+- **Parallelism.** When `TARIBOY_AGENT` is set, as it is in every agent
+  session, `CHECK_JOBS` defaults to 2. `CHECK_JOBS=N` adds `-p=N` to
+  `GOFLAGS`, unless `GOFLAGS` already sets `-p`, sets the vitest worker count
+  through `TARIBOY_VITEST_MAX_WORKERS`, and passes `--jobs N` to
+  `desktop-rust-check`. Without `TARIBOY_AGENT` or `CHECK_JOBS`, nothing
+  changes. Set `CHECK_JOBS=N` yourself to override the default.
+- **Temporary files.** A top-level run creates `$TMPDIR/tbc.XXXXXX` (or
+  `/tmp/tbc.XXXXXX`) and gives every step `TMPDIR=<run dir>/t`. Test homes,
+  `t.TempDir()` directories, Go build files and npm temporary files go there,
+  and the run removes the directory when it ends. Each run writes its process
+  ID to `<run dir>/pid`. A run that was killed cannot remove its directory, so
+  the next run removes every `tbc.*` directory whose process is gone. Files of
+  commands outside the fast checks, such as a direct `go test`, are not
+  covered.
+
 `frontend-check`, `check`, and `full-check` reuse dependencies when a saved
 SHA-256 fingerprint matches `package.json`, `package-lock.json`, and the Node.js
 and npm versions. A fingerprint identifies those inputs by their contents.
@@ -212,8 +245,8 @@ Three scripts stay outside `full-check` deliberately and are run by hand:
 `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` require a
 disposable SSH host (the first also requires explicit consent to destroying its
 data), and `scripts/check-alpha-artifacts.sh` is a release gate that takes a
-release directory as its argument. The Rust host tests are outside both targets
-as well; see [Rust desktop host](#rust-desktop-host).
+release directory as its argument. The Rust host tests and clippy are outside
+both targets as well; see [Rust desktop host](#rust-desktop-host).
 
 The individual targets remain callable on their own, so running `make vet` or
 `make e2e` while iterating is still legitimate. Use the smallest relevant
@@ -672,9 +705,11 @@ and its real API together:
 make ui-dev
 ```
 
-The target prints the browser URL, builds and starts a daemon with temporary
-isolated data and runtime directories on `127.0.0.1:4176`, and serves the UI on
-`127.0.0.1:4175`. Press Ctrl-C to stop both processes and remove the temporary
+The target asks the OS for two free loopback ports and prints the browser URL
+with the ones it took. It builds and starts a daemon with temporary isolated
+data and runtime directories on the first port and serves the UI on the second,
+so an old dev server that still holds a port does not stop a new one. The
+Playwright suites keep the fixed ports `4175` and `4176`. Press Ctrl-C to stop both processes and remove the temporary
 daemon state. Use the native Desktop gates only when the change depends on the
 Tauri host, WebView behavior, packaging, or generated Desktop assets.
 
@@ -703,8 +738,16 @@ RESPONSIVE_SHOTS=/tmp/shots npm run test:responsive-browser -- --project phone-3
 
 ### Rust desktop host
 
-Neither entry point runs the Rust tests or clippy — `full-check` compiles this
-crate through its desktop step, but does not test it. Run them yourself when
+The `desktop-rust-check` step of `backend-check` compiles this crate with
+`cargo check --locked --all-targets`, so `make check` needs the Rust toolchain
+and, on Linux, the native Tauri libraries listed below. A host without `cargo`
+fails the step with the install command. Every worktree shares one target
+directory, `~/.cache/tariboy/desktop-check-target`, which
+`TARIBOY_CARGO_CHECK_DIR` changes. The first run with an empty target directory
+takes several minutes; later runs are incremental. A worktree without
+`desktop/dist` compiles against an empty stub frontend.
+
+Neither entry point runs the Rust tests or clippy. Run them yourself when
 changing `desktop/src-tauri`:
 
 ```bash

@@ -32,7 +32,19 @@ TAURI_BUNDLE_VERBOSITY = $(if $(filter 1,$(DESKTOP_BUNDLE_VERBOSE)),--verbose,)
 
 export CGO_ENABLED=0
 
-.PHONY: build install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev ui-fmt-check ui-complexity-report store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+# Agents share one host, so their runs default to two Go packages and two
+# vitest workers at a time. CHECK_JOBS=N overrides it for anyone.
+ifdef TARIBOY_AGENT
+CHECK_JOBS ?= 2
+endif
+ifdef CHECK_JOBS
+ifeq ($(filter -p=%,$(GOFLAGS)),)
+export GOFLAGS := $(strip $(GOFLAGS) -p=$(CHECK_JOBS))
+endif
+export TARIBOY_VITEST_MAX_WORKERS ?= $(CHECK_JOBS)
+endif
+
+.PHONY: build install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev ui-fmt-check ui-complexity-report store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries desktop-version-check desktop-lock-check desktop-rust-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build:
 	$(GO) build -trimpath -o $(BINDIR)/tariboyd ./cmd/tariboyd
@@ -88,13 +100,13 @@ uninstall:
 # make test adds -tags tmux when tmux is installed, so the shim tests that
 # drive a real tmux run there and stay out of a plain go test.
 test:
-	@test_tmp=$$(cd /tmp && pwd -P) || exit $$?; \
+	@test_tmp=$$(cd "$${TMPDIR:-/tmp}" && pwd -P) || exit $$?; \
 	packages=$$($(GO) list ./...) || exit $$?; \
 	packages=$$(printf '%s\n' "$$packages" | sed '/\/node_modules\//d; /\/internal\/cli$$/d; /\/internal\/plugins$$/d'); \
 	tags=; if command -v tmux >/dev/null 2>&1; then tags=-tags=tmux; fi; \
 	TMPDIR="$$test_tmp" $(GO) test $$tags $$packages && \
-	TMPDIR=/tmp $(GO) test ./internal/cli && \
-	TMPDIR=/tmp $(GO) test ./internal/plugins -skip '^($(LONG_SOCKET_TESTS))$$' && \
+	TMPDIR="$$test_tmp" $(GO) test ./internal/cli && \
+	TMPDIR="$$test_tmp" $(GO) test ./internal/plugins -skip '^($(LONG_SOCKET_TESTS))$$' && \
 	TMPDIR=. $(GO) test ./internal/plugins -run '^($(LONG_SOCKET_TESTS))$$'
 
 smoke-contract-test:
@@ -218,7 +230,7 @@ ui:
 
 ui-dev:
 	@test -d ui/node_modules || { echo "ui/node_modules is missing, run: cd ui && npm ci" >&2; exit 1; }
-	@bash -lc 'set -euo pipefail; cd ui; cleanup() { trap - EXIT INT TERM; kill "$${daemon_pid:-}" "$${ui_pid:-}" 2>/dev/null || true; wait "$${daemon_pid:-}" "$${ui_pid:-}" 2>/dev/null || true; }; trap cleanup EXIT INT TERM; node tests/tasks-e2e-daemon.mjs & daemon_pid=$$!; npx vite --config vite.tasks-test.config.ts & ui_pid=$$!; echo "UI: http://127.0.0.1:4175/tests/tasks-fixture.html#/servers/local/tasks"; echo "Isolated API: http://127.0.0.1:4176"; while kill -0 "$$daemon_pid" 2>/dev/null && kill -0 "$$ui_pid" 2>/dev/null; do sleep 1; done'
+	@bash -lc 'set -euo pipefail; cd ui; cleanup() { trap - EXIT INT TERM; kill "$${daemon_pid:-}" "$${ui_pid:-}" 2>/dev/null || true; wait "$${daemon_pid:-}" "$${ui_pid:-}" 2>/dev/null || true; }; trap cleanup EXIT INT TERM; free_port() { node -e "const s = require(\"net\").createServer(); s.listen(0, \"127.0.0.1\", () => { console.log(s.address().port); s.close(); })"; }; export TARIBOY_UI_DEV_PORT=$$(free_port) TARIBOY_UI_DEV_API_PORT=$$(free_port); node tests/tasks-e2e-daemon.mjs & daemon_pid=$$!; npx vite --config vite.tasks-test.config.ts & ui_pid=$$!; echo "UI: http://127.0.0.1:$$TARIBOY_UI_DEV_PORT/tests/tasks-fixture.html#/servers/local/tasks"; echo "Isolated API: http://127.0.0.1:$$TARIBOY_UI_DEV_API_PORT"; while kill -0 "$$daemon_pid" 2>/dev/null && kill -0 "$$ui_pid" 2>/dev/null; do sleep 1; done'
 
 # Read-only oxfmt drift report for ui/; `cd ui && npm run fmt` rewrites files.
 ui-fmt-check:
@@ -341,6 +353,23 @@ desktop-version-check:
 	@rg -q 'Quit Tariboy' $(TAURI_DIR)/src/menu.rs
 	@rg -q 'Tariboy cannot start' $(TAURI_DIR)/src/main.rs
 	@echo "version ok: $(VERSION)"
+
+# Compile the desktop crate, without tests or clippy, so make check fails on
+# Rust that does not build. Every worktree shares one target directory, which
+# cargo locks itself. A worktree without desktop/dist gets an empty stub for
+# tauri::generate_context!, which only embeds the frontend.
+desktop-rust-check:
+	@command -v cargo >/dev/null || { \
+		echo "cargo not found — install the Rust toolchain first:" >&2; \
+		echo "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh" >&2; \
+		exit 1; \
+	}
+	@stub=$$(mktemp -d "$${TMPDIR:-/tmp}/tbc-dist.XXXXXX") || exit 1; \
+	trap 'rm -rf -- "$$stub"' EXIT; \
+	if [ ! -d $(DESKTOP)/dist ]; then export TAURI_CONFIG="{\"build\":{\"frontendDist\":\"$$stub\"}}"; fi; \
+	cd $(TAURI_DIR) && \
+	CARGO_TARGET_DIR="$${TARIBOY_CARGO_CHECK_DIR:-$$HOME/.cache/tariboy/desktop-check-target}" \
+	cargo check --locked --all-targets $(if $(CHECK_JOBS),--jobs $(CHECK_JOBS),)
 
 # Validate the committed Cargo.lock before any Rust build. Offline first, so a
 # warm checkout never reaches the network. A cold ~/.cargo has none of the
@@ -541,19 +570,63 @@ desktop-smoke:
 # -j` jobserver; these entry points are sequential by design, so nothing is lost.
 SUBMAKE := $(MAKE) --no-print-directory
 
+# A top-level check run holds one of TARIBOY_CHECK_SLOTS (default 1) host-wide
+# check slots, so agents on one host do not run their checks at the same time.
+# The lock path is absolute, so every worktree shares it; flock frees a slot
+# when its holder dies. Nested runs see TARIBOY_CHECK_LOCK_HELD and skip it.
+# Step commands get fd 9 closed, so a leaked child never keeps the slot.
+define CHECK_SLOT
+__lock="$${TARIBOY_CHECK_LOCK:-/tmp/tariboy-check.lock}"; \
+if ! command -v flock >/dev/null 2>&1; then \
+	echo "check slot: flock not found, running without a host lock"; \
+else \
+	__i=0; __got=; \
+	while [ "$$__i" -lt "$${TARIBOY_CHECK_SLOTS:-1}" ]; do \
+		__f="$$__lock"; [ "$$__i" -eq 0 ] || __f="$$__lock.$$__i"; \
+		exec 9>>"$$__f" || exit 1; \
+		if flock -n 9; then __got=1; break; fi; \
+		exec 9>&-; __i=$$((__i + 1)); \
+	done; \
+	if [ -z "$$__got" ]; then \
+		exec 9>>"$$__lock" || exit 1; \
+		__wait="$${TARIBOY_CHECK_LOCK_TIMEOUT:-3600}"; \
+		echo "waiting for a check slot ($$__lock)"; \
+		flock -w "$$__wait" 9 || { echo "no check slot after $${__wait}s ($$__lock); the check did not run" >&2; exit 1; }; \
+	fi; \
+fi
+endef
+
 # The single mechanism behind these targets. run_step NAME CMD runs CMD in a
 # subshell, times it, and records ok/FAIL — it never aborts the run, because one
 # pass has to surface gofmt drift AND a ui type error at once, not one per pass.
 # summarize prints the table and owns the exit status. There is no fail-fast flag
 # by design. The subshell is what makes `cd ui && ...` steps safe to chain, and
 # eval (rather than sh -c) keeps need_node_modules visible to full-check's
-# later browser steps.
+# later browser steps. A top-level run gives its steps a TMPDIR inside its run
+# directory, which the EXIT trap removes; the pid file lets the next run remove
+# the directory of a killed run.
 define STEP_RUNNER
 set +e; \
-rows=""; failed=0; __step=0; \
-__output_dir=$$(mktemp -d "$${TMPDIR:-/tmp}/tariboy-check.XXXXXXXX") || exit 1; \
-trap 'rm -rf -- "$$__output_dir"' EXIT; \
+rows=""; failed=0; __step=0; __top=; \
+if [ -z "$${TARIBOY_CHECK_LOCK_HELD:-}" ]; then \
+	__top=1; \
+	$(CHECK_SLOT); \
+	export TARIBOY_CHECK_LOCK_HELD=1; \
+fi; \
+__tmp_base="$${TMPDIR:-/tmp}"; \
+__output_dir=$$(mktemp -d "$$__tmp_base/tbc.XXXXXX") || exit 1; \
+trap 'chmod -R u+w -- "$$__output_dir" 2>/dev/null; rm -rf -- "$$__output_dir"' EXIT; \
 trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM; \
+if [ -n "$$__top" ]; then \
+	echo "$$$$" >"$$__output_dir/pid"; \
+	for __dead in "$$__tmp_base"/tbc.*; do \
+		[ -f "$$__dead/pid" ] || continue; \
+		ps -p "$$(cat "$$__dead/pid")" >/dev/null 2>&1 && continue; \
+		chmod -R u+w -- "$$__dead" 2>/dev/null; rm -rf -- "$$__dead"; \
+	done; \
+	mkdir "$$__output_dir/t" || exit 1; \
+	export TMPDIR="$$__output_dir/t"; \
+fi; \
 need_node_modules() { \
 	if [ ! -d "$$1/node_modules" ]; then \
 		echo "$$1/node_modules is missing, run: cd $$1 && npm ci" >&2; \
@@ -565,7 +638,7 @@ run_step() { \
 	__output="$$__output_dir/$$__step.log"; \
 	printf '==> %-28s ' "$$1"; \
 	__start=$$(date +%s); \
-	( eval "$$2" ) >"$$__output" 2>&1; \
+	( eval "$$2" ) 9>&- >"$$__output" 2>&1; \
 	__code=$$?; \
 	__secs=$$(( $$(date +%s) - $$__start )); \
 	if [ "$$__code" -eq 0 ]; then \
@@ -582,7 +655,7 @@ run_step() { \
 run_group() { \
 	printf '\n==> %s\n' "$$1"; \
 	__start=$$(date +%s); \
-	( eval "$$2" ); \
+	( eval "$$2" ) 9>&-; \
 	__code=$$?; \
 	__secs=$$(( $$(date +%s) - $$__start )); \
 	if [ "$$__code" -eq 0 ]; then __st=ok; else __st=FAIL; failed=1; fi; \
@@ -609,6 +682,7 @@ backend-check:
 	run_step "staticcheck"  '$(SUBMAKE) staticcheck'; \
 	run_step "gocyclo"      '$(SUBMAKE) gocyclo'; \
 	run_step "test"         '$(SUBMAKE) test'; \
+	run_step "desktop-rust-check" '$(SUBMAKE) desktop-rust-check'; \
 	run_step "tariboy-tasks-e2e" '$(SUBMAKE) tariboy-tasks-e2e'; \
 	run_step "smoke-contract" '$(SUBMAKE) smoke-contract-test'; \
 	summarize backend-check
@@ -638,7 +712,7 @@ check:
 check-output-contract-fixture:
 	@$(STEP_RUNNER); \
 	run_step "success-step" 'echo SUCCESS_DETAIL'; \
-	run_step "failure-step" 'echo FAILURE_DETAIL; exit 7'; \
+	run_step "failure-step" 'echo FAILURE_DETAIL; echo "TMPDIR=$$TMPDIR"; exit 7'; \
 	run_step "after-step" 'echo AFTER_DETAIL'; \
 	summarize check-output-contract-fixture
 

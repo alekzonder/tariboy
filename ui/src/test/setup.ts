@@ -99,5 +99,6 @@ if (typeof globalThis.EventSource === "undefined") {
 
 // Screens and editors load lazily: the first findBy in a test file may wait
 // for a cold dynamic import, which under the parallel suite can take longer
-// than the 1 s default.
-configure({ asyncUtilTimeout: 5000 });
+// than the 1 s default, and much longer on a host that agents share. It stays
+// under the 20 s test limit in vite.config.ts.
+configure({ asyncUtilTimeout: 10_000 });
