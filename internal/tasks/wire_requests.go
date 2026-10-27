@@ -156,23 +156,29 @@ type AssignRequest struct {
 	Revision int64  `json:"revision" flag:"revision"`
 }
 
-// CommentRequest adds a comment, given as --body or as the words after the key.
+// CommentRequest adds a comment, given as --body, as the words after the key,
+// or read by the client from File or stdin when neither is given.
 type CommentRequest struct {
 	Key            string   `json:"key" pos:"0" label:"task key" required:"cli"`
 	Body           string   `json:"body" flag:"body" help:"Markdown comment text"`
 	Text           []string `json:"-" pos:"1+"`
+	File           string   `json:"-" flag:"file"`
 	IdempotencyKey string   `json:"idempotency_key" flag:"idempotency-key" help:"Stable retry key"`
 }
 
 func (r *CommentRequest) Validate() error {
+	if r.File != "" && (r.Body != "" || len(r.Text) > 0) {
+		return errors.New("pass TEXT, --body, or --file, not more than one")
+	}
 	if r.Body != "" && len(r.Text) > 0 {
 		return fmt.Errorf("unexpected argument: %s", r.Text[0])
 	}
+	given := r.Body != "" || len(r.Text) > 0
 	if r.Body == "" {
 		r.Body = strings.TrimSpace(strings.Join(r.Text, " "))
 	}
 	r.Text = nil
-	if r.Body == "" {
+	if given && r.Body == "" {
 		return errors.New("comment text is required")
 	}
 	return nil
@@ -182,18 +188,21 @@ func (r *CommentRequest) Input() AddCommentInput {
 	return AddCommentInput{Body: r.Body, IdempotencyKey: r.IdempotencyKey}
 }
 
-// AskRequest asks a principal a question as a comment that mentions it.
+// AskRequest asks a principal a question as a comment that mentions it. The
+// client reads the question from File or stdin when no words follow the
+// principal.
 type AskRequest struct {
 	Key            string   `json:"key" pos:"0" label:"task key" required:"cli"`
 	Principal      string   `json:"principal" pos:"1" label:"principal" required:"cli"`
 	Question       []string `json:"-" pos:"2+"`
+	File           string   `json:"-" flag:"file"`
 	Body           string   `json:"body"`
 	IdempotencyKey string   `json:"idempotency_key" flag:"idempotency-key"`
 }
 
 func (r *AskRequest) Validate() error {
-	if len(r.Question) == 0 {
-		return errors.New("principal and question are required")
+	if r.File != "" && len(r.Question) > 0 {
+		return errors.New("pass the question or --file, not both")
 	}
 	r.Body, r.Question = strings.Join(r.Question, " "), nil
 	return nil

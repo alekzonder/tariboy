@@ -50,9 +50,14 @@ Install only the toolchains needed for the area you are changing:
   `GET /api/daemon/status` reports `state: error` with the missing tools; see
   [Daemon host tools](/docs/remote-hosts#daemon-host-tools).
 
-Coding agents must run all shell commands through a Bash login shell
-(`bash -lc 'COMMAND'`) so the account's login profile and exported environment
-are loaded. Keep credentials in the environment; never print their values.
+Coding agents run shell commands directly in their tool shell, which already
+has the account's profile environment. Do not wrap a command that carries text
+(a commit message, a pull request body, a task comment or an artifact) in an
+extra `bash -c` or `bash -lc` layer: quotes, backticks and newlines in the text
+break that layer. Write the text to a file with the Write tool and pass the
+file (`git commit -F`, `gh pr create --body-file`, `ttasks ... --file`), or use
+a quoted heredoc at the top level of the command. Keep credentials in the
+environment; never print their values.
 
 Load the Rust environment before Cargo or desktop commands:
 

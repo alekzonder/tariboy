@@ -64,8 +64,12 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
 
 ## Implementation and verification
 
-- Run all shell commands through a Bash login shell (`bash -lc 'COMMAND'`) so
-  the account's login profile and exported environment are loaded.
+- Run shell commands directly in the tool shell; it already has the account's
+  profile environment. Do not wrap a command that carries text (a commit
+  message, a PR body, a task comment, an artifact) in an extra `bash -c` or
+  `bash -lc` layer. Write that text to a file with the Write tool and pass the
+  file (`git commit -F`, `gh pr create --body-file`, `ttasks ... --file`), or
+  use a quoted heredoc at the top level of the command.
 - Diagnose root cause before fixing a bug.
 - For behavior changes, add a focused failing test before production code.
 - For implementation subtasks, use TDD RED/GREEN and run tests for the affected

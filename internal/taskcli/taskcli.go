@@ -22,7 +22,8 @@ type Caller interface {
 
 var newCaller = func(socket string) Caller { return client.New(socket) }
 
-// stdin is where "artifacts set" reads a value that is not given as an argument.
+// stdin is where "artifacts set", "comment" and "ask" read text that is not
+// given as an argument.
 var stdin io.Reader = os.Stdin
 
 // mode is how an entry point reaches the daemon: prog names the command in
@@ -90,7 +91,7 @@ func run(ctx context.Context, argv []string, m mode, stdout, stderr io.Writer) i
 			fmt.Fprintf(stderr, "tasks: unknown command %q\n", strings.ReplaceAll(parsed.action, "_", " "))
 			return 2
 		}
-		if code := resolveArtifactValue(&parsed, stderr); code != 0 {
+		if code := resolveTextInput(&parsed, stderr); code != 0 {
 			return code
 		}
 		return runAgent(ctx, parsed, newCaller(toolsSocket), jsonOut, stdout, stderr)
@@ -100,7 +101,7 @@ func run(ctx context.Context, argv []string, m mode, stdout, stderr io.Writer) i
 		fmt.Fprintf(stderr, "tariboy-tasks: %v\n", err)
 		return 2
 	}
-	if code := resolveArtifactValue(&parsed, stderr); code != 0 {
+	if code := resolveTextInput(&parsed, stderr); code != 0 {
 		return code
 	}
 	return runOperator(ctx, parsed, newCaller(socket), jsonOut, stdout, stderr)
