@@ -28,40 +28,77 @@ var isTerminal = func(r io.Reader) bool {
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
+// resolveTextInput reads the text of "artifacts set", "comment" and "ask"
+// from --file or stdin when the command line gave none.
+func resolveTextInput(parsed *request, stderr io.Writer) int {
+	switch parsed.action {
+	case "artifact_set":
+		return resolveArtifactValue(parsed, stderr)
+	case "comment":
+		return resolveBody(parsed, parsed.input.(*tasks.CommentRequest).File, "tasks comment", "TEXT", "comment text is required", stderr)
+	case "ask":
+		return resolveBody(parsed, parsed.input.(*tasks.AskRequest).File, "tasks ask", "the question", "principal and question are required", stderr)
+	}
+	return 0
+}
+
 // resolveArtifactValue fills the value of "artifacts set" from --file or from
 // stdin when no VALUE argument was given. The value is stored as read, trailing
 // newline included. At most maxArtifactInput bytes are read, so an oversize
 // value is refused by the daemon rather than cut short here.
 func resolveArtifactValue(parsed *request, stderr io.Writer) int {
-	if parsed.action != "artifact_set" {
-		return 0
-	}
 	if _, given := parsed.payload["value"]; given {
 		return 0
 	}
-	var source io.Reader = stdin
-	name := "stdin"
 	path := parsed.input.(*tasks.ArtifactSetRequest).File
-	if path == "" && isTerminal(stdin) {
-		fmt.Fprintln(stderr, "tasks artifacts set: pass VALUE, --file PATH, or pipe the value on stdin")
-		return 2
-	}
-	if path != "" {
-		name = path
-		file, err := os.Open(path)
-		if err != nil {
-			fmt.Fprintf(stderr, "tasks artifacts set: %v\n", err)
-			return 2
-		}
-		defer file.Close()
-		source = file
-	}
-	value, ok := readText(source, name, "tasks artifacts set", "artifacts", stderr)
+	value, ok := readInput(path, "tasks artifacts set", "pass VALUE, --file PATH, or pipe the value on stdin", "artifacts", stderr)
 	if !ok {
 		return 2
 	}
 	parsed.payload["value"] = value
 	return 0
+}
+
+// resolveBody fills the body of "comment" or "ask" from --file or stdin when
+// no text was given, trimmed like --body. Text over 64 KiB is refused here,
+// never cut short.
+func resolveBody(parsed *request, path, command, argument, required string, stderr io.Writer) int {
+	if body, _ := parsed.payload["body"].(string); body != "" {
+		return 0
+	}
+	body, ok := readInput(path, command, "pass "+argument+", --file PATH, or pipe the text on stdin", "comments", stderr)
+	if !ok {
+		return 2
+	}
+	if len(body) >= maxArtifactInput {
+		fmt.Fprintf(stderr, "%s: the text is larger than 64 KiB\n", command)
+		return 2
+	}
+	if body = strings.TrimSpace(body); body == "" {
+		fmt.Fprintf(stderr, "%s: %s\n", command, required)
+		return 2
+	}
+	parsed.payload["body"] = body
+	return 0
+}
+
+// readInput reads text from the file at path, or from stdin when path is
+// empty. It refuses a terminal stdin with hint rather than wait for typing.
+func readInput(path, command, hint, noun string, stderr io.Writer) (string, bool) {
+	if path == "" {
+		if isTerminal(stdin) {
+			fmt.Fprintf(stderr, "%s: %s\n", command, hint)
+			return "", false
+		}
+		return readText(stdin, "stdin", command, noun, stderr)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s: %v\n", command, err)
+		return "", false
+	}
+	defer file.Close()
+	return readText(file, path, command, noun, stderr)
 }
 
 // readText reads at most maxArtifactInput bytes of UTF-8 text from source, so

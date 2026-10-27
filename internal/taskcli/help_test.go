@@ -59,7 +59,8 @@ func TestHelpExplainsTaskFormsAndFlags(t *testing.T) {
 		wants []string
 	}{
 		{"", []string{"tariboy-tasks", "TARIBOY_TOOLS_SOCKET", "operator", "agent", "queue"}},
-		{"ask", []string{"KEY", "PRINCIPAL", "TEXT", "--idempotency-key"}},
+		{"ask", []string{"KEY", "PRINCIPAL", "TEXT", "--idempotency-key", "--file PATH", "stdin"}},
+		{"comment", []string{"--body", "--file PATH", "stdin"}},
 		{"create", []string{"--title", "--queue", "--parent", "P0", "P3", "filed"}},
 		{"move", []string{"--to-root", "--before", "--parent"}},
 		{"list", []string{"--subtree", "--sort", "--after", "next:", "workflow status"}},

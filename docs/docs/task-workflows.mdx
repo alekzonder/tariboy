@@ -1436,6 +1436,7 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks queue source log QUEUE RUN [--max-bytes N]` | operator | Read a source run log. |
 | `ttasks workflow get KEY` | agent, operator | The task view. |
 | `ttasks artifacts set KEY NAME [VALUE \| --file PATH]` | holder, operator | Set an artifact; stdin when no value. |
+| `ttasks comment KEY [TEXT \| --file PATH]`, `ttasks ask KEY PRINCIPAL [TEXT \| --file PATH]` | agent, operator | Comment or ask; stdin when no text. |
 | `ttasks artifacts ls KEY` | agent, operator | Current artifacts. |
 | `ttasks artifacts show KEY NAME` | agent, operator | One artifact and its history. |
 | `ttasks advance KEY --outcome NAME [--from STATUS] [--message TEXT] [--no-wait]` | holder, customer | Declare an outcome and wait for its checks. |

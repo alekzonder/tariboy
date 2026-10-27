@@ -350,8 +350,8 @@ derives identity from the socket.
 | `ttasks create --parent KEY --title T` | Create a child inheriting queue/context |
 | `ttasks update KEY [--title T] [--description D] [--status S]` | Update fields with optimistic revision |
 | `ttasks assign KEY ASSIGNEE` | Hand work to an agent name |
-| `ttasks comment KEY TEXT` | Add a task comment |
-| `ttasks ask KEY agent:name\|user:login TEXT` | Mention a principal and record an open answer wait |
+| `ttasks comment KEY [TEXT \| --body TEXT \| --file PATH]` (stdin when absent; up to 64 KiB) | Add a task comment |
+| `ttasks ask KEY agent:name\|user:login [TEXT \| --file PATH]` (stdin when absent; up to 64 KiB) | Mention a principal and record an open answer wait |
 | `ttasks move KEY [--parent KEY] [--before KEY] [--to-root]` | Reparent/reorder in the same queue |
 | `ttasks block KEY --by BLOCKER` | Add a directed, cycle-checked blocking relation |
 | `ttasks relate KEY OTHER` | Add a symmetric related link |

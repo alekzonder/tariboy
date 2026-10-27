@@ -41,9 +41,14 @@ ttasks create --parent OPS-12 --title "Add regression coverage"
 ttasks assign OPS-12 worker
 ttasks comment OPS-12 "The failing boundary is confirmed"
 ttasks ask OPS-12 user:login "Which behavior should win?"
+ttasks comment OPS-12 --file note.md
 ttasks update OPS-12 --status in_progress --priority P1
 ttasks done OPS-12
 ```
+
+`comment` and `ask` read the text from `--file PATH`, or from stdin when no
+text is given, so Markdown with quotes, backticks or newlines needs no shell
+quoting.
 
 The same surface includes same-queue move/reorder operations, directed blocking
 relations, symmetric related links, and explicit completion despite active
