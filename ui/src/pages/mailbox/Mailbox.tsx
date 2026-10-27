@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { lazy, useState, type ReactNode } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { PenLine } from "lucide-react";
 import { useApi } from "@/components/apiContext";
+import { LazyBoundary } from "@/components/LazyBoundary";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { useApiQuery } from "@/hooks/useApiQuery";
@@ -15,11 +16,12 @@ import { BOXES, marksReadOnOpen, type MailboxMode } from "./mailboxModel";
 import { mailQueries, useLiveMail } from "./mailQueries";
 import { useMailboxActions } from "./useMailboxActions";
 
+const TaskDrawer = lazy(() => import("@/pages/tasks/TaskDrawer"));
+
 export interface MailboxProps {
   /** The principal whose mailbox this is; "" is the customer. */
   as: string;
   mode: MailboxMode;
-  hostId: string;
   /** A new letter goes here, with no recipient picker. */
   fixedTo?: string;
   /** Principals the recipient picker offers. */
@@ -112,19 +114,13 @@ function useCurrentLetter(as: string, box: MailBox, opened: Letter | null): Lett
  * One mailbox: Inbox, Sent and Archive of `as`, a list on the left and the
  * selected letter on the right. On a narrow screen only one pane shows.
  */
-export default function Mailbox({
-  as,
-  mode,
-  hostId,
-  fixedTo,
-  recipients = [],
-  toolbar,
-}: MailboxProps) {
+export default function Mailbox({ as, mode, fixedTo, recipients = [], toolbar }: MailboxProps) {
   const api = useApi();
   const narrow = useMediaQuery(DRAWER_QUERY);
   const [box, setBox] = useState<MailBox>("inbox");
   const [opened, setOpened] = useState<Letter | null>(null);
   const [compose, setCompose] = useState<ComposeTarget | null>(null);
+  const [taskKey, setTaskKey] = useState("");
   const refresh = useLiveMail(as);
   const actions = useMailboxActions(as, refresh);
   const openCount = useApiQuery(mailQueries.unread(api, as)).data?.open ?? 0;
@@ -167,13 +163,13 @@ export default function Mailbox({
                 box={box}
                 mode={mode}
                 as={as}
-                hostId={hostId}
                 onBack={narrow ? () => setOpened(null) : undefined}
                 handlers={{
                   busy: actions.busy,
                   onReply: (letter) => setCompose({ mode: "reply", letter }),
                   onArchive: (letter) => void actions.archive(letter),
                   onRequeue: (letter) => void actions.requeue(letter),
+                  onOpenTask: setTaskKey,
                 }}
               />
             ) : (
@@ -191,6 +187,11 @@ export default function Mailbox({
           onClose={() => setCompose(null)}
           onSubmit={(values) => void submit(values)}
         />
+      )}
+      {taskKey && (
+        <LazyBoundary resetKey={taskKey}>
+          <TaskDrawer key={taskKey} taskKey={taskKey} onClose={() => setTaskKey("")} />
+        </LazyBoundary>
       )}
     </div>
   );

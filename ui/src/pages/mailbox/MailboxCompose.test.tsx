@@ -22,7 +22,6 @@ function renderMailbox(fixedTo?: string) {
       <Mailbox
         as={fixedTo ?? ""}
         mode={fixedTo ? "agent" : "customer"}
-        hostId=""
         fixedTo={fixedTo}
         recipients={["agent:dev", "agent:ops"]}
       />

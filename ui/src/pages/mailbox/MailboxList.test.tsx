@@ -33,8 +33,13 @@ describe("MailboxList", () => {
           box="archive"
           mode="agent"
           as="agent:dev"
-          hostId=""
-          handlers={{ onReply: vi.fn(), onArchive: vi.fn(), onRequeue, busy: false }}
+          handlers={{
+            onReply: vi.fn(),
+            onArchive: vi.fn(),
+            onRequeue,
+            onOpenTask: vi.fn(),
+            busy: false,
+          }}
         />
       </MemoryRouter>,
       { api: fakeApi() },

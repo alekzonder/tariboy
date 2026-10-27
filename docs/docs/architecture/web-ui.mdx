@@ -1009,9 +1009,11 @@ raw HTML. Sent and Archive load more pages with **Load more**.
 Opening an unread Inbox letter marks it read. The daemon closes a read notice,
 so it moves to Archive and stays open in the right pane; a request stays in the
 Inbox until **Reply** or **Archive**. A letter with a string `data.task_key`
-links to `/servers/<host>/tasks?task=<key>`, the Tasks route that opens the
-task drawer. A `task.question` letter is answered on its task: it shows
-**Answer on the task**, that link, and no **Reply**. **Compose** opens a dialog
+shows **Open** with the task key, which opens the task drawer (`TaskDrawer`) over the
+mailbox: the route does not change, the letter stays selected, and closing the
+drawer returns to it. A `task.question` letter is answered on its task: it
+shows **Answer on the task**, which opens that drawer, and no **Reply**.
+**Compose** opens a dialog
 with the recipient, the subject, the text and a **No reply needed** switch: off
 sends a request, on sends a notice. Every write shows a toast with the daemon's
 message on failure and refetches; nothing changes optimistically. The lists

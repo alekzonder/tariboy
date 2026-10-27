@@ -77,11 +77,9 @@ function ClearInbox({ name, disabled }: { name: string; disabled: boolean }) {
 /** Agent → Mailbox: the agent's mailbox, read and answered by the operator on
  *  its behalf. The toolbar shows what one iteration takes and the inbox cap. */
 export default function AgentMailboxTab({
-  hostId,
   name,
   batch,
 }: {
-  hostId: string;
   name: string;
   /** messages_batch from the agent view, once loaded. */
   batch?: number;
@@ -94,7 +92,6 @@ export default function AgentMailboxTab({
     <Mailbox
       as={principal}
       mode="agent"
-      hostId={hostId}
       fixedTo={principal}
       toolbar={
         <>
