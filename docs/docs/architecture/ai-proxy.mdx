@@ -27,6 +27,35 @@ the client receives the response uncompressed over loopback. Passing the
 client's header through would leave compressed bytes that the usage parser
 cannot read, and requests would be recorded with no model, tokens or cost.
 
+## Request status
+
+Each `ai_requests` row and transcript entry has a `status`. The HTTP status
+from the upstream stays in `upstream_status`.
+
+| Status | Meaning |
+| --- | --- |
+| `ok` | The upstream answered below 400 and the response arrived complete. |
+| `auth_error` | The request had no valid attribution token or upstream credential. |
+| `budget_block` | A cost budget refused the request before it reached the upstream. |
+| `quota_probe` | The upstream answered 429 to the startup quota probe of Claude Code (`max_tokens` 1, one user message `quota`). This is not a failure. |
+| `rate_limited` | The upstream answered 429 to any other request, for example at a usage limit. |
+| `client_closed` | The client went away before the exchange finished. The daemon stops the session after `loop.sh done`, so an open request at that time gets this status. |
+| `upstream_error` | Every other failure: an upstream status of 400 or more, an unreachable upstream, or a cut response. |
+
+While the newest request of a running iteration is `rate_limited`, the agent
+status endpoint returns `active_iteration.rate_limited_since` with the time of
+that request. The next accepted request clears it.
+
+## Transcript after iteration close
+
+At iteration close the daemon compresses `proxy-transcript.jsonl` into
+`proxy-transcript.jsonl.gz` and removes the plain file. A request that is still
+open when the session stops finishes later. The proxy then adds its entry to
+the `.gz` as a new gzip member, and does not create a new plain file. Go,
+`zcat` and Python read the members as one stream. `tariboy transcript` reads
+the `.gz` first and then a plain file, if one exists. Older daemons left such a
+plain file next to the `.gz`, and its entries come after the archived ones.
+
 Every agent may also have four independent USD limits for the local calendar
 hour, day, ISO week (Monday start), and month. Each defaults to `0` (unlimited)
 and is separate from the legacy global/group rolling budgets. When one or more
