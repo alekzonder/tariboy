@@ -226,7 +226,9 @@ func (claude) Command(cwd, promptPath string, cfg Config) ([]string, []string, e
 	if cfg.Effort != "" {
 		argv = append(argv, "--effort", cfg.Effort)
 	}
-	return argv, nil, nil
+	// Prompt suggestions make extra AI calls and inject fake user lines into an
+	// unattended iteration. The agent's own env can still turn them back on.
+	return argv, []string{"CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false"}, nil
 }
 
 func (claude) SkillBridge(request SkillBridgeRequest) (SkillBridge, error) {

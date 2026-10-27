@@ -583,3 +583,24 @@ func TestOnlyCursorAdapterRecordsProxyUsage(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudeDisablesPromptSuggestionsOnlyForIterations(t *testing.T) {
+	const off = "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false"
+	prompt := writePrompt(t, "work")
+	for _, cfg := range []Config{{}, {Interactive: true}} {
+		_, env, err := claude{}.Command("/w", prompt, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(env, off) {
+			t.Fatalf("iteration env %v (interactive=%v) lacks %s", env, cfg.Interactive, off)
+		}
+	}
+	_, env, err := claude{}.Command("/w", prompt, Config{Bare: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(env, off) {
+		t.Fatalf("bare env %v must keep the Claude default", env)
+	}
+}
