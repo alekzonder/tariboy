@@ -248,6 +248,36 @@ func TestReconcilerDeliversAgainAfterProcessedCooldown(t *testing.T) {
 	}
 }
 
+// TestReconcilerDeliversAgainAfterIterationEndClosedTheGoal: the iteration end
+// closes the Goal letter it covered; a task that still needs the agent gets a
+// fresh Goal letter from the next reconciliation after the cooldown.
+func TestReconcilerDeliversAgainAfterIterationEndClosedTheGoal(t *testing.T) {
+	now := goalNow
+	_, messageBus, base := seededGoalReconciler(t)
+	r := NewReconciler(ReconcilerConfig{Store: base, Mail: messageBus, Clock: func() time.Time { return now }})
+	if err := r.Reconcile(context.Background(), "worker", ""); err != nil {
+		t.Fatal(err)
+	}
+	onlyGoalMessage(t, messageBus, "worker")
+	tx, err := base.DB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, err := mail.CloseTaskNoticesTx(tx, "agent:worker", "T-1", []string{"task.goal"}, now, "iteration-end:iter-8", now); err != nil || n != 1 {
+		_ = tx.Rollback()
+		t.Fatalf("closed = %d, %v", n, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(time.Minute)
+	r.IterationCompleted("worker", "iter-8")
+	messages := goalLetters(t, messageBus, "worker")
+	if len(messages) != 2 || messages[0].Data["reason"] != "iteration_completed" || messages[0].AnsweredAt != "" {
+		t.Fatalf("letters after the iteration end = %#v", messages)
+	}
+}
+
 func seededGoalReconciler(t *testing.T) (*Reconciler, *mail.Mail, *basestore.Store) {
 	t.Helper()
 	base := openGoalStore(t)
