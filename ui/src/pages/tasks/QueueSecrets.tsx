@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import type { QueueSecretInfo } from "@/lib/api";
-import { COUNT, EMPTY, FIELD, LABEL, QUIET_ACTION } from "./panelStyles";
-import KeyHints from "./KeyHints";
+import { COUNT, EMPTY, LABEL, QUIET_ACTION } from "./panelStyles";
+import KeyValueForm from "./KeyValueForm";
 import type { KeyHint } from "./queueSettingsModel";
 import { formatTaskTime } from "./taskTime";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
@@ -108,8 +106,6 @@ export default function QueueSecrets({
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const { confirm, dialog } = useWorkflowConfirm();
-  const listId = useId();
-  const valueInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -195,42 +191,18 @@ export default function QueueSecrets({
       )}
       <GlobalEnvList globalEnv={globalEnv} secrets={secrets} />
       <SecretList secrets={secrets} loaded={loaded} busy={busy} onRemove={(name) => remove(name)} />
-      <form
-        className="flex min-w-0 flex-wrap items-center gap-1.5"
-        autoComplete="off"
-        onSubmit={(event) => void submit(event)}
-      >
-        <Input
-          aria-label="Secret key"
-          placeholder="KEY"
-          list={hints.length > 0 ? listId : undefined}
-          value={key}
-          className={`${FIELD} h-6.5 min-w-25 flex-1`}
-          onChange={(event) => setKey(event.target.value)}
-        />
-        <Input
-          ref={valueInput}
-          aria-label="Secret value"
-          type="password"
-          autoComplete="new-password"
-          placeholder="Value"
-          value={value}
-          className={`${FIELD} h-6.5 min-w-25 flex-1`}
-          onChange={(event) => setValue(event.target.value)}
-        />
-        <Button type="submit" size="sm" className="h-6.5" disabled={busy || !key.trim() || !value}>
-          Set
-        </Button>
-      </form>
-      <KeyHints
-        listId={listId}
+      <KeyValueForm
+        label="Secret"
         block="Secrets"
+        secret
+        keyName={key}
+        value={value}
+        busy={busy}
         hints={hints}
         taken={[...secrets.map((secret) => secret.key), ...envKeys]}
-        onPick={(name) => {
-          setKey(name);
-          valueInput.current?.focus();
-        }}
+        onKey={setKey}
+        onValue={setValue}
+        onSubmit={(event) => void submit(event)}
       />
       {error && (
         <p role="alert" className="text-ui text-destructive">

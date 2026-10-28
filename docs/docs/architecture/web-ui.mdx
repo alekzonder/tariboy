@@ -899,8 +899,8 @@ the other, so setting a key of the other block asks first, and a change in
 either block reloads both. A name a refused bind reported counts as set by
 either block. For a bound queue, the dialog passes the loaded definition, and
 `workflowEnvHints` reads its `env` keys and `requires_secrets` as suggested
-names: the key input of **Env** and **Secrets** gets a `<datalist>` of them,
-and `KeyHints` shows a chip for each name neither block holds. A chip fills the
+names. Both blocks set a key through `KeyValueForm`: its key input gets a
+`<datalist>` of them, and a chip shows for each name neither block holds. A chip fills the
 key and focuses the value; an **Env** chip shows the Workflowfile default on
 hover. The **Sources** tab of a
 bound queue, `QueueSources` (`listQueueSources`, `getQueueSourceRunLog`) lists the sources of

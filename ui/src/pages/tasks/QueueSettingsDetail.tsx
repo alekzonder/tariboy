@@ -16,6 +16,7 @@ import {
   newQueueInput,
   queueTabs,
   type QueueEntry,
+  type QueueState,
   type QueueTab,
 } from "./queueSettingsModel";
 
@@ -72,6 +73,27 @@ export function QueueDetail(props: QueueDetailProps) {
       )}
       <QueueTabs {...props} />
     </>
+  );
+}
+
+/** The Environment tab: keyed by the binding, so a new one starts it fresh. */
+function EnvironmentTab({
+  queue,
+  state,
+  secretsMissing,
+}: {
+  queue: string;
+  state: QueueState | undefined;
+  secretsMissing: QueueDetailProps["secretsMissing"];
+}) {
+  return (
+    <QueueEnvironment
+      key={`${queue}:${state?.binding?.digest ?? ""}`}
+      queue={queue}
+      definition={state?.definition}
+      missing={secretsMissing?.names}
+      missingMessage={secretsMissing?.message}
+    />
   );
 }
 
@@ -149,13 +171,7 @@ function QueueTabs({
           )}
         </TabsContent>
         <TabsContent value="environment">
-          <QueueEnvironment
-            key={`${queue.prefix}:${state?.binding?.digest ?? ""}`}
-            queue={queue.prefix}
-            definition={state?.definition}
-            missing={secretsMissing?.names}
-            missingMessage={secretsMissing?.message}
-          />
+          <EnvironmentTab queue={queue.prefix} state={state} secretsMissing={secretsMissing} />
         </TabsContent>
         {state?.binding && (
           <TabsContent value="sources">
