@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import type { QueueEnvVar } from "@/lib/api";
-import { COUNT, EMPTY, FIELD, LABEL, QUIET_ACTION } from "./panelStyles";
+import type { QueueEnvVar, WorkflowImageDefinition } from "@/lib/api";
+import { COUNT, EMPTY, LABEL, QUIET_ACTION } from "./panelStyles";
+import KeyValueForm from "./KeyValueForm";
 import QueueSecrets from "./QueueSecrets";
+import { workflowEnvHints, type KeyHint } from "./queueSettingsModel";
 import { formatTaskTime } from "./taskTime";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
 import { errorText } from "@/lib/errors";
@@ -13,14 +13,18 @@ import { keyProblem } from "./workflowShared";
 /**
  * The Environment tab of a queue: plain env vars and secrets in two blocks.
  * Both reach the scripts of the queue's workflow the same way; a key is one or
- * the other, so a change in either block reloads both.
+ * the other, so a change in either block reloads both. Each block suggests the
+ * names the bound workflow's definition declares.
  */
 export default function QueueEnvironment({
   queue,
+  definition,
   missing,
   missingMessage,
 }: {
   queue: string;
+  /** The bound workflow's definition, the source of the suggested names. */
+  definition?: WorkflowImageDefinition | null;
   /** Names a failed bind reported without a value. */
   missing?: string[];
   missingMessage?: string;
@@ -29,12 +33,14 @@ export default function QueueEnvironment({
   const [envKeys, setEnvKeys] = useState<string[]>([]);
   const [secretKeys, setSecretKeys] = useState<string[]>([]);
   const changed = useCallback(() => setRevision((value) => value + 1), []);
+  const hints = workflowEnvHints(definition);
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <QueueEnv
         queue={queue}
         revision={revision}
         secretKeys={secretKeys}
+        hints={hints.env}
         onKeys={setEnvKeys}
         onChanged={changed}
       />
@@ -44,6 +50,7 @@ export default function QueueEnvironment({
         missingMessage={missingMessage}
         revision={revision}
         envKeys={envKeys}
+        hints={hints.secrets}
         onKeys={setSecretKeys}
         onChanged={changed}
       />
@@ -56,12 +63,14 @@ function QueueEnv({
   queue,
   revision,
   secretKeys,
+  hints,
   onKeys,
   onChanged,
 }: {
   queue: string;
   revision: number;
   secretKeys: string[];
+  hints: KeyHint[];
   onKeys: (keys: string[]) => void;
   onChanged: () => void;
 }) {
@@ -169,29 +178,18 @@ function QueueEnv({
           ))}
         </ul>
       )}
-      <form
-        className="flex min-w-0 flex-wrap items-center gap-1.5"
-        autoComplete="off"
+      <KeyValueForm
+        label="Env"
+        block="Env"
+        keyName={key}
+        value={value}
+        busy={busy}
+        hints={hints}
+        taken={[...items.map((item) => item.key), ...secretKeys]}
+        onKey={setKey}
+        onValue={setValue}
         onSubmit={submit}
-      >
-        <Input
-          aria-label="Env key"
-          placeholder="KEY"
-          value={key}
-          className={`${FIELD} h-6.5 min-w-25 flex-1`}
-          onChange={(event) => setKey(event.target.value)}
-        />
-        <Input
-          aria-label="Env value"
-          placeholder="Value"
-          value={value}
-          className={`${FIELD} h-6.5 min-w-25 flex-1`}
-          onChange={(event) => setValue(event.target.value)}
-        />
-        <Button type="submit" size="sm" className="h-6.5" disabled={busy || !key.trim() || !value}>
-          Set
-        </Button>
-      </form>
+      />
       {error && (
         <p role="alert" className="text-ui text-destructive">
           {error}

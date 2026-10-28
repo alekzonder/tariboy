@@ -11,8 +11,32 @@ import {
   requiredWithMissing,
   shownTab,
   stillEmptyPools,
+  workflowEnvHints,
   type QueueEntry,
 } from "./queueSettingsModel";
+
+describe("workflowEnvHints", () => {
+  it("reads the env names with defaults and the required secrets, sorted", () => {
+    expect(
+      workflowEnvHints({
+        ...developmentManifest.definition,
+        env: { TIMEOUT: "30", AUTO_MERGE: "false" },
+        requires_secrets: ["GH_TOKEN", "API_KEY"],
+      }),
+    ).toEqual({
+      env: [
+        { name: "AUTO_MERGE", title: "default: false" },
+        { name: "TIMEOUT", title: "default: 30" },
+      ],
+      secrets: [{ name: "API_KEY" }, { name: "GH_TOKEN" }],
+    });
+  });
+
+  it("has no hints without a definition or its lists", () => {
+    expect(workflowEnvHints(null)).toEqual({ env: [], secrets: [] });
+    expect(workflowEnvHints(developmentManifest.definition)).toEqual({ env: [], secrets: [] });
+  });
+});
 
 describe("classifyBindError", () => {
   it.each<[string, unknown, ReturnType<typeof classifyBindError>]>([

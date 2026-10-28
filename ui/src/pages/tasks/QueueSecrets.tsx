@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import type { QueueSecretInfo } from "@/lib/api";
-import { COUNT, EMPTY, FIELD, LABEL, QUIET_ACTION } from "./panelStyles";
+import { COUNT, EMPTY, LABEL, QUIET_ACTION } from "./panelStyles";
+import KeyValueForm from "./KeyValueForm";
+import type { KeyHint } from "./queueSettingsModel";
 import { formatTaskTime } from "./taskTime";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
 import { errorText } from "@/lib/errors";
@@ -78,6 +78,7 @@ export default function QueueSecrets({
   missingMessage = "",
   revision = 0,
   envKeys = [],
+  hints = [],
   onKeys,
   onChanged,
 }: {
@@ -89,6 +90,8 @@ export default function QueueSecrets({
   revision?: number;
   /** Keys of the queue's plain env vars: one also answers a needed name, and setting one here moves it. */
   envKeys?: string[];
+  /** The secret names the bound workflow requires. */
+  hints?: KeyHint[];
   onKeys?: (keys: string[]) => void;
   /** Told of a change instead of reloading only this list. */
   onChanged?: () => void;
@@ -188,31 +191,19 @@ export default function QueueSecrets({
       )}
       <GlobalEnvList globalEnv={globalEnv} secrets={secrets} />
       <SecretList secrets={secrets} loaded={loaded} busy={busy} onRemove={(name) => remove(name)} />
-      <form
-        className="flex min-w-0 flex-wrap items-center gap-1.5"
-        autoComplete="off"
+      <KeyValueForm
+        label="Secret"
+        block="Secrets"
+        secret
+        keyName={key}
+        value={value}
+        busy={busy}
+        hints={hints}
+        taken={[...secrets.map((secret) => secret.key), ...envKeys]}
+        onKey={setKey}
+        onValue={setValue}
         onSubmit={(event) => void submit(event)}
-      >
-        <Input
-          aria-label="Secret key"
-          placeholder="KEY"
-          value={key}
-          className={`${FIELD} h-6.5 min-w-25 flex-1`}
-          onChange={(event) => setKey(event.target.value)}
-        />
-        <Input
-          aria-label="Secret value"
-          type="password"
-          autoComplete="new-password"
-          placeholder="Value"
-          value={value}
-          className={`${FIELD} h-6.5 min-w-25 flex-1`}
-          onChange={(event) => setValue(event.target.value)}
-        />
-        <Button type="submit" size="sm" className="h-6.5" disabled={busy || !key.trim() || !value}>
-          Set
-        </Button>
-      </form>
+      />
       {error && (
         <p role="alert" className="text-ui text-destructive">
           {error}

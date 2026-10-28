@@ -908,7 +908,12 @@ their values. **Secrets**, `QueueSecrets` (`listQueueSecrets`,
 password input until it is sent and is never read back. A key is one kind or
 the other, so setting a key of the other block asks first, and a change in
 either block reloads both. A name a refused bind reported counts as set by
-either block. The **Sources** tab of a
+either block. For a bound queue, the dialog passes the loaded definition, and
+`workflowEnvHints` reads its `env` keys and `requires_secrets` as suggested
+names. Both blocks set a key through `KeyValueForm`: its key input gets a
+`<datalist>` of them, and a chip shows for each name neither block holds. A chip fills the
+key and focuses the value; an **Env** chip shows the Workflowfile default on
+hover. The **Sources** tab of a
 bound queue, `QueueSources` (`listQueueSources`, `getQueueSourceRunLog`) lists the sources of
 the workflow with their schedule, failures in a row, and newest 20 runs; it
 loads once and on **Reload**, without polling. Its run rows and the task's

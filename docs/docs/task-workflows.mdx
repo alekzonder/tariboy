@@ -440,7 +440,9 @@ ttasks queue env rm DEV LOG_LEVEL
 - The `queue.env_set` and `queue.env_removed` events carry only the key.
 
 In the Web UI both kinds are on the **Environment** tab of the queue settings,
-in an **Env** block and a **Secrets** block.
+in an **Env** block and a **Secrets** block. For a bound queue each block
+suggests the names the Workflowfile declares: `env` keys in **Env** and
+`requires_secrets` in **Secrets**. You can still set any other key.
 
 ### Creating a task in a bound queue
 
@@ -1921,7 +1923,12 @@ dialog drops every unsaved edit.
   key. A bind refused with `workflow_secret_missing` lists the missing names in
   the Secrets block until either block sets them. Each secret the bound image
   requires that the global env holds shows as `NAME present in global env`,
-  with `overridden by the queue secret` when the queue sets it too.
+  with `overridden by the queue secret` when the queue sets it too. For a
+  bound queue, the key field of each block suggests the names the Workflowfile
+  declares: `env` keys for **Env** and `requires_secrets` for **Secrets**.
+  Below the form, **Declared in Workflowfile:** shows one button for each
+  such name that has no value in either block. Click it to fill the key, then
+  type the value. Hover over an **Env** name to see its default.
 - **Sources.** Only for a bound queue: the sources of the workflow and their
   runs; see [Sources](#sources).
 
