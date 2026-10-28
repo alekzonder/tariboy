@@ -54,6 +54,7 @@ func TestParseGoldenPayloads(t *testing.T) {
 		{[]string{"workflow", "upgrade", "DEV-1", "--reason", "new rules"}, "workflow_upgrade", `{"key":"DEV-1","reason":"new rules"}`, false},
 		{[]string{"workflow", "resume", "DEV-1", "--decision", "release"}, "workflow_resume", `{"decision":"release","key":"DEV-1"}`, false},
 		{[]string{"workflow", "reassign", "DEV-1", "--agent", "dev-2"}, "workflow_reassign", `{"agent":"dev-2","key":"DEV-1"}`, false},
+		{[]string{"workflow", "watch", "DEV-1"}, "workflow_watch", `{"key":"DEV-1"}`, false},
 		{[]string{"workflow", "retry", "DEV-1"}, "workflow_retry", `{"key":"DEV-1"}`, false},
 		{[]string{"workflow", "retry", "DEV-1", "41"}, "workflow_retry", `{"id":41,"key":"DEV-1"}`, false},
 		{[]string{"cancel", "DEV-1"}, "cancel", `{"key":"DEV-1"}`, false},

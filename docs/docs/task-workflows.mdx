@@ -658,6 +658,22 @@ than `every`. Runs of one task never overlap.
 Leaving the status by any route, or cancelling the task, stops the watch: the
 schedule is cleared, a pending run is cancelled, and a running one is killed.
 
+The customer can start the watch before its next scheduled time. Use
+**Run watch now** in the task's Workflow panel, `ttasks workflow watch KEY`, or
+`POST /api/tasks/{key}/workflow/watch`. The daemon then creates a pending watch
+run at once and clears the schedule. The run follows all the rules above: the
+spacing, the limit of four scripts, the timeout, and the exit codes. When it
+ends, the daemon sets the next time as for a scheduled run. The daemon refuses
+the request and changes nothing in these cases:
+
+- The task is closed (`workflow_closed`) or paused (`workflow_paused`). Resume
+  a paused task instead: the resume starts the watch.
+- The current status has no watch script (`workflow_no_watch`).
+- A script run of the task is pending or running (`script_running`).
+
+The script gets the same environment as a scheduled run, so it cannot tell the
+two apart.
+
 The worker runs up to four scripts at once. Pending checks start before
 pending watch runs, because an agent waits for a check, and one slot is always
 left for a check.
@@ -1447,6 +1463,7 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks workflow resume KEY --decision continue\|release` | operator | Resolve a pause. |
 | `ttasks workflow reassign KEY --agent NAME` | operator | Give the pool status to another member of its pool. |
 | `ttasks workflow retry KEY [REQUEST]` | operator | Run a failed request's checks again and wait for them. |
+| `ttasks workflow watch KEY` | operator | Start the watch script of the current status now. |
 | `ttasks cancel KEY` | operator | Cancel the task. |
 | `ttasks requeue KEY --queue QUEUE` | operator | Move the task to another queue as a new task. |
 
@@ -1485,6 +1502,7 @@ generated OpenAPI document is the authority for request and response schemas.
 | `POST` | `/api/tasks/{key}/workflow/upgrade` | restart at the queue's current version (`reason`, optional); returns the task | operator |
 | `POST` | `/api/tasks/{key}/workflow/resume` | resolve a pause (`decision`: `continue` or `release`); returns the task | operator |
 | `POST` | `/api/tasks/{key}/workflow/reassign` | give the pool status to another member (`agent`); returns the task | operator |
+| `POST` | `/api/tasks/{key}/workflow/watch` | start the watch script of the current status now; returns the pending run | operator |
 | `POST` | `/api/tasks/{key}/cancel` | cancel | operator |
 | `POST` | `/api/tasks/{key}/requeue` | move to another queue (`queue`, optional `revision`); returns the new task | operator |
 
@@ -1560,6 +1578,7 @@ the key, and the run id. A failed source run records the queue event
 | `invalid_status_owner` | 409 | `workflow reassign` of a task whose current status is not owned by an agent pool. |
 | `agent_unavailable` | 409 | `workflow reassign` to an agent that is not a member of the status's pool or cannot work; `data.cause` says why. |
 | `invalid_agent` | 400 | `workflow reassign` without an agent name. |
+| `workflow_no_watch` | 409 | `workflow watch` of a task whose current status has no watch script. |
 | `invalid_decision` | 400 | A resume decision that is not `continue` or `release`, or `release` outside a pool status. |
 | `workflow_in_use` | 409 | A queue binds the image or a task, open or closed, pins it. |
 | `workflow_pool_empty` | 409 | A pool the image names is missing or has no agents. |
@@ -1786,8 +1805,9 @@ sections:
   checks (script, `description`, `run_as`, and timeout), and the effective
   limits. The row wraps on a narrow screen.
 - **Header.** `name@version`, `step k of n`, the status, the owner, and the
-  holder, with the labeled actions **Return to agent…**, **Upgrade to
-  NAME@VERSION…**, **Move to status…**, and **Cancel task**; see below.
+  holder, with the labeled actions **Run watch now**, **Return to agent…**,
+  **Upgrade to NAME@VERSION…**, **Move to status…**, and **Cancel task**; see
+  below.
 - **Outcomes.** Each outcome shows its target status, the artifacts it
   requires (a set one ticked, a missing one highlighted), and its checks with
   what each verifies, when the image describes it, and the resolved `run_as`
@@ -1830,6 +1850,12 @@ sections:
   move is sent with the message as its reason, after a confirmation that says
   so. The action is hidden on a closed task and on an unpaused pool status an
   agent already holds.
+- **Run watch now.** Starts the watch script of the current status at once,
+  without a confirmation; see [Watch scripts](#watch-scripts). The action is
+  shown only on an open, unpaused task in a script status that has a watch. It
+  is disabled while a script run of the task is pending or running. After the
+  request the panel reloads, and the new run shows under **Runs**. A refusal
+  shows the daemon's message under the header.
 - **Move and cancel.** **Move to status…** offers every declared status but
   the current one, terminal statuses grouped last, and needs a reason; a move
   to a terminal status closes the task. **Cancel task** is hidden once the

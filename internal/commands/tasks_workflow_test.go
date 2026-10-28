@@ -83,6 +83,10 @@ func (s *workflowStub) ResumeWorkflow(_ context.Context, a tasks.Actor, key, dec
 	s.record(a, "workflow_resume %s %s", key, decision)
 	return tasks.Task{Key: key, Status: tasks.StatusInProgress, WorkflowDigest: "d", WorkflowStatus: "develop"}, s.err
 }
+func (s *workflowStub) RunWatchNow(_ context.Context, a tasks.Actor, key string) (tasks.ScriptRun, error) {
+	s.record(a, "workflow_watch %s", key)
+	return tasks.ScriptRun{ID: 5, TaskKey: key, Kind: "watch", Script: "watch/merge.sh", RunAs: "queue", State: "pending"}, s.err
+}
 func (s *workflowStub) ReassignWorkflow(_ context.Context, a tasks.Actor, key, agent string) (tasks.Task, error) {
 	s.record(a, "workflow_reassign %s %s", key, agent)
 	return tasks.Task{Key: key, Status: tasks.StatusInProgress, Assignee: "agent:" + agent, WorkflowDigest: "d", WorkflowStatus: "develop"}, s.err
@@ -194,6 +198,7 @@ func TestWorkflowRoutesCallTheServiceAsTheCustomer(t *testing.T) {
 			`workflow_upgrade DEV-1 ""`, `"key":"DEV-1"`},
 		{"workflow resume", "POST", "/api/tasks/DEV-1/workflow/resume", map[string]any{"decision": "release"},
 			`workflow_resume DEV-1 release`, `"category":"in_progress"`},
+		{"workflow watch", "POST", "/api/tasks/DEV-1/workflow/watch", nil, `workflow_watch DEV-1`, `"kind":"watch"`},
 		{"workflow reassign", "POST", "/api/tasks/DEV-1/workflow/reassign", map[string]any{"agent": "dev-2"},
 			`workflow_reassign DEV-1 dev-2`, `"assignee":"agent:dev-2"`},
 		{"cancel", "POST", "/api/tasks/DEV-1/cancel", nil, `cancel DEV-1`, `"category":"cancelled"`},
@@ -301,6 +306,7 @@ func TestWorkflowOpenAPIDescribesRoutesAndSchemas(t *testing.T) {
 		"/api/tasks/{key}/workflow/move":     "post",
 		"/api/tasks/{key}/workflow/resume":   "post",
 		"/api/tasks/{key}/workflow/reassign": "post",
+		"/api/tasks/{key}/workflow/watch":    "post",
 		"/api/tasks/{key}/workflow/upgrade":  "post",
 		"/api/tasks/{key}/workflow/runs":     "get",
 

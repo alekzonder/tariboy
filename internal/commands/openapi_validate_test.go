@@ -335,6 +335,7 @@ func taskTypedCalls() []typedCall {
 		{"GET", "/api/tasks/{key}/workflow/runs/{id}/log", "/api/tasks/FLOW-1/workflow/runs/4/log", nil},
 		{"POST", "/api/tasks/{key}/workflow/move", "/api/tasks/FLOW-1/workflow/move", map[string]any{"to": "review", "reason": "r"}},
 		{"POST", "/api/tasks/{key}/workflow/resume", "/api/tasks/FLOW-1/workflow/resume", map[string]any{"decision": "continue"}},
+		{"POST", "/api/tasks/{key}/workflow/watch", "/api/tasks/FLOW-1/workflow/watch", nil},
 		{"POST", "/api/tasks/{key}/cancel", "/api/tasks/FLOW-1/cancel", nil},
 		{"POST", "/api/tasks/{key}/requeue", "/api/tasks/FLOW-1/requeue", map[string]any{"queue": "FLOW", "revision": 1}},
 	}

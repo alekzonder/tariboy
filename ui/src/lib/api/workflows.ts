@@ -3,6 +3,7 @@ import type {
   Artifact,
   QueueEnvVar,
   QueueWorkflow,
+  ScriptRun,
   Task,
   TaskArtifactHistory,
   TaskQueueEnvList,
@@ -93,6 +94,8 @@ export function workflowsApi(t: Transport) {
     /** Hands the pool status of a workflow task to another member of that pool. */
     reassignTaskWorkflow: (key: string, agent: string) =>
       t.post<Task>(`${taskPath(key)}/workflow/reassign`, { agent }),
+    /** Starts the watch script of the task's script status now, instead of at its next scheduled time. */
+    runTaskWatch: (key: string) => t.post<ScriptRun>(`${taskPath(key)}/workflow/watch`),
     /** The workflow image a queue is bound to, or null when it is unbound. */
     getQueueWorkflow: async (queue: string): Promise<QueueWorkflow | null> => {
       try {

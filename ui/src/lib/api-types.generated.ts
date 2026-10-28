@@ -2807,6 +2807,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/tasks/{key}/workflow/watch": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Run the watch script of a workflow task now */
+    post: operations["tasks.workflow.watch"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/team-imports/preview-yaml": {
     parameters: {
       query?: never;
@@ -14765,6 +14782,52 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["Task"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "tasks.workflow.watch": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        key: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": Record<string, unknown>;
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["ScriptRun"];
           };
         };
       };
