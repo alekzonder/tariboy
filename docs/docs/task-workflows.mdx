@@ -1033,8 +1033,9 @@ refused with `workflow_paused`; resume it first. The new request's
 holder itself needs no retry: it repeats its `advance`.
 
 `workflow move` moves the task to any status of its pinned image regardless of
-outcomes, requirements, and checks. It needs `--to` and a non-empty `--reason`
-(`reason_required`); an unknown status fails with `status_unknown` and lists the
+outcomes, requirements, and checks. It needs `--to`; `--reason` is optional,
+and a move without one closes the visit with no message, so the next agent's
+Goal shows no transition message. An unknown status fails with `status_unknown` and lists the
 declared statuses. The move stops the scripts of the current status, cancels a
 pending request, closes the current visit, enters the target as an ordinary
 status entry (so it dispatches, opens a customer wait, or starts a watch just as
@@ -1458,7 +1459,7 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks advance KEY --outcome NAME [--from STATUS] [--message TEXT] [--no-wait]` | holder, customer | Declare an outcome and wait for its checks. |
 | `ttasks workflow runs KEY` | agent, operator | List script runs. |
 | `ttasks workflow log KEY RUN [--max-bytes N]` | holder, operator | Read a run log. |
-| `ttasks workflow move KEY --to STATUS --reason TEXT` | operator | Move without checks. |
+| `ttasks workflow move KEY --to STATUS [--reason TEXT]` | operator | Move without checks. |
 | `ttasks workflow upgrade KEY [--reason TEXT]` | operator | Restart the task at the queue's current workflow version. |
 | `ttasks workflow resume KEY --decision continue\|release` | operator | Resolve a pause. |
 | `ttasks workflow reassign KEY --agent NAME` | operator | Give the pool status to another member of its pool. |
@@ -1605,7 +1606,6 @@ the key, and the run id. A failed source run records the queue event
 | `invalid_secret_key` | 400 | A secret key is malformed or starts with `TARIBOY_`. |
 | `invalid_secret` | 400 | A secret value is empty or not valid UTF-8. |
 | `secret_too_large` | 413 | A secret value exceeds 64 KiB. |
-| `reason_required` | 400 | A move needs a reason. |
 | `invalid_message` | 400 | The transition message exceeds 4 KiB. |
 | `revision_conflict` | 409 | The binding, pool, or task revision is not the current one. |
 
@@ -1840,8 +1840,8 @@ sections:
 - **Visits.** Every stay in a status, with who entered it, when it was left and
   by which outcome, and the message. A visit made under an earlier workflow
   version carries that version, as `@VERSION`.
-- **Return to agent.** Sends the task back to a pool status with a message
-  the agent reads in its Goal as the transition message. The targets are the
+- **Return to agent.** Sends the task back to a pool status with an optional
+  message the agent reads in its Goal as the transition message. The targets are the
   pool statuses a declared outcome of the current status leads to, the pool
   statuses the task visited before, newest first, and, for a paused pool
   status, the status itself as a restart; the most recently visited one is
@@ -1857,7 +1857,7 @@ sections:
   request the panel reloads, and the new run shows under **Runs**. A refusal
   shows the daemon's message under the header.
 - **Move and cancel.** **Move to status…** offers every declared status but
-  the current one, terminal statuses grouped last, and needs a reason; a move
+  the current one, terminal statuses grouped last, and takes an optional reason; a move
   to a terminal status closes the task. **Cancel task** is hidden once the
   task is closed. Both ask for confirmation, because they skip outcomes,
   checks, and required artifacts and stop the current scripts. The header

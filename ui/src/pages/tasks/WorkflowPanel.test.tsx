@@ -144,7 +144,21 @@ async function openAction(name: string) {
   await userEvent.click(await screen.findByRole("button", { name }));
 }
 
-it("moves to a declared status with a required reason after confirmation", async () => {
+it("moves to a chosen status without a reason", async () => {
+  renderPanel();
+  await openAction("Move to status…");
+  const move = screen.getByRole("button", { name: "Move" });
+  expect(move).toBeDisabled();
+  expect(screen.getByLabelText("Reason")).toHaveAttribute("placeholder", "Reason (optional)");
+  await userEvent.selectOptions(screen.getByLabelText("Target status"), "draft");
+  expect(move).toBeEnabled();
+  await userEvent.click(move);
+  const dialog = await screen.findByRole("alertdialog");
+  await userEvent.click(within(dialog).getByRole("button", { name: "Move task" }));
+  await waitFor(() => expect(api.moveTaskWorkflow).toHaveBeenCalledWith("REL-1", "draft", ""));
+});
+
+it("moves to a declared status with a reason after confirmation", async () => {
   const { onTaskChanged } = renderPanel();
   await openAction("Move to status…");
   const select = screen.getByLabelText("Target status");
@@ -163,7 +177,6 @@ it("moves to a declared status with a required reason after confirmation", async
   expect(select).toHaveFocus();
   await userEvent.selectOptions(select, "draft");
   const move = screen.getByRole("button", { name: "Move" });
-  expect(move).toBeDisabled();
   await userEvent.type(screen.getByLabelText("Reason"), "found a regression");
   await userEvent.click(move);
   const dialog = await screen.findByRole("alertdialog");

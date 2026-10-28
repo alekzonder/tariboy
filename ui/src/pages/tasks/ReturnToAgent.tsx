@@ -156,7 +156,7 @@ export default function ReturnToAgent({
       </div>
       <Textarea
         aria-label="Message to the agent"
-        placeholder="What to change (required)"
+        placeholder="What to change (optional)"
         value={message}
         disabled={busy}
         maxLength={MAX_MESSAGE}
@@ -164,12 +164,7 @@ export default function ReturnToAgent({
         className="min-h-16 rounded-md border-0 bg-muted text-body-sm md:text-body-sm"
       />
       <div className="flex items-center gap-1.5">
-        <Button
-          type="submit"
-          size="sm"
-          className={cn("h-6.5")}
-          disabled={busy || !chosen || !message.trim()}
-        >
+        <Button type="submit" size="sm" className={cn("h-6.5")} disabled={busy || !chosen}>
           {checking ? "Checking…" : "Return to agent"}
         </Button>
         <Button

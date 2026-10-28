@@ -348,9 +348,6 @@ func (s *WorkflowEngine) MoveWorkflow(ctx context.Context, actor Actor, key, to,
 		return Task{}, err
 	}
 	to, reason = strings.TrimSpace(to), strings.TrimSpace(reason)
-	if reason == "" {
-		return Task{}, newError(http.StatusBadRequest, "reason_required", "a workflow move needs a reason")
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Task{}, err

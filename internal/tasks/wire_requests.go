@@ -347,7 +347,7 @@ type RequestRef struct {
 type WorkflowMoveRequest struct {
 	Key    string `json:"key" pos:"0" label:"task key" required:"cli"`
 	To     string `json:"to" flag:"to" required:"true" help:"Target status id"`
-	Reason string `json:"reason" flag:"reason" required:"true" help:"Why the task is moved"`
+	Reason string `json:"reason" flag:"reason" help:"Why the task is moved"`
 }
 
 // WorkflowUpgradeRequest restarts a workflow task at the version its queue is
