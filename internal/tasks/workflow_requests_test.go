@@ -230,9 +230,6 @@ func TestMoveWorkflow(t *testing.T) {
 	if _, err := svc.MoveWorkflow(ctx, AgentActor("dev-1"), task.Key, "approval", "skip"); ErrorCode(err) != "forbidden" || ErrorStatus(err) != 403 {
 		t.Fatalf("agent: %v", err)
 	}
-	if _, err := svc.MoveWorkflow(ctx, actor, task.Key, "approval", "  "); ErrorCode(err) != "reason_required" {
-		t.Fatalf("empty reason: %v", err)
-	}
 	if _, err := svc.MoveWorkflow(ctx, actor, task.Key, "nowhere", "skip"); ErrorCode(err) != "status_unknown" {
 		t.Fatalf("unknown status: %v", err)
 	}
@@ -294,6 +291,14 @@ func TestMoveWorkflow(t *testing.T) {
 	stored, _ := taskByKey(ctx, svc.db, task.Key)
 	if stored.WorkflowPausedReason != "" || stored.Revision != unpaused.Revision {
 		t.Fatalf("stored = %#v", stored)
+	}
+
+	// The reason is optional: a blank one closes the visit with no message.
+	if _, err := svc.MoveWorkflow(ctx, actor, task.Key, "approval", "  "); err != nil {
+		t.Fatalf("blank reason: %v", err)
+	}
+	if review := visitBySequence(t, svc, task, 5); review.Status != "review" || review.Message != "" {
+		t.Fatalf("review visit = %#v", review)
 	}
 }
 

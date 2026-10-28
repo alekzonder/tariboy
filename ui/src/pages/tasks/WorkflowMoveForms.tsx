@@ -96,12 +96,12 @@ export function MoveForm({
         </SelectShell>
         <Input
           aria-label="Reason"
-          placeholder="Reason (required)"
+          placeholder="Reason (optional)"
           value={reason}
           className={cn(FIELD, "h-6.5 min-w-40 flex-1")}
           onChange={(event) => setReason(event.target.value)}
         />
-        <Button type="submit" size="sm" className="h-6.5" disabled={busy || !to || !reason.trim()}>
+        <Button type="submit" size="sm" className="h-6.5" disabled={busy || !to}>
           Move
         </Button>
         <Button type="button" variant="ghost" size="sm" className="h-6.5" onClick={onDone}>

@@ -81,7 +81,6 @@ it("declares the outcome of a customer status with the message, and closes once 
   expect(select).toHaveValue("draft");
   expect(select).toHaveFocus();
   expect(screen.getByText("declares rework")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Return to agent" })).toBeDisabled();
   await sendMessage("Please add a heading");
   await waitFor(() =>
     expect(api.advanceTask).toHaveBeenCalledWith(
@@ -94,6 +93,21 @@ it("declares the outcome of a customer status with the message, and closes once 
   expect(api.moveTaskWorkflow).not.toHaveBeenCalled();
   await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
   expect(onDone).toHaveBeenCalledTimes(1);
+});
+
+it("returns the task without a message", async () => {
+  api.advanceTask.mockResolvedValue(applied);
+  renderReturn(customerView);
+  expect(screen.getByLabelText("Message to the agent")).toHaveAttribute(
+    "placeholder",
+    "What to change (optional)",
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Return to agent" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await userEvent.click(within(dialog).getByRole("button", { name: "Return to agent" }));
+  await waitFor(() =>
+    expect(api.advanceTask).toHaveBeenCalledWith("REL-1", "rework", "", "review"),
+  );
 });
 
 it("moves the task back to the pool status it visited when no outcome leads there", async () => {

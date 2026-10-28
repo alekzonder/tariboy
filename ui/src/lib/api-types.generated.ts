@@ -14399,7 +14399,7 @@ export interface operations {
       content: {
         "application/json": {
           /** @description Why the task is moved */
-          reason: string;
+          reason?: string;
           /** @description Target status id */
           to: string;
         };

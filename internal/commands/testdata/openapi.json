@@ -25749,8 +25749,7 @@
                   }
                 },
                 "required": [
-                  "to",
-                  "reason"
+                  "to"
                 ],
                 "type": "object"
               }
