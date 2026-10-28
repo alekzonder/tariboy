@@ -52,10 +52,9 @@ describe("fetchTranscript", () => {
   it("passes the cancellation signal to the request", async () => {
     const fetchMock = stubResult({ calls: [], count: 0 });
     const controller = new AbortController();
+    controller.abort();
     await createApi(null).audit.fetchTranscript("a1", "it-1", controller.signal);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/agents/a1/iterations/it-1/transcript",
-      expect.objectContaining({ signal: controller.signal }),
-    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.signal?.aborted).toBe(true);
   });
 });

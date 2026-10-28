@@ -1,4 +1,5 @@
 import type { Daemon } from "../daemons";
+import { subscribeResume } from "../resume";
 import type {
   AgentActionResult,
   AgentAliasResult,
@@ -101,7 +102,6 @@ export function subscribeAgentEventsOn(
   const base = daemon && daemon.baseURL ? daemon.baseURL.replace(/\/+$/, "") : getLocalBaseURL();
   const qs = params.toString();
   const url = `${base}${path}${qs ? `?${qs}` : ""}`;
-  const es = new EventSource(url);
   const kinds = ["message", "stream", "iteration", "audit", "proxy"];
   const handler = (e: MessageEvent) => {
     try {
@@ -110,8 +110,21 @@ export function subscribeAgentEventsOn(
       /* ignore malformed frame */
     }
   };
-  for (const k of kinds) es.addEventListener(k, handler as EventListener);
-  return () => es.close();
+  const open = () => {
+    const source = new EventSource(url);
+    for (const k of kinds) source.addEventListener(k, handler as EventListener);
+    return source;
+  };
+  let es = open();
+  // The old stream may be dead without an error; a fresh one is cheap.
+  const stopResume = subscribeResume(() => {
+    es.close();
+    es = open();
+  });
+  return () => {
+    stopResume();
+    es.close();
+  };
 }
 
 export function agentsApi(t: Transport) {

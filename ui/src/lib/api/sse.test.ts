@@ -56,6 +56,32 @@ describe("subscribeAgentEvents SSE targeting", () => {
     stop();
   });
 
+  it("reopens the stream when the app comes back and stops after unsubscribe", () => {
+    const opened: string[] = [];
+    const closed = vi.fn();
+    class CountingES extends SpyES {
+      constructor(url: string) {
+        super(url);
+        opened.push(url);
+      }
+      close() {
+        closed();
+      }
+    }
+    vi.stubGlobal("EventSource", CountingES as unknown as typeof EventSource);
+    const stop = subscribeAgentEventsOn(null, "foo", ["iteration"], () => {});
+    window.dispatchEvent(new Event("online"));
+    expect(closed).toHaveBeenCalledTimes(1);
+    expect(opened).toEqual([
+      "/api/agents/foo/events?types=iteration",
+      "/api/agents/foo/events?types=iteration",
+    ]);
+    stop();
+    expect(closed).toHaveBeenCalledTimes(2);
+    window.dispatchEvent(new Event("online"));
+    expect(opened).toHaveLength(2);
+  });
+
   it("fails closed for an unresolved remote instead of opening local SSE", () => {
     setActiveDaemon({ id: "d0", label: "remote", baseURL: "", token: "" });
     const stop = createApi(undefined).agents.subscribeAgentEvents("baz", [], () => {});

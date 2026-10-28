@@ -104,6 +104,33 @@ describe("tasks websocket", () => {
     expect(onReset).toHaveBeenCalledWith(12);
   });
 
+  it("redials at once from the last sequence when the app comes back", () => {
+    vi.useFakeTimers();
+    const onHint = vi.fn();
+    renderHook(() => useTasksSocket({ target: null, after: 4, onHint }));
+    const first = FakeWebSocket.instances[0];
+    act(() => {
+      first.onopen?.(new Event("open"));
+      first.onmessage?.({
+        data: JSON.stringify({ sequence: 5, event_id: "e-5", kind: "task.updated" }),
+      } as MessageEvent);
+    });
+
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(first.close).toHaveBeenCalledOnce();
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(FakeWebSocket.instances[1].url).toContain("after=5");
+
+    // The superseded socket's close must not schedule another dial.
+    act(() => {
+      first.onclose?.({ code: 1000 } as CloseEvent);
+      vi.runAllTimers();
+    });
+    expect(FakeWebSocket.instances).toHaveLength(2);
+  });
+
   it("uses capped exponential reconnect and closes cleanly on unmount", () => {
     vi.useFakeTimers();
     const { unmount } = renderHook(() => useTasksSocket({ target: null, onHint: vi.fn() }));

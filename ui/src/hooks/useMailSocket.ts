@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { ApiContext } from "@/components/apiContext";
 import { getLocalBaseURL } from "@/lib/api";
 import type { Daemon } from "@/lib/daemons";
+import { subscribeResume } from "@/lib/resume";
 
 const RECONNECT_MIN_MS = 250;
 const RECONNECT_MAX_MS = 5000;
@@ -159,8 +160,8 @@ function useHintSocket<T>(
         if (hint !== null) onHintRef.current(hint);
       };
       current.onclose = () => {
-        if (socket === current) socket = null;
-        if (!alive) return;
+        if (!alive || socket !== current) return;
+        socket = null;
         setStatus("closed");
         const wait = reconnectDelay;
         reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
@@ -169,7 +170,17 @@ function useHintSocket<T>(
     };
 
     connect();
+    // Redial; the new socket's onOpen makes the caller refetch.
+    const stopResume = subscribeResume(() => {
+      if (timer !== undefined) clearTimeout(timer);
+      reconnectDelay = RECONNECT_MIN_MS;
+      const stale = socket;
+      socket = null;
+      stale?.close();
+      connect();
+    });
     return () => {
+      stopResume();
       alive = false;
       if (timer !== undefined) clearTimeout(timer);
       socket?.close();
