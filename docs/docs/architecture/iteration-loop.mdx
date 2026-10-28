@@ -23,7 +23,8 @@ directory and its own loop. It does not run continuously — it runs a series of
 The loop is driven three ways, all requiring the agent to be **enabled**:
 
 - **Timer** — `interval_s`: wake every N seconds.
-- **Schedule** — an RFC 5545 `RRULE`, set with `tariboy loop schedule`: start
+- **Schedule** — an RFC 5545 `RRULE`, set with `tariboy loop schedule` or the
+  **Schedule** builder on the agent's Configuration tab: start
   an iteration at each occurrence, with the trigger `schedule`. See
   [Schedule](#schedule).
 - **Message** — a letter sent to the agent nudges the loop to start an

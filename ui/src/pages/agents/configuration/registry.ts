@@ -11,6 +11,7 @@ type FieldKind =
   | "select"
   | "switch"
   | "textarea"
+  | "schedule"
   | "preset"
   | "path"
   | "image"
@@ -125,11 +126,11 @@ export const BLOCKS: readonly ConfigBlock[] = [
       },
       {
         key: "schedule",
-        label: "Schedule (RRULE)",
-        kind: "textarea",
+        label: "Schedule",
+        kind: "schedule",
         helper:
-          "RFC 5545 RRULE, whole minutes, in the daemon host's time zone unless DTSTART names one. Works together with Interval. Empty means no schedule.",
-        keywords: "rrule cron calendar time weekday day month dtstart",
+          "Times are in the daemon host's time zone, not the browser's. Works together with Interval. Custom RRULE takes any RFC 5545 rule; None means no schedule.",
+        keywords: "rrule cron calendar time weekday day month dtstart once",
       },
       {
         key: "timeout",
