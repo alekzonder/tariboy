@@ -1255,12 +1255,25 @@ Configuration is one column of blocks in a fixed order: **General** (agent
 image, image digest, working directory and, while the agent is stopped,
 **Create directory if missing**), **Runtime** (harness, model, effort,
 Interactive), **Loop and timeouts** (the scheduling and timeout
-fields, including **Schedule (RRULE)** with the daemon's next scheduled start
-under it, which follows Save, and an emptied field clears the schedule; there
-is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
+fields, including **Schedule** with the daemon's next scheduled start under it,
+which follows Save; there is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
 shell script and secrets), and **Retention and cleanup**. Start, Stop and
 Restart are actions, not settings: they sit in the page header next to the
 master-switch state and apply immediately.
+
+**Schedule** is a builder for the agent's `RRULE` (see
+[Schedule](/docs/architecture/iteration-loop#schedule)). You select a mode and fill
+in its fields: **None** (no schedule), **Every N minutes / hours**, **Daily**
+(one time), **Weekly** (days and one time), **Monthly** (a day of the month or
+the last day, and one time), **Once** (a date and a time), or **Custom RRULE**
+(a text field for any rule). The builder shows a one-line summary and the rule
+it sends. Times are in the time zone of the daemon host, not of the browser.
+When the page loads a saved rule, the builder selects the mode that builds
+exactly that rule. If no mode does, for example a rule with two times or with
+`UNTIL`, it selects **Custom RRULE** and shows the rule unchanged. A rule you
+do not edit is not marked **Changed**. When you select another mode, the
+builder drops the saved `DTSTART`, and the daemon starts the new rule at the
+current minute.
 
 Every editable field of every block belongs to one page-wide draft with one
 save mechanic. A field is dirty when its normalized draft differs from the

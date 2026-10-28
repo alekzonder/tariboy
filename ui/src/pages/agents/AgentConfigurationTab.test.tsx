@@ -935,28 +935,51 @@ it("mounts no prune dialog buttons while its confirmation is closed", async () =
 
 // --- Schedule ----------------------------------------------------------------
 
-it("shows the next scheduled run and saves or clears the RRULE schedule", async () => {
+it("opens a saved rule in its builder mode and leaves it unchanged", async () => {
   const rule = "DTSTART:20261018T000000\nRRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=0";
   const nextAt = "2026-10-19T09:30:00+03:00";
-  const server = fakeServer({ view: { schedule: rule, schedule_next_at: nextAt } });
+  fakeServer({ view: { schedule: rule, schedule_next_at: nextAt } });
   render(tree());
   await ready();
   const loop = block("Loop and timeouts");
-  expect(within(loop).getByLabelText("Schedule (RRULE)")).toHaveValue(rule);
+  expect(within(loop).getByLabelText("Schedule")).toHaveValue("daily");
+  expect(within(loop).getByLabelText("Time")).toHaveValue("09:30");
+  expect(within(loop).getByTestId("schedule-summary")).toHaveTextContent("Every day at 09:30");
+  expect(within(loop).getByTestId("schedule-rrule")).toHaveTextContent("FREQ=DAILY;BYHOUR=9");
   expect(within(loop).getByTestId("schedule-next-run")).toHaveTextContent(
     `Next run: ${new Date(nextAt).toLocaleString()}`,
   );
+  expect(within(loop).queryByText("Changed")).not.toBeInTheDocument();
+});
 
-  fireEvent.change(within(loop).getByLabelText("Schedule (RRULE)"), {
-    target: { value: " RRULE:FREQ=WEEKLY;BYDAY=MO;BYHOUR=8;BYMINUTE=0 " },
-  });
+it("keeps a rule no builder mode fits in Custom RRULE, unchanged", async () => {
+  const rule = "DTSTART:20261018T000000\nRRULE:FREQ=DAILY;BYHOUR=9,18;BYMINUTE=0;BYSECOND=0";
+  fakeServer({ view: { schedule: rule } });
+  render(tree());
+  await ready();
+  const loop = block("Loop and timeouts");
+  expect(within(loop).getByLabelText("Schedule")).toHaveValue("custom");
+  expect(within(loop).getByLabelText("Custom RRULE")).toHaveValue(rule);
+  expect(within(loop).queryByText("Changed")).not.toBeInTheDocument();
+});
+
+it("builds and saves a weekly schedule, then clears it with None", async () => {
+  const rule = "DTSTART:20261018T000000\nRRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=0";
+  const server = fakeServer({ view: { schedule: rule, schedule_next_at: "2026-10-19T09:30:00Z" } });
+  render(tree());
+  await ready();
+  const loop = block("Loop and timeouts");
+  fireEvent.change(within(loop).getByLabelText("Schedule"), { target: { value: "weekly" } });
+  expect(within(loop).getByRole("button", { name: "Mon" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.change(within(loop).getByLabelText("Time"), { target: { value: "08:00" } });
+  expect(within(loop).getByText("Changed")).toBeInTheDocument();
   save();
   await waitFor(() => expect(saveBar()).toHaveTextContent("All changes saved"));
   expect(server.calls.find((c) => c.path.endsWith("/loop/schedule"))?.body).toEqual({
-    value: "RRULE:FREQ=WEEKLY;BYDAY=MO;BYHOUR=8;BYMINUTE=0",
+    value: "RRULE:FREQ=WEEKLY;BYDAY=MO;BYHOUR=8;BYMINUTE=0;BYSECOND=0",
   });
 
-  fireEvent.change(screen.getByLabelText("Schedule (RRULE)"), { target: { value: "" } });
+  fireEvent.change(screen.getByLabelText("Schedule"), { target: { value: "none" } });
   save();
   await waitFor(() =>
     expect(server.calls.filter((c) => c.path.endsWith("/loop/schedule"))).toHaveLength(2),
