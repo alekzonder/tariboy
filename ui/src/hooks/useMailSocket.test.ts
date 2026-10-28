@@ -90,6 +90,34 @@ describe("mail websocket", () => {
     });
     expect(onOpen).toHaveBeenCalledTimes(2);
   });
+
+  it("redials at once when the app comes back, and the new socket refetches", () => {
+    vi.useFakeTimers();
+    const onOpen = vi.fn();
+    renderHook(() => useMailSocket({ target: null, onHint: vi.fn(), onOpen }));
+    const first = FakeWebSocket.instances[0];
+    act(() => {
+      first.onopen?.(new Event("open"));
+    });
+
+    act(() => {
+      window.dispatchEvent(new Event("online"));
+    });
+    expect(first.close).toHaveBeenCalledOnce();
+    const second = FakeWebSocket.instances[1];
+    expect(second).toBeDefined();
+    act(() => {
+      second.onopen?.(new Event("open"));
+    });
+    expect(onOpen).toHaveBeenCalledTimes(2);
+
+    // The superseded socket's close must not schedule another dial.
+    act(() => {
+      first.onclose?.(new CloseEvent("close"));
+      vi.runAllTimers();
+    });
+    expect(FakeWebSocket.instances).toHaveLength(2);
+  });
 });
 
 describe("agent states websocket", () => {

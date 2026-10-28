@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getLocalBaseURL, type TaskEventHint } from "@/lib/api";
 import type { Daemon } from "@/lib/daemons";
+import { subscribeResume } from "@/lib/resume";
 
 const RECONNECT_MIN_MS = 250;
 const RECONNECT_MAX_MS = 5000;
@@ -119,8 +120,8 @@ export function useTasksSocket({
         onHintRef.current(hint);
       };
       current.onclose = () => {
-        if (socket === current) socket = null;
-        if (!alive) return;
+        if (!alive || socket !== current) return;
+        socket = null;
         setStatus("closed");
         const wait = reconnectDelay;
         reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
@@ -129,7 +130,17 @@ export function useTasksSocket({
     };
 
     connect();
+    // Redial from the last sequence; the daemon replays what was missed.
+    const stopResume = subscribeResume(() => {
+      if (timer !== undefined) clearTimeout(timer);
+      reconnectDelay = RECONNECT_MIN_MS;
+      const stale = socket;
+      socket = null;
+      stale?.close();
+      connect();
+    });
     return () => {
+      stopResume();
       alive = false;
       if (timer !== undefined) clearTimeout(timer);
       socket?.close();

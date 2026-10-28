@@ -431,7 +431,16 @@ modules; it holds no requests of its own.
   `{ok, result}` / `{ok, error}` envelope, raw requests for archives, uploads
   and text exports, and the single `ApiError` class (`status`, `code`,
   `message`, `details`). Every request uses `cache: "no-store"`, sends the
-  host's bearer token, and passes the caller's `AbortSignal`.
+  host's bearer token, and passes the caller's `AbortSignal`. A JSON `GET`
+  that gets no complete response in 30 seconds fails with `network_error`
+  and the message `request timed out`, so a connection that never answers
+  cannot stop a refresh loop. Writes and raw requests have no time limit.
+- `lib/resume.ts` calls its listeners when the page becomes visible again or
+  the browser comes back online. On that event the tasks, mail and agent
+  state WebSockets and the agent event stream close and open again at once,
+  and the shared query client rereads its active queries. A WebView can keep
+  a socket open after its connection stopped, for example after an Android
+  port forward dropped.
 - `hosts.ts` owns server selection: the active host that the host switcher
   sets, the local daemon origin that Desktop sets at boot, and the
   `ApiTarget` type (`undefined` = the active host, `null` = the local daemon,
@@ -724,6 +733,8 @@ The cache holds data only in memory. Inactive queries expire after five
 minutes. Data is stale immediately, so reopening a view refreshes it in the
 background. Automatic retries, window-focus refresh, and browser reconnect
 refresh are disabled. The host connection adapter controls reconnect reads.
+When the page becomes visible again or the browser comes back online, the
+client rereads all active queries once (see [API layer](#api-layer)).
 Network failures retain a loaded snapshot. A 401 or 403 response clears the
 server's cached data and shows the access error.
 

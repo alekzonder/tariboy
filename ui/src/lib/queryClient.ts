@@ -1,6 +1,7 @@
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { ApiError } from "./api";
 import type { Daemon } from "./daemons";
+import { subscribeResume } from "./resume";
 
 export const apiServerKey = (target: Daemon | null) => ["server", target?.id ?? "local"] as const;
 export const isAccessError = (error: unknown) =>
@@ -42,3 +43,6 @@ export function clearServerQueries(client: QueryClient, server: string) {
 }
 
 export const queryClient = createQueryClient();
+// Coming back to the app rereads what is on screen: a read made over a dead
+// connection must not leave stale data until the next hint.
+subscribeResume(() => void queryClient.invalidateQueries());

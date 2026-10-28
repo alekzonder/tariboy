@@ -138,3 +138,63 @@ describe("createApi", () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe("read timeout", () => {
+  // stubHangingFetch never answers; it rejects only when its signal aborts.
+  function stubHangingFetch() {
+    const signals: (AbortSignal | undefined)[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+        const signal = init.signal ?? undefined;
+        signals.push(signal);
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () =>
+            reject(new DOMException("The operation was aborted.", "AbortError")),
+          );
+        });
+      }),
+    );
+    return signals;
+  }
+
+  afterEach(() => vi.useRealTimers());
+
+  it("fails a GET that gets no answer within 30 seconds as a connection error", async () => {
+    vi.useFakeTimers();
+    stubHangingFetch();
+    const read = createApi(null)
+      .get("/api/tasks")
+      .catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(29_999);
+    let settled = false;
+    void read.then(() => (settled = true));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const err = await read;
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ code: "network_error", message: "request timed out" });
+  });
+
+  it("gives writes no timeout", async () => {
+    vi.useFakeTimers();
+    const signals = stubHangingFetch();
+    void createApi(null).post("/api/tasks", {});
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(signals[0]).toBeUndefined();
+  });
+
+  it("still cancels a GET through the caller's signal", async () => {
+    stubHangingFetch();
+    const controller = new AbortController();
+    const read = createApi(null)
+      .get("/api/tasks", controller.signal)
+      .catch((e: unknown) => e);
+    controller.abort();
+    const err = await read;
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ code: "network_error" });
+    expect((err as ApiError).message).not.toBe("request timed out");
+  });
+});

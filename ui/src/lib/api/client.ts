@@ -43,6 +43,33 @@ function authHeaders(daemon: Daemon | null): Record<string, string> {
   return daemon && daemon.token ? { Authorization: `Bearer ${daemon.token}` } : {};
 }
 
+const READ_TIMEOUT_MS = 30_000;
+
+// boundRead limits a GET to READ_TIMEOUT_MS and passes other methods through. A forwarded port can accept the
+// connection and never answer; without a limit that read, and every refresh
+// loop awaiting it, hangs until the app restarts. The caller's signal still
+// cancels. Writes get no limit: they may legitimately run long.
+function boundRead(method: string, signal?: AbortSignal) {
+  if (method !== "GET") return { signal, timedOut: () => false, done: () => {} };
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, READ_TIMEOUT_MS);
+  const cancel = () => controller.abort();
+  if (signal?.aborted) cancel();
+  signal?.addEventListener("abort", cancel, { once: true });
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    done: () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", cancel);
+    },
+  };
+}
+
 // request is the JSON transport against an EXPLICIT daemon descriptor (null =
 // same-origin no-auth). Unwraps the {ok,result}|{ok,error} envelope.
 async function request<T>(
@@ -54,20 +81,25 @@ async function request<T>(
 ): Promise<T> {
   const headers: Record<string, string> = { ...authHeaders(daemon) };
   if (body !== undefined) headers["Content-Type"] = "application/json";
+  const bound = boundRead(method, signal);
   let res: Response;
+  let text: string;
   try {
     res = await fetch(resolveUrl(daemon, path), {
       method,
       cache: "no-store",
       headers: Object.keys(headers).length ? headers : undefined,
       body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal,
+      signal: bound.signal,
     });
+    text = await res.text();
   } catch (e) {
     if (e instanceof ApiError) throw e;
+    if (bound.timedOut()) throw new ApiError(0, "network_error", "request timed out");
     throw new ApiError(0, "network_error", `network error: ${(e as Error).message}`);
+  } finally {
+    bound.done();
   }
-  const text = await res.text();
   let env: Envelope<T>;
   try {
     env = text ? (JSON.parse(text) as Envelope<T>) : { ok: res.ok };
