@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { QueueSecretInfo } from "@/lib/api";
 import { COUNT, EMPTY, FIELD, LABEL, QUIET_ACTION } from "./panelStyles";
+import KeyHints from "./KeyHints";
+import type { KeyHint } from "./queueSettingsModel";
 import { formatTaskTime } from "./taskTime";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
 import { errorText } from "@/lib/errors";
@@ -78,6 +80,7 @@ export default function QueueSecrets({
   missingMessage = "",
   revision = 0,
   envKeys = [],
+  hints = [],
   onKeys,
   onChanged,
 }: {
@@ -89,6 +92,8 @@ export default function QueueSecrets({
   revision?: number;
   /** Keys of the queue's plain env vars: one also answers a needed name, and setting one here moves it. */
   envKeys?: string[];
+  /** The secret names the bound workflow requires. */
+  hints?: KeyHint[];
   onKeys?: (keys: string[]) => void;
   /** Told of a change instead of reloading only this list. */
   onChanged?: () => void;
@@ -103,6 +108,8 @@ export default function QueueSecrets({
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const { confirm, dialog } = useWorkflowConfirm();
+  const listId = useId();
+  const valueInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -196,11 +203,13 @@ export default function QueueSecrets({
         <Input
           aria-label="Secret key"
           placeholder="KEY"
+          list={hints.length > 0 ? listId : undefined}
           value={key}
           className={`${FIELD} h-6.5 min-w-25 flex-1`}
           onChange={(event) => setKey(event.target.value)}
         />
         <Input
+          ref={valueInput}
           aria-label="Secret value"
           type="password"
           autoComplete="new-password"
@@ -213,6 +222,16 @@ export default function QueueSecrets({
           Set
         </Button>
       </form>
+      <KeyHints
+        listId={listId}
+        block="Secrets"
+        hints={hints}
+        taken={[...secrets.map((secret) => secret.key), ...envKeys]}
+        onPick={(name) => {
+          setKey(name);
+          valueInput.current?.focus();
+        }}
+      />
       {error && (
         <p role="alert" className="text-ui text-destructive">
           {error}

@@ -152,6 +152,7 @@ function QueueTabs({
           <QueueEnvironment
             key={`${queue.prefix}:${state?.binding?.digest ?? ""}`}
             queue={queue.prefix}
+            definition={state?.definition}
             missing={secretsMissing?.names}
             missingMessage={secretsMissing?.message}
           />

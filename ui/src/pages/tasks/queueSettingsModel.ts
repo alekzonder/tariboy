@@ -86,6 +86,27 @@ export function requiredWithMissing(
   return required;
 }
 
+/** A name the bound Workflowfile declares, with what its chip says on hover. */
+export interface KeyHint {
+  name: string;
+  title?: string;
+}
+
+/**
+ * The names the Environment tab suggests: the definition's `env` keys with
+ * their defaults, and its `requires_secrets`. None without a definition.
+ */
+export function workflowEnvHints(definition: WorkflowImageDefinition | null | undefined): {
+  env: KeyHint[];
+  secrets: KeyHint[];
+} {
+  const env = Object.entries(definition?.env ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, value]) => ({ name, title: `default: ${value}` }));
+  const secrets = [...(definition?.requires_secrets ?? [])].sort().map((name) => ({ name }));
+  return { env, secrets };
+}
+
 /** The tabs of a queue: Sources only where a workflow is bound. */
 export function queueTabs(binding: QueueWorkflow | null | undefined): QueueTab[] {
   const tabs: QueueTab[] = ["general", "workflow", "pools", "environment"];

@@ -3,7 +3,7 @@ import { fireEvent, render as renderWith, screen, waitFor, within } from "@/test
 import { beforeEach, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api";
 import QueueEnvironment from "./QueueEnvironment";
-import { remoteTarget } from "@/test/fixtures/workflowFixtures";
+import { developmentManifest, remoteTarget } from "@/test/fixtures/workflowFixtures";
 import { fakeApi } from "@/test/api";
 
 const api = vi.hoisted(() => ({
@@ -135,4 +135,53 @@ it("counts an env var as a value for a name a bind needs", async () => {
     ),
   );
   expect(screen.getByRole("alert", { name: "Secrets needed" })).toHaveTextContent("OTHER");
+});
+
+const declared = {
+  ...developmentManifest.definition,
+  env: { LOG_LEVEL: "info", TIMEOUT: "30" },
+  requires_secrets: ["TOKEN", "GH_TOKEN", "LOG_LEVEL"],
+};
+const chips = (block: string) =>
+  screen.queryByRole("group", { name: `${block} declared in Workflowfile` });
+const options = (input: HTMLElement) =>
+  [
+    ...document.querySelectorAll(`datalist#${CSS.escape(input.getAttribute("list") ?? "")} option`),
+  ].map((option) => option.getAttribute("value"));
+
+it("suggests the names the workflow declares and offers a chip for each unset one", async () => {
+  render(<QueueEnvironment queue="REL" definition={declared} />);
+  await within(env()).findByText("LOG_LEVEL");
+  await screen.findByText("TOKEN");
+  expect(options(screen.getByLabelText("Env key"))).toEqual(["LOG_LEVEL", "TIMEOUT"]);
+  expect(options(screen.getByLabelText("Secret key"))).toEqual(["GH_TOKEN", "LOG_LEVEL", "TOKEN"]);
+  const envChips = within(chips("Env")!).getAllByRole("button");
+  expect(envChips.map((chip) => chip.textContent)).toEqual(["TIMEOUT"]);
+  expect(envChips[0]).toHaveAttribute("title", "default: 30");
+  // LOG_LEVEL has a value as an env var, so the Secrets block offers no chip for it either.
+  expect(
+    within(chips("Secrets")!)
+      .getAllByRole("button")
+      .map((chip) => chip.textContent),
+  ).toEqual(["GH_TOKEN"]);
+});
+
+it("fills the key from a chip and moves the focus to the value", async () => {
+  render(<QueueEnvironment queue="REL" definition={declared} />);
+  await within(env()).findByText("LOG_LEVEL");
+  fireEvent.click(within(chips("Env")!).getByRole("button", { name: "TIMEOUT" }));
+  expect(screen.getByLabelText("Env key")).toHaveValue("TIMEOUT");
+  expect(screen.getByLabelText("Env value")).toHaveFocus();
+  await screen.findByText("TOKEN");
+  fireEvent.click(within(chips("Secrets")!).getByRole("button", { name: "GH_TOKEN" }));
+  expect(screen.getByLabelText("Secret key")).toHaveValue("GH_TOKEN");
+  expect(screen.getByLabelText("Secret value")).toHaveFocus();
+});
+
+it("shows no hints without a bound workflow", async () => {
+  render(<QueueEnvironment queue="REL" />);
+  await within(env()).findByText("LOG_LEVEL");
+  expect(chips("Env")).not.toBeInTheDocument();
+  expect(chips("Secrets")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Env key")).not.toHaveAttribute("list");
 });

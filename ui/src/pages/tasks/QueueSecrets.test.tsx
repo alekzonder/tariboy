@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { fireEvent, render as renderWith, screen, waitFor } from "@/test/queryRender";
+import { fireEvent, render as renderWith, screen, waitFor, within } from "@/test/queryRender";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api";
 import QueueSecrets from "./QueueSecrets";
@@ -186,4 +186,25 @@ it("names required secrets the global env holds, and which a queue secret overri
   expect(global).toHaveTextContent("GH_TOKEN present in global env");
   expect(global).toHaveTextContent("TOKEN present in global env, overridden by the queue secret");
   expect(screen.getByLabelText("Secret key")).toBeEnabled();
+});
+
+it("offers a chip for each declared secret without a value and keeps the value write-only", async () => {
+  render(
+    <QueueSecrets
+      queue="REL"
+      hints={[{ name: "API_KEY" }, { name: "BASE_URL" }, { name: "TOKEN" }]}
+      envKeys={["BASE_URL"]}
+    />,
+  );
+  await screen.findByText("TOKEN");
+  const chips = screen.getByRole("group", { name: "Secrets declared in Workflowfile" });
+  expect(
+    within(chips)
+      .getAllByRole("button")
+      .map((chip) => chip.textContent),
+  ).toEqual(["API_KEY"]);
+  fireEvent.click(within(chips).getByRole("button", { name: "API_KEY" }));
+  expect(screen.getByLabelText("Secret key")).toHaveValue("API_KEY");
+  expect(screen.getByLabelText("Secret value")).toHaveFocus();
+  expect(screen.getByLabelText("Secret value")).toHaveAttribute("type", "password");
 });
