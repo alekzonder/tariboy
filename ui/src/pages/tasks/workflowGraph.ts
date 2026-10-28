@@ -45,6 +45,20 @@ function runVisits(view: WorkflowView): StatusVisit[] {
   );
 }
 
+/**
+ * Whether the customer can start the watch of the current status now: an open,
+ * unpaused task in a script status that declares a watch.
+ */
+export function canRunWatch(view: WorkflowView): boolean {
+  if (isClosed(view) || view.waiting_on === "pause" || view.owner !== "script") return false;
+  return !!currentStatus(view)?.watch;
+}
+
+/** Whether a script run of the task is pending or running. */
+export function hasActiveRun(view: WorkflowView): boolean {
+  return (view.runs ?? []).some((run) => run.state === "pending" || run.state === "running");
+}
+
 /** Whether the task's queue is bound to another workflow version than the task's. */
 export function canUpgrade(view: WorkflowView): boolean {
   return !isClosed(view) && !!view.queue_digest && view.queue_digest !== view.digest;

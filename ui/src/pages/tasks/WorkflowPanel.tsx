@@ -9,18 +9,11 @@ import { cn } from "@/lib/utils";
 import { EMPTY, LABEL, MONO, QUIET_ACTION, ROW } from "./panelStyles";
 import ReturnToAgent from "./ReturnToAgent";
 import { formatTaskTime } from "./taskTime";
+import WorkflowActions, { ActionError, type OpenForm } from "./WorkflowActions";
 import WorkflowArtifacts from "./WorkflowArtifacts";
 import { MoveForm, UpgradeForm } from "./WorkflowMoveForms";
 import { useWorkflowConfirm, type ConfirmRequest } from "./WorkflowConfirm";
-import {
-  canReturnToAgent,
-  canUpgrade,
-  isClosed,
-  requiredBy,
-  selectedStep,
-  stepArtifacts,
-  stepOf,
-} from "./workflowGraph";
+import { isClosed, requiredBy, selectedStep, stepArtifacts, stepOf } from "./workflowGraph";
 import WorkflowOutcomes from "./WorkflowOutcomes";
 import WorkflowPauseBanner from "./WorkflowPauseBanner";
 import WorkflowProblem from "./WorkflowProblem";
@@ -30,8 +23,6 @@ import { errorText } from "@/lib/errors";
 
 /** A mono value that may be a 64-character ID: it wraps rather than overflows. */
 const MONO_ID = cn(MONO, "min-w-0 break-all");
-
-type OpenForm = "move" | "return" | "upgrade" | null;
 
 /**
  * The workflow of a task, in the task detail: what is wrong, where it is,
@@ -66,6 +57,10 @@ export function WorkflowPanel({
   const cancellation = useMutation({
     mutationFn: () => writeTask(client, api, () => api.workflows.cancelWorkflowTask(task.key)),
     onSuccess: () => onTaskChanged?.(),
+  });
+  const watching = useMutation({
+    mutationFn: () => api.workflows.runTaskWatch(task.key),
+    onSuccess: () => void workflow.refetch(),
   });
   const changed = () => {
     cancellation.reset();
@@ -124,6 +119,7 @@ export function WorkflowPanel({
     );
   const open = (next: OpenForm) => {
     cancellation.reset();
+    watching.reset();
     setForm(form === next ? null : next);
   };
 
@@ -142,17 +138,18 @@ export function WorkflowPanel({
             view={view}
             upgradeTo={upgradeTo}
             cancelling={cancellation.isPending}
+            watching={watching.isPending}
+            onRunWatch={() => {
+              cancellation.reset();
+              watching.mutate();
+            }}
             onOpen={open}
             onCancel={cancel}
           />
         )}
       </div>
       {failure}
-      {cancellation.error && (
-        <p role="alert" className="text-ui text-status-failed">
-          {errorText(cancellation.error)}
-        </p>
-      )}
+      <ActionError errors={[cancellation.error, watching.error]} />
       <OpenFormPane
         form={form}
         taskKey={task.key}
@@ -324,69 +321,6 @@ function WorkflowHeader({ view }: { view: WorkflowView }) {
         <span className="min-w-0">
           holder <span className={cn(MONO_ID, "text-foreground")}>{view.holder}</span>
         </span>
-      )}
-    </div>
-  );
-}
-
-/** Return to agent, Upgrade, Move, and Cancel, each where it applies. */
-function WorkflowActions({
-  view,
-  upgradeTo,
-  cancelling,
-  onOpen,
-  onCancel,
-}: {
-  view: WorkflowView;
-  upgradeTo: string;
-  cancelling: boolean;
-  onOpen: (form: OpenForm) => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-      {canReturnToAgent(view) && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7"
-          onClick={() => onOpen("return")}
-        >
-          Return to agent…
-        </Button>
-      )}
-      {canUpgrade(view) && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7"
-          onClick={() => onOpen("upgrade")}
-        >
-          Upgrade to {upgradeTo}…
-        </Button>
-      )}
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-7"
-        onClick={() => onOpen("move")}
-      >
-        Move to status…
-      </Button>
-      {!isClosed(view) && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 text-destructive hover:text-destructive"
-          disabled={cancelling}
-          onClick={onCancel}
-        >
-          Cancel task
-        </Button>
       )}
     </div>
   );

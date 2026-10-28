@@ -85,6 +85,7 @@ func TestTaskRoutesGoldenInputs(t *testing.T) {
 		{"POST", "/api/tasks/DEV-1/workflow/move", map[string]any{"to": " develop ", "reason": " regression "}, "user:customer|workflow_move DEV-1 develop \"regression\""},
 		{"POST", "/api/tasks/DEV-1/workflow/upgrade", map[string]any{"reason": " new rules "}, "user:customer|workflow_upgrade DEV-1 \"new rules\""},
 		{"POST", "/api/tasks/DEV-1/workflow/resume", map[string]any{"decision": " release "}, "user:customer|workflow_resume DEV-1 release"},
+		{"POST", "/api/tasks/DEV-1/workflow/watch", map[string]any{}, "user:customer|workflow_watch DEV-1"},
 		{"POST", "/api/tasks/DEV-1/workflow/reassign", map[string]any{"agent": " dev-2 "}, "user:customer|workflow_reassign DEV-1 dev-2"},
 		{"POST", "/api/tasks/DEV-1/cancel", map[string]any{}, "user:customer|cancel DEV-1"},
 	}

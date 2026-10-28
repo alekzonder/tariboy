@@ -240,6 +240,8 @@ describe("workflow task client", () => {
     expectLast("POST", "/api/tasks/TARI-1/workflow/resume", { decision: "release" });
     await workflows().reassignTaskWorkflow("TARI-1", "dev-2");
     expectLast("POST", "/api/tasks/TARI-1/workflow/reassign", { agent: "dev-2" });
+    await workflows().runTaskWatch("TARI-1");
+    expectLast("POST", "/api/tasks/TARI-1/workflow/watch");
   });
 
   it("maps only an unbound queue to null", async () => {

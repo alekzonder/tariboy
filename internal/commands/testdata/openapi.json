@@ -26568,6 +26568,96 @@
         "summary": "Restart a workflow task at the version its queue is bound to"
       }
     },
+    "/api/tasks/{key}/workflow/watch": {
+      "post": {
+        "operationId": "tasks.workflow.watch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "description": "Resource key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/ScriptRun"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Run the watch script of a workflow task now"
+      }
+    },
     "/api/team-imports/preview-yaml": {
       "post": {
         "operationId": "team.import.yaml",

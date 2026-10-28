@@ -5,8 +5,10 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api";
 import { WorkflowPanel } from "./WorkflowPanel";
 import {
+  checkRun,
   customerView,
   poolView,
+  watchRun,
   workflowTask,
   remoteTarget,
 } from "@/test/fixtures/workflowFixtures";
@@ -19,6 +21,7 @@ const api = vi.hoisted(() => ({
   upgradeTaskWorkflow: vi.fn(),
   cancelWorkflowTask: vi.fn(),
   resumeTaskWorkflow: vi.fn(),
+  runTaskWatch: vi.fn(),
 }));
 // The mocks are methods of a client bound to the remote host, so each call
 // they record went to that host.
@@ -31,6 +34,7 @@ const remoteApi = fakeApi(
       upgradeTaskWorkflow: api.upgradeTaskWorkflow,
       cancelWorkflowTask: api.cancelWorkflowTask,
       resumeTaskWorkflow: api.resumeTaskWorkflow,
+      runTaskWatch: api.runTaskWatch,
     },
   },
   remoteTarget,
@@ -592,4 +596,58 @@ it("labels the visits of an earlier workflow version", async () => {
   const [old, current] = within(visits).getAllByRole("listitem");
   expect(old).toHaveTextContent("@1.1.0");
   expect(current).not.toHaveTextContent("@1.2.0");
+});
+
+/** The task in the script status `publish`, whose watch is not running. */
+const scriptView = {
+  ...customerView,
+  status: "publish",
+  category: "in_progress",
+  waiting_on: undefined,
+  owner: "script",
+  outcomes: [],
+  runs: [checkRun],
+};
+
+it("runs the watch of a script status now and refetches the view", async () => {
+  api.getTaskWorkflow.mockResolvedValue(scriptView);
+  api.runTaskWatch.mockResolvedValue({ ...watchRun, id: 10, state: "pending" });
+  renderPanel();
+  await userEvent.click(await screen.findByRole("button", { name: "Run watch now" }));
+  expect(api.runTaskWatch).toHaveBeenCalledWith("REL-1");
+  await waitFor(() => expect(api.getTaskWorkflow).toHaveBeenCalledTimes(2));
+});
+
+it("offers Run watch now only in an open, unpaused script status with a watch", async () => {
+  for (const view of [
+    customerView,
+    poolView,
+    { ...scriptView, waiting_on: "pause", paused_reason: "script_failures" },
+    { ...scriptView, category: "done" },
+    { ...scriptView, statuses: scriptView.statuses.map((s) => ({ ...s, watch: undefined })) },
+  ]) {
+    api.getTaskWorkflow.mockResolvedValue(view);
+    const { unmount } = renderPanel();
+    await screen.findByText("release@1.2.0");
+    expect(screen.queryByRole("button", { name: "Run watch now" })).not.toBeInTheDocument();
+    unmount();
+  }
+});
+
+it("disables Run watch now while a run of the task is active", async () => {
+  api.getTaskWorkflow.mockResolvedValue({ ...scriptView, runs: [watchRun] });
+  renderPanel();
+  expect(await screen.findByRole("button", { name: "Run watch now" })).toBeDisabled();
+});
+
+it("shows why the daemon refused to run the watch", async () => {
+  api.getTaskWorkflow.mockResolvedValue(scriptView);
+  api.runTaskWatch.mockRejectedValue(
+    new ApiError(409, "script_running", "a script run of REL-1 is still active"),
+  );
+  renderPanel();
+  await userEvent.click(await screen.findByRole("button", { name: "Run watch now" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "a script run of REL-1 is still active",
+  );
 });

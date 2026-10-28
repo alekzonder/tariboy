@@ -244,6 +244,10 @@ func TaskOperatorCommands() []registry.Command {
 				tasks.Decode(p, &in)
 				return control.ResumeWorkflow(ctx, actor, in.Key, in.Decision)
 			}),
+		taskRoute("tasks.workflow.watch", "POST", "/api/tasks/{key}/workflow/watch", "Run the watch script of a workflow task now",
+			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
+				return control.RunWatchNow(ctx, actor, p.Trimmed("key"))
+			}),
 		taskRoute("tasks.workflow.reassign", "POST", "/api/tasks/{key}/workflow/reassign", "Hand the pool status of a workflow task to another member",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				var in tasks.ReassignRequest
@@ -453,6 +457,7 @@ var taskResultTypes = map[string]func(registry.Command) registry.Command{
 	"tasks.workflow.move":           registry.WithResult[tasks.Task],
 	"tasks.workflow.upgrade":        registry.WithResult[tasks.Task],
 	"tasks.workflow.resume":         registry.WithResult[tasks.Task],
+	"tasks.workflow.watch":          registry.WithResult[tasks.ScriptRun],
 	"tasks.workflow.reassign":       registry.WithResult[tasks.Task],
 	"tasks.cancel":                  registry.WithResult[tasks.Task],
 	"tasks.requeue":                 registry.WithResult[tasks.Task],

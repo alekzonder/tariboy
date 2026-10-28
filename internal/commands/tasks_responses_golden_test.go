@@ -206,6 +206,7 @@ func TestTasksResponsesMatchGolden(t *testing.T) {
 		tasksGoldenCall{"tasks.workflow.move", "tasks.workflow.move", registry.Params{"key": "DEV-1", "to": "review", "reason": "unstick"}},
 		tasksGoldenCall{"tasks.workflow.upgrade", "tasks.workflow.upgrade", registry.Params{"key": "DEV-1", "reason": "new rules"}},
 		tasksGoldenCall{"tasks.workflow.resume", "tasks.workflow.resume", registry.Params{"key": "DEV-1", "decision": "release"}},
+		tasksGoldenCall{"tasks.workflow.watch", "tasks.workflow.watch", registry.Params{"key": "DEV-1"}},
 		tasksGoldenCall{"tasks.workflow.reassign", "tasks.workflow.reassign", registry.Params{"key": "DEV-1", "agent": "dev-2"}},
 		tasksGoldenCall{"tasks.cancel", "tasks.cancel", registry.Params{"key": "DEV-1"}},
 		tasksGoldenCall{"tasks.requeue", "tasks.requeue", registry.Params{"key": "DEV-1", "queue": "OPS", "revision": float64(3)}},

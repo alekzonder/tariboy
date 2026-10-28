@@ -845,8 +845,11 @@ second click on the step, clears the selection and lists every entry of the
 view's `declared_artifacts` in one list, those `requiredBy` names for the
 current status first), `WorkflowRuns`
 (`getTaskScriptRunLog`; `runTone` gives each row its tone), the visit list,
-and the header's labeled **Return to agent…**, **Upgrade to NAME@VERSION…**,
-**Move to status…**, and **Cancel task** buttons: `ReturnToAgent` picks its
+and the header's labeled **Run watch now**, **Return to agent…**, **Upgrade to
+NAME@VERSION…**, **Move to status…**, and **Cancel task** buttons: **Run watch
+now** appears when `canRunWatch` finds an open, unpaused script status with a
+watch, is disabled while `hasActiveRun` finds a pending or running run, and
+sends `runTaskWatch`, then refetches the view; `ReturnToAgent` picks its
 targets with `returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the
 upgrade form appears when `canUpgrade` finds the view's `queue_digest` differs
 from its `digest` and sends `upgradeTaskWorkflow`, the move form uses

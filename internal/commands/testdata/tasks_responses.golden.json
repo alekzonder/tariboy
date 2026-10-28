@@ -1331,5 +1331,14 @@
     "title": "",
     "updated_at": "",
     "workflow_digest": "d2"
+  },
+  "tasks.workflow.watch": {
+    "created_at": "",
+    "id": 5,
+    "kind": "watch",
+    "run_as": "queue",
+    "script": "watch/merge.sh",
+    "state": "pending",
+    "task_key": "DEV-1"
   }
 }

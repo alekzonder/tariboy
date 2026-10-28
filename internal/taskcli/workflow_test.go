@@ -75,6 +75,7 @@ func TestOperatorWorkflowCommandsUseRestRoutes(t *testing.T) {
 		{[]string{"workflow", "resume", "DEV-1", "--decision", "continue"}, "POST", "/api/tasks/DEV-1/workflow/resume", map[string]any{"decision": "continue"}},
 		{[]string{"workflow", "resume", "DEV-1", "--decision", " release "}, "POST", "/api/tasks/DEV-1/workflow/resume", map[string]any{"decision": "release"}},
 		{[]string{"workflow", "reassign", "DEV-1", "--agent", "dev-2"}, "POST", "/api/tasks/DEV-1/workflow/reassign", map[string]any{"agent": "dev-2"}},
+		{[]string{"workflow", "watch", "DEV-1"}, "POST", "/api/tasks/DEV-1/workflow/watch", map[string]any{}},
 		{[]string{"workflow", "retry", "DEV-1", "7"}, "POST", "/api/tasks/DEV-1/workflow/requests/7/retry", map[string]any{}},
 		{[]string{"cancel", "DEV-1"}, "POST", "/api/tasks/DEV-1/cancel", map[string]any{}},
 		{[]string{"requeue", "DEV-1", "--queue", "OPS", "--revision", "3"}, "POST", "/api/tasks/DEV-1/requeue", map[string]any{"queue": "OPS", "revision": float64(3)}},
