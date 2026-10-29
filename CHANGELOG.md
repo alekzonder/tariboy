@@ -1,3 +1,39 @@
+## [0.99.0] - 2026-10-29
+
+### Added
+
+- Image and workflow image builds run in the background as daemon
+  operations. The new routes are `GET /api/operations`,
+  `GET /api/operations/{id}`, `GET /api/operations/{id}/log`,
+  `GET /api/operations/{id}/log/download` and the `/api/operations/ws` hint
+  socket. The new CLI verbs are `tariboy operation ls`, `show` and
+  `log [-f]`. The full log of each build is in
+  `<base-dir>/operations/<id>.log`.
+- Settings → Operations lists the builds of the host, newest first, 50 per
+  page. The page of one operation shows the status, the result or the error
+  and the full log, live while the build runs, with Download log. Build in
+  Images, Workflow images and Stores shows a "Build started" notice with a
+  link to the operation.
+- An open `task.question` letter in the Mailbox of the customer has an answer
+  form. Send answer posts the text as a comment on the task of the letter.
+  The comment answers the question and closes the letter. The Mailbox of an
+  agent and questions from `system:workflow` keep Answer on the task.
+
+### Changed
+
+- `POST /api/images/build` and `POST /api/workflow-images/build` start the
+  build and answer at once with the operation. A client that needs the build
+  result sends `wait=true`. A missing source path gives `400
+  bad_source_path` before an operation starts.
+- `tariboy image build` and `tariboy workflow build` print the operation log
+  to stderr until the build ends, then print the same result as before.
+  `--detach` prints only the operation id.
+- When the daemon starts, it marks operations that a previous process left
+  running as `interrupted`. The nightly maintenance removes finished
+  operations and their logs after the retention period.
+
+[0.99.0]: https://github.com/alekzonder/tariboy/compare/v0.98.0...v0.99.0
+
 ## [0.98.0] - 2026-10-29
 
 ### Added
