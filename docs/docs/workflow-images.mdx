@@ -354,7 +354,7 @@ tariboy workflow version update major|minor|patch [--path DIR]
 | Command | HTTP route | Result |
 | --- | --- | --- |
 | `workflow validate` | `POST /api/workflow-images/validate` | `valid`, `name`, `version`, `pools`, `files`, and `errors` (empty when valid). Validation errors are returned in the result, not as an HTTP failure; the CLI prints them and exits 1. |
-| `workflow build` | `POST /api/workflow-images/build` | `name`, `version`, `digest`, `tags`, and `created`. |
+| `workflow build` | `POST /api/workflow-images/build` | `{operation}`: the started build operation. The build result (`name`, `version`, `digest`, `tags`, and `created`) is `operation.workflow_result` once the build succeeds; with `wait: true` the request answers with the finished operation. The CLI prints the operation log to stderr until the build ends, then the result; `--detach` prints only the operation id. See [Build as an operation](/docs/images#build-as-an-operation). |
 | `workflow ls` | `GET /api/workflow-images` | `workflows` (one row per tag with `name`, `tag`, `version`, `digest`, `built_at`) and `count`. |
 | `workflow inspect NAME [TAG]` | `GET /api/workflow-images/{name}/{tag}` | The stored manifest. `TAG` is a tag or a full digest and defaults to `latest`. |
 | `workflow rm NAME TAG` | `DELETE /api/workflow-images/{name}/{tag}` | `name`, `tag`, `removed`, and `content_removed`. Removing the last tag that names a digest also deletes its content and database row. |

@@ -367,6 +367,6 @@ func operationLsLocal(c *registry.Ctx, p registry.Request) (any, error) {
 	if err := w.Flush(); err != nil {
 		return nil, err
 	}
-	fmt.Fprintf(c.Out, "page %d of %d operations\n", list.Page, list.Total)
+	fmt.Fprintf(c.Out, "page %d, %d per page, %d operations in total\n", list.Page, list.Limit, list.Total)
 	return nil, nil
 }

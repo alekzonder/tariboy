@@ -113,6 +113,10 @@ func TestImageBuildRejectsBadArgumentsWithoutOperation(t *testing.T) {
 	if !errors.As(err, &ue) || ue.Code != "missing_path" || ue.Status != http.StatusBadRequest {
 		t.Fatalf("err = %v", err)
 	}
+	_, err = callCommand(t, c, "image.build", registry.Params{"name": "demo", "path": filepath.Join(t.TempDir(), "missing")})
+	if !errors.As(err, &ue) || ue.Code != "bad_source_path" || ue.Status != http.StatusBadRequest {
+		t.Fatalf("missing path err = %v", err)
+	}
 	list, err := callCommand(t, c, "operation.ls", registry.Params{})
 	if err != nil {
 		t.Fatal(err)

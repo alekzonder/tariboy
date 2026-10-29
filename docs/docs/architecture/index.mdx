@@ -169,8 +169,10 @@ a resource always stops before the resources it uses. The order is:
 2. The access log.
 3. The AI proxy, awaited.
 4. Background workers, canceled and awaited.
-5. Plugins, then the loop manager.
-6. Telemetry flush, then the SQLite store, then the PID file.
+5. Running operations (image and workflow builds), canceled and awaited; each
+   records the status `interrupted`.
+6. Plugins, then the loop manager.
+7. Telemetry flush, then the SQLite store, then the PID file.
 
 All listeners bind before the daemon reports itself started, so a busy HTTP
 port fails startup synchronously. If any API listener fails later, the daemon
@@ -202,6 +204,36 @@ account, with no agent tools socket. The tasks service decides what a finished
 run means in one transaction. On shutdown the worker kills its scripts and
 leaves their records `running` for the next start to mark `interrupted`. See
 [Task workflows](/docs/task-workflows#script-protocol).
+
+### Background operations
+
+An image build and a workflow build are operations (`internal/operations`).
+`POST /api/images/build` and `POST /api/workflow-images/build` check their
+arguments in the request. An argument error answers at once with its error
+code. Otherwise the daemon records the operation, starts the build on the
+daemon's context, not on the request's context, and answers at once with
+`{operation}` in the status `running`. A client that disconnects does not stop
+the build. With the argument `wait: true` the request answers only when the
+build ends: the finished operation, or the build error with its code. Compose
+and Store automatic builds use `wait`.
+
+Each operation writes its log to `<base-dir>/operations/<id>.log`: the build
+steps, the output of `npx skills experimental_install`, the wait for the image
+name lock and the result or the error. Each status change and each log line
+emits an `operation` event. Clients read operations with these routes:
+
+| Route | Result |
+| --- | --- |
+| `GET /api/operations?page=N&limit=M` | One page, newest first, and the total. `limit` is 1 to 200, 50 by default. |
+| `GET /api/operations/{id}` | One operation with its result or error. |
+| `GET /api/operations/{id}/log?offset=N` | Up to 1 MiB of the log from byte `offset`, the next offset, the log size and whether the operation ended. |
+| `GET /api/operations/{id}/log/download` | The whole log file. |
+| `GET /api/operations/ws` | A hint frame `{id, status, ts}` for each `operation` event. The client then reads the operation and the log over HTTP. |
+
+The daemon cannot cancel an operation. A daemon stop interrupts running builds,
+and the next start marks rows that are still `running` as `interrupted`. An
+image build that fails restores the previous image tags, so an interrupted
+build leaves no partial image.
 
 Shutdown stops the API listeners and the proxy first, then cancels and awaits
 the pricing worker and the other workers before plugins, loops and SQLite stop.
@@ -374,7 +406,10 @@ all derived from it.
   and a fixed `bad_json` text.
 - **Some commands run in the CLI.** A command with `Local` runs in the CLI
   process instead of over HTTP: `daemon start|stop|restart|status|logs`,
-  `update` and the `compose` verbs. `daemon status` also keeps its HTTP route.
+  `update`, the `compose` verbs, `image build`, `workflow build`,
+  `operation ls` and `operation log`. `daemon status`, the build verbs and the
+  operation verbs also keep their HTTP routes; the CLI side of a build starts
+  the operation and reads its log over the socket.
   `AbsPathArgs` names the path arguments the CLI makes absolute, and
   `ExitCodeFrom` derives the CLI exit code from a result.
 - **Results are typed Go structs.** A handler returns a named struct, never

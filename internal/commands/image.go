@@ -65,6 +65,9 @@ func imageBuild() registry.Command {
 				if params.name, params.tags, err = resolveImageBuildName(params.name, params.tags); err != nil {
 					return nil, err
 				}
+				if _, err := canonicalSourceDir(params.path); err != nil {
+					return nil, api.UserError{Code: "bad_source_path", Msg: err.Error(), Status: http.StatusBadRequest}
+				}
 			}
 			if c.Store == nil {
 				return nil, api.UserError{Code: "build_failed", Msg: "image metadata store is unavailable"}
