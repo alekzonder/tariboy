@@ -26,6 +26,15 @@ export interface AgentStateHint {
   ts: string;
 }
 
+/** A background operation started, wrote a log line, or ended: a frame of
+ *  /api/operations/ws. Hand-written because the socket is outside the OpenAPI
+ *  spec. It is a hint: the client refetches the operation over HTTP. */
+export interface OperationHint {
+  id: number;
+  status: string;
+  ts: string;
+}
+
 export type HintSocketStatus = "connecting" | "open" | "closed";
 
 function hintWsUrl(target: Daemon | null, path: string): string {
@@ -92,6 +101,21 @@ export function useAgentStatesSocket(options: HintSocketOptions<AgentStateHint>)
     (parsed) => {
       const hint = parsed as Partial<AgentStateHint>;
       return hint && typeof hint.agent === "string" ? (hint as AgentStateHint) : null;
+    },
+    options,
+  );
+}
+
+/**
+ * Watch every background operation (image and workflow builds) on one host.
+ * The socket replays nothing, so the caller refetches on open as well.
+ */
+export function useOperationsSocket(options: HintSocketOptions<OperationHint>): HintSocketStatus {
+  return useHintSocket(
+    "/api/operations/ws",
+    (parsed) => {
+      const hint = parsed as Partial<OperationHint>;
+      return hint && typeof hint.id === "number" ? (hint as OperationHint) : null;
     },
     options,
   );

@@ -21,6 +21,7 @@ import type {
   WorkflowImageValidation,
   WorkflowView,
 } from "../api-types.generated";
+import { UI_INITIATOR, type OperationStarted } from "./operations";
 import { queryPath } from "./tasks";
 
 export type {
@@ -154,8 +155,9 @@ export function workflowsApi(t: Transport) {
     /** `path` is a Workflowfile.yaml, or its directory, on the host of this client. */
     validateWorkflowDirectory: (path: string) =>
       t.post<WorkflowImageValidation>("/api/workflow-images/validate", { path }),
+    /** Starts a background build; the result arrives on the returned operation. */
     buildWorkflowDirectory: (path: string) =>
-      t.post<WorkflowImageBuildResult>("/api/workflow-images/build", { path }),
+      t.post<OperationStarted>("/api/workflow-images/build", { path, initiator: UI_INITIATOR }),
     downloadWorkflowArchive: async (name: string, tag: string) =>
       (await t.raw("GET", `${workflowImagePath(name, tag)}/export`)).blob(),
     importWorkflowArchive: async (archive: Blob) => {

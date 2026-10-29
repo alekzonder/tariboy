@@ -4,7 +4,12 @@ import { createElement, type PropsWithChildren } from "react";
 import { createApi, setLocalBaseURL, type ApiClient } from "@/lib/api";
 import { ApiProvider } from "@/components/ApiProvider";
 import type { Daemon } from "@/lib/daemons";
-import { mailWsUrl, useAgentStatesSocket, useMailSocket } from "./useMailSocket";
+import {
+  mailWsUrl,
+  useAgentStatesSocket,
+  useMailSocket,
+  useOperationsSocket,
+} from "./useMailSocket";
 
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
@@ -147,6 +152,25 @@ describe("agent states websocket", () => {
     });
     expect(onHint).toHaveBeenCalledTimes(1);
     expect(onHint.mock.calls[0][0].agent).toBe("worker");
+  });
+
+  it("delivers operation hints with a numeric id from /api/operations/ws", () => {
+    const onHint = vi.fn();
+    renderHook(() => useOperationsSocket({ target: null, onHint }));
+    const socket = FakeWebSocket.instances[0];
+    expect(socket.url).toMatch(/\/api\/operations\/ws$/);
+    act(() => {
+      socket.onmessage?.(
+        new MessageEvent("message", {
+          data: JSON.stringify({ id: 4, status: "running", ts: "t" }),
+        }),
+      );
+      socket.onmessage?.(
+        new MessageEvent("message", { data: JSON.stringify({ id: "4", status: "running" }) }),
+      );
+    });
+    expect(onHint).toHaveBeenCalledTimes(1);
+    expect(onHint.mock.calls[0][0]).toEqual({ id: 4, status: "running", ts: "t" });
   });
 });
 

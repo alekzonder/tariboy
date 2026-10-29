@@ -326,6 +326,6 @@ describe("workflow task client", () => {
     await workflows().validateWorkflowDirectory("/src/wf");
     expectLast("POST", "/api/workflow-images/validate", { path: "/src/wf" });
     await workflows().buildWorkflowDirectory("/src/wf");
-    expectLast("POST", "/api/workflow-images/build", { path: "/src/wf" });
+    expectLast("POST", "/api/workflow-images/build", { path: "/src/wf", initiator: "ui" });
   });
 });

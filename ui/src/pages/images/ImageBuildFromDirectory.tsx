@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { type ImageDiagnostic, type ImageValidateResult } from "@/lib/api";
 import { notifyImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
+import { useOperationStartedToast } from "@/hooks/useOperationStartedToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorText } from "@/lib/errors";
@@ -11,6 +12,7 @@ import { ValidatedTemplate } from "./ValidatedTemplate";
 
 export default function ImageBuildFromDirectory() {
   const api = useApi();
+  const buildStarted = useOperationStartedToast(notifyImagesChanged);
   const [path, setPath] = useState("");
   const [name, setName] = useState("");
   const [tag, setTag] = useState("latest");
@@ -45,10 +47,9 @@ export default function ImageBuildFromDirectory() {
     }
     setBusy(true);
     try {
-      const result = await api.images.buildImageDirectory(directoryRequest(path, name, tag));
+      const started = await api.images.buildImageDirectory(directoryRequest(path, name, tag));
       setDiagnostics([]);
-      toast.success(`built ${result.name}:${result.tag}`);
-      notifyImagesChanged();
+      buildStarted(started);
     } catch (error) {
       toast.error(`build failed: ${errorText(error)}`);
     } finally {

@@ -12,6 +12,8 @@ import { addDaemon } from "@/lib/daemons";
 import { subscribeImagesChanged } from "@/lib/imageEvents";
 import StoresPage from "@/pages/StoresPage";
 import { routeFetch } from "@/test/fetchRoutes";
+import { FakeWebSocket } from "@/test/fakeWebSocket";
+import { operationStarted } from "@/test/fixtures/apiFixtures";
 
 vi.mock("@/lib/aggregate", () => ({ fetchAllAgents: vi.fn() }));
 
@@ -88,11 +90,13 @@ beforeEach(() => {
   // The server rows this page asserts on live in the sidebar's Servers tab.
   localStorage.setItem("terminals:sidebar-tab:v1", "servers");
   sessionStorage.clear();
+  FakeWebSocket.install();
 });
 
 afterEach(() => {
   setActiveDaemon(null);
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("Stores workspace", () => {
@@ -300,7 +304,7 @@ describe("Stores workspace", () => {
       expect(calls).toContainEqual({
         url: "https://store.example/api/images/build",
         method: "POST",
-        body: JSON.stringify({ source: "design/reviewer" }),
+        body: JSON.stringify({ source: "design/reviewer", initiator: "ui" }),
         authorization: "Bearer store-token",
       }),
     );
@@ -308,10 +312,14 @@ describe("Stores workspace", () => {
     expect(refresh).toBeDisabled();
     expect(removeStore).toBeDisabled();
 
-    finishBuild(envelope({ name: "reviewer", tag: "1.2.3", digest: "sha256:new", layers: 2 }));
+    finishBuild(envelope(operationStarted({ id: 11, title: "Build image design/reviewer" })));
     expect(
-      await screen.findByText("Built reviewer:1.2.3 and reviewer:latest."),
+      await screen.findByText("Build started: Build image design/reviewer."),
     ).toBeInTheDocument();
+    // The build runs on: the store reloads only when its operation succeeds.
+    expect(detailReads).toBe(1);
+    expect(imageBuilt).not.toHaveBeenCalled();
+    FakeWebSocket.last("/api/operations/ws")!.send({ id: 11, status: "succeeded", ts: "t" });
     await waitFor(() => expect(detailReads).toBe(2));
     expect(screen.getByText("reviewer").closest("tr")).not.toHaveClass("bg-amber-50");
     expect(screen.getByText("reviewer").closest("tr")).toHaveTextContent("Up to date");
@@ -328,8 +336,22 @@ describe("Stores workspace", () => {
         name: "Build reviewer",
       }),
     );
+    await waitFor(() =>
+      expect(
+        within(screen.getByText("reviewer").closest("tr")!).getByRole("button", {
+          name: "Build reviewer",
+        }),
+      ).toBeEnabled(),
+    );
+    // The first build ended, so its socket closed; the second build dials again.
+    await waitFor(() =>
+      expect(
+        FakeWebSocket.instances.filter((socket) => socket.url.includes("/api/operations/ws")),
+      ).toHaveLength(2),
+    );
+    FakeWebSocket.last("/api/operations/ws")!.send({ id: 11, status: "succeeded", ts: "t" });
     expect(await screen.findByRole("alert")).toHaveTextContent("reload failed");
-    expect(screen.getByText("Built reviewer:1.2.3 and reviewer:latest.")).toBeInTheDocument();
+    expect(screen.getByText("Build started: Build image design/reviewer.")).toBeInTheDocument();
     expect(imageBuilt).toHaveBeenCalledTimes(2);
 
     fireEvent.click(removeStore);
@@ -517,12 +539,12 @@ describe("Stores workspace", () => {
       expect.objectContaining({
         url: "https://new-build.example/api/images/build",
         method: "POST",
-        body: JSON.stringify({ source: "old/new-image" }),
+        body: JSON.stringify({ source: "old/new-image", initiator: "ui" }),
       }),
     );
 
-    finishOld(envelope({ name: "old-image", tag: "1.0.0", digest: "sha256:old", layers: 1 }));
-    await waitFor(() => expect(screen.queryByText(/Built old-image/)).not.toBeInTheDocument());
+    finishOld(envelope(operationStarted({ id: 1, title: "Build image old/old-image" })));
+    await waitFor(() => expect(screen.queryByText(/old\/old-image/)).not.toBeInTheDocument());
     expect(screen.getByRole("heading", { name: "old" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Building new-image…" })).toBeDisabled();
 
@@ -531,13 +553,14 @@ describe("Stores workspace", () => {
     expect(screen.getByRole("button", { name: "Build new-image" })).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Build new-image" }));
-    finishNewSuccess(
-      envelope({ name: "new-image", tag: "2.0.0", digest: "sha256:new", layers: 1 }),
-    );
+    finishNewSuccess(envelope(operationStarted({ id: 2, title: "Build image old/new-image" })));
     expect(
-      await screen.findByText("Built new-image:2.0.0 and new-image:latest."),
+      await screen.findByText("Build started: Build image old/new-image."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Build new-image" })).toBeEnabled();
+    // The build succeeds and its reload starts; a newer build makes that reload late.
+    FakeWebSocket.last("/api/operations/ws")!.send({ id: 2, status: "succeeded", ts: "t" });
+    await waitFor(() => expect(newReads).toBe(2));
     fireEvent.click(screen.getByRole("button", { name: "Build new-image" }));
     finishNewReload(envelope({ name: "old", source: "/srv/new", path: "/srv/new", images: [] }));
     await waitFor(() =>
@@ -595,7 +618,7 @@ describe("Stores workspace", () => {
         }
         if (url.endsWith("/api/images/build")) {
           return Promise.resolve(
-            envelope({ name: "reviewer", tag: "1.0.0", digest: "sha256:built", layers: 1 }),
+            envelope(operationStarted({ id: 5, title: "Build image team/reviewer" })),
           );
         }
         if (url.endsWith("/api/stores/team/refresh")) return refreshResponse;
@@ -607,9 +630,11 @@ describe("Stores workspace", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Build reviewer" }));
     expect(
-      await screen.findByText("Built reviewer:1.0.0 and reviewer:latest."),
+      await screen.findByText("Build started: Build image team/reviewer."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Build reviewer" })).toBeEnabled();
+    FakeWebSocket.last("/api/operations/ws")!.send({ id: 5, status: "succeeded", ts: "t" });
+    await waitFor(() => expect(detailReads).toBe(2));
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
 
@@ -784,13 +809,13 @@ describe("Store workflow images", () => {
           }
           built = true;
           return Promise.resolve(
-            envelope({
-              name: "development",
-              version: "0.3.0",
-              digest: "d3",
-              tags: ["0.3.0", "latest"],
-              created: true,
-            }),
+            envelope(
+              operationStarted({
+                id: 9,
+                kind: "workflow.build",
+                title: "Build workflow old/development",
+              }),
+            ),
           );
         }
         return Promise.resolve(envelope({ agents: [], groups: [], count: 0 }));
@@ -819,10 +844,14 @@ describe("Store workflow images", () => {
     expect(await screen.findByText("workflow build failed")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Build development" }));
     expect(
-      await screen.findByText("Built development 0.3.0 (tags: 0.3.0, latest)."),
+      await screen.findByText("Build started: Build workflow old/development."),
     ).toBeInTheDocument();
     const build = calls.filter((call) => call.url.endsWith("/api/workflow-images/build"));
-    expect(JSON.parse(build[1]?.body ?? "{}")).toEqual({ source: "old/development" });
+    expect(JSON.parse(build[1]?.body ?? "{}")).toEqual({
+      source: "old/development",
+      initiator: "ui",
+    });
+    FakeWebSocket.last("/api/operations/ws")!.send({ id: 9, status: "succeeded", ts: "t" });
     await waitFor(async () =>
       expect(within(await row("development")).getByText("Up to date")).toBeInTheDocument(),
     );

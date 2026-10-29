@@ -1,6 +1,6 @@
 import type { Transport } from "./client";
+import { UI_INITIATOR, type OperationStarted } from "./operations";
 import type {
-  ImageBuildResult,
   ImageFileContent,
   ImageFilesResult,
   ImageListResult,
@@ -13,7 +13,6 @@ import type {
 } from "../api-types.generated";
 
 export type {
-  ImageBuildResult,
   ImageDiagnostic,
   ImageFileEntry,
   ImageManifest,
@@ -42,8 +41,9 @@ export function imagesApi(t: Transport) {
     listImages: () => t.get<ImageListResult>("/api/images"),
     validateImageDirectory: (input: { path: string; name: string; tag?: string }) =>
       t.post<ImageValidateResult>("/api/images/validate", input),
+    /** Starts a background build; the result arrives on the returned operation. */
     buildImageDirectory: (input: { path: string; name: string; tag?: string }) =>
-      t.post<ImageBuildResult>("/api/images/build", input),
+      t.post<OperationStarted>("/api/images/build", { ...input, initiator: UI_INITIATOR }),
     imageManifestGet: (ref: string, expectedDigest?: string) =>
       t.get<ImageManifest>(`${imagePath(ref)}${imageDigestQuery(expectedDigest)}`),
     imageTemplateGet: (ref: string, expectedDigest?: string) =>

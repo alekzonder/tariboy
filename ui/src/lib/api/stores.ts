@@ -1,7 +1,6 @@
 import type { StoreDetail, StoreRemoveResult, StoreView } from "../api-types.generated";
 import type { Transport } from "./client";
-import type { ImageBuildResult } from "./images";
-import type { WorkflowImageBuildResult } from "./workflows";
+import { UI_INITIATOR, type OperationStarted } from "./operations";
 
 export type {
   StoreDetail,
@@ -27,9 +26,10 @@ export function storesApi(t: Transport) {
     setStoreAuto: (name: string, input: { interval: number; image: string[] }) =>
       t.post<StoreDetail>(`${storePath(name)}/auto`, input),
     removeStore: (name: string) => t.delete<StoreRemoveResult>(storePath(name)),
+    /** Starts a background build; the result arrives on the returned operation. */
     buildStoreImage: (input: { source: string; name?: string; tag?: string }) =>
-      t.post<ImageBuildResult>("/api/images/build", input),
+      t.post<OperationStarted>("/api/images/build", { ...input, initiator: UI_INITIATOR }),
     buildStoreWorkflow: (source: string) =>
-      t.post<WorkflowImageBuildResult>("/api/workflow-images/build", { source }),
+      t.post<OperationStarted>("/api/workflow-images/build", { source, initiator: UI_INITIATOR }),
   };
 }

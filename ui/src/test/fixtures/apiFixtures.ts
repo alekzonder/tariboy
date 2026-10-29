@@ -1,4 +1,4 @@
-import type { AgentRow, AgentView, ImageSummary } from "@/lib/api";
+import type { AgentRow, AgentView, ImageSummary, Operation, OperationStarted } from "@/lib/api";
 
 /** Complete API responses for tests; each test overrides only what it checks. */
 
@@ -69,4 +69,20 @@ export const imageSummary = (over: Partial<ImageSummary> = {}): ImageSummary => 
   current_agents: null,
   pending_agents: null,
   ...over,
+});
+
+export const operation = (over: Partial<Operation> = {}): Operation => ({
+  id: 1,
+  kind: "image.build",
+  title: "Build image reviewer:latest",
+  status: "running",
+  initiator: "ui",
+  params: {},
+  created_at: "2026-10-29T10:00:00Z",
+  ...over,
+});
+
+/** What a build POST answers: the operation that now runs the build. */
+export const operationStarted = (over: Partial<Operation> = {}): OperationStarted => ({
+  operation: operation(over),
 });
