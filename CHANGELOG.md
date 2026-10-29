@@ -1,3 +1,34 @@
+## [0.98.0] - 2026-10-29
+
+### Added
+
+- On the first start, the Desktop UI shows a short tour of the main screens:
+  servers, hosts, images, stores, agents, tasks, queues, workflows and the
+  Help menu. The "?" menu in the titlebar and a Help card in Application
+  settings start the tour again, show What's new for the steps that a release
+  added or changed, and open a Changelog window with the CHANGELOG of this
+  build.
+- Task letters name the task title. The subject has the key and then the
+  title, for example `Question on DEV-1: Ship the release`, and `data` carries
+  `task_title`. The body of a `task.question` or `task.answered` letter holds
+  the full comment, and the Mailbox shows it as Markdown. The letter card
+  shows a Task field with the key, the title and the current status.
+
+### Changed
+
+- Each host workspace has its own list of hosts. Add host puts a new host in
+  the current workspace only, and All tasks reads only the servers of the
+  current workspace. The workspace manager has Add to and Remove instead of
+  Move to. The UI moves the old workspace data once, so each host stays in its
+  workspace.
+
+### Fixed
+
+- All tasks in a workspace with no servers shows the empty table at once, not
+  loading placeholders.
+
+[0.98.0]: https://github.com/alekzonder/tariboy/compare/v0.97.0...v0.98.0
+
 ## [0.97.0] - 2026-10-29
 
 ### Added
