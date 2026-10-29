@@ -10,7 +10,7 @@ import type {
   ImageSummary,
 } from "@/lib/api";
 import { type Daemon } from "@/lib/daemons";
-import { createWorkspace, moveHost } from "@/lib/workspaces";
+import { addHostToWorkspace, createWorkspace, selectWorkspace } from "@/lib/workspaces";
 import userEvent from "@testing-library/user-event";
 import {
   cleanupTerminalsPage,
@@ -118,7 +118,7 @@ describe("host workspaces", () => {
   });
 
   it("filters the sidebar and its counts to the current workspace and follows the switch", async () => {
-    moveHost("d1", createWorkspace("Production")!);
+    addHostToWorkspace("d1", createWorkspace("Production")!);
     renderAt("/agents/local/a1/activity");
     expect(await screen.findByRole("button", { name: "Open a1" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open b1" })).toBeNull();
@@ -135,6 +135,20 @@ describe("host workspaces", () => {
     expect(screen.queryByRole("button", { name: "Open a1" })).toBeNull();
   });
 
+  it("limits All tasks to the current workspace's servers", async () => {
+    const production = createWorkspace("Production")!;
+    addHostToWorkspace("d1", production);
+    selectWorkspace(production);
+    renderAt("/?view=all");
+    await screen.findByTestId("all-tasks-workspace");
+    await waitFor(() => expect(fetchAllAgents).toHaveBeenCalled());
+
+    await userEvent.click(await screen.findByRole("button", { name: "Server: all" }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByRole("menuitem", { name: /prod/ })).toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: /This daemon/ })).toBeNull();
+  });
+
   it("shows an empty workspace in the island with a way to manage it", async () => {
     createWorkspace("Lab");
     renderAt("/agents/local/a1/console");
@@ -149,9 +163,9 @@ describe("host workspaces", () => {
     const dialog = await screen.findByRole("dialog", { name: "Manage workspaces" });
     expect(within(dialog).getByLabelText("Workspace name")).toHaveValue("Lab");
 
-    // Moving a host in updates the island without a reload.
+    // Adding a host updates the island without a reload.
     await userEvent.click(within(dialog).getByRole("button", { name: /^Default/ }));
-    await userEvent.click(within(dialog).getByRole("button", { name: "Move prod to…" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Add prod to…" }));
     await userEvent.click(within(dialog).getByRole("button", { name: "Lab" }));
     expect(
       await screen.findByRole("button", { name: "Open b1", hidden: true }),

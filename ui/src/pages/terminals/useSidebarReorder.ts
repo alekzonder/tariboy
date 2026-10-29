@@ -3,7 +3,7 @@ import type { HostAgents } from "@/lib/aggregate";
 import { createApi } from "@/lib/api";
 import { resolveDaemon } from "@/lib/daemons";
 import { readKey, storageKeys, writeKey } from "@/lib/storage";
-import { useWorkspaces, workspaceOf } from "@/lib/workspaces";
+import { inWorkspace, useWorkspaces } from "@/lib/workspaces";
 import type { ReorderKind } from "./sidebar/sidebarDnd";
 import { mergeVisibleServerOrder, parseServerOrder, rankHosts } from "./terminalsHosts";
 
@@ -35,8 +35,7 @@ export function useSidebarReorder(
     [serverOrder, sidebarHosts, sidebarOrderOverrides],
   );
   const orderedSidebarHosts = useMemo(
-    () =>
-      rankedHosts.filter((entry) => workspaceOf(workspaces, entry.host.id) === workspaces.active),
+    () => rankedHosts.filter((entry) => inWorkspace(workspaces, entry.host.id, workspaces.active)),
     [rankedHosts, workspaces],
   );
 

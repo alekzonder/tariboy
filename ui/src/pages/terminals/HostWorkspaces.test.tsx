@@ -4,12 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import {
   DEFAULT_WORKSPACE_ID,
+  addHostToWorkspace,
   createWorkspace,
-  moveHost,
+  inWorkspace,
   resetWorkspacesForTest,
   selectWorkspace,
   useWorkspaces,
-  workspaceOf,
 } from "@/lib/workspaces";
 import { WorkspaceManager, WorkspaceSwitcher, type WorkspaceHost } from "./HostWorkspaces";
 
@@ -51,7 +51,7 @@ function Harness({ onSelect = () => {} }: { onSelect?: (id: string) => void }) {
 describe("WorkspaceSwitcher", () => {
   it("lists workspaces with host counts and switches the current one", async () => {
     const lab = createWorkspace("Lab")!;
-    moveHost("h1", lab);
+    addHostToWorkspace("h1", lab);
     const onSelect = vi.fn();
     render(<Harness onSelect={onSelect} />);
 
@@ -87,18 +87,19 @@ describe("WorkspaceManager", () => {
     return screen.findByRole("dialog", { name: "Manage workspaces" });
   }
 
-  it("shows Default as built-in with its hosts and no Move to while alone", async () => {
+  it("shows Default as built-in with its hosts and no Add to while alone", async () => {
     const dialog = await openManager();
     expect(within(dialog).getByText("built-in")).toBeInTheDocument();
     expect(within(dialog).getByText("Can't be renamed or deleted.")).toBeInTheDocument();
     expect(within(dialog).getByText("hetzner-01")).toBeInTheDocument();
     expect(within(dialog).getAllByText("ready")).toHaveLength(2);
     expect(within(dialog).getByText("offline")).toBeInTheDocument();
-    expect(within(dialog).queryByRole("button", { name: /Move .* to/ })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: /Add .* to/ })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: /Remove .* from/ })).toBeNull();
     expect(within(dialog).queryByRole("button", { name: "Delete workspace" })).toBeNull();
   });
 
-  it("creates a workspace on Enter, selects it and moves a host into it", async () => {
+  it("creates a workspace on Enter, selects it and adds a host to it", async () => {
     const dialog = await openManager();
     const name = within(dialog).getByPlaceholderText("New workspace name");
     await userEvent.type(name, "   {Enter}");
@@ -107,24 +108,59 @@ describe("WorkspaceManager", () => {
 
     expect(within(dialog).getByLabelText("Workspace name")).toHaveValue("Production");
     expect(
-      within(dialog).getByText("No hosts yet. Open another workspace and move a host here."),
+      within(dialog).getByText("No hosts yet. Open another workspace and add a host here."),
     ).toBeInTheDocument();
 
     await userEvent.click(within(dialog).getByRole("button", { name: /^Default/ }));
-    await userEvent.click(within(dialog).getByRole("button", { name: "Move hetzner-01 to…" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Add hetzner-01 to…" }));
     await userEvent.click(within(dialog).getByRole("button", { name: "Production" }));
 
-    const state = () => JSON.parse(localStorage.getItem("app:workspaces:v1")!);
-    expect(workspaceOf(state(), "h1")).not.toBe(DEFAULT_WORKSPACE_ID);
-    expect(within(dialog).queryByText("hetzner-01")).toBeNull();
+    // The host is in Production and stays in Default too.
+    const state = () => JSON.parse(localStorage.getItem("app:workspaces:v2")!);
+    expect(inWorkspace(state(), "h1", state().workspaces[1].id)).toBe(true);
+    expect(inWorkspace(state(), "h1", DEFAULT_WORKSPACE_ID)).toBe(true);
+    expect(within(dialog).getByText("hetzner-01")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: /^Production\s*1$/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /^Default\s*3$/ })).toBeInTheDocument();
   });
 
-  it("keeps one Move to row open at a time", async () => {
+  it("removes a host from one workspace and keeps it in the others", async () => {
+    const lab = createWorkspace("Lab")!;
+    const prod = createWorkspace("Prod")!;
+    addHostToWorkspace("h1", lab);
+    addHostToWorkspace("h1", prod);
+    selectWorkspace(lab);
+    const dialog = await openManager();
+
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Remove hetzner-01 from Lab" }),
+    );
+    expect(within(dialog).queryByText("hetzner-01")).toBeNull();
+    expect(within(dialog).getByRole("button", { name: /^Lab\s*0$/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /^Prod\s*1$/ })).toBeInTheDocument();
+    // Default still lacks it: Prod holds it.
+    expect(within(dialog).getByRole("button", { name: /^Default\s*2$/ })).toBeInTheDocument();
+  });
+
+  it("offers no Remove for a host that would only fall back to Default", async () => {
+    const lab = createWorkspace("Lab")!;
+    addHostToWorkspace("h1", lab);
+    addHostToWorkspace("h1", DEFAULT_WORKSPACE_ID);
+    const dialog = await openManager();
+    // h1 is also in Lab, so removing it from Default changes something.
+    expect(
+      within(dialog).getByRole("button", { name: "Remove hetzner-01 from Default" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Remove lab-mini from Default" }),
+    ).toBeNull();
+  });
+
+  it("keeps one Add to row open at a time", async () => {
     createWorkspace("Lab");
     const dialog = await openManager();
-    await userEvent.click(within(dialog).getByRole("button", { name: "Move hetzner-01 to…" }));
-    await userEvent.click(within(dialog).getByRole("button", { name: "Move lab-mini to…" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Add hetzner-01 to…" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Add lab-mini to…" }));
     expect(within(dialog).getAllByRole("button", { name: "Lab" })).toHaveLength(1);
   });
 
@@ -146,12 +182,14 @@ describe("WorkspaceManager", () => {
 
   it("deletes after an inline confirmation, returning hosts to Default", async () => {
     const lab = createWorkspace("Lab")!;
-    moveHost("h1", lab);
+    addHostToWorkspace("h1", lab);
     selectWorkspace(lab);
     const dialog = await openManager();
 
     await userEvent.click(within(dialog).getByRole("button", { name: "Delete workspace" }));
-    expect(within(dialog).getByText("Delete Lab? Its hosts move to Default.")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Delete Lab? Hosts in no other workspace return to Default."),
+    ).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await userEvent.click(within(dialog).getByRole("button", { name: "Delete workspace" }));
     await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));

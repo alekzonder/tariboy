@@ -111,7 +111,7 @@ export function WorkspaceSwitcher({
   );
 }
 
-/** Create, rename and delete workspaces, and move hosts between them. The
+/** Create, rename and delete workspaces, and add or remove their hosts. The
  *  caller remounts it (via `open`) so each opening starts on `initialId`. */
 export function WorkspaceManager({
   hosts,
@@ -144,7 +144,7 @@ function ManagerBody({
 }) {
   const state = useWorkspaces();
   const [selectedId, setSelectedId] = useState(initialId);
-  const [moving, setMoving] = useState<string | null>(null);
+  const [adding, setAdding] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const newNameRef = useRef<HTMLInputElement | null>(null);
   const selected = state.workspaces.find((w) => w.id === selectedId) ?? state.workspaces[0];
@@ -153,7 +153,7 @@ function ManagerBody({
 
   const pick = (id: string) => {
     setSelectedId(id);
-    setMoving(null);
+    setAdding(null);
     setConfirming(false);
   };
 
@@ -169,7 +169,7 @@ function ManagerBody({
       <div className="flex shrink-0 items-center gap-2 border-b py-3 pr-12 pl-4.5">
         <DialogTitle className="text-body-lg font-semibold">Manage workspaces</DialogTitle>
         <DialogDescription className="text-ui text-muted-foreground">
-          New hosts join Default.
+          New hosts join the current workspace.
         </DialogDescription>
       </div>
       <div className="flex min-h-0 flex-1 max-sm:flex-col">
@@ -202,7 +202,7 @@ function ManagerBody({
               <span className="text-meta font-medium text-muted-foreground">Hosts</span>
               {members.length === 0 && (
                 <div className="rounded-lg border border-dashed p-3.5 text-body-sm text-muted-foreground">
-                  No hosts yet. Open another workspace and move a host here.
+                  No hosts yet. Open another workspace and add a host here.
                 </div>
               )}
               {members.map((host) => (
@@ -211,11 +211,9 @@ function ManagerBody({
                   host={host}
                   state={state}
                   selectedId={selected.id}
-                  moving={moving === host.id}
-                  onToggleMove={() =>
-                    setMoving((current) => (current === host.id ? null : host.id))
-                  }
-                  onMoved={() => setMoving(null)}
+                  adding={adding === host.id}
+                  onToggleAdd={() => setAdding((current) => (current === host.id ? null : host.id))}
+                  onAdded={() => setAdding(null)}
                 />
               ))}
             </div>

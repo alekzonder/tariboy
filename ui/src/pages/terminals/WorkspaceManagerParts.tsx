@@ -1,8 +1,16 @@
 import { useState, type RefObject } from "react";
-import { ArrowLeftRight } from "lucide-react";
+import { Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { createWorkspace, hostsIn, moveHost, type WorkspacesState } from "@/lib/workspaces";
+import {
+  DEFAULT_WORKSPACE_ID,
+  addHostToWorkspace,
+  createWorkspace,
+  hostsIn,
+  inWorkspace,
+  removeHostFromWorkspace,
+  type WorkspacesState,
+} from "@/lib/workspaces";
 import type { WorkspaceHost } from "./HostWorkspaces";
 
 /** The manager's left column: every workspace, and the form that adds one. */
@@ -67,22 +75,29 @@ export function WorkspaceList({
   );
 }
 
-/** One host of the selected workspace, with its "Move to…" picker. */
+/** One host of the selected workspace, with its "Add to…" picker and its
+ *  removal from this workspace only. */
 export function WorkspaceHostRow({
   host,
   state,
   selectedId,
-  moving,
-  onToggleMove,
-  onMoved,
+  adding,
+  onToggleAdd,
+  onAdded,
 }: {
   host: WorkspaceHost;
   state: WorkspacesState;
   selectedId: string;
-  moving: boolean;
-  onToggleMove: () => void;
-  onMoved: () => void;
+  adding: boolean;
+  onToggleAdd: () => void;
+  onAdded: () => void;
 }) {
+  const targets = state.workspaces.filter((w) => !inWorkspace(state, host.id, w.id));
+  const selected = state.workspaces.find((w) => w.id === selectedId);
+  // A host in Default and no other workspace would only fall back to Default.
+  const removable =
+    selectedId !== DEFAULT_WORKSPACE_ID ||
+    state.workspaces.some((w) => w.id !== DEFAULT_WORKSPACE_ID && w.hosts.includes(host.id));
   return (
     <div className="grid gap-0.5 rounded-lg border px-2.5 py-2">
       <div className="flex h-6.5 items-center gap-2">
@@ -95,37 +110,50 @@ export function WorkspaceHostRow({
         />
         <span className="min-w-0 flex-1 truncate font-mono text-ui font-medium">{host.label}</span>
         <span className="text-ui text-muted-foreground">{host.ready ? "ready" : "offline"}</span>
-        {state.workspaces.length > 1 && (
+        {targets.length > 0 && (
           <button
             type="button"
-            aria-label={`Move ${host.label} to…`}
-            aria-expanded={moving}
-            title="Move to workspace"
-            onClick={onToggleMove}
+            aria-label={`Add ${host.label} to…`}
+            aria-expanded={adding}
+            title="Add to another workspace"
+            onClick={onToggleAdd}
             className="inline-flex h-6 shrink-0 items-center gap-1 rounded-control border px-2 text-ui hover:bg-accent"
           >
-            <ArrowLeftRight aria-hidden="true" className="size-3" />
-            Move to…
+            <Plus aria-hidden="true" className="size-3" />
+            Add to…
+          </button>
+        )}
+        {removable && (
+          <button
+            type="button"
+            aria-label={`Remove ${host.label} from ${selected?.name ?? ""}`}
+            title="Remove from this workspace"
+            onClick={() => removeHostFromWorkspace(host.id, selectedId)}
+            className="inline-flex h-6 shrink-0 items-center gap-1 rounded-control border px-2 text-ui hover:bg-accent"
+          >
+            <Minus aria-hidden="true" className="size-3" />
+            Remove
           </button>
         )}
       </div>
-      {moving && (
+      {adding && (
         <div className="flex flex-wrap items-center gap-1 rounded-md bg-muted px-1.75 py-1.5">
-          {state.workspaces
-            .filter((w) => w.id !== selectedId)
-            .map((target) => (
-              <button
-                key={target.id}
-                type="button"
-                onClick={() => {
-                  moveHost(host.id, target.id);
-                  onMoved();
-                }}
-                className="h-6 rounded-sm border bg-card px-2.25 text-ui hover:border-ring"
-              >
-                {target.name}
-              </button>
-            ))}
+          {targets.map((target) => (
+            <button
+              key={target.id}
+              type="button"
+              onClick={() => {
+                // List it here first: a host only Default holds would leave
+                // Default once another workspace lists it.
+                addHostToWorkspace(host.id, selectedId);
+                addHostToWorkspace(host.id, target.id);
+                onAdded();
+              }}
+              className="h-6 rounded-sm border bg-card px-2.25 text-ui hover:border-ring"
+            >
+              {target.name}
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -149,7 +177,7 @@ export function WorkspaceDeleteBar({
       {confirming ? (
         <>
           <span className="min-w-0 flex-1 text-body-sm">
-            Delete {name}? Its hosts move to Default.
+            Delete {name}? Hosts in no other workspace return to Default.
           </span>
           <Button size="sm" variant="secondary" onClick={() => onConfirming(false)}>
             Cancel

@@ -6,7 +6,7 @@ import { useCustomerQuestionNotifications } from "@/components/customerQuestionN
 import type { HostAgents } from "@/lib/aggregate";
 import { hostToParam } from "@/lib/terminalsHost";
 import { defaultAgentTab } from "@/lib/uiMode";
-import { useWorkspaces } from "@/lib/workspaces";
+import { inWorkspace, useWorkspaces } from "@/lib/workspaces";
 import AgentWorkspace from "@/pages/agents/AgentWorkspace";
 import { RouteHostBoundary } from "./RouteHostBoundary";
 import type { ServerView } from "./TerminalsPage";
@@ -110,8 +110,15 @@ export function TerminalsRoutes({
   const navigate = useNavigate();
   const { select: selectDaemon } = useDaemons();
   const { refreshHost } = useCustomerQuestionNotifications();
+  const workspaces = useWorkspaces();
 
-  if (searchParams.get("view") === "all") return <AllTasksWorkspace hosts={hosts} />;
+  if (searchParams.get("view") === "all") {
+    // Tasks, like the sidebar, come only from the current workspace's servers.
+    const workspaceHosts = hosts.filter((entry) =>
+      inWorkspace(workspaces, entry.host.id, workspaces.active),
+    );
+    return <AllTasksWorkspace hosts={workspaceHosts} />;
+  }
   if (hostId === undefined) return fallback;
   const page = serverView
     ? SERVER_VIEWS[serverView]({

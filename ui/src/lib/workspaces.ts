@@ -1,59 +1,91 @@
 import { useSyncExternalStore } from "react";
 import { readKey, storageKeys, writeKey } from "./storage";
 
-/** Host workspaces: a window-level grouping of registered hosts. Hosts are the
- *  set of daemons, so no single daemon can own this; it lives in the app's
- *  WebView storage next to the server order. A host absent from the map is in
- *  the built-in Default, so new hosts land there without any migration. */
+/** Host workspaces: independent lists of registered hosts in one window. Hosts
+ *  are the set of daemons, so no single daemon can own this; it lives in the
+ *  app's WebView storage next to the server order. A host may be in several
+ *  workspaces; a host in none, such as one registered before workspaces
+ *  existed, is in the built-in Default. */
 export const WORKSPACES_KEY = storageKeys.workspaces.name;
 export const DEFAULT_WORKSPACE_ID = "default";
 
 interface Workspace {
   id: string;
   name: string;
+  hosts: readonly string[];
 }
 
 export interface WorkspacesState {
   /** Default first, then custom workspaces in creation order. */
   workspaces: Workspace[];
-  hostWorkspace: Readonly<Record<string, string>>;
   active: string;
 }
 
-const DEFAULT_WORKSPACE: Workspace = { id: DEFAULT_WORKSPACE_ID, name: "Default" };
+const DEFAULT_NAME = "Default";
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((v): v is string => typeof v === "string"))]
+    : [];
+}
 
 function sanitizeWorkspaces(value: unknown): WorkspacesState {
+  const raw = (typeof value === "object" && value !== null ? value : {}) as {
+    version?: unknown;
+    workspaces?: unknown;
+    active?: unknown;
+  };
+  const entries = raw.version === 2 && Array.isArray(raw.workspaces) ? raw.workspaces : [];
+  const valid = entries.filter(
+    (w): w is { id: string; name?: unknown; hosts?: unknown } =>
+      typeof w?.id === "string" && w.id !== "",
+  );
+  const defaultEntry = valid.find((w) => w.id === DEFAULT_WORKSPACE_ID);
+  const custom: Workspace[] = valid
+    .filter(
+      (w): w is { id: string; name: string; hosts?: unknown } =>
+        w.id !== DEFAULT_WORKSPACE_ID && typeof w.name === "string" && w.name.trim() !== "",
+    )
+    .map((w) => ({ id: w.id, name: w.name, hosts: stringList(w.hosts) }));
+  const ids = new Set(custom.map((w) => w.id));
+  const active =
+    typeof raw.active === "string" && ids.has(raw.active) ? raw.active : DEFAULT_WORKSPACE_ID;
+  const defaults = {
+    id: DEFAULT_WORKSPACE_ID,
+    name: DEFAULT_NAME,
+    hosts: stringList(defaultEntry?.hosts),
+  };
+  return { workspaces: [defaults, ...custom], active };
+}
+
+/** Version 1 kept one workspace per host in `hostWorkspace`; a host without an
+ *  entry was in Default and stays there through the fallback. */
+function migrateV1(value: unknown): WorkspacesState {
   const raw = (typeof value === "object" && value !== null ? value : {}) as {
     version?: unknown;
     workspaces?: unknown;
     hostWorkspace?: unknown;
     active?: unknown;
   };
-  const custom =
-    raw.version === 1 && Array.isArray(raw.workspaces)
-      ? raw.workspaces.filter(
-          (w): w is Workspace =>
-            typeof w?.id === "string" &&
-            w.id !== DEFAULT_WORKSPACE_ID &&
-            w.id !== "" &&
-            typeof w.name === "string" &&
-            w.name.trim() !== "",
-        )
+  if (raw.version !== 1) return sanitizeWorkspaces(null);
+  const hostWorkspace =
+    typeof raw.hostWorkspace === "object" && raw.hostWorkspace !== null
+      ? Object.entries(raw.hostWorkspace)
       : [];
-  const ids = new Set(custom.map((w) => w.id));
-  const hostWorkspace: Record<string, string> = {};
-  if (raw.version === 1 && typeof raw.hostWorkspace === "object" && raw.hostWorkspace !== null) {
-    for (const [host, id] of Object.entries(raw.hostWorkspace)) {
-      if (typeof id === "string" && ids.has(id)) hostWorkspace[host] = id;
-    }
-  }
-  const active =
-    typeof raw.active === "string" && ids.has(raw.active) ? raw.active : DEFAULT_WORKSPACE_ID;
-  return { workspaces: [DEFAULT_WORKSPACE, ...custom], hostWorkspace, active };
+  const workspaces = (Array.isArray(raw.workspaces) ? raw.workspaces : []).map((w: unknown) => {
+    const id = (w as { id?: unknown } | null)?.id;
+    return {
+      ...(w as object),
+      hosts: hostWorkspace.filter(([, ws]) => ws === id).map(([host]) => host),
+    };
+  });
+  return sanitizeWorkspaces({ version: 2, workspaces, active: raw.active });
 }
 
 function read(): WorkspacesState {
-  return sanitizeWorkspaces(readKey(storageKeys.workspaces));
+  const stored = readKey(storageKeys.workspaces);
+  if (stored !== null) return sanitizeWorkspaces(stored);
+  return migrateV1(readKey(storageKeys.workspacesLegacy));
 }
 
 let state: WorkspacesState | null = null;
@@ -65,14 +97,10 @@ function current(): WorkspacesState {
 }
 
 function update(next: WorkspacesState) {
-  state = sanitizeWorkspaces({ version: 1, ...next, workspaces: next.workspaces.slice(1) });
+  const value = { version: 2, workspaces: next.workspaces, active: next.active };
+  state = sanitizeWorkspaces(value);
   // Unavailable storage keeps the change for this session only.
-  writeKey(storageKeys.workspaces, {
-    version: 1,
-    workspaces: state.workspaces.slice(1),
-    hostWorkspace: state.hostWorkspace,
-    active: state.active,
-  });
+  writeKey(storageKeys.workspaces, value);
   for (const listener of listeners) listener();
 }
 
@@ -87,8 +115,12 @@ export function useWorkspaces(): WorkspacesState {
   return useSyncExternalStore(subscribe, current);
 }
 
-export function workspaceOf(value: WorkspacesState, hostId: string): string {
-  return value.hostWorkspace[hostId] ?? DEFAULT_WORKSPACE_ID;
+/** Whether `hostId` is in workspace `id`: listed there, or in Default when no
+ *  workspace lists it. */
+export function inWorkspace(value: WorkspacesState, hostId: string, id: string): boolean {
+  const listed = value.workspaces.filter((w) => w.hosts.includes(hostId));
+  if (listed.some((w) => w.id === id)) return true;
+  return id === DEFAULT_WORKSPACE_ID && listed.length === 0;
 }
 
 /** The hosts that belong to workspace `id`. */
@@ -97,7 +129,7 @@ export function hostsIn<T extends { id: string }>(
   hosts: T[],
   id: string,
 ): T[] {
-  return hosts.filter((host) => workspaceOf(value, host.id) === id);
+  return hosts.filter((host) => inWorkspace(value, host.id, id));
 }
 
 /** Returns the new workspace id, or undefined for a blank name. */
@@ -106,7 +138,7 @@ export function createWorkspace(name: string): string | undefined {
   if (!trimmed) return undefined;
   const id = `ws-${crypto.randomUUID()}`;
   const s = current();
-  update({ ...s, workspaces: [...s.workspaces, { id, name: trimmed }] });
+  update({ ...s, workspaces: [...s.workspaces, { id, name: trimmed, hosts: [] }] });
   return id;
 }
 
@@ -114,22 +146,42 @@ export function renameWorkspace(id: string, name: string) {
   const trimmed = name.trim();
   if (id === DEFAULT_WORKSPACE_ID || !trimmed) return;
   const s = current();
-  update({ ...s, workspaces: s.workspaces.map((w) => (w.id === id ? { id, name: trimmed } : w)) });
+  update({
+    ...s,
+    workspaces: s.workspaces.map((w) => (w.id === id ? { ...w, name: trimmed } : w)),
+  });
 }
 
-/** Its hosts fall back to Default because their map entries now dangle. */
+/** Hosts listed nowhere else fall back to Default. */
 export function deleteWorkspace(id: string) {
   if (id === DEFAULT_WORKSPACE_ID) return;
   const s = current();
   update({ ...s, workspaces: s.workspaces.filter((w) => w.id !== id) });
 }
 
-export function moveHost(hostId: string, workspaceId: string) {
+function setHosts(workspaceId: string, hosts: (list: readonly string[]) => readonly string[]) {
   const s = current();
-  const hostWorkspace = { ...s.hostWorkspace };
-  if (workspaceId === DEFAULT_WORKSPACE_ID) delete hostWorkspace[hostId];
-  else hostWorkspace[hostId] = workspaceId;
-  update({ ...s, hostWorkspace });
+  update({
+    ...s,
+    workspaces: s.workspaces.map((w) =>
+      w.id === workspaceId ? { ...w, hosts: hosts(w.hosts) } : w,
+    ),
+  });
+}
+
+/** Adds the host to the workspace and keeps its other workspaces. */
+export function addHostToWorkspace(hostId: string, workspaceId: string) {
+  setHosts(workspaceId, (list) => (list.includes(hostId) ? list : [...list, hostId]));
+}
+
+/** A host removed from its last workspace falls back to Default. */
+export function removeHostFromWorkspace(hostId: string, workspaceId: string) {
+  setHosts(workspaceId, (list) => list.filter((id) => id !== hostId));
+}
+
+/** Adds a newly registered host to the current workspace only. */
+export function addHostToCurrentWorkspace(hostId: string) {
+  addHostToWorkspace(hostId, current().active);
 }
 
 export function selectWorkspace(id: string) {

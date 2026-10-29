@@ -101,7 +101,7 @@ describe("storage access", () => {
   });
 
   it("returns the fallback for broken JSON", () => {
-    localStorage.setItem("app:workspaces:v1", "{not json");
+    localStorage.setItem("app:workspaces:v2", "{not json");
     expect(readKey(storageKeys.workspaces)).toBeNull();
   });
 

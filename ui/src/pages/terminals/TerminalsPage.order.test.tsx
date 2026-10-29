@@ -10,7 +10,7 @@ import type {
   ImageSummary,
 } from "@/lib/api";
 import { type Daemon } from "@/lib/daemons";
-import { createWorkspace, moveHost } from "@/lib/workspaces";
+import { createWorkspace, addHostToWorkspace } from "@/lib/workspaces";
 import {
   cleanupTerminalsPage,
   setupTerminalsPage,
@@ -199,7 +199,7 @@ describe("TerminalsPage keyboard reorder", () => {
       "terminals:server-order:v1",
       JSON.stringify({ version: 1, ids: ["", "d2", "d1"] }),
     );
-    moveHost("d2", createWorkspace("Lab")!);
+    addHostToWorkspace("d2", createWorkspace("Lab")!);
     mockRowRects({ "Open server local": 0, "Open server prod": 30 });
     renderAt("/");
     await screen.findByRole("button", { name: "Open server local" });
