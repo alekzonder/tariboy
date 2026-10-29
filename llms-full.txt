@@ -526,8 +526,10 @@ a resource always stops before the resources it uses. The order is:
 2. The access log.
 3. The AI proxy, awaited.
 4. Background workers, canceled and awaited.
-5. Plugins, then the loop manager.
-6. Telemetry flush, then the SQLite store, then the PID file.
+5. Running operations (image and workflow builds), canceled and awaited; each
+   records the status `interrupted`.
+6. Plugins, then the loop manager.
+7. Telemetry flush, then the SQLite store, then the PID file.
 
 All listeners bind before the daemon reports itself started, so a busy HTTP
 port fails startup synchronously. If any API listener fails later, the daemon
@@ -559,6 +561,36 @@ account, with no agent tools socket. The tasks service decides what a finished
 run means in one transaction. On shutdown the worker kills its scripts and
 leaves their records `running` for the next start to mark `interrupted`. See
 [Task workflows](/docs/task-workflows#script-protocol).
+
+### Background operations
+
+An image build and a workflow build are operations (`internal/operations`).
+`POST /api/images/build` and `POST /api/workflow-images/build` check their
+arguments in the request. An argument error answers at once with its error
+code. Otherwise the daemon records the operation, starts the build on the
+daemon's context, not on the request's context, and answers at once with
+`{operation}` in the status `running`. A client that disconnects does not stop
+the build. With the argument `wait: true` the request answers only when the
+build ends: the finished operation, or the build error with its code. Compose
+and Store automatic builds use `wait`.
+
+Each operation writes its log to `<base-dir>/operations/<id>.log`: the build
+steps, the output of `npx skills experimental_install`, the wait for the image
+name lock and the result or the error. Each status change and each log line
+emits an `operation` event. Clients read operations with these routes:
+
+| Route | Result |
+| --- | --- |
+| `GET /api/operations?page=N&limit=M` | One page, newest first, and the total. `limit` is 1 to 200, 50 by default. |
+| `GET /api/operations/{id}` | One operation with its result or error. |
+| `GET /api/operations/{id}/log?offset=N` | Up to 1 MiB of the log from byte `offset`, the next offset, the log size and whether the operation ended. |
+| `GET /api/operations/{id}/log/download` | The whole log file. |
+| `GET /api/operations/ws` | A hint frame `{id, status, ts}` for each `operation` event. The client then reads the operation and the log over HTTP. |
+
+The daemon cannot cancel an operation. A daemon stop interrupts running builds,
+and the next start marks rows that are still `running` as `interrupted`. An
+image build that fails restores the previous image tags, so an interrupted
+build leaves no partial image.
 
 Shutdown stops the API listeners and the proxy first, then cancels and awaits
 the pricing worker and the other workers before plugins, loops and SQLite stop.
@@ -731,7 +763,10 @@ all derived from it.
   and a fixed `bad_json` text.
 - **Some commands run in the CLI.** A command with `Local` runs in the CLI
   process instead of over HTTP: `daemon start|stop|restart|status|logs`,
-  `update` and the `compose` verbs. `daemon status` also keeps its HTTP route.
+  `update`, the `compose` verbs, `image build`, `workflow build`,
+  `operation ls` and `operation log`. `daemon status`, the build verbs and the
+  operation verbs also keep their HTTP routes; the CLI side of a build starts
+  the operation and reads its log over the socket.
   `AbsPathArgs` names the path arguments the CLI makes absolute, and
   `ExitCodeFrom` derives the CLI exit code from a result.
 - **Results are typed Go structs.** A handler returns a named struct, never
@@ -2009,6 +2044,25 @@ sets flags with header lines at its very top:
 
 An unknown key or step name stops the migration with an error.
 
+## Background operations
+
+The `operations` table (migration `0073_operations.sql`) has one row for each
+image or workflow build that the daemon runs in the background:
+
+- `kind` is `image.build` or `workflow.build`;
+- `status` is `running`, `succeeded`, `failed` or `interrupted`;
+- `title`, `initiator` (`ui`, `cli`, `compose`, `auto` or empty) and `params`,
+  a JSON object of the request arguments;
+- `result`, the JSON build result of a succeeded operation;
+- `error_code` and `error_message` of a failed or interrupted operation;
+- `created_at` and `finished_at`.
+
+The full log of an operation is the owner-only file
+`<base-dir>/operations/<id>.log`, not a table. The log of one operation stops
+at 10 MiB with one line about the truncation. At start, the daemon sets every
+`running` row to `interrupted`: a build does not survive the daemon process
+that ran it.
+
 ## Agent-owned tables
 
 The tables whose rows belong to one agent are listed once, in
@@ -2132,6 +2186,10 @@ when retention is `0`:
   `chat_retention_days` (any value `>= 0`; `0` leaves mail to the retention
   period), which covers every mailbox at once. Old mail therefore ends at that
   cutoff and stays only in the database backups.
+- **Operations** — `operations` rows of builds that finished before the
+  cutoff. A `running` operation is never deleted. After the deletion commits,
+  the log file `<base-dir>/operations/<id>.log` of each deleted operation is
+  removed.
 - **Daemon events** (`events`) and task mutation idempotency records.
 
 When compaction is on and at least the threshold share of pages is free, a
@@ -2935,6 +2993,25 @@ load or save is reported in place and the previous mode stays selected. The
 new mode applies from the host's next Codex iteration. See
 [Iteration loop](/docs/architecture/iteration-loop).
 
+**Settings → Operations** lists the image and workflow builds of the explicit
+host, newest first, 50 per page, with **Previous** and **Next**. The columns are
+kind, title, status, start time and duration. A row opens
+`/servers/:hostId/settings/operations/:id`. That page shows the status, kind,
+initiator, arguments, times, the result or the error code and message, and
+the full log with **Download log**. When the log file is gone, the page shows
+"Log unavailable". The list and the page of a running operation listen on
+`/api/operations/ws`. On a hint they read the operation again, and the page
+reads the log on from the last offset; a hint that arrives during a read
+causes one more read after it. See
+[Background operations](/docs/architecture#background-operations).
+
+**Build** in Images, Workflow images and a Store detail does not wait for the
+build. When the daemon accepts the build, a "Build started" toast offers
+**Open operation**, a link to the operation page. An argument error still
+shows at once in place. While the page that started a build stays open, it
+watches the socket: a succeeded build reloads its lists, and a failed or
+interrupted build shows an error toast with the same link.
+
 Activity loads a terminal iteration's proxy transcript once when that iteration
 is selected. Running iterations may refresh from the timer or daemon events,
 but share one in-flight request; changing the agent or iteration aborts that
@@ -3049,7 +3126,9 @@ that says why the spec does not cover it:
 
 - Responses that `internal/api/server.go` serves outside the command
   registry: the agent event stream (`AgentEvent`), the tasks WebSocket frame
-  (`TaskEventHint`), the mail WebSocket frame (`MailHint`), and the image, team, and workflow image archive imports.
+  (`TaskEventHint`), the mail WebSocket frame (`MailHint`), the operations
+  WebSocket frame (`OperationHint`), and the image, team, and workflow image
+  archive imports.
 - The transcript calls of `audit.ts`, which the spec describes only as
   objects.
 - Request bodies and filters, such as `CreateAgentSpec` and `TaskFilters`, and
@@ -3119,7 +3198,8 @@ Their internal modules separate form state, requests, and presentation:
   commit modules still own the single Save operation for the page.
 - `mailbox` is one two-pane mailbox for both Mailbox tabs: `Mailbox` holds
   the box switch and the panes, `MailboxList`, `MailboxLetter` and
-  `MailboxCompose` render them, `mailboxModel` holds the pure readings, and
+  `MailboxCompose` render them, `MailboxTaskAnswer` is the answer form of a
+  task question, `mailboxModel` holds the pure readings, and
   `mailQueries` the query keys and the live refetch.
 - Tasks separates local view state, panel sizing, query composition, and write
   actions. `TaskDetail` keeps one draft with its original revision. Its fields,
@@ -3234,8 +3314,8 @@ stays in the registry only so it can be read once, like `terminals:workspace:v1`
 ### Image change notifications
 
 `ui/src/lib/imageEvents.ts` connects image builds to the image lists in the
-same window. A finished build from a directory or from a Store calls
-`notifyImagesChanged()`. **Built images** and the agent configuration sources
+same window. A build from a directory or from a Store calls
+`notifyImagesChanged()` when its operation succeeds. **Built images** and the agent configuration sources
 subscribe with `subscribeImagesChanged()` and reload the images of their
 current host. A failing subscriber does not stop the others. Builds outside
 this window, for example from the CLI, do not notify the lists.
@@ -3566,8 +3646,23 @@ the current ones. Until the task loads, or when it does not load, the field
 shows the key and `data.task_title`, without a status. Such a letter also
 shows **Open** with the task key, which opens the task drawer (`TaskDrawer`) over the
 mailbox: the route does not change, the letter stays selected, and closing the
-drawer returns to it. A `task.question` letter is answered on its task: it
-shows **Answer on the task**, which opens that drawer, and no **Reply**.
+drawer returns to it. The daemon refuses a mail reply to a `task.question`
+letter, so such a letter shows no **Reply**. In the customer's mailbox, an open
+question shows an answer form under its body (`MailboxTaskAnswer`). The form
+has the controls of the task comment form: the **Rich text** / **Markdown**
+switch, the editor and **Send files**. It has no **Ask** choice.
+**Send answer** posts the text as the customer's comment on the task in
+`data.task_key`. The comment resolves the customer's wait, and the daemon
+closes the letter with `task-comment:<id>` in the same write. The form keeps
+one idempotency key for a draft until the comment is posted. A failure keeps
+the text and the key, so a retry does not post the comment twice. After the
+comment is posted, the mailbox refetches, the task queries refetch, and the
+right pane shows the letter as the daemon closed it. The draft lives only while
+the letter is selected. Two open questions show **Answer on the task** instead
+of the form, which opens the task drawer. The first is a question in an agent's
+mailbox, because a comment by the customer does not answer for the agent. The
+second is a question from `system:workflow`, because only a status outcome
+closes it.
 **Compose** opens a dialog
 with the recipient, the subject, the text and a **No reply needed** switch: off
 sends a request, on sends a notice. Every write shows a toast with the daemon's
@@ -5980,6 +6075,35 @@ source snapshot; it never infers a commit from the current working directory.
 For CLI calls, a relative `--path` is resolved against the shell's current
 working directory before the request is sent to the daemon.
 
+### Build as an operation
+
+The daemon runs each build in the background as an operation. A build does not
+block the Web UI, and it does not depend on the request that started it.
+
+- In the Web UI, **Build** shows the notice "Build started" with the link
+  **Open operation**. The link opens **Settings → Operations** on the page of
+  this build.
+- **Settings → Operations** lists every image and workflow build of the
+  server, newest first, 50 per page. The page of one operation shows its
+  status, arguments, result or error and its full log. The page of a running
+  operation updates its status and log live. **Download log** saves the log
+  file.
+- `tariboy image build` prints the operation id and the operation log to
+  stderr until the build ends. Then it prints the result as before, for
+  example `digest: ...`, to stdout. A failed build exits 1 with its error code
+  and message. Ctrl+C stops only the output; the build goes on in the daemon.
+- `tariboy image build --detach` prints only `operation: ID` and exits.
+- `tariboy operation ls [--page N] [--limit M]`, `tariboy operation show ID`
+  and `tariboy operation log ID [-f]` read the operations of the daemon.
+
+The log names each build step: the parse of `Tariboyfile.yaml`, the `extends`
+chain, the skills lock restore with the full `npx` output, the source
+snapshot, the wait for the image name lock, the layer build, the tags and the
+provenance record. A failed build ends with its error code and message. A
+daemon stop interrupts a running build: its operation gets the status
+`interrupted`, and the previous image tags stay. Start the build again after
+the daemon starts.
+
 ### Refs, tags and identity
 
 A **ref** is the stored image content. Its identity is derived from the image
@@ -8229,13 +8353,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.98.0` alpha on an Apple Silicon Mac.
+This path is for the `0.99.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.98.0_aarch64.dmg`;
+- a verified `Tariboy_0.99.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -8491,7 +8615,7 @@ tariboy has four command surfaces:
 | `tariboy harness codex-approval get` | Read the codex approval mode of this daemon (yolo\|approve-for-me) |
 | `tariboy harness codex-approval set MODE` | Set the codex approval mode of this daemon for the next iterations |
 | `tariboy harness models TYPE` | List the models and efforts a harness supports on the daemon host |
-| `tariboy image build` | Build an agent image from a Tariboyfile.yaml |
+| `tariboy image build` | Start a background build of an agent image from a Tariboyfile.yaml |
 | `tariboy image file REF PATH` | Read a single file packed into an image |
 | `tariboy image files REF` | List the files packed into an image |
 | `tariboy image inspect REF` | Show an image manifest |
@@ -8531,6 +8655,9 @@ tariboy has four command surfaces:
 | `tariboy maintenance get` | Show database maintenance settings and the last run |
 | `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
 | `tariboy maintenance set` | Change database maintenance settings; unset flags keep their value |
+| `tariboy operation log ID` | Read the log of a background operation |
+| `tariboy operation ls` | List background operations, newest first |
+| `tariboy operation show ID` | Show a background operation |
 | `tariboy plugin action NAME ACTION` | Invoke a generic action on a running plugin |
 | `tariboy plugin contributions` | List enabled plugin CLI and settings contributions |
 | `tariboy plugin inspect NAME` | Show one plugin's manifest, state and socket |
@@ -8577,7 +8704,7 @@ tariboy has four command surfaces:
 | `tariboy user-prompt get NAME` | Read the agent's standing user-prompt |
 | `tariboy user-prompt set NAME TEXT` | Set the agent's standing user-prompt |
 | `tariboy version` | Print the Tariboy version |
-| `tariboy workflow build` | Build a workflow image from a Workflowfile.yaml |
+| `tariboy workflow build` | Start a background build of a workflow image from a Workflowfile.yaml |
 | `tariboy workflow inspect NAME` | Show a workflow image manifest |
 | `tariboy workflow ls` | List built workflow images |
 | `tariboy workflow rm NAME TAG` | Remove a workflow image tag, and its content when no tag remains |
@@ -9679,7 +9806,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.98.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.99.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -9793,7 +9920,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.98.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.99.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -12729,7 +12856,7 @@ tariboy workflow version update major|minor|patch [--path DIR]
 | Command | HTTP route | Result |
 | --- | --- | --- |
 | `workflow validate` | `POST /api/workflow-images/validate` | `valid`, `name`, `version`, `pools`, `files`, and `errors` (empty when valid). Validation errors are returned in the result, not as an HTTP failure; the CLI prints them and exits 1. |
-| `workflow build` | `POST /api/workflow-images/build` | `name`, `version`, `digest`, `tags`, and `created`. |
+| `workflow build` | `POST /api/workflow-images/build` | `{operation}`: the started build operation. The build result (`name`, `version`, `digest`, `tags`, and `created`) is `operation.workflow_result` once the build succeeds; with `wait: true` the request answers with the finished operation. The CLI prints the operation log to stderr until the build ends, then the result; `--detach` prints only the operation id. See [Build as an operation](/docs/images#build-as-an-operation). |
 | `workflow ls` | `GET /api/workflow-images` | `workflows` (one row per tag with `name`, `tag`, `version`, `digest`, `built_at`) and `count`. |
 | `workflow inspect NAME [TAG]` | `GET /api/workflow-images/{name}/{tag}` | The stored manifest. `TAG` is a tag or a full digest and defaults to `latest`. |
 | `workflow rm NAME TAG` | `DELETE /api/workflow-images/{name}/{tag}` | `name`, `tag`, `removed`, and `content_removed`. Removing the last tag that names a digest also deletes its content and database row. |

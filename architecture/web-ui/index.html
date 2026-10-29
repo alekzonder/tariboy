@@ -424,6 +424,23 @@ a choice between <strong>Yolo</strong> (<code>--yolo</code>) and <strong>Approve
 load or save is reported in place and the previous mode stays selected. The
 new mode applies from the host’s next Codex iteration. See
 <a href="/tariboy/docs/architecture/iteration-loop">Iteration loop</a>.</p>
+<p><strong>Settings → Operations</strong> lists the image and workflow builds of the explicit
+host, newest first, 50 per page, with <strong>Previous</strong> and <strong>Next</strong>. The columns are
+kind, title, status, start time and duration. A row opens
+<code>/servers/:hostId/settings/operations/:id</code>. That page shows the status, kind,
+initiator, arguments, times, the result or the error code and message, and
+the full log with <strong>Download log</strong>. When the log file is gone, the page shows
+“Log unavailable”. The list and the page of a running operation listen on
+<code>/api/operations/ws</code>. On a hint they read the operation again, and the page
+reads the log on from the last offset; a hint that arrives during a read
+causes one more read after it. See
+<a href="/tariboy/docs/architecture#background-operations">Background operations</a>.</p>
+<p><strong>Build</strong> in Images, Workflow images and a Store detail does not wait for the
+build. When the daemon accepts the build, a “Build started” toast offers
+<strong>Open operation</strong>, a link to the operation page. An argument error still
+shows at once in place. While the page that started a build stays open, it
+watches the socket: a succeeded build reloads its lists, and a failed or
+interrupted build shows an error toast with the same link.</p>
 <p>Activity loads a terminal iteration’s proxy transcript once when that iteration
 is selected. Running iterations may refresh from the timer or daemon events,
 but share one in-flight request; changing the agent or iteration aborts that
@@ -524,7 +541,9 @@ that says why the spec does not cover it:</p>
 <ul>
 <li>Responses that <code>internal/api/server.go</code> serves outside the command
 registry: the agent event stream (<code>AgentEvent</code>), the tasks WebSocket frame
-(<code>TaskEventHint</code>), the mail WebSocket frame (<code>MailHint</code>), and the image, team, and workflow image archive imports.</li>
+(<code>TaskEventHint</code>), the mail WebSocket frame (<code>MailHint</code>), the operations
+WebSocket frame (<code>OperationHint</code>), and the image, team, and workflow image
+archive imports.</li>
 <li>The transcript calls of <code>audit.ts</code>, which the spec describes only as
 objects.</li>
 <li>Request bodies and filters, such as <code>CreateAgentSpec</code> and <code>TaskFilters</code>, and
@@ -589,7 +608,8 @@ file actions. <code>FileBrowser</code> keeps the public API and source reset bou
 commit modules still own the single Save operation for the page.</li>
 <li><code>mailbox</code> is one two-pane mailbox for both Mailbox tabs: <code>Mailbox</code> holds
 the box switch and the panes, <code>MailboxList</code>, <code>MailboxLetter</code> and
-<code>MailboxCompose</code> render them, <code>mailboxModel</code> holds the pure readings, and
+<code>MailboxCompose</code> render them, <code>MailboxTaskAnswer</code> is the answer form of a
+task question, <code>mailboxModel</code> holds the pure readings, and
 <code>mailQueries</code> the query keys and the live refetch.</li>
 <li>Tasks separates local view state, panel sizing, query composition, and write
 actions. <code>TaskDetail</code> keeps one draft with its original revision. Its fields,
@@ -867,8 +887,8 @@ stays in the registry only so it can be read once, like <code>terminals:workspac
 </table></div>
 <h3 id="image-change-notifications"><a class="blume-heading-anchor" href="#image-change-notifications">Image change notifications</a></h3>
 <p><code>ui/src/lib/imageEvents.ts</code> connects image builds to the image lists in the
-same window. A finished build from a directory or from a Store calls
-<code>notifyImagesChanged()</code>. <strong>Built images</strong> and the agent configuration sources
+same window. A build from a directory or from a Store calls
+<code>notifyImagesChanged()</code> when its operation succeeds. <strong>Built images</strong> and the agent configuration sources
 subscribe with <code>subscribeImagesChanged()</code> and reload the images of their
 current host. A failing subscriber does not stop the others. Builds outside
 this window, for example from the CLI, do not notify the lists.</p>
@@ -1177,8 +1197,23 @@ the current ones. Until the task loads, or when it does not load, the field
 shows the key and <code>data.task_title</code>, without a status. Such a letter also
 shows <strong>Open</strong> with the task key, which opens the task drawer (<code>TaskDrawer</code>) over the
 mailbox: the route does not change, the letter stays selected, and closing the
-drawer returns to it. A <code>task.question</code> letter is answered on its task: it
-shows <strong>Answer on the task</strong>, which opens that drawer, and no <strong>Reply</strong>.
+drawer returns to it. The daemon refuses a mail reply to a <code>task.question</code>
+letter, so such a letter shows no <strong>Reply</strong>. In the customer’s mailbox, an open
+question shows an answer form under its body (<code>MailboxTaskAnswer</code>). The form
+has the controls of the task comment form: the <strong>Rich text</strong> / <strong>Markdown</strong>
+switch, the editor and <strong>Send files</strong>. It has no <strong>Ask</strong> choice.
+<strong>Send answer</strong> posts the text as the customer’s comment on the task in
+<code>data.task_key</code>. The comment resolves the customer’s wait, and the daemon
+closes the letter with <code>task-comment:&lt;id&gt;</code> in the same write. The form keeps
+one idempotency key for a draft until the comment is posted. A failure keeps
+the text and the key, so a retry does not post the comment twice. After the
+comment is posted, the mailbox refetches, the task queries refetch, and the
+right pane shows the letter as the daemon closed it. The draft lives only while
+the letter is selected. Two open questions show <strong>Answer on the task</strong> instead
+of the form, which opens the task drawer. The first is a question in an agent’s
+mailbox, because a comment by the customer does not answer for the agent. The
+second is a question from <code>system:workflow</code>, because only a status outcome
+closes it.
 <strong>Compose</strong> opens a dialog
 with the recipient, the subject, the text and a <strong>No reply needed</strong> switch: off
 sends a request, on sends a notice. Every write shows a toast with the daemon’s

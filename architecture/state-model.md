@@ -96,6 +96,25 @@ sets flags with header lines at its very top:
 
 An unknown key or step name stops the migration with an error.
 
+## Background operations
+
+The `operations` table (migration `0073_operations.sql`) has one row for each
+image or workflow build that the daemon runs in the background:
+
+- `kind` is `image.build` or `workflow.build`;
+- `status` is `running`, `succeeded`, `failed` or `interrupted`;
+- `title`, `initiator` (`ui`, `cli`, `compose`, `auto` or empty) and `params`,
+  a JSON object of the request arguments;
+- `result`, the JSON build result of a succeeded operation;
+- `error_code` and `error_message` of a failed or interrupted operation;
+- `created_at` and `finished_at`.
+
+The full log of an operation is the owner-only file
+`<base-dir>/operations/<id>.log`, not a table. The log of one operation stops
+at 10 MiB with one line about the truncation. At start, the daemon sets every
+`running` row to `interrupted`: a build does not survive the daemon process
+that ran it.
+
 ## Agent-owned tables
 
 The tables whose rows belong to one agent are listed once, in
@@ -219,6 +238,10 @@ when retention is `0`:
   `chat_retention_days` (any value `>= 0`; `0` leaves mail to the retention
   period), which covers every mailbox at once. Old mail therefore ends at that
   cutoff and stays only in the database backups.
+- **Operations** — `operations` rows of builds that finished before the
+  cutoff. A `running` operation is never deleted. After the deletion commits,
+  the log file `<base-dir>/operations/<id>.log` of each deleted operation is
+  removed.
 - **Daemon events** (`events`) and task mutation idempotency records.
 
 When compaction is on and at least the threshold share of pages is free, a

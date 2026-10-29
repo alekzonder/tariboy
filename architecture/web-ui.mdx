@@ -468,6 +468,25 @@ load or save is reported in place and the previous mode stays selected. The
 new mode applies from the host's next Codex iteration. See
 [Iteration loop](/docs/architecture/iteration-loop).
 
+**Settings → Operations** lists the image and workflow builds of the explicit
+host, newest first, 50 per page, with **Previous** and **Next**. The columns are
+kind, title, status, start time and duration. A row opens
+`/servers/:hostId/settings/operations/:id`. That page shows the status, kind,
+initiator, arguments, times, the result or the error code and message, and
+the full log with **Download log**. When the log file is gone, the page shows
+"Log unavailable". The list and the page of a running operation listen on
+`/api/operations/ws`. On a hint they read the operation again, and the page
+reads the log on from the last offset; a hint that arrives during a read
+causes one more read after it. See
+[Background operations](/docs/architecture#background-operations).
+
+**Build** in Images, Workflow images and a Store detail does not wait for the
+build. When the daemon accepts the build, a "Build started" toast offers
+**Open operation**, a link to the operation page. An argument error still
+shows at once in place. While the page that started a build stays open, it
+watches the socket: a succeeded build reloads its lists, and a failed or
+interrupted build shows an error toast with the same link.
+
 Activity loads a terminal iteration's proxy transcript once when that iteration
 is selected. Running iterations may refresh from the timer or daemon events,
 but share one in-flight request; changing the agent or iteration aborts that
@@ -582,7 +601,9 @@ that says why the spec does not cover it:
 
 - Responses that `internal/api/server.go` serves outside the command
   registry: the agent event stream (`AgentEvent`), the tasks WebSocket frame
-  (`TaskEventHint`), the mail WebSocket frame (`MailHint`), and the image, team, and workflow image archive imports.
+  (`TaskEventHint`), the mail WebSocket frame (`MailHint`), the operations
+  WebSocket frame (`OperationHint`), and the image, team, and workflow image
+  archive imports.
 - The transcript calls of `audit.ts`, which the spec describes only as
   objects.
 - Request bodies and filters, such as `CreateAgentSpec` and `TaskFilters`, and
@@ -652,7 +673,8 @@ Their internal modules separate form state, requests, and presentation:
   commit modules still own the single Save operation for the page.
 - `mailbox` is one two-pane mailbox for both Mailbox tabs: `Mailbox` holds
   the box switch and the panes, `MailboxList`, `MailboxLetter` and
-  `MailboxCompose` render them, `mailboxModel` holds the pure readings, and
+  `MailboxCompose` render them, `MailboxTaskAnswer` is the answer form of a
+  task question, `mailboxModel` holds the pure readings, and
   `mailQueries` the query keys and the live refetch.
 - Tasks separates local view state, panel sizing, query composition, and write
   actions. `TaskDetail` keeps one draft with its original revision. Its fields,
@@ -767,8 +789,8 @@ stays in the registry only so it can be read once, like `terminals:workspace:v1`
 ### Image change notifications
 
 `ui/src/lib/imageEvents.ts` connects image builds to the image lists in the
-same window. A finished build from a directory or from a Store calls
-`notifyImagesChanged()`. **Built images** and the agent configuration sources
+same window. A build from a directory or from a Store calls
+`notifyImagesChanged()` when its operation succeeds. **Built images** and the agent configuration sources
 subscribe with `subscribeImagesChanged()` and reload the images of their
 current host. A failing subscriber does not stop the others. Builds outside
 this window, for example from the CLI, do not notify the lists.
@@ -1099,8 +1121,23 @@ the current ones. Until the task loads, or when it does not load, the field
 shows the key and `data.task_title`, without a status. Such a letter also
 shows **Open** with the task key, which opens the task drawer (`TaskDrawer`) over the
 mailbox: the route does not change, the letter stays selected, and closing the
-drawer returns to it. A `task.question` letter is answered on its task: it
-shows **Answer on the task**, which opens that drawer, and no **Reply**.
+drawer returns to it. The daemon refuses a mail reply to a `task.question`
+letter, so such a letter shows no **Reply**. In the customer's mailbox, an open
+question shows an answer form under its body (`MailboxTaskAnswer`). The form
+has the controls of the task comment form: the **Rich text** / **Markdown**
+switch, the editor and **Send files**. It has no **Ask** choice.
+**Send answer** posts the text as the customer's comment on the task in
+`data.task_key`. The comment resolves the customer's wait, and the daemon
+closes the letter with `task-comment:<id>` in the same write. The form keeps
+one idempotency key for a draft until the comment is posted. A failure keeps
+the text and the key, so a retry does not post the comment twice. After the
+comment is posted, the mailbox refetches, the task queries refetch, and the
+right pane shows the letter as the daemon closed it. The draft lives only while
+the letter is selected. Two open questions show **Answer on the task** instead
+of the form, which opens the task drawer. The first is a question in an agent's
+mailbox, because a comment by the customer does not answer for the agent. The
+second is a question from `system:workflow`, because only a status outcome
+closes it.
 **Compose** opens a dialog
 with the recipient, the subject, the text and a **No reply needed** switch: off
 sends a request, on sends a notice. Every write shows a toast with the daemon's

@@ -589,7 +589,7 @@ mutually exclusive.</p>
 <tr>
 <td><code>workflow build</code></td>
 <td><code>POST /api/workflow-images/build</code></td>
-<td><code>name</code>, <code>version</code>, <code>digest</code>, <code>tags</code>, and <code>created</code>.</td>
+<td><code>{operation}</code>: the started build operation. The build result (<code>name</code>, <code>version</code>, <code>digest</code>, <code>tags</code>, and <code>created</code>) is <code>operation.workflow_result</code> once the build succeeds; with <code>wait: true</code> the request answers with the finished operation. The CLI prints the operation log to stderr until the build ends, then the result; <code>--detach</code> prints only the operation id. See <a href="/tariboy/docs/images#build-as-an-operation">Build as an operation</a>.</td>
 </tr>
 <tr>
 <td><code>workflow ls</code></td>
