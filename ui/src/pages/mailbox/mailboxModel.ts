@@ -11,6 +11,7 @@ export const BOXES: ReadonlyArray<{ value: MailBox; label: string }> = [
 export type MailboxMode = "customer" | "agent";
 
 const QUESTION_KIND = "task.question";
+const WORKFLOW_SENDER = "system:workflow";
 
 /** `agent:dev` reads `dev`; a broadcast lists each recipient. */
 export function principalName(principal: string): string {
@@ -33,7 +34,12 @@ export interface LetterActions {
   reply: boolean;
   archive: boolean;
   requeue: boolean;
-  /** A task question is answered on its task: the daemon refuses a reply. */
+  /** The customer answers a task question in the letter: the answer is a
+   *  comment on its task, which closes the question and the letter. */
+  answerInline: boolean;
+  /** A task question a comment here cannot answer goes to its task: the
+   *  operator does not answer for an agent, and only an outcome closes a
+   *  workflow's question. The daemon refuses a reply to either. */
   answerOnTask: boolean;
   taskLink: boolean;
 }
@@ -42,12 +48,15 @@ export function letterActions(letter: Letter, box: MailBox, mode: MailboxMode): 
   const received = box !== "sent";
   const open = received && isOpen(letter);
   const question = letter.kind === QUESTION_KIND && letterTaskKey(letter) !== "";
+  const answerInline = open && question && mode === "customer" && letter.from !== WORKFLOW_SENDER;
+  const answerOnTask = open && question && !answerInline;
   return {
     reply: open && letter.needs_reply && !question,
     archive: open,
     requeue: mode === "agent" && received && !!letter.dead_at,
-    answerOnTask: open && question,
-    taskLink: !(open && question) && letterTaskKey(letter) !== "",
+    answerInline,
+    answerOnTask,
+    taskLink: !answerOnTask && letterTaskKey(letter) !== "",
   };
 }
 

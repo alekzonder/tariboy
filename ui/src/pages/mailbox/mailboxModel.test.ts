@@ -22,25 +22,42 @@ describe("mailboxModel", () => {
     expect(letterTaskKey(letter({ data: { task_key: 7 } }))).toBe("");
   });
 
-  it("gives an open request Reply and Archive, a task question Answer on the task", () => {
+  it("gives an open request Reply and Archive, a task question an answer form", () => {
     expect(letterActions(letter(), "inbox", "customer")).toEqual({
       reply: true,
       archive: true,
       requeue: false,
+      answerInline: false,
       answerOnTask: false,
       taskLink: false,
     });
     const question = letter({ kind: "task.question", data: { task_key: "DEV-1" } });
     expect(letterActions(question, "inbox", "customer")).toMatchObject({
       reply: false,
-      answerOnTask: true,
-      taskLink: false,
+      answerInline: true,
+      answerOnTask: false,
+      taskLink: true,
     });
     const linked = letter({ kind: "task.done", needs_reply: false, data: { task_key: "DEV-1" } });
     expect(letterActions(linked, "inbox", "customer")).toMatchObject({
       reply: false,
       taskLink: true,
     });
+  });
+
+  it("sends a question to its task when a comment cannot answer it", () => {
+    const question = letter({ kind: "task.question", data: { task_key: "DEV-1" } });
+    const onTask = { answerInline: false, answerOnTask: true, taskLink: false };
+    expect(letterActions(question, "inbox", "agent")).toMatchObject(onTask);
+    const workflow = letter({ ...question, from: "system:workflow" });
+    expect(letterActions(workflow, "inbox", "customer")).toMatchObject(onTask);
+    const closed = letter({ ...question, answered_at: "x" });
+    expect(letterActions(closed, "archive", "customer")).toMatchObject({
+      answerInline: false,
+      answerOnTask: false,
+      taskLink: true,
+    });
+    expect(letterActions(question, "sent", "customer").answerInline).toBe(false);
   });
 
   it("offers Requeue only on a dead letter in Archive", () => {

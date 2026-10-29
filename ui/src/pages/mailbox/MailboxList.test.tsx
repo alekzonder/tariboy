@@ -38,6 +38,7 @@ describe("MailboxList", () => {
             onArchive: vi.fn(),
             onRequeue,
             onOpenTask: vi.fn(),
+            onAnswer: vi.fn(),
             busy: false,
           }}
         />

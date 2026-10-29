@@ -652,7 +652,8 @@ Their internal modules separate form state, requests, and presentation:
   commit modules still own the single Save operation for the page.
 - `mailbox` is one two-pane mailbox for both Mailbox tabs: `Mailbox` holds
   the box switch and the panes, `MailboxList`, `MailboxLetter` and
-  `MailboxCompose` render them, `mailboxModel` holds the pure readings, and
+  `MailboxCompose` render them, `MailboxTaskAnswer` is the answer form of a
+  task question, `mailboxModel` holds the pure readings, and
   `mailQueries` the query keys and the live refetch.
 - Tasks separates local view state, panel sizing, query composition, and write
   actions. `TaskDetail` keeps one draft with its original revision. Its fields,
@@ -1099,8 +1100,23 @@ the current ones. Until the task loads, or when it does not load, the field
 shows the key and `data.task_title`, without a status. Such a letter also
 shows **Open** with the task key, which opens the task drawer (`TaskDrawer`) over the
 mailbox: the route does not change, the letter stays selected, and closing the
-drawer returns to it. A `task.question` letter is answered on its task: it
-shows **Answer on the task**, which opens that drawer, and no **Reply**.
+drawer returns to it. The daemon refuses a mail reply to a `task.question`
+letter, so such a letter shows no **Reply**. In the customer's mailbox, an open
+question shows an answer form under its body (`MailboxTaskAnswer`). The form
+has the controls of the task comment form: the **Rich text** / **Markdown**
+switch, the editor and **Send files**. It has no **Ask** choice.
+**Send answer** posts the text as the customer's comment on the task in
+`data.task_key`. The comment resolves the customer's wait, and the daemon
+closes the letter with `task-comment:<id>` in the same write. The form keeps
+one idempotency key for a draft until the comment is posted. A failure keeps
+the text and the key, so a retry does not post the comment twice. After the
+comment is posted, the mailbox refetches, the task queries refetch, and the
+right pane shows the letter as the daemon closed it. The draft lives only while
+the letter is selected. Two open questions show **Answer on the task** instead
+of the form, which opens the task drawer. The first is a question in an agent's
+mailbox, because a comment by the customer does not answer for the agent. The
+second is a question from `system:workflow`, because only a status outcome
+closes it.
 **Compose** opens a dialog
 with the recipient, the subject, the text and a **No reply needed** switch: off
 sends a request, on sends a notice. Every write shows a toast with the daemon's

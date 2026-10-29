@@ -7,6 +7,7 @@ import { letterTaskKey } from "@/lib/letters";
 import { MarkdownContent } from "@/pages/tasks/TaskMarkdown";
 import { taskQueries } from "@/pages/tasks/taskQueries";
 import { mailKeys } from "./mailQueries";
+import { MailboxTaskAnswer } from "./MailboxTaskAnswer";
 import { letterActions, letterState, principalName, type MailboxMode } from "./mailboxModel";
 
 export interface LetterHandlers {
@@ -15,6 +16,8 @@ export interface LetterHandlers {
   onRequeue: (letter: Letter) => void;
   /** Opens the task drawer over the mailbox. */
   onOpenTask: (key: string) => void;
+  /** Answers a task question with a comment on its task; true once posted. */
+  onAnswer: (letter: Letter, body: string, idempotencyKey: string) => Promise<boolean>;
   busy: boolean;
 }
 
@@ -146,6 +149,14 @@ export function MailboxLetter({
       <div className="border-t pt-3">
         <MarkdownContent>{letter.body}</MarkdownContent>
       </div>
+      {letterActions(letter, box, mode).answerInline && (
+        <MailboxTaskAnswer
+          key={letter.id}
+          taskKey={taskKey}
+          busy={handlers.busy}
+          onAnswer={(body, key) => handlers.onAnswer(letter, body, key)}
+        />
+      )}
     </article>
   );
 }
