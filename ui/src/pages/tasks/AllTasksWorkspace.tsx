@@ -45,7 +45,14 @@ function ServerTasksLive({
  * newest first. A task opens in place, on its own server, and its assignee can
  * be any agent anywhere — one on another server moves the task there.
  */
-export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgents[] }) {
+export default function AllTasksWorkspace({
+  hosts,
+  noServers = false,
+}: {
+  hosts: readonly HostAgents[];
+  /** The workspace has no servers, so there is nothing to wait for. */
+  noServers?: boolean;
+}) {
   const { view, setView, queue, setQueue, filtersActive, clearFilters } = useAllTasksView();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<{ serverId: string; key: string } | null>(null);
@@ -137,7 +144,7 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
           />
         )}
         <ServerWarnings errors={errors} labelOf={labelOf} onRetry={reload} />
-        {loading ? (
+        {loading && !noServers ? (
           <div aria-label="Loading tasks" role="status">
             {Array.from({ length: 6 }, (_, index) => (
               <div key={index} className="mx-4 my-1.25 h-5 animate-pulse rounded-sm bg-muted" />

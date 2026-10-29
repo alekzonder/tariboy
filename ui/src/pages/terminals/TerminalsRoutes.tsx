@@ -117,7 +117,14 @@ export function TerminalsRoutes({
     const workspaceHosts = hosts.filter((entry) =>
       inWorkspace(workspaces, entry.host.id, workspaces.active),
     );
-    return <AllTasksWorkspace hosts={workspaceHosts} />;
+    // Once the first poll found hosts, an empty list is an empty workspace,
+    // not one still loading.
+    return (
+      <AllTasksWorkspace
+        hosts={workspaceHosts}
+        noServers={hosts.length > 0 && workspaceHosts.length === 0}
+      />
+    );
   }
   if (hostId === undefined) return fallback;
   const page = serverView

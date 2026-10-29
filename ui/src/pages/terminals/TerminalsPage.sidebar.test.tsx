@@ -149,6 +149,14 @@ describe("host workspaces", () => {
     expect(within(menu).queryByRole("menuitem", { name: /This daemon/ })).toBeNull();
   });
 
+  it("shows an empty task table, not a loading one, in a workspace with no servers", async () => {
+    selectWorkspace(createWorkspace("Lab")!);
+    renderAt("/?view=all");
+    await waitFor(() => expect(fetchAllAgents).toHaveBeenCalled());
+    expect(await screen.findByText("No tasks")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Loading tasks" })).toBeNull();
+  });
+
   it("shows an empty workspace in the island with a way to manage it", async () => {
     createWorkspace("Lab");
     renderAt("/agents/local/a1/console");
