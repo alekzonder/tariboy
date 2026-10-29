@@ -110,11 +110,11 @@ it("refetches on socket hints while a listed operation runs", async () => {
   renderPage();
   expect(await screen.findByText("running")).toBeInTheDocument();
 
-  FakeWebSocket.last("/api/operations/ws")!.send({ id: 1, status: "succeeded", ts: "t" });
+  (await FakeWebSocket.dialed("/api/operations/ws")).send({ id: 1, status: "succeeded", ts: "t" });
   expect(await screen.findByText("succeeded")).toBeInTheDocument();
   const calls = list.mock.calls.length;
 
   // Nothing listed runs any more: a hint for a listed operation changes nothing.
-  FakeWebSocket.last("/api/operations/ws")!.send({ id: 1, status: "succeeded", ts: "t" });
+  (await FakeWebSocket.dialed("/api/operations/ws")).send({ id: 1, status: "succeeded", ts: "t" });
   await waitFor(() => expect(list.mock.calls.length).toBe(calls));
 });

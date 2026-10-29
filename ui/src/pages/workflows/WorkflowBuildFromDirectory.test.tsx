@@ -92,7 +92,7 @@ it("starts a build, links to its operation, and refreshes the list when it succe
   expect(options.description).toBe("Build workflow dev");
   expect(onBuilt).not.toHaveBeenCalled();
 
-  const socket = FakeWebSocket.last("/api/operations/ws")!;
+  const socket = await FakeWebSocket.dialed("/api/operations/ws");
   socket.open();
   await waitFor(() => expect(operations.get).toHaveBeenCalledWith(7));
   socket.send({ id: 7, status: "running", ts: "t" });

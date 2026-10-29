@@ -77,8 +77,8 @@ it("appends new log lines on each hint for a running operation", async () => {
   log.mockResolvedValueOnce(chunk(0, "start\n", 6));
   renderPage();
   await waitFor(() => expect(screen.getByLabelText("Operation log").textContent).toBe("start\n"));
-
-  const socket = FakeWebSocket.last("/api/operations/ws")!;
+  // The page subscribes once it knows the operation runs, which may be after the log renders.
+  const socket = await FakeWebSocket.dialed("/api/operations/ws");
   log.mockResolvedValueOnce(chunk(6, "line\n", 11));
   socket.send({ id: 3, status: "running", ts: "t" });
   await waitFor(() =>

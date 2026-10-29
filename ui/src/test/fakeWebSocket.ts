@@ -1,4 +1,4 @@
-import { act } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 
 /** A WebSocket stand-in that never dials: a test opens it and sends frames by hand. */
@@ -23,6 +23,16 @@ export class FakeWebSocket {
   /** The newest socket dialed to `path`. */
   static last(path: string): FakeWebSocket | undefined {
     return FakeWebSocket.instances.filter((socket) => socket.url.includes(path)).at(-1);
+  }
+
+  /** The newest socket dialed to `path`, once a component has dialed it from an effect. */
+  static async dialed(path: string): Promise<FakeWebSocket> {
+    let socket: FakeWebSocket | undefined;
+    await waitFor(() => {
+      socket = FakeWebSocket.last(path);
+      if (!socket) throw new Error(`no socket dialed to ${path}`);
+    });
+    return socket!;
   }
 
   open() {

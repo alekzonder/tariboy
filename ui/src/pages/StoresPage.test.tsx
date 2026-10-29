@@ -319,7 +319,11 @@ describe("Stores workspace", () => {
     // The build runs on: the store reloads only when its operation succeeds.
     expect(detailReads).toBe(1);
     expect(imageBuilt).not.toHaveBeenCalled();
-    FakeWebSocket.last("/api/operations/ws")!.send({ id: 11, status: "succeeded", ts: "t" });
+    (await FakeWebSocket.dialed("/api/operations/ws")).send({
+      id: 11,
+      status: "succeeded",
+      ts: "t",
+    });
     await waitFor(() => expect(detailReads).toBe(2));
     expect(screen.getByText("reviewer").closest("tr")).not.toHaveClass("bg-amber-50");
     expect(screen.getByText("reviewer").closest("tr")).toHaveTextContent("Up to date");
@@ -349,7 +353,11 @@ describe("Stores workspace", () => {
         FakeWebSocket.instances.filter((socket) => socket.url.includes("/api/operations/ws")),
       ).toHaveLength(2),
     );
-    FakeWebSocket.last("/api/operations/ws")!.send({ id: 11, status: "succeeded", ts: "t" });
+    (await FakeWebSocket.dialed("/api/operations/ws")).send({
+      id: 11,
+      status: "succeeded",
+      ts: "t",
+    });
     expect(await screen.findByRole("alert")).toHaveTextContent("reload failed");
     expect(screen.getByText("Build started: Build image design/reviewer.")).toBeInTheDocument();
     expect(imageBuilt).toHaveBeenCalledTimes(2);
@@ -559,7 +567,11 @@ describe("Stores workspace", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Build new-image" })).toBeEnabled();
     // The build succeeds and its reload starts; a newer build makes that reload late.
-    FakeWebSocket.last("/api/operations/ws")!.send({ id: 2, status: "succeeded", ts: "t" });
+    (await FakeWebSocket.dialed("/api/operations/ws")).send({
+      id: 2,
+      status: "succeeded",
+      ts: "t",
+    });
     await waitFor(() => expect(newReads).toBe(2));
     fireEvent.click(screen.getByRole("button", { name: "Build new-image" }));
     finishNewReload(envelope({ name: "old", source: "/srv/new", path: "/srv/new", images: [] }));
@@ -633,7 +645,11 @@ describe("Stores workspace", () => {
       await screen.findByText("Build started: Build image team/reviewer."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Build reviewer" })).toBeEnabled();
-    FakeWebSocket.last("/api/operations/ws")!.send({ id: 5, status: "succeeded", ts: "t" });
+    (await FakeWebSocket.dialed("/api/operations/ws")).send({
+      id: 5,
+      status: "succeeded",
+      ts: "t",
+    });
     await waitFor(() => expect(detailReads).toBe(2));
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
@@ -851,7 +867,11 @@ describe("Store workflow images", () => {
       source: "old/development",
       initiator: "ui",
     });
-    FakeWebSocket.last("/api/operations/ws")!.send({ id: 9, status: "succeeded", ts: "t" });
+    (await FakeWebSocket.dialed("/api/operations/ws")).send({
+      id: 9,
+      status: "succeeded",
+      ts: "t",
+    });
     await waitFor(async () =>
       expect(within(await row("development")).getByText("Up to date")).toBeInTheDocument(),
     );

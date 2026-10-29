@@ -24,9 +24,14 @@ export default function OperationsPage() {
   const [list, setList] = useState<OperationList | null>(null);
   const [error, setError] = useState("");
 
+  // The last loaded page, for the socket handler. load sets it with the
+  // state, so a hint right after a load never sees the previous page.
+  const listRef = useRef<{ list: OperationList | null; page: number }>({ list: null, page });
   const load = useCallback(async () => {
     try {
-      setList(await api.operations.list(page, OPERATIONS_PAGE_SIZE));
+      const next = await api.operations.list(page, OPERATIONS_PAGE_SIZE);
+      listRef.current = { list: next, page };
+      setList(next);
       setError("");
     } catch (cause) {
       setError(errorText(cause));
@@ -39,10 +44,6 @@ export default function OperationsPage() {
 
   // Refetch on a hint while a listed operation runs, or when the first page
   // would gain an operation it does not list yet.
-  const listRef = useRef({ list, page });
-  useEffect(() => {
-    listRef.current = { list, page };
-  }, [list, page]);
   const onHint = useCallback(
     (hint: { id: number }) => {
       const { list: current, page: shown } = listRef.current;
