@@ -1,3 +1,38 @@
+## [0.97.0] - 2026-10-29
+
+### Added
+
+- The `tasks.workflow.watch` command (`POST /api/tasks/{key}/workflow/watch`,
+  `ttasks workflow watch KEY`) starts the watch script of a script status at
+  once, not at its next scheduled time. The Workflow panel shows
+  **Run watch now** for an open script status with a watch script.
+- The Schedule field on the agent Configuration tab has a builder: None,
+  Every N minutes or hours, Daily, Weekly, Monthly, Once and Custom RRULE.
+  It writes the same RRULE text, so the API and the CLI do not change.
+- The Environment tab of a queue with a workflow suggests the env and secret
+  names that its Workflowfile declares.
+
+### Changed
+
+- The reason for a workflow move is optional. `ttasks workflow move` takes
+  `--reason` as an optional flag, and the **Move to status** and
+  **Return to agent** forms send without text.
+
+### Fixed
+
+- Task notices that carry no new work no longer start an agent iteration. At
+  the end of an iteration the daemon closes the open `task.goal`,
+  `task.assigned` and `task.answered` letters about the Goal task. Before a
+  wake, the loop closes such notices when their task is done, cancelled,
+  assigned to another agent, paused, or in a workflow status that no pool
+  owns. `task.question` letters stay open.
+- The UI updates again after a forwarded port stops answering. JSON reads stop
+  after 30 seconds with `network_error` "request timed out", and the screens
+  keep the last data. When the page becomes visible again or the browser comes
+  back online, the task, mail and agent connections reconnect at once.
+
+[0.97.0]: https://github.com/alekzonder/tariboy/compare/v0.96.0...v0.97.0
+
 ## [0.96.0] - 2026-10-27
 
 ### Added
