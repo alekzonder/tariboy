@@ -468,6 +468,25 @@ load or save is reported in place and the previous mode stays selected. The
 new mode applies from the host's next Codex iteration. See
 [Iteration loop](/docs/architecture/iteration-loop).
 
+**Settings → Operations** lists the image and workflow builds of the explicit
+host, newest first, 50 per page, with **Previous** and **Next**. The columns are
+kind, title, status, start time and duration. A row opens
+`/servers/:hostId/settings/operations/:id`. That page shows the status, kind,
+initiator, arguments, times, the result or the error code and message, and
+the full log with **Download log**. When the log file is gone, the page shows
+"Log unavailable". The list and the page of a running operation listen on
+`/api/operations/ws`. On a hint they read the operation again, and the page
+reads the log on from the last offset; a hint that arrives during a read
+causes one more read after it. See
+[Background operations](/docs/architecture#background-operations).
+
+**Build** in Images, Workflow images and a Store detail does not wait for the
+build. When the daemon accepts the build, a "Build started" toast offers
+**Open operation**, a link to the operation page. An argument error still
+shows at once in place. While the page that started a build stays open, it
+watches the socket: a succeeded build reloads its lists, and a failed or
+interrupted build shows an error toast with the same link.
+
 Activity loads a terminal iteration's proxy transcript once when that iteration
 is selected. Running iterations may refresh from the timer or daemon events,
 but share one in-flight request; changing the agent or iteration aborts that
@@ -582,7 +601,9 @@ that says why the spec does not cover it:
 
 - Responses that `internal/api/server.go` serves outside the command
   registry: the agent event stream (`AgentEvent`), the tasks WebSocket frame
-  (`TaskEventHint`), the mail WebSocket frame (`MailHint`), and the image, team, and workflow image archive imports.
+  (`TaskEventHint`), the mail WebSocket frame (`MailHint`), the operations
+  WebSocket frame (`OperationHint`), and the image, team, and workflow image
+  archive imports.
 - The transcript calls of `audit.ts`, which the spec describes only as
   objects.
 - Request bodies and filters, such as `CreateAgentSpec` and `TaskFilters`, and
@@ -768,8 +789,8 @@ stays in the registry only so it can be read once, like `terminals:workspace:v1`
 ### Image change notifications
 
 `ui/src/lib/imageEvents.ts` connects image builds to the image lists in the
-same window. A finished build from a directory or from a Store calls
-`notifyImagesChanged()`. **Built images** and the agent configuration sources
+same window. A build from a directory or from a Store calls
+`notifyImagesChanged()` when its operation succeeds. **Built images** and the agent configuration sources
 subscribe with `subscribeImagesChanged()` and reload the images of their
 current host. A failing subscriber does not stop the others. Builds outside
 this window, for example from the CLI, do not notify the lists.

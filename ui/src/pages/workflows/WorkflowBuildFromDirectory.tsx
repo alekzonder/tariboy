@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { toast } from "sonner";
+import { useOperationStartedToast } from "@/hooks/useOperationStartedToast";
 import {
   ApiError,
   type WorkflowImageValidation,
@@ -10,9 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorText } from "@/lib/errors";
 
-/** Validate and build a workflow source directory on the host of the nearest ApiProvider. */
+/** Validate a workflow source directory on the host of the nearest ApiProvider
+ *  and start its build there; `onBuilt` runs when that build succeeds. */
 export default function WorkflowBuildFromDirectory({ onBuilt }: { onBuilt: () => void }) {
   const api = useApi();
+  const buildStarted = useOperationStartedToast(onBuilt);
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [validation, setValidation] = useState<WorkflowImageValidation | null>(null);
@@ -45,10 +47,7 @@ export default function WorkflowBuildFromDirectory({ onBuilt }: { onBuilt: () =>
   const build = () =>
     run(async () => {
       try {
-        const result = await api.workflows.buildWorkflowDirectory(path.trim());
-        const ref = `${result.name}:${result.version}`;
-        toast.success(result.created ? `built ${ref}` : `${ref} already built`);
-        onBuilt();
+        buildStarted(await api.workflows.buildWorkflowDirectory(path.trim()));
       } catch (err) {
         const list =
           err instanceof ApiError && Array.isArray(err.details?.errors)

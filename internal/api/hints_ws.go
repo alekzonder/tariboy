@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/events"
+	"github.com/alekzonder/tariboy/internal/operations"
 	"github.com/coder/websocket"
 )
 
@@ -31,6 +32,15 @@ func (s *Server) serveMail(w http.ResponseWriter, r *http.Request) {
 func (s *Server) serveAgentStates(w http.ResponseWriter, r *http.Request) {
 	s.serveHints(w, r, []string{"iteration", "state"}, func(event events.Event) map[string]any {
 		return map[string]any{"agent": event.Agent, "type": event.Type, "ts": event.Time}
+	})
+}
+
+// serveOperations streams a hint, {id, status, ts}, whenever an operation
+// starts, writes a log line or ends. An operation page refetches the
+// operation and its log from the last offset on a hint for its id.
+func (s *Server) serveOperations(w http.ResponseWriter, r *http.Request) {
+	s.serveHints(w, r, []string{operations.EventType}, func(event events.Event) map[string]any {
+		return map[string]any{"id": event.Data["id"], "status": event.Data["status"], "ts": event.Time}
 	})
 }
 

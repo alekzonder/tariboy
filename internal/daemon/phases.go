@@ -29,6 +29,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/mail/storedir"
 	"github.com/alekzonder/tariboy/internal/maintenance"
+	"github.com/alekzonder/tariboy/internal/operations"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/pricingcatalog"
@@ -504,6 +505,16 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 	// compaction. A worker; drained before the store closes.
 	maint := maintenance.New(st, filepath.Join(p.Base, "backups", "db"), time.Now, log)
 	maint.TasksDir = filepath.Join(p.Base, "tasks")
+	// Image and workflow builds run as operations on the daemon's context. A
+	// build of a previous daemon process no longer runs.
+	operationStore := &operations.Store{DB: st.DB, Dir: filepath.Join(p.Base, "operations")}
+	if n, err := operationStore.MarkInterrupted(); err != nil {
+		log.Error("mark interrupted operations", "err", err)
+	} else if n > 0 {
+		log.Warn("operations interrupted by the previous daemon stop", "count", n)
+	}
+	maint.OperationsDir = operationStore.Dir
+	operationRunner := operations.NewRunner(context.Background(), operationStore, c.hub.Emit, log)
 	maint.PruneIterations = func() (int64, error) {
 		reps, err := retPruner.PruneAll(false)
 		var n int64
@@ -606,6 +617,7 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 		Maintenance:    maint,
 		Tasks:          tk.service,
 		WorkflowImages: tk.workflowImages.Store,
+		Operations:     operationRunner,
 	}
 	return &managerParts{
 		manager: manager, schedules: schedStore, scriptPublisher: scriptPublisher,
@@ -643,6 +655,8 @@ func startWorkers(ctx context.Context, o Options, proc *process, c *coreParts, t
 	log := proc.log
 	gctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
+	// Running builds record their interrupted status before the store closes.
+	stack.push("operations", mg.cctx.Operations.Shutdown)
 	stack.push("workers", func() {
 		cancel()
 		wg.Wait()
@@ -691,7 +705,7 @@ func startWorkers(ctx context.Context, o Options, proc *process, c *coreParts, t
 			if !ok {
 				return errors.New("image.build command is unavailable")
 			}
-			_, err := registry.Call(mg.cctx, ctx, command, map[string]any{"source": selector})
+			_, err := registry.Call(mg.cctx, ctx, command, map[string]any{"source": selector, "wait": true, "initiator": "auto"})
 			return err
 		}, log)
 	})

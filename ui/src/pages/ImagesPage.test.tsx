@@ -4,6 +4,8 @@ import { MemoryRouter } from "react-router-dom";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import { ApiProvider } from "@/components/ApiProvider";
 import { addDaemon, type Daemon } from "@/lib/daemons";
+import { FakeWebSocket } from "@/test/fakeWebSocket";
+import { operationStarted } from "@/test/fixtures/apiFixtures";
 import ImagesPage from "./ImagesPage";
 
 interface Call {
@@ -52,7 +54,7 @@ function stubApi(calls: Call[]) {
       } else if (url.endsWith("/api/images/validate") && method === "POST") {
         result = { valid: true, schema_version: 2, diagnostics: [] };
       } else if (url.endsWith("/api/images/build") && method === "POST") {
-        result = { name: "reviewer", tag: "latest", digest: "sha256:new", layers: 3 };
+        result = operationStarted({ id: 3 });
       }
       return Promise.resolve({
         ok: true,
@@ -79,8 +81,12 @@ function renderPage(host?: Daemon) {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  FakeWebSocket.install();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("Images workspace", () => {
   it("builds from an original directory with required name and latest by default", async () => {
@@ -110,7 +116,7 @@ describe("Images workspace", () => {
       expect(calls).toContainEqual({
         url: "/api/images/build",
         method: "POST",
-        body: JSON.stringify({ path: "/srv/images/reviewer", name: "reviewer" }),
+        body: JSON.stringify({ path: "/srv/images/reviewer", name: "reviewer", initiator: "ui" }),
       }),
     );
   });

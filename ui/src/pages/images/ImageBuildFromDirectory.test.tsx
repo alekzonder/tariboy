@@ -1,13 +1,46 @@
-import { afterEach, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { ComponentType, PropsWithChildren } from "react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { createApi, setActiveDaemon } from "@/lib/api";
 import { apiWrapper } from "@/test/api";
+import { FakeWebSocket } from "@/test/fakeWebSocket";
+import { operationStarted } from "@/test/fixtures/apiFixtures";
 import ImageBuildFromDirectory from "./ImageBuildFromDirectory";
+
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock("sonner", () => ({ toast }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  FakeWebSocket.install();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   setActiveDaemon(null);
 });
+
+function OperationRoute() {
+  return <p>operation {useLocation().pathname}</p>;
+}
+
+/** Mount under /servers/local/images, beside the operation route the toast links to. */
+function withRouter(Api: ComponentType<PropsWithChildren>) {
+  return function RouterWrapper({ children }: PropsWithChildren) {
+    return (
+      <Api>
+        <MemoryRouter initialEntries={["/servers/local/images"]}>
+          <Routes>
+            <Route path="/servers/:hostId/images" element={children} />
+            <Route path="/servers/:hostId/settings/operations/:id" element={<OperationRoute />} />
+          </Routes>
+        </MemoryRouter>
+      </Api>
+    );
+  };
+}
 
 it("sends an explicit name and non-default tag while leaving sources in place", async () => {
   const fetchMock = vi.fn().mockResolvedValue({
@@ -16,11 +49,11 @@ it("sends an explicit name and non-default tag while leaving sources in place", 
     text: async () =>
       JSON.stringify({
         ok: true,
-        result: { name: "reviewer", tag: "v3", digest: "sha256:new", layers: 2 },
+        result: operationStarted({ id: 4, title: "Build image reviewer:v3" }),
       }),
   } as Response);
   vi.stubGlobal("fetch", fetchMock);
-  render(<ImageBuildFromDirectory />, { wrapper: apiWrapper() });
+  render(<ImageBuildFromDirectory />, { wrapper: withRouter(apiWrapper()) });
 
   fireEvent.change(screen.getByLabelText("Image source directory"), {
     target: { value: "/srv/images/reviewer" },
@@ -34,10 +67,42 @@ it("sends an explicit name and non-default tag while leaving sources in place", 
       "/api/images/build",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ path: "/srv/images/reviewer", name: "reviewer", tag: "v3" }),
+        body: JSON.stringify({
+          path: "/srv/images/reviewer",
+          name: "reviewer",
+          tag: "v3",
+          initiator: "ui",
+        }),
       }),
     ),
   );
+  await waitFor(() => expect(toast.success).toHaveBeenCalled());
+  const [message, options] = toast.success.mock.calls[0];
+  expect(message).toBe("Build started");
+  expect(options.description).toBe("Build image reviewer:v3");
+  expect(options.action.label).toBe("Open operation");
+  act(() => options.action.onClick());
+  expect(await screen.findByText("operation /servers/local/settings/operations/4")).toBeTruthy();
+});
+
+it("reports a refused build as an error", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () =>
+        JSON.stringify({ ok: false, error: { code: "bad_request", message: "no Tariboyfile" } }),
+    } as Response),
+  );
+  render(<ImageBuildFromDirectory />, { wrapper: withRouter(apiWrapper()) });
+  fireEvent.change(screen.getByLabelText("Image source directory"), {
+    target: { value: "/srv/images/reviewer" },
+  });
+  fireEvent.change(screen.getByLabelText("Image name"), { target: { value: "reviewer" } });
+  fireEvent.click(screen.getByRole("button", { name: "Build" }));
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith("build failed: no Tariboyfile"));
+  expect(toast.success).not.toHaveBeenCalled();
 });
 
 it("shows the exact resolved template and warnings before build", async () => {
@@ -84,7 +149,7 @@ it("shows the exact resolved template and warnings before build", async () => {
       }),
   } as Response);
   vi.stubGlobal("fetch", fetchMock);
-  render(<ImageBuildFromDirectory />, { wrapper: apiWrapper() });
+  render(<ImageBuildFromDirectory />, { wrapper: withRouter(apiWrapper()) });
   fireEvent.change(screen.getByLabelText("Image source directory"), {
     target: { value: "/srv/images/reviewer" },
   });
@@ -129,7 +194,7 @@ it("dismisses validation diagnostics and the resolved template", async () => {
       }),
   } as Response);
   vi.stubGlobal("fetch", fetchMock);
-  render(<ImageBuildFromDirectory />, { wrapper: apiWrapper() });
+  render(<ImageBuildFromDirectory />, { wrapper: withRouter(apiWrapper()) });
 
   fireEvent.change(screen.getByLabelText("Image source directory"), {
     target: { value: "/srv/images/reviewer" },
@@ -162,7 +227,7 @@ it("keeps validation and build on the explicit target when the active host diffe
       );
     }),
   );
-  render(<ImageBuildFromDirectory />, { wrapper: apiWrapper(createApi(target)) });
+  render(<ImageBuildFromDirectory />, { wrapper: withRouter(apiWrapper(createApi(target))) });
   fireEvent.change(screen.getByLabelText("Image source directory"), {
     target: { value: "/srv/image" },
   });

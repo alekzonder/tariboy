@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/url"
 	"os"
@@ -248,22 +249,23 @@ func (c *Catalog) PrepareBuild(selector string) (prepared PreparedBuild, release
 	return PreparedBuild{Name: parts[1], Path: imageDir}, release, nil
 }
 
-func (c *Catalog) RestoreBuildLocks(ctx context.Context, prepared PreparedBuild) error {
-	if err := c.RestoreStoreLock(ctx, prepared); err != nil {
+func (c *Catalog) RestoreBuildLocks(ctx context.Context, prepared PreparedBuild, out io.Writer) error {
+	if err := c.RestoreStoreLock(ctx, prepared, out); err != nil {
 		return err
 	}
-	return RestoreLock(ctx, prepared.Path)
+	return RestoreLock(ctx, prepared.Path, out)
 }
 
 // RestoreStoreLock restores only the Store root lock. An image that uses
 // extends restores each layer's lock while its layers are assembled.
-func (c *Catalog) RestoreStoreLock(ctx context.Context, prepared PreparedBuild) error {
-	return RestoreLock(ctx, filepath.Dir(filepath.Dir(prepared.Path)))
+func (c *Catalog) RestoreStoreLock(ctx context.Context, prepared PreparedBuild, out io.Writer) error {
+	return RestoreLock(ctx, filepath.Dir(filepath.Dir(prepared.Path)), out)
 }
 
 // RestoreLock runs the skills installer in dir when it holds skills-lock.json
-// and leaves the lock file as it was.
-func RestoreLock(ctx context.Context, dir string) error {
+// and leaves the lock file as it was. A non-nil out receives the installer's
+// output.
+func RestoreLock(ctx context.Context, dir string, out io.Writer) error {
 	lock := filepath.Join(dir, "skills-lock.json")
 	if _, err := os.Lstat(lock); errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -280,7 +282,10 @@ func RestoreLock(ctx context.Context, dir string) error {
 	if err != nil {
 		return err
 	}
-	installErr := run(ctx, dir, "npx", "skills", "experimental_install")
+	if out != nil {
+		fmt.Fprintf(out, "npx skills experimental_install in %s\n", dir)
+	}
+	installErr := runTo(ctx, dir, out, "npx", "skills", "experimental_install")
 	// The installer rewrites the tracked lock; restoring it keeps the
 	// Store checkout clean so a later Refresh can fast-forward.
 	if err := os.Remove(lock); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -573,12 +578,35 @@ func isGitCheckout(ctx context.Context, dir string) (bool, error) {
 }
 
 func run(ctx context.Context, dir, name string, args ...string) error {
+	return runTo(ctx, dir, nil, name, args...)
+}
+
+// lockedWriter serializes writes to w.
+type lockedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
+}
+
+// runTo is run that also copies the command's stdout and stderr to a non-nil
+// out.
+func runTo(ctx context.Context, dir string, out io.Writer, name string, args ...string) error {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
+	if out != nil {
+		// exec copies stdout and stderr in two goroutines; both write to out.
+		shared := &lockedWriter{w: out}
+		cmd.Stdout, cmd.Stderr = shared, io.MultiWriter(&stderr, shared)
+	}
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()

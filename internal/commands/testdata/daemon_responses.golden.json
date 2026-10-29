@@ -122,6 +122,7 @@
         "ai_requests": 0,
         "events": 0,
         "mail": 0,
+        "operations": 0,
         "task_idempotency": 0,
         "tasks": 0
       },
@@ -160,6 +161,7 @@
       "ai_requests": 0,
       "events": 0,
       "mail": 0,
+      "operations": 0,
       "task_idempotency": 0,
       "tasks": 0
     },

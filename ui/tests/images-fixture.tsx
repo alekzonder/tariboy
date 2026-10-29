@@ -13,6 +13,7 @@ import { ApiProvider } from "@/components/ApiProvider";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import { Toaster } from "@/components/ui/sonner";
 import { routeFetch, type FetchRequest } from "@/test/fetchRoutes";
+import { operationStarted } from "@/test/fixtures/apiFixtures";
 import "@/index.css";
 
 declare global {
@@ -207,7 +208,7 @@ window.fetch = routeFetch(
       }),
     "POST /api/images/build": ({ body }) => {
       window.__imageBuild = body;
-      return envelope({ name: "browser-built", tag: "latest", digest: "built-digest", layers: 1 });
+      return envelope(operationStarted({ id: 1, title: "Build image browser-built:latest" }));
     },
     "* /api/images": () =>
       envelope({

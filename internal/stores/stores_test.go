@@ -1,6 +1,7 @@
 package stores
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -414,7 +415,7 @@ func TestRestoreBuildLocksKeepsStoreLockFilesUnchanged(t *testing.T) {
 	catalog := &Catalog{}
 	for _, exit := range []string{"0", "7"} {
 		t.Setenv("NPX_EXIT", exit)
-		err := catalog.RestoreBuildLocks(context.Background(), PreparedBuild{Name: "alpha", Path: imageDir})
+		err := catalog.RestoreBuildLocks(context.Background(), PreparedBuild{Name: "alpha", Path: imageDir}, nil)
 		if (err != nil) != (exit != "0") {
 			t.Fatalf("exit %s: RestoreBuildLocks() = %v", exit, err)
 		}
@@ -426,13 +427,36 @@ func TestRestoreBuildLocksKeepsStoreLockFilesUnchanged(t *testing.T) {
 	}
 }
 
+func TestRestoreLockCopiesInstallerOutput(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "skills-lock.json"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tools := t.TempDir()
+	script := "#!/bin/sh\necho installing alpha\necho cannot fetch beta >&2\nexit 3\n"
+	if err := os.WriteFile(filepath.Join(tools, "npx"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", tools+string(os.PathListSeparator)+os.Getenv("PATH"))
+	var out bytes.Buffer
+	err := RestoreLock(context.Background(), dir, &out)
+	if err == nil || !strings.Contains(err.Error(), "cannot fetch beta") {
+		t.Fatalf("RestoreLock() = %v", err)
+	}
+	for _, want := range []string{"npx skills experimental_install", "installing alpha", "cannot fetch beta"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("output %q lacks %q", out.String(), want)
+		}
+	}
+}
+
 func TestRestoreLockExplainsMissingNpx(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "skills-lock.json"), []byte("{}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", t.TempDir())
-	err := RestoreLock(context.Background(), dir)
+	err := RestoreLock(context.Background(), dir, nil)
 	if err == nil || !strings.Contains(err.Error(), "requires npx") || !strings.Contains(err.Error(), "install Node.js") {
 		t.Fatalf("RestoreLock() = %v, want npx install hint", err)
 	}

@@ -700,7 +700,7 @@ func (c *errLocalCaller) Call(string, string, any) (json.RawMessage, error) { re
 func TestPrintHumanNestedMap(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	printHuman(json.RawMessage(`{"agent":"bot","pruned":["a","b"],"policy":{"keep_iterations":3}}`), &buf)
+	registry.PrintHuman(json.RawMessage(`{"agent":"bot","pruned":["a","b"],"policy":{"keep_iterations":3}}`), &buf)
 	out := buf.String()
 	// Scalar stays key: value; nested value is JSON, not Go's map[...] form.
 	if !strings.Contains(out, "agent: bot") {

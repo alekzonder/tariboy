@@ -44,7 +44,7 @@ test("real Desktop creates, separates, copies, exports, previews, and imports a 
         if (!response.ok || !envelope.ok) throw new Error(path + ": " + JSON.stringify(envelope.error));
         return envelope.result;
       };
-      await call("POST", "/api/images/build", { name: "portable-image", tag: "v1", path: ${JSON.stringify(sourceDir)} });
+      await call("POST", "/api/images/build", { name: "portable-image", tag: "v1", path: ${JSON.stringify(sourceDir)}, wait: true });
       await call("POST", "/api/agents", { image: "portable-image:v1", name: "desktop-worker", group: "desktop-team", harness: "codex" });
       window.__desktopSetup = "complete";
     })().catch((error) => { window.__desktopSetup = "failed: " + String(error); });`);

@@ -1,8 +1,9 @@
 import { type MutableRefObject, useEffect, useRef, useState } from "react";
 import { type NavigateFunction, useNavigate } from "react-router-dom";
-import type { ApiClient } from "@/lib/api";
+import type { ApiClient, OperationStarted } from "@/lib/api";
 import { notifyImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
+import { useOperationStartedToast } from "@/hooks/useOperationStartedToast";
 import { errorText } from "@/lib/errors";
 import type { StoreData } from "./useStoreData";
 
@@ -16,6 +17,7 @@ interface StoreActionContext {
   setBusy: (busy: string) => void;
   setStatus: (status: string) => void;
   setRemoveError: (error: string) => void;
+  buildStarted: (started: OperationStarted) => void;
 }
 
 const start = (ctx: StoreActionContext, busyKey: string) => {
@@ -62,26 +64,21 @@ const currentBuild = (ctx: StoreActionContext) => {
   return () => ctx.mounted.current && ctx.buildGeneration.current === requestedBuild;
 };
 
-const buildImage = async (ctx: StoreActionContext, name: string, imageName: string) => {
+// A build only starts here: the daemon runs it as an operation, and the
+// toast links to its page. The store reloads when the build succeeds.
+const startBuild = async (
+  ctx: StoreActionContext,
+  busyKey: string,
+  request: () => Promise<OperationStarted>,
+) => {
   const isCurrent = currentBuild(ctx);
-  start(ctx, `build:${imageName}`);
+  start(ctx, busyKey);
   try {
-    const built = await ctx.api.stores.buildStoreImage({ source: `${name}/${imageName}` });
+    const started = await request();
+    // A build on a host the page has since left is not reported against this one.
     if (isCurrent()) {
-      ctx.setStatus(
-        built.tag === "latest"
-          ? `Built ${built.name}:latest.`
-          : `Built ${built.name}:${built.tag} and ${built.name}:latest.`,
-      );
-      ctx.setBusy("");
-      notifyImagesChanged();
-    }
-    if (!isCurrent()) return;
-    try {
-      const refreshed = await ctx.api.stores.getStore(name);
-      if (isCurrent()) ctx.data.setDetail(refreshed);
-    } catch (cause) {
-      if (isCurrent()) ctx.data.setError(errorText(cause));
+      ctx.buildStarted(started);
+      ctx.setStatus(`Build started: ${started.operation.title}.`);
     }
   } catch (cause) {
     if (isCurrent()) ctx.data.setError(errorText(cause));
@@ -90,14 +87,24 @@ const buildImage = async (ctx: StoreActionContext, name: string, imageName: stri
   }
 };
 
-const buildWorkflowImage = async (ctx: StoreActionContext, name: string, workflowName: string) => {
-  const isCurrent = currentBuild(ctx);
-  start(ctx, `workflow:${workflowName}`);
+const buildImage = (ctx: StoreActionContext, name: string, imageName: string) =>
+  startBuild(ctx, `build:${imageName}`, () =>
+    ctx.api.stores.buildStoreImage({ source: `${name}/${imageName}` }),
+  );
+
+const buildWorkflowImage = (ctx: StoreActionContext, name: string, workflowName: string) =>
+  startBuild(ctx, `workflow:${workflowName}`, () =>
+    ctx.api.stores.buildStoreWorkflow(`${name}/${workflowName}`),
+  );
+
+// reloadAfterBuild re-reads what a finished build changes: the store's image
+// states and the built workflow images. A Refresh or another build started
+// meanwhile owns the detail, and this late read is dropped.
+const reloadAfterBuild = async (ctx: StoreActionContext, name: string) => {
+  notifyImagesChanged();
+  const generation = ctx.buildGeneration.current;
+  const isCurrent = () => ctx.mounted.current && ctx.buildGeneration.current === generation;
   try {
-    const built = await ctx.api.stores.buildStoreWorkflow(`${name}/${workflowName}`);
-    if (!isCurrent()) return;
-    ctx.setStatus(`Built ${built.name} ${built.version} (tags: ${built.tags.join(", ")}).`);
-    ctx.setBusy("");
     const [refreshed, images] = await Promise.all([
       ctx.api.stores.getStore(name),
       ctx.api.workflows.listWorkflowImages().catch(() => null),
@@ -108,8 +115,6 @@ const buildWorkflowImage = async (ctx: StoreActionContext, name: string, workflo
     }
   } catch (cause) {
     if (isCurrent()) ctx.data.setError(errorText(cause));
-  } finally {
-    if (isCurrent()) ctx.setBusy("");
   }
 };
 
@@ -169,6 +174,8 @@ export function useStoreActions(name: string | undefined, basePath: string, data
   const [status, setStatus] = useState("");
   const [removeError, setRemoveError] = useState("");
   const [removeOpen, setRemoveOpen] = useState(false);
+  const builtRef = useRef<() => void>(() => undefined);
+  const buildStarted = useOperationStartedToast(() => builtRef.current());
 
   useEffect(() => {
     mounted.current = true;
@@ -187,7 +194,13 @@ export function useStoreActions(name: string | undefined, basePath: string, data
     setBusy,
     setStatus,
     setRemoveError,
+    buildStarted,
   };
+  useEffect(() => {
+    builtRef.current = () => {
+      if (name) void reloadAfterBuild(ctx, name);
+    };
+  });
   return {
     busy,
     status,

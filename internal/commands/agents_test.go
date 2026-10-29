@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net"
@@ -104,13 +103,7 @@ func ctxWithStore(t *testing.T) (*registry.Ctx, *agent.Store, *fakeControl) {
 // the same argument binding as the daemon.
 func h(t *testing.T, path string) func(*registry.Ctx, registry.Params) (any, error) {
 	t.Helper()
-	cmd, ok := BuildRegistry().Get(path)
-	if !ok {
-		t.Fatalf("%s not registered", path)
-	}
-	return func(c *registry.Ctx, p registry.Params) (any, error) {
-		return registry.Call(c, context.Background(), cmd, p)
-	}
+	return cmdHandler(t, path)
 }
 
 func TestAgentRunAndPs(t *testing.T) {

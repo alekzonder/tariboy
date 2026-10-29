@@ -122,7 +122,7 @@ tariboy has four command surfaces:
 | `tariboy harness codex-approval get` | Read the codex approval mode of this daemon (yolo\|approve-for-me) |
 | `tariboy harness codex-approval set MODE` | Set the codex approval mode of this daemon for the next iterations |
 | `tariboy harness models TYPE` | List the models and efforts a harness supports on the daemon host |
-| `tariboy image build` | Build an agent image from a Tariboyfile.yaml |
+| `tariboy image build` | Start a background build of an agent image from a Tariboyfile.yaml |
 | `tariboy image file REF PATH` | Read a single file packed into an image |
 | `tariboy image files REF` | List the files packed into an image |
 | `tariboy image inspect REF` | Show an image manifest |
@@ -162,6 +162,9 @@ tariboy has four command surfaces:
 | `tariboy maintenance get` | Show database maintenance settings and the last run |
 | `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
 | `tariboy maintenance set` | Change database maintenance settings; unset flags keep their value |
+| `tariboy operation log ID` | Read the log of a background operation |
+| `tariboy operation ls` | List background operations, newest first |
+| `tariboy operation show ID` | Show a background operation |
 | `tariboy plugin action NAME ACTION` | Invoke a generic action on a running plugin |
 | `tariboy plugin contributions` | List enabled plugin CLI and settings contributions |
 | `tariboy plugin inspect NAME` | Show one plugin's manifest, state and socket |
@@ -208,7 +211,7 @@ tariboy has four command surfaces:
 | `tariboy user-prompt get NAME` | Read the agent's standing user-prompt |
 | `tariboy user-prompt set NAME TEXT` | Set the agent's standing user-prompt |
 | `tariboy version` | Print the Tariboy version |
-| `tariboy workflow build` | Build a workflow image from a Workflowfile.yaml |
+| `tariboy workflow build` | Start a background build of a workflow image from a Workflowfile.yaml |
 | `tariboy workflow inspect NAME` | Show a workflow image manifest |
 | `tariboy workflow ls` | List built workflow images |
 | `tariboy workflow rm NAME TAG` | Remove a workflow image tag, and its content when no tag remains |

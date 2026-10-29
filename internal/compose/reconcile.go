@@ -131,7 +131,8 @@ func (r *Runner) Build(f File) error {
 			ctx = filepath.Join(r.workdir, ctx)
 		}
 		r.logf("building image %s:latest", name)
-		if _, err := r.call.Call("POST", "/api/images/build", map[string]any{"name": name, "tag": "latest", "path": ctx}); err != nil {
+		// The build is a daemon operation; wait answers when it has ended.
+		if _, err := r.call.Call("POST", "/api/images/build", map[string]any{"name": name, "tag": "latest", "path": ctx, "wait": true, "initiator": "compose"}); err != nil {
 			return fmt.Errorf("build image %s: %w", name, err)
 		}
 	}

@@ -15,6 +15,7 @@ const SECTIONS = [
   { suffix: "/hosts", label: "Hosts" },
   { suffix: "/cli", label: "CLI" },
   { suffix: "/appearance", label: "Appearance" },
+  { suffix: "/operations", label: "Operations" },
   { suffix: "/advanced", label: "Advanced" },
 ];
 

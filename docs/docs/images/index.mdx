@@ -87,6 +87,35 @@ source snapshot; it never infers a commit from the current working directory.
 For CLI calls, a relative `--path` is resolved against the shell's current
 working directory before the request is sent to the daemon.
 
+### Build as an operation
+
+The daemon runs each build in the background as an operation. A build does not
+block the Web UI, and it does not depend on the request that started it.
+
+- In the Web UI, **Build** shows the notice "Build started" with the link
+  **Open operation**. The link opens **Settings → Operations** on the page of
+  this build.
+- **Settings → Operations** lists every image and workflow build of the
+  server, newest first, 50 per page. The page of one operation shows its
+  status, arguments, result or error and its full log. The page of a running
+  operation updates its status and log live. **Download log** saves the log
+  file.
+- `tariboy image build` prints the operation id and the operation log to
+  stderr until the build ends. Then it prints the result as before, for
+  example `digest: ...`, to stdout. A failed build exits 1 with its error code
+  and message. Ctrl+C stops only the output; the build goes on in the daemon.
+- `tariboy image build --detach` prints only `operation: ID` and exits.
+- `tariboy operation ls [--page N] [--limit M]`, `tariboy operation show ID`
+  and `tariboy operation log ID [-f]` read the operations of the daemon.
+
+The log names each build step: the parse of `Tariboyfile.yaml`, the `extends`
+chain, the skills lock restore with the full `npx` output, the source
+snapshot, the wait for the image name lock, the layer build, the tags and the
+provenance record. A failed build ends with its error code and message. A
+daemon stop interrupts a running build: its operation gets the status
+`interrupted`, and the previous image tags stay. Start the build again after
+the daemon starts.
+
 ### Refs, tags and identity
 
 A **ref** is the stored image content. Its identity is derived from the image

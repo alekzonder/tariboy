@@ -98,6 +98,10 @@ type Service struct {
 	// key; the files of a purged task are removed after the purge commits.
 	// Empty leaves task files alone.
 	TasksDir string
+	// OperationsDir is <base-dir>/operations, where each operation keeps its
+	// log as <id>.log; the log of a purged operation is removed after the
+	// purge commits. Empty leaves operation logs alone.
+	OperationsDir string
 	// PruneIterations archives and prunes agent iterations per their
 	// retention policies after the backup and returns how many it pruned.
 	// Nil skips the step.
@@ -343,6 +347,13 @@ func (s *Service) cleanup(cutoffAt, msgCutoffAt time.Time, deleted map[string]in
 		return r.RowsAffected()
 	})
 	step("mail", func(tx *sql.Tx) (int64, error) { return purgeMail(tx, msgCutoff) })
+	var operationIDs []int64
+	if step("operations", func(tx *sql.Tx) (n int64, err error) {
+		operationIDs, err = purgeOperations(tx, cutoff)
+		return int64(len(operationIDs)), err
+	}) {
+		errs = append(errs, s.removeOperationLogs(operationIDs))
+	}
 	step("events", simple(`DELETE FROM events WHERE ts < ?`))
 	step("task_idempotency", simple(`DELETE FROM task_idempotency WHERE created_at < ?`))
 	return errors.Join(errs...)
@@ -447,6 +458,39 @@ func (s *Service) removeTaskFiles(keys []string) error {
 		}
 		if err := os.RemoveAll(filepath.Join(s.TasksDir, key)); err != nil {
 			errs = append(errs, fmt.Errorf("task files of %s: %w", key, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// purgeOperations removes the operations that finished before cutoff and
+// returns their ids. A running operation is never removed.
+func purgeOperations(tx *sql.Tx, cutoff string) ([]int64, error) {
+	rows, err := tx.Query(`DELETE FROM operations WHERE status <> 'running' AND finished_at <> '' AND finished_at < ? RETURNING id`, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// removeOperationLogs removes the log files of purged operations.
+func (s *Service) removeOperationLogs(ids []int64) error {
+	if s.OperationsDir == "" {
+		return nil
+	}
+	var errs []error
+	for _, id := range ids {
+		if err := os.Remove(filepath.Join(s.OperationsDir, fmt.Sprintf("%d.log", id))); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, fmt.Errorf("log of operation %d: %w", id, err))
 		}
 	}
 	return errors.Join(errs...)

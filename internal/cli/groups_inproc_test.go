@@ -34,7 +34,7 @@ func TestGroupCommandsAndGroupMail(t *testing.T) {
 
 	// Build the image the group agents run, then run two members.
 	mustCall(t, c, "POST", "/api/images/build", map[string]any{
-		"name": "stub", "tag": "latest", "path": source,
+		"name": "stub", "tag": "latest", "path": source, "wait": true,
 	})
 	mustCall(t, c, "POST", "/api/agents", map[string]any{
 		"image": "stub:latest", "name": "scout", "group": "research", "loop": false})

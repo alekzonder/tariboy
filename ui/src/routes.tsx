@@ -25,6 +25,8 @@ const AdvancedSettingsIndex = lazy(() =>
   import("@/pages/settings/SettingsPage").then((m) => ({ default: m.AdvancedSettingsIndex })),
 );
 const PluginSettings = lazy(() => import("@/pages/settings/PluginSettings"));
+const OperationsPage = lazy(() => import("@/pages/settings/operations/OperationsPage"));
+const OperationPage = lazy(() => import("@/pages/settings/operations/OperationPage"));
 const UsagePage = lazy(() => import("@/pages/UsagePage"));
 const GroupsPage = lazy(() => import("@/pages/GroupsPage"));
 const BudgetsPage = lazy(() => import("@/pages/BudgetsPage"));
@@ -76,6 +78,8 @@ export function AppRoutes() {
         <Route path="hosts" element={<DaemonsPage />} />
         <Route path="cli" element={<CliSettings />} />
         <Route path="appearance" element={<AppearanceSettings />} />
+        <Route path="operations" element={<OperationsPage />} />
+        <Route path="operations/:id" element={<OperationPage />} />
         <Route path="integrations/:plugin" element={<PluginSettingsRoute />} />
         <Route path="advanced" element={<AdvancedSettingsIndex />} />
         <Route path="advanced/usage" element={<UsagePage />} />

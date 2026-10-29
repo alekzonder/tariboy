@@ -1622,7 +1622,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Build an agent image from a Tariboyfile.yaml */
+    /** Start a background build of an agent image from a Tariboyfile.yaml */
     post: operations["image.build"];
     delete?: never;
     options?: never;
@@ -1899,6 +1899,57 @@ export interface paths {
     put?: never;
     /** Back up the database, delete expired data, and compact it now */
     post: operations["maintenance.run"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/operations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List background operations, newest first */
+    get: operations["operation.ls"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/operations/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Show a background operation */
+    get: operations["operation.show"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/operations/{id}/log": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read the log of a background operation */
+    get: operations["operation.log"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -2918,7 +2969,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Build a workflow image from a Workflowfile.yaml */
+    /** Start a background build of a workflow image from a Workflowfile.yaml */
     post: operations["workflow.build"];
     delete?: never;
     options?: never;
@@ -3918,6 +3969,40 @@ export interface components {
     MaintenanceView: {
       last_run: components["schemas"]["MaintenanceLastRun"];
       settings: components["schemas"]["MaintenanceSettings"];
+    };
+    Operation: {
+      created_at: string;
+      error_code?: string;
+      error_message?: string;
+      finished_at?: string;
+      id: number;
+      image_result?: components["schemas"]["ImageBuildResult"];
+      initiator: string;
+      kind: string;
+      params: {
+        [key: string]: string;
+      };
+      status: string;
+      title: string;
+      workflow_result?: components["schemas"]["WorkflowImageBuildResult"];
+    };
+    OperationList: {
+      limit: number;
+      operations: components["schemas"]["Operation"][];
+      page: number;
+      total: number;
+    };
+    OperationLog: {
+      available: boolean;
+      content: string;
+      finished: boolean;
+      id: number;
+      next: number;
+      offset: number;
+      size: number;
+    };
+    OperationStarted: {
+      operation: components["schemas"]["Operation"];
     };
     OperatorArg: {
       flag?: string;
@@ -4934,6 +5019,10 @@ export type MaintenanceLastRun = components["schemas"]["MaintenanceLastRun"];
 export type MaintenanceRun = components["schemas"]["MaintenanceRun"];
 export type MaintenanceSettings = components["schemas"]["MaintenanceSettings"];
 export type MaintenanceView = components["schemas"]["MaintenanceView"];
+export type Operation = components["schemas"]["Operation"];
+export type OperationList = components["schemas"]["OperationList"];
+export type OperationLog = components["schemas"]["OperationLog"];
+export type OperationStarted = components["schemas"]["OperationStarted"];
 export type OperatorArg = components["schemas"]["OperatorArg"];
 export type OperatorCommand = components["schemas"]["OperatorCommand"];
 export type OutcomeView = components["schemas"]["OutcomeView"];
@@ -10612,8 +10701,12 @@ export interface operations {
     requestBody?: {
       content: {
         "application/json": {
+          /** @description CLI: print only the operation id and do not follow its log */
+          detach?: boolean;
           /** @description source Git commit */
           "git-commit"?: string;
+          /** @description who started the operation, as the operations list shows it: ui, cli, compose or auto */
+          initiator?: string;
           /** @description target image name */
           name?: string;
           /** @description Tariboyfile.yaml or its directory */
@@ -10624,6 +10717,8 @@ export interface operations {
           source?: string;
           /** @description target image tag (default image_version and latest, or only latest when absent) */
           tag?: string[];
+          /** @description answer only when the operation ends; a failed build answers with its error */
+          wait?: boolean;
         };
       };
     };
@@ -10636,7 +10731,7 @@ export interface operations {
         content: {
           "application/json": {
             ok: boolean;
-            result: components["schemas"]["ImageBuildResult"];
+            result: components["schemas"]["OperationStarted"];
           };
         };
       };
@@ -11532,6 +11627,136 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["MaintenanceRun"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "operation.ls": {
+    parameters: {
+      query?: {
+        page?: number;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["OperationList"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "operation.show": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["Operation"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "operation.log": {
+    parameters: {
+      query?: {
+        offset?: number;
+        follow?: boolean;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["OperationLog"];
           };
         };
       };
@@ -15080,10 +15305,16 @@ export interface operations {
     requestBody?: {
       content: {
         "application/json": {
+          /** @description CLI: print only the operation id and do not follow its log */
+          detach?: boolean;
+          /** @description who started the operation, as the operations list shows it: ui, cli, compose or auto */
+          initiator?: string;
           /** @description Workflowfile.yaml or its directory */
           path?: string;
           /** @description Store selector (store/workflow) */
           source?: string;
+          /** @description answer only when the operation ends; a failed build answers with its error */
+          wait?: boolean;
         };
       };
     };
@@ -15096,7 +15327,7 @@ export interface operations {
         content: {
           "application/json": {
             ok: boolean;
-            result: components["schemas"]["WorkflowImageBuildResult"];
+            result: components["schemas"]["OperationStarted"];
           };
         };
       };

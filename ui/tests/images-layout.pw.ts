@@ -55,6 +55,7 @@ test("portable image export, source states, and import retag work in a real brow
     .toEqual({
       path: "/srv/images/browser-built",
       name: "browser-built",
+      initiator: "ui",
     });
 
   await page.addInitScript(() => {
