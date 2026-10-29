@@ -23,7 +23,8 @@ directory and its own loop. It does not run continuously — it runs a series of
 The loop is driven three ways, all requiring the agent to be **enabled**:
 
 - **Timer** — `interval_s`: wake every N seconds.
-- **Schedule** — an RFC 5545 `RRULE`, set with `tariboy loop schedule`: start
+- **Schedule** — an RFC 5545 `RRULE`, set with `tariboy loop schedule` or the
+  **Schedule** builder on the agent's Configuration tab: start
   an iteration at each occurrence, with the trigger `schedule`. See
   [Schedule](#schedule).
 - **Message** — a letter sent to the agent nudges the loop to start an
@@ -93,7 +94,10 @@ block a new Goal generation; the positive per-agent delivery cooldown
 (60 seconds by default) still blocks rapid repeats. A wait within its grace
 period remains the goal but sends no continuation wake. Disabled agents and
 agents on `bare:latest` neither select nor receive a goal wake, but preserve a
-valid sticky key; only disabling Goal clears it.
+valid sticky key; only disabling Goal clears it. The end of an iteration
+closes the agent's open Goal and task notices about its Goal task, and stale
+task notices start no iteration; see
+[Task notifications](/docs/architecture/messaging#task-notifications).
 
 Every non-bare agent receives daemon-owned Goal guidance inside **Task Processing
 Order**, regardless of image plugins or runtime entries. The guidance has two

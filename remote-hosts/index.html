@@ -351,6 +351,13 @@ instead if you prefer, and enter its token.</li>
 <p>Plain <code>http://</code> is accepted only for <code>127.0.0.1</code>, <code>localhost</code>, or <code>[::1]</code> with
 a port; Android blocks cleartext to every other host. The app does not start or
 restart the forward: while it is down the server shows as unreachable.</p>
+<p>A forward can accept a connection and never answer, for example when the SSH
+session behind it lost the server. The app stops each read after 30 seconds
+and keeps the last data on screen. When you come back to the app, for example
+after you restart the forward in Termux, it opens its live connections again
+and rereads the screen. You do not have to restart the app. If the forward
+comes back while the app stays open, reads recover in 30 seconds, but live
+task updates can wait until you leave the app and come back.</p>
 <p>The daemon must be this release or newer, because only it allows the Android
 app’s origin <code>http://tauri.localhost</code> on its loopback listener. An older daemon
 answers, but the WebView blocks its responses; forward its token listener

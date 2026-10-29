@@ -1107,7 +1107,8 @@ directory and its own loop. It does not run continuously — it runs a series of
 The loop is driven three ways, all requiring the agent to be **enabled**:
 
 - **Timer** — `interval_s`: wake every N seconds.
-- **Schedule** — an RFC 5545 `RRULE`, set with `tariboy loop schedule`: start
+- **Schedule** — an RFC 5545 `RRULE`, set with `tariboy loop schedule` or the
+  **Schedule** builder on the agent's Configuration tab: start
   an iteration at each occurrence, with the trigger `schedule`. See
   [Schedule](#schedule).
 - **Message** — a letter sent to the agent nudges the loop to start an
@@ -1177,7 +1178,10 @@ block a new Goal generation; the positive per-agent delivery cooldown
 (60 seconds by default) still blocks rapid repeats. A wait within its grace
 period remains the goal but sends no continuation wake. Disabled agents and
 agents on `bare:latest` neither select nor receive a goal wake, but preserve a
-valid sticky key; only disabling Goal clears it.
+valid sticky key; only disabling Goal clears it. The end of an iteration
+closes the agent's open Goal and task notices about its Goal task, and stale
+task notices start no iteration; see
+[Task notifications](/docs/architecture/messaging#task-notifications).
 
 Every non-bare agent receives daemon-owned Goal guidance inside **Task Processing
 Order**, regardless of image plugins or runtime entries. The guidance has two
@@ -1657,6 +1661,19 @@ customer alike. The asker is matched by `data.from`, so a question the outbox
 sent as `system:tasks` closes too. A notification whose recipient no longer
 exists is marked failed in the outbox with `last_error` and is not retried. A workflow outcome that resolves the customer's open wait
 closes its question letters with `task-outcome:<status>`.
+
+Stale task notices never wake an agent. When an iteration that ran with Goal
+task `T` ends, the tasks service closes the agent's open `task.goal`,
+`task.assigned` and `task.answered` letters about `T` created up to the end of
+the iteration, with `close_note = iteration-end:<iteration>`, and marks such
+notifications not sent yet as sent. The Goal reconciler then sends a fresh
+`task.goal` only when `T` still needs the agent. Before a wake counts open
+letters and before a prompt renders them, the daemon also closes those three
+kinds when their task is `done` or `cancelled`, is assigned to another
+principal, is paused, or is in a workflow status that no pool owns, with
+`close_note = task-not-assigned-work`; a `task.answered` closes this way only
+when its recipient is the task's assignee. Neither rule closes a
+`task.question`.
 
 ## Groups
 
@@ -2871,7 +2888,16 @@ modules; it holds no requests of its own.
   `{ok, result}` / `{ok, error}` envelope, raw requests for archives, uploads
   and text exports, and the single `ApiError` class (`status`, `code`,
   `message`, `details`). Every request uses `cache: "no-store"`, sends the
-  host's bearer token, and passes the caller's `AbortSignal`.
+  host's bearer token, and passes the caller's `AbortSignal`. A JSON `GET`
+  that gets no complete response in 30 seconds fails with `network_error`
+  and the message `request timed out`, so a connection that never answers
+  cannot stop a refresh loop. Writes and raw requests have no time limit.
+- `lib/resume.ts` calls its listeners when the page becomes visible again or
+  the browser comes back online. On that event the tasks, mail and agent
+  state WebSockets and the agent event stream close and open again at once,
+  and the shared query client rereads its active queries. A WebView can keep
+  a socket open after its connection stopped, for example after an Android
+  port forward dropped.
 - `hosts.ts` owns server selection: the active host that the host switcher
   sets, the local daemon origin that Desktop sets at boot, and the
   `ApiTarget` type (`undefined` = the active host, `null` = the local daemon,
@@ -3164,6 +3190,8 @@ The cache holds data only in memory. Inactive queries expire after five
 minutes. Data is stale immediately, so reopening a view refreshes it in the
 background. Automatic retries, window-focus refresh, and browser reconnect
 refresh are disabled. The host connection adapter controls reconnect reads.
+When the page becomes visible again or the browser comes back online, the
+client rereads all active queries once (see [API layer](#api-layer)).
 Network failures retain a loaded snapshot. A 401 or 403 response clears the
 server's cached data and shows the access error.
 
@@ -3285,8 +3313,11 @@ second click on the step, clears the selection and lists every entry of the
 view's `declared_artifacts` in one list, those `requiredBy` names for the
 current status first), `WorkflowRuns`
 (`getTaskScriptRunLog`; `runTone` gives each row its tone), the visit list,
-and the header's labeled **Return to agent…**, **Upgrade to NAME@VERSION…**,
-**Move to status…**, and **Cancel task** buttons: `ReturnToAgent` picks its
+and the header's labeled **Run watch now**, **Return to agent…**, **Upgrade to
+NAME@VERSION…**, **Move to status…**, and **Cancel task** buttons: **Run watch
+now** appears when `canRunWatch` finds an open, unpaused script status with a
+watch, is disabled while `hasActiveRun` finds a pending or running run, and
+sends `runTaskWatch`, then refetches the view; `ReturnToAgent` picks its
 targets with `returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the
 upgrade form appears when `canUpgrade` finds the view's `queue_digest` differs
 from its `digest` and sends `upgradeTaskWorkflow`, the move form uses
@@ -3334,7 +3365,12 @@ their values. **Secrets**, `QueueSecrets` (`listQueueSecrets`,
 password input until it is sent and is never read back. A key is one kind or
 the other, so setting a key of the other block asks first, and a change in
 either block reloads both. A name a refused bind reported counts as set by
-either block. The **Sources** tab of a
+either block. For a bound queue, the dialog passes the loaded definition, and
+`workflowEnvHints` reads its `env` keys and `requires_secrets` as suggested
+names. Both blocks set a key through `KeyValueForm`: its key input gets a
+`<datalist>` of them, and a chip shows for each name neither block holds. A chip fills the
+key and focuses the value; an **Env** chip shows the Workflowfile default on
+hover. The **Sources** tab of a
 bound queue, `QueueSources` (`listQueueSources`, `getQueueSourceRunLog`) lists the sources of
 the workflow with their schedule, failures in a row, and newest 20 runs; it
 loads once and on **Reload**, without polling. Its run rows and the task's
@@ -3692,12 +3728,25 @@ Configuration is one column of blocks in a fixed order: **General** (agent
 image, image digest, working directory and, while the agent is stopped,
 **Create directory if missing**), **Runtime** (harness, model, effort,
 Interactive), **Loop and timeouts** (the scheduling and timeout
-fields, including **Schedule (RRULE)** with the daemon's next scheduled start
-under it, which follows Save, and an emptied field clears the schedule; there
-is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
+fields, including **Schedule** with the daemon's next scheduled start under it,
+which follows Save; there is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
 shell script and secrets), and **Retention and cleanup**. Start, Stop and
 Restart are actions, not settings: they sit in the page header next to the
 master-switch state and apply immediately.
+
+**Schedule** is a builder for the agent's `RRULE` (see
+[Schedule](/docs/architecture/iteration-loop#schedule)). You select a mode and fill
+in its fields: **None** (no schedule), **Every N minutes / hours**, **Daily**
+(one time), **Weekly** (days and one time), **Monthly** (a day of the month or
+the last day, and one time), **Once** (a date and a time), or **Custom RRULE**
+(a text field for any rule). The builder shows a one-line summary and the rule
+it sends. Times are in the time zone of the daemon host, not of the browser.
+When the page loads a saved rule, the builder selects the mode that builds
+exactly that rule. If no mode does, for example a rule with two times or with
+`UNTIL`, it selects **Custom RRULE** and shows the rule unchanged. A rule you
+do not edit is not marked **Changed**. When you select another mode, the
+builder drops the saved `DTSTART`, and the daemon starts the new rule at the
+current minute.
 
 Every editable field of every block belongs to one page-wide draft with one
 save mechanic. A field is dirty when its normalized draft differs from the
@@ -8069,13 +8118,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.96.0` alpha on an Apple Silicon Mac.
+This path is for the `0.97.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.96.0_aarch64.dmg`;
+- a verified `Tariboy_0.97.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -8577,9 +8626,10 @@ socket; operator mode calls the REST routes as the customer.
 | `ttasks workflow get KEY` | agent, operator | `GET /api/tasks/{key}/workflow` |
 | `ttasks workflow runs KEY` (newest first) | agent, operator | `GET /api/tasks/{key}/workflow/runs` |
 | `ttasks workflow log KEY RUN [--max-bytes N]` (last 64 KiB by default, at most 1 MiB; queue secrets redacted; customer and the task's holders only) | agent, operator | `GET /api/tasks/{key}/workflow/runs/{id}/log` |
-| `ttasks workflow move KEY --to STATUS --reason TEXT` | operator only | `POST /api/tasks/{key}/workflow/move` |
+| `ttasks workflow move KEY --to STATUS [--reason TEXT]` | operator only | `POST /api/tasks/{key}/workflow/move` |
 | `ttasks workflow upgrade KEY [--reason TEXT]` (pins the task to the queue's current workflow version and restarts it at that version's initial status; artifacts and holders stay; errors `workflow_current`, `workflow_unbound`, `workflow_closed`, `workflow_pool_empty`, `workflow_secret_missing`, `forbidden`) | operator only | `POST /api/tasks/{key}/workflow/upgrade` |
 | `ttasks workflow resume KEY --decision continue\|release` (resolves the pause of a task the daemon paused: `continue` keeps the holder and zeroes the counters; `release` takes a pool task from its holder and dispatches it to another member, or leaves it `open` and unassigned; errors `invalid_decision`, `workflow_not_paused`, `forbidden`) | operator only | `POST /api/tasks/{key}/workflow/resume` |
+| `ttasks workflow watch KEY` (starts the watch script of a script status now instead of at its next scheduled time and returns the pending run; errors `workflow_no_watch`, `script_running`, `workflow_closed`, `workflow_paused`, `forbidden`) | operator only | `POST /api/tasks/{key}/workflow/watch` |
 | `ttasks cancel KEY` | operator only | `POST /api/tasks/{key}/cancel` |
 | `ttasks requeue KEY --queue QUEUE [--revision N]` (creates a new task in `QUEUE` and cancels this one; errors `task_closed`, `same_queue`, `queue_not_found`, `requeue_has_children`) | operator only | `POST /api/tasks/{key}/requeue` |
 | `ttasks queue workflow set QUEUE REF [--revision N]` | operator only | `PUT /api/task-queues/{queue}/workflow` |
@@ -9224,6 +9274,14 @@ Plain `http://` is accepted only for `127.0.0.1`, `localhost`, or `[::1]` with
 a port; Android blocks cleartext to every other host. The app does not start or
 restart the forward: while it is down the server shows as unreachable.
 
+A forward can accept a connection and never answer, for example when the SSH
+session behind it lost the server. The app stops each read after 30 seconds
+and keeps the last data on screen. When you come back to the app, for example
+after you restart the forward in Termux, it opens its live connections again
+and rereads the screen. You do not have to restart the app. If the forward
+comes back while the app stays open, reads recover in 30 seconds, but live
+task updates can wait until you leave the app and come back.
+
 The daemon must be this release or newer, because only it allows the Android
 app's origin `http://tauri.localhost` on its loopback listener. An older daemon
 answers, but the WebView blocks its responses; forward its token listener
@@ -9503,7 +9561,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.96.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.97.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -9617,7 +9675,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.96.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.97.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -10227,7 +10285,9 @@ ttasks queue env rm DEV LOG_LEVEL
 - The `queue.env_set` and `queue.env_removed` events carry only the key.
 
 In the Web UI both kinds are on the **Environment** tab of the queue settings,
-in an **Env** block and a **Secrets** block.
+in an **Env** block and a **Secrets** block. For a bound queue each block
+suggests the names the Workflowfile declares: `env` keys in **Env** and
+`requires_secrets` in **Secrets**. You can still set any other key.
 
 ### Creating a task in a bound queue
 
@@ -10444,6 +10504,22 @@ than `every`. Runs of one task never overlap.
 
 Leaving the status by any route, or cancelling the task, stops the watch: the
 schedule is cleared, a pending run is cancelled, and a running one is killed.
+
+The customer can start the watch before its next scheduled time. Use
+**Run watch now** in the task's Workflow panel, `ttasks workflow watch KEY`, or
+`POST /api/tasks/{key}/workflow/watch`. The daemon then creates a pending watch
+run at once and clears the schedule. The run follows all the rules above: the
+spacing, the limit of four scripts, the timeout, and the exit codes. When it
+ends, the daemon sets the next time as for a scheduled run. The daemon refuses
+the request and changes nothing in these cases:
+
+- The task is closed (`workflow_closed`) or paused (`workflow_paused`). Resume
+  a paused task instead: the resume starts the watch.
+- The current status has no watch script (`workflow_no_watch`).
+- A script run of the task is pending or running (`script_running`).
+
+The script gets the same environment as a scheduled run, so it cannot tell the
+two apart.
 
 The worker runs up to four scripts at once. Pending checks start before
 pending watch runs, because an agent waits for a check, and one slot is always
@@ -10804,8 +10880,9 @@ refused with `workflow_paused`; resume it first. The new request's
 holder itself needs no retry: it repeats its `advance`.
 
 `workflow move` moves the task to any status of its pinned image regardless of
-outcomes, requirements, and checks. It needs `--to` and a non-empty `--reason`
-(`reason_required`); an unknown status fails with `status_unknown` and lists the
+outcomes, requirements, and checks. It needs `--to`; `--reason` is optional,
+and a move without one closes the visit with no message, so the next agent's
+Goal shows no transition message. An unknown status fails with `status_unknown` and lists the
 declared statuses. The move stops the scripts of the current status, cancels a
 pending request, closes the current visit, enters the target as an ordinary
 status entry (so it dispatches, opens a customer wait, or starts a watch just as
@@ -11229,11 +11306,12 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks advance KEY --outcome NAME [--from STATUS] [--message TEXT] [--no-wait]` | holder, customer | Declare an outcome and wait for its checks. |
 | `ttasks workflow runs KEY` | agent, operator | List script runs. |
 | `ttasks workflow log KEY RUN [--max-bytes N]` | holder, operator | Read a run log. |
-| `ttasks workflow move KEY --to STATUS --reason TEXT` | operator | Move without checks. |
+| `ttasks workflow move KEY --to STATUS [--reason TEXT]` | operator | Move without checks. |
 | `ttasks workflow upgrade KEY [--reason TEXT]` | operator | Restart the task at the queue's current workflow version. |
 | `ttasks workflow resume KEY --decision continue\|release` | operator | Resolve a pause. |
 | `ttasks workflow reassign KEY --agent NAME` | operator | Give the pool status to another member of its pool. |
 | `ttasks workflow retry KEY [REQUEST]` | operator | Run a failed request's checks again and wait for them. |
+| `ttasks workflow watch KEY` | operator | Start the watch script of the current status now. |
 | `ttasks cancel KEY` | operator | Cancel the task. |
 | `ttasks requeue KEY --queue QUEUE` | operator | Move the task to another queue as a new task. |
 
@@ -11272,6 +11350,7 @@ generated OpenAPI document is the authority for request and response schemas.
 | `POST` | `/api/tasks/{key}/workflow/upgrade` | restart at the queue's current version (`reason`, optional); returns the task | operator |
 | `POST` | `/api/tasks/{key}/workflow/resume` | resolve a pause (`decision`: `continue` or `release`); returns the task | operator |
 | `POST` | `/api/tasks/{key}/workflow/reassign` | give the pool status to another member (`agent`); returns the task | operator |
+| `POST` | `/api/tasks/{key}/workflow/watch` | start the watch script of the current status now; returns the pending run | operator |
 | `POST` | `/api/tasks/{key}/cancel` | cancel | operator |
 | `POST` | `/api/tasks/{key}/requeue` | move to another queue (`queue`, optional `revision`); returns the new task | operator |
 
@@ -11347,6 +11426,7 @@ the key, and the run id. A failed source run records the queue event
 | `invalid_status_owner` | 409 | `workflow reassign` of a task whose current status is not owned by an agent pool. |
 | `agent_unavailable` | 409 | `workflow reassign` to an agent that is not a member of the status's pool or cannot work; `data.cause` says why. |
 | `invalid_agent` | 400 | `workflow reassign` without an agent name. |
+| `workflow_no_watch` | 409 | `workflow watch` of a task whose current status has no watch script. |
 | `invalid_decision` | 400 | A resume decision that is not `continue` or `release`, or `release` outside a pool status. |
 | `workflow_in_use` | 409 | A queue binds the image or a task, open or closed, pins it. |
 | `workflow_pool_empty` | 409 | A pool the image names is missing or has no agents. |
@@ -11373,7 +11453,6 @@ the key, and the run id. A failed source run records the queue event
 | `invalid_secret_key` | 400 | A secret key is malformed or starts with `TARIBOY_`. |
 | `invalid_secret` | 400 | A secret value is empty or not valid UTF-8. |
 | `secret_too_large` | 413 | A secret value exceeds 64 KiB. |
-| `reason_required` | 400 | A move needs a reason. |
 | `invalid_message` | 400 | The transition message exceeds 4 KiB. |
 | `revision_conflict` | 409 | The binding, pool, or task revision is not the current one. |
 
@@ -11573,8 +11652,9 @@ sections:
   checks (script, `description`, `run_as`, and timeout), and the effective
   limits. The row wraps on a narrow screen.
 - **Header.** `name@version`, `step k of n`, the status, the owner, and the
-  holder, with the labeled actions **Return to agent…**, **Upgrade to
-  NAME@VERSION…**, **Move to status…**, and **Cancel task**; see below.
+  holder, with the labeled actions **Run watch now**, **Return to agent…**,
+  **Upgrade to NAME@VERSION…**, **Move to status…**, and **Cancel task**; see
+  below.
 - **Outcomes.** Each outcome shows its target status, the artifacts it
   requires (a set one ticked, a missing one highlighted), and its checks with
   what each verifies, when the image describes it, and the resolved `run_as`
@@ -11607,8 +11687,8 @@ sections:
 - **Visits.** Every stay in a status, with who entered it, when it was left and
   by which outcome, and the message. A visit made under an earlier workflow
   version carries that version, as `@VERSION`.
-- **Return to agent.** Sends the task back to a pool status with a message
-  the agent reads in its Goal as the transition message. The targets are the
+- **Return to agent.** Sends the task back to a pool status with an optional
+  message the agent reads in its Goal as the transition message. The targets are the
   pool statuses a declared outcome of the current status leads to, the pool
   statuses the task visited before, newest first, and, for a paused pool
   status, the status itself as a restart; the most recently visited one is
@@ -11617,8 +11697,14 @@ sections:
   move is sent with the message as its reason, after a confirmation that says
   so. The action is hidden on a closed task and on an unpaused pool status an
   agent already holds.
+- **Run watch now.** Starts the watch script of the current status at once,
+  without a confirmation; see [Watch scripts](#watch-scripts). The action is
+  shown only on an open, unpaused task in a script status that has a watch. It
+  is disabled while a script run of the task is pending or running. After the
+  request the panel reloads, and the new run shows under **Runs**. A refusal
+  shows the daemon's message under the header.
 - **Move and cancel.** **Move to status…** offers every declared status but
-  the current one, terminal statuses grouped last, and needs a reason; a move
+  the current one, terminal statuses grouped last, and takes an optional reason; a move
   to a terminal status closes the task. **Cancel task** is hidden once the
   task is closed. Both ask for confirmation, because they skip outcomes,
   checks, and required artifacts and stop the current scripts. The header
@@ -11682,7 +11768,12 @@ dialog drops every unsaved edit.
   key. A bind refused with `workflow_secret_missing` lists the missing names in
   the Secrets block until either block sets them. Each secret the bound image
   requires that the global env holds shows as `NAME present in global env`,
-  with `overridden by the queue secret` when the queue sets it too.
+  with `overridden by the queue secret` when the queue sets it too. For a
+  bound queue, the key field of each block suggests the names the Workflowfile
+  declares: `env` keys for **Env** and `requires_secrets` for **Secrets**.
+  Below the form, **Declared in Workflowfile:** shows one button for each
+  such name that has no value in either block. Click it to fill the key, then
+  type the value. Hover over an **Env** name to see its default.
 - **Sources.** Only for a bound queue: the sources of the workflow and their
   runs; see [Sources](#sources).
 

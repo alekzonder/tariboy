@@ -372,9 +372,10 @@ socket; operator mode calls the REST routes as the customer.
 | `ttasks workflow get KEY` | agent, operator | `GET /api/tasks/{key}/workflow` |
 | `ttasks workflow runs KEY` (newest first) | agent, operator | `GET /api/tasks/{key}/workflow/runs` |
 | `ttasks workflow log KEY RUN [--max-bytes N]` (last 64 KiB by default, at most 1 MiB; queue secrets redacted; customer and the task's holders only) | agent, operator | `GET /api/tasks/{key}/workflow/runs/{id}/log` |
-| `ttasks workflow move KEY --to STATUS --reason TEXT` | operator only | `POST /api/tasks/{key}/workflow/move` |
+| `ttasks workflow move KEY --to STATUS [--reason TEXT]` | operator only | `POST /api/tasks/{key}/workflow/move` |
 | `ttasks workflow upgrade KEY [--reason TEXT]` (pins the task to the queue's current workflow version and restarts it at that version's initial status; artifacts and holders stay; errors `workflow_current`, `workflow_unbound`, `workflow_closed`, `workflow_pool_empty`, `workflow_secret_missing`, `forbidden`) | operator only | `POST /api/tasks/{key}/workflow/upgrade` |
 | `ttasks workflow resume KEY --decision continue\|release` (resolves the pause of a task the daemon paused: `continue` keeps the holder and zeroes the counters; `release` takes a pool task from its holder and dispatches it to another member, or leaves it `open` and unassigned; errors `invalid_decision`, `workflow_not_paused`, `forbidden`) | operator only | `POST /api/tasks/{key}/workflow/resume` |
+| `ttasks workflow watch KEY` (starts the watch script of a script status now instead of at its next scheduled time and returns the pending run; errors `workflow_no_watch`, `script_running`, `workflow_closed`, `workflow_paused`, `forbidden`) | operator only | `POST /api/tasks/{key}/workflow/watch` |
 | `ttasks cancel KEY` | operator only | `POST /api/tasks/{key}/cancel` |
 | `ttasks requeue KEY --queue QUEUE [--revision N]` (creates a new task in `QUEUE` and cancels this one; errors `task_closed`, `same_queue`, `queue_not_found`, `requeue_has_children`) | operator only | `POST /api/tasks/{key}/requeue` |
 | `ttasks queue workflow set QUEUE REF [--revision N]` | operator only | `PUT /api/task-queues/{queue}/workflow` |

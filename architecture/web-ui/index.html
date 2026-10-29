@@ -391,7 +391,16 @@ modules; it holds no requests of its own.</p>
 <code>{ok, result}</code> / <code>{ok, error}</code> envelope, raw requests for archives, uploads
 and text exports, and the single <code>ApiError</code> class (<code>status</code>, <code>code</code>,
 <code>message</code>, <code>details</code>). Every request uses <code>cache: &quot;no-store&quot;</code>, sends the
-host’s bearer token, and passes the caller’s <code>AbortSignal</code>.</li>
+host’s bearer token, and passes the caller’s <code>AbortSignal</code>. A JSON <code>GET</code>
+that gets no complete response in 30 seconds fails with <code>network_error</code>
+and the message <code>request timed out</code>, so a connection that never answers
+cannot stop a refresh loop. Writes and raw requests have no time limit.</li>
+<li><code>lib/resume.ts</code> calls its listeners when the page becomes visible again or
+the browser comes back online. On that event the tasks, mail and agent
+state WebSockets and the agent event stream close and open again at once,
+and the shared query client rereads its active queries. A WebView can keep
+a socket open after its connection stopped, for example after an Android
+port forward dropped.</li>
 <li><code>hosts.ts</code> owns server selection: the active host that the host switcher
 sets, the local daemon origin that Desktop sets at boot, and the
 <code>ApiTarget</code> type (<code>undefined</code> = the active host, <code>null</code> = the local daemon,
@@ -814,6 +823,8 @@ server’s old data, and removing a host removes its cached queries.</p>
 minutes. Data is stale immediately, so reopening a view refreshes it in the
 background. Automatic retries, window-focus refresh, and browser reconnect
 refresh are disabled. The host connection adapter controls reconnect reads.
+When the page becomes visible again or the browser comes back online, the
+client rereads all active queries once (see <a href="#api-layer">API layer</a>).
 Network failures retain a loaded snapshot. A 401 or 403 response clears the
 server’s cached data and shows the access error.</p>
 <p>HTTP responses remain authoritative. The task socket opens after HTTP supplies
@@ -925,8 +936,11 @@ second click on the step, clears the selection and lists every entry of the
 view’s <code>declared_artifacts</code> in one list, those <code>requiredBy</code> names for the
 current status first), <code>WorkflowRuns</code>
 (<code>getTaskScriptRunLog</code>; <code>runTone</code> gives each row its tone), the visit list,
-and the header’s labeled <strong>Return to agent…</strong>, <strong>Upgrade to NAME@VERSION…</strong>,
-<strong>Move to status…</strong>, and <strong>Cancel task</strong> buttons: <code>ReturnToAgent</code> picks its
+and the header’s labeled <strong>Run watch now</strong>, <strong>Return to agent…</strong>, <strong>Upgrade to
+NAME@VERSION…</strong>, <strong>Move to status…</strong>, and <strong>Cancel task</strong> buttons: <strong>Run watch
+now</strong> appears when <code>canRunWatch</code> finds an open, unpaused script status with a
+watch, is disabled while <code>hasActiveRun</code> finds a pending or running run, and
+sends <code>runTaskWatch</code>, then refetches the view; <code>ReturnToAgent</code> picks its
 targets with <code>returnTargets</code> and sends <code>advanceTask</code> or <code>moveTaskWorkflow</code>, the
 upgrade form appears when <code>canUpgrade</code> finds the view’s <code>queue_digest</code> differs
 from its <code>digest</code> and sends <code>upgradeTaskWorkflow</code>, the move form uses
@@ -974,7 +988,12 @@ their values. <strong>Secrets</strong>, <code>QueueSecrets</code> (<code>listQue
 password input until it is sent and is never read back. A key is one kind or
 the other, so setting a key of the other block asks first, and a change in
 either block reloads both. A name a refused bind reported counts as set by
-either block. The <strong>Sources</strong> tab of a
+either block. For a bound queue, the dialog passes the loaded definition, and
+<code>workflowEnvHints</code> reads its <code>env</code> keys and <code>requires_secrets</code> as suggested
+names. Both blocks set a key through <code>KeyValueForm</code>: its key input gets a
+<code>&lt;datalist&gt;</code> of them, and a chip shows for each name neither block holds. A chip fills the
+key and focuses the value; an <strong>Env</strong> chip shows the Workflowfile default on
+hover. The <strong>Sources</strong> tab of a
 bound queue, <code>QueueSources</code> (<code>listQueueSources</code>, <code>getQueueSourceRunLog</code>) lists the sources of
 the workflow with their schedule, failures in a row, and newest 20 runs; it
 loads once and on <strong>Reload</strong>, without polling. Its run rows and the task’s
@@ -1298,12 +1317,24 @@ later delivery.</p>
 image, image digest, working directory and, while the agent is stopped,
 <strong>Create directory if missing</strong>), <strong>Runtime</strong> (harness, model, effort,
 Interactive), <strong>Loop and timeouts</strong> (the scheduling and timeout
-fields, including <strong>Schedule (RRULE)</strong> with the daemon’s next scheduled start
-under it, which follows Save, and an emptied field clears the schedule; there
-is no Loop switch), <strong>Goal</strong>, <strong>Messages</strong>, <strong>Budgets (USD)</strong>, <strong>Environment</strong> (agent
+fields, including <strong>Schedule</strong> with the daemon’s next scheduled start under it,
+which follows Save; there is no Loop switch), <strong>Goal</strong>, <strong>Messages</strong>, <strong>Budgets (USD)</strong>, <strong>Environment</strong> (agent
 shell script and secrets), and <strong>Retention and cleanup</strong>. Start, Stop and
 Restart are actions, not settings: they sit in the page header next to the
 master-switch state and apply immediately.</p>
+<p><strong>Schedule</strong> is a builder for the agent’s <code>RRULE</code> (see
+<a href="/tariboy/docs/architecture/iteration-loop#schedule">Schedule</a>). You select a mode and fill
+in its fields: <strong>None</strong> (no schedule), <strong>Every N minutes / hours</strong>, <strong>Daily</strong>
+(one time), <strong>Weekly</strong> (days and one time), <strong>Monthly</strong> (a day of the month or
+the last day, and one time), <strong>Once</strong> (a date and a time), or <strong>Custom RRULE</strong>
+(a text field for any rule). The builder shows a one-line summary and the rule
+it sends. Times are in the time zone of the daemon host, not of the browser.
+When the page loads a saved rule, the builder selects the mode that builds
+exactly that rule. If no mode does, for example a rule with two times or with
+<code>UNTIL</code>, it selects <strong>Custom RRULE</strong> and shows the rule unchanged. A rule you
+do not edit is not marked <strong>Changed</strong>. When you select another mode, the
+builder drops the saved <code>DTSTART</code>, and the daemon starts the new rule at the
+current minute.</p>
 <p>Every editable field of every block belongs to one page-wide draft with one
 save mechanic. A field is dirty when its normalized draft differs from the
 value last loaded; the field shows <strong>Changed</strong>, its block counts its unsaved

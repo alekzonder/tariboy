@@ -564,7 +564,9 @@ and a remove are checked against both kinds.</li>
 <li>The <code>queue.env_set</code> and <code>queue.env_removed</code> events carry only the key.</li>
 </ul>
 <p>In the Web UI both kinds are on the <strong>Environment</strong> tab of the queue settings,
-in an <strong>Env</strong> block and a <strong>Secrets</strong> block.</p>
+in an <strong>Env</strong> block and a <strong>Secrets</strong> block. For a bound queue each block
+suggests the names the Workflowfile declares: <code>env</code> keys in <strong>Env</strong> and
+<code>requires_secrets</code> in <strong>Secrets</strong>. You can still set any other key.</p>
 <h3 id="creating-a-task-in-a-bound-queue"><a class="blume-heading-anchor" href="#creating-a-task-in-a-bound-queue">Creating a task in a bound queue</a></h3>
 <p>A task created in a bound queue, as a root or as a child of a task in that
 queue, pins the queue’s current digest, enters <code>initial_status</code>, and is assigned
@@ -855,6 +857,21 @@ the next run: the watch keeps trying.</li>
 </ul>
 <p>Leaving the status by any route, or cancelling the task, stops the watch: the
 schedule is cleared, a pending run is cancelled, and a running one is killed.</p>
+<p>The customer can start the watch before its next scheduled time. Use
+<strong>Run watch now</strong> in the task’s Workflow panel, <code>ttasks workflow watch KEY</code>, or
+<code>POST /api/tasks/{key}/workflow/watch</code>. The daemon then creates a pending watch
+run at once and clears the schedule. The run follows all the rules above: the
+spacing, the limit of four scripts, the timeout, and the exit codes. When it
+ends, the daemon sets the next time as for a scheduled run. The daemon refuses
+the request and changes nothing in these cases:</p>
+<ul>
+<li>The task is closed (<code>workflow_closed</code>) or paused (<code>workflow_paused</code>). Resume
+a paused task instead: the resume starts the watch.</li>
+<li>The current status has no watch script (<code>workflow_no_watch</code>).</li>
+<li>A script run of the task is pending or running (<code>script_running</code>).</li>
+</ul>
+<p>The script gets the same environment as a scheduled run, so it cannot tell the
+two apart.</p>
 <p>The worker runs up to four scripts at once. Pending checks start before
 pending watch runs, because an agent waits for a check, and one slot is always
 left for a check.</p>
@@ -1371,8 +1388,9 @@ refused with <code>workflow_paused</code>; resume it first. The new request’s
 <code>workflow.transition_requested</code> event carries <code>retry_of</code> and <code>retried_by</code>. The
 holder itself needs no retry: it repeats its <code>advance</code>.</p>
 <p><code>workflow move</code> moves the task to any status of its pinned image regardless of
-outcomes, requirements, and checks. It needs <code>--to</code> and a non-empty <code>--reason</code>
-(<code>reason_required</code>); an unknown status fails with <code>status_unknown</code> and lists the
+outcomes, requirements, and checks. It needs <code>--to</code>; <code>--reason</code> is optional,
+and a move without one closes the visit with no message, so the next agent’s
+Goal shows no transition message. An unknown status fails with <code>status_unknown</code> and lists the
 declared statuses. The move stops the scripts of the current status, cancels a
 pending request, closes the current visit, enters the target as an ordinary
 status entry (so it dispatches, opens a customer wait, or starts a watch just as
@@ -1947,7 +1965,7 @@ and what it may do next. Agents and the operator can read it.</p>
 <td>Read a run log.</td>
 </tr>
 <tr>
-<td><code>ttasks workflow move KEY --to STATUS --reason TEXT</code></td>
+<td><code>ttasks workflow move KEY --to STATUS [--reason TEXT]</code></td>
 <td>operator</td>
 <td>Move without checks.</td>
 </tr>
@@ -1970,6 +1988,11 @@ and what it may do next. Agents and the operator can read it.</p>
 <td><code>ttasks workflow retry KEY [REQUEST]</code></td>
 <td>operator</td>
 <td>Run a failed request’s checks again and wait for them.</td>
+</tr>
+<tr>
+<td><code>ttasks workflow watch KEY</code></td>
+<td>operator</td>
+<td>Start the watch script of the current status now.</td>
 </tr>
 <tr>
 <td><code>ttasks cancel KEY</code></td>
@@ -2146,6 +2169,12 @@ generated OpenAPI document is the authority for request and response schemas.</p
 <td><code>POST</code></td>
 <td><code>/api/tasks/{key}/workflow/reassign</code></td>
 <td>give the pool status to another member (<code>agent</code>); returns the task</td>
+<td>operator</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/tasks/{key}/workflow/watch</code></td>
+<td>start the watch script of the current status now; returns the pending run</td>
 <td>operator</td>
 </tr>
 <tr>
@@ -2328,6 +2357,11 @@ the key, and the run id. A failed source run records the queue event
 <td><code>workflow reassign</code> without an agent name.</td>
 </tr>
 <tr>
+<td><code>workflow_no_watch</code></td>
+<td>409</td>
+<td><code>workflow watch</code> of a task whose current status has no watch script.</td>
+</tr>
+<tr>
 <td><code>invalid_decision</code></td>
 <td>400</td>
 <td>A resume decision that is not <code>continue</code> or <code>release</code>, or <code>release</code> outside a pool status.</td>
@@ -2456,11 +2490,6 @@ the key, and the run id. A failed source run records the queue event
 <td><code>secret_too_large</code></td>
 <td>413</td>
 <td>A secret value exceeds 64 KiB.</td>
-</tr>
-<tr>
-<td><code>reason_required</code></td>
-<td>400</td>
-<td>A move needs a reason.</td>
 </tr>
 <tr>
 <td><code>invalid_message</code></td>
@@ -2760,8 +2789,9 @@ schedule, and timeout, each way out with the artifacts it requires and its
 checks (script, <code>description</code>, <code>run_as</code>, and timeout), and the effective
 limits. The row wraps on a narrow screen.</li>
 <li><strong>Header.</strong> <code>name@version</code>, <code>step k of n</code>, the status, the owner, and the
-holder, with the labeled actions <strong>Return to agent…</strong>, <strong>Upgrade to
-NAME@VERSION…</strong>, <strong>Move to status…</strong>, and <strong>Cancel task</strong>; see below.</li>
+holder, with the labeled actions <strong>Run watch now</strong>, <strong>Return to agent…</strong>,
+<strong>Upgrade to NAME@VERSION…</strong>, <strong>Move to status…</strong>, and <strong>Cancel task</strong>; see
+below.</li>
 <li><strong>Outcomes.</strong> Each outcome shows its target status, the artifacts it
 requires (a set one ticked, a missing one highlighted), and its checks with
 what each verifies, when the image describes it, and the resolved <code>run_as</code>
@@ -2794,8 +2824,8 @@ running, an open log has <strong>Refresh</strong>. Who may read a log is describ
 <li><strong>Visits.</strong> Every stay in a status, with who entered it, when it was left and
 by which outcome, and the message. A visit made under an earlier workflow
 version carries that version, as <code>@VERSION</code>.</li>
-<li><strong>Return to agent.</strong> Sends the task back to a pool status with a message
-the agent reads in its Goal as the transition message. The targets are the
+<li><strong>Return to agent.</strong> Sends the task back to a pool status with an optional
+message the agent reads in its Goal as the transition message. The targets are the
 pool statuses a declared outcome of the current status leads to, the pool
 statuses the task visited before, newest first, and, for a paused pool
 status, the status itself as a restart; the most recently visited one is
@@ -2804,8 +2834,14 @@ with the message; everywhere else, and for a paused task, the operator’s
 move is sent with the message as its reason, after a confirmation that says
 so. The action is hidden on a closed task and on an unpaused pool status an
 agent already holds.</li>
+<li><strong>Run watch now.</strong> Starts the watch script of the current status at once,
+without a confirmation; see <a href="#watch-scripts">Watch scripts</a>. The action is
+shown only on an open, unpaused task in a script status that has a watch. It
+is disabled while a script run of the task is pending or running. After the
+request the panel reloads, and the new run shows under <strong>Runs</strong>. A refusal
+shows the daemon’s message under the header.</li>
 <li><strong>Move and cancel.</strong> <strong>Move to status…</strong> offers every declared status but
-the current one, terminal statuses grouped last, and needs a reason; a move
+the current one, terminal statuses grouped last, and takes an optional reason; a move
 to a terminal status closes the task. <strong>Cancel task</strong> is hidden once the
 task is closed. Both ask for confirmation, because they skip outcomes,
 checks, and required artifacts and stop the current scripts. The header
@@ -2867,7 +2903,12 @@ shown. Setting a key that the other block holds asks first, then moves the
 key. A bind refused with <code>workflow_secret_missing</code> lists the missing names in
 the Secrets block until either block sets them. Each secret the bound image
 requires that the global env holds shows as <code>NAME present in global env</code>,
-with <code>overridden by the queue secret</code> when the queue sets it too.</li>
+with <code>overridden by the queue secret</code> when the queue sets it too. For a
+bound queue, the key field of each block suggests the names the Workflowfile
+declares: <code>env</code> keys for <strong>Env</strong> and <code>requires_secrets</code> for <strong>Secrets</strong>.
+Below the form, <strong>Declared in Workflowfile:</strong> shows one button for each
+such name that has no value in either block. Click it to fill the key, then
+type the value. Hover over an <strong>Env</strong> name to see its default.</li>
 <li><strong>Sources.</strong> Only for a bound queue: the sources of the workflow and their
 runs; see <a href="#sources">Sources</a>.</li>
 </ul>

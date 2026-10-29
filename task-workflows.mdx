@@ -440,7 +440,9 @@ ttasks queue env rm DEV LOG_LEVEL
 - The `queue.env_set` and `queue.env_removed` events carry only the key.
 
 In the Web UI both kinds are on the **Environment** tab of the queue settings,
-in an **Env** block and a **Secrets** block.
+in an **Env** block and a **Secrets** block. For a bound queue each block
+suggests the names the Workflowfile declares: `env` keys in **Env** and
+`requires_secrets` in **Secrets**. You can still set any other key.
 
 ### Creating a task in a bound queue
 
@@ -657,6 +659,22 @@ than `every`. Runs of one task never overlap.
 
 Leaving the status by any route, or cancelling the task, stops the watch: the
 schedule is cleared, a pending run is cancelled, and a running one is killed.
+
+The customer can start the watch before its next scheduled time. Use
+**Run watch now** in the task's Workflow panel, `ttasks workflow watch KEY`, or
+`POST /api/tasks/{key}/workflow/watch`. The daemon then creates a pending watch
+run at once and clears the schedule. The run follows all the rules above: the
+spacing, the limit of four scripts, the timeout, and the exit codes. When it
+ends, the daemon sets the next time as for a scheduled run. The daemon refuses
+the request and changes nothing in these cases:
+
+- The task is closed (`workflow_closed`) or paused (`workflow_paused`). Resume
+  a paused task instead: the resume starts the watch.
+- The current status has no watch script (`workflow_no_watch`).
+- A script run of the task is pending or running (`script_running`).
+
+The script gets the same environment as a scheduled run, so it cannot tell the
+two apart.
 
 The worker runs up to four scripts at once. Pending checks start before
 pending watch runs, because an agent waits for a check, and one slot is always
@@ -1017,8 +1035,9 @@ refused with `workflow_paused`; resume it first. The new request's
 holder itself needs no retry: it repeats its `advance`.
 
 `workflow move` moves the task to any status of its pinned image regardless of
-outcomes, requirements, and checks. It needs `--to` and a non-empty `--reason`
-(`reason_required`); an unknown status fails with `status_unknown` and lists the
+outcomes, requirements, and checks. It needs `--to`; `--reason` is optional,
+and a move without one closes the visit with no message, so the next agent's
+Goal shows no transition message. An unknown status fails with `status_unknown` and lists the
 declared statuses. The move stops the scripts of the current status, cancels a
 pending request, closes the current visit, enters the target as an ordinary
 status entry (so it dispatches, opens a customer wait, or starts a watch just as
@@ -1442,11 +1461,12 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks advance KEY --outcome NAME [--from STATUS] [--message TEXT] [--no-wait]` | holder, customer | Declare an outcome and wait for its checks. |
 | `ttasks workflow runs KEY` | agent, operator | List script runs. |
 | `ttasks workflow log KEY RUN [--max-bytes N]` | holder, operator | Read a run log. |
-| `ttasks workflow move KEY --to STATUS --reason TEXT` | operator | Move without checks. |
+| `ttasks workflow move KEY --to STATUS [--reason TEXT]` | operator | Move without checks. |
 | `ttasks workflow upgrade KEY [--reason TEXT]` | operator | Restart the task at the queue's current workflow version. |
 | `ttasks workflow resume KEY --decision continue\|release` | operator | Resolve a pause. |
 | `ttasks workflow reassign KEY --agent NAME` | operator | Give the pool status to another member of its pool. |
 | `ttasks workflow retry KEY [REQUEST]` | operator | Run a failed request's checks again and wait for them. |
+| `ttasks workflow watch KEY` | operator | Start the watch script of the current status now. |
 | `ttasks cancel KEY` | operator | Cancel the task. |
 | `ttasks requeue KEY --queue QUEUE` | operator | Move the task to another queue as a new task. |
 
@@ -1485,6 +1505,7 @@ generated OpenAPI document is the authority for request and response schemas.
 | `POST` | `/api/tasks/{key}/workflow/upgrade` | restart at the queue's current version (`reason`, optional); returns the task | operator |
 | `POST` | `/api/tasks/{key}/workflow/resume` | resolve a pause (`decision`: `continue` or `release`); returns the task | operator |
 | `POST` | `/api/tasks/{key}/workflow/reassign` | give the pool status to another member (`agent`); returns the task | operator |
+| `POST` | `/api/tasks/{key}/workflow/watch` | start the watch script of the current status now; returns the pending run | operator |
 | `POST` | `/api/tasks/{key}/cancel` | cancel | operator |
 | `POST` | `/api/tasks/{key}/requeue` | move to another queue (`queue`, optional `revision`); returns the new task | operator |
 
@@ -1560,6 +1581,7 @@ the key, and the run id. A failed source run records the queue event
 | `invalid_status_owner` | 409 | `workflow reassign` of a task whose current status is not owned by an agent pool. |
 | `agent_unavailable` | 409 | `workflow reassign` to an agent that is not a member of the status's pool or cannot work; `data.cause` says why. |
 | `invalid_agent` | 400 | `workflow reassign` without an agent name. |
+| `workflow_no_watch` | 409 | `workflow watch` of a task whose current status has no watch script. |
 | `invalid_decision` | 400 | A resume decision that is not `continue` or `release`, or `release` outside a pool status. |
 | `workflow_in_use` | 409 | A queue binds the image or a task, open or closed, pins it. |
 | `workflow_pool_empty` | 409 | A pool the image names is missing or has no agents. |
@@ -1586,7 +1608,6 @@ the key, and the run id. A failed source run records the queue event
 | `invalid_secret_key` | 400 | A secret key is malformed or starts with `TARIBOY_`. |
 | `invalid_secret` | 400 | A secret value is empty or not valid UTF-8. |
 | `secret_too_large` | 413 | A secret value exceeds 64 KiB. |
-| `reason_required` | 400 | A move needs a reason. |
 | `invalid_message` | 400 | The transition message exceeds 4 KiB. |
 | `revision_conflict` | 409 | The binding, pool, or task revision is not the current one. |
 
@@ -1786,8 +1807,9 @@ sections:
   checks (script, `description`, `run_as`, and timeout), and the effective
   limits. The row wraps on a narrow screen.
 - **Header.** `name@version`, `step k of n`, the status, the owner, and the
-  holder, with the labeled actions **Return to agent…**, **Upgrade to
-  NAME@VERSION…**, **Move to status…**, and **Cancel task**; see below.
+  holder, with the labeled actions **Run watch now**, **Return to agent…**,
+  **Upgrade to NAME@VERSION…**, **Move to status…**, and **Cancel task**; see
+  below.
 - **Outcomes.** Each outcome shows its target status, the artifacts it
   requires (a set one ticked, a missing one highlighted), and its checks with
   what each verifies, when the image describes it, and the resolved `run_as`
@@ -1820,8 +1842,8 @@ sections:
 - **Visits.** Every stay in a status, with who entered it, when it was left and
   by which outcome, and the message. A visit made under an earlier workflow
   version carries that version, as `@VERSION`.
-- **Return to agent.** Sends the task back to a pool status with a message
-  the agent reads in its Goal as the transition message. The targets are the
+- **Return to agent.** Sends the task back to a pool status with an optional
+  message the agent reads in its Goal as the transition message. The targets are the
   pool statuses a declared outcome of the current status leads to, the pool
   statuses the task visited before, newest first, and, for a paused pool
   status, the status itself as a restart; the most recently visited one is
@@ -1830,8 +1852,14 @@ sections:
   move is sent with the message as its reason, after a confirmation that says
   so. The action is hidden on a closed task and on an unpaused pool status an
   agent already holds.
+- **Run watch now.** Starts the watch script of the current status at once,
+  without a confirmation; see [Watch scripts](#watch-scripts). The action is
+  shown only on an open, unpaused task in a script status that has a watch. It
+  is disabled while a script run of the task is pending or running. After the
+  request the panel reloads, and the new run shows under **Runs**. A refusal
+  shows the daemon's message under the header.
 - **Move and cancel.** **Move to status…** offers every declared status but
-  the current one, terminal statuses grouped last, and needs a reason; a move
+  the current one, terminal statuses grouped last, and takes an optional reason; a move
   to a terminal status closes the task. **Cancel task** is hidden once the
   task is closed. Both ask for confirmation, because they skip outcomes,
   checks, and required artifacts and stop the current scripts. The header
@@ -1895,7 +1923,12 @@ dialog drops every unsaved edit.
   key. A bind refused with `workflow_secret_missing` lists the missing names in
   the Secrets block until either block sets them. Each secret the bound image
   requires that the global env holds shows as `NAME present in global env`,
-  with `overridden by the queue secret` when the queue sets it too.
+  with `overridden by the queue secret` when the queue sets it too. For a
+  bound queue, the key field of each block suggests the names the Workflowfile
+  declares: `env` keys for **Env** and `requires_secrets` for **Secrets**.
+  Below the form, **Declared in Workflowfile:** shows one button for each
+  such name that has no value in either block. Click it to fill the key, then
+  type the value. Hover over an **Env** name to see its default.
 - **Sources.** Only for a bound queue: the sources of the workflow and their
   runs; see [Sources](#sources).
 

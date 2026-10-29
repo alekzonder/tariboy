@@ -296,6 +296,18 @@ customer alike. The asker is matched by <code>data.from</code>, so a question th
 sent as <code>system:tasks</code> closes too. A notification whose recipient no longer
 exists is marked failed in the outbox with <code>last_error</code> and is not retried. A workflow outcome that resolves the customer’s open wait
 closes its question letters with <code>task-outcome:&lt;status&gt;</code>.</p>
+<p>Stale task notices never wake an agent. When an iteration that ran with Goal
+task <code>T</code> ends, the tasks service closes the agent’s open <code>task.goal</code>,
+<code>task.assigned</code> and <code>task.answered</code> letters about <code>T</code> created up to the end of
+the iteration, with <code>close_note = iteration-end:&lt;iteration&gt;</code>, and marks such
+notifications not sent yet as sent. The Goal reconciler then sends a fresh
+<code>task.goal</code> only when <code>T</code> still needs the agent. Before a wake counts open
+letters and before a prompt renders them, the daemon also closes those three
+kinds when their task is <code>done</code> or <code>cancelled</code>, is assigned to another
+principal, is paused, or is in a workflow status that no pool owns, with
+<code>close_note = task-not-assigned-work</code>; a <code>task.answered</code> closes this way only
+when its recipient is the task’s assignee. Neither rule closes a
+<code>task.question</code>.</p>
 <h2 id="groups"><a class="blume-heading-anchor" href="#groups">Groups</a></h2>
 <p>Group membership is the data <code>group:&lt;name&gt;</code> expands over; groups create no
 mailboxes of their own. <code>tmail send --to group:dev-team</code> writes one letter to

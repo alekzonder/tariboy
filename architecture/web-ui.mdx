@@ -431,7 +431,16 @@ modules; it holds no requests of its own.
   `{ok, result}` / `{ok, error}` envelope, raw requests for archives, uploads
   and text exports, and the single `ApiError` class (`status`, `code`,
   `message`, `details`). Every request uses `cache: "no-store"`, sends the
-  host's bearer token, and passes the caller's `AbortSignal`.
+  host's bearer token, and passes the caller's `AbortSignal`. A JSON `GET`
+  that gets no complete response in 30 seconds fails with `network_error`
+  and the message `request timed out`, so a connection that never answers
+  cannot stop a refresh loop. Writes and raw requests have no time limit.
+- `lib/resume.ts` calls its listeners when the page becomes visible again or
+  the browser comes back online. On that event the tasks, mail and agent
+  state WebSockets and the agent event stream close and open again at once,
+  and the shared query client rereads its active queries. A WebView can keep
+  a socket open after its connection stopped, for example after an Android
+  port forward dropped.
 - `hosts.ts` owns server selection: the active host that the host switcher
   sets, the local daemon origin that Desktop sets at boot, and the
   `ApiTarget` type (`undefined` = the active host, `null` = the local daemon,
@@ -724,6 +733,8 @@ The cache holds data only in memory. Inactive queries expire after five
 minutes. Data is stale immediately, so reopening a view refreshes it in the
 background. Automatic retries, window-focus refresh, and browser reconnect
 refresh are disabled. The host connection adapter controls reconnect reads.
+When the page becomes visible again or the browser comes back online, the
+client rereads all active queries once (see [API layer](#api-layer)).
 Network failures retain a loaded snapshot. A 401 or 403 response clears the
 server's cached data and shows the access error.
 
@@ -845,8 +856,11 @@ second click on the step, clears the selection and lists every entry of the
 view's `declared_artifacts` in one list, those `requiredBy` names for the
 current status first), `WorkflowRuns`
 (`getTaskScriptRunLog`; `runTone` gives each row its tone), the visit list,
-and the header's labeled **Return to agent…**, **Upgrade to NAME@VERSION…**,
-**Move to status…**, and **Cancel task** buttons: `ReturnToAgent` picks its
+and the header's labeled **Run watch now**, **Return to agent…**, **Upgrade to
+NAME@VERSION…**, **Move to status…**, and **Cancel task** buttons: **Run watch
+now** appears when `canRunWatch` finds an open, unpaused script status with a
+watch, is disabled while `hasActiveRun` finds a pending or running run, and
+sends `runTaskWatch`, then refetches the view; `ReturnToAgent` picks its
 targets with `returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the
 upgrade form appears when `canUpgrade` finds the view's `queue_digest` differs
 from its `digest` and sends `upgradeTaskWorkflow`, the move form uses
@@ -894,7 +908,12 @@ their values. **Secrets**, `QueueSecrets` (`listQueueSecrets`,
 password input until it is sent and is never read back. A key is one kind or
 the other, so setting a key of the other block asks first, and a change in
 either block reloads both. A name a refused bind reported counts as set by
-either block. The **Sources** tab of a
+either block. For a bound queue, the dialog passes the loaded definition, and
+`workflowEnvHints` reads its `env` keys and `requires_secrets` as suggested
+names. Both blocks set a key through `KeyValueForm`: its key input gets a
+`<datalist>` of them, and a chip shows for each name neither block holds. A chip fills the
+key and focuses the value; an **Env** chip shows the Workflowfile default on
+hover. The **Sources** tab of a
 bound queue, `QueueSources` (`listQueueSources`, `getQueueSourceRunLog`) lists the sources of
 the workflow with their schedule, failures in a row, and newest 20 runs; it
 loads once and on **Reload**, without polling. Its run rows and the task's
@@ -1252,12 +1271,25 @@ Configuration is one column of blocks in a fixed order: **General** (agent
 image, image digest, working directory and, while the agent is stopped,
 **Create directory if missing**), **Runtime** (harness, model, effort,
 Interactive), **Loop and timeouts** (the scheduling and timeout
-fields, including **Schedule (RRULE)** with the daemon's next scheduled start
-under it, which follows Save, and an emptied field clears the schedule; there
-is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
+fields, including **Schedule** with the daemon's next scheduled start under it,
+which follows Save; there is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
 shell script and secrets), and **Retention and cleanup**. Start, Stop and
 Restart are actions, not settings: they sit in the page header next to the
 master-switch state and apply immediately.
+
+**Schedule** is a builder for the agent's `RRULE` (see
+[Schedule](/docs/architecture/iteration-loop#schedule)). You select a mode and fill
+in its fields: **None** (no schedule), **Every N minutes / hours**, **Daily**
+(one time), **Weekly** (days and one time), **Monthly** (a day of the month or
+the last day, and one time), **Once** (a date and a time), or **Custom RRULE**
+(a text field for any rule). The builder shows a one-line summary and the rule
+it sends. Times are in the time zone of the daemon host, not of the browser.
+When the page loads a saved rule, the builder selects the mode that builds
+exactly that rule. If no mode does, for example a rule with two times or with
+`UNTIL`, it selects **Custom RRULE** and shows the rule unchanged. A rule you
+do not edit is not marked **Changed**. When you select another mode, the
+builder drops the saved `DTSTART`, and the daemon starts the new rule at the
+current minute.
 
 Every editable field of every block belongs to one page-wide draft with one
 save mechanic. A field is dirty when its normalized draft differs from the

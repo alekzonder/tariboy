@@ -1077,7 +1077,7 @@ socket; operator mode calls the REST routes as the customer.</p>
 <td><code>GET /api/tasks/{key}/workflow/runs/{id}/log</code></td>
 </tr>
 <tr>
-<td><code>ttasks workflow move KEY --to STATUS --reason TEXT</code></td>
+<td><code>ttasks workflow move KEY --to STATUS [--reason TEXT]</code></td>
 <td>operator only</td>
 <td><code>POST /api/tasks/{key}/workflow/move</code></td>
 </tr>
@@ -1090,6 +1090,11 @@ socket; operator mode calls the REST routes as the customer.</p>
 <td><code>ttasks workflow resume KEY --decision continue|release</code> (resolves the pause of a task the daemon paused: <code>continue</code> keeps the holder and zeroes the counters; <code>release</code> takes a pool task from its holder and dispatches it to another member, or leaves it <code>open</code> and unassigned; errors <code>invalid_decision</code>, <code>workflow_not_paused</code>, <code>forbidden</code>)</td>
 <td>operator only</td>
 <td><code>POST /api/tasks/{key}/workflow/resume</code></td>
+</tr>
+<tr>
+<td><code>ttasks workflow watch KEY</code> (starts the watch script of a script status now instead of at its next scheduled time and returns the pending run; errors <code>workflow_no_watch</code>, <code>script_running</code>, <code>workflow_closed</code>, <code>workflow_paused</code>, <code>forbidden</code>)</td>
+<td>operator only</td>
+<td><code>POST /api/tasks/{key}/workflow/watch</code></td>
 </tr>
 <tr>
 <td><code>ttasks cancel KEY</code></td>
