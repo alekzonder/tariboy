@@ -1,8 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ServerDialog } from "./ServerDialog";
 import type { DaemonMeta } from "@/lib/daemons";
 import * as desktop from "@/lib/desktop";
+import {
+  DEFAULT_WORKSPACE_ID,
+  createWorkspace,
+  inWorkspace,
+  resetWorkspacesForTest,
+  selectWorkspace,
+  useWorkspaces,
+} from "@/lib/workspaces";
 
 beforeEach(() => {
   localStorage.clear();
@@ -73,6 +81,26 @@ describe("ServerDialog desktop SSH connect", () => {
     expect(screen.getByRole("button", { name: "Advanced HTTPS" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Install Tariboy" })).toBeChecked();
     expect(screen.getByRole("radio", { name: "Connect to existing Tariboy" })).not.toBeChecked();
+  });
+
+  it("adds a saved SSH host to the current workspace only", async () => {
+    resetWorkspacesForTest();
+    const lab = createWorkspace("Lab")!;
+    selectWorkspace(lab);
+    mockNativeEvents();
+    vi.spyOn(desktop, "hostSaveSsh").mockResolvedValue(nativeHost());
+    const connect = vi.spyOn(desktop, "hostConnect").mockResolvedValue(null);
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Connect to existing Tariboy" }));
+    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "gpu" } });
+    fireEvent.change(screen.getByLabelText("SSH alias"), { target: { value: "gpu-box" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add and connect" }));
+
+    await waitFor(() => expect(connect).toHaveBeenCalledWith("ssh-1"));
+    const state = renderHook(() => useWorkspaces()).result.current;
+    expect(inWorkspace(state, "ssh-1", lab)).toBe(true);
+    expect(inWorkspace(state, "ssh-1", DEFAULT_WORKSPACE_ID)).toBe(false);
   });
 
   it("connects a saved SSH host without provisioning in existing-Tariboy mode", async () => {

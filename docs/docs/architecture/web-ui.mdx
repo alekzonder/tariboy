@@ -741,7 +741,8 @@ stays in the registry only so it can be read once, like `terminals:workspace:v1`
 | --- | --- | --- | --- | --- |
 | `tariboy-theme` | local | theme provider | `light`, `dark`, or `system` | `system` |
 | `app:ui-mode:v1` | local | interface mode | `simple` or `expert` | `simple` |
-| `app:workspaces:v1` | local | host workspaces | JSON workspaces, host map, active workspace | Default only |
+| `app:workspaces:v2` | local | host workspaces | JSON workspaces with their host lists, active workspace | Default only |
+| `app:workspaces:v1` | local | host workspaces (legacy, read once) | JSON workspaces, host map, active workspace | none |
 | `desktop:updates:auto-download:v1` | local | Desktop updates | `true` or `false` | `true` |
 | `onboarding:state:v1` | local | onboarding tour | release version whose tour was finished or skipped | empty: first run |
 | `tariboy:runtime-presets:v1` | local | create-agent presets | JSON saved models and efforts per harness | none |
@@ -1211,33 +1212,45 @@ the explicit host id and fail closed rather than silently falling back to local.
 
 ### Host workspaces
 
-A workspace is a named group of registered hosts in one app window. The
-titlebar shows the current workspace right after the sidebar toggle; its menu
-lists every workspace with its host count and a check on the current one,
-followed by **New workspace…** and **Manage workspaces…**. Choosing a workspace
-narrows the agent sidebar, its Servers tab and its `N servers · M agents` footer
-to that workspace's hosts. When the open agent's host is not in it, its first
-agent opens in the same tab, or the island shows `<name> has no agents yet`
+A workspace is a named, independent list of registered hosts in one app
+window. The titlebar shows the current workspace right after the sidebar
+toggle; its menu lists every workspace with its host count and a check on the
+current one, followed by **New workspace…** and **Manage workspaces…**.
+Choosing a workspace narrows the agent sidebar, its Servers tab, its
+`N servers · M agents` footer and the **All tasks** table with its live updates
+to that workspace's hosts, so an empty workspace shows no agents and no tasks.
+When the open agent's host is not in it, its first agent opens in the same tab, or the island shows `<name> has no agents yet`
 with a **Manage workspaces** button when it has none. Polling continues for
 every host, so the manager can show each host as ready or offline, and agents
 on hosts outside the current workspace keep running: a workspace filters the
-window, it does not isolate hosts.
+window, it does not isolate hosts. Agents and tasks live on their daemon, so a
+host in two workspaces shows the same agents and tasks in both.
 
-**Default** is built in and cannot be renamed or deleted, and every host
-belongs to exactly one workspace. A host without an assignment, including a
-newly added one, is in Default. The manager dialog creates a workspace (Enter or
-**Create workspace**; blank names are ignored) and selects it, renames a custom
-workspace as its name is typed without ever saving a blank one, and moves a
-host with **Move to…** and a click on the target workspace. **Delete
-workspace** asks inline and returns the workspace's hosts to Default; deleting
-the current workspace switches to Default.
+**Default** is built in and cannot be renamed or deleted. A host may belong to
+several workspaces. A host that no workspace lists, such as the local daemon or
+a host registered before workspaces existed, is in Default. **Add host** puts
+the new host in the current workspace only, for SSH and HTTPS alike; adding the
+same alias or URL again makes a second host entry. The manager dialog creates a
+workspace (Enter or **Create workspace**; blank names are ignored) and selects
+it, and renames a custom workspace as its name is typed without ever saving a
+blank one. **Add to…** and a click on a target workspace add a host there and
+keep it in the current one. **Remove** takes a host out of the selected
+workspace only; a host left in no workspace returns to Default, so the manager
+offers no **Remove** for a host that only Default holds. **Delete workspace**
+asks inline; its hosts in no other workspace return to Default, and deleting
+the current workspace switches to Default. **Remove host** in a server's menu
+removes the host from the app and so from every workspace.
 
-The state is the WebView localStorage record `app:workspaces:v1`:
-`{version: 1, workspaces: [{id, name}], hostWorkspace: {hostId: workspaceId},
-active}`. It is local to one app installation and is not stored by any daemon,
-because hosts are the set of daemons rather than something one daemon owns.
-Malformed storage, unavailable storage, or an assignment to a missing workspace
-falls back to Default.
+The state is the WebView localStorage record `app:workspaces:v2`:
+`{version: 2, workspaces: [{id, name, hosts: [hostId]}], active}`, where the
+first entry is Default. When it is missing, the version 1 record
+`app:workspaces:v1` (`{version: 1, workspaces: [{id, name}], hostWorkspace:
+{hostId: workspaceId}, active}`) is read once: each host keeps its one
+workspace, and a host without an entry stays in Default. The version 1 record
+is left in place. The state is local to one app installation and is not stored
+by any daemon, because hosts are the set of daemons rather than something one
+daemon owns. Malformed or unavailable storage falls back to Default only;
+unavailable storage keeps changes until the window closes.
 
 ### All tasks
 
@@ -1246,13 +1259,14 @@ toggle in **Agents**. The view is the `view=all` query on the current route, so 
 a reload, Back returns to the previous view, and the selected agent's path is
 untouched. Arrow keys move between the two options. In **All tasks** the
 agent sidebar and its titlebar toggle are hidden, and the island shows one task
-table for every server instead of the agent's header and tabs. The persisted
-sidebar visibility is not changed, so switching back to **Agents** restores the
-sidebar as it was and reopens the agent the route still names.
+table for every server of the current workspace instead of the agent's header
+and tabs. The persisted sidebar visibility is not changed, so switching back to
+**Agents** restores the sidebar as it was and reopens the agent the route still
+names.
 
-The table reads `GET /api/tasks` from the local daemon and every registered
-server in parallel, each with its own token, following each server's cursor to
-the end; a server's live `/api/tasks/ws` hint re-reads only that server. A
+The table reads `GET /api/tasks` from every server of the current workspace,
+the local daemon included when it is a member, in parallel, each with its own
+token, following each server's cursor to the end; a server's live `/api/tasks/ws` hint re-reads only that server. A
 server that the sidebar cannot reach, or whose read fails, keeps the other
 servers' rows and adds a `<server> unavailable · Retry` line above the table.
 Rows are keyed by server and task key, because a transferred task keeps its key

@@ -8,6 +8,7 @@ import {
   isAndroidShell,
 } from "@/lib/desktop";
 import type { HostOperationKind } from "@/lib/hostProgress";
+import { addHostToCurrentWorkspace } from "@/lib/workspaces";
 import type { ServerDialogProps } from "../ServerDialog";
 import { useHostOperation } from "./useHostOperation";
 import { useServerFields, useServerFormReset } from "./useServerFields";
@@ -50,7 +51,8 @@ export function useServerForm({ open, server, onOpenChange, onSaved }: ServerDia
         await updateDaemon(server.id, { label: cleanLabel, baseURL: cleanURL });
         if (cleanToken) await setDaemonToken(server.id, cleanToken);
       } else {
-        await addDaemon({ label: cleanLabel, baseURL: cleanURL, token: cleanToken });
+        const added = await addDaemon({ label: cleanLabel, baseURL: cleanURL, token: cleanToken });
+        addHostToCurrentWorkspace(added.id);
       }
       onSaved();
       onOpenChange(false);
@@ -74,6 +76,7 @@ export function useServerForm({ open, server, onOpenChange, onSaved }: ServerDia
       });
       if (!saved) throw new Error("host_save_ssh is unavailable outside the desktop shell");
       hostIdRef.current = saved.id;
+      if (!editing) addHostToCurrentWorkspace(saved.id);
       setHost(saved);
       onSaved();
       if (setup === "connect") {

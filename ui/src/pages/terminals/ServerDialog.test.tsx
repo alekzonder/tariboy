@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, renderHook, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ServerDialog } from "./ServerDialog";
 import { addDaemon, listDaemons, getDaemonToken, type DaemonMeta } from "@/lib/daemons";
+import {
+  DEFAULT_WORKSPACE_ID,
+  createWorkspace,
+  inWorkspace,
+  resetWorkspacesForTest,
+  selectWorkspace,
+  useWorkspaces,
+} from "@/lib/workspaces";
 
 beforeEach(() => {
   localStorage.clear();
@@ -64,6 +72,22 @@ describe("ServerDialog in the Android app", () => {
 });
 
 describe("ServerDialog", () => {
+  it("adds a new server to the current workspace only", async () => {
+    resetWorkspacesForTest();
+    const lab = createWorkspace("Lab")!;
+    selectWorkspace(lab);
+    const { onSaved } = renderDialog();
+    fireEvent.change(screen.getByLabelText("label"), { target: { value: "prod" } });
+    fireEvent.change(screen.getByLabelText("base URL"), { target: { value: "http://h:9990" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    const [meta] = await listDaemons();
+    const state = renderHook(() => useWorkspaces()).result.current;
+    expect(inWorkspace(state, meta.id, lab)).toBe(true);
+    expect(inWorkspace(state, meta.id, DEFAULT_WORKSPACE_ID)).toBe(false);
+  });
+
   it("adds a new server with the typed token", async () => {
     const { onSaved, onOpenChange } = renderDialog();
     expect(screen.getByText("Add host")).toBeInTheDocument();

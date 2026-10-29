@@ -11,7 +11,7 @@ import { LazyBoundary } from "@/components/LazyBoundary";
 import { MessagesLiveRefresh } from "./MessagesLiveRefresh";
 import { TitlebarSlotContext } from "./titlebarSlotContext";
 import { WorkspaceManager, WorkspaceSwitcher, type WorkspaceHost } from "./HostWorkspaces";
-import { useWorkspaces, workspaceOf } from "@/lib/workspaces";
+import { inWorkspace, useWorkspaces } from "@/lib/workspaces";
 import { defaultAgentTab } from "@/lib/uiMode";
 import { TerminalsEmptyState, TerminalsRoutes } from "./TerminalsRoutes";
 import { TerminalsSidebar, type CreateDialogState } from "./TerminalsSidebar";
@@ -83,9 +83,9 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   // A route on a host outside the chosen workspace moves to that workspace's
   // first agent, in the same tab, or to the empty console when it has none.
   const followWorkspace = (id: string) => {
-    if (hostId === undefined || workspaceOf(workspaces, hostId) === id) return;
+    if (hostId === undefined || inWorkspace(workspaces, hostId, id)) return;
     const first = rankedHosts.find(
-      (entry) => workspaceOf(workspaces, entry.host.id) === id && entry.agents.length > 0,
+      (entry) => inWorkspace(workspaces, entry.host.id, id) && entry.agents.length > 0,
     );
     const query = allTasks ? "?view=all" : "";
     const tab = agentName && agentTab ? agentTab : defaultAgentTab();
@@ -106,7 +106,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         onChange={refresh}
         onLive={setAgentStatesLive}
       />
-      {/* All tasks spans every server, so no agent is the subject there. */}
+      {/* All tasks spans the workspace's servers, so no agent is the subject there. */}
       {!allTasks && (
         <TerminalsSidebar
           hosts={orderedSidebarHosts}
