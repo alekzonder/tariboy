@@ -130,6 +130,16 @@ export default function Mailbox({ as, mode, fixedTo, recipients = [], toolbar }:
     setOpened(letter);
     if (marksReadOnOpen(letter, box)) void actions.read(letter);
   };
+  // The answered question leaves Inbox; show it as the daemon closed it.
+  const answer = async (letter: Letter, body: string, key: string) => {
+    if (!(await actions.answer(letter, body, key))) return false;
+    try {
+      setOpened((await api.mail.show(letter.id, as || undefined)).letter);
+    } catch {
+      /* The open copy stays until the next selection. */
+    }
+    return true;
+  };
   const submit = async (values: ComposeValues) => {
     const done =
       compose?.mode === "reply"
@@ -170,6 +180,7 @@ export default function Mailbox({ as, mode, fixedTo, recipients = [], toolbar }:
                   onArchive: (letter) => void actions.archive(letter),
                   onRequeue: (letter) => void actions.requeue(letter),
                   onOpenTask: setTaskKey,
+                  onAnswer: answer,
                 }}
               />
             ) : (

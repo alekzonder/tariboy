@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
-import { act, render, screen, waitFor, within } from "@/test/queryRender";
+import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
 import { fakeApi } from "@/test/api";
 import { letter } from "@/test/fixtures/mailFixtures";
-import type { Letter, MailBox, MailListQuery } from "@/lib/api";
+import type { CommentResult, Letter, MailBox, MailListQuery, TaskDetail } from "@/lib/api";
 import Mailbox from "./Mailbox";
 
 const socket = vi.hoisted(() => ({
@@ -46,7 +46,23 @@ const mail = {
   reply: vi.fn(),
   requeue: vi.fn(),
   send: vi.fn(async () => ({ letters: [] })),
-  show: vi.fn(async () => ({ letter: letter({ subject: "Earlier" }) })),
+  show: vi.fn(async (id: string) => ({
+    letter: boxes.archive.find((item) => item.id === id) ?? letter({ subject: "Earlier" }),
+  })),
+};
+
+const tasks = {
+  getTask: vi.fn(async () => ({ task: { key: "DEV-7", title: "Pick a DB" } }) as TaskDetail),
+  // The daemon closes the question in the comment's transaction.
+  addTaskComment: vi.fn(async () => {
+    boxes.archive = boxes.inbox.map((item) => ({
+      ...item,
+      answered_at: "x",
+      close_note: "task-comment:9",
+    }));
+    boxes.inbox = [];
+    return {} as CommentResult;
+  }),
 };
 
 function Location() {
@@ -60,7 +76,7 @@ function renderMailbox(props: Partial<Parameters<typeof Mailbox>[0]> = {}) {
       <Mailbox as="" mode="customer" recipients={["agent:dev"]} {...props} />
       <Location />
     </MemoryRouter>,
-    { api: fakeApi({ mail }) },
+    { api: fakeApi({ mail, tasks }) },
   );
 }
 
@@ -156,6 +172,27 @@ describe("Mailbox", () => {
     await waitFor(() => expect(mail.list.mock.calls.length).toBeGreaterThan(calls));
   });
 
+  it("answers a question with a comment on its task and refetches the box and the task", async () => {
+    boxes.inbox = [
+      letter({ id: "q", subject: "Which DB?", kind: "task.question", data: { task_key: "DEV-7" } }),
+    ];
+    renderMailbox();
+
+    await userEvent.click(await screen.findByRole("button", { name: /Which DB\?/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Markdown" }));
+    fireEvent.change(await screen.findByLabelText("Answer"), { target: { value: "Postgres" } });
+    const listed = mail.list.mock.calls.length;
+    const loaded = tasks.getTask.mock.calls.length;
+    await userEvent.click(screen.getByRole("button", { name: "Send answer" }));
+
+    expect(tasks.addTaskComment).toHaveBeenCalledWith("DEV-7", "Postgres", expect.any(String));
+    await waitFor(() => expect(mail.list.mock.calls.length).toBeGreaterThan(listed));
+    await waitFor(() => expect(tasks.getTask.mock.calls.length).toBeGreaterThan(loaded));
+    expect(await screen.findByText("archived · task-comment:9")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Send answer" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Which DB\?/ })).toBeNull();
+  });
+
   it("opens the task of a question over the mailbox and keeps the letter", async () => {
     boxes.inbox = [
       letter({ id: "q", subject: "Which DB?", kind: "task.question", data: { task_key: "DEV-7" } }),
@@ -163,7 +200,7 @@ describe("Mailbox", () => {
     renderMailbox();
 
     await userEvent.click(await screen.findByRole("button", { name: /Which DB\?/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Answer on the task" }));
+    await userEvent.click(screen.getByRole("button", { name: "Open DEV-7" }));
 
     expect(await screen.findByTestId("task-drawer")).toHaveTextContent("DEV-7");
     expect(screen.getByTestId("location")).toHaveTextContent("/servers/h1/mail");

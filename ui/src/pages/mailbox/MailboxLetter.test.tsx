@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
-import { render, screen, waitFor } from "@/test/queryRender";
+import { fireEvent, render, screen, waitFor } from "@/test/queryRender";
 import { fakeApi } from "@/test/api";
 import { letter } from "@/test/fixtures/mailFixtures";
 import type { Letter, MailBox, Task, TaskDetail } from "@/lib/api";
@@ -12,6 +12,7 @@ const handlers = {
   onArchive: vi.fn(),
   onRequeue: vi.fn(),
   onOpenTask: vi.fn(),
+  onAnswer: vi.fn(async () => true),
   busy: false,
 };
 
@@ -34,12 +35,26 @@ function show(
 }
 
 describe("MailboxLetter", () => {
-  it("answers a task question on its task, not by Reply", async () => {
-    show(letter({ kind: "task.question", data: { task_key: "DEV-7" } }));
+  it("answers a task question in the letter with a comment on its task, not by Reply", async () => {
+    const question = letter({ kind: "task.question", data: { task_key: "DEV-7" } });
+    show(question);
 
+    await userEvent.click(screen.getByRole("button", { name: "Markdown" }));
+    fireEvent.change(await screen.findByLabelText("Answer"), { target: { value: "Yes" } });
+    await userEvent.click(screen.getByRole("button", { name: "Send answer" }));
+    expect(handlers.onAnswer).toHaveBeenCalledWith(question, "Yes", expect.any(String));
+    expect(screen.queryByRole("button", { name: "Answer on the task" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reply" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Open DEV-7" }));
+    expect(handlers.onOpenTask).toHaveBeenCalledWith("DEV-7");
+  });
+
+  it("sends an agent's task question to its task: the operator does not answer for the agent", async () => {
+    show(letter({ kind: "task.question", data: { task_key: "DEV-7" } }), "inbox", "agent");
+
+    expect(screen.queryByRole("button", { name: "Send answer" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Answer on the task" }));
     expect(handlers.onOpenTask).toHaveBeenCalledWith("DEV-7");
-    expect(screen.queryByRole("button", { name: "Reply" })).toBeNull();
   });
 
   it("shows the key, current title and status of the letter's task", async () => {

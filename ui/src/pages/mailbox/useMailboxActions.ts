@@ -1,7 +1,10 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useApi } from "@/components/apiContext";
 import { ApiError, type Letter } from "@/lib/api";
+import { letterTaskKey } from "@/lib/letters";
+import { writeTask } from "@/pages/tasks/taskQueries";
 import type { ComposeValues } from "./MailboxCompose";
 
 const message = (error: unknown) => (error instanceof ApiError ? error.message : String(error));
@@ -11,6 +14,7 @@ const message = (error: unknown) => (error instanceof ApiError ? error.message :
  *  changes optimistically. */
 export function useMailboxActions(as: string, refresh: () => Promise<void>) {
   const api = useApi();
+  const client = useQueryClient();
   const [busy, setBusy] = useState(false);
   const actAs = as || undefined;
 
@@ -42,6 +46,12 @@ export function useMailboxActions(as: string, refresh: () => Promise<void>) {
       ),
     reply: (letter: Letter, text: string) =>
       run("replied", "reply", () => api.mail.reply(letter.id, { text, as: actAs })),
+    // The customer's comment answers the question: the daemon closes the
+    // letter, and the task's status and comments refetch.
+    answer: (letter: Letter, body: string, key: string) =>
+      run("answered", "answer", () =>
+        writeTask(client, api, () => api.tasks.addTaskComment(letterTaskKey(letter), body, key)),
+      ),
     archive: (letter: Letter) =>
       run("archived", "archive", () => api.mail.close(letter.id, { as: actAs })),
     requeue: (letter: Letter) =>
