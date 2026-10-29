@@ -83,7 +83,7 @@ var timeColumns = map[string][]string{
 	"iterations":                   {"started_at", "ended_at", "timeout_deadline", "hard_timeout_deadline", "timeout_triggered_at", "last_ai_request_at"},
 	"mail":                         {"created_at", "deadline", "read_at", "answered_at", "dead_at"},
 	"operations":                   {"created_at", "finished_at"},
-	"plugins":                     {"installed_at"},
+	"plugins":                      {"installed_at"},
 	"proxy_rules":                  {"created_at"},
 	"schedules":                    {"next_fire_at", "created_at"},
 	"schema_migrations":            {"applied_at"},
