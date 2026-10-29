@@ -88,7 +88,7 @@ func TestRunShutdownOrder(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatalf("Run = %v", err)
 	}
-	want := []string{"api-servers", "access-log", "ai-proxy", "workers", "plugins", "manager",
+	want := []string{"api-servers", "access-log", "ai-proxy", "workers", "operations", "plugins", "manager",
 		"ai-proxy-listener", "telemetry", "store", "pidfile"}
 	if got := rec.get(); !slices.Equal(got, want) {
 		t.Fatalf("shutdown steps = %v, want %v", got, want)

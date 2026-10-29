@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -321,6 +322,44 @@ func TestCleanupRemovesTheFilesOfPurgedTasks(t *testing.T) {
 	for _, kept := range []string{filepath.Join(svc.TasksDir, "T-c", "runs", "1"), keep} {
 		if _, err := os.Stat(kept); err != nil {
 			t.Fatalf("%s: %v", kept, err)
+		}
+	}
+}
+
+func TestCleanupRemovesOldOperationsAndTheirLogs(t *testing.T) {
+	svc, st, _ := open(t)
+	db := st.DB
+	svc.OperationsDir = filepath.Join(t.TempDir(), "operations")
+	if err := os.MkdirAll(svc.OperationsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	add := func(id int, status, createdAt, finishedAt string) {
+		exec(t, db, `INSERT INTO operations(id, kind, title, status, created_at, finished_at) VALUES (?,?,?,?,?,?)`,
+			id, "image.build", "t", status, createdAt, finishedAt)
+		if err := os.WriteFile(filepath.Join(svc.OperationsDir, fmt.Sprintf("%d.log", id)), []byte("log\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add(1, "succeeded", ts(100), ts(100))
+	add(2, "failed", ts(100), ts(10))
+	add(3, "running", ts(100), "")
+
+	res, err := svc.Run()
+	if err != nil || res.Error != "" {
+		t.Fatalf("run: %+v %v", res, err)
+	}
+	if res.Deleted["operations"] != 1 {
+		t.Fatalf("deleted = %v", res.Deleted)
+	}
+	if n := count(t, db, `SELECT COUNT(*) FROM operations WHERE id IN (2, 3)`); n != 2 || count(t, db, `SELECT COUNT(*) FROM operations`) != 2 {
+		t.Fatalf("operations left = %d", n)
+	}
+	if _, err := os.Stat(filepath.Join(svc.OperationsDir, "1.log")); !os.IsNotExist(err) {
+		t.Fatalf("log of the purged operation: %v", err)
+	}
+	for _, kept := range []string{"2.log", "3.log"} {
+		if _, err := os.Stat(filepath.Join(svc.OperationsDir, kept)); err != nil {
+			t.Fatal(err)
 		}
 	}
 }

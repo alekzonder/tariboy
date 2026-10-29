@@ -517,7 +517,7 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
     "Approve the work when it looks right.\n",
   );
   let response = await request.post(`${daemonURL}/api/workflow-images/build`, {
-    data: { path: source },
+    data: { path: source, wait: true },
   });
   rmSync(source, { recursive: true, force: true });
   expect(response.ok(), "step 1: the fixture workflow image must build").toBe(true);
@@ -769,7 +769,7 @@ test("Tasks production workspace explains a workflow task's problem, maps its st
   chmodSync(path.join(source, "scripts", "check.sh"), 0o755);
   chmodSync(path.join(source, "scripts", "fail.sh"), 0o755);
   let response = await request.post(`${daemonURL}/api/workflow-images/build`, {
-    data: { path: source },
+    data: { path: source, wait: true },
   });
   rmSync(source, { recursive: true, force: true });
   expect(response.ok(), "step 1: the fixture workflow image must build").toBe(true);

@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"io"
 	"log/slog"
@@ -23,6 +24,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/imageportable"
 	"github.com/alekzonder/tariboy/internal/imageprovenance"
 	"github.com/alekzonder/tariboy/internal/loop"
+	"github.com/alekzonder/tariboy/internal/operations"
 	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
@@ -34,10 +36,19 @@ func localCtx(t *testing.T) *registry.Ctx {
 	base := t.TempDir()
 	s := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	return &registry.Ctx{
-		Store:   s,
-		BaseDir: base,
-		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Store:      s,
+		BaseDir:    base,
+		Log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Operations: testOperations(t, s.DB, base),
 	}
+}
+
+// testOperations is an operations runner that the test stops at its end.
+func testOperations(t *testing.T, db *sql.DB, base string) *operations.Runner {
+	t.Helper()
+	runner := operations.NewRunner(context.Background(), &operations.Store{DB: db, Dir: filepath.Join(base, "operations")}, nil, nil)
+	t.Cleanup(runner.Shutdown)
+	return runner
 }
 
 func installDisabledPlugin(t *testing.T, c *registry.Ctx, name string) {
@@ -77,7 +88,24 @@ func cmdHandler(t *testing.T, path string) func(*registry.Ctx, registry.Params) 
 		t.Fatalf("command %s not registered", path)
 	}
 	return func(c *registry.Ctx, p registry.Params) (any, error) {
-		return registry.Call(c, context.Background(), cmd, p)
+		if path != "image.build" && path != "workflow.build" {
+			return registry.Call(c, context.Background(), cmd, p)
+		}
+		// A build answers with its operation; these tests check the build
+		// itself, so they wait for it and read its result.
+		waited := registry.Params{"wait": true}
+		for key, value := range p {
+			waited[key] = value
+		}
+		result, err := registry.Call(c, context.Background(), cmd, waited)
+		if err != nil {
+			return nil, err
+		}
+		op := result.(OperationStarted).Operation
+		if op.WorkflowResult != nil {
+			return *op.WorkflowResult, nil
+		}
+		return *op.ImageResult, nil
 	}
 }
 

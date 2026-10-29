@@ -79,7 +79,7 @@ func (p *planner) planQueueWorkflows(f File) error {
 		}
 		if _, done := built[ref.Selector()]; declared && ref.Store != "" && !done {
 			built[ref.Selector()] = p.add(Action{Resource: "workflow:" + ref.Selector(), Kind: "build", Note: "building workflow " + ref.Selector(),
-				Fail: "build workflow " + ref.Selector(), Call: Call{"POST", "/api/workflow-images/build", map[string]any{"source": ref.Selector()}}})
+				Fail: "build workflow " + ref.Selector(), Call: Call{"POST", "/api/workflow-images/build", map[string]any{"source": ref.Selector(), "wait": true, "initiator": "compose"}}})
 		}
 	}
 	for _, prefix := range sortedKeys(f.TaskQueues) {

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/api"
+	"github.com/alekzonder/tariboy/internal/operations"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
@@ -147,40 +149,77 @@ func nonNil(s []string) []string {
 }
 
 func workflowBuild() registry.Command {
-	return registry.WithResult[WorkflowImageBuildResult](registry.Command{
+	return registry.WithResult[OperationStarted](registry.Command{
 		Path:        "workflow.build",
 		AbsPathArgs: []string{"path"},
-		Summary:     "Build a workflow image from a Workflowfile.yaml",
-		Args: []registry.Arg{
+		Summary:     "Start a background build of a workflow image from a Workflowfile.yaml",
+		Help:        "The daemon builds the workflow image as an operation. The CLI prints the operation log until the build ends, then the result; --detach prints only the operation id.",
+		Args: append([]registry.Arg{
 			{Name: "source", Type: registry.String, Help: "Store selector (store/workflow)"},
 			{Name: "path", Flag: "path", Type: registry.String, Help: "Workflowfile.yaml or its directory"},
-		},
-		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/workflow-images/build"},
+		}, operationStartArgs()...),
+		HTTP:  &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/workflow-images/build"},
+		Local: buildLocal("/api/workflow-images/build"),
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
-			path, release, err := workflowSourcePath(c, p.Params)
-			if err != nil {
+			selector, path := strings.TrimSpace(p.String("source")), strings.TrimSpace(p.String("path"))
+			switch {
+			case selector != "" && path != "":
+				return nil, api.UserError{Code: "bad_source", Msg: "source and path are mutually exclusive", Status: http.StatusBadRequest}
+			case selector == "" && path == "":
+				return nil, api.UserError{Code: "missing_path", Msg: "workflow source path is required", Status: http.StatusBadRequest}
+			}
+			if _, err := workflowImageRegistry(c); err != nil {
 				return nil, err
 			}
-			defer release()
-			reg, err := workflowImageRegistry(c)
-			if err != nil {
-				return nil, err
+			target, params := selector, map[string]string{"source": selector}
+			if selector == "" {
+				target, params = path, map[string]string{"path": path}
 			}
-			f, err := parseWorkflowSource(path)
-			if err != nil {
-				return nil, err
-			}
-			m, created, err := reg.Publish(f, time.Now())
-			if err != nil {
-				return nil, workflowImageError(err)
-			}
-			tags, err := reg.Store.Tags(m.Name, m.Digest)
-			if err != nil {
-				return nil, err
-			}
-			return WorkflowImageBuildResult{Name: m.Name, Version: m.Version, Digest: m.Digest, Tags: nonNil(tags), Created: created}, nil
+			spec := operations.Spec{Kind: "workflow.build", Title: "workflow build " + target, Initiator: p.String("initiator"), Params: params}
+			return startOperation(c, p, spec, func(ctx context.Context, log *operations.Log) (any, error) {
+				return runWorkflowBuild(c, p.Params, log)
+			})
 		},
 	})
+}
+
+// runWorkflowBuild builds and publishes the workflow image of params.
+func runWorkflowBuild(c *registry.Ctx, params registry.Params, log *operations.Log) (WorkflowImageBuildResult, error) {
+	path, release, err := workflowSourcePath(c, params)
+	if err != nil {
+		return WorkflowImageBuildResult{}, err
+	}
+	defer release()
+	reg, err := workflowImageRegistry(c)
+	if err != nil {
+		return WorkflowImageBuildResult{}, err
+	}
+	log.Printf("parse %s", path)
+	f, err := parseWorkflowSource(path)
+	if err != nil {
+		return WorkflowImageBuildResult{}, err
+	}
+	log.Printf("validate and publish workflow %s %s", f.Name, f.WorkflowVersion)
+	m, created, err := reg.Publish(f, time.Now())
+	if err != nil {
+		var invalid *workflowimage.InvalidError
+		if errors.As(err, &invalid) {
+			for _, item := range invalid.Errors {
+				log.Printf("invalid: %s %s: %s", item.Code, item.Path, item.Message)
+			}
+		}
+		return WorkflowImageBuildResult{}, workflowImageError(err)
+	}
+	tags, err := reg.Store.Tags(m.Name, m.Digest)
+	if err != nil {
+		return WorkflowImageBuildResult{}, err
+	}
+	if created {
+		log.Printf("published %s %s digest %s, tags %s", m.Name, m.Version, m.Digest, strings.Join(tags, ", "))
+	} else {
+		log.Printf("%s %s is already published with digest %s", m.Name, m.Version, m.Digest)
+	}
+	return WorkflowImageBuildResult{Name: m.Name, Version: m.Version, Digest: m.Digest, Tags: nonNil(tags), Created: created}, nil
 }
 
 func workflowLs() registry.Command {

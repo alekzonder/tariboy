@@ -40,10 +40,12 @@ func imagesFixture(t *testing.T) (*registry.Ctx, imagesFixtureDirs) {
 	if err := os.MkdirAll(base, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	st := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	c := &registry.Ctx{
-		Store:   storetest.OpenAt(t, filepath.Join(base, "state.db")),
-		BaseDir: base,
-		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Store:      st,
+		BaseDir:    base,
+		Log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Operations: testOperations(t, st.DB, base),
 	}
 	dirs := imagesFixtureDirs{
 		root:      root,
@@ -189,9 +191,9 @@ func imagesTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 	c, dirs := imagesFixture(t)
 	imagesSetupAgents(t, c)
 	return c, []typedCall{
-		{"POST", "/api/images/build", "/api/images/build", map[string]any{"name": "reviewer", "path": dirs.versioned}},
-		{"POST", "/api/images/build", "/api/images/build", map[string]any{"name": "demo", "tag": []string{"v1", "v2"}, "path": dirs.plain, "repository-id": "tariboy", "git-commit": imagesGoldenCommit}},
-		{"POST", "/api/images/build", "/api/images/build", map[string]any{"name": "solo", "tag": []string{"latest"}, "path": dirs.plain}},
+		{"POST", "/api/images/build", "/api/images/build", map[string]any{"name": "reviewer", "path": dirs.versioned, "wait": true}},
+		{"POST", "/api/images/build", "/api/images/build", map[string]any{"name": "demo", "tag": []string{"v1", "v2"}, "path": dirs.plain, "repository-id": "tariboy", "git-commit": imagesGoldenCommit, "wait": true}},
+		{"POST", "/api/images/build", "/api/images/build", map[string]any{"name": "solo", "tag": []string{"latest"}, "path": dirs.plain, "wait": true}},
 		{"POST", "/api/images/validate", "/api/images/validate", map[string]any{"name": "reviewer", "path": dirs.versioned}},
 		{"POST", "/api/images/validate", "/api/images/validate", map[string]any{"name": "reviewer", "path": filepath.Join(dirs.root, "missing")}},
 		{"POST", "/api/image-sources", "/api/image-sources", map[string]any{"name": "drafter", "prompt": "Draft the reply."}},

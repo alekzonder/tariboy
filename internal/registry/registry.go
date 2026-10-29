@@ -17,6 +17,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/maintenance"
+	"github.com/alekzonder/tariboy/internal/operations"
 	"github.com/alekzonder/tariboy/internal/retention"
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/shim"
@@ -82,6 +83,9 @@ type Ctx struct {
 	// WorkflowImages is the workflow image store; the prompt preview reads
 	// status instructions from it.
 	WorkflowImages *workflowimage.Store
+	// Operations runs image and workflow builds in the background; nil
+	// outside the daemon.
+	Operations *operations.Runner
 	// Out and ErrOut are the CLI's output streams, and JSON reports the global
 	// --json flag. The CLI sets them for a Local handler, which prints its own
 	// output.

@@ -32,7 +32,7 @@ func TestBuildPublishesDeclaredImagesThroughDaemon(t *testing.T) {
 		t.Fatalf("build did not publish through daemon: %v", fc.calls)
 	}
 	body, ok := bodyFor(fc, "POST /api/images/build").(map[string]any)
-	if !ok || body["name"] != "analyst" || body["tag"] != "latest" || body["path"] != ctxDir {
+	if !ok || body["name"] != "analyst" || body["tag"] != "latest" || body["path"] != ctxDir || body["wait"] != true || body["initiator"] != "compose" {
 		t.Fatalf("image build body = %#v", body)
 	}
 }

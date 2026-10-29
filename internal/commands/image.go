@@ -18,6 +18,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/imageprovenance"
 	"github.com/alekzonder/tariboy/internal/imagesnapshot"
 	"github.com/alekzonder/tariboy/internal/imagesource"
+	"github.com/alekzonder/tariboy/internal/operations"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/plugins"
@@ -40,58 +41,100 @@ func imagePluginResolver(c *registry.Ctx, pluginsDir string) plugincaps.External
 }
 
 func imageBuild() registry.Command {
-	return registry.WithResult[ImageBuildResult](registry.Command{
+	return registry.WithResult[OperationStarted](registry.Command{
 		Path:        "image.build",
 		AbsPathArgs: []string{"path"},
-		Summary:     "Build an agent image from a Tariboyfile.yaml",
-		Args: []registry.Arg{
+		Summary:     "Start a background build of an agent image from a Tariboyfile.yaml",
+		Help:        "The daemon builds the image as an operation. The CLI prints the operation log until the build ends, then the result; --detach prints only the operation id.",
+		Args: append([]registry.Arg{
 			{Name: "source", Type: registry.String, Help: "Store selector (store/image)"},
 			{Name: "name", Flag: "name", Type: registry.String, Help: "target image name"},
 			{Name: "tag", Flag: "tag", Type: registry.String, Repeatable: true, Help: "target image tag (default image_version and latest, or only latest when absent)"},
 			{Name: "path", Flag: "path", Type: registry.String, Help: "Tariboyfile.yaml or its directory"},
 			{Name: "repository-id", Flag: "repository-id", Type: registry.String, Help: "source repository ID"},
 			{Name: "git-commit", Flag: "git-commit", Type: registry.String, Help: "source Git commit"},
-		},
-		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/images/build"},
+		}, operationStartArgs()...),
+		HTTP:  &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/images/build"},
+		Local: buildLocal("/api/images/build"),
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
-			requestCtx := p.Ctx
 			params, err := parseImageBuildParams(p.Params)
 			if err != nil {
 				return nil, err
 			}
-			var locks imageBuildLocks
-			if params.selector != "" {
-				catalog := storeCatalog(c)
-				prepared, release, err := catalog.PrepareBuild(params.selector)
-				if err != nil {
-					return nil, storeError(err)
+			if params.selector == "" {
+				if params.name, params.tags, err = resolveImageBuildName(params.name, params.tags); err != nil {
+					return nil, err
 				}
-				defer release()
-				params.path = prepared.Path
-				locks = imageBuildLocks{
-					restore:      func() error { return catalog.RestoreBuildLocks(requestCtx, prepared) },
-					restoreStore: func() error { return catalog.RestoreStoreLock(requestCtx, prepared) },
-					install:      func(dir string) error { return stores.RestoreLock(requestCtx, dir) },
-				}
-				if params.name == "" {
-					params.name = prepared.Name
-				}
-			}
-			params.name, params.tags, err = resolveImageBuildName(params.name, params.tags)
-			if err != nil {
-				return nil, err
 			}
 			if c.Store == nil {
 				return nil, api.UserError{Code: "build_failed", Msg: "image metadata store is unavailable"}
 			}
-			source, cleanup, err := freezeImageSource(c, params, locks)
-			if err != nil {
-				return nil, err
-			}
-			defer cleanup()
-			return publishImage(c, params, source)
+			spec := operations.Spec{Kind: "image.build", Title: imageBuildTitle(params), Initiator: p.String("initiator"), Params: params.record()}
+			return startOperation(c, p, spec, func(ctx context.Context, log *operations.Log) (any, error) {
+				return runImageBuild(ctx, c, params, log)
+			})
 		},
 	})
+}
+
+// runImageBuild builds the image of params; ctx is the operation's context.
+func runImageBuild(ctx context.Context, c *registry.Ctx, params imageBuildParams, log *operations.Log) (ImageBuildResult, error) {
+	var locks imageBuildLocks
+	if params.selector != "" {
+		log.Printf("prepare Store image %s", params.selector)
+		catalog := storeCatalog(c)
+		prepared, release, err := catalog.PrepareBuild(params.selector)
+		if err != nil {
+			return ImageBuildResult{}, storeError(err)
+		}
+		defer release()
+		params.path = prepared.Path
+		npx := log.Writer("")
+		defer npx.Close()
+		locks = imageBuildLocks{
+			restore:      func() error { return catalog.RestoreBuildLocks(ctx, prepared, npx) },
+			restoreStore: func() error { return catalog.RestoreStoreLock(ctx, prepared, npx) },
+			install:      func(dir string) error { return stores.RestoreLock(ctx, dir, npx) },
+		}
+		if params.name == "" {
+			params.name = prepared.Name
+		}
+		if params.name, params.tags, err = resolveImageBuildName(params.name, params.tags); err != nil {
+			return ImageBuildResult{}, err
+		}
+	}
+	source, cleanup, err := freezeImageSource(c, params, locks, log)
+	if err != nil {
+		return ImageBuildResult{}, err
+	}
+	defer cleanup()
+	return publishImage(c, params, source, log)
+}
+
+// imageBuildTitle names an image build in the operations list.
+func imageBuildTitle(params imageBuildParams) string {
+	target := params.selector
+	if target == "" {
+		target = params.name
+		if len(params.tags) > 0 {
+			target += ":" + strings.Join(params.tags, ",")
+		}
+	}
+	return "image build " + target
+}
+
+// record returns the build parameters an operation shows.
+func (params imageBuildParams) record() map[string]string {
+	out := map[string]string{}
+	for key, value := range map[string]string{
+		"source": params.selector, "name": params.name, "tag": strings.Join(params.tags, ","), "path": params.path,
+		"repository-id": params.repositoryID, "git-commit": params.gitCommit,
+	} {
+		if value != "" {
+			out[key] = value
+		}
+	}
+	return out
 }
 
 // imageBuildParams holds the checked request parameters of image.build.
@@ -158,13 +201,14 @@ type imageBuildSource struct {
 
 // freezeImageSource assembles the source, restores its locks and freezes a
 // snapshot of it. cleanup removes the assembled directory.
-func freezeImageSource(c *registry.Ctx, params imageBuildParams, locks imageBuildLocks) (imageBuildSource, func(), error) {
+func freezeImageSource(c *registry.Ctx, params imageBuildParams, locks imageBuildLocks, log *operations.Log) (imageBuildSource, func(), error) {
 	cleanup := func() {}
 	sourceCWD, sourceErr := canonicalSourceDir(params.path)
 	if sourceErr != nil {
 		return imageBuildSource{}, cleanup, api.UserError{Code: "bad_source_path", Msg: sourceErr.Error(), Status: http.StatusBadRequest}
 	}
 	snapshotStore := &imagesnapshot.Store{Root: filepath.Join(c.BaseDir, "image-source-snapshots"), Clock: time.Now, DB: c.Store.DB}
+	log.Printf("parse %s", filepath.Join(sourceCWD, imagefile.DefaultFilename))
 	parsed, err := imagefile.ParseV2(sourceCWD)
 	if err != nil {
 		return imageBuildSource{}, cleanup, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
@@ -181,10 +225,12 @@ func freezeImageSource(c *registry.Ctx, params imageBuildParams, locks imageBuil
 	buildDir := sourceCWD
 	if len(parsed.Extends) > 0 {
 		if locks.restoreStore != nil {
+			log.Printf("restore the Store skills lock")
 			if err := locks.restoreStore(); err != nil {
 				return imageBuildSource{}, cleanup, storeError(err)
 			}
 		}
+		log.Printf("assemble the extends chain: %s", strings.Join(parsed.Extends, ", "))
 		assembled, removeAssembled, err := imagefile.Assemble(sourceCWD, imageBuildRoot(c), imagefile.ResolveRoots{Plugins: paths.Paths{Base: c.BaseDir}.PluginsDir()}, locks.install)
 		if err != nil {
 			return imageBuildSource{}, cleanup, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
@@ -192,6 +238,7 @@ func freezeImageSource(c *registry.Ctx, params imageBuildParams, locks imageBuil
 		cleanup = removeAssembled
 		buildDir = assembled
 	} else if locks.restore != nil {
+		log.Printf("restore the skills locks")
 		if err := locks.restore(); err != nil {
 			return imageBuildSource{}, cleanup, storeError(err)
 		}
@@ -200,6 +247,7 @@ func freezeImageSource(c *registry.Ctx, params imageBuildParams, locks imageBuil
 	if err != nil {
 		return imageBuildSource{}, cleanup, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
 	}
+	log.Printf("freeze a snapshot of the source")
 	frozen, err := snapshotStore.Freeze(buildDir, parsed.Skills...)
 	if err != nil {
 		return imageBuildSource{}, cleanup, api.UserError{Code: "bad_source_path", Msg: err.Error(), Status: http.StatusBadRequest}
@@ -224,7 +272,7 @@ func freezeImageSource(c *registry.Ctx, params imageBuildParams, locks imageBuil
 // publishImage builds the image from source, moves every requested tag onto
 // it and records its provenance in one transaction. A failure restores the
 // previous images.
-func publishImage(c *registry.Ctx, params imageBuildParams, source imageBuildSource) (ImageBuildResult, error) {
+func publishImage(c *registry.Ctx, params imageBuildParams, source imageBuildSource, log *operations.Log) (ImageBuildResult, error) {
 	refs := source.refs
 	pluginsDir := paths.Paths{Base: c.BaseDir}.PluginsDir()
 	resolver := imagePluginResolver(c, pluginsDir)
@@ -233,7 +281,9 @@ func publishImage(c *registry.Ctx, params imageBuildParams, source imageBuildSou
 	var result ImageBuildResult
 	// Every ref of one build shares the image name. freezeImageSource has
 	// already migrated the store.
+	log.Printf("wait for the lock of image %s", refs[0].Name)
 	err := image.WithRefLock(refs[0].Name, func() error {
+		log.Printf("build layers of %s", refs[0])
 		store := imageStore(c)
 		publication, err := store.BeginPublication(refs)
 		if err != nil {
@@ -251,11 +301,14 @@ func publishImage(c *registry.Ctx, params imageBuildParams, source imageBuildSou
 		if err != nil {
 			return restore("build_failed", err)
 		}
+		log.Printf("built %s digest %s, %d layers", refs[0], man.Digest, len(man.Layers))
 		for _, ref := range refs[1:] {
+			log.Printf("tag %s", ref)
 			if err := store.SetTag(ref, man.Digest); err != nil {
 				return restore("build_failed", err)
 			}
 		}
+		log.Printf("record the provenance")
 		results := make([]ImageBuilt, 0, len(refs))
 		tx, err := c.Store.DB.BeginTx(context.Background(), nil)
 		if err != nil {

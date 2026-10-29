@@ -103,6 +103,10 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /api/agents/{name}/events", s.serveEvents)
 		mux.HandleFunc("GET /api/mail/ws", s.serveMail)
 		mux.HandleFunc("GET /api/agent-states/ws", s.serveAgentStates)
+		mux.HandleFunc("GET /api/operations/ws", s.serveOperations)
+	}
+	if s.cctx.Operations != nil {
+		mux.HandleFunc("GET /api/operations/{id}/log/download", s.serveOperationLogDownload)
 	}
 	mux.HandleFunc("GET /api/agents/{name}/terminal", s.serveTerminal)
 	mux.HandleFunc("GET /api/agents/{name}/audit-export", s.serveAuditExport)
@@ -178,6 +182,23 @@ func (s *Server) serveScriptLogDownload(w http.ResponseWriter, r *http.Request) 
 	defer file.Close()
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+safeAttachmentPart(filename)+`"`)
+	_, _ = io.Copy(w, file)
+}
+
+func (s *Server) serveOperationLogDownload(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		WriteErr(w, http.StatusBadRequest, "bad_request", "invalid operation id")
+		return
+	}
+	file, err := s.cctx.Operations.Store().OpenLog(id)
+	if err != nil {
+		WriteErr(w, http.StatusNotFound, "not_found", "operation log not found")
+		return
+	}
+	defer file.Close()
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="operation-`+strconv.FormatInt(id, 10)+`.log"`)
 	_, _ = io.Copy(w, file)
 }
 
