@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
+import { fsAllow } from "./vite.fsAllow";
 
 // Desktop bundle: the SAME src/ as the browser build, emitted into desktop/dist
 // where tauri.conf.json's frontendDist picks it up. Unlike the old
@@ -47,6 +48,7 @@ export default defineConfig({
     // port a loud failure instead of a silent shift the Rust side won't follow.
     port: 5173,
     strictPort: true,
+    fs: { allow: fsAllow },
     proxy: {
       "/api": { target: "http://127.0.0.1:9990", changeOrigin: true },
     },

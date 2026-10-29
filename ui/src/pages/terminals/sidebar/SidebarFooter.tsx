@@ -1,5 +1,6 @@
 import { Plus, Server } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
 import { cn } from "@/lib/utils";
 
 /** The 44px foot of the sidebar: what is connected, and how to add more. */
@@ -43,6 +44,7 @@ export function SidebarFooter({
         className="size-5.5 shrink-0 rounded-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
         aria-label="Add host"
         title="Add host"
+        data-tour={TOUR_ANCHORS.addHost}
         onClick={onAddServer}
       >
         <Plus className="size-3" />

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { fsAllow } from "./vite.fsAllow";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -21,5 +22,6 @@ export default defineConfig({
     host: "127.0.0.1",
     port,
     strictPort: true,
+    fs: { allow: fsAllow },
   },
 });

@@ -15,6 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
 import { cn } from "@/lib/utils";
 import type { Queue } from "@/lib/api";
 import { queueMenuItems, serverMenuItems } from "@/lib/taskFilterMenus";
@@ -51,6 +52,7 @@ export function TaskQueueMenu({
         <button
           type="button"
           aria-label={`Queue: ${queueLabel}`}
+          data-tour={TOUR_ANCHORS.queueMenu}
           className="flex h-7 shrink-0 items-center gap-1.75 rounded-md bg-muted px-2.25 text-ui hover:bg-accent"
         >
           <ListFilter aria-hidden="true" className="size-3 opacity-55" />

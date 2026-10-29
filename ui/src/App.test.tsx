@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { fetchAllAgents } from "@/lib/aggregate";
 import App from "./App";
 import { UI_MODE_KEY } from "@/lib/uiMode";
+import { UI_VERSION } from "@/lib/onboarding/version";
 
 vi.mock("@/lib/aggregate", () => ({
   fetchAllAgents: vi.fn(),
@@ -31,6 +32,8 @@ function renderAt(path: string) {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  // The tour starts on a first run; only its own test wants it.
+  localStorage.setItem("onboarding:state:v1", UI_VERSION);
   vi.mocked(fetchAllAgents).mockResolvedValue([
     { host: { id: "", label: "This daemon (local)" }, agents: [] },
   ]);
@@ -140,6 +143,34 @@ describe("product routing", () => {
     expect(await screen.findByLabelText("Search tasks")).toBeInTheDocument();
     expect(screen.getByTestId("tasks-workspace")).toHaveAttribute("data-scope-agent", "");
     expect(screen.getByRole("navigation", { name: "Server workspace" })).toBeInTheDocument();
+  });
+
+  it("starts the tour on the first run and marks the elements it explains", async () => {
+    localStorage.removeItem("onboarding:state:v1");
+    renderAt("/servers/local/tasks");
+
+    expect(await screen.findByRole("dialog", { name: "Welcome to Tariboy" })).toBeInTheDocument();
+    await screen.findByLabelText("Search tasks");
+    const anchors = [...document.querySelectorAll("[data-tour]")].map((el) =>
+      el.getAttribute("data-tour"),
+    );
+    for (const anchor of [
+      "servers-tab",
+      "add-agent",
+      "add-host",
+      "server-sections",
+      "section-tasks",
+      "section-images",
+      "section-workflows",
+      "section-stores",
+      "queue-menu",
+      "help-menu",
+    ]) {
+      expect(anchors).toContain(anchor);
+    }
+    expect(
+      within(screen.getByTestId("app-titlebar")).getByRole("button", { name: "Help" }),
+    ).toBeInTheDocument();
   });
 
   it.each([

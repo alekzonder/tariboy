@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
+import { fsAllow } from "./vite.fsAllow";
 
 // Shared dev/test config: `npm run dev` in a browser and the vitest suite. It no
 // longer emits the shipped bundle — the desktop target (vite.desktop.config.ts)
@@ -12,6 +13,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
   server: {
+    fs: { allow: fsAllow },
     // In dev, proxy API + SSE to the daemon's loopback web listener.
     proxy: {
       "/api": { target: "http://127.0.0.1:9990", changeOrigin: true },

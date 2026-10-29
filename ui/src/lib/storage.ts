@@ -77,6 +77,15 @@ export const storageKeys = {
     serialize: String,
     fallback: true,
   } satisfies StorageKey<boolean>,
+  /** The release whose tour the user finished or skipped; empty = first run. */
+  onboarding: {
+    area: "local",
+    name: "onboarding:state:v1",
+    version: 1,
+    parse: (raw) => (/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(raw) ? raw : undefined),
+    serialize: (value) => value,
+    fallback: "",
+  } satisfies StorageKey<string>,
   runtimePresets: jsonKey("local", "tariboy:runtime-presets:v1", 1),
   daemons: jsonKey("local", "tariboy_daemons", null),
   activeDaemon: stringKey("local", "tariboy_active_daemon", null),

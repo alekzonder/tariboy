@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { NavLink } from "react-router-dom";
 import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
 import { serverPath, type ServerSection } from "@/lib/terminalsHost";
+import { SECTION_ANCHORS, TOUR_ANCHORS } from "@/lib/onboarding/tour";
 import { cn } from "@/lib/utils";
 
 // The count brings the host client and the query helpers: it loads after the shell.
@@ -26,6 +27,7 @@ export function ServerContextBar({ hostId, label }: { hostId: string; label: str
     <nav
       ref={strip}
       aria-label="Server workspace"
+      data-tour={TOUR_ANCHORS.serverSections}
       className="scrollbar-none flex shrink-0 items-center gap-0.5 overflow-x-auto border-b px-3"
     >
       <span className="mr-2 flex max-w-[40vw] min-w-0 shrink-0 items-baseline gap-1.5 text-body-sm">
@@ -38,6 +40,7 @@ export function ServerContextBar({ hostId, label }: { hostId: string; label: str
         <NavLink
           key={section}
           to={serverPath(hostId, section)}
+          data-tour={SECTION_ANCHORS[section]}
           className={({ isActive }) =>
             cn(
               "flex h-8.5 shrink-0 items-center border-b-2 border-transparent px-2.5 text-body whitespace-nowrap text-muted-foreground hover:text-foreground",

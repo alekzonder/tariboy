@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Segmented } from "@/components/ui/segmented";
+import { HelpCard } from "@/components/onboarding/HelpMenu";
 import { readKeyResult, storageKeys, writeKey } from "@/lib/storage";
 import { useUiMode, writeUiMode, type UiMode } from "@/lib/uiMode";
 
@@ -203,6 +204,7 @@ export function AppSettings() {
           <Link to="/">Back to workspace</Link>
         </Button>
         <h1 className="text-2xl font-semibold">Application settings</h1>
+        <HelpCard />
         <Card>
           <CardHeader>
             <CardTitle>Interface mode</CardTitle>

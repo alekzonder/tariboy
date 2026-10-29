@@ -1,6 +1,7 @@
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
 import { cn } from "@/lib/utils";
 import type { SidebarTab } from "./sidebarPrefs";
 
@@ -22,6 +23,7 @@ export function SidebarTabs({ onCreate }: { onCreate: () => void }) {
           <TabsTrigger
             key={tab.value}
             value={tab.value}
+            data-tour={tab.value === "servers" ? TOUR_ANCHORS.serversTab : undefined}
             className={cn(
               "h-6 rounded-control px-2.25 py-0 text-ui font-normal text-muted-foreground shadow-none",
               "data-[state=active]:bg-accent data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=active]:shadow-none",
@@ -37,6 +39,7 @@ export function SidebarTabs({ onCreate }: { onCreate: () => void }) {
         className="ml-auto size-6 shrink-0 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
         aria-label="Add agent"
         title="Add agent"
+        data-tour={TOUR_ANCHORS.addAgent}
         onClick={onCreate}
       >
         <Plus className="size-3" />
