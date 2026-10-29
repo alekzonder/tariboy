@@ -93,6 +93,7 @@ func enqueueNotificationTx(
 	// from it.
 	data, _ := json.Marshal(map[string]any{
 		"task_key":        task.Key,
+		"task_title":      task.Title,
 		"queue":           task.Queue,
 		"principal":       principal,
 		"from":            from,

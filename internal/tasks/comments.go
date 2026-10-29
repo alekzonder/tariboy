@@ -83,7 +83,7 @@ func (s *TaskService) AddComment(ctx context.Context, actor Actor, key string, i
 	if err != nil {
 		return CommentResult{}, err
 	}
-	if err := notifyCommentTx(ctx, tx, sequence, task, actor, created, resolved, now); err != nil {
+	if err := notifyCommentTx(ctx, tx, sequence, task, actor, body, created, resolved, now); err != nil {
 		return CommentResult{}, err
 	}
 	response := CommentResult{Comment: comment, CreatedWaits: created, ResolvedWaits: resolved}
@@ -200,16 +200,16 @@ func commentStatusTx(
 }
 
 // notifyCommentTx tells each mentioned principal about its new question and
-// each asker about its answer.
+// each asker about its answer. Each letter carries the comment in full.
 func notifyCommentTx(
-	ctx context.Context, tx *sql.Tx, sequence int64, task Task, actor Actor, created, resolved []WaitingFor, now string,
+	ctx context.Context, tx *sql.Tx, sequence int64, task Task, actor Actor, body string, created, resolved []WaitingFor, now string,
 ) error {
 	for _, wait := range created {
 		if wait.ExpectedPrincipal == actor.Principal {
 			continue
 		}
 		if err := enqueueNotificationTx(ctx, tx, sequence, wait.ExpectedPrincipal, actor.Principal,
-			"task.question", task, actor.Principal+" asked for an answer on "+task.Key, now); err != nil {
+			"task.question", task, actor.Principal+" asked for an answer on "+task.Key+"\n\n"+body, now); err != nil {
 			return err
 		}
 	}
@@ -219,7 +219,7 @@ func notifyCommentTx(
 			continue
 		}
 		if err := enqueueNotificationTx(ctx, tx, sequence, wait.RequestingPrincipal, actor.Principal,
-			"task.answered", task, actor.Principal+" answered on "+task.Key, now); err != nil {
+			"task.answered", task, actor.Principal+" answered on "+task.Key+"\n\n"+body, now); err != nil {
 			return err
 		}
 		notified[wait.RequestingPrincipal] = true

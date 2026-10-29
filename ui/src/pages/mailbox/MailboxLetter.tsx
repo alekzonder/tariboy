@@ -5,6 +5,7 @@ import { useApiQuery } from "@/hooks/useApiQuery";
 import type { Letter, MailBox } from "@/lib/api";
 import { letterTaskKey } from "@/lib/letters";
 import { MarkdownContent } from "@/pages/tasks/TaskMarkdown";
+import { taskQueries } from "@/pages/tasks/taskQueries";
 import { mailKeys } from "./mailQueries";
 import { letterActions, letterState, principalName, type MailboxMode } from "./mailboxModel";
 
@@ -28,6 +29,18 @@ function ThreadLine({ id, as }: { id: string; as: string }) {
     <p className="text-meta text-muted-foreground">
       In reply to {subject ? `“${subject}”` : "an earlier letter"}
     </p>
+  );
+}
+
+/** The letter's task: its current title and status, or the title the letter carries until the task loads. */
+function TaskField({ letter, taskKey }: { letter: Letter; taskKey: string }) {
+  const api = useApi();
+  const task = useApiQuery(taskQueries.detail(api, taskKey)).data?.task;
+  const carried = typeof letter.data?.task_title === "string" ? letter.data.task_title : "";
+  return (
+    <Field label="Task">
+      {[taskKey, task?.title ?? carried, task?.status].filter(Boolean).join(" · ")}
+    </Field>
   );
 }
 
@@ -111,6 +124,7 @@ export function MailboxLetter({
   /** Shown on narrow screens, where the letter replaces the list. */
   onBack?: () => void;
 }) {
+  const taskKey = letterTaskKey(letter);
   return (
     <article aria-label={letter.subject || "Letter"} className="flex flex-col gap-3 px-4 py-3">
       {onBack && (
@@ -125,6 +139,7 @@ export function MailboxLetter({
         <Field label="To">{principalName(letter.to)}</Field>
         <Field label="Received">{new Date(letter.created_at).toLocaleString()}</Field>
         <Field label="State">{letterState(letter)}</Field>
+        {taskKey && <TaskField letter={letter} taskKey={taskKey} />}
       </dl>
       {letter.in_reply_to && <ThreadLine id={letter.in_reply_to} as={as} />}
       <LetterActionBar letter={letter} box={box} mode={mode} handlers={handlers} />

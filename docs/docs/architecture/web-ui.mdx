@@ -1092,6 +1092,11 @@ raw HTML. Sent and Archive load more pages with **Load more**.
 Opening an unread Inbox letter marks it read. The daemon closes a read notice,
 so it moves to Archive and stays open in the right pane; a request stays in the
 Inbox until **Reply** or **Archive**. A letter with a string `data.task_key`
+shows a **Task** field: the key, the title and the status, for example
+`DEV-1 · Ship the release · review`. The field reads the task with the task
+drawer's detail query (`taskQueries.detail`), so the title and the status are
+the current ones. Until the task loads, or when it does not load, the field
+shows the key and `data.task_title`, without a status. Such a letter also
 shows **Open** with the task key, which opens the task drawer (`TaskDrawer`) over the
 mailbox: the route does not change, the letter stays selected, and closing the
 drawer returns to it. A `task.question` letter is answered on its task: it
