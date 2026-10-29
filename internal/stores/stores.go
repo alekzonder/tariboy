@@ -581,6 +581,18 @@ func run(ctx context.Context, dir, name string, args ...string) error {
 	return runTo(ctx, dir, nil, name, args...)
 }
 
+// lockedWriter serializes writes to w.
+type lockedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
+}
+
 // runTo is run that also copies the command's stdout and stderr to a non-nil
 // out.
 func runTo(ctx context.Context, dir string, out io.Writer, name string, args ...string) error {
@@ -591,7 +603,9 @@ func runTo(ctx context.Context, dir string, out io.Writer, name string, args ...
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if out != nil {
-		cmd.Stdout, cmd.Stderr = out, io.MultiWriter(&stderr, out)
+		// exec copies stdout and stderr in two goroutines; both write to out.
+		shared := &lockedWriter{w: out}
+		cmd.Stdout, cmd.Stderr = shared, io.MultiWriter(&stderr, shared)
 	}
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
