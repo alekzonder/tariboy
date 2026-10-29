@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import type { RefObject } from "react";
+import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
 import { cn } from "@/lib/utils";
 import type { AgentTabEntry } from "./agentWorkspaceModel";
 
@@ -36,12 +37,14 @@ export function AgentWorkspaceTabs({
     <nav
       ref={stripRef}
       aria-label="Agent workspace"
+      data-tour={TOUR_ANCHORS.agentTabs}
       className="scrollbar-none flex items-center gap-0.5 overflow-x-auto border-b px-3"
     >
       {tabs.map(([key, label]) => (
         <NavLink
           key={key}
           to={`${base}/${key}`}
+          data-tour={key === "configuration" ? TOUR_ANCHORS.agentConfiguration : undefined}
           className={({ isActive }) =>
             cn(
               "flex h-8.5 shrink-0 items-center border-b-2 border-transparent px-2.5 text-body whitespace-nowrap text-muted-foreground hover:text-foreground",

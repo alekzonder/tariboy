@@ -174,6 +174,65 @@ compose clipboard transfer, and portable archive
 import/export. All requests retain the active explicit host, including raw
 archive uploads and downloads.
 
+## Onboarding
+
+The onboarding tour explains the work process on the screen itself. Each step
+dims the window, puts a ring around one element, and shows a card with a short
+English text, a counter such as **4 of 13**, and **Skip tour**, **Back**, and
+**Next** (**Done** on the last step). The arrow keys move between steps, and
+Esc closes the tour. While the tour is open, clicks on the dimmed interface do
+not pass. The tour shows where an action is, but it does not open dialogs or
+create objects.
+
+The steps go through the screen in this order: the **Servers** tab, **Add
+host**, the server section bar, **Images**, **Stores**, **Add agent**, the tabs
+of the first agent and its **Configuration** tab, **Tasks**, the queue menu,
+**Workflow images**, and the **?** (Help) button. A step with a server section
+opens that section of the server on screen, or of the selected server. The
+agent steps open the first agent of the sidebar. If the sidebar has no agent,
+the tour skips the agent steps. If the sidebar is hidden on a wide window, a
+sidebar step shows it. On a phone width, the sidebar is a modal drawer that
+takes focus from the card, so the tour closes the drawer, and the sidebar steps
+show their card in the center. A step whose element is not on the screen, or
+has no size, also shows the card in the center without a ring. The tour checks
+for the element every 100 ms, so the ring follows the element after a route
+change, a resize, or a scroll.
+
+`ui/src/lib/onboarding/tour.ts` holds the steps and `TOUR_ANCHORS`, the
+`data-tour` values. A component marks an element with
+`data-tour={TOUR_ANCHORS.name}`, and a step names the same constant, so a step
+cannot name an anchor that does not exist. The version of the UI comes from
+`scripts/release-version.txt`, which `scripts/set-version.sh` writes at release
+time.
+
+`onboarding:state:v1` stores the version whose tour the user finished or
+skipped. The tour starts by itself in these cases:
+
+- No version is stored: the full tour starts.
+- The stored version is older than the UI version, and a step has a `since`
+  value after the stored version, up to the UI version: **What's new** starts.
+  It shows only those steps, with a **New** mark, or **Updated** for a step
+  with `updated: true`, and a **Full changelog** link.
+- Otherwise, the tour does not start, and the stored version moves to the UI
+  version.
+
+**Skip tour**, Esc, and **Done** store the UI version. If the storage is
+blocked, the tour starts again after each reload.
+
+The **?** menu in the titlebar, and the **Help** card in Application settings,
+have **Take the tour**, **What's new**, and **Changelog**. **What's new** from
+the menu shows the steps whose `since` is the UI version. If no step has that
+value, it opens the changelog. The **Changelog** window shows `CHANGELOG.md` of
+this UI build: the versions on the left and the text of the selected version
+on the right. It shows the changes of the running UI, not of a remote daemon.
+If the file has no `## [VERSION] - DATE` headings, the window shows the whole
+file. When **Full changelog** opens it, the versions after the stored version
+have a **New** mark.
+
+The Vite configurations allow the dev server to read the repository root
+(`ui/vite.fsAllow.ts`), because the UI imports `CHANGELOG.md` and the version
+file with `?raw`. The default deny list of Vite still applies.
+
 ## Activity
 
 An agent's **Activity** tab and the server's **Activity** section
@@ -542,7 +601,10 @@ loads with `React.lazy` when it first renders:
 - the TipTap editor (`tasks/TaskMarkdownEditor.tsx`): `MarkdownEditor` in
   `TaskMarkdown.tsx` is a lazy wrapper, so `MarkdownContent` never loads TipTap;
 - the file viewer of `FileBrowser`, with CodeMirror, its languages, and the
-  highlighted preview.
+  highlighted preview;
+- the onboarding tour overlay and the **Changelog** window with
+  `CHANGELOG.md`. The shell keeps only the **?** menu, the steps, and the
+  version check.
 
 `components/LazyBoundary` wraps each place that renders a lazy component. It
 sits inside the layout that stays mounted, so the titlebar, the agent list,
@@ -681,6 +743,7 @@ stays in the registry only so it can be read once, like `terminals:workspace:v1`
 | `app:ui-mode:v1` | local | interface mode | `simple` or `expert` | `simple` |
 | `app:workspaces:v1` | local | host workspaces | JSON workspaces, host map, active workspace | Default only |
 | `desktop:updates:auto-download:v1` | local | Desktop updates | `true` or `false` | `true` |
+| `onboarding:state:v1` | local | onboarding tour | release version whose tour was finished or skipped | empty: first run |
 | `tariboy:runtime-presets:v1` | local | create-agent presets | JSON saved models and efforts per harness | none |
 | `tariboy_daemons` | local | browser host registry | JSON host metadata list | empty |
 | `tariboy_active_daemon` | local | host registry | selected host ID | none |

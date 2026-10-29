@@ -13,6 +13,8 @@ import { CustomerQuestionNotifications } from "@/components/CustomerQuestionNoti
 import { DesktopUpdatesProvider, UpdateBanner } from "@/components/DesktopUpdates";
 import { SidebarToggle } from "@/components/SidebarToggle";
 import { ViewSwitch } from "@/components/ViewSwitch";
+import { HelpMenu } from "@/components/onboarding/HelpMenu";
+import { OnboardingProvider } from "@/components/onboarding/OnboardingProvider";
 import { appChromeState } from "@/appChrome";
 import { AppRoutes } from "@/routes";
 
@@ -22,9 +24,11 @@ export default function App() {
       <CustomerQuestionNotifications>
         <SidebarStateProvider>
           <DesktopUpdatesProvider>
-            <div className="flex h-screen flex-col">
-              <MainApp />
-            </div>
+            <OnboardingProvider>
+              <div className="flex h-screen flex-col">
+                <MainApp />
+              </div>
+            </OnboardingProvider>
           </DesktopUpdatesProvider>
         </SidebarStateProvider>
       </CustomerQuestionNotifications>
@@ -67,6 +71,7 @@ function MainApp() {
         </div>
         <div aria-hidden="true" className="h-full min-w-4 flex-1" />
         <div className="flex items-center gap-0.5">
+          <HelpMenu />
           <Button
             asChild
             variant="ghost"

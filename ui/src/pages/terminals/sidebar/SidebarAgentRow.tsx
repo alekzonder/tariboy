@@ -6,6 +6,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { AgentRow } from "@/components/AgentRow";
+import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
 import { cn } from "@/lib/utils";
 import type { SidebarAgent } from "./sidebarModel";
 
@@ -72,6 +73,7 @@ export function SidebarAgentRow({
     interactive: agent.interactive !== false,
     "aria-label": `Open ${agent.name}`,
     "data-testid": "sidebar-agent",
+    "data-tour": TOUR_ANCHORS.agentRow,
     disabled,
     onClick: () => {
       if (!disabled) actions.onSelect(row.hostId, agent.name);
