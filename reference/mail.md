@@ -170,7 +170,10 @@ Notices: read them; they close when this iteration finishes.
 
 A letter shows `deadline:` and `data:` lines only when they are set. A
 `task.question` letter carries one more line,
-`answer: ttasks comment <task-key> "<answer>"`. With no open letters the
+`answer: ttasks comment <task-key> "<answer>"`. The subject of a task letter
+has the task key and title, for example `Question on DEV-1: Ship the release`.
+The body of a `task.question` or `task.answered` letter has the full text of
+the comment after its first line. With no open letters the
 section reads `No incoming messages for this iteration.` Requests the agent
 sent with a deadline and no answer follow under `### Awaiting replies`, one
 line each with the id, the recipient, the age and the deadline.

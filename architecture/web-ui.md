@@ -174,6 +174,65 @@ compose clipboard transfer, and portable archive
 import/export. All requests retain the active explicit host, including raw
 archive uploads and downloads.
 
+## Onboarding
+
+The onboarding tour explains the work process on the screen itself. Each step
+dims the window, puts a ring around one element, and shows a card with a short
+English text, a counter such as **4 of 13**, and **Skip tour**, **Back**, and
+**Next** (**Done** on the last step). The arrow keys move between steps, and
+Esc closes the tour. While the tour is open, clicks on the dimmed interface do
+not pass. The tour shows where an action is, but it does not open dialogs or
+create objects.
+
+The steps go through the screen in this order: the **Servers** tab, **Add
+host**, the server section bar, **Images**, **Stores**, **Add agent**, the tabs
+of the first agent and its **Configuration** tab, **Tasks**, the queue menu,
+**Workflow images**, and the **?** (Help) button. A step with a server section
+opens that section of the server on screen, or of the selected server. The
+agent steps open the first agent of the sidebar. If the sidebar has no agent,
+the tour skips the agent steps. If the sidebar is hidden on a wide window, a
+sidebar step shows it. On a phone width, the sidebar is a modal drawer that
+takes focus from the card, so the tour closes the drawer, and the sidebar steps
+show their card in the center. A step whose element is not on the screen, or
+has no size, also shows the card in the center without a ring. The tour checks
+for the element every 100 ms, so the ring follows the element after a route
+change, a resize, or a scroll.
+
+`ui/src/lib/onboarding/tour.ts` holds the steps and `TOUR_ANCHORS`, the
+`data-tour` values. A component marks an element with
+`data-tour={TOUR_ANCHORS.name}`, and a step names the same constant, so a step
+cannot name an anchor that does not exist. The version of the UI comes from
+`scripts/release-version.txt`, which `scripts/set-version.sh` writes at release
+time.
+
+`onboarding:state:v1` stores the version whose tour the user finished or
+skipped. The tour starts by itself in these cases:
+
+- No version is stored: the full tour starts.
+- The stored version is older than the UI version, and a step has a `since`
+  value after the stored version, up to the UI version: **What's new** starts.
+  It shows only those steps, with a **New** mark, or **Updated** for a step
+  with `updated: true`, and a **Full changelog** link.
+- Otherwise, the tour does not start, and the stored version moves to the UI
+  version.
+
+**Skip tour**, Esc, and **Done** store the UI version. If the storage is
+blocked, the tour starts again after each reload.
+
+The **?** menu in the titlebar, and the **Help** card in Application settings,
+have **Take the tour**, **What's new**, and **Changelog**. **What's new** from
+the menu shows the steps whose `since` is the UI version. If no step has that
+value, it opens the changelog. The **Changelog** window shows `CHANGELOG.md` of
+this UI build: the versions on the left and the text of the selected version
+on the right. It shows the changes of the running UI, not of a remote daemon.
+If the file has no `## [VERSION] - DATE` headings, the window shows the whole
+file. When **Full changelog** opens it, the versions after the stored version
+have a **New** mark.
+
+The Vite configurations allow the dev server to read the repository root
+(`ui/vite.fsAllow.ts`), because the UI imports `CHANGELOG.md` and the version
+file with `?raw`. The default deny list of Vite still applies.
+
 ## Activity
 
 An agent's **Activity** tab and the server's **Activity** section
@@ -542,7 +601,10 @@ loads with `React.lazy` when it first renders:
 - the TipTap editor (`tasks/TaskMarkdownEditor.tsx`): `MarkdownEditor` in
   `TaskMarkdown.tsx` is a lazy wrapper, so `MarkdownContent` never loads TipTap;
 - the file viewer of `FileBrowser`, with CodeMirror, its languages, and the
-  highlighted preview.
+  highlighted preview;
+- the onboarding tour overlay and the **Changelog** window with
+  `CHANGELOG.md`. The shell keeps only the **?** menu, the steps, and the
+  version check.
 
 `components/LazyBoundary` wraps each place that renders a lazy component. It
 sits inside the layout that stays mounted, so the titlebar, the agent list,
@@ -679,8 +741,10 @@ stays in the registry only so it can be read once, like `terminals:workspace:v1`
 | --- | --- | --- | --- | --- |
 | `tariboy-theme` | local | theme provider | `light`, `dark`, or `system` | `system` |
 | `app:ui-mode:v1` | local | interface mode | `simple` or `expert` | `simple` |
-| `app:workspaces:v1` | local | host workspaces | JSON workspaces, host map, active workspace | Default only |
+| `app:workspaces:v2` | local | host workspaces | JSON workspaces with their host lists, active workspace | Default only |
+| `app:workspaces:v1` | local | host workspaces (legacy, read once) | JSON workspaces, host map, active workspace | none |
 | `desktop:updates:auto-download:v1` | local | Desktop updates | `true` or `false` | `true` |
+| `onboarding:state:v1` | local | onboarding tour | release version whose tour was finished or skipped | empty: first run |
 | `tariboy:runtime-presets:v1` | local | create-agent presets | JSON saved models and efforts per harness | none |
 | `tariboy_daemons` | local | browser host registry | JSON host metadata list | empty |
 | `tariboy_active_daemon` | local | host registry | selected host ID | none |
@@ -1028,6 +1092,11 @@ raw HTML. Sent and Archive load more pages with **Load more**.
 Opening an unread Inbox letter marks it read. The daemon closes a read notice,
 so it moves to Archive and stays open in the right pane; a request stays in the
 Inbox until **Reply** or **Archive**. A letter with a string `data.task_key`
+shows a **Task** field: the key, the title and the status, for example
+`DEV-1 · Ship the release · review`. The field reads the task with the task
+drawer's detail query (`taskQueries.detail`), so the title and the status are
+the current ones. Until the task loads, or when it does not load, the field
+shows the key and `data.task_title`, without a status. Such a letter also
 shows **Open** with the task key, which opens the task drawer (`TaskDrawer`) over the
 mailbox: the route does not change, the letter stays selected, and closing the
 drawer returns to it. A `task.question` letter is answered on its task: it
@@ -1148,33 +1217,45 @@ the explicit host id and fail closed rather than silently falling back to local.
 
 ### Host workspaces
 
-A workspace is a named group of registered hosts in one app window. The
-titlebar shows the current workspace right after the sidebar toggle; its menu
-lists every workspace with its host count and a check on the current one,
-followed by **New workspace…** and **Manage workspaces…**. Choosing a workspace
-narrows the agent sidebar, its Servers tab and its `N servers · M agents` footer
-to that workspace's hosts. When the open agent's host is not in it, its first
-agent opens in the same tab, or the island shows `<name> has no agents yet`
+A workspace is a named, independent list of registered hosts in one app
+window. The titlebar shows the current workspace right after the sidebar
+toggle; its menu lists every workspace with its host count and a check on the
+current one, followed by **New workspace…** and **Manage workspaces…**.
+Choosing a workspace narrows the agent sidebar, its Servers tab, its
+`N servers · M agents` footer and the **All tasks** table with its live updates
+to that workspace's hosts, so an empty workspace shows no agents and no tasks.
+When the open agent's host is not in it, its first agent opens in the same tab, or the island shows `<name> has no agents yet`
 with a **Manage workspaces** button when it has none. Polling continues for
 every host, so the manager can show each host as ready or offline, and agents
 on hosts outside the current workspace keep running: a workspace filters the
-window, it does not isolate hosts.
+window, it does not isolate hosts. Agents and tasks live on their daemon, so a
+host in two workspaces shows the same agents and tasks in both.
 
-**Default** is built in and cannot be renamed or deleted, and every host
-belongs to exactly one workspace. A host without an assignment, including a
-newly added one, is in Default. The manager dialog creates a workspace (Enter or
-**Create workspace**; blank names are ignored) and selects it, renames a custom
-workspace as its name is typed without ever saving a blank one, and moves a
-host with **Move to…** and a click on the target workspace. **Delete
-workspace** asks inline and returns the workspace's hosts to Default; deleting
-the current workspace switches to Default.
+**Default** is built in and cannot be renamed or deleted. A host may belong to
+several workspaces. A host that no workspace lists, such as the local daemon or
+a host registered before workspaces existed, is in Default. **Add host** puts
+the new host in the current workspace only, for SSH and HTTPS alike; adding the
+same alias or URL again makes a second host entry. The manager dialog creates a
+workspace (Enter or **Create workspace**; blank names are ignored) and selects
+it, and renames a custom workspace as its name is typed without ever saving a
+blank one. **Add to…** and a click on a target workspace add a host there and
+keep it in the current one. **Remove** takes a host out of the selected
+workspace only; a host left in no workspace returns to Default, so the manager
+offers no **Remove** for a host that only Default holds. **Delete workspace**
+asks inline; its hosts in no other workspace return to Default, and deleting
+the current workspace switches to Default. **Remove host** in a server's menu
+removes the host from the app and so from every workspace.
 
-The state is the WebView localStorage record `app:workspaces:v1`:
-`{version: 1, workspaces: [{id, name}], hostWorkspace: {hostId: workspaceId},
-active}`. It is local to one app installation and is not stored by any daemon,
-because hosts are the set of daemons rather than something one daemon owns.
-Malformed storage, unavailable storage, or an assignment to a missing workspace
-falls back to Default.
+The state is the WebView localStorage record `app:workspaces:v2`:
+`{version: 2, workspaces: [{id, name, hosts: [hostId]}], active}`, where the
+first entry is Default. When it is missing, the version 1 record
+`app:workspaces:v1` (`{version: 1, workspaces: [{id, name}], hostWorkspace:
+{hostId: workspaceId}, active}`) is read once: each host keeps its one
+workspace, and a host without an entry stays in Default. The version 1 record
+is left in place. The state is local to one app installation and is not stored
+by any daemon, because hosts are the set of daemons rather than something one
+daemon owns. Malformed or unavailable storage falls back to Default only;
+unavailable storage keeps changes until the window closes.
 
 ### All tasks
 
@@ -1183,13 +1264,14 @@ toggle in **Agents**. The view is the `view=all` query on the current route, so 
 a reload, Back returns to the previous view, and the selected agent's path is
 untouched. Arrow keys move between the two options. In **All tasks** the
 agent sidebar and its titlebar toggle are hidden, and the island shows one task
-table for every server instead of the agent's header and tabs. The persisted
-sidebar visibility is not changed, so switching back to **Agents** restores the
-sidebar as it was and reopens the agent the route still names.
+table for every server of the current workspace instead of the agent's header
+and tabs. The persisted sidebar visibility is not changed, so switching back to
+**Agents** restores the sidebar as it was and reopens the agent the route still
+names.
 
-The table reads `GET /api/tasks` from the local daemon and every registered
-server in parallel, each with its own token, following each server's cursor to
-the end; a server's live `/api/tasks/ws` hint re-reads only that server. A
+The table reads `GET /api/tasks` from every server of the current workspace,
+the local daemon included when it is a member, in parallel, each with its own
+token, following each server's cursor to the end; a server's live `/api/tasks/ws` hint re-reads only that server. A
 server that the sidebar cannot reach, or whose read fails, keeps the other
 servers' rows and adds a `<server> unavailable · Retry` line above the table.
 Rows are keyed by server and task key, because a transferred task keeps its key

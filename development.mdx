@@ -699,6 +699,25 @@ or an override has no `componentSrcMap` key. To fix the first case, run
 `node .design-sync/make-entry.mjs` from `ui/` and commit the result. For the
 other cases, correct `config.json`.
 
+#### Onboarding steps for a new feature
+
+When a change adds or changes a UI feature that a user must find, add or
+change its step in the onboarding tour (see
+[Onboarding](/docs/architecture/web-ui#onboarding)):
+
+1. Add a `data-tour` value to `TOUR_ANCHORS` in
+   `ui/src/lib/onboarding/tour.ts`.
+2. Put `data-tour={TOUR_ANCHORS.name}` on the element that the step explains.
+3. Add the step to `TOUR_STEPS` at its place in the screen order. Write a
+   title and one or two short English sentences.
+4. Set `since` to the version of the next release. For a changed step, also
+   set `updated: true`.
+
+A user who saw an older version gets **What's new** with the new step at the
+first start of that release. Before the UI version reaches `since`, **What's
+new** does not show the step. `ui/src/lib/onboarding/tour.test.ts` fails when a step names an
+anchor that `TOUR_ANCHORS` does not declare.
+
 For interactive visual checks of React-only changes, start the production UI
 and its real API together:
 

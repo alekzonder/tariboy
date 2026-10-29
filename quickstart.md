@@ -6,13 +6,13 @@ sidebar:
   icon: rocket
 ---
 
-This path is for the `0.97.0` alpha on an Apple Silicon Mac.
+This path is for the `0.98.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.97.0_aarch64.dmg`;
+- a verified `Tariboy_0.98.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -37,6 +37,10 @@ Never disable Gatekeeper globally and never run `spctl --master-disable`.
 
 Desktop opens the workspace directly. Daemon startup and saved-host reconnect
 continue in the background, with their state visible in the workspace.
+
+On the first start, a short tour highlights the servers, images, stores,
+agents, tasks, queues, and workflows. To take it again, or to read the
+changelog, open the **?** (Help) menu in the titlebar.
 
 This alpha includes WebView developer tools in release builds. Open
 them with **Option-Command-I** on macOS or choose **Inspect Element** from the

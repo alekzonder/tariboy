@@ -238,7 +238,10 @@ section. When the agent has open letters, it lists them oldest first, up to
 <span class="line"><span>Notices: read them; they close when this iteration finishes.</span></span></code></pre>
 <p>A letter shows <code>deadline:</code> and <code>data:</code> lines only when they are set. A
 <code>task.question</code> letter carries one more line,
-<code>answer: ttasks comment &lt;task-key&gt; "&lt;answer&gt;"</code>. With no open letters the
+<code>answer: ttasks comment &lt;task-key&gt; "&lt;answer&gt;"</code>. The subject of a task letter
+has the task key and title, for example <code>Question on DEV-1: Ship the release</code>.
+The body of a <code>task.question</code> or <code>task.answered</code> letter has the full text of
+the comment after its first line. With no open letters the
 section reads <code>No incoming messages for this iteration.</code> Requests the agent
 sent with a deadline and no answer follow under <code>### Awaiting replies</code>, one
 line each with the id, the recipient, the age and the deadline.</p>

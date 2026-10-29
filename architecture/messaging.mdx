@@ -190,6 +190,16 @@ sent as `system:tasks` closes too. A notification whose recipient no longer
 exists is marked failed in the outbox with `last_error` and is not retried. A workflow outcome that resolves the customer's open wait
 closes its question letters with `task-outcome:<status>`.
 
+A task letter names its task in the subject, the key and then the title, for
+example `Question on DEV-1: Ship the release`. Its `data` carries `task_key`
+and `task_title`. The title is the one the task had when the letter was sent.
+The body of a `task.question` or `task.answered` letter starts with one line,
+for example `agent:dev asked for an answer on DEV-1`, then an empty line, then
+the full text of the comment. The comment is Markdown, and the Mailbox shows it
+as Markdown. A `task.question` from a workflow customer status carries the
+workflow's comment. The `task.assigned` and `task.triage` bodies are one line
+with the key and the title.
+
 Stale task notices never wake an agent. When an iteration that ran with Goal
 task `T` ends, the tasks service closes the agent's open `task.goal`,
 `task.assigned` and `task.answered` letters about `T` created up to the end of
