@@ -409,6 +409,14 @@ func TestEnterCustomerStatusOpensOneSystemWait(t *testing.T) {
 		WHERE e.task_id = ? AND o.message_type = 'task.question' AND o.channel = 'user:customer'`, task.ID); n != 1 {
 		t.Fatalf("question notifications = %d", n)
 	}
+	var text string
+	if err := svc.db.QueryRow(`SELECT text FROM task_notification_outbox
+		WHERE message_type = 'task.question' AND channel = 'user:customer'`).Scan(&text); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(text, "\n\n"+body) {
+		t.Fatalf("question letter text = %q, want the full comment %q", text, body)
+	}
 
 	// A plain customer comment does not leave the status or resolve its wait.
 	if _, err := svc.AddComment(context.Background(), actor, task.Key, AddCommentInput{Body: "looking"}); err != nil {

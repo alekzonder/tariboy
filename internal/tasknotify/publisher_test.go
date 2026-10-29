@@ -101,6 +101,24 @@ func TestNotificationOutboxSendsFromCausingPrincipal(t *testing.T) {
 			t.Fatalf("%s = %+v; want %+v (all=%v)", kind, got[kind], r, got)
 		}
 	}
+	for _, message := range fake.messages {
+		if message.Data["task_title"] == nil {
+			t.Fatalf("%s has no task title: %+v", message.Kind, message.Data)
+		}
+		var subject, body string
+		switch message.Kind {
+		case "task.question":
+			subject = "Question on " + assigned.Key + ": assigned"
+			body = "agent:worker asked for an answer on " + assigned.Key + "\n\nQuestion for @user:customer"
+		case "task.answered":
+			subject, body = "Answer on "+assigned.Key+": assigned", "user:customer answered on "+assigned.Key+"\n\nAnswer"
+		default:
+			continue
+		}
+		if message.Subject != subject || message.Body != body {
+			t.Fatalf("%s subject = %q body = %q; want %q %q", message.Kind, message.Subject, message.Body, subject, body)
+		}
+	}
 	count := len(fake.messages)
 	if err := publisher.Flush(ctx); err != nil {
 		t.Fatal(err)

@@ -132,6 +132,9 @@ func notificationLetter(row outboxRow, data map[string]any) mail.Letter {
 		from = SenderTasks
 	}
 	key, _ := data["task_key"].(string)
+	if title, _ := data["task_title"].(string); title != "" {
+		key += ": " + title
+	}
 	return mail.Letter{
 		IdempotencyKey: row.id,
 		From:           from,

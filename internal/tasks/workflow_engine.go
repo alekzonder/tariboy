@@ -180,7 +180,7 @@ func (s *WorkflowEngine) askCustomerTx(ctx context.Context, tx *sql.Tx, task Tas
 		return err
 	}
 	return enqueueNotificationTx(ctx, tx, sequence, task.Customer, workflowActor,
-		"task.question", task, workflowActor+" asked for an answer on "+task.Key, now)
+		"task.question", task, workflowActor+" asked for an answer on "+task.Key+"\n\n"+body, now)
 }
 
 // recordAssignmentTx writes what a manual assignment writes, by the workflow:
