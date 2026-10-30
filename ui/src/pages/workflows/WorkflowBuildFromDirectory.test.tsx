@@ -35,7 +35,7 @@ function setup() {
       <MemoryRouter initialEntries={["/servers/remote/workflows"]}>
         <Routes>
           <Route path="/servers/:hostId/workflows" element={children} />
-          <Route path="/servers/:hostId/settings/operations/:id" element={<OperationRoute />} />
+          <Route path="/settings/maintenance/operations/:id" element={<OperationRoute />} />
         </Routes>
       </MemoryRouter>
     </Api>
@@ -102,7 +102,7 @@ it("starts a build, links to its operation, and refreshes the list when it succe
 
   expect(options.action.label).toBe("Open operation");
   act(() => options.action.onClick());
-  expect(await screen.findByText("operation /servers/remote/settings/operations/7")).toBeTruthy();
+  expect(await screen.findByText("operation /settings/maintenance/operations/7")).toBeTruthy();
 });
 
 it("shows the errors of a refused build and a version hint", async () => {

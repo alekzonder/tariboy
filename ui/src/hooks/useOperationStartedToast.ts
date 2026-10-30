@@ -1,24 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { OperationStarted } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
+import { useMultiHost } from "@/lib/navRoutes";
 import { hostToParam } from "@/lib/terminalsHost";
 import { type OperationHint, useOperationsSocket } from "./useMailSocket";
 
 const ENDED = new Set(["succeeded", "failed", "interrupted"]);
 
-/** The page of one operation on a server, under that server's settings. */
-function operationPath(hostParam: string, id: number): string {
-  return `/servers/${encodeURIComponent(hostParam)}/settings/operations/${id}`;
-}
-
-/** The route of an operation's page on the current server. */
+/** The route of an operation's page under Settings → Maintenance, naming
+ *  the current host when the workspace has two or more. */
 export function useOperationHref() {
   const api = useApi();
-  const { hostId } = useParams();
-  const host = hostId ?? hostToParam(api.target?.id ?? "");
-  return useCallback((id: number) => operationPath(host, id), [host]);
+  const multiHost = useMultiHost();
+  const host = multiHost ? `?host=${encodeURIComponent(hostToParam(api.target?.id ?? ""))}` : "";
+  return useCallback((id: number) => `/settings/maintenance/operations/${id}${host}`, [host]);
 }
 
 /**

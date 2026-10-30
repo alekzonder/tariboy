@@ -38,7 +38,7 @@ export default function UsagePage() {
   return (
     <div className="space-y-4 p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Usage</h1>
+        <h2 className="text-lg font-semibold">Usage</h2>
         <label className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">Group</span>
           <select

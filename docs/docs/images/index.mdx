@@ -106,10 +106,10 @@ The daemon runs each build in the background as an operation. A build does not
 block the Web UI, and it does not depend on the request that started it.
 
 - In the Web UI, **Build** shows the notice "Build started" with the link
-  **Open operation**. The link opens **Settings → Operations** on the page of
-  this build.
-- **Settings → Operations** lists every image and workflow build of the
-  server, newest first, 50 per page. The page of one operation shows its
+  **Open operation**. The link opens the page of this build under
+  **Settings → Maintenance**.
+- The **Operations log** of **Settings → Maintenance** lists every image and
+  workflow build of the host, newest first, 50 per page. The page of one operation shows its
   status, arguments, result or error and its full log. The page of a running
   operation updates its status and log live. **Download log** saves the log
   file.
@@ -198,7 +198,7 @@ the daemon did not record a removal. After that, the daemon builds
 `tariboy/basic` when no image named `basic` exists. It never rebuilds an
 existing `basic`. Both steps run in the background, so the daemon is ready
 before they finish. The build is an ordinary operation in
-**Settings → Operations**.
+the **Operations log** of **Settings → Maintenance**.
 
 - If you remove the Store with `tariboy store remove tariboy`, the daemon does
   not register it again by itself.

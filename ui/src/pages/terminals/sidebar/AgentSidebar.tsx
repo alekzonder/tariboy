@@ -13,7 +13,6 @@ import type { HostAgents } from "@/lib/aggregate";
 import { hostUpdateAvailable, type DaemonMeta } from "@/lib/daemons";
 import { activeNav } from "@/lib/navRoutes";
 import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
-import { serverPath } from "@/lib/terminalsHost";
 import {
   reorderFromDrag,
   rowCollision,
@@ -39,10 +38,6 @@ export interface SidebarActions extends HostActions {
   onReorder: (kind: ReorderKind, hostId: string, ids: string[]) => void;
   onClone: (hostId: string, agentName: string) => void;
   onCreate: (hostId: string) => void;
-  onAddServer: () => void;
-  onUpdateAll: (hostIds: string[]) => void;
-  onSelectWorkspace: (id: string) => void;
-  onManageWorkspaces: (focusNew: boolean) => void;
   /** A pick that leaves the sidebar: the drawer closes on it. */
   onNavigate?: () => void;
 }
@@ -185,12 +180,7 @@ export function AgentSidebar({
         <SidebarFooter
           line={hostsLine(hosts)}
           healthy={hosts.every((host) => !host.error)}
-          hostsPath={`${serverPath(pageHostId, "settings")}/hosts`}
           behind={behind}
-          onAddServer={actions.onAddServer}
-          onUpdateAll={actions.onUpdateAll}
-          onSelectWorkspace={actions.onSelectWorkspace}
-          onManageWorkspaces={actions.onManageWorkspaces}
           onNavigate={actions.onNavigate}
         />
       </aside>

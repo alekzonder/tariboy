@@ -113,6 +113,13 @@ describe("TOUR_STEPS", () => {
     }
   });
 
+  it("shows Add host on Settings → Hosts, not in the sidebar", () => {
+    const addHost = TOUR_STEPS.find((s) => s.id === "add-server");
+    expect(addHost).toMatchObject({ anchor: TOUR_ANCHORS.addHost, route: "settings" });
+    expect(addHost?.sidebar).toBeFalsy();
+    expect(addHost?.body).toContain("Settings → Hosts");
+  });
+
   it("opens every step's page through navPath", () => {
     for (const s of TOUR_STEPS.filter((s) => s.route)) {
       expect(navPath(s.route!, "")).toMatch(/^\//);

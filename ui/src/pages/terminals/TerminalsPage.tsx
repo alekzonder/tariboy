@@ -13,8 +13,7 @@ import { NeedsYouContext, type NeedsYouValue } from "./needsYouContext";
 import { TitlebarSlotContext } from "./titlebarSlotContext";
 import { GlobalSearch } from "./GlobalSearch";
 import type { WorkspaceHost } from "./HostWorkspaces";
-import { inWorkspace, useWorkspaces } from "@/lib/workspaces";
-import { defaultAgentTab } from "@/lib/uiMode";
+import { useWorkspaces } from "@/lib/workspaces";
 import { TerminalsEmptyState, TerminalsRoutes } from "./TerminalsRoutes";
 import { TerminalsSidebar, type CreateDialogState } from "./TerminalsSidebar";
 import { useSharedSidebarState } from "./sidebarStateContext";
@@ -114,7 +113,7 @@ function ConsolePage({
   serverView?: ServerView;
   scoped?: boolean;
 }) {
-  const { hostId: hostParam, agent: agentName, tab: agentTab } = useParams();
+  const { hostId: hostParam } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -131,7 +130,7 @@ function ConsolePage({
   const sidebar = useSharedSidebarState();
   const [workspaceManager, setWorkspaceManager] = useState<WorkspaceManagerState | null>(null);
   const [hostError, setHostError] = useState("");
-  const { rankedHosts, orderedSidebarHosts, reorderSidebar } = useSidebarReorder(
+  const { orderedSidebarHosts, reorderSidebar } = useSidebarReorder(
     sidebarHosts,
     refresh,
     setHostError,
@@ -157,16 +156,6 @@ function ConsolePage({
   const needs = useNeedsYou(needsHosts, polling.agentStatesLive ? 15000 : 3000);
   const pageHostId = hostId ?? activeId;
 
-  // A route on a host outside the chosen workspace moves to that workspace's
-  // first agent, in the same tab, or to Home when it has none.
-  const followWorkspace = (id: string) => {
-    if (hostId === undefined || inWorkspace(workspaces, hostId, id)) return;
-    const first = rankedHosts.find(
-      (entry) => inWorkspace(workspaces, entry.host.id, id) && entry.agents.length > 0,
-    );
-    const tab = agentName && agentTab ? agentTab : defaultAgentTab();
-    navigate(first ? agentPath(first.host.id, first.agents[0].name, tab) : "/");
-  };
   const manageWorkspaces = (focusNew: boolean) =>
     setWorkspaceManager({ id: workspaces.active, focusNew });
 
@@ -195,9 +184,6 @@ function ConsolePage({
           server={server}
           onReorder={(kind, id, ids) => void reorderSidebar(kind, id, ids)}
           onCreate={setCreateFor}
-          onAddServer={() => setServerDialog({ mode: "add" })}
-          onSelectWorkspace={followWorkspace}
-          onManageWorkspaces={manageWorkspaces}
         />
         {/* The content island: --card on the --background chrome, one radius and
             one of the two allowed shadows. Everything the operator works with
@@ -218,6 +204,7 @@ function ConsolePage({
                   selectedHost={selectedHost}
                   routeUnavailable={Boolean(liveSelectedHost?.error)}
                   refresh={refresh}
+                  hostsContext={{ workspaceHosts, onManageWorkspaces: manageWorkspaces }}
                   fallback={
                     <TerminalsEmptyState
                       hosts={orderedSidebarHosts}

@@ -1,7 +1,6 @@
 import { lazy, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { useDaemons } from "@/components/daemonContext";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import type { HostAgents } from "@/lib/aggregate";
 import { navPath } from "@/lib/navRoutes";
@@ -9,6 +8,7 @@ import { hostToParam } from "@/lib/terminalsHost";
 import { defaultAgentTab } from "@/lib/uiMode";
 import { useWorkspaces } from "@/lib/workspaces";
 import AgentWorkspace from "@/pages/agents/AgentWorkspace";
+import type { HostsOutletContext } from "@/pages/settings/hostsContext";
 import { RouteHostBoundary } from "./RouteHostBoundary";
 import type { ServerView } from "./TerminalsPage";
 import { LibraryHeader } from "./LibraryHeader";
@@ -39,8 +39,6 @@ const LIBRARY_WORKFLOWS = navPath("library-workflows", "");
 
 interface ServerRoute {
   hostId: string;
-  /** `/servers/<host>`, the root of Settings links. */
-  basePath: string;
   storeName?: string;
   routeTag?: string;
   initialTaskKey?: string;
@@ -48,6 +46,9 @@ interface ServerRoute {
   /** The host selector; null with one host. */
   hostControl: ReactNode;
   onNotificationsChanged: () => void;
+  /** Connects a page body to the route host. */
+  boundary: (page: ReactNode) => ReactNode;
+  hostsContext: HostsOutletContext;
 }
 
 /** Each page, or null when its route lacks what the page needs. */
@@ -86,9 +87,21 @@ const SERVER_VIEWS: Record<ServerView, (route: ServerRoute) => ReactNode> = {
   stores: (route) => library(route, storesPage(route)),
   "store-detail": (route) => library(route, storesPage(route)),
   settings: (route) => (
-    <SettingsPage basePath={`${route.basePath}/settings`} hostControl={route.hostControl} />
+    <SettingsPage
+      hostControl={route.hostControl}
+      boundary={route.boundary}
+      hostsContext={route.hostsContext}
+    />
   ),
 };
+
+/** Settings → Teams opened on one team, naming its host when there are several. */
+function teamSettingsPath(team: string, hostId?: string): string {
+  const params = new URLSearchParams();
+  if (hostId !== undefined) params.set("host", hostToParam(hostId));
+  params.set("team", team);
+  return `/settings/teams?${params.toString()}`;
+}
 
 /** A Library page under its Images · Workflows · Sources tabs. */
 function library(route: ServerRoute, page: ReactNode) {
@@ -122,6 +135,7 @@ export function TerminalsRoutes({
   selectedHost,
   routeUnavailable,
   refresh,
+  hostsContext,
   fallback,
 }: {
   serverView?: ServerView;
@@ -131,13 +145,14 @@ export function TerminalsRoutes({
   selectedHost?: HostAgents;
   routeUnavailable: boolean;
   refresh: () => Promise<void>;
+  /** The host workspaces, for Settings → Hosts. */
+  hostsContext: HostsOutletContext;
   /** What shows when the route names no page this component can open. */
   fallback: ReactNode;
 }) {
   const { agent: agentName, team: teamName, name: storeName, tag: routeTag } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { select: selectDaemon } = useDaemons();
   const { refreshHost } = useCustomerQuestionNotifications();
 
   if (hostId === undefined) return fallback;
@@ -145,15 +160,22 @@ export function TerminalsRoutes({
   const page = serverView
     ? SERVER_VIEWS[serverView]({
         hostId,
-        basePath: `/servers/${encodeURIComponent(hostToParam(hostId))}`,
         storeName,
         routeTag,
         initialTaskKey: searchParams.get("task") ?? undefined,
         multiHost,
         hostControl: multiHost ? <HostScopeSelect hosts={workspaceHosts} hostId={hostId} /> : null,
         onNotificationsChanged: () => void refreshHost(hostId),
+        boundary: (body) => (
+          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+            {body}
+          </RouteHostBoundary>
+        ),
+        hostsContext,
       })
     : null;
+  // Settings puts its host pages in the boundary itself: Hosts opens without one.
+  if (page && serverView === "settings") return page;
   if (page) {
     return (
       <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
@@ -169,12 +191,7 @@ export function TerminalsRoutes({
           hostLabel={selectedHost.host.label}
           members={selectedHost.agents.filter((agent) => agent.group === teamName)}
           onOpen={(agent) => navigate(agentPath(hostId, agent, defaultAgentTab()))}
-          onManage={() =>
-            void selectDaemon(hostId).then((selected) => {
-              if (selected)
-                navigate(`/settings/advanced/groups?team=${encodeURIComponent(teamName)}`);
-            })
-          }
+          onManage={() => navigate(teamSettingsPath(teamName, multiHost ? hostId : undefined))}
         />
       </RouteHostBoundary>
     );

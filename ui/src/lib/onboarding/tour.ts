@@ -123,9 +123,9 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "add-server",
     title: "Add a host",
-    body: "Connect another computer over SSH from this menu. Host workspaces are here too.",
+    body: "Connect another computer over SSH with Add host on Settings → Hosts. Host workspaces are there too.",
     anchor: TOUR_ANCHORS.addHost,
-    sidebar: true,
+    route: "settings",
     since: LEAN_NAVIGATION,
     updated: true,
   },

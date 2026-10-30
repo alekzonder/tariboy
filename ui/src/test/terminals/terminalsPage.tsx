@@ -11,6 +11,7 @@ import { UI_MODE_KEY } from "@/lib/uiMode";
 import { resetWorkspacesForTest } from "@/lib/workspaces";
 import { SidebarStateProvider } from "@/pages/terminals/SidebarStateProvider";
 import TerminalsPage from "@/pages/terminals/TerminalsPage";
+import DaemonsPage from "@/pages/DaemonsPage";
 import { TitlebarSlotContext } from "@/pages/terminals/titlebarSlotContext";
 import { RoutedLocation } from "./RoutedLocation";
 import { agentRow, agentView, imageSummary } from "@/test/fixtures/apiFixtures";
@@ -139,6 +140,9 @@ export function renderAt(path: string, attention: ReadonlyMap<string, number> = 
                 <Route path="/servers/:hostId/mail" element={<TerminalsPage />} />
                 <Route path="/inbox" element={<TerminalsPage serverView="mail" scoped />} />
                 <Route path="/tasks" element={<TerminalsPage scoped />} />
+                <Route path="/settings" element={<TerminalsPage serverView="settings" scoped />}>
+                  <Route path="hosts" element={<DaemonsPage />} />
+                </Route>
               </Routes>
             </SidebarStateProvider>
           </MemoryRouter>

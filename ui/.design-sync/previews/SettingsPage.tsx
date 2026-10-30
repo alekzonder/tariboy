@@ -1,32 +1,26 @@
 import type { ReactNode } from "react";
 import {
-  AdvancedSettingsIndex,
-  AppearanceSettings,
-  CliSettings,
+  AgentDefaultsSettings,
   DaemonProvider,
   DaemonsPage,
-  GeneralSettings,
+  MaintenanceSettings,
   MemoryRouter,
   Route,
   Routes,
   SettingsPage,
 } from "tariboy-ui";
 
-// SettingsPage is the settings shell: a 208px section rail (General, Hosts, CLI,
-// Appearance, Advanced), an Integrations block for any plugin that contributes a
-// settings panel, an Operator tools block that unfolds only inside /advanced —
-// and an <Outlet/> for the section body.
+// SettingsPage is the settings shell: a 208px rail with one flat list of pages
+// (Hosts, Teams, Usage & budgets, Agent defaults, Integrations, Maintenance,
+// and Application as a link) and an <Outlet/> for the page body.
 //
 // The Outlet is the whole point, so a preview must give it the CHILD ROUTES from
-// App.tsx, not just a router: MemoryRouter alone leaves the right-hand pane
-// blank. `basePath` is what every NavLink is built from, so it has to match the
-// mounted path — here the canonical per-server one, /servers/local/settings.
-// The Outlet also passes `target` down as outlet context (GeneralSettings reads
-// it), which is why `target={null}` — the same-origin local daemon.
+// routes.tsx, not just a router: MemoryRouter alone leaves the right-hand pane
+// blank. Every NavLink is an absolute /settings/<page> path, so the layout is
+// mounted at /settings like in the app.
 //
-// There is no daemon behind the capture server, so the plugin-contribution fetch
-// fails (no Integrations block) and the section bodies show their own load
-// failures under complete chrome.
+// There is no daemon behind the capture server, so the page bodies show their
+// own load failures under complete chrome.
 const Shell = ({ children }: { children: ReactNode }) => (
   <div
     style={{
@@ -42,19 +36,15 @@ const Shell = ({ children }: { children: ReactNode }) => (
   </div>
 );
 
-const BASE = "/servers/local/settings";
-
 const Settings = ({ path }: { path: string }) => (
-  <MemoryRouter initialEntries={[`${BASE}${path}`]}>
+  <MemoryRouter initialEntries={[`/settings/${path}`]}>
     <DaemonProvider>
       <Shell>
         <Routes>
-          <Route path="/servers/:hostId/settings" element={<SettingsPage basePath={BASE} />}>
-            <Route index element={<GeneralSettings />} />
+          <Route path="/settings" element={<SettingsPage />}>
             <Route path="hosts" element={<DaemonsPage />} />
-            <Route path="cli" element={<CliSettings />} />
-            <Route path="appearance" element={<AppearanceSettings />} />
-            <Route path="advanced" element={<AdvancedSettingsIndex />} />
+            <Route path="agent-defaults" element={<AgentDefaultsSettings />} />
+            <Route path="maintenance" element={<MaintenanceSettings />} />
           </Route>
         </Routes>
       </Shell>
@@ -62,8 +52,8 @@ const Settings = ({ path }: { path: string }) => (
   </MemoryRouter>
 );
 
-export const General = () => <Settings path="" />;
+export const Hosts = () => <Settings path="hosts" />;
 
-export const Hosts = () => <Settings path="/hosts" />;
+export const AgentDefaults = () => <Settings path="agent-defaults" />;
 
-export const Advanced = () => <Settings path="/advanced" />;
+export const Maintenance = () => <Settings path="maintenance" />;

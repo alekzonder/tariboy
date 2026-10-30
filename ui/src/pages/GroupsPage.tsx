@@ -57,13 +57,13 @@ export default function GroupsPage() {
   return (
     <div className="space-y-4 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Groups</h1>
+        <h1 className="text-lg font-semibold">Teams</h1>
         <Button
           size="sm"
           variant={wizard ? "secondary" : "default"}
           onClick={() => setWizard((w) => !w)}
         >
-          {wizard ? "Close wizard" : "New group (wizard)"}
+          {wizard ? "Close wizard" : "New team (wizard)"}
         </Button>
       </div>
 

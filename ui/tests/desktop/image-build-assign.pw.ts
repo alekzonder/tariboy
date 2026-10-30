@@ -66,7 +66,7 @@ test("builds a transparent image from its original directory and assigns it to a
   await expect
     .poll(() => desktop.execute<string>("return window.__desktopTransferTarget || '';"))
     .toBe("ready");
-  await desktop.execute(`window.location.hash = "#/servers/local/settings/hosts";`);
+  await desktop.execute(`window.location.hash = "#/settings/hosts";`);
   await expect.poll(() => bodyText(desktop)).toContain("Desktop transfer target");
   await desktop.execute(`window.location.hash = ${JSON.stringify(sourceImagesRoute)};`);
   await expect.poll(() => bodyText(desktop)).toContain("transparent-e2e:latest");

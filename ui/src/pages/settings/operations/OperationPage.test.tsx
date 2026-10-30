@@ -30,10 +30,10 @@ const chunk = (offset: number, content: string, size: number, finished = false):
 function renderPage() {
   const api = fakeApi({ operations: { get, log } });
   render(
-    <MemoryRouter initialEntries={["/servers/local/settings/operations/3"]}>
+    <MemoryRouter initialEntries={["/settings/maintenance/operations/3?host=d1"]}>
       <Routes>
-        <Route path="/servers/:hostId/settings/operations" element={<p>operations list</p>} />
-        <Route path="/servers/:hostId/settings/operations/:id" element={<OperationRoute />} />
+        <Route path="/settings/maintenance" element={<p>operations list</p>} />
+        <Route path="/settings/maintenance/operations/:id" element={<OperationRoute />} />
       </Routes>
     </MemoryRouter>,
     { wrapper: apiWrapper(api) },
@@ -64,9 +64,9 @@ it("reads the whole log of a finished operation and shows its result", async () 
   expect(screen.getByText("path=/srv/reviewer")).toBeInTheDocument();
   expect(screen.getByText("sha256:abc")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Download log" })).toBeEnabled();
-  expect(screen.getByRole("link", { name: /Operations/ })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: /Maintenance/ })).toHaveAttribute(
     "href",
-    "/servers/local/settings/operations",
+    "/settings/maintenance?host=d1",
   );
   // A finished operation does not watch the socket.
   expect(FakeWebSocket.last("/api/operations/ws")).toBeUndefined();
