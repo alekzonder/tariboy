@@ -361,7 +361,7 @@ restart rather than rewritten.</p>
 </tr>
 <tr>
 <td>Codex</td>
-<td>Bounded prompt catalog containing each name, description, and absolute bridge <code>SKILL.md</code> path</td>
+<td>Bounded prompt catalog containing each name, description, and absolute <code>&lt;agent&gt;/image/skills/&lt;name&gt;/SKILL.md</code> path</td>
 <td>No skill-specific version probe</td>
 </tr>
 <tr>
@@ -383,6 +383,10 @@ CWD skill discovery, and it does not change the agent’s effective CWD.</p>
 the interactive Codex TUI. The catalog is launch metadata rather than an image
 prompt layer, so it does not change the image prompt-template hash. The
 iteration prompt hash covers the final rendered catalog and prompt.</p>
+<p>Each path points into the agent’s active <code>image/skills</code> directory, not into the
+digest-keyed bridge. Both hold the same files; the shorter path leaves more of
+the limit below for descriptions. Activation swaps <code>image/</code> only before an
+iteration starts, so a running iteration reads the image it started with.</p>
 <p>The catalog contains no <code>SKILL.md</code> body, reference, asset, or script bytes.
 Metadata is escaped so a line break or Markdown delimiter cannot create another
 catalog entry. The result is capped at 8,000 Unicode characters. Tariboy first
@@ -399,7 +403,8 @@ harness’s global or CWD scope. Validation emits a warning when it can detect a
 duplicate in those scopes, but the build remains valid. At runtime, the
 harness’s native precedence rules decide which same-named skill wins for
 Claude Code and OpenCode. Codex retains its native precedence for native
-scopes, while the image catalog identifies its copy by exact absolute path.</p>
+scopes, while the image catalog identifies its copy by exact absolute path
+under the agent’s <code>image/skills</code> directory.</p>
 <p>Use unique names when the image must provide an unambiguous implementation.
 Tariboy guarantees uniqueness only among the skills explicitly packaged in one
 image.</p>

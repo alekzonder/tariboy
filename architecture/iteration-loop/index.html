@@ -231,7 +231,7 @@ loop.</p>
 </tr>
 <tr>
 <td>Codex CLI</td>
-<td>At-most-8,000-character prompt catalog with absolute bridge <code>SKILL.md</code> paths</td>
+<td>At-most-8,000-character prompt catalog with absolute <code>&lt;agent&gt;/image/skills/&lt;name&gt;/SKILL.md</code> paths</td>
 </tr>
 <tr>
 <td>OpenCode</td>
@@ -239,7 +239,7 @@ loop.</p>
 </tr>
 <tr>
 <td>Cursor CLI</td>
-<td>The same bounded prompt catalog as Codex, with absolute bridge <code>SKILL.md</code> paths</td>
+<td>The same bounded prompt catalog as Codex, with the same <code>image/skills</code> paths</td>
 </tr>
 </tbody>
 </table></div>
@@ -248,7 +248,10 @@ with <code>opencode debug config</code>; its effective configuration must report
 generated absolute skill path. Codex needs no image-skill version probe and no
 plugin installation: Tariboy prepends escaped name, description, and path
 metadata to the shared prompt file, and Codex reads the selected skill on
-demand. Tariboy does not change CWD, <code>HOME</code>, or <code>CODEX_HOME</code>, and it does not
+demand. The catalog names the active image’s <code>image/skills</code> directory rather
+than the digest-keyed bridge, which holds the same files, so each path is about
+90 characters shorter. Activation swaps <code>image/</code> only before an iteration
+starts, so the files do not change while an iteration reads them. Tariboy does not change CWD, <code>HOME</code>, or <code>CODEX_HOME</code>, and it does not
 disable normal global or CWD discovery. Schema-v1 images retain their legacy
 CWD-relative skill materialization.</p>
 <p>Harness adapters select their native execution mode from the persisted

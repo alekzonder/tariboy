@@ -108,6 +108,11 @@ its iterations, secrets and AI budget) in one transaction, and
 <code>PurgeAgentData</code> deletes the side-table rows in a second one. Agent backup
 and restore use the rows with a backup position. Iteration retention deletes
 the tables in <code>store.IterationTables</code>.</p>
+<p><code>task_agent_pool_members</code> references <code>agents</code> with <code>ON DELETE RESTRICT</code>. The
+tasks service owns pool membership, and agent removal does not change it. A
+purge remove of an agent that is in a task queue agent pool fails before the
+daemon stops the agent. The error names each queue and pool. Remove the agent
+from the pool in the queue settings, then delete the agent.</p>
 <p>A new table with an <code>agent</code>, <code>agent_name</code> or <code>produced_by_agent</code> column, or a
 foreign key to a registry table without <code>ON DELETE CASCADE</code>, needs a registry
 row or an exemption with a reason in <code>agentKeyedExempt</code>. Otherwise the schema
@@ -386,6 +391,12 @@ existing visits from <code>tasks.workflow_digest</code>. An operator upgrade cha
 version’s initial status in one transaction, with a <code>workflow.upgraded</code> event;
 the visits of the earlier version stay as history. See
 <a href="/tariboy/docs/task-workflows#upgrading-a-task-to-the-queue-version">Task workflows</a>.</p>
+<p>Migration <code>0074</code> adds <code>task_status_visits.owner_pool</code> (default empty): the
+pool that owns a customer status in the customer’s place, copied from the
+queue env var <code>CUSTOMER_AGENT_POOL</code> when the task enters the status. It
+replaces the owner kind triggers so that <code>tasks.workflow_owner_kind</code> is <code>pool</code>
+while such a visit is open. See
+<a href="/tariboy/docs/task-workflows#a-pool-in-place-of-the-customer">Task workflows</a>.</p>
 <p>Migration <code>0063</code> adds <code>task_queue_source_runs</code>, the durable record of every run
 of a workflow source (queue, source, script, image digest, state, verdict, exit
 code, message, number of tasks created, process id, times, and log path), with a

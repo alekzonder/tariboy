@@ -337,7 +337,7 @@ restart rather than rewritten.
 | Harness | How the image skills are exposed | Support check |
 | --- | --- | --- |
 | Claude Code | Generated local plugin passed with `--plugin-dir` | Version `2.1.227` or newer |
-| Codex | Bounded prompt catalog containing each name, description, and absolute bridge `SKILL.md` path | No skill-specific version probe |
+| Codex | Bounded prompt catalog containing each name, description, and absolute `<agent>/image/skills/<name>/SKILL.md` path | No skill-specific version probe |
 | OpenCode | Isolated config overlay whose `skills.paths` names the bridge | `opencode debug config` must expose that path |
 | Cursor CLI | The Codex prompt catalog, prepended to the prompt argument | No skill-specific version probe |
 
@@ -350,6 +350,11 @@ Tariboy prepends the same catalog to the prompt used by batch `codex exec` and
 the interactive Codex TUI. The catalog is launch metadata rather than an image
 prompt layer, so it does not change the image prompt-template hash. The
 iteration prompt hash covers the final rendered catalog and prompt.
+
+Each path points into the agent's active `image/skills` directory, not into the
+digest-keyed bridge. Both hold the same files; the shorter path leaves more of
+the limit below for descriptions. Activation swaps `image/` only before an
+iteration starts, so a running iteration reads the image it started with.
 
 The catalog contains no `SKILL.md` body, reference, asset, or script bytes.
 Metadata is escaped so a line break or Markdown delimiter cannot create another
@@ -370,7 +375,8 @@ harness's global or CWD scope. Validation emits a warning when it can detect a
 duplicate in those scopes, but the build remains valid. At runtime, the
 harness's native precedence rules decide which same-named skill wins for
 Claude Code and OpenCode. Codex retains its native precedence for native
-scopes, while the image catalog identifies its copy by exact absolute path.
+scopes, while the image catalog identifies its copy by exact absolute path
+under the agent's `image/skills` directory.
 
 Use unique names when the image must provide an unambiguous implementation.
 Tariboy guarantees uniqueness only among the skills explicitly packaged in one

@@ -254,6 +254,7 @@ Nobody sets a category; the daemon derives it from the status owner:
 | Pool status, no eligible agent | `open` | empty | |
 | Pool status, the holder asked the customer a question | `wait_customer` | the holder | `customer` |
 | Customer status | `wait_customer`, with an open customer wait | unchanged | `customer` |
+| Customer status with [`CUSTOMER_AGENT_POOL`](#a-pool-in-place-of-the-customer) | as a pool status of that pool | as a pool status | as a pool status |
 | Script status | `wait_customer`, with no customer wait | empty | `script` |
 | Paused (any non-terminal status) | `wait_customer`, with an open customer wait authored by `system:workflow` | unchanged | `pause` |
 | Terminal status | `done`, or `cancelled` when the status declares `cancelled: true` | unchanged | |
@@ -321,6 +322,12 @@ ttasks queue workflow set DEV development:latest --revision 0
 ttasks queue workflow get DEV
 ttasks queue workflow clear DEV --revision 1
 ```
+
+You cannot delete an agent that is a member of a pool. The delete fails with
+an error that names the queue and the pool, and the agent continues to run. To
+delete the agent, remove it from the pool in the queue settings first. If the
+agent is the last member of a pool that the bound image uses, the pool change
+fails with `workflow_pool_empty`. Add another agent to the pool first.
 
 The reference is `NAME`, `NAME:TAG`, or `NAME:<digest>`; `NAME` means
 `latest`. The binding stores the digest the reference names now and the tag it
@@ -443,6 +450,44 @@ In the Web UI both kinds are on the **Environment** tab of the queue settings,
 in an **Env** block and a **Secrets** block. For a bound queue each block
 suggests the names the Workflowfile declares: `env` keys in **Env** and
 `requires_secrets` in **Secrets**. You can still set any other key.
+
+### A pool in place of the customer
+
+The queue env var `CUSTOMER_AGENT_POOL` gives the customer statuses of a
+workflow to a pool of agents. The workflow does not change. The value is the
+name of a pool of the same queue.
+
+```bash
+ttasks queue pool set DEV approvers --agents reviewer-1,reviewer-2 --revision 0 --idempotency-key approvers-1
+ttasks queue env set DEV CUSTOMER_AGENT_POOL approvers
+```
+
+- When the variable is not set, a status with `owner: customer` waits for the
+  customer as before.
+- When it is set, every status with `owner: customer` in the queue works as a
+  status with `owner: {pool: approvers}`. The daemon picks a holder by the
+  [Dispatch](#dispatch) rules. The holder gets the status instructions in its
+  Goal block and leaves the status with `ttasks advance`. The daemon opens no
+  customer wait and sends the customer no question.
+- The customer and the operator can still advance such a status, so a person
+  can decide when the agent cannot.
+- The task reads the variable when it enters the status, and its visit keeps
+  the pool. A change or a removal applies the next time a task enters a
+  customer status. A task that already waits for the customer keeps waiting.
+- `ttasks workflow get` shows the owner as `pool:approvers` with the holder.
+- The key is an env var only: `queue secret set` refuses it with
+  `invalid_secret_key`.
+- For a bound queue, `queue env set` refuses a pool that is missing or has no
+  agents with `workflow_pool_empty`. A bind, a follow of a new `latest`, and an
+  upgrade check the pool like the pools of the workflow, and emptying the pool
+  is refused while the queue's workflow has a customer status.
+- Questions with `ttasks ask ... user:LOGIN` and mentions of the customer
+  still reach the customer.
+- The pool's agents need instructions that let them work a customer status.
+  The daemon does not stop you from naming the developers' pool, but then a
+  developer approves its own plan.
+- Workflow scripts see `CUSTOMER_AGENT_POOL` in their environment like any
+  other queue env var.
 
 ### Creating a task in a bound queue
 
@@ -1522,12 +1567,12 @@ See [State model](/docs/architecture/state-model) for the tables.
 | `tasks.workflow_digest` | The pinned image digest; `NULL` for a flexible task. |
 | `tasks.workflow_status` | The current workflow status. |
 | `tasks.workflow_paused_reason` | The pause reason; empty unless the task is paused. |
-| `tasks.workflow_owner_kind` | The owner kind of the current status (`pool`, `customer`, or `script`), copied from the pinned manifest; empty for a terminal or undeclared status and for a flexible task. Triggers keep it current when the status, the digest, or the manifest changes (migration `0069`). |
+| `tasks.workflow_owner_kind` | The owner kind of the current status (`pool`, `customer`, or `script`), copied from the pinned manifest, or `pool` while the open visit has an `owner_pool`; empty for a terminal or undeclared status and for a flexible task. Triggers keep it current when the status, the digest, or the manifest changes (migrations `0069`, `0074`). |
 | `tasks.open_blockers` | How many `blocks` relations point at the task from a task that is not `done` or `cancelled`. A task is blocked while this is above zero or it has a manual block reason. Triggers on relations and on the blocker's status keep it current, for flexible and workflow tasks alike (migration `0069`). |
 | `task_queue_workflows` | One binding per queue: digest, the tag it follows (`workflow_tag`, empty when pinned), revision, update time. |
 | `task_queue_secrets` | Queue secret values in plaintext, per queue and key (migration `0056`). |
 | `task_workflow_holders` | The last holder of each task and pool, with the dispatch time, `released` (set by a `release` decision; migration `0060`), and `unavailable_since`, when the holder was first seen unable to work (migration `0061`). |
-| `task_status_visits` | One row per stay in a status, with its outcome and message, the `rejected_requests`, `script_failures`, and `idle_iterations` counters, `next_watch_at`, when a script status's watch runs next (migration `0057`), `resumed_at`, when a pause of the visit was last resumed (migration `0062`), and `workflow_digest`, the digest the task was pinned to on entry (migration `0071`). |
+| `task_status_visits` | One row per stay in a status, with its outcome and message, the `rejected_requests`, `script_failures`, and `idle_iterations` counters, `next_watch_at`, when a script status's watch runs next (migration `0057`), `resumed_at`, when a pause of the visit was last resumed (migration `0062`), `workflow_digest`, the digest the task was pinned to on entry (migration `0071`), and `owner_pool`, the [pool in place of the customer](#a-pool-in-place-of-the-customer) of a customer status, empty otherwise (migration `0074`). |
 | `task_transition_requests` | Each request, with its state and `result_message`; at most one is `pending` per task. |
 | `task_artifacts` | Every artifact value with its author and time. |
 | `task_queue_source_runs` | Every source run: queue, source, script, image digest, state, verdict, exit code, message, number of tasks created, process id, times, and log path (migration `0063`). At most one run of a source of a queue is `running`. |

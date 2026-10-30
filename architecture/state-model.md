@@ -126,6 +126,12 @@ its iterations, secrets and AI budget) in one transaction, and
 and restore use the rows with a backup position. Iteration retention deletes
 the tables in `store.IterationTables`.
 
+`task_agent_pool_members` references `agents` with `ON DELETE RESTRICT`. The
+tasks service owns pool membership, and agent removal does not change it. A
+purge remove of an agent that is in a task queue agent pool fails before the
+daemon stops the agent. The error names each queue and pool. Remove the agent
+from the pool in the queue settings, then delete the agent.
+
 A new table with an `agent`, `agent_name` or `produced_by_agent` column, or a
 foreign key to a registry table without `ON DELETE CASCADE`, needs a registry
 row or an exemption with a reason in `agentKeyedExempt`. Otherwise the schema
@@ -441,6 +447,13 @@ existing visits from `tasks.workflow_digest`. An operator upgrade changes
 version's initial status in one transaction, with a `workflow.upgraded` event;
 the visits of the earlier version stay as history. See
 [Task workflows](/docs/task-workflows#upgrading-a-task-to-the-queue-version).
+
+Migration `0074` adds `task_status_visits.owner_pool` (default empty): the
+pool that owns a customer status in the customer's place, copied from the
+queue env var `CUSTOMER_AGENT_POOL` when the task enters the status. It
+replaces the owner kind triggers so that `tasks.workflow_owner_kind` is `pool`
+while such a visit is open. See
+[Task workflows](/docs/task-workflows#a-pool-in-place-of-the-customer).
 
 Migration `0063` adds `task_queue_source_runs`, the durable record of every run
 of a workflow source (queue, source, script, image digest, state, verdict, exit

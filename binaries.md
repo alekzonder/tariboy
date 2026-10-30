@@ -38,7 +38,7 @@ change stdout or the exit code, so output parsing is unaffected. A daemon old
 enough to send no header produces no warning.
 
 This matters because packaged skill scripts and the agent `tasks` / `i-am-done`
-compatibility shims execute from the active image bridge: without the warning,
+compatibility shims execute from the active image's `image/skills` directory: without the warning,
 a script too old to know a newer flag looks like it simply did nothing.
 `scripts/whoami.sh` prints both `client_version` and `daemon_version` for exactly this
 reason — it is the first command to run when the tools behave strangely.

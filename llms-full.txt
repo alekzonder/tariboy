@@ -868,7 +868,7 @@ An explicit agent `PATH` override must retain a Tasks command location. When
 `TARIBOY_TOOLS_SOCKET` is non-empty, it uses that identity-bound socket and
 fails closed; when absent, it uses the host Unix daemon socket as the customer
 actor. Each compatibility shim `exec`s its owning skill script by an **absolute
-path** inside the active image bridge. Every other capability is invoked
+path** inside the active image's `image/skills` directory. Every other capability is invoked
 through its packaged skill-local `scripts/*.sh` launcher.
 
 The launch gate validates that each required launcher exists inside the
@@ -1343,16 +1343,19 @@ The adapters attach the bridge additively:
 | Harness | Projection |
 | --- | --- |
 | Claude Code | `--plugin-dir <absolute bridge>` |
-| Codex CLI | At-most-8,000-character prompt catalog with absolute bridge `SKILL.md` paths |
+| Codex CLI | At-most-8,000-character prompt catalog with absolute `<agent>/image/skills/<name>/SKILL.md` paths |
 | OpenCode | `OPENCODE_CONFIG_DIR=<absolute bridge>` with an absolute `skills.paths` entry |
-| Cursor CLI | The same bounded prompt catalog as Codex, with absolute bridge `SKILL.md` paths |
+| Cursor CLI | The same bounded prompt catalog as Codex, with the same `image/skills` paths |
 
 Claude Code requires version `2.1.227` or newer. OpenCode is capability-probed
 with `opencode debug config`; its effective configuration must report the
 generated absolute skill path. Codex needs no image-skill version probe and no
 plugin installation: Tariboy prepends escaped name, description, and path
 metadata to the shared prompt file, and Codex reads the selected skill on
-demand. Tariboy does not change CWD, `HOME`, or `CODEX_HOME`, and it does not
+demand. The catalog names the active image's `image/skills` directory rather
+than the digest-keyed bridge, which holds the same files, so each path is about
+90 characters shorter. Activation swaps `image/` only before an iteration
+starts, so the files do not change while an iteration reads them. Tariboy does not change CWD, `HOME`, or `CODEX_HOME`, and it does not
 disable normal global or CWD discovery. Schema-v1 images retain their legacy
 CWD-relative skill materialization.
 
@@ -2074,6 +2077,12 @@ its iterations, secrets and AI budget) in one transaction, and
 and restore use the rows with a backup position. Iteration retention deletes
 the tables in `store.IterationTables`.
 
+`task_agent_pool_members` references `agents` with `ON DELETE RESTRICT`. The
+tasks service owns pool membership, and agent removal does not change it. A
+purge remove of an agent that is in a task queue agent pool fails before the
+daemon stops the agent. The error names each queue and pool. Remove the agent
+from the pool in the queue settings, then delete the agent.
+
 A new table with an `agent`, `agent_name` or `produced_by_agent` column, or a
 foreign key to a registry table without `ON DELETE CASCADE`, needs a registry
 row or an exemption with a reason in `agentKeyedExempt`. Otherwise the schema
@@ -2389,6 +2398,13 @@ existing visits from `tasks.workflow_digest`. An operator upgrade changes
 version's initial status in one transaction, with a `workflow.upgraded` event;
 the visits of the earlier version stay as history. See
 [Task workflows](/docs/task-workflows#upgrading-a-task-to-the-queue-version).
+
+Migration `0074` adds `task_status_visits.owner_pool` (default empty): the
+pool that owns a customer status in the customer's place, copied from the
+queue env var `CUSTOMER_AGENT_POOL` when the task enters the status. It
+replaces the owner kind triggers so that `tasks.workflow_owner_kind` is `pool`
+while such a visit is open. See
+[Task workflows](/docs/task-workflows#a-pool-in-place-of-the-customer).
 
 Migration `0063` adds `task_queue_source_runs`, the durable record of every run
 of a workflow source (queue, source, script, image digest, state, verdict, exit
@@ -4308,7 +4324,7 @@ change stdout or the exit code, so output parsing is unaffected. A daemon old
 enough to send no header produces no warning.
 
 This matters because packaged skill scripts and the agent `tasks` / `i-am-done`
-compatibility shims execute from the active image bridge: without the warning,
+compatibility shims execute from the active image's `image/skills` directory: without the warning,
 a script too old to know a newer flag looks like it simply did nothing.
 `scripts/whoami.sh` prints both `client_version` and `daemon_version` for exactly this
 reason — it is the first command to run when the tools behave strangely.
@@ -7023,7 +7039,7 @@ restart rather than rewritten.
 | Harness | How the image skills are exposed | Support check |
 | --- | --- | --- |
 | Claude Code | Generated local plugin passed with `--plugin-dir` | Version `2.1.227` or newer |
-| Codex | Bounded prompt catalog containing each name, description, and absolute bridge `SKILL.md` path | No skill-specific version probe |
+| Codex | Bounded prompt catalog containing each name, description, and absolute `<agent>/image/skills/<name>/SKILL.md` path | No skill-specific version probe |
 | OpenCode | Isolated config overlay whose `skills.paths` names the bridge | `opencode debug config` must expose that path |
 | Cursor CLI | The Codex prompt catalog, prepended to the prompt argument | No skill-specific version probe |
 
@@ -7036,6 +7052,11 @@ Tariboy prepends the same catalog to the prompt used by batch `codex exec` and
 the interactive Codex TUI. The catalog is launch metadata rather than an image
 prompt layer, so it does not change the image prompt-template hash. The
 iteration prompt hash covers the final rendered catalog and prompt.
+
+Each path points into the agent's active `image/skills` directory, not into the
+digest-keyed bridge. Both hold the same files; the shorter path leaves more of
+the limit below for descriptions. Activation swaps `image/` only before an
+iteration starts, so a running iteration reads the image it started with.
 
 The catalog contains no `SKILL.md` body, reference, asset, or script bytes.
 Metadata is escaped so a line break or Markdown delimiter cannot create another
@@ -7056,7 +7077,8 @@ harness's global or CWD scope. Validation emits a warning when it can detect a
 duplicate in those scopes, but the build remains valid. At runtime, the
 harness's native precedence rules decide which same-named skill wins for
 Claude Code and OpenCode. Codex retains its native precedence for native
-scopes, while the image catalog identifies its copy by exact absolute path.
+scopes, while the image catalog identifies its copy by exact absolute path
+under the agent's `image/skills` directory.
 
 Use unique names when the image must provide an unambiguous implementation.
 Tariboy guarantees uniqueness only among the skills explicitly packaged in one
@@ -8353,13 +8375,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.99.0` alpha on an Apple Silicon Mac.
+This path is for the `0.100.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.99.0_aarch64.dmg`;
+- a verified `Tariboy_0.100.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -9806,7 +9828,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.99.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.100.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -9920,7 +9942,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.99.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.100.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -10344,6 +10366,7 @@ Nobody sets a category; the daemon derives it from the status owner:
 | Pool status, no eligible agent | `open` | empty | |
 | Pool status, the holder asked the customer a question | `wait_customer` | the holder | `customer` |
 | Customer status | `wait_customer`, with an open customer wait | unchanged | `customer` |
+| Customer status with [`CUSTOMER_AGENT_POOL`](#a-pool-in-place-of-the-customer) | as a pool status of that pool | as a pool status | as a pool status |
 | Script status | `wait_customer`, with no customer wait | empty | `script` |
 | Paused (any non-terminal status) | `wait_customer`, with an open customer wait authored by `system:workflow` | unchanged | `pause` |
 | Terminal status | `done`, or `cancelled` when the status declares `cancelled: true` | unchanged | |
@@ -10411,6 +10434,12 @@ ttasks queue workflow set DEV development:latest --revision 0
 ttasks queue workflow get DEV
 ttasks queue workflow clear DEV --revision 1
 ```
+
+You cannot delete an agent that is a member of a pool. The delete fails with
+an error that names the queue and the pool, and the agent continues to run. To
+delete the agent, remove it from the pool in the queue settings first. If the
+agent is the last member of a pool that the bound image uses, the pool change
+fails with `workflow_pool_empty`. Add another agent to the pool first.
 
 The reference is `NAME`, `NAME:TAG`, or `NAME:<digest>`; `NAME` means
 `latest`. The binding stores the digest the reference names now and the tag it
@@ -10533,6 +10562,44 @@ In the Web UI both kinds are on the **Environment** tab of the queue settings,
 in an **Env** block and a **Secrets** block. For a bound queue each block
 suggests the names the Workflowfile declares: `env` keys in **Env** and
 `requires_secrets` in **Secrets**. You can still set any other key.
+
+### A pool in place of the customer
+
+The queue env var `CUSTOMER_AGENT_POOL` gives the customer statuses of a
+workflow to a pool of agents. The workflow does not change. The value is the
+name of a pool of the same queue.
+
+```bash
+ttasks queue pool set DEV approvers --agents reviewer-1,reviewer-2 --revision 0 --idempotency-key approvers-1
+ttasks queue env set DEV CUSTOMER_AGENT_POOL approvers
+```
+
+- When the variable is not set, a status with `owner: customer` waits for the
+  customer as before.
+- When it is set, every status with `owner: customer` in the queue works as a
+  status with `owner: {pool: approvers}`. The daemon picks a holder by the
+  [Dispatch](#dispatch) rules. The holder gets the status instructions in its
+  Goal block and leaves the status with `ttasks advance`. The daemon opens no
+  customer wait and sends the customer no question.
+- The customer and the operator can still advance such a status, so a person
+  can decide when the agent cannot.
+- The task reads the variable when it enters the status, and its visit keeps
+  the pool. A change or a removal applies the next time a task enters a
+  customer status. A task that already waits for the customer keeps waiting.
+- `ttasks workflow get` shows the owner as `pool:approvers` with the holder.
+- The key is an env var only: `queue secret set` refuses it with
+  `invalid_secret_key`.
+- For a bound queue, `queue env set` refuses a pool that is missing or has no
+  agents with `workflow_pool_empty`. A bind, a follow of a new `latest`, and an
+  upgrade check the pool like the pools of the workflow, and emptying the pool
+  is refused while the queue's workflow has a customer status.
+- Questions with `ttasks ask ... user:LOGIN` and mentions of the customer
+  still reach the customer.
+- The pool's agents need instructions that let them work a customer status.
+  The daemon does not stop you from naming the developers' pool, but then a
+  developer approves its own plan.
+- Workflow scripts see `CUSTOMER_AGENT_POOL` in their environment like any
+  other queue env var.
 
 ### Creating a task in a bound queue
 
@@ -11612,12 +11679,12 @@ See [State model](/docs/architecture/state-model) for the tables.
 | `tasks.workflow_digest` | The pinned image digest; `NULL` for a flexible task. |
 | `tasks.workflow_status` | The current workflow status. |
 | `tasks.workflow_paused_reason` | The pause reason; empty unless the task is paused. |
-| `tasks.workflow_owner_kind` | The owner kind of the current status (`pool`, `customer`, or `script`), copied from the pinned manifest; empty for a terminal or undeclared status and for a flexible task. Triggers keep it current when the status, the digest, or the manifest changes (migration `0069`). |
+| `tasks.workflow_owner_kind` | The owner kind of the current status (`pool`, `customer`, or `script`), copied from the pinned manifest, or `pool` while the open visit has an `owner_pool`; empty for a terminal or undeclared status and for a flexible task. Triggers keep it current when the status, the digest, or the manifest changes (migrations `0069`, `0074`). |
 | `tasks.open_blockers` | How many `blocks` relations point at the task from a task that is not `done` or `cancelled`. A task is blocked while this is above zero or it has a manual block reason. Triggers on relations and on the blocker's status keep it current, for flexible and workflow tasks alike (migration `0069`). |
 | `task_queue_workflows` | One binding per queue: digest, the tag it follows (`workflow_tag`, empty when pinned), revision, update time. |
 | `task_queue_secrets` | Queue secret values in plaintext, per queue and key (migration `0056`). |
 | `task_workflow_holders` | The last holder of each task and pool, with the dispatch time, `released` (set by a `release` decision; migration `0060`), and `unavailable_since`, when the holder was first seen unable to work (migration `0061`). |
-| `task_status_visits` | One row per stay in a status, with its outcome and message, the `rejected_requests`, `script_failures`, and `idle_iterations` counters, `next_watch_at`, when a script status's watch runs next (migration `0057`), `resumed_at`, when a pause of the visit was last resumed (migration `0062`), and `workflow_digest`, the digest the task was pinned to on entry (migration `0071`). |
+| `task_status_visits` | One row per stay in a status, with its outcome and message, the `rejected_requests`, `script_failures`, and `idle_iterations` counters, `next_watch_at`, when a script status's watch runs next (migration `0057`), `resumed_at`, when a pause of the visit was last resumed (migration `0062`), `workflow_digest`, the digest the task was pinned to on entry (migration `0071`), and `owner_pool`, the [pool in place of the customer](#a-pool-in-place-of-the-customer) of a customer status, empty otherwise (migration `0074`). |
 | `task_transition_requests` | Each request, with its state and `result_message`; at most one is `pending` per task. |
 | `task_artifacts` | Every artifact value with its author and time. |
 | `task_queue_source_runs` | Every source run: queue, source, script, image digest, state, verdict, exit code, message, number of tasks created, process id, times, and log path (migration `0063`). At most one run of a source of a queue is `running`. |

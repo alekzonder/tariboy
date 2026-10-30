@@ -615,7 +615,7 @@ An explicit agent <code>PATH</code> override must retain a Tasks command locatio
 <code>TARIBOY_TOOLS_SOCKET</code> is non-empty, it uses that identity-bound socket and
 fails closed; when absent, it uses the host Unix daemon socket as the customer
 actor. Each compatibility shim <code>exec</code>s its owning skill script by an <strong>absolute
-path</strong> inside the active image bridge. Every other capability is invoked
+path</strong> inside the active image’s <code>image/skills</code> directory. Every other capability is invoked
 through its packaged skill-local <code>scripts/*.sh</code> launcher.</p>
 <p>The launch gate validates that each required launcher exists inside the
 candidate image, is regular, and is executable before replacing the current
