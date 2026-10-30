@@ -260,6 +260,22 @@ any other support-bundle exclusion. See [AI proxy and
 audit](/docs/architecture/ai-proxy#pricing-catalog-and-request-costs) for its
 runtime lifecycle.
 
+## Default Store at first start
+
+Each daemon, local or remote over SSH, clones
+`https://github.com/alekzonder/tariboy-store.git` with `git` at its first start.
+It then builds `tariboy/basic` from that clone. The build can run `npx` when
+the image carries `skills-lock.json`. The source URL is fixed in the daemon,
+and no request or configuration can redirect it. The clone uses the same
+Store code as `tariboy store add`, so it accepts no credentials in the URL.
+The daemon does not clone again after it registers the Store or after you
+remove it. See [Images](/docs/images#the-default-store).
+
+To prevent this connection, start the daemon with `TARIBOY_ONBOARDING=off` or
+`tariboyd --onboarding=off`. The daemon then registers and builds nothing at
+start. An explicit `onboarding.retry` (`POST /api/onboarding/retry`) still
+runs the routine.
+
 ## Alpha signing and Gatekeeper
 
 `0.100.0` is ad-hoc signed, not Developer ID signed or notarized. Verify

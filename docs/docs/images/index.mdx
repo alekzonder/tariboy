@@ -142,8 +142,9 @@ is omitted, a source with `image_version` publishes both that version and
 without a version publishes only `latest`. Explicit tags, including
 `--tag latest`, take priority and do not add another ref.
 
-The daemon-managed `bare:latest` and `basic:latest` refs remain reserved and
-cannot be built, imported over, or removed.
+The daemon-managed `bare:latest` ref is reserved. You cannot build it, import
+over it, or remove it. `basic` is an ordinary Store image. You can rebuild,
+export, and remove `basic:latest`, also a legacy one without provenance.
 
 A store written by an earlier release is migrated once, when the daemon starts:
 each archive keeps its content digest as its ref id, so every digest already
@@ -174,6 +175,27 @@ running as `agent` with defaults, `team` lives at
 `/home/agent/.tariboy/stores/team/`, and its reviewer source is
 `/home/agent/.tariboy/stores/team/images/reviewer/Tariboyfile.yaml`.
 `TARIBOY_BASE_DIR` or the daemon's `--base-dir` changes that root.
+
+### The default Store
+
+On each start, the daemon registers the public Tariboy Store
+`https://github.com/alekzonder/tariboy-store.git` under the name `tariboy`.
+It does this only when no Store has the name `tariboy` or that source, and
+the daemon did not record a removal. After that, the daemon builds
+`tariboy/basic` when no image named `basic` exists. It never rebuilds an
+existing `basic`. Both steps run in the background, so the daemon is ready
+before they finish. The build is an ordinary operation in
+**Settings → Operations**.
+
+- If you remove the Store with `tariboy store remove tariboy`, the daemon does
+  not register it again by itself.
+- If the clone or the build fails, the daemon tries again at the next start or
+  when you run `onboarding.retry` (`POST /api/onboarding/retry`). It does not
+  retry on a timer.
+- `onboarding.status` (`GET /api/onboarding`) reports the state of the Store
+  and the starter image.
+- If `TARIBOY_ONBOARDING=off` is set or the daemon starts with
+  `--onboarding=off`, the daemon registers and builds nothing at start.
 
 The Stores page offers the public Tariboy Store as one button. **Add tariboy
 Store** registers `https://github.com/alekzonder/tariboy-store.git` under the
@@ -584,8 +606,8 @@ for this operation, not source backup or persistent state.
   pinned to them continue to resolve.
 - The official Store's `basic` source explicitly declares every plugin,
   packaged skill, runtime placeholder, and mandatory finish prompt it uses.
-  Add the `tariboy` Store, then build `tariboy/basic`; daemon
-  upgrades do not publish or replace that image.
+  The daemon builds `tariboy/basic` once after it registers the default
+  Store. Daemon upgrades do not publish or replace that image.
 - New build and validation requests require schema v2. Existing self-contained
   schema-v1 runnable archives remain readable and runnable only when they carry
   every byte their historical contract requires; they are not valid editable
