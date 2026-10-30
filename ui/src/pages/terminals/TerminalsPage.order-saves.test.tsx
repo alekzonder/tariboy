@@ -82,6 +82,9 @@ vi.mock("@/hooks/useTerminalSocket", () => ({
 vi.mock("@/components/TuiScreen", () => ({
   TuiScreen: () => <div data-testid="tui-screen" />,
 }));
+// "/" is Home: its live "needs you" read would hit the unmocked network and
+// raise a second alert that can win the race with the order-save alert.
+vi.mock("@/pages/terminals/NeedsYouLive", () => ({ default: () => null }));
 
 beforeEach(() => setupTerminalsPage(calls));
 afterEach(cleanupTerminalsPage);
