@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect, test, type APIRequestContext, type Page } from "playwright/test";
+import { expect, test, type APIRequestContext, type Locator, type Page } from "playwright/test";
 
 const daemonURL = "http://127.0.0.1:4176";
 
@@ -96,6 +96,34 @@ async function pointerDrag(
     await expect(target).toHaveClass(/is-over/);
   }
   await page.mouse.up();
+}
+
+// The drawer keeps Details and Workflow collapsed in a <details>; open one
+// before its controls are used. Its content stays mounted while collapsed.
+// A <details> takes no accessible name from its summary, so it is found by it.
+function detailsSection(scope: Locator, summary: string) {
+  return scope.locator("details").filter({
+    has: scope.page().locator("xpath=./summary", { hasText: new RegExp(`^\\s*${summary}\\s*$`) }),
+  });
+}
+
+async function expandSection(scope: Locator, name: "Details" | "Workflow") {
+  const section = detailsSection(scope, name);
+  if ((await section.getAttribute("open")) === null) {
+    await section.locator("xpath=./summary").click();
+  }
+  await expect(section).toHaveAttribute("open", "");
+}
+
+// An agent the daemon knows, so a closed assignee list or a Work tab can name it.
+async function ensureAgent(request: APIRequestContext, name: string) {
+  const existing = await request.get(`${daemonURL}/api/agents/${name}`);
+  if (existing.ok()) return;
+  const response = await request.post(`${daemonURL}/api/agents`, {
+    data: { name, image: "bare:latest", cwd: "/tmp" },
+  });
+  const envelope = await response.json();
+  expect(envelope.ok, JSON.stringify(envelope)).toBe(true);
 }
 
 async function assertNoLoadFailedToast(page: Page) {
@@ -271,6 +299,8 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   request,
 }) => {
   test.setTimeout(60_000);
+  // The assignee is a closed list of the daemon's agents.
+  await ensureAgent(request, "worker-e2e");
   await page.goto(TASKS_PAGE);
   await expect(page.getByLabel("Search tasks")).toBeVisible();
 
@@ -319,8 +349,9 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await detail
     .getByRole("textbox", { name: "Description" })
     .fill("Edited from the production Tasks form");
+  await expandSection(detail, "Details");
   await detail.getByLabel("Status").selectOption("in_progress");
-  await detail.getByLabel("Assignee").fill("worker-e2e");
+  await detail.getByLabel("Assignee").selectOption("agent:worker-e2e");
   await detail.getByLabel("Manual block reason").fill("waiting on E2E fixture");
   const taskPatchRequest = page.waitForRequest(
     (request) =>
@@ -331,7 +362,7 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
     title: "Root task updated",
     description: "Edited from the production Tasks form",
     status: "in_progress",
-    assignee: "worker-e2e",
+    assignee: "agent:worker-e2e",
     manual_block_reason: "waiting on E2E fixture",
   });
   await expect(page.getByText("Task updated", { exact: true }).last()).toBeVisible();
@@ -355,6 +386,7 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await expect(detail.getByLabel("Pull request")).toHaveValue(
     "https://github.com/acme/tariboy/pull/43",
   );
+  await expandSection(detail, "Details");
   await detail.getByLabel("Pull request").fill("");
   await detail.getByRole("button", { name: "Save task" }).click();
   await expect(page.getByText("Task updated", { exact: true }).last()).toBeVisible();
@@ -374,25 +406,28 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
     pull_request: "",
   });
 
-  await detail.getByLabel("Ask", { exact: true }).selectOption({ index: 1 });
+  // A question to the customer pins the Needs you card above the fields.
+  await detail.getByLabel("Ask an agent", { exact: true }).selectOption("user:customer");
   await detail.getByLabel("Comment", { exact: true }).fill("Please confirm the browser workflow");
   await detail.getByRole("button", { name: "Send comment" }).click();
-  await expect(detail.getByText(/Waiting for an answer from user:/)).toBeVisible();
-  await expect(detail.getByText("Please confirm the browser workflow")).toBeVisible();
+  const card = detail.getByRole("region", { name: "Needs you" });
+  await expect(card.getByText("Please confirm the browser workflow")).toBeVisible();
+  await expect(card.getByRole("button", { name: "Reply Ok to the question" })).toBeVisible();
 
   await page.reload();
   await expect(page.getByLabel("Search tasks")).toBeVisible();
   await toggleWaitingForMe(page);
   await expect(page.getByTestId(`task-row-${rootKey}`)).toBeVisible();
   await page.getByTestId(`task-row-${rootKey}`).locator(".task-row-main").click();
-  await detail.getByLabel("Comment", { exact: true }).fill("Confirmed from the customer");
-  await detail.getByRole("button", { name: "Send comment" }).click();
-  await expect(detail.getByText(/Waiting for an answer from user:/)).toHaveCount(0);
+  await card.getByLabel("Message").fill("Confirmed from the customer");
+  await card.getByRole("button", { name: "Send answer" }).click();
+  await expect(card).toHaveCount(0);
   await expect(detail.getByText("Confirmed from the customer")).toBeVisible();
 
   await detail.getByRole("button", { name: "Close task detail" }).click();
   await toggleWaitingForMe(page);
   await page.getByTestId(`task-row-${rootKey}`).locator(".task-row-main").click();
+  await expandSection(detail, "Details");
   await detail.getByLabel("Relation type").selectOption("related");
   await detail.getByLabel("Related task key").fill(secondRootKey);
   await detail.getByRole("button", { name: "Add relation" }).click();
@@ -601,6 +636,9 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   // Step 4: the drawer shows the workflow panel and no status or assignee control.
   await row.locator(".task-row-main").click();
   const detail = page.locator(".task-detail-panel");
+  // The initial status is a start, not a request: no card, the panel decides.
+  await expect(detail.getByRole("region", { name: "Needs you" })).toHaveCount(0);
+  await expandSection(detail, "Workflow");
   await expect(detail.getByText("wfui@0.1.0"), "step 4: the panel header").toBeVisible();
   await expect(detail.getByText("status approval")).toBeVisible();
   await expect(detail.getByRole("button", { name: "approved", exact: true })).toBeEnabled();
@@ -609,7 +647,7 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
     "step 4: no status select",
   ).toHaveCount(0);
   await expect(
-    detail.getByLabel("Assignee", { exact: true }),
+    detail.getByRole("combobox", { name: "Assignee", exact: true }),
     "step 4: no assignee control",
   ).toHaveCount(0);
   step("4 drawer panel");
@@ -642,6 +680,7 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   const cancelKey = await createWorkflowTask("Cancel by hand");
   await page.getByRole("radio", { name: "Active", exact: true }).click();
   await page.getByTestId(`task-row-${moveKey}`).locator(".task-row-main").click();
+  await expandSection(detail, "Workflow");
   await detail.getByRole("button", { name: "Move to status…" }).click();
   await detail.getByLabel("Target status").selectOption("done");
   await detail.getByLabel("Reason", { exact: true }).fill("closed by hand");
@@ -655,6 +694,7 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
     .toBe("done");
   await detail.getByRole("button", { name: "Close task detail" }).click();
   await page.getByTestId(`task-row-${cancelKey}`).locator(".task-row-main").click();
+  await expandSection(detail, "Workflow");
   await detail.getByRole("button", { name: "Cancel task" }).click();
   await page
     .getByRole("alertdialog")
@@ -722,12 +762,13 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   await page.getByRole("radio", { name: "Active", exact: true }).click();
   await page.getByTestId(`task-row-${flexKey}`).locator(".task-row-main").click();
   const flexDetail = page.locator(".task-detail-panel");
+  await expandSection(flexDetail, "Details");
   await expect(
     flexDetail.getByRole("combobox", { name: "Status", exact: true }),
     "step 7: flexible task keeps its status select",
   ).toBeVisible();
   await expect(
-    flexDetail.getByLabel("Assignee", { exact: true }),
+    flexDetail.getByRole("combobox", { name: "Assignee", exact: true }),
     "step 7: flexible task keeps its assignee control",
   ).toBeVisible();
   // The header menu opens above the detail sheet, so its item takes the click.
@@ -837,6 +878,7 @@ test("Tasks production workspace explains a workflow task's problem, maps its st
   await expect(row.getByTitle("Step 2 of 4"), "step 2: the row counts the step").toHaveText("2/4");
   await row.locator(".task-row-main").click();
   const detail = page.locator(".task-detail-panel");
+  await expandSection(detail, "Workflow");
   await expect(detail.getByText("wfui2@0.1.0")).toBeVisible();
   await expect(detail.getByText("step 2 of 4")).toBeVisible();
   const steps = detail.getByRole("list", { name: "Workflow steps" });
@@ -935,6 +977,204 @@ test("Tasks production workspace explains a workflow task's problem, maps its st
       .workflow_paused_reason ?? "",
     "step 5: the pause is over",
   ).toBe("");
-  await expect(detail.getByText("Waiting for an agent")).toBeVisible();
+  // The Workflow section follows workflow_attention: it opened with the pause
+  // and closes, even under the user, when the drawer reads that the pause
+  // ended. Open it again until it stays open.
+  await expect(async () => {
+    await expandSection(detail, "Workflow");
+    await expect(detail.getByText("Waiting for an agent")).toBeVisible({ timeout: 1_000 });
+  }).toPass();
   step("5 returned by move");
+});
+
+const WORK_AGENT = "work-tab-agent";
+const workPage = (query = "") =>
+  `/tests/tasks-fixture.html#/agents/local/${WORK_AGENT}/work${query}`;
+
+// The agent is created stopped, so the composer offers "Start & give". The
+// suite never starts an agent: the start request is answered here with a
+// refusal, and the task stays created as the composer promises.
+async function stubAgentStart(page: Page) {
+  const starts: string[] = [];
+  await page.route(`${daemonURL}/api/agents/${WORK_AGENT}/start`, async (route) => {
+    starts.push(route.request().method());
+    await route.fulfill({
+      status: 409,
+      json: {
+        ok: false,
+        error: { code: "e2e_no_start", message: "the browser suite starts no agent" },
+      },
+    });
+  });
+  return starts;
+}
+
+async function giveTask(page: Page, title: string) {
+  const composer = page.getByRole("textbox", { name: `New task for ${WORK_AGENT}` });
+  await expect(composer).toBeVisible();
+  await expect(composer).toHaveAttribute("placeholder", `Give ${WORK_AGENT} a task…`);
+  await composer.fill(title);
+  await composer.press("Enter");
+  await expect(composer).toHaveValue("");
+}
+
+test("Agent Work tab gives a task in a flexible queue to the agent", async ({ page, request }) => {
+  await ensureAgent(request, WORK_AGENT);
+  const starts = await stubAgentStart(page);
+  await page.goto(workPage());
+  await expect(page.getByRole("heading", { name: WORK_AGENT })).toBeVisible();
+  // The Work tab is the composer and the sections, not the Tasks toolbar.
+  await expect(page.getByLabel("Search tasks")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Start & give" })).toBeVisible();
+
+  await giveTask(page, "Write the release notes from the Work tab");
+  const key = await keyByTitle(request, "Write the release notes from the Work tab");
+  expect(await taskFromAPI(request, key)).toMatchObject({
+    assignee: `agent:${WORK_AGENT}`,
+    priority: "P2",
+    status: "open",
+  });
+  // A stopped agent is started after the create; the stubbed refusal says so.
+  await expect.poll(() => starts).toEqual(["POST"]);
+  await expect(page.getByRole("alert")).toContainText(
+    `${key} is created, but the agent did not start`,
+  );
+
+  const queued = page.getByRole("region", { name: /^Queued \(\d+\)$/ });
+  const row = queued.getByRole("button", { name: new RegExp(`^${key}`) });
+  await expect(row).toContainText("Write the release notes from the Work tab");
+  await expect(row).toContainText("Open");
+  await expect(page.getByRole("region", { name: /^In progress \(\d+\)$/ })).toBeVisible();
+  await expect(page.getByRole("searchbox", { name: "Search done tasks" })).toBeVisible();
+
+  // A row opens the task drawer.
+  await row.click();
+  await expect(page.getByRole("dialog", { name: key })).toBeVisible();
+});
+
+// A plan written in a pool status, then approved by the customer.
+const planWorkflow = `schema_version: 1
+name: wfplan
+workflow_version: 0.1.0
+initial_status: draft
+artifacts:
+  - { name: plan, description: The plan to approve. }
+statuses:
+  - id: draft
+    owner: { pool: planners }
+    instructions: ./statuses/draft.md
+    transitions:
+      - { on: planned, to: approval, requires: [plan] }
+  - id: approval
+    owner: customer
+    instructions: ./statuses/approval.md
+    transitions:
+      - { on: approved, to: build }
+      - { on: rework, to: draft }
+  - id: build
+    owner: { pool: planners }
+    instructions: ./statuses/build.md
+    transitions:
+      - { on: built, to: done }
+  - id: done
+    terminal: true
+`;
+
+async function bindPlanQueue(request: APIRequestContext) {
+  const source = mkdtempSync(path.join(tmpdir(), "tasks-e2e-workflow-plan-"));
+  mkdirSync(path.join(source, "statuses"));
+  writeFileSync(path.join(source, "Workflowfile.yaml"), planWorkflow);
+  for (const status of ["draft", "approval", "build"]) {
+    writeFileSync(path.join(source, "statuses", `${status}.md`), `Do the ${status} step.\n`);
+  }
+  let response = await request.post(`${daemonURL}/api/workflow-images/build`, {
+    data: { path: source, wait: true },
+  });
+  rmSync(source, { recursive: true, force: true });
+  expect(response.ok(), "the plan workflow image must build").toBe(true);
+  response = await request.post(`${daemonURL}/api/task-queues`, {
+    data: { prefix: "WPLAN", name: "Plan browser" },
+  });
+  expect(response.ok()).toBe(true);
+  response = await request.patch(`${daemonURL}/api/task-queues/WPLAN/pools/planners`, {
+    data: { agents: [WORK_AGENT], revision: 0, idempotency_key: "wplan-pool" },
+  });
+  expect(response.ok(), "the pool binds").toBe(true);
+  response = await request.put(`${daemonURL}/api/task-queues/WPLAN/workflow`, {
+    data: { ref: "wfplan:latest", revision: 0 },
+  });
+  expect(response.ok(), "the queue binds the image").toBe(true);
+}
+
+// A bare agent never holds a pool status, so the daemon cannot hand the plan
+// step to it: the plan is set and the task moved by the customer instead.
+async function readyForApproval(request: APIRequestContext, key: string) {
+  let response = await request.put(`${daemonURL}/api/tasks/${key}/artifacts/plan`, {
+    data: { value: "## Plan\n\n1. Parse the changelog\n2. Publish the notes\n" },
+  });
+  expect(response.ok(), "the customer sets the plan").toBe(true);
+  response = await request.post(`${daemonURL}/api/tasks/${key}/workflow/move`, {
+    data: { to: "approval", reason: "the plan is ready" },
+  });
+  expect(response.ok(), "the task moves to approval").toBe(true);
+}
+
+test("Agent Work tab dispatches a bound-queue task to its workflow and approves its plan", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(60_000);
+  await ensureAgent(request, WORK_AGENT);
+  await bindPlanQueue(request);
+  await stubAgentStart(page);
+  await page.goto(workPage());
+  await expect(page.getByRole("heading", { name: WORK_AGENT })).toBeVisible();
+
+  // Step 1: pick the bound queue in Details; the composer says who takes it.
+  await page.getByRole("button", { name: "Details", exact: true }).click();
+  // The label wraps the select, so its text includes the chosen option: match by role.
+  await page.getByRole("combobox", { name: "Queue", exact: true }).selectOption("WPLAN");
+  await expect(page.getByRole("combobox", { name: "Priority", exact: true })).toHaveValue("P2");
+  await expect(
+    page.getByText("Dispatched by the wfplan workflow; a pool member takes it"),
+  ).toBeVisible();
+  await giveTask(page, "Plan the release notes");
+  const key = await keyByTitle(request, "Plan the release notes");
+  const created = await taskFromAPI(request, key);
+  expect(created.assignee, "step 1: a bound queue takes no assignee").toBe("");
+  expect(created.status).toBe("draft");
+  const remembered = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("tasks:new-task-queue-by-agent:v1") ?? "{}"),
+  );
+  expect(Object.values(remembered)).toContainEqual({ [WORK_AGENT]: "WPLAN" });
+
+  // Step 2: the dispatched line opens the task.
+  const dispatched = page.getByRole("button", { name: `${key} dispatched by the wfplan workflow` });
+  await dispatched.click();
+  await expect(page.getByRole("dialog", { name: key })).toBeVisible();
+
+  // Step 3: in the customer status the drawer pins the card with the plan. The
+  // task is not the agent's (see readyForApproval), so the card is checked in
+  // the drawer, not under Needs you.
+  await readyForApproval(request, key);
+  await page.goto(workPage(`?task=${key}`));
+  const card = page.getByRole("dialog", { name: key }).getByRole("region", { name: "Needs you" });
+  await expect(card).toContainText("The workflow waits for your decision in approval.");
+  const plan = detailsSection(card, "plan");
+  await expect(plan).toHaveAttribute("open", "");
+  await expect(plan.getByRole("heading", { name: "Plan" })).toBeVisible();
+  await expect(plan.getByText("Publish the notes")).toBeVisible();
+  await expect(card.getByRole("button", { name: "rework → draft" })).toBeEnabled();
+
+  // Step 4: approve with a message; the task moves on.
+  await card.getByLabel("Message").fill("Go ahead");
+  await card.getByRole("button", { name: "approved → build" }).click();
+  await expect.poll(async () => (await taskFromAPI(request, key)).status).toBe("build");
+  const view = (await (await request.get(`${daemonURL}/api/tasks/${key}/workflow`)).json())
+    .result as { visits: { status: string; message?: string; left_at?: string }[] };
+  expect(
+    view.visits.find((visit) => visit.status === "approval" && visit.left_at)?.message,
+    "step 4: the message is the transition message",
+  ).toBe("Go ahead");
+  await expect(card).toHaveCount(0);
 });
