@@ -1,3 +1,35 @@
+## [0.100.0] - 2026-10-30
+
+### Added
+
+- The queue env var `CUSTOMER_AGENT_POOL` names a pool of the same queue.
+  While it is set, every status with `owner: customer` in the queue works as
+  a status of that pool. The daemon dispatches a holder, opens no customer
+  wait and sends the customer no question. The holder leaves the status with
+  `ttasks advance`, and the customer and the operator can still advance it.
+  A task reads the variable when it enters the status, so a change applies
+  on the next entry. `ttasks workflow get` shows the owner as `pool:NAME`.
+  `queue secret set` refuses the key. For a bound queue, `queue env set`,
+  bind, follow and upgrade refuse a missing or empty pool. Migration `0074`
+  adds `task_status_visits.owner_pool`.
+
+### Changed
+
+- The Codex and Cursor skill catalog gives each skill the path
+  `<agent>/image/skills/<name>/SKILL.md` instead of the path in the
+  digest-keyed bridge. Each path is about 90 characters shorter, so more of
+  the 8,000-character limit is left for descriptions.
+
+### Fixed
+
+- A delete of an agent that is a member of a task queue pool now fails before
+  the agent stops. The error names each queue and pool and tells you to
+  remove the agent from the pool first. The agent continues to run. Before,
+  a purge stopped the agent and then failed with
+  `FOREIGN KEY constraint failed (1811)`.
+
+[0.100.0]: https://github.com/alekzonder/tariboy/compare/v0.99.0...v0.100.0
+
 ## [0.99.0] - 2026-10-29
 
 ### Added
