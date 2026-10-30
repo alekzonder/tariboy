@@ -21,7 +21,7 @@ describe("FirstVisitHint", () => {
     ["work", "Tasks you create here are given to this agent."],
     [
       "settings",
-      "Autopilot: set a schedule here to let the agent keep working without you. Everything else is optional.",
+      "Autopilot: choose whether the agent also runs every few minutes on its own. Everything else is optional.",
     ],
   ] as const)("shows the %s line once per agent until it is dismissed", async (tab, text) => {
     expect(HINT_TEXT[tab as HintTab]).toBe(text);

@@ -1,13 +1,12 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { removedSecrets } from "./commits";
-import { DraftField, FieldFrame } from "./ConfigControls";
+import { DraftField, FieldFrame, type SectionProps } from "./ConfigControls";
 import { fieldOfKey, type ConfigField } from "./registry";
-import type { BlockProps } from "./ConfigurationBlocks";
 
 const field = (key: string) => fieldOfKey(key) as ConfigField;
 
-export function EnvironmentBlock({ draft, matched, sources }: BlockProps) {
+export function EnvironmentBlock({ draft, sources }: SectionProps) {
   const { script, secrets } = sources;
   const removed = removedSecrets(draft.values["secrets-remove"] ?? "");
   const toggle = (key: string) => {
@@ -22,11 +21,7 @@ export function EnvironmentBlock({ draft, matched, sources }: BlockProps) {
           Shell script unavailable: {script.error}
         </p>
       )}
-      <DraftField
-        field={field("shell-script")}
-        draft={draft}
-        matched={matched.has("shell-script")}
-      />
+      <DraftField field={field("shell-script")} draft={draft} />
       {/* SECURITY: secrets are write-only. The list holds key names only
           (the daemon never returns values); a new value lives only in the
           page draft while typing, is sent in a POST body, never in a URL, and
@@ -36,7 +31,7 @@ export function EnvironmentBlock({ draft, matched, sources }: BlockProps) {
           Secrets unavailable: {secrets.error}
         </p>
       )}
-      <FieldFrame field={listField} draft={draft} matched={matched.has("secrets-remove")}>
+      <FieldFrame field={listField} draft={draft}>
         <div id="secrets-remove" tabIndex={-1} className="flex flex-wrap items-center gap-1.5">
           {(secrets.value ?? []).map((key) => {
             const pending = removed.includes(key);
@@ -63,12 +58,8 @@ export function EnvironmentBlock({ draft, matched, sources }: BlockProps) {
         </div>
       </FieldFrame>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <DraftField field={field("secret-key")} draft={draft} matched={matched.has("secret-key")} />
-        <DraftField
-          field={field("secret-value")}
-          draft={draft}
-          matched={matched.has("secret-value")}
-        />
+        <DraftField field={field("secret-key")} draft={draft} />
+        <DraftField field={field("secret-value")} draft={draft} />
       </div>
     </>
   );

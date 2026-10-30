@@ -12,14 +12,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useApi } from "@/components/apiContext";
 import { guard } from "@/lib/toast-guard";
-import { ActionRow, DraftField } from "./ConfigControls";
+import { ActionRow, DraftField, type SectionProps } from "./ConfigControls";
 import { fieldOfKey, type ConfigField } from "./registry";
-import type { BlockProps } from "./ConfigurationBlocks";
 import { errorText } from "@/lib/errors";
 
 const field = (key: string) => fieldOfKey(key) as ConfigField;
 
-export function RetentionBlock({ draft, matched, sources, name }: BlockProps) {
+export function RetentionBlock({ draft, sources, name }: SectionProps) {
   const api = useApi();
   const policy = sources.retention.value;
   // Prune is the one destructive action on this page: it is confirmed first,
@@ -55,12 +54,10 @@ export function RetentionBlock({ draft, matched, sources, name }: BlockProps) {
             helper: inherits(policy?.default?.keep_iterations),
           }}
           draft={draft}
-          matched={matched.has("keep-iterations")}
         />
         <DraftField
           field={{ ...field("keep-days"), helper: inherits(policy?.default?.keep_days) }}
           draft={draft}
-          matched={matched.has("keep-days")}
         />
       </div>
       {policy && (
@@ -97,7 +94,7 @@ export function RetentionBlock({ draft, matched, sources, name }: BlockProps) {
         </p>
       )}
       {/* Closed means unmounted, so no stray Cancel/confirm button sits in
-          the page waiting to be matched by a broader query. */}
+          the page. */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

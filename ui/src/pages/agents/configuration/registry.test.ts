@@ -1,53 +1,92 @@
 import { describe, expect, it } from "vitest";
-import { BLOCKS, filterBlocks, blockOfKey, normalizeField, validateField } from "./registry";
+import { SECTIONS, fieldOfKey, normalizeField, sectionOfKey, validateField } from "./registry";
 
-const ids = (query: string) => filterBlocks(query, BLOCKS).blocks.map((b) => b.id);
+const keysOf = (id: string) => SECTIONS.find((s) => s.id === id)!.fields.map((f) => f.key);
 
-describe("filterBlocks", () => {
-  it("shows every block for an empty query", () => {
-    expect(ids("")).toEqual(BLOCKS.map((b) => b.id));
-    expect(ids("   ")).toHaveLength(BLOCKS.length);
+// Every setting the page had before the Settings layout; none may be lost.
+const ALL_KEYS = [
+  "image",
+  "image-digest",
+  "cwd",
+  "cwd-create",
+  "harness",
+  "model",
+  "effort",
+  "interactive",
+  "interval",
+  "schedule",
+  "timeout",
+  "hard-timeout",
+  "on-timeout",
+  "on-error",
+  "max-idle",
+  "ai-stall-timeout",
+  "goal-enabled",
+  "goal-wait-customer-timeout",
+  "goal-delivery-cooldown",
+  "current-goal-task",
+  "messages-batch",
+  "messages-max-queue",
+  "budget-hour",
+  "budget-day",
+  "budget-week",
+  "budget-month",
+  "shell-script",
+  "secrets-remove",
+  "secret-key",
+  "secret-value",
+  "keep-iterations",
+  "keep-days",
+];
+
+describe("SECTIONS", () => {
+  it("keeps every setting, each in exactly one section", () => {
+    const keys = SECTIONS.flatMap((s) => s.fields.map((f) => f.key));
+    expect(keys).toHaveLength(ALL_KEYS.length);
+    expect(new Set(keys)).toEqual(new Set(ALL_KEYS));
   });
 
-  it("shows the whole block when one setting matches and marks only that setting", () => {
-    const result = filterBlocks("hard timeout", BLOCKS);
-    expect(result.blocks.map((b) => b.id)).toEqual(["loop"]);
-    expect(result.blocks[0].fields.length).toBeGreaterThan(1);
-    expect(result.matched.has("hard-timeout")).toBe(true);
-    expect(result.matched.has("interval")).toBe(false);
-    expect(result.matched.has("timeout")).toBe(false);
+  it("puts the four groups first and everything else under Advanced", () => {
+    expect(SECTIONS.map((s) => [s.id, s.advanced])).toEqual([
+      ["model", false],
+      ["folder", false],
+      ["autopilot", false],
+      ["spending", false],
+      ["image", true],
+      ["schedule", true],
+      ["goal", true],
+      ["mail", true],
+      ["budgets", true],
+      ["environment", true],
+      ["retention", true],
+    ]);
+    expect(keysOf("model")).toEqual(["harness", "model", "effort"]);
+    expect(keysOf("folder")).toEqual(["cwd", "cwd-create"]);
+    expect(keysOf("autopilot")).toEqual(["interval", "timeout", "interactive"]);
+    expect(keysOf("spending")).toEqual(["budget-day", "budget-month"]);
+    expect(keysOf("budgets")).toEqual(["budget-hour", "budget-week"]);
   });
 
-  it("matches case-insensitively by block title", () => {
-    expect(ids("BUDGET")).toEqual(["budgets"]);
+  it("names the groups and fields in words", () => {
+    expect(SECTIONS.slice(0, 4).map((s) => s.title)).toEqual([
+      "Model",
+      "Working folder",
+      "Autopilot",
+      "Spending limit",
+    ]);
+    expect(fieldOfKey("harness")?.label).toBe("Coding tool");
+    expect(fieldOfKey("interactive")?.label).toBe("Interactive terminal");
   });
 
-  it("matches keywords that are not visible labels", () => {
-    expect(ids("cwd")).toEqual(["general"]);
-    expect(ids("tmux")).toEqual(["runtime"]);
-    expect(ids("dlq")).toEqual(["messages"]);
-    expect(ids("usd")).toEqual(["budgets"]);
-  });
-
-  it("requires every word to match inside one block", () => {
-    expect(ids("secret key")).toEqual(["environment"]);
-    expect(ids("budget tmux")).toEqual([]);
-  });
-
-  it("returns no blocks when nothing matches", () => {
-    const result = filterBlocks("zzz-nothing", BLOCKS);
-    expect(result.blocks).toEqual([]);
-    expect(result.matched.size).toBe(0);
+  it("maps a field key to its section", () => {
+    expect(sectionOfKey("model")?.id).toBe("model");
+    expect(sectionOfKey("hard-timeout")?.id).toBe("schedule");
+    expect(sectionOfKey("keep-days")?.id).toBe("retention");
+    expect(sectionOfKey("nope")).toBeUndefined();
   });
 });
 
 describe("field helpers", () => {
-  it("maps a field key to its block", () => {
-    expect(blockOfKey("model")).toBe("runtime");
-    expect(blockOfKey("budget-day")).toBe("budgets");
-    expect(blockOfKey("keep-days")).toBe("retention");
-  });
-
   it("normalizes whole numbers and trims text", () => {
     expect(normalizeField("interval", " 30.7 ")).toBe("30");
     expect(normalizeField("max-idle", "-4")).toBe("0");
@@ -63,6 +102,16 @@ describe("field helpers", () => {
     expect(validateField("budget-hour", "-1", {})).toMatch(/zero or a positive/);
     expect(validateField("budget-hour", "2.5", {})).toBe("");
     expect(validateField("keep-days", "1.5", {})).toMatch(/whole number/);
+  });
+
+  it("rejects an interval or timeout the minutes box could not convert", () => {
+    for (const bad of ["", "abc", "-1"]) {
+      expect(validateField("interval", bad, {})).toBe("Enter the minutes between runs.");
+      expect(validateField("timeout", bad, {})).toBe("Enter the minutes, or 0 for no limit.");
+    }
+    expect(validateField("interval", "0", {})).toBe("");
+    expect(validateField("interval", "300", {})).toBe("");
+    expect(validateField("timeout", "0", {})).toBe("");
   });
 
   it("requires a secret key and a value together", () => {

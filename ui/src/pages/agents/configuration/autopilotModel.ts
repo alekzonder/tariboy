@@ -6,9 +6,11 @@ export type AutopilotMode = "on-demand" | "every";
 
 const DEFAULT_MINUTES = "30";
 
-// autopilotMode reads a saved or drafted interval: 0 runs only when given work.
+// autopilotMode reads a saved or drafted interval: only 0 runs when given
+// work alone. Text the box could not convert keeps "every" selected, so the
+// operator sees the box and its error instead of a silent switch.
 export const autopilotMode = (seconds: string): AutopilotMode =>
-  Number(seconds) > 0 ? "every" : "on-demand";
+  seconds.trim() === "0" ? "on-demand" : "every";
 
 // toMinutes shows whole seconds as minutes ("90" → "1.5"); other text is kept
 // so an invalid draft stays visible.
@@ -31,4 +33,4 @@ export function toSeconds(minutes: string): string {
 // rememberedMinutes is what "Also every N minutes" offers: the saved positive
 // interval, or 30 minutes.
 export const rememberedMinutes = (seconds: string): string =>
-  autopilotMode(seconds) === "every" ? toMinutes(seconds) : DEFAULT_MINUTES;
+  Number(seconds) > 0 ? toMinutes(seconds) : DEFAULT_MINUTES;

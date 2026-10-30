@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { render, screen, fireEvent, waitFor, within } from "@/test/queryRender";
 import { fakeApi } from "@/test/api";
 import type { PrimaryAction } from "@/pages/agents/agentWorkspaceModel";
-import { AgentControls } from "./AgentControls";
+import { AgentControls, DeleteAgentButton } from "./AgentControls";
 
 const target = { id: "remote", label: "Remote", baseURL: "https://remote.test", token: "secret" };
 
@@ -248,6 +248,26 @@ describe("delete from the overflow menu", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Delete agent" })).toBeEnabled());
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
     expect(onDeleted).not.toHaveBeenCalled();
+  });
+});
+
+describe("DeleteAgentButton", () => {
+  it("deletes through the same confirmation as the menu, then leaves the route", async () => {
+    vi.mocked(agentDelete).mockResolvedValue({});
+    const onDeleted = vi.fn();
+    render(
+      <MemoryRouter>
+        <DeleteAgentButton name="worker" onDeleted={onDeleted} />
+      </MemoryRouter>,
+      { api: remoteApi() },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete agent" }));
+    const dialog = screen.getByRole("alertdialog");
+    expect(within(dialog).getByRole("heading", { name: "Delete agent worker?" })).toBeVisible();
+    expect(agentDelete).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete agent" }));
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledOnce());
+    expect(agentDelete).toHaveBeenCalledWith("worker", { force: true, purge: true });
   });
 });
 

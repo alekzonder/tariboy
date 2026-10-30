@@ -1,5 +1,5 @@
 import { lazy, useState, type ReactNode } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import { ApiProvider } from "@/components/ApiProvider";
 import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
@@ -63,15 +63,7 @@ const TAB_CONTENT: Record<AgentTab, (ctx: TabContext) => ReactNode> = {
       />
     </>
   ),
-  settings: ({ refresh, base }) => (
-    <>
-      <p className="mx-4 mt-3 text-caption text-muted-foreground">
-        Other views: <Link to={`${base}/mailbox`}>Open mailbox</Link> ·{" "}
-        <Link to={`${base}/advanced`}>Advanced</Link>
-      </p>
-      <AgentConfigurationTab refresh={refresh} />
-    </>
-  ),
+  settings: ({ refresh, base }) => <AgentConfigurationTab base={base} refresh={refresh} />,
   advanced: () => <AgentAdvancedTab />,
 };
 

@@ -47,34 +47,60 @@ function useAction(refresh?: () => void) {
   };
 }
 
-// RunStateActions is the lifecycle trio on its own. The Configuration page's
-// run-state strip mounts THIS rather than AgentControls, so it shares these
-// handlers instead of hand-rolling a second start/stop control — and without
-// carrying Kill, Delete and the overflow menu onto that page.
-export function RunStateActions({ name, refresh }: { name: string; refresh?: () => void }) {
+// useDeleteAgent is the one delete of an agent: force and purge, through the
+// route host's client, with the confirmation's open and pending state. The
+// header menu and Settings → Danger both use it.
+function useDeleteAgent(
+  name: string,
+  { refresh, onDeleted }: { refresh?: () => void; onDeleted?: () => void },
+) {
   const api = useApi();
-  const run = useAction(refresh);
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const remove = async () => {
+    if (pending) return;
+    setPending(true);
+    try {
+      await api.agents.agentDelete(name, { force: true, purge: true });
+      refresh?.();
+      onDeleted?.();
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : String(error));
+    } finally {
+      setPending(false);
+    }
+  };
+  const dialog = (
+    <DeleteAgentDialog
+      name={name}
+      open={open}
+      pending={pending}
+      setOpen={setOpen}
+      onDelete={() => void remove()}
+    />
+  );
+  return { openDelete: () => setOpen(true), dialog };
+}
 
+/** Settings → Danger: Delete agent with the header menu's confirmation. */
+export function DeleteAgentButton({
+  name,
+  refresh,
+  onDeleted,
+}: {
+  name: string;
+  refresh?: () => void;
+  onDeleted?: () => void;
+}) {
+  const { openDelete, dialog } = useDeleteAgent(name, { refresh, onDeleted });
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" onClick={() => run("start", () => api.agentPost(name, "start"))}>
-        Start
+    <>
+      <Button size="sm" variant="destructive" onClick={openDelete}>
+        <Trash2 aria-hidden="true" />
+        Delete agent
       </Button>
-      <Button
-        size="sm"
-        variant="secondary"
-        onClick={() => run("stop", () => api.agentPost(name, "stop"))}
-      >
-        Stop
-      </Button>
-      <Button
-        size="sm"
-        variant="secondary"
-        onClick={() => run("restart", () => api.agentPost(name, "restart"))}
-      >
-        Restart
-      </Button>
-    </div>
+      {dialog}
+    </>
   );
 }
 
@@ -309,8 +335,7 @@ export function AgentControls(props: AgentControlsProps) {
   const { name, alive, disabled = false, primary, refresh, onExec, onDeleted } = props;
   const api = useApi();
   const run = useAction(refresh);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deletePending, setDeletePending] = useState(false);
+  const deletion = useDeleteAgent(name, { refresh, onDeleted });
   const [forceStopOpen, setForceStopOpen] = useState(false);
   const [execOpen, setExecOpen] = useState(false);
   const [execPending, setExecPending] = useState(false);
@@ -330,20 +355,6 @@ export function AgentControls(props: AgentControlsProps) {
       toast.error(error instanceof ApiError ? error.message : String(error));
     } finally {
       setExecPending(false);
-    }
-  };
-
-  const remove = async () => {
-    if (deletePending) return;
-    setDeletePending(true);
-    try {
-      await api.agents.agentDelete(name, { force: true, purge: true });
-      refresh?.();
-      onDeleted?.();
-    } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : String(error));
-    } finally {
-      setDeletePending(false);
     }
   };
 
@@ -378,7 +389,7 @@ export function AgentControls(props: AgentControlsProps) {
         canRunOnce={alive && props.image !== "bare:latest"}
         onRunOnce={() => setExecOpen(true)}
         onForceStop={() => setForceStopOpen(true)}
-        onDelete={() => setDeleteOpen(true)}
+        onDelete={deletion.openDelete}
       />
 
       <ExecDialog
@@ -396,13 +407,7 @@ export function AgentControls(props: AgentControlsProps) {
         setOpen={setForceStopOpen}
         onForceStop={() => void run("force-stop", () => api.agentPost(name, "kill"))}
       />
-      <DeleteAgentDialog
-        name={name}
-        open={deleteOpen}
-        pending={deletePending}
-        setOpen={setDeleteOpen}
-        onDelete={() => void remove()}
-      />
+      {deletion.dialog}
     </div>
   );
 }

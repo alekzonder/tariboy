@@ -1,59 +1,60 @@
 import type { ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { PresetGroup } from "@/lib/runtimePresets";
 import { DraftControl } from "./DraftControls";
-import { fieldOfKey, type ConfigBlock, type ConfigField } from "./registry";
+import { describedBy, unsaved } from "./draftFieldModel";
+import { fieldOfKey, type ConfigField } from "./registry";
 import type { ConfigDraft } from "./useConfigDraft";
+import type { ConfigSources } from "./useConfigSources";
 
-const unsaved = (count: number) => `${count} unsaved ${count === 1 ? "change" : "changes"}`;
+// SectionProps is what every group and Advanced subsection receives.
+export interface SectionProps {
+  draft: ConfigDraft;
+  sources: ConfigSources;
+  name: string;
+  stopped: boolean;
+  refresh: () => void;
+}
 
-export function ConfigBlockCard({
-  block,
-  dirtyCount,
+// SettingsSection is one plain group: a heading and a thin rule, no card, so
+// the four groups fit above the fold. Advanced subsections use level 4.
+export function SettingsSection({
+  id,
+  title,
+  level = 3,
   action,
   children,
 }: {
-  block: ConfigBlock;
-  dirtyCount: number;
+  id: string;
+  title: string;
+  level?: 3 | 4;
   action?: ReactNode;
   children: ReactNode;
 }) {
-  // overflow-visible: Card clips by default, which hid the in-place pop-up lists
-  // (preset combobox, path suggestions) behind the card's bottom edge.
+  const Heading = level === 3 ? "h3" : "h4";
   return (
-    <Card
-      id={`config-block-${block.id}`}
-      role="region"
-      aria-labelledby={`config-block-${block.id}-title`}
-      className="scroll-mt-32 overflow-visible"
+    <section
+      id={`settings-section-${id}`}
+      aria-labelledby={`settings-section-${id}-title`}
+      className={cn(
+        "scroll-mt-24 border-t pt-3",
+        level === 3 && "grid gap-x-6 gap-y-2 sm:grid-cols-[9rem_minmax(0,1fr)]",
+      )}
     >
-      <CardHeader>
-        <CardTitle id={`config-block-${block.id}-title`} className="text-base">
-          {block.title}
-        </CardTitle>
-        <CardDescription>{block.description}</CardDescription>
-        {(dirtyCount > 0 || action) && (
-          <CardAction className="flex items-center gap-2">
-            {dirtyCount > 0 && <Badge variant="secondary">{unsaved(dirtyCount)}</Badge>}
-            {action}
-          </CardAction>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-5">{children}</CardContent>
-    </Card>
+      <div className={cn("flex items-center gap-2", level === 4 && "mb-3")}>
+        <Heading
+          id={`settings-section-${id}-title`}
+          className={level === 3 ? "text-sm font-semibold" : "text-sm font-medium"}
+        >
+          {title}
+        </Heading>
+        {action}
+      </div>
+      <div className="min-w-0 space-y-3">{children}</div>
+    </section>
   );
 }
 
@@ -63,13 +64,11 @@ export function ConfigBlockCard({
 export function FieldFrame({
   field,
   draft,
-  matched,
   inline,
   children,
 }: {
   field: ConfigField;
   draft: ConfigDraft;
-  matched: boolean;
   inline?: boolean;
   children: ReactNode;
 }) {
@@ -84,14 +83,7 @@ export function FieldFrame({
     </div>
   );
   return (
-    <div
-      data-field={field.key}
-      data-matched={matched || undefined}
-      className={cn(
-        "space-y-1.5 rounded-lg",
-        matched && "-m-2 bg-primary/5 p-2 ring-1 ring-primary/30",
-      )}
-    >
+    <div data-field={field.key} className="space-y-1.5">
       {inline ? (
         <div className="flex items-center gap-3">
           {children}
@@ -117,23 +109,16 @@ export function FieldFrame({
   );
 }
 
-const describedBy = (field: ConfigField, draft: ConfigDraft) =>
-  [field.helper && `${field.key}-help`, draft.fieldErrors[field.key] && `${field.key}-error`]
-    .filter(Boolean)
-    .join(" ") || undefined;
-
 // DraftField renders one plain setting bound to the page draft.
 export function DraftField({
   field,
   draft,
-  matched,
   options,
   presets,
   disabled,
 }: {
   field: ConfigField;
   draft: ConfigDraft;
-  matched: boolean;
   options?: readonly string[];
   presets?: readonly PresetGroup[];
   disabled?: boolean;
@@ -149,7 +134,7 @@ export function DraftField({
   const unloaded = disabled || !(field.key in draft.values);
   if (field.kind === "switch") {
     return (
-      <FieldFrame field={field} draft={draft} matched={matched} inline>
+      <FieldFrame field={field} draft={draft} inline>
         <Switch
           {...common}
           checked={value === "true"}
@@ -160,7 +145,7 @@ export function DraftField({
     );
   }
   return (
-    <FieldFrame field={field} draft={draft} matched={matched}>
+    <FieldFrame field={field} draft={draft}>
       <DraftControl
         field={field}
         value={value}
@@ -174,98 +159,22 @@ export function DraftField({
   );
 }
 
-export function ConfigSearch({
-  query,
-  onQuery,
-  changedOnly,
-  onChangedOnly,
-  dirtyCount,
-  chips,
-  resultText,
-}: {
-  query: string;
-  onQuery: (query: string) => void;
-  changedOnly: boolean;
-  onChangedOnly: (value: boolean) => void;
-  dirtyCount: number;
-  chips: Array<{ id: string; title: string; dirty: number }>;
-  resultText: string;
-}) {
-  return (
-    <div className="sticky top-0 z-10 flex flex-col gap-2 bg-card/95 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          type="search"
-          aria-label="Search settings"
-          placeholder="Search settings"
-          value={query}
-          onChange={(e) => onQuery(e.target.value)}
-          className="h-9 min-w-0 flex-1 basis-60"
-        />
-        {query && (
-          <Button variant="ghost" className="h-9" onClick={() => onQuery("")}>
-            Clear
-          </Button>
-        )}
-        <Button
-          variant={changedOnly ? "secondary" : "outline"}
-          className="h-9"
-          aria-pressed={changedOnly}
-          onClick={() => onChangedOnly(!changedOnly)}
-        >
-          Changed only ({dirtyCount})
-        </Button>
-      </div>
-      <nav aria-label="Configuration blocks" className="flex flex-wrap gap-1.5">
-        {chips.map((chip) => (
-          <Button
-            key={chip.id}
-            size="sm"
-            variant="outline"
-            className="h-7 rounded-full"
-            onClick={() =>
-              document
-                .getElementById(`config-block-${chip.id}`)
-                ?.scrollIntoView?.({ block: "start", behavior: "smooth" })
-            }
-          >
-            {chip.title}
-            {chip.dirty > 0 && <Badge className="ml-1">{chip.dirty}</Badge>}
-          </Button>
-        ))}
-      </nav>
-      <p
-        role="status"
-        aria-live="polite"
-        className={resultText ? "text-xs text-muted-foreground" : "sr-only"}
-      >
-        {resultText}
-      </p>
-    </div>
-  );
-}
-
-// ConfigSaveBar is the page's only commit point. It appears once there is
-// something to commit, a reason the last save stopped, or a result to report.
-export function ConfigSaveBar({
-  draft,
-  blockTitles,
-}: {
-  draft: ConfigDraft;
-  blockTitles: string[];
-}) {
+// ConfigSaveRow is the page title and its only commit point. It sticks to the
+// top of the tab, so "Save changes" stays reachable at the end of Advanced.
+export function ConfigSaveRow({ draft, groups }: { draft: ConfigDraft; groups: string[] }) {
   const count = draft.dirtyKeys.length;
-  if (count === 0 && !draft.error && !draft.notice) return null;
+  const status = count > 0 ? `${unsaved(count)} in ${groups.join(", ")}` : draft.notice;
   return (
     <div
       role="region"
-      aria-label="Unsaved changes"
-      className="sticky bottom-0 z-10 rounded-lg border bg-card/95 p-3 shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/80"
+      aria-label="Save settings"
+      className="sticky top-0 z-10 -mx-4 -mt-4 border-b bg-card/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-card/80"
     >
       <div className="flex flex-wrap items-center gap-3">
+        <h2 className="font-semibold">Settings</h2>
         <div className="min-w-0 flex-1 space-y-0.5">
-          <p role="status" aria-live="polite" className="text-sm font-medium">
-            {count > 0 ? `${unsaved(count)} in ${blockTitles.join(", ")}` : draft.notice}
+          <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+            {status}
           </p>
           {draft.error && (
             <p role="alert" className="text-xs text-destructive">
@@ -275,11 +184,11 @@ export function ConfigSaveBar({
         </div>
         {count > 0 && (
           <>
-            <Button variant="outline" className="h-9" disabled={draft.saving} onClick={draft.reset}>
+            <Button variant="outline" className="h-8" disabled={draft.saving} onClick={draft.reset}>
               Reset
             </Button>
-            <Button className="h-9" disabled={draft.saving} onClick={() => void draft.save()}>
-              {draft.saving ? "Saving…" : "Save"}
+            <Button className="h-8" disabled={draft.saving} onClick={() => void draft.save()}>
+              {draft.saving ? "Saving…" : "Save changes"}
             </Button>
           </>
         )}
@@ -290,21 +199,15 @@ export function ConfigSaveBar({
 
 export function ReadOnly({
   draft,
-  matched,
   fieldKey,
   children,
 }: {
   draft: ConfigDraft;
-  matched: Set<string>;
   fieldKey: string;
   children: React.ReactNode;
 }) {
   return (
-    <FieldFrame
-      field={fieldOfKey(fieldKey) as ConfigField}
-      draft={draft}
-      matched={matched.has(fieldKey)}
-    >
+    <FieldFrame field={fieldOfKey(fieldKey) as ConfigField} draft={draft}>
       {children}
     </FieldFrame>
   );

@@ -4,7 +4,8 @@ import { autopilotMode, rememberedMinutes, toMinutes, toSeconds } from "./autopi
 describe("autopilotMode", () => {
   it.each([
     ["0", "on-demand"],
-    ["", "on-demand"],
+    ["", "every"],
+    ["abc", "every"],
     ["30", "every"],
     ["1800", "every"],
   ] as const)("reads %j seconds as %s", (seconds, mode) => {
@@ -41,7 +42,8 @@ describe("toSeconds", () => {
   });
 
   it("round-trips the minutes it shows", () => {
-    for (const seconds of ["90", "1800", "7200"]) expect(toSeconds(toMinutes(seconds))).toBe(seconds);
+    for (const seconds of ["90", "1800", "7200"])
+      expect(toSeconds(toMinutes(seconds))).toBe(seconds);
   });
 });
 

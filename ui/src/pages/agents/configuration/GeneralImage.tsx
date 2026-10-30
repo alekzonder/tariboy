@@ -6,89 +6,32 @@ import type { AgentImageStatus, AgentView } from "@/lib/api";
 import { useMultiHost } from "@/lib/navRoutes";
 import { guard } from "@/lib/toast-guard";
 import { ActionRow } from "./ConfigControls";
-import { imageHref, imageSides, nextReasonText, updatesOnNext } from "./generalImageModel";
+import { imageHref } from "./generalImageModel";
 import type { ConfigSources } from "./useConfigSources";
 
-type ImageSideValue = AgentImageStatus["current"] | AgentImageStatus["next"];
-
-function ImageSide({
-  label,
-  value,
-  targetId,
-}: {
-  label: string;
-  value: NonNullable<ImageSideValue>;
-  targetId: string;
-}) {
-  const multiHost = useMultiHost();
-  return (
-    <div role="group" aria-label={label} className="space-y-0.5">
-      <div className="font-medium">{label}</div>
-      <Link
-        className="font-mono text-primary hover:underline"
-        to={imageHref(targetId, value.ref, multiHost)}
-      >
-        {value.ref}
-      </Link>
-      <div>
-        {value.error ? "Version unavailable" : value.image_version || "Version not specified"}
-      </div>
-      <div className="font-mono text-xs break-all">{value.digest || "Digest unavailable"}</div>
-      {value.error && (
-        <p role="alert" className="mt-1 text-destructive">
-          {value.error}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function NextImageNote({ imageStatus }: { imageStatus: AgentImageStatus }) {
-  const next = imageStatus.next;
-  if (!next) return null;
-  return (
-    <div className="space-y-1 sm:col-span-2">
-      <p className="text-xs text-muted-foreground">{nextReasonText(next.reason)}</p>
-      {updatesOnNext(imageStatus) && <p role="status">Update on next iteration</p>}
-      <p className="text-xs text-muted-foreground">
-        This preview is not a reservation; the image may change before launch.
-      </p>
-    </div>
-  );
-}
-
-// ImageIdentity shows the current and next image versions with their digests,
-// why the next one was chosen, and any pending assignment.
-export function ImageIdentity({
-  imageStatus,
-  stopped,
-}: {
-  imageStatus: AgentImageStatus;
-  stopped: boolean;
-}) {
+// PendingImage shows an image assignment that waits for the next iteration,
+// and why its activation failed.
+export function PendingImage({ imageStatus }: { imageStatus: AgentImageStatus }) {
   const targetId = useApi().target?.id ?? "";
   const multiHost = useMultiHost();
+  const { pending } = imageStatus;
+  if (!pending.ref && !pending.error) return null;
   return (
-    <div className="grid gap-4 text-sm sm:grid-cols-2">
-      {imageSides(imageStatus, stopped).map(
-        ({ label, value }) =>
-          value && <ImageSide key={label} label={label} value={value} targetId={targetId} />,
-      )}
-      <NextImageNote imageStatus={imageStatus} />
-      {imageStatus.pending.ref && (
-        <div className="sm:col-span-2">
+    <div className="space-y-1 text-sm">
+      {pending.ref && (
+        <div>
           Pending:{" "}
           <Link
             className="font-mono text-primary hover:underline"
-            to={imageHref(targetId, imageStatus.pending.ref, multiHost)}
+            to={imageHref(targetId, pending.ref, multiHost)}
           >
-            {imageStatus.pending.ref}
+            {pending.ref}
           </Link>
         </div>
       )}
-      {imageStatus.pending.error && (
-        <p role="alert" className="text-destructive sm:col-span-2">
-          {imageStatus.pending.error}
+      {pending.error && (
+        <p role="alert" className="text-destructive">
+          {pending.error}
         </p>
       )}
     </div>

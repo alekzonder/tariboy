@@ -1,7 +1,7 @@
-// The Configuration page is one column of blocks over one page-wide draft.
-// This module is the pure half of that page: which blocks exist, which fields
-// they hold, how a field's text is normalized and checked, and how search picks
-// blocks. Rendering and requests live elsewhere so this stays testable alone.
+// The Settings page is four groups and one Advanced disclosure over one
+// page-wide draft. This module is the pure half of that page: which sections
+// exist, which fields they hold, and how a field's text is normalized and
+// checked. Rendering and requests live elsewhere so this stays testable alone.
 
 export type Values = Record<string, string>;
 
@@ -26,29 +26,79 @@ export interface ConfigField {
   label: string;
   helper: string;
   kind: FieldKind;
-  // Words a search should find that the label and helper do not contain.
-  keywords?: string;
   options?: readonly string[];
   minimum?: number;
 }
 
-export interface ConfigBlock {
+export interface ConfigSection {
   id: string;
   title: string;
-  description: string;
-  keywords: string;
+  // An advanced section renders inside the collapsed Advanced disclosure.
+  advanced: boolean;
   fields: readonly ConfigField[];
 }
 
 const NEXT_ITERATION = "Takes effect on the next iteration.";
 const NEXT_START = "Takes effect the next time the agent starts.";
 
-export const BLOCKS: readonly ConfigBlock[] = [
+export const SECTIONS: readonly ConfigSection[] = [
   {
-    id: "general",
-    title: "General",
-    description: "Image and working directory used for the next launch.",
-    keywords: "identity location",
+    id: "model",
+    title: "Model",
+    advanced: false,
+    fields: [
+      { key: "harness", label: "Coding tool", kind: "select", helper: NEXT_START },
+      { key: "model", label: "Model", kind: "preset", helper: "" },
+      { key: "effort", label: "Effort", kind: "preset", helper: "" },
+    ],
+  },
+  {
+    id: "folder",
+    title: "Working folder",
+    advanced: false,
+    fields: [
+      {
+        key: "cwd",
+        label: "Working directory",
+        kind: "path",
+        helper: "Takes effect on the next start. Existing files stay where they are.",
+      },
+      {
+        key: "cwd-create",
+        label: "Create directory if missing",
+        kind: "switch",
+        helper: "Make the working directory and its parents when it does not exist.",
+      },
+    ],
+  },
+  {
+    id: "autopilot",
+    title: "Autopilot",
+    advanced: false,
+    fields: [
+      { key: "interval", label: "Minutes between runs", kind: "text", helper: "" },
+      {
+        key: "timeout",
+        label: "Stop a run after (minutes)",
+        kind: "text",
+        helper: `0 means no limit. ${NEXT_ITERATION}`,
+      },
+      { key: "interactive", label: "Interactive terminal", kind: "switch", helper: NEXT_START },
+    ],
+  },
+  {
+    id: "spending",
+    title: "Spending limit",
+    advanced: false,
+    fields: [
+      { key: "budget-day", label: "Per day", kind: "number", minimum: 0, helper: "" },
+      { key: "budget-month", label: "Per month", kind: "number", minimum: 0, helper: "" },
+    ],
+  },
+  {
+    id: "image",
+    title: "Image",
+    advanced: true,
     fields: [
       {
         key: "image",
@@ -56,95 +106,27 @@ export const BLOCKS: readonly ConfigBlock[] = [
         kind: "image",
         helper:
           "Select an already-built image. It becomes active before the next iteration and does not change runtime settings.",
-        keywords: "version pending build",
       },
-      {
-        key: "image-digest",
-        label: "Image digest",
-        kind: "readonly",
-        helper: "Read only.",
-        keywords: "sha hash",
-      },
-      {
-        key: "cwd",
-        label: "Working directory",
-        kind: "path",
-        helper: "Takes effect on the next start. Existing files stay where they are.",
-        keywords: "cwd path folder directory location",
-      },
-      {
-        key: "cwd-create",
-        label: "Create directory if missing",
-        kind: "switch",
-        helper: "Make the working directory and its parents when it does not exist.",
-        keywords: "cwd mkdir folder directory",
-      },
+      { key: "image-digest", label: "Image digest", kind: "readonly", helper: "Read only." },
     ],
   },
   {
-    id: "runtime",
-    title: "Runtime",
-    description: "Harness, model and effort for this agent.",
-    keywords: "llm ai",
+    id: "schedule",
+    title: "Schedule and timeouts",
+    advanced: true,
     fields: [
-      {
-        key: "harness",
-        label: "Harness",
-        kind: "select",
-        helper: NEXT_START,
-        keywords: "cli claude codex opencode cursor",
-      },
-      { key: "model", label: "Model", kind: "preset", helper: NEXT_ITERATION, keywords: "llm" },
-      {
-        key: "effort",
-        label: "Effort",
-        kind: "preset",
-        helper: NEXT_ITERATION,
-        keywords: "reasoning thinking",
-      },
-      {
-        key: "interactive",
-        label: "Interactive (tmux TUI)",
-        kind: "switch",
-        helper: NEXT_START,
-        keywords: "terminal tmux tui",
-      },
-    ],
-  },
-  {
-    id: "loop",
-    title: "Loop and timeouts",
-    description: "When the agent runs and how it recovers.",
-    keywords: "schedule iteration",
-    fields: [
-      {
-        key: "interval",
-        label: "Interval",
-        kind: "text",
-        helper: `Seconds. ${NEXT_ITERATION}`,
-        keywords: "period seconds",
-      },
       {
         key: "schedule",
         label: "Schedule",
         kind: "schedule",
         helper:
-          "Times are in the daemon host's time zone, not the browser's. Works together with Interval. Custom RRULE takes any RFC 5545 rule; None means no schedule.",
-        keywords: "rrule cron calendar time weekday day month dtstart once",
-      },
-      {
-        key: "timeout",
-        label: "Timeout",
-        kind: "text",
-        helper: `Seconds. ${NEXT_ITERATION}`,
-        keywords: "seconds",
+          "Times are in the daemon host's time zone, not the browser's. Works together with Autopilot. Custom RRULE takes any RFC 5545 rule; None means no schedule.",
       },
       {
         key: "hard-timeout",
         label: "Hard timeout",
         kind: "text",
         helper: `Seconds. ${NEXT_ITERATION}`,
-        keywords: "kill seconds",
       },
       {
         key: "on-timeout",
@@ -152,7 +134,6 @@ export const BLOCKS: readonly ConfigBlock[] = [
         kind: "select",
         options: ["restart", "stop"],
         helper: NEXT_ITERATION,
-        keywords: "policy",
       },
       {
         key: "on-error",
@@ -160,7 +141,6 @@ export const BLOCKS: readonly ConfigBlock[] = [
         kind: "select",
         options: ["restart", "stop"],
         helper: NEXT_ITERATION,
-        keywords: "policy failure",
       },
       {
         key: "max-idle",
@@ -168,7 +148,6 @@ export const BLOCKS: readonly ConfigBlock[] = [
         kind: "number",
         minimum: 0,
         helper: `0 means never. ${NEXT_ITERATION}`,
-        keywords: "idle limit",
       },
       {
         key: "ai-stall-timeout",
@@ -176,15 +155,13 @@ export const BLOCKS: readonly ConfigBlock[] = [
         kind: "number",
         minimum: 1,
         helper: "Seconds without an AI-proxy request before showing an informational error.",
-        keywords: "stall proxy",
       },
     ],
   },
   {
     id: "goal",
     title: "Goal",
-    description: "Choose whether this agent follows one sticky Native Task goal.",
-    keywords: "task native",
+    advanced: true,
     fields: [
       {
         key: "goal-enabled",
@@ -198,7 +175,6 @@ export const BLOCKS: readonly ConfigBlock[] = [
         kind: "number",
         minimum: 1,
         helper: "Use a positive whole number of seconds.",
-        keywords: "customer wait",
       },
       {
         key: "goal-delivery-cooldown",
@@ -206,7 +182,6 @@ export const BLOCKS: readonly ConfigBlock[] = [
         kind: "number",
         minimum: 1,
         helper: "Wait before sending another unprocessed Goal message.",
-        keywords: "cooldown delay",
       },
       {
         key: "current-goal-task",
@@ -217,10 +192,9 @@ export const BLOCKS: readonly ConfigBlock[] = [
     ],
   },
   {
-    id: "messages",
+    id: "mail",
     title: "Mail",
-    description: "Control the open inbox cap and the letters read per iteration.",
-    keywords: "mail inbox letters",
+    advanced: true,
     fields: [
       {
         key: "messages-batch",
@@ -228,7 +202,6 @@ export const BLOCKS: readonly ConfigBlock[] = [
         kind: "number",
         minimum: 1,
         helper: "Most open inbox letters added to one iteration.",
-        keywords: "batch",
       },
       {
         key: "messages-max-queue",
@@ -236,27 +209,22 @@ export const BLOCKS: readonly ConfigBlock[] = [
         kind: "number",
         minimum: 1,
         helper: "A letter beyond this limit is dead on arrival; requeue it from Mailbox, Archive.",
-        keywords: "queue dlq limit",
       },
     ],
   },
   {
     id: "budgets",
-    title: "Budgets (USD)",
-    description: "Zero means Unlimited. Each configured calendar limit applies independently.",
-    keywords: "money cost spend usd limit",
+    title: "Hour and week budgets (USD)",
+    advanced: true,
     fields: [
       { key: "budget-hour", label: "Hour budget", kind: "number", minimum: 0, helper: "" },
-      { key: "budget-day", label: "Day budget", kind: "number", minimum: 0, helper: "" },
       { key: "budget-week", label: "Week budget", kind: "number", minimum: 0, helper: "" },
-      { key: "budget-month", label: "Month budget", kind: "number", minimum: 0, helper: "" },
     ],
   },
   {
     id: "environment",
     title: "Environment",
-    description: "Shell script and secrets for each iteration.",
-    keywords: "bash env variables",
+    advanced: true,
     fields: [
       {
         key: "shell-script",
@@ -264,36 +232,26 @@ export const BLOCKS: readonly ConfigBlock[] = [
         kind: "textarea",
         helper:
           "Bash commands sourced after the global script before this agent starts an iteration.",
-        keywords: "bash export",
       },
       {
         key: "secrets-remove",
         label: "Secrets",
         kind: "secret-remove",
         helper: "Key names only; values are never shown.",
-        keywords: "token password credential",
       },
-      {
-        key: "secret-key",
-        label: "Secret key",
-        kind: "text",
-        helper: NEXT_ITERATION,
-        keywords: "token",
-      },
+      { key: "secret-key", label: "Secret key", kind: "text", helper: NEXT_ITERATION },
       {
         key: "secret-value",
         label: "Secret value",
         kind: "secret-value",
         helper: "Write-only. Cleared after it is saved.",
-        keywords: "password",
       },
     ],
   },
   {
     id: "retention",
     title: "Retention and cleanup",
-    description: "Keep the history you need, then review cleanup safely.",
-    keywords: "prune history archive",
+    advanced: true,
     fields: [
       { key: "keep-iterations", label: "Keep iterations", kind: "number", minimum: 0, helper: "" },
       { key: "keep-days", label: "Keep days", kind: "number", minimum: 0, helper: "" },
@@ -302,12 +260,12 @@ export const BLOCKS: readonly ConfigBlock[] = [
 ];
 
 const FIELDS = new Map(
-  BLOCKS.flatMap((block) =>
-    block.fields.map((field) => [field.key, { field, block: block.id }] as const),
+  SECTIONS.flatMap((section) =>
+    section.fields.map((field) => [field.key, { field, section }] as const),
   ),
 );
 
-export const blockOfKey = (key: string) => FIELDS.get(key)?.block ?? "";
+export const sectionOfKey = (key: string) => FIELDS.get(key)?.section;
 export const fieldOfKey = (key: string) => FIELDS.get(key)?.field;
 
 // Whole seconds and counts: a non-numeric draft is left alone so the server,
@@ -347,9 +305,14 @@ const amount = (value: string) =>
     ? ""
     : "Enter zero or a positive amount.";
 
+// The minutes boxes pass text they cannot convert through, so it lands here.
+const minutes = (message: string) => (value: string) => (nonNegativeWhole(value) ? message : "");
+
 const SECONDS = positiveWhole("Enter a positive whole number of seconds.");
 const COUNT = positiveWhole("Enter a positive whole number.");
 const VALIDATORS: Record<string, (value: string, values: Values) => string> = {
+  interval: minutes("Enter the minutes between runs."),
+  timeout: minutes("Enter the minutes, or 0 for no limit."),
   "goal-wait-customer-timeout": SECONDS,
   "goal-delivery-cooldown": SECONDS,
   "messages-batch": COUNT,
@@ -368,30 +331,4 @@ const VALIDATORS: Record<string, (value: string, values: Values) => string> = {
 // validateField checks a normalized value before anything is sent; "" is valid.
 export function validateField(key: string, value: string, values: Values): string {
   return VALIDATORS[key]?.(value, values) ?? "";
-}
-
-const haystack = (...parts: (string | undefined)[]) =>
-  parts.filter(Boolean).join(" ").toLowerCase();
-
-// filterBlocks returns the blocks a query selects, whole, in page order, and
-// the fields that matched by themselves so the page can highlight them. Every
-// word of the query must be found somewhere in one block.
-export function filterBlocks(
-  query: string,
-  blocks: readonly ConfigBlock[],
-): { blocks: ConfigBlock[]; matched: Set<string> } {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const matched = new Set<string>();
-  if (words.length === 0) return { blocks: [...blocks], matched };
-  const selected = blocks.filter((block) => {
-    const own = haystack(block.title, block.description, block.keywords);
-    const fieldTexts = block.fields.map((f) => haystack(f.label, f.helper, f.keywords, f.key));
-    const all = [own, ...fieldTexts].join(" ");
-    if (!words.every((word) => all.includes(word))) return false;
-    block.fields.forEach((field, index) => {
-      if (words.every((word) => fieldTexts[index].includes(word))) matched.add(field.key);
-    });
-    return true;
-  });
-  return { blocks: selected, matched };
 }
