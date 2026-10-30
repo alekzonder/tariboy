@@ -18,15 +18,23 @@ const sidebar = (children: React.ReactNode, width = 260) => (
   </div>
 );
 
-// agentTone(): running is live, failed is danger, everything else quiet —
-// and an exhausted budget outranks the state in both the dot and the pill.
+const now = new Date("2026-10-30T12:30:00Z");
+const working = { kind: "working", since: "2026-10-30T12:18:00Z" } as const;
+const idle = { kind: "idle" } as const;
+const off = { kind: "off" } as const;
+const needs = { kind: "needs", needs: { count: 1 } } as const;
+const error = { kind: "error", reason: "Out of budget: day" } as const;
+
+// The derived state: needs you is the accent, working is live, error is
+// danger, off is quiet text, and an idle row carries no pill at all.
 export const States = () =>
   sidebar(
     <>
-      <AgentRow name="builder" state="running" />
-      <AgentRow name="reviewer" state="stopped" />
-      <AgentRow name="packager" state="failed" />
-      <AgentRow name="docs-bot" state="running" outOfBudget />
+      <AgentRow name="planner" agentState={needs} now={now} />
+      <AgentRow name="builder" agentState={working} now={now} />
+      <AgentRow name="reviewer" agentState={idle} now={now} />
+      <AgentRow name="packager" agentState={off} now={now} />
+      <AgentRow name="docs-bot" agentState={error} now={now} />
     </>,
   );
 
@@ -35,19 +43,19 @@ export const States = () =>
 export const Selected = () =>
   sidebar(
     <>
-      <AgentRow name="builder" state="running" selected />
-      <AgentRow name="reviewer" state="stopped" />
-      <AgentRow name="packager" state="stopped" />
+      <AgentRow name="builder" agentState={working} now={now} selected />
+      <AgentRow name="reviewer" agentState={idle} now={now} />
+      <AgentRow name="packager" agentState={off} now={now} />
     </>,
   );
 
-// The two quiet markers: unread chat messages, and an agent with no tty.
+// The quiet marker of an agent with no tty.
 export const Markers = () =>
   sidebar(
     <>
-      <AgentRow name="builder" state="running" unreadMessages={2} />
-      <AgentRow name="reviewer" state="running" interactive={false} />
-      <AgentRow name="packager" state="stopped" />
+      <AgentRow name="builder" agentState={working} now={now} />
+      <AgentRow name="reviewer" agentState={working} now={now} interactive={false} />
+      <AgentRow name="packager" agentState={off} now={now} />
     </>,
   );
 
@@ -71,9 +79,9 @@ export const InSidebar = () =>
         <span>Agents</span>
         <span>4</span>
       </div>
-      <AgentRow name="builder" state="running" selected unreadMessages={2} />
-      <AgentRow name="reviewer" state="running" interactive={false} />
-      <AgentRow name="packager" state="failed" />
-      <AgentRow name="docs-bot" state="stopped" outOfBudget />
+      <AgentRow name="builder" agentState={needs} now={now} selected />
+      <AgentRow name="reviewer" agentState={working} now={now} interactive={false} />
+      <AgentRow name="packager" agentState={idle} now={now} />
+      <AgentRow name="docs-bot" agentState={error} now={now} />
     </>,
   );

@@ -6,6 +6,7 @@
  * taking the sidebar down with it.
  */
 
+import { useSyncExternalStore } from "react";
 import { readKey, storageKeys, writeKey } from "@/lib/storage";
 
 export const SIDEBAR_AGENTS_KEY = storageKeys.terminalsSidebarAgents.name;
@@ -32,4 +33,37 @@ export function readPinnedAgents(): Set<string> {
 export function writePinnedAgents(keys: ReadonlySet<string>): void {
   // Same as the list: a pin that cannot be saved still applies to this session.
   writeKey(storageKeys.terminalsSidebarPinned, { version: 1, keys: [...keys] });
+}
+
+// The sidebar and the agent header pin the same set, so it is one store read
+// from storage. shortcut: a pin that storage refuses does not stick, keep a
+// session copy if that matters.
+const pinListeners = new Set<() => void>();
+let pinnedSnapshot: ReadonlySet<string> = new Set();
+
+function pinnedAgentsSnapshot(): ReadonlySet<string> {
+  const read = readPinnedAgents();
+  const same =
+    read.size === pinnedSnapshot.size && [...read].every((key) => pinnedSnapshot.has(key));
+  if (!same) pinnedSnapshot = read;
+  return pinnedSnapshot;
+}
+
+function subscribePinned(listener: () => void) {
+  pinListeners.add(listener);
+  return () => {
+    pinListeners.delete(listener);
+  };
+}
+
+export function togglePinnedAgent(key: string): void {
+  const next = new Set(pinnedAgentsSnapshot());
+  if (!next.delete(key)) next.add(key);
+  writePinnedAgents(next);
+  pinnedSnapshot = next;
+  pinListeners.forEach((listener) => listener());
+}
+
+export function usePinnedAgents(): ReadonlySet<string> {
+  return useSyncExternalStore(subscribePinned, pinnedAgentsSnapshot);
 }

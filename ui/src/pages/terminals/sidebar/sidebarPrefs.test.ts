@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { act, renderHook } from "@testing-library/react";
 import {
   SIDEBAR_AGENTS_KEY,
   SIDEBAR_PINNED_KEY,
   readAgentsOpen,
   readPinnedAgents,
+  togglePinnedAgent,
+  usePinnedAgents,
   writeAgentsOpen,
   writePinnedAgents,
 } from "./sidebarPrefs";
@@ -39,5 +42,18 @@ describe("pinned agents", () => {
     expect(readPinnedAgents().size).toBe(0);
     localStorage.setItem(SIDEBAR_PINNED_KEY, JSON.stringify({ version: 1, keys: ["x", 7] }));
     expect([...readPinnedAgents()]).toEqual(["x"]);
+  });
+});
+
+describe("usePinnedAgents", () => {
+  it("shares one pinned set between its readers", () => {
+    const first = renderHook(() => usePinnedAgents());
+    const second = renderHook(() => usePinnedAgents());
+    act(() => togglePinnedAgent("a"));
+    expect([...first.result.current]).toEqual(["a"]);
+    expect([...second.result.current]).toEqual(["a"]);
+    expect([...readPinnedAgents()]).toEqual(["a"]);
+    act(() => togglePinnedAgent("a"));
+    expect(first.result.current.size).toBe(0);
   });
 });

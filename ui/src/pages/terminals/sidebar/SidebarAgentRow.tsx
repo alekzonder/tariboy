@@ -6,6 +6,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { AgentRow } from "@/components/AgentRow";
+import { deriveAgentState, type AgentNeeds } from "@/lib/agentState";
 import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
 import { cn } from "@/lib/utils";
 import type { SidebarAgent } from "./sidebarModel";
@@ -17,6 +18,9 @@ export interface AgentRowActions {
   onSelect: (hostId: string, agent: string) => void;
   onClone: (hostId: string, agent: string) => void;
   onTogglePin: (key: string) => void;
+  now: Date;
+  /** What the agent waits on the user for, from the shared "needs you" read. */
+  needsFor: (hostId: string, agent: string) => AgentNeeds;
 }
 
 function DraggableRow({
@@ -67,8 +71,8 @@ export function SidebarAgentRow({
   const disabled = Boolean(row.hostError);
   const rowProps = {
     name: agent.name,
-    state: agent.state,
-    outOfBudget: Boolean(agent.budget?.exhausted?.length),
+    agentState: deriveAgentState({ agent, needs: actions.needsFor(row.hostId, agent.name) }),
+    now: actions.now,
     selected: actions.selected?.hostId === row.hostId && actions.selected.agent === agent.name,
     interactive: agent.interactive !== false,
     "aria-label": `Open ${agent.name}`,
