@@ -30,8 +30,12 @@ func buildPrompt(t *testing.T, store *Store, ref Ref, body string) (Manifest, er
 // TestBuildRefsRejectsReservedTags covers the screen every build entry point
 // applies before it reaches the one publication mechanism.
 func TestBuildRefsRejectsReservedTags(t *testing.T) {
-	if _, _, err := BuildRefs("basic", []string{"latest"}, ""); !errors.Is(err, ErrTagReserved) {
+	if _, _, err := BuildRefs("bare", []string{"latest"}, ""); !errors.Is(err, ErrTagReserved) {
 		t.Fatalf("BuildRefs error = %v, want ErrTagReserved", err)
+	}
+	// basic is a Store image: its default build publishes image_version plus latest.
+	if refs, _, err := BuildRefs("basic", nil, "1.0.0"); err != nil || len(refs) != 2 || refs[1].String() != "basic:latest" {
+		t.Fatalf("BuildRefs(basic) = %#v, %v", refs, err)
 	}
 	if _, _, err := BuildRefs("reviewer", []string{"v1", "v1"}, ""); !errors.Is(err, ErrDuplicateTag) {
 		t.Fatalf("BuildRefs error = %v, want ErrDuplicateTag", err)
