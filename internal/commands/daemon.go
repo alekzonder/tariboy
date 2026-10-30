@@ -35,6 +35,8 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, storeRefresh())
 	mustRegister(r, storeAuto())
 	mustRegister(r, storeRemove())
+	mustRegister(r, onboardingStatus())
+	mustRegister(r, onboardingRetry())
 	mustRegister(r, imageBuild())
 	mustRegister(r, imageVersionGet())
 	mustRegister(r, imageVersionUpdate())
@@ -258,6 +260,7 @@ func BuildRegistry() *registry.Registry {
 	mustGroup(r, "mail", "Read and send mail as the customer or another principal")
 	mustGroup(r, "agent.mail", "Manage an agent's mailbox")
 	mustGroup(r, "harness", "Inspect the harnesses installed on the daemon host")
+	mustGroup(r, "onboarding", "Inspect or retry the first-run setup of the daemon")
 	mustGroup(r, "harness.codex-approval", "Read or set how this daemon starts codex (--yolo or --approve-for-me)")
 	mustValidate(r)
 	return r

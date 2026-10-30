@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/alekzonder/tariboy/internal/api"
+	"github.com/alekzonder/tariboy/internal/onboarding"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/stores"
 )
@@ -85,8 +86,21 @@ func storeAuto() registry.Command {
 
 func storeRemove() registry.Command {
 	return registry.WithResult[StoreRemoveResult](registry.Command{Path: "store.remove", Summary: "Remove a Store registration", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodDelete, Path: "/api/stores/{name}"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
-		if err := storeCatalog(c).Remove(p.Ctx, p.String("name")); err != nil {
+		catalog, name := storeCatalog(c), p.String("name")
+		removed := stores.Store{Name: name}
+		if list, err := catalog.List(p.Ctx); err == nil {
+			for _, s := range list {
+				if s.Name == name {
+					removed = s
+				}
+			}
+		}
+		if err := catalog.Remove(p.Ctx, name); err != nil {
 			return nil, storeError(err)
+		}
+		// The daemon never registers a removed default Store again by itself.
+		if err := onboarding.MarkRemoved(c.Store, removed, onboardingSource(c)); err != nil {
+			return nil, err
 		}
 		return StoreRemoveResult{Removed: true}, nil
 	}})

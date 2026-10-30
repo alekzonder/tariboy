@@ -299,6 +299,9 @@ func (s *Service) findDefault(ctx context.Context) (stores.Store, bool, error) {
 	return stores.Store{}, false, nil
 }
 
+// DefaultSource is the source the service registers the default Store from.
+func (s *Service) DefaultSource() string { return s.source() }
+
 func (s *Service) source() string {
 	if s.Source == "" {
 		return DefaultStoreSource
