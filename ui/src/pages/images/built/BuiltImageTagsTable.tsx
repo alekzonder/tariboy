@@ -4,11 +4,14 @@ import type { TagActionHandlers } from "./BuiltImageTagActions";
 
 export function BuiltImageTagsTable({
   tags,
-  basePath,
+  newestTag,
+  currentTag,
   actions,
 }: {
   tags: ImageSummary[];
-  basePath: string;
+  newestTag?: string;
+  /** The tag the page shows. */
+  currentTag?: string;
   actions: TagActionHandlers;
 }) {
   return (
@@ -17,7 +20,7 @@ export function BuiltImageTagsTable({
         <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
           <tr>
             <th className="px-3 py-2">Tag</th>
-            <th className="px-3 py-2">image_version</th>
+            <th className="px-3 py-2">Version</th>
             <th className="px-3 py-2">Digest</th>
             <th className="px-3 py-2">Built</th>
             <th className="px-3 py-2">Source</th>
@@ -29,8 +32,8 @@ export function BuiltImageTagsTable({
             <BuiltImageTagRow
               key={`${image.name}:${image.tag}`}
               image={image}
-              newest={image === tags[0]}
-              basePath={basePath}
+              newest={image.tag === newestTag}
+              current={image.tag === currentTag}
               actions={actions}
             />
           ))}

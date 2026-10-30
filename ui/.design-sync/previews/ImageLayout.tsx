@@ -32,14 +32,11 @@ const Frame = ({ children }: { children: ReactNode }) => (
 );
 
 export const ImageShell = () => (
-  <MemoryRouter initialEntries={["/servers/build-01/images/worker/v1"]}>
+  <MemoryRouter initialEntries={["/library/images/worker/v1"]}>
     <DaemonProvider>
       <Frame>
         <Routes>
-          <Route
-            path="/servers/:hostId/images/:name/:tag/*"
-            element={<ImageLayout hostId="build-01" basePath="/servers/build-01/images" />}
-          />
+          <Route path="/library/images/:name/:tag/*" element={<ImageLayout hostId="build-01" />} />
         </Routes>
       </Frame>
     </DaemonProvider>

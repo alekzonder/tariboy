@@ -1,43 +1,51 @@
 import { useState } from "react";
-import StoreDetail from "@/pages/stores/StoreDetail";
+import { Link } from "react-router-dom";
+import StoreCard from "@/pages/stores/StoreCard";
 import StoreList from "@/pages/stores/StoreList";
 import { useStoreActions } from "@/pages/stores/useStoreActions";
 import { useStoreData } from "@/pages/stores/useStoreData";
 
+/** The Library's Sources tab: one card per Store, or the Store `name` alone. */
 export default function StoresPage({ name, basePath }: { name?: string; basePath: string }) {
-  const [storeName, setStoreName] = useState("");
-  const [source, setSource] = useState("");
-  const data = useStoreData(name);
-  const actions = useStoreActions(name, basePath, data);
-  const { error } = data;
-  const { status } = actions;
-
   return (
-    <div className="h-full min-h-0 space-y-4 overflow-y-auto p-6">
+    <div className="h-full min-h-0 space-y-4 overflow-y-auto p-4">
       {name ? (
-        <StoreDetail name={name} basePath={basePath} data={data} actions={actions} />
+        <>
+          <Link className="text-sm text-primary hover:underline" to={basePath}>
+            ← Sources
+          </Link>
+          <StoreCard name={name} basePath={basePath} />
+        </>
       ) : (
-        <StoreList
-          basePath={basePath}
-          stores={data.stores}
-          loading={data.loading}
-          actions={actions}
-          storeName={storeName}
-          setStoreName={setStoreName}
-          source={source}
-          setSource={setSource}
-        />
-      )}
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-      {status && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {status}
-        </p>
+        <SourcesList basePath={basePath} />
       )}
     </div>
+  );
+}
+
+function SourcesList({ basePath }: { basePath: string }) {
+  const [storeName, setStoreName] = useState("");
+  const [source, setSource] = useState("");
+  const data = useStoreData(undefined);
+  const actions = useStoreActions(undefined, basePath, data);
+  return (
+    <>
+      <StoreList
+        basePath={basePath}
+        stores={data.stores}
+        loading={data.loading}
+        actions={actions}
+        storeName={storeName}
+        setStoreName={setStoreName}
+        source={source}
+        setSource={setSource}
+        onRemoved={data.reload}
+      />
+      {data.error && (
+        <p role="alert" className="text-sm text-destructive">
+          {data.error}
+        </p>
+      )}
+    </>
   );
 }

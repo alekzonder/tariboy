@@ -8,6 +8,7 @@ import WorkflowImageDetail from "./WorkflowImageDetail";
 
 const api = {
   getWorkflowImage: vi.fn(),
+  listWorkflowImages: vi.fn(),
   removeWorkflowImage: vi.fn(),
   listTaskQueues: vi.fn(),
   getQueueWorkflow: vi.fn(),
@@ -20,6 +21,7 @@ const remoteApi = fakeApi(
   {
     workflows: {
       getWorkflowImage: api.getWorkflowImage,
+      listWorkflowImages: api.listWorkflowImages,
       removeWorkflowImage: api.removeWorkflowImage,
       getQueueWorkflow: api.getQueueWorkflow,
     },
@@ -80,6 +82,23 @@ const manifest: WorkflowImageManifest = {
 beforeEach(() => {
   vi.clearAllMocks();
   api.getWorkflowImage.mockResolvedValue(manifest);
+  api.listWorkflowImages.mockResolvedValue([
+    {
+      name: "development",
+      tag: "latest",
+      version: "0.2.0",
+      digest: "d".repeat(64),
+      built_at: "2026-10-02T00:00:00Z",
+    },
+    {
+      name: "development",
+      tag: "0.1.0",
+      version: "0.1.0",
+      digest,
+      built_at: "2026-10-01T00:00:00Z",
+    },
+    { name: "research", tag: "0.1.0", version: "0.1.0", digest, built_at: "2026-10-01T00:00:00Z" },
+  ]);
   api.listTaskQueues.mockResolvedValue({ queues: [{ prefix: "DEV" }], count: 1 });
   api.getQueueWorkflow.mockResolvedValue({ queue: "DEV", digest });
 });
@@ -172,4 +191,24 @@ it("shows a load failure", async () => {
   );
   renderDetail();
   expect(await screen.findByRole("alert")).toHaveTextContent("workflow image not found");
+});
+
+it("lists the versions of the name with their bindings and an upload each", async () => {
+  renderDetail();
+  const versions = await screen.findByRole("region", { name: "Versions" });
+  const rows = within(versions).getAllByRole("row").slice(1);
+  expect(rows.map((row) => within(row).getAllByRole("cell")[0].textContent)).toEqual([
+    "latest",
+    "0.1.0",
+  ]);
+  expect(within(rows[0]).getByRole("link", { name: "latest" })).toHaveAttribute(
+    "href",
+    "/w/development/latest",
+  );
+  await waitFor(() => expect(rows[1]).toHaveTextContent("DEV"));
+  expect(rows[1]).toHaveAttribute("aria-current", "true");
+  fireEvent.click(
+    within(rows[0]).getByRole("button", { name: "Upload to servers development:latest" }),
+  );
+  expect(await screen.findByText("Upload workflow development:latest")).toBeInTheDocument();
 });

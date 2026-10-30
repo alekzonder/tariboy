@@ -63,12 +63,9 @@ it("reloads a changed template once with the new manifest and explicit route tar
     }),
   );
   render(
-    <MemoryRouter initialEntries={["/servers/route/images/reviewer/latest/template"]}>
+    <MemoryRouter initialEntries={["/library/images/reviewer/latest/template"]}>
       <Routes>
-        <Route
-          path="/servers/:hostId/images/:name/:tag"
-          element={<ImageLayout hostId={host.id} basePath="/servers/route/images" />}
-        >
+        <Route path="/library/images/:name/:tag" element={<ImageLayout hostId={host.id} />}>
           <Route path="template" element={<ImageTemplate />} />
         </Route>
       </Routes>
@@ -78,13 +75,10 @@ it("reloads a changed template once with the new manifest and explicit route tar
   expect(screen.getByText("2.0.0", { exact: true })).toBeInTheDocument();
   expect(screen.queryByText("1.0.0", { exact: true })).toBeNull();
   expect(screen.getByRole("status")).toHaveTextContent(/image changed/i);
-  expect(screen.getByRole("link", { name: "Images" })).toHaveAttribute(
-    "href",
-    "/servers/route/images",
-  );
+  expect(screen.getByRole("link", { name: "Images" })).toHaveAttribute("href", "/library/images");
   expect(screen.getByRole("link", { name: "reviewer" })).toHaveAttribute(
     "href",
-    "/servers/route/images/reviewer",
+    "/library/images/reviewer",
   );
   expect(
     requests.filter((url) => url === "https://route/api/images/reviewer%3Alatest"),

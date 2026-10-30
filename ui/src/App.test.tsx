@@ -153,17 +153,24 @@ describe("product routing", () => {
     ["/servers/local/mail", "/inbox?host=local"],
     ["/servers/remote-1/activity?view=agents", "/activity?host=remote-1&view=agents"],
     ["/settings/advanced/usage?range=7d", "/servers/local/settings/advanced/usage?range=7d"],
+    [
+      "/servers/remote-1/images/worker/v1/files?x=1",
+      "/library/images/worker/v1/files?host=remote-1&x=1",
+    ],
+    ["/servers/local/workflows/flow/latest", "/library/workflows/flow/latest?host=local"],
+    ["/servers/local/stores/tariboy", "/library/sources/tariboy?host=local"],
+    ["/library", "/library/images"],
   ])("redirects legacy server surface %s without losing its tail", async (from, to) => {
     renderAt(from);
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(to));
   });
 
-  it("preserves the active remote host when redirecting an image detail", async () => {
+  it("sends an old image detail straight to the Library", async () => {
     localStorage.setItem("tariboy_active_daemon", "remote-1");
     renderAt("/images/worker/v1/template?raw=1");
     await waitFor(() =>
       expect(screen.getByTestId("location")).toHaveTextContent(
-        "/servers/remote-1/images/worker/v1/template?raw=1",
+        "/library/images/worker/v1/template?raw=1",
       ),
     );
   });

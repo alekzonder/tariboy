@@ -50,32 +50,37 @@ export function AppRoutes() {
       <Route path="/servers/:hostId/tasks" element={<TerminalsPage />} />
       <Route path="/servers/:hostId/activity" element={<TerminalsPage />} />
 
-      <Route path="/servers/:hostId/images" element={<TerminalsPage serverView="images" />} />
+      <Route path="/library" element={<Navigate to="/library/images" replace />} />
+      <Route path="/library/images" element={<TerminalsPage serverView="images" scoped />} />
       <Route
-        path="/servers/:hostId/images/:name"
-        element={<TerminalsPage serverView="image-tags" />}
-      />
+        path="/library/images/:name"
+        element={<TerminalsPage serverView="image-detail" scoped />}
+      >
+        <Route index element={<ImageOverview />} />
+      </Route>
       <Route
-        path="/servers/:hostId/images/:name/:tag"
-        element={<TerminalsPage serverView="image-detail" />}
+        path="/library/images/:name/:tag"
+        element={<TerminalsPage serverView="image-detail" scoped />}
       >
         <Route index element={<ImageOverview />} />
         <Route path="template" element={<ImageTemplate />} />
         <Route path="skills" element={<ImageSkills />} />
         <Route path="files" element={<ImageFiles />} />
       </Route>
-
-      <Route path="/servers/:hostId/workflows" element={<TerminalsPage serverView="workflows" />} />
+      <Route path="/library/workflows" element={<TerminalsPage serverView="workflows" scoped />} />
       <Route
-        path="/servers/:hostId/workflows/:name/:tag"
-        element={<TerminalsPage serverView="workflow-detail" />}
+        path="/library/workflows/:name/:tag"
+        element={<TerminalsPage serverView="workflow-detail" scoped />}
       />
-
-      <Route path="/servers/:hostId/stores" element={<TerminalsPage serverView="stores" />} />
+      <Route path="/library/sources" element={<TerminalsPage serverView="stores" scoped />} />
       <Route
-        path="/servers/:hostId/stores/:name"
-        element={<TerminalsPage serverView="store-detail" />}
+        path="/library/sources/:name"
+        element={<TerminalsPage serverView="store-detail" scoped />}
       />
+      {/* TerminalsPage sends these to /library/images, /workflows and /sources. */}
+      <Route path="/servers/:hostId/images/*" element={<TerminalsPage />} />
+      <Route path="/servers/:hostId/workflows/*" element={<TerminalsPage />} />
+      <Route path="/servers/:hostId/stores/*" element={<TerminalsPage />} />
 
       <Route path="/servers/:hostId/settings" element={<TerminalsPage serverView="settings" />}>
         <Route index element={<GeneralSettings />} />
@@ -94,7 +99,7 @@ export function AppRoutes() {
         <Route path="advanced/groups" element={<GroupsPage />} />
       </Route>
 
-      <Route path="/images/*" element={<LegacyServerSurfaceRedirect section="images" />} />
+      <Route path="/images/*" element={<LegacyImagesRedirect />} />
       <Route path="/settings/*" element={<LegacyServerSurfaceRedirect section="settings" />} />
 
       <Route path="/terminals" element={<CanonicalTerminalsRedirect />} />
@@ -160,7 +165,12 @@ function LegacyAgentRedirect() {
   );
 }
 
-function LegacyServerSurfaceRedirect({ section }: { section: "images" | "settings" }) {
+function LegacyImagesRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/library${location.pathname}${location.search}`} replace />;
+}
+
+function LegacyServerSurfaceRedirect({ section }: { section: "settings" }) {
   const location = useLocation();
   const { activeId } = useDaemons();
   const legacyBase = `/${section}`;

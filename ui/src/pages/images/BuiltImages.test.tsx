@@ -9,6 +9,7 @@ import { createApi, setActiveDaemon } from "@/lib/api";
 import { ApiProvider } from "@/components/ApiProvider";
 import { apiWrapper } from "@/test/api";
 import BuiltImages from "./BuiltImages";
+import { ImageArchiveImport } from "./built/ImageArchiveImport";
 
 // BuiltImages renders under the route host's ApiProvider.
 const on = (target: Daemon | null) => ({ wrapper: apiWrapper(createApi(target)) });
@@ -227,7 +228,7 @@ it("imports into the route host instead of the active daemon", async () => {
 
   render(
     <MemoryRouter>
-      <BuiltImages hostId={source.id} />
+      <ImageArchiveImport hostId={source.id} onImported={() => {}} />
     </MemoryRouter>,
     await routeHost(source.id),
   );
@@ -473,9 +474,8 @@ it("exports runnable images and distinguishes original builds from imports", asy
   );
   render(
     <MemoryRouter>
-      <BuiltImages hostId="" basePath="/servers/local/images" />
       {["built", "imported", "missing", "bare"].map((name) => (
-        <BuiltImages key={name} imageName={name} hostId="" basePath="/servers/local/images" />
+        <BuiltImages key={name} imageName={name} hostId="" />
       ))}
     </MemoryRouter>,
     on(null),
@@ -483,18 +483,58 @@ it("exports runnable images and distinguishes original builds from imports", asy
 
   expect(await screen.findByRole("button", { name: "Export built:v1" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "Export imported:v1" })).toBeEnabled();
-  expect(screen.getByText("/srv/images/built")).toBeInTheDocument();
+  const source = screen.getByText("/srv/images/built");
+  expect(source).toHaveClass("truncate");
+  expect(source).toHaveAttribute("title", "/srv/images/built");
   expect(screen.getByText("Source CWD unavailable — imported artifact")).toBeInTheDocument();
   expect(screen.getByText("Source CWD unavailable — /srv/images/missing")).toBeInTheDocument();
   expect(screen.getByText("Current: reviewer")).toBeInTheDocument();
   expect(screen.getByText("Pending: worker")).toBeInTheDocument();
   expect(screen.getAllByTitle(/original sources are not included/i)).toHaveLength(3);
-  expect(screen.getByLabelText("Import image archive")).toBeInTheDocument();
   expect(screen.getByTestId("built-image-built:v1").querySelector("a")).toHaveAttribute(
     "href",
-    "/servers/local/images/built/v1",
+    "/library/images/built/v1",
   );
   expect(screen.queryByRole("button", { name: "Upload to servers bare:latest" })).toBeNull();
+});
+
+it("shows the newest five versions until asked for all and marks the shown tag", async () => {
+  const tags = Array.from({ length: 12 }, (_, index) => ({
+    name: "dev",
+    tag: `v${index}`,
+    bare: false,
+    exportable: true,
+    built_at: `2026-10-${String(index + 1).padStart(2, "0")}T00:00:00Z`,
+  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true, result: { images: tags } }),
+    } as Response),
+  );
+  render(
+    <MemoryRouter>
+      <BuiltImages imageName="dev" hostId="" currentTag="v10" />
+    </MemoryRouter>,
+    on(null),
+  );
+
+  expect(await screen.findByTestId("built-image-dev:v11")).toBeInTheDocument();
+  expect(screen.getAllByTestId(/^built-image-/)).toHaveLength(5);
+  expect(screen.queryByTestId("built-image-dev:v6")).toBeNull();
+  expect(screen.getByTestId("built-image-dev:v10")).toHaveAttribute("aria-current", "true");
+  expect(screen.getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual([
+    "Tag",
+    "Version",
+    "Digest",
+    "Built",
+    "Source",
+    "",
+  ]);
+  fireEvent.click(screen.getByRole("button", { name: "Show all 12" }));
+  expect(screen.getAllByTestId(/^built-image-/)).toHaveLength(12);
 });
 
 it("downloads the runnable bundle and confirms the saved portable filename", async () => {
@@ -573,7 +613,7 @@ it("lets the operator retag a conflicting image import", async () => {
   vi.stubGlobal("fetch", fetchMock);
   render(
     <MemoryRouter>
-      <BuiltImages hostId="" />
+      <ImageArchiveImport hostId="" onImported={() => {}} />
     </MemoryRouter>,
     on(null),
   );

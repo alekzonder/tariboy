@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { TOUR_ANCHORS, type TourAnchor } from "@/lib/onboarding/tour";
-import { serverPath, type ServerSection } from "@/lib/terminalsHost";
+import { navPath, type NavItem } from "@/lib/navRoutes";
 import { cn } from "@/lib/utils";
 
-const TABS: Array<{ section: ServerSection; label: string; tour?: TourAnchor }> = [
-  { section: "images", label: "Images" },
-  { section: "workflows", label: "Workflows", tour: TOUR_ANCHORS.sectionWorkflows },
-  { section: "stores", label: "Sources", tour: TOUR_ANCHORS.sectionStores },
+const TABS: Array<{ item: NavItem; label: string; tour?: TourAnchor }> = [
+  { item: "library-images", label: "Images" },
+  { item: "library-workflows", label: "Workflows", tour: TOUR_ANCHORS.sectionWorkflows },
+  { item: "library-sources", label: "Sources", tour: TOUR_ANCHORS.sectionStores },
 ];
 
 /** The Library's tabs over Images, Workflows and Sources of one host, and the
@@ -25,10 +25,10 @@ export function LibraryHeader({
       data-toolbar
       className="flex shrink-0 flex-nowrap items-center gap-0.5 border-b px-3"
     >
-      {TABS.map(({ section, label, tour }) => (
+      {TABS.map(({ item, label, tour }) => (
         <NavLink
-          key={section}
-          to={serverPath(hostId, section)}
+          key={item}
+          to={navPath(item, hostId)}
           data-tour={tour}
           className={({ isActive }) =>
             cn(

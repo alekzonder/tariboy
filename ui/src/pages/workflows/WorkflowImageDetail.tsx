@@ -6,6 +6,7 @@ import { useWorkflowConfirm } from "@/pages/tasks/WorkflowConfirm";
 import { errorText } from "@/lib/errors";
 import { useMounted } from "@/pages/tasks/workflowShared";
 import { WorkflowTransferDialog } from "./WorkflowTransferDialog";
+import { WorkflowVersions } from "./WorkflowVersions";
 import { boundTo, useQueueBindings, useTransferDaemons } from "./workflowImages";
 import {
   ArtifactsList,
@@ -100,7 +101,7 @@ export default function WorkflowImageDetail({
     <div className="h-full space-y-5 overflow-auto p-3 text-sm">
       <nav className="text-xs text-muted-foreground">
         <Link className="text-primary hover:underline" to={basePath}>
-          Workflow images
+          Workflows
         </Link>{" "}
         / <span className="font-mono">{ref}</span>
       </nav>
@@ -121,6 +122,13 @@ export default function WorkflowImageDetail({
       <SecretsList definition={definition} />
       <EnvList definition={definition} />
       <FilesTable files={manifest.files} />
+      <WorkflowVersions
+        name={name}
+        tag={tag}
+        basePath={basePath}
+        bindings={bindings}
+        transferDaemons={transferDaemons}
+      />
 
       {dialog}
       {transfer && (

@@ -4,21 +4,13 @@ import { Badge } from "@/components/ui/badge";
 import { builtDate, sourceLabel } from "./builtImages";
 import { BuiltImageTagActions, type TagActionHandlers } from "./BuiltImageTagActions";
 
-function TagCell({
-  image,
-  newest,
-  basePath,
-}: {
-  image: ImageSummary;
-  newest: boolean;
-  basePath: string;
-}) {
+function TagCell({ image, newest }: { image: ImageSummary; newest: boolean }) {
   return (
     <td className="px-3 py-2">
       <div className="flex items-center gap-2">
         <Link
           className="font-mono text-primary hover:underline"
-          to={`${basePath}/${encodeURIComponent(image.name)}/${encodeURIComponent(image.tag)}`}
+          to={`/library/images/${encodeURIComponent(image.name)}/${encodeURIComponent(image.tag)}`}
         >
           {image.tag}
         </Link>
@@ -43,22 +35,34 @@ function TagCell({
 export function BuiltImageTagRow({
   image,
   newest,
-  basePath,
+  current,
   actions,
 }: {
   image: ImageSummary;
   newest: boolean;
-  basePath: string;
+  /** The tag the page shows. */
+  current: boolean;
   actions: TagActionHandlers;
 }) {
   const ref = `${image.name}:${image.tag}`;
+  const source = sourceLabel(image);
   return (
-    <tr data-testid={`built-image-${ref}`} className="border-t">
-      <TagCell image={image} newest={newest} basePath={basePath} />
+    <tr
+      data-testid={`built-image-${ref}`}
+      aria-current={current ? "true" : undefined}
+      className={current ? "border-t bg-muted/40" : "border-t"}
+    >
+      <TagCell image={image} newest={newest} />
       <td className="px-3 py-2">{image.image_version || "Version not specified"}</td>
       <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{image.digest ?? "—"}</td>
-      <td className="px-3 py-2 text-xs text-muted-foreground">{builtDate(image)}</td>
-      <td className="px-3 py-2 font-mono text-xs break-all">{sourceLabel(image)}</td>
+      <td className="px-3 py-2 text-xs whitespace-nowrap text-muted-foreground">
+        {builtDate(image)}
+      </td>
+      <td className="px-3 py-2 font-mono text-xs">
+        <span className="block max-w-64 truncate" title={source}>
+          {source}
+        </span>
+      </td>
       <td className="px-3 py-2">
         <BuiltImageTagActions image={image} imageRef={ref} {...actions} />
       </td>

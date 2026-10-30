@@ -1,7 +1,7 @@
 // The pure half of the General block's image section: links, labels and the
 // update notice. GeneralImage renders them.
 import type { AgentImageStatus } from "@/lib/api";
-import { serverPath } from "@/lib/terminalsHost";
+import { hostToParam } from "@/lib/terminalsHost";
 
 type NextReason = NonNullable<AgentImageStatus["next"]["reason"]>;
 
@@ -12,14 +12,16 @@ export function shortDigest(digest: string): string {
   return digest.length > 24 ? `${digest.slice(0, 14)}…${digest.slice(-8)}` : digest;
 }
 
-// imageHref links an image ref ("name:tag") to its page on the target host; a
-// ref without a tag links to the image list.
-export function imageHref(targetId: string, ref: string): string {
+// imageHref links an image ref ("name:tag") to its Library page; a ref
+// without a tag links to the image list. The link names the target host only
+// when the workspace has several.
+export function imageHref(targetId: string, ref: string, multiHost: boolean): string {
   const split = ref.lastIndexOf(":");
-  const base = serverPath(targetId, "images");
-  return split < 0
-    ? base
-    : `${base}/${encodeURIComponent(ref.slice(0, split))}/${encodeURIComponent(ref.slice(split + 1))}`;
+  const path =
+    split < 0
+      ? "/library/images"
+      : `/library/images/${encodeURIComponent(ref.slice(0, split))}/${encodeURIComponent(ref.slice(split + 1))}`;
+  return multiHost ? `${path}?host=${encodeURIComponent(hostToParam(targetId))}` : path;
 }
 
 const NEXT_REASONS: Record<NextReason, string> = {

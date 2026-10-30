@@ -559,7 +559,7 @@ it("selects a built image and applies it with Save", async () => {
   });
   expect(
     within(screen.getByText("Pending:").parentElement!).getByRole("link", { name: "reviewer:v2" }),
-  ).toHaveAttribute("href", "/servers/remote-1/images/reviewer/v2");
+  ).toHaveAttribute("href", "/library/images/reviewer/v2");
 });
 
 it("cancels an explicit pending image at once, outside Save", async () => {
@@ -598,7 +598,7 @@ it("shows pinned Activated version and next digest even when source versions mat
   expect(next).toHaveTextContent("new-digest");
   expect(within(next).getByRole("link", { name: "worker:latest" })).toHaveAttribute(
     "href",
-    "/servers/remote-1/images/worker/latest",
+    "/library/images/worker/latest",
   );
   expect(screen.getByText("Update on next iteration")).toBeInTheDocument();
   expect(screen.getByText(/preview.*not a reservation/i)).toBeInTheDocument();

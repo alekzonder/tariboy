@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { ApiProvider } from "@/components/ApiProvider";
 import { LazyBoundary } from "@/components/LazyBoundary";
@@ -13,6 +14,7 @@ export function ImageDetailBody({
   error,
   onReadError,
   onRefresh,
+  footer,
 }: {
   imageRef: string;
   hostKey: string;
@@ -20,6 +22,8 @@ export function ImageDetailBody({
   error: string;
   onReadError: (error: unknown) => void;
   onRefresh: () => void;
+  /** Shown below the loaded tab. */
+  footer?: ReactNode;
 }) {
   const location = useLocation();
   const state = imageDetailBodyState(error, !!detail);
@@ -53,6 +57,7 @@ export function ImageDetailBody({
           </LazyBoundary>
         </ApiProvider>
       )}
+      {state === "loaded" && footer && <div className="mt-6">{footer}</div>}
       {state === "loading" && <p className="text-sm text-muted-foreground">Loading…</p>}
     </div>
   );

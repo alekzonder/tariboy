@@ -2,7 +2,8 @@ import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import BuiltImages from "@/pages/images/BuiltImages";
-import ImagesPage from "@/pages/ImagesPage";
+import { ImageArchiveImport } from "@/pages/images/built/ImageArchiveImport";
+import LibraryImagesPage from "@/pages/images/LibraryImagesPage";
 import ImageTemplate from "@/pages/images/ImageTemplate";
 import ImageOverview from "@/pages/ImageOverview";
 import { ImageLayout } from "@/components/ImageLayout";
@@ -64,7 +65,7 @@ const transferHosts = [
     id: "unavailable",
     label: "Unavailable target",
     baseURL: "https://unavailable.tariboy.test",
-    state: "error",
+    state: "failed",
   },
 ];
 
@@ -357,29 +358,25 @@ if (mode === "transfer" || mode === "transfer-cancel") {
   for (const host of fixtureTransferHosts)
     sessionStorage.setItem(`tariboy_daemon_token_${host.id}`, `${host.id}-token`);
 }
-// The registry lists images and each image page lists its tags, so the
-// fixture renders both views of the images the browser test inspects.
+// The archive import and the Versions of each image the browser test inspects.
 let content = (
   <>
-    <BuiltImages hostId="" basePath="/servers/local/images" />
+    <ImageArchiveImport hostId="" onImported={() => {}} />
     {["reviewer", "imported", "missing"].map((name) => (
-      <BuiltImages key={name} hostId="" basePath="/servers/local/images" imageName={name} />
+      <BuiltImages key={name} hostId="" imageName={name} />
     ))}
   </>
 );
 if (mode === "build")
   content = (
     <DaemonProvider>
-      <ImagesPage hostId="" basePath="/servers/local/images" />
+      <LibraryImagesPage hostId="" />
     </DaemonProvider>
   );
 if (mode === "detail")
   content = (
     <Routes>
-      <Route
-        path="/servers/local/images/:name/:tag"
-        element={<ImageLayout hostId="" basePath="/servers/local/images" />}
-      >
+      <Route path="/library/images/:name/:tag" element={<ImageLayout hostId="" />}>
         <Route index element={<ImageOverview />} />
         <Route path="template" element={<ImageTemplate />} />
       </Route>
@@ -389,11 +386,11 @@ if (mode === "agent") content = <AgentFixture />;
 if (mode === "transfer" || mode === "transfer-cancel")
   content = (
     <DaemonProvider>
-      <BuiltImages hostId="source" basePath="/servers/source/images" imageName="reviewer" />
+      <BuiltImages hostId="source" imageName="reviewer" />
     </DaemonProvider>
   );
 createRoot(document.getElementById("root")!).render(
-  <MemoryRouter initialEntries={mode === "detail" ? ["/servers/local/images/reviewer/v3"] : ["/"]}>
+  <MemoryRouter initialEntries={mode === "detail" ? ["/library/images/reviewer/v3"] : ["/"]}>
     {/* The local daemon serves every mode; the DaemonProvider modes mount their own. */}
     <ApiProvider target={null}>
       <main className={mode === "build" ? "h-screen overflow-hidden" : "p-4"}>{content}</main>

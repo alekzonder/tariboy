@@ -91,20 +91,22 @@ handoff; legacy daemons fail closed when active work cannot be preserved.
 ## 3. Create or select an image
 
 For the first agent you do not have to do anything here: the daemon builds
-`basic` by itself. To use another image, open **Images**:
+`basic` by itself. To use another image, open **Library → Images**:
 
 - use `basic:latest`: at its first start the daemon registers
   `https://github.com/alekzonder/tariboy-store.git` as the Store `tariboy`
   and builds `tariboy/basic` in the background. The build is in
   **Settings → Operations**. If you removed the Store, click
-  **Add tariboy Store** on **Stores**, then build `tariboy/basic` from its
-  detail (or run
+  **Add tariboy Store** in **Library → Sources**, then click **Build** on the
+  `basic` row of its card (or run
   `tariboy store add tariboy https://github.com/alekzonder/tariboy-store.git`
   and `tariboy image build tariboy/basic`); or
-- choose an existing built image; or
-- enter the path to an original directory containing `Tariboyfile.yaml`, set a
-  required name such as `reviewer`, validate the exact plugin/prompt template,
-  and build `reviewer:latest`.
+- choose an existing built image and click **Run agent**. Images that no agent
+  uses yet are under **Show unused**; or
+- choose **Add image → Build from directory**, enter the path to an original
+  directory containing `Tariboyfile.yaml`, set a required name such as
+  `reviewer`, validate the exact plugin/prompt template, and build
+  `reviewer:latest`.
 
 An image is a reusable template. It is not an agent and does not start work.
 

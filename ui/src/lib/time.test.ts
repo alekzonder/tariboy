@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fmtDateTime } from "./time";
+import { fmtDateTime, relativeTime } from "./time";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -38,5 +38,23 @@ describe("fmtDateTime", () => {
 
   it("returns junk input unchanged", () => {
     expect(fmtDateTime("not a date")).toBe("not a date");
+  });
+});
+
+describe("relativeTime", () => {
+  const now = Date.parse("2026-10-30T12:00:00Z");
+  it.each([
+    ["2026-10-30T11:59:40Z", "just now"],
+    ["2026-10-30T11:55:00Z", "5 min ago"],
+    ["2026-10-30T09:00:00Z", "3 h ago"],
+    ["2026-10-28T12:00:00Z", "2 d ago"],
+    ["not a time", "—"],
+    ["", "—"],
+  ])("renders %s as %s", (iso, text) => {
+    expect(relativeTime(iso, now)).toBe(text);
+  });
+
+  it("renders the date after 30 days", () => {
+    expect(relativeTime("2026-08-01T12:00:00Z", now)).toBe("2026-08-01");
   });
 });

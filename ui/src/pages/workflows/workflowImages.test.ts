@@ -78,6 +78,22 @@ it("collects the queues bound to each digest and marks the unreadable ones", asy
   });
 });
 
+it("joins the queues bound to any digest of a name once each", () => {
+  const bindings = {
+    loaded: true,
+    byDigest: new Map([
+      ["aaa", ["DEV", "OPS"]],
+      ["bbb", ["DEV", "RES"]],
+    ]),
+    unknown: [],
+    failed: "",
+  };
+  expect(boundTo(bindings, ["aaa", "bbb", "aaa", "ccc"])).toEqual({
+    text: "DEV, OPS, RES",
+    title: undefined,
+  });
+});
+
 it("shows unknown everywhere when the queue list fails", async () => {
   api.listTaskQueues.mockRejectedValue(new Error("offline"));
   const { result } = renderHook(() => useQueueBindings(), on(null));

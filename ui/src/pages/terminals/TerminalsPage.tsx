@@ -33,7 +33,6 @@ export type ServerView =
   | "tasks"
   | "activity"
   | "images"
-  | "image-tags"
   | "image-detail"
   | "workflows"
   | "workflow-detail"
@@ -74,7 +73,7 @@ function createFromQuery(searchParams: URLSearchParams): CreateDialogState | nul
 }
 
 /** The console: the sidebar and the content island. `scoped` pages (Tasks,
- *  Inbox, Activity) take their host from `?host=` or the active host. An old
+ *  Inbox, Activity, Library) take their host from `?host=` or the active host. An old
  *  URL first moves to where its page lives now. */
 export default function TerminalsPage(props: { serverView?: ServerView; scoped?: boolean }) {
   const location = useLocation();

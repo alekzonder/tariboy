@@ -415,7 +415,7 @@ and they keep rendering. Do not "fix" the remainder by dropping vendor CSS.
 ## Page-level surfaces, and why the render check is skipped
 
 `src/pages` surfaces ship as cards too: `TerminalsPage` (the app shell),
-`AgentWorkspace`, `TasksWorkspace`, `TaskDetail`, `SettingsPage`, `ImagesPage`,
+`AgentWorkspace`, `TasksWorkspace`, `TaskDetail`, `SettingsPage`, `LibraryImagesPage`,
 `StoresPage`. They give the design agent whole-page compositions — real density
 and layout — rather than only atoms. `make-entry.mjs` re-exports exactly those
 seven, deliberately NOT a walk of `src/pages`: every module in the entry lands in

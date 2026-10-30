@@ -17,6 +17,20 @@ describe("legacyServerRedirect", () => {
     ["/", "?view=all", "/tasks"],
     ["/", "?view=all&task=DEV-2", "/tasks?task=DEV-2"],
     ["/agents/local/a1/console", "?view=all", "/tasks"],
+    ["/servers/prod/images", "", "/library/images?host=prod"],
+    ["/servers/prod/images/", "", "/library/images?host=prod"],
+    ["/servers/prod/images/reviewer", "", "/library/images/reviewer?host=prod"],
+    [
+      "/servers/prod/images/reviewer/v3/template",
+      "?x=1",
+      "/library/images/reviewer/v3/template?host=prod&x=1",
+    ],
+    ["/servers/local/images/a%2Fb/v%201", "", "/library/images/a%2Fb/v%201?host=local"],
+    ["/servers/local/workflows", "", "/library/workflows?host=local"],
+    ["/servers/local/workflows/flow/latest", "", "/library/workflows/flow/latest?host=local"],
+    ["/servers/local/stores", "", "/library/sources?host=local"],
+    ["/servers/local/stores/tariboy", "", "/library/sources/tariboy?host=local"],
+    ["/servers/remote%201/stores", "?host=x", "/library/sources?host=remote+1"],
   ])("sends %s%s to %s", (pathname, search, target) => {
     expect(legacyServerRedirect(pathname, search)).toBe(target);
   });
@@ -24,7 +38,8 @@ describe("legacyServerRedirect", () => {
   it.each([
     ["/", ""],
     ["/tasks", "?host=local"],
-    ["/servers/local/images", ""],
+    ["/library/images", "?host=local"],
+    ["/servers/local/imagesx", ""],
     ["/servers/local/settings/hosts", ""],
     ["/agents/local/a1/advanced", "?view=logs"],
   ])("leaves %s%s alone", (pathname, search) => {
@@ -37,16 +52,16 @@ describe("navPath and activeNav", () => {
     ["home", "/"],
     ["tasks", "/tasks"],
     ["inbox", "/inbox"],
-    ["library-images", "/servers/d_abc/images"],
-    ["library-workflows", "/servers/d_abc/workflows"],
-    ["library-sources", "/servers/d_abc/stores"],
+    ["library-images", "/library/images"],
+    ["library-workflows", "/library/workflows"],
+    ["library-sources", "/library/sources"],
     ["settings", "/servers/d_abc/settings"],
   ] as const)("opens %s at %s", (item, path) => {
     expect(navPath(item, "d_abc")).toBe(path);
   });
 
-  it("names the local host in Library and Settings paths", () => {
-    expect(navPath("library-images", "")).toBe("/servers/local/images");
+  it("names the local host in Settings paths", () => {
+    expect(navPath("settings", "")).toBe("/servers/local/settings");
   });
 
   it.each([
@@ -54,10 +69,10 @@ describe("navPath and activeNav", () => {
     ["/activity", "home"],
     ["/tasks", "tasks"],
     ["/inbox", "inbox"],
-    ["/servers/local/images", "library"],
-    ["/servers/local/images/basic/latest/skills", "library"],
-    ["/servers/d1/workflows/x/1", "library"],
-    ["/servers/d1/stores/tariboy", "library"],
+    ["/library/images", "library"],
+    ["/library/images/basic/latest/skills", "library"],
+    ["/library/workflows/x/1", "library"],
+    ["/library/sources/tariboy", "library"],
     ["/servers/local/settings", "settings"],
     ["/servers/local/settings/advanced/usage", "settings"],
     ["/app-settings", "settings"],

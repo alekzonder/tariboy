@@ -71,7 +71,7 @@ export * from "@/pages/tasks/TasksWorkspace";
 export * from "@/pages/tasks/TaskDetail";
 export * from "@/pages/settings/SettingsPage";
 export * from "@/pages/DaemonsPage";
-export * from "@/pages/ImagesPage";
+export * from "@/pages/images/LibraryImagesPage";
 export * from "@/pages/StoresPage";
 
 // Default exports: `export *` does not forward a module default, so any
@@ -85,7 +85,7 @@ export { default as TasksWorkspace } from "@/pages/tasks/TasksWorkspace";
 export { default as TaskDetail } from "@/pages/tasks/TaskDetail";
 export { default as SettingsPage } from "@/pages/settings/SettingsPage";
 export { default as DaemonsPage } from "@/pages/DaemonsPage";
-export { default as ImagesPage } from "@/pages/ImagesPage";
+export { default as LibraryImagesPage } from "@/pages/images/LibraryImagesPage";
 export { default as StoresPage } from "@/pages/StoresPage";
 
 // Contexts components read but that live outside src/components. A preview

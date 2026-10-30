@@ -1,5 +1,6 @@
 import { useSearchParams } from "react-router-dom";
-import { useDaemons } from "@/components/daemonContext";
+import { useDaemons, useOptionalDaemons } from "@/components/daemonContext";
+import { hasLocalDaemon } from "./desktop";
 import { hostToParam, paramToHost, serverPath } from "./terminalsHost";
 
 /** The host-scoped pages of the sidebar. Each takes an optional `?host=`. */
@@ -11,8 +12,15 @@ const LEGACY_SECTIONS: Record<string, ScopedSection> = {
   activity: "activity",
 };
 
-/** A place the sidebar or the tour opens. Library and Settings still live
- *  under `/servers/:hostId/…` until they get their own routes. */
+/** The Library's old `/servers/:hostId/…` sections and their tabs now. */
+const LEGACY_LIBRARY: Record<string, string> = {
+  images: "images",
+  workflows: "workflows",
+  stores: "sources",
+};
+
+/** A place the sidebar or the tour opens. Settings still lives under
+ *  `/servers/:hostId/…` until it gets its own routes. */
 export type NavItem =
   | "home"
   | "tasks"
@@ -31,11 +39,11 @@ export function navPath(item: NavItem, hostId: string): string {
     case "inbox":
       return `/${item}`;
     case "library-images":
-      return serverPath(hostId, "images");
+      return "/library/images";
     case "library-workflows":
-      return serverPath(hostId, "workflows");
+      return "/library/workflows";
     case "library-sources":
-      return serverPath(hostId, "stores");
+      return "/library/sources";
     case "settings":
       return serverPath(hostId, "settings");
   }
@@ -48,9 +56,8 @@ export function activeNav(
   if (pathname === "/" || pathname === "/activity") return "home";
   if (pathname === "/tasks" || pathname === "/inbox") return pathname.slice(1) as "tasks" | "inbox";
   if (pathname === "/app-settings") return "settings";
-  const section = /^\/servers\/[^/]+\/([^/]+)/.exec(pathname)?.[1];
-  if (section === "images" || section === "workflows" || section === "stores") return "library";
-  if (section === "settings") return "settings";
+  if (pathname === "/library" || pathname.startsWith("/library/")) return "library";
+  if (/^\/servers\/[^/]+\/settings(\/|$)/.test(pathname)) return "settings";
   return null;
 }
 
@@ -71,16 +78,24 @@ export function scopedPath(
 /**
  * Where an old URL now lives, or null when it still opens as it is: the
  * host-exact `/servers/:hostId/mail|tasks|activity` pages move the path host
- * into `?host=` and keep the rest of the query, and the former All tasks view
- * (`?view=all`) opens Tasks.
+ * into `?host=` and keep the rest of the query, the Library sections
+ * `/servers/:hostId/images|workflows|stores/…` move to `/library/…` with the
+ * rest of the path unchanged, and the former All tasks view (`?view=all`)
+ * opens Tasks.
  */
 export function legacyServerRedirect(pathname: string, search: string): string | null {
   const params = new URLSearchParams(search);
-  const match = /^\/servers\/([^/]+)\/(mail|tasks|activity)\/?$/.exec(pathname);
-  if (match) {
-    const next = new URLSearchParams({ host: decodeURIComponent(match[1]) });
+  const withHost = (host: string) => {
+    const next = new URLSearchParams({ host: decodeURIComponent(host) });
     for (const [key, value] of params) if (key !== "host") next.append(key, value);
-    return `/${LEGACY_SECTIONS[match[2]]}?${next.toString()}`;
+    return next.toString();
+  };
+  const match = /^\/servers\/([^/]+)\/(mail|tasks|activity)\/?$/.exec(pathname);
+  if (match) return `/${LEGACY_SECTIONS[match[2]]}?${withHost(match[1])}`;
+  const library = /^\/servers\/([^/]+)\/(images|workflows|stores)(\/.*)?$/.exec(pathname);
+  if (library) {
+    const rest = (library[3] ?? "").replace(/\/$/, "");
+    return `/library/${LEGACY_LIBRARY[library[2]]}${rest}?${withHost(library[1])}`;
   }
   if (params.get("view") !== "all") return null;
   if (pathname !== "/" && !pathname.startsWith("/agents/")) return null;
@@ -98,6 +113,13 @@ export function hostScopeTarget(pathname: string, search: string, hostId: string
   const params = new URLSearchParams(search);
   params.set("host", param);
   return `${pathname}?${params.toString()}`;
+}
+
+/** Whether more than one host is registered: a link the UI builds then names
+ *  its host. */
+export function useMultiHost(): boolean {
+  const daemons = useOptionalDaemons()?.daemons ?? [];
+  return (hasLocalDaemon() ? 1 : 0) + daemons.length >= 2;
 }
 
 /** The host of a scoped page: `?host=` when the URL names one, otherwise the

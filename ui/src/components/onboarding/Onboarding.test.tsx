@@ -155,7 +155,7 @@ describe("onboarding tour", () => {
     await takeTour();
     await goTo("Agent images");
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/servers/local/images"),
+      expect(screen.getByTestId("location")).toHaveTextContent("/library/images"),
     );
   });
 

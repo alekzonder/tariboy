@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { createApi, setActiveDaemon } from "@/lib/api";
 import { resolveDaemon, unresolvedDaemon, type Daemon } from "@/lib/daemons";
@@ -14,56 +14,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
   setActiveDaemon(null);
-});
-
-it("groups names and distinguishes latest from newest by parsed build date with stable ties", async () => {
-  const images = [
-    { name: "reviewer", tag: "latest", image_version: "1.0.0", built_at: "2026-01-01T00:00:00Z" },
-    { name: "reviewer", tag: "99.0.0", image_version: "99.0.0", built_at: "invalid" },
-    { name: "reviewer", tag: "2.0.0", image_version: "2.0.0", built_at: "2026-01-02T00:00:00Z" },
-    { name: "tie", tag: "latest", image_version: "1.2.3", built_at: "2026-01-02T00:00:00Z" },
-    { name: "tie", tag: "zeta", built_at: "2026-01-02T00:00:00Z" },
-    { name: "tie", tag: "1.2.3", image_version: "1.2.3", built_at: "2026-01-01T19:00:00-05:00" },
-    { name: "missing", tag: "zeta", built_at: "invalid" },
-    { name: "missing", tag: "alpha" },
-    { name: "old", tag: "latest" },
-  ];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ ok: true, result: { images } }),
-    }),
-  );
-  render(
-    <MemoryRouter>
-      <BuiltImages hostId="" basePath="/servers/local/images" />
-    </MemoryRouter>,
-    on(null),
-  );
-  const reviewer = (await screen.findByRole("link", { name: "reviewer" })).closest("tr")!;
-  expect(within(reviewer).getByText("1.0.0")).toBeInTheDocument();
-  expect(within(reviewer).getByText("2.0.0")).toBeInTheDocument();
-  expect(screen.getAllByRole("row")).toHaveLength(5);
-  expect(
-    within(screen.getByRole("link", { name: "tie" }).closest("tr")!).getByRole("link", {
-      name: "1.2.3",
-    }),
-  ).toBeInTheDocument();
-  const missing = screen.getByRole("link", { name: "missing" }).closest("tr")!;
-  expect(within(missing).getByText("No latest")).toBeInTheDocument();
-  expect(within(missing).getByRole("link", { name: "alpha" })).toBeInTheDocument();
-  expect(
-    within(screen.getByRole("link", { name: "old" }).closest("tr")!).getByText(
-      "Version not specified",
-    ),
-  ).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "reviewer" })).toHaveAttribute(
-    "href",
-    "/servers/local/images/reviewer",
-  );
-  expect(screen.queryByRole("button", { name: /^Export / })).toBeNull();
 });
 
 it("opens a name's encoded tags on the explicit host and keeps actions at tag level", async () => {
@@ -100,26 +50,15 @@ it("opens a name's encoded tags on the explicit host and keeps actions at tag le
     );
   });
   vi.stubGlobal("fetch", fetchMock);
-  const { Routes, Route } = await import("react-router-dom");
-  const { default: ImageTags } = await import("./ImageTags");
   render(
-    <MemoryRouter initialEntries={["/servers/route/images/reviewer"]}>
-      <Routes>
-        <Route
-          path="/servers/:hostId/images/:name"
-          element={<ImageTags hostId={source.id} basePath="/servers/route/images" />}
-        />
-      </Routes>
+    <MemoryRouter>
+      <BuiltImages hostId={source.id} imageName="reviewer" />
     </MemoryRouter>,
     on(await resolveDaemon(source.id)),
   );
   expect(await screen.findByRole("link", { name: "1.2.3+build.7" })).toHaveAttribute(
     "href",
-    "/servers/route/images/reviewer/1.2.3%2Bbuild.7",
-  );
-  expect(screen.getByRole("link", { name: "Images" })).toHaveAttribute(
-    "href",
-    "/servers/route/images",
+    "/library/images/reviewer/1.2.3%2Bbuild.7",
   );
   expect(screen.getByText("full-digest")).toBeInTheDocument();
   expect(screen.getByText("Current: worker")).toBeInTheDocument();
@@ -151,7 +90,7 @@ it("reports an unavailable explicit host without reading the active host", async
   vi.stubGlobal("fetch", fetchMock);
   render(
     <MemoryRouter>
-      <BuiltImages hostId="missing-host" />
+      <BuiltImages hostId="missing-host" imageName="reviewer" />
     </MemoryRouter>,
     on(unresolvedDaemon("missing-host")),
   );

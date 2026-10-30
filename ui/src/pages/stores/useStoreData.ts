@@ -3,6 +3,8 @@ import type { StoreView, StoreDetail, WorkflowImageListing } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { errorText } from "@/lib/errors";
 
+/** The Store list without a name, else that Store's detail and the built
+ *  workflow images its rows compare against. */
 export function useStoreData(name: string | undefined) {
   const api = useApi();
   const [stores, setStores] = useState<StoreView[]>([]);
@@ -12,6 +14,7 @@ export function useStoreData(name: string | undefined) {
   const [autoInterval, setAutoInterval] = useState("0");
   const [autoImages, setAutoImages] = useState<string[]>([]);
   const [workflowImages, setWorkflowImages] = useState<WorkflowImageListing[] | null>(null);
+  const [revision, setRevision] = useState(0);
   // The Store whose policy seeded the form: a re-read after a reconnect must
   // not overwrite an unsaved edit.
   const policyLoaded = useRef("");
@@ -53,9 +56,10 @@ export function useStoreData(name: string | undefined) {
     return () => {
       current = false;
     };
-  }, [api, name]);
+  }, [api, name, revision]);
 
   return {
+    reload: () => setRevision((value) => value + 1),
     stores,
     detail,
     setDetail,

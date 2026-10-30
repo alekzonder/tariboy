@@ -22,3 +22,21 @@ export function fmtDateTime(iso: string): string {
   if (isToday) return hm;
   return sameYear ? md : `${d.getFullYear()}-${md}`;
 }
+
+/** How long ago `iso` was, from `now`: "just now", "5 min ago", "3 h ago",
+ *  "2 d ago", or the local date (`YYYY-MM-DD`) after 30 days. "—" when `iso`
+ *  is not a time. */
+export function relativeTime(iso: string, now: number = Date.now()): string {
+  const time = Date.parse(iso);
+  if (!Number.isFinite(time)) return "—";
+  const minutes = Math.floor((now - time) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  if (days <= 30) return `${days} d ago`;
+  const d = new Date(time);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}

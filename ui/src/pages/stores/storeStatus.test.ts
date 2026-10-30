@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type StoreImageView, type StoreWorkflowView, type WorkflowImageListing } from "@/lib/api";
-import {
-  hasTariboyStore,
-  imageStatuses,
-  latestImageVersionLabel,
-  latestWorkflowVersion,
-  workflowStatus,
-} from "./storeStatus";
+import { catalogRow, hasTariboyStore, latestWorkflowVersion, workflowStatus } from "./storeStatus";
 
 const image = (fields: Partial<StoreImageView>): StoreImageView => ({
   name: "agent",
@@ -17,56 +11,55 @@ const image = (fields: Partial<StoreImageView>): StoreImageView => ({
   ...fields,
 });
 
-describe("imageStatuses", () => {
-  it.each<[string, Partial<StoreImageView>, string[]]>([
-    ["up to date", {}, ["Up to date"]],
-    ["update needed", { update_needed: true }, ["Update needed"]],
+describe("catalogRow", () => {
+  it.each<[string, Partial<StoreImageView>, ReturnType<typeof catalogRow>]>([
+    ["built and up to date", {}, { status: "Built", tone: "muted", action: "build" }],
     [
-      "source version missing",
-      { version: "" },
-      ["Source image_version missing; comparison unavailable"],
+      "built with an update",
+      { built_version: "1.0.0", version: "1.2.0", update_needed: true },
+      { status: "Update available (1.0.0 → 1.2.0)", tone: "update", action: "update" },
     ],
     [
-      "latest unversioned",
-      { latest_status: "unversioned" },
-      ["Latest image_version missing; comparison unavailable"],
+      "built without a comparable version",
+      { latest_status: "unversioned", built_version: "" },
+      { status: "Built", tone: "muted", action: "build" },
     ],
     [
-      "latest built without version",
-      { built_version: "" },
-      ["Latest image_version missing; comparison unavailable"],
-    ],
-    ["latest missing", { latest_status: "missing" }, ["Latest not built"]],
-    ["latest inspection error", { latest_status: "error" }, ["Latest error: inspection failed"]],
-    [
-      "latest error with detail",
-      { latest_status: "error", latest_error: "denied" },
-      ["Latest error: denied"],
-    ],
-    ["source error on built", { error: "bad manifest" }, ["Source error: bad manifest"]],
-    [
-      "source error and missing latest",
-      { error: "bad", latest_status: "missing" },
-      ["Source error: bad", "Latest not built"],
+      "not built",
+      { latest_status: "missing", built_version: "" },
+      { status: "Not built", tone: "muted", action: "build" },
     ],
     [
-      "no latest status",
-      { latest_status: undefined as unknown as StoreImageView["latest_status"] },
-      ["Comparison unavailable"],
+      "an unreadable built image",
+      { latest_status: "error", latest_error: "lstat /x: no such file" },
+      {
+        status: "Could not read the built image",
+        detail: "lstat /x: no such file",
+        tone: "error",
+        action: "build",
+      },
+    ],
+    [
+      "an invalid Store entry",
+      { error: "invalid Tariboyfile", latest_status: "missing" },
+      {
+        status: "The Store entry is invalid",
+        detail: "invalid Tariboyfile",
+        tone: "error",
+        action: null,
+      },
     ],
   ])("reports %s", (_, fields, expected) => {
-    expect(imageStatuses(image(fields))).toEqual(expected);
+    expect(catalogRow(image(fields))).toEqual(expected);
   });
-});
 
-describe("latestImageVersionLabel", () => {
-  it.each<[Partial<StoreImageView>, string]>([
-    [{ latest_status: "missing" }, "Not built"],
-    [{ latest_status: "error" }, "Inspection failed"],
-    [{ built_version: "2.0.0" }, "2.0.0"],
-    [{ built_version: "" }, "Not specified"],
-  ])("labels %j as %s", (fields, expected) => {
-    expect(latestImageVersionLabel(image(fields))).toBe(expected);
+  it("reports a failed build of this session first", () => {
+    expect(catalogRow(image({}), { id: 7, reason: "exit status 1" })).toEqual({
+      status: "Build failed: exit status 1",
+      tone: "error",
+      action: "build",
+      operation: 7,
+    });
   });
 });
 

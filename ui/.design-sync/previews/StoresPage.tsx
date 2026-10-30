@@ -12,11 +12,11 @@ import { DaemonProvider, MemoryRouter, Route, Routes, StoresPage } from "tariboy
 // `target` is an explicit Daemon (or null for the same-origin local daemon), NOT
 // the active-daemon fallback, so it is passed directly. A router is required —
 // the list links each row to `${basePath}/${name}` and Remove navigates back to
-// `basePath` — and the mounted paths are App.tsx's /servers/:hostId/stores and
-// /servers/:hostId/stores/:name.
+// `basePath` — and the mounted paths are App.tsx's /library/sources and
+// /library/sources/:name.
 //
 // There is no daemon behind the capture server, so listStores/getStore fail: the
-// list shows its empty table ("No Stores registered on this server.") with the
+// list shows its empty table ("No Stores registered on this host.") with the
 // error line beneath, and the detail shows its header and actions over the same
 // honest failure.
 const Shell = ({ children }: { children: ReactNode }) => (
@@ -34,14 +34,14 @@ const Shell = ({ children }: { children: ReactNode }) => (
   </div>
 );
 
-const BASE = "/servers/local/stores";
+const BASE = "/library/sources";
 
 export const StoreList = () => (
   <MemoryRouter initialEntries={[BASE]}>
     <DaemonProvider>
       <Shell>
         <Routes>
-          <Route path="/servers/:hostId/stores" element={<StoresPage basePath={BASE} />} />
+          <Route path={BASE} element={<StoresPage basePath={BASE} />} />
         </Routes>
       </Shell>
     </DaemonProvider>
@@ -54,7 +54,7 @@ export const StoreDetail = () => (
       <Shell>
         <Routes>
           <Route
-            path="/servers/:hostId/stores/:name"
+            path={`${BASE}/:name`}
             element={<StoresPage name="tariboy-images" basePath={BASE} />}
           />
         </Routes>
