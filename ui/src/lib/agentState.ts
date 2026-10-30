@@ -8,7 +8,7 @@ import type { StatusTone } from "./statusTone";
 
 /** One thing an agent waits on the user for: a task in a customer status or
  *  paused, or an open question letter about a task. */
-export interface NeedItem {
+interface NeedItem {
   key: string;
   at: string;
   /** The workflow status the task waits in, when it is a task. */

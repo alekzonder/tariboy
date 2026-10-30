@@ -6,8 +6,8 @@
  * agent, an exhausted budget). Everything else — queued, stopped, open, done —
  * is quiet text on no background, and cancelled is quieter still.
  *
- * Every status surface in the app (sidebar rows, the agent header, task rows,
- * task tables) reads its colors from here, so the rule is changed in one edit
+ * Every status surface in the app (task rows, task tables, and the agent rows
+ * and header through `agentStateTone`) reads its colors from here, so the rule is changed in one edit
  * rather than re-decided per row. The tone is what callers reason about; the
  * class tables below are the only place a token name is spelled out.
  */
@@ -22,15 +22,6 @@ export type StatusTone =
   | "quiet"
   /** cancelled — quiet text, dimmed further */
   | "faint";
-
-/** Agent lifecycle state → tone. An exhausted budget outranks the state: the
- *  agent may still say "running", but the thing to act on is the budget. */
-export function agentTone(state: string, outOfBudget = false): StatusTone {
-  if (outOfBudget) return "danger";
-  if (state === "running") return "live";
-  if (state === "failed" || state === "error") return "danger";
-  return "quiet";
-}
 
 /** Task status → tone. */
 export function taskTone(status: string): StatusTone {

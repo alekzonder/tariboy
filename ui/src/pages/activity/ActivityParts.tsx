@@ -7,15 +7,18 @@ import { cn } from "@/lib/utils";
 
 const fmtUSD = (usd: number) => `$${usd.toFixed(2)}`;
 
-/** Hour · Day · Week · Custom, with the custom range inputs and their error. */
+/** The period buttons (Hour · Day · Week · Custom unless periods says
+ *  otherwise), with the custom range inputs and their error. */
 export function ActivityPeriodBar({
   window,
   onPeriod,
   onCustom,
+  periods = ACTIVITY_PERIODS,
 }: {
   window: ActivityWindow;
   onPeriod: (period: ActivityPeriod) => void;
   onCustom: (bound: "since" | "until", value: string) => void;
+  periods?: Array<{ period: ActivityPeriod; label: string }>;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -24,7 +27,7 @@ export function ActivityPeriodBar({
         aria-label="Period"
         className="flex overflow-hidden rounded-md border text-sm"
       >
-        {ACTIVITY_PERIODS.map(({ period, label }) => (
+        {periods.map(({ period, label }) => (
           <button
             key={period}
             type="button"
@@ -74,17 +77,45 @@ export function ActivityPeriodBar({
   );
 }
 
-export function ActivityTotals({ totals }: { totals: TaskActivityTotals | null }) {
-  const cards: Array<[string, string]> = [
+function allCards(totals: TaskActivityTotals | null): Array<[string, string]> {
+  return [
     ["Tasks", totals ? String(totals.tasks) : "—"],
     ["Completed", totals ? String(totals.completed) : "—"],
     ["Status changes", totals ? String(totals.transitions) : "—"],
     ["Comments", totals ? String(totals.comments) : "—"],
-    ["Iterations", totals ? String(totals.iterations) : "—"],
+    ["Runs", totals ? String(totals.iterations) : "—"],
     ["Cost", totals ? fmtUSD(totals.cost_usd) : "—"],
   ];
+}
+
+/** An agent's four: what got done, the runs and money it took. */
+function agentCards(totals: TaskActivityTotals | null): Array<[string, string]> {
+  const average = totals?.completed ? fmtUSD(totals.cost_usd / totals.completed) : "—";
+  return [
+    ["Tasks done", totals ? String(totals.completed) : "—"],
+    ["Runs", totals ? String(totals.iterations) : "—"],
+    ["Cost", totals ? fmtUSD(totals.cost_usd) : "—"],
+    ["Avg. cost per task", average],
+  ];
+}
+
+/** The period's totals: six cards by default, the agent tab's four with
+ *  variant="agent". */
+export function ActivityTotals({
+  totals,
+  variant = "all",
+}: {
+  totals: TaskActivityTotals | null;
+  variant?: "all" | "agent";
+}) {
+  const cards = variant === "agent" ? agentCards(totals) : allCards(totals);
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+    <div
+      className={cn(
+        "grid grid-cols-2 gap-2",
+        variant === "agent" ? "lg:grid-cols-4" : "sm:grid-cols-3 lg:grid-cols-6",
+      )}
+    >
       {cards.map(([label, value]) => (
         <div key={label} data-total={label} className="rounded border p-3">
           <div className="text-xs text-muted-foreground">{label}</div>
@@ -157,7 +188,7 @@ export function TaskActivityTable({
             <th className="px-3 py-2">Status</th>
             {showAgents && <th className="px-3 py-2">Agents</th>}
             <th className="px-3 py-2">In this period</th>
-            <th className="px-3 py-2 text-right">Iterations</th>
+            <th className="px-3 py-2 text-right">Runs</th>
             <th className="px-3 py-2 text-right">Comments</th>
             <th className="px-3 py-2 text-right">Cost</th>
             <th className="px-3 py-2">Last activity</th>
@@ -218,7 +249,7 @@ export function AgentActivityTable({
             <th className="px-3 py-2">Agent</th>
             <th className="px-3 py-2 text-right">Tasks</th>
             <th className="px-3 py-2 text-right">Completed</th>
-            <th className="px-3 py-2 text-right">Iterations</th>
+            <th className="px-3 py-2 text-right">Runs</th>
             <th className="px-3 py-2 text-right">Requests</th>
             <th className="px-3 py-2 text-right">Cost</th>
           </tr>

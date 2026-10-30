@@ -42,6 +42,7 @@ export * from "@/components/DaemonProvider";
 export * from "@/components/DesktopUpdates";
 export * from "@/components/EditablePresetCombobox";
 export * from "@/components/FileBrowser";
+export * from "@/components/ForceStopDialog";
 export * from "@/components/FullAuditLog";
 export * from "@/components/GoalHelp";
 export * from "@/components/GroupWizard";

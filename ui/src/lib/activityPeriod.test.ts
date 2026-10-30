@@ -50,6 +50,31 @@ describe("activityWindow", () => {
   it("falls back to the day for an unknown period", () => {
     expect(activityWindow(new URLSearchParams("period=year"), now).period).toBe("day");
   });
+
+  it("runs today from local midnight until now", () => {
+    const midnight = new Date(now);
+    midnight.setHours(0, 0, 0, 0);
+    expect(activityWindow(new URLSearchParams("period=today"), now)).toMatchObject({
+      period: "today",
+      since: midnight.toISOString(),
+      until: now.toISOString(),
+    });
+  });
+
+  it("slides the month window back 30 days", () => {
+    expect(activityWindow(new URLSearchParams("period=month"), now).since).toBe(
+      "2026-09-18T12:00:00.000Z",
+    );
+  });
+
+  it("uses the caller's default period and still reads hour and day links", () => {
+    expect(activityWindow(new URLSearchParams(), now, "today").period).toBe("today");
+    expect(activityWindow(new URLSearchParams("period=year"), now, "today").period).toBe("today");
+    expect(activityWindow(new URLSearchParams("period=hour"), now, "today").period).toBe("hour");
+    expect(activityWindow(new URLSearchParams("period=day"), now, "today").since).toBe(
+      "2026-10-17T12:00:00.000Z",
+    );
+  });
 });
 
 describe("closestBucket", () => {

@@ -13,7 +13,7 @@ export const PRESET_ORDER: Preset[] = ["1h", "5h", "24h", "7d", "custom"];
 
 export type GroupBy = "iteration" | "task" | "epic" | "model";
 export const GROUPINGS: { key: GroupBy; label: string }[] = [
-  { key: "iteration", label: "Iterations" },
+  { key: "iteration", label: "Runs" },
   { key: "task", label: "Tasks" },
   { key: "epic", label: "Epics" },
   { key: "model", label: "Models" },

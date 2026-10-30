@@ -1,63 +1,78 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import AuditLogPage from "@/pages/AuditLogPage";
 import AgentUsagePage from "@/pages/AgentUsagePage";
 import { useApi } from "@/components/apiContext";
+import { Segmented } from "@/components/ui/segmented";
+import { usePolling } from "@/hooks/usePolling";
 import { useAgentName } from "@/lib/agent";
-import { useActivityWindow } from "@/lib/activityPeriod";
-import type { AgentStatusEvent } from "@/lib/api";
-import { fmtDateTime } from "@/lib/time";
+import { AGENT_ACTIVITY_PERIODS, useActivityWindow } from "@/lib/activityPeriod";
 import { useTaskActivity } from "@/hooks/useTaskActivity";
 import TaskDrawer from "@/pages/tasks/TaskDrawer";
 import {
   ActivityPeriodBar,
-  ActivityTabs,
   ActivityTotals,
   TaskActivityTable,
   TruncatedNote,
 } from "@/pages/activity/ActivityParts";
+import { CostChart } from "@/pages/agentUsage/CostChart";
+import { usageParams } from "@/pages/agentUsage/usageParams";
 import TabPage from "@/components/TabPage";
+import AgentStatusHistory from "./AgentStatusHistory";
 
-type View = "tasks" | "iterations" | "usage" | "status";
-const VIEWS: Array<{ view: View; label: string }> = [
-  { view: "tasks", label: "Tasks" },
-  { view: "iterations", label: "Iterations" },
-  { view: "usage", label: "Usage" },
-  { view: "status", label: "Status history" },
+// The URL keeps the older view names (?view=iterations|usage|status) so
+// existing links still open the matching More view.
+type MoreView = "iterations" | "usage" | "status";
+const MORE_VIEWS: Array<{ value: MoreView; label: string }> = [
+  { value: "iterations", label: "Runs log" },
+  { value: "usage", label: "Usage" },
+  { value: "status", label: "Status history" },
 ];
 
-function viewFrom(params: URLSearchParams): View {
+function moreViewFrom(params: URLSearchParams): MoreView {
   const raw = params.get("view");
-  if (raw === "tasks" || raw === "iterations" || raw === "usage" || raw === "status") return raw;
-  // An ?iteration= deep link (e.g. from Usage) opens the iteration list.
-  return params.has("iteration") ? "iterations" : "tasks";
+  // Runs log is the default, and an ?iteration= deep link (e.g. from Usage)
+  // opens it too.
+  return raw === "usage" || raw === "status" ? raw : "iterations";
 }
 
+/** The agent's cost per bucket over the period, polled like the Usage view. */
+function useCostSeries(name: string, since: string, until: string) {
+  const api = useApi();
+  const buildParams = useCallback(
+    () =>
+      usageParams({
+        period: { since, until },
+        preset: "24h",
+        customSince: "",
+        customUntil: "",
+        groupBy: "model",
+        now: Date.now(),
+      }),
+    [since, until],
+  );
+  const { data, refresh } = usePolling(() => api.usage.getAgentUsage(name, buildParams()), 10000);
+  useEffect(() => {
+    void refresh();
+  }, [since, until, refresh]);
+  return data?.series ?? [];
+}
+
+/** One Activity view for every agent: the period, its totals, the tasks worked
+ *  on, the cost over time, and a More area with the runs log, usage and status
+ *  history. */
 export default function AgentActivityTab() {
   const name = useAgentName();
-  const { window, setPeriod, setCustom } = useActivityWindow();
+  const { window, setPeriod, setCustom } = useActivityWindow("today");
   const [searchParams, setSearchParams] = useSearchParams();
-  const view = viewFrom(searchParams);
-  const api = useApi();
+  const view = moreViewFrom(searchParams);
   const { report, error } = useTaskActivity(window, name);
   const [taskKey, setTaskKey] = useState("");
   // An invalid custom range shows its error and leaves the views unbounded.
   const bounds = { since: window.since, until: window.until };
+  const series = useCostSeries(name, bounds.since, bounds.until);
 
-  const [history, setHistory] = useState<AgentStatusEvent[]>([]);
-  useEffect(() => {
-    if (view !== "status") return;
-    void api.agents
-      .getStatusHistory(name)
-      .then((result) => setHistory(result.events))
-      .catch(() => setHistory([]));
-  }, [api, name, view]);
-  const inPeriod = history.filter((event) => {
-    const at = Date.parse(event.ts);
-    return !bounds.since || (at >= Date.parse(bounds.since) && at < Date.parse(bounds.until));
-  });
-
-  const selectView = (next: View) => {
+  const selectView = (next: MoreView) => {
     const params = new URLSearchParams(searchParams);
     params.set("view", next);
     setSearchParams(params, { replace: true });
@@ -65,38 +80,33 @@ export default function AgentActivityTab() {
 
   return (
     <TabPage className="overflow-auto">
-      <ActivityPeriodBar window={window} onPeriod={setPeriod} onCustom={setCustom} />
-      <ActivityTotals totals={report?.totals ?? null} />
+      <ActivityPeriodBar
+        window={window}
+        periods={AGENT_ACTIVITY_PERIODS}
+        onPeriod={setPeriod}
+        onCustom={setCustom}
+      />
+      <ActivityTotals totals={report?.totals ?? null} variant="agent" />
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
       )}
-      <ActivityTabs views={VIEWS} active={view} onSelect={selectView} />
-      <div className="min-h-0 flex-1">
-        {view === "tasks" ? (
-          <div className="flex flex-col gap-2">
-            <TaskActivityTable rows={report?.tasks ?? []} onOpenTask={setTaskKey} />
-            {report?.truncated && <TruncatedNote shown={report.tasks.length} />}
-          </div>
-        ) : view === "iterations" ? (
-          <AuditLogPage period={bounds} />
-        ) : view === "usage" ? (
-          <AgentUsagePage period={bounds} />
-        ) : (
-          <div className="mx-auto max-w-3xl space-y-2">
-            {inPeriod.map((event, index) => (
-              <div key={`${event.ts}-${index}`} className="rounded-md border p-3 text-sm">
-                <div className="text-xs text-muted-foreground">{fmtDateTime(event.ts)}</div>
-                <div>{event.message}</div>
-              </div>
-            ))}
-            {inPeriod.length === 0 && (
-              <p className="text-sm text-muted-foreground">No status changes in this period.</p>
-            )}
-          </div>
-        )}
+      <div className="flex flex-col gap-2">
+        <TaskActivityTable rows={report?.tasks ?? []} onOpenTask={setTaskKey} />
+        {report?.truncated && <TruncatedNote shown={report.tasks.length} />}
       </div>
+      <CostChart series={series} />
+      <Segmented label="More" options={MORE_VIEWS} value={view} onChange={selectView} />
+      {view === "iterations" ? (
+        <div className="h-[70vh] min-h-96 shrink-0">
+          <AuditLogPage period={bounds} />
+        </div>
+      ) : view === "usage" ? (
+        <AgentUsagePage period={bounds} />
+      ) : (
+        <AgentStatusHistory since={bounds.since} until={bounds.until} />
+      )}
       {taskKey && <TaskDrawer key={taskKey} taskKey={taskKey} onClose={() => setTaskKey("")} />}
     </TabPage>
   );
