@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -58,7 +59,7 @@ func TestManagerPassesCurrentGoalToRunner(t *testing.T) {
 	}}
 	runner := m.runnerFor(agent.Agent{}).(*ShimRunner)
 	got, ok, err := runner.cfg.CurrentGoal("alice", time.Time{})
-	if err != nil || !ok || got != want {
+	if err != nil || !ok || !reflect.DeepEqual(got, want) {
 		t.Fatalf("CurrentGoal = %#v, %v, %v", got, ok, err)
 	}
 }
