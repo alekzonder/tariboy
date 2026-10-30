@@ -23,6 +23,7 @@ mod support_client;
 mod testbin;
 mod tunnel;
 mod updater;
+mod zoom;
 
 use state::{AppState, DaemonView};
 use std::time::Duration;
@@ -147,6 +148,10 @@ fn main() {
             }
 
             menu::install(app)?;
+            // Linux keeps Tauri's default: an app menu there adds a GTK menu bar
+            // to the window.
+            #[cfg(target_os = "macos")]
+            menu::install_app_menu(app)?;
 
             // Only the SPAWN is asynchronous: up to 10s must not hold the visible
             // main window. The SPA reports startup state while remote hosts remain

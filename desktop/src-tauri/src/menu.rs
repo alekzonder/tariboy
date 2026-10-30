@@ -4,8 +4,9 @@
 //! service, and agents may be mid-iteration. The menu bar is what keeps the
 //! running daemon visible and controllable once the window is gone.
 
-use crate::{commands, startup, state::AppState};
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use crate::{commands, startup, state::AppState, zoom};
+use std::sync::{Mutex, PoisonError};
+use tauri::menu::{Menu, MenuBuilder, MenuEvent, MenuItemBuilder, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{App, AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
@@ -69,6 +70,71 @@ pub fn install(app: &App) -> tauri::Result<()> {
         .build(app)?;
 
     Ok(())
+}
+
+/// Sets the macOS app menu: Tauri's default menu with zoom items in View. The
+/// items' key equivalents reach AppKit before the WebView, so they work while
+/// the terminal has focus. Also applies the zoom saved in `zoom.json`.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn install_app_menu(app: &App) -> tauri::Result<()> {
+    let saved = zoom::load(&app.state::<AppState>().paths.zoom_file());
+    let applied = match app
+        .get_webview_window("main")
+        .map(|main| main.set_zoom(saved))
+    {
+        Some(Ok(())) => saved,
+        Some(Err(error)) => {
+            eprintln!("Tariboy: apply zoom {saved}: {error}");
+            zoom::DEFAULT
+        }
+        None => zoom::DEFAULT,
+    };
+    app.manage(zoom::Current(Mutex::new(applied)));
+
+    let menu = Menu::default(app.handle())?;
+    let view = menu.items()?.into_iter().find_map(|item| {
+        item.as_submenu()
+            .filter(|submenu| submenu.text().is_ok_and(|text| text == "View"))
+            .cloned()
+    });
+    if let Some(view) = view {
+        view.append_items(&[
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItemBuilder::with_id(zoom::MENU_IDS[0], "Zoom In")
+                .accelerator("CmdOrCtrl+Shift+=")
+                .build(app)?,
+            &MenuItemBuilder::with_id(zoom::MENU_IDS[1], "Zoom Out")
+                .accelerator("CmdOrCtrl+Shift+-")
+                .build(app)?,
+            &MenuItemBuilder::with_id(zoom::MENU_IDS[2], "Actual Size")
+                .accelerator("CmdOrCtrl+Shift+0")
+                .build(app)?,
+        ])?;
+    }
+    app.set_menu(menu)?;
+    app.on_menu_event(on_app_menu_event);
+    Ok(())
+}
+
+/// Applies a zoom item to the main window and saves it. A failed `set_zoom`
+/// changes nothing; a failed save keeps the zoom until restart.
+fn on_app_menu_event(app: &AppHandle, event: MenuEvent) {
+    let current = app.state::<zoom::Current>();
+    let mut current = current.0.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(next) = zoom::next(event.id().as_ref(), *current) else {
+        return;
+    };
+    let Some(main) = app.get_webview_window("main") else {
+        return;
+    };
+    if let Err(error) = main.set_zoom(next) {
+        eprintln!("Tariboy: set zoom {next}: {error}");
+        return;
+    }
+    *current = next;
+    if let Err(error) = zoom::save(&app.state::<AppState>().paths.zoom_file(), next) {
+        eprintln!("Tariboy: save zoom: {error}");
+    }
 }
 
 /// show_window raises the main window, whether it was hidden by a window close
