@@ -3151,6 +3151,53 @@ func TestRemovePreserveThenPurge(t *testing.T) {
 	}
 }
 
+// TestRemovePurgeRejectsPoolMemberBeforeStopping proves a purge Remove of an
+// agent in a task queue agent pool fails with an actionable message before it
+// touches the agent, instead of stopping it and then failing on the FK.
+func TestRemovePurgeRejectsPoolMemberBeforeStopping(t *testing.T) {
+	t.Parallel()
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, agentsDir, s := newManager(t, r)
+	defer m.Shutdown()
+
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "pooled",
+		Harness: "stub", Plugins: []string{"context"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Start(name); err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range []string{
+		`INSERT INTO task_queues(prefix,name,created_at,updated_at) VALUES ('DAO','DAO','t','t')`,
+		`INSERT INTO task_agent_pools(id,queue_prefix,name,created_at,updated_at) VALUES (1,'DAO','developers','t','t')`,
+		`INSERT INTO task_agent_pool_members(pool_id,agent,position) VALUES (1,'pooled',0)`,
+	} {
+		if _, err := s.DB.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := agentdir.New(agentsDir, name)
+
+	err = m.Remove(name, true, true)
+	if err == nil {
+		t.Fatal("purge remove of a pool member succeeded")
+	}
+	want := "agent pooled is a member of agent pool developers in queue DAO; remove it from the pool in the queue settings, then delete the agent"
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err, want)
+	}
+	if got, _ := as.Get(name); !got.Enabled {
+		t.Fatal("rejected remove stopped the agent")
+	}
+	if _, err := os.Stat(l.Workdir()); err != nil {
+		t.Fatalf("rejected remove dropped the workdir: %v", err)
+	}
+	if m.runtimes.runtime(name) == nil {
+		t.Fatal("rejected remove tore down the runtime")
+	}
+}
+
 // TestReprovisionKeepsDataAndSwapsImage proves the up-side counterpart: after a
 // preserving down, Reprovision re-unpacks the (new) image over the retained
 // CONTEXT.md / iterations / audit and restarts the loop.

@@ -322,6 +322,12 @@ ttasks queue workflow get DEV
 ttasks queue workflow clear DEV --revision 1
 ```
 
+You cannot delete an agent that is a member of a pool. The delete fails with
+an error that names the queue and the pool, and the agent continues to run. To
+delete the agent, remove it from the pool in the queue settings first. If the
+agent is the last member of a pool that the bound image uses, the pool change
+fails with `workflow_pool_empty`. Add another agent to the pool first.
+
 The reference is `NAME`, `NAME:TAG`, or `NAME:<digest>`; `NAME` means
 `latest`. The binding stores the digest the reference names now and the tag it
 was made by, shown as `tag` by `queue workflow get`:
