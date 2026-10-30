@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { toast } from "sonner";
 import { OnboardingProvider } from "./OnboardingProvider";
 import { HelpMenu } from "./HelpMenu";
 import { TOUR_ANCHORS, TOUR_STEPS, type TourAnchor } from "@/lib/onboarding/tour";
@@ -9,18 +10,29 @@ import { UI_VERSION } from "@/lib/onboarding/version";
 import { readKey, storageKeys } from "@/lib/storage";
 import { SidebarStateContext } from "@/pages/terminals/sidebarStateContext";
 
+vi.mock("sonner", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("sonner")>()),
+  toast: vi.fn(),
+}));
+
 const ALL = Object.values(TOUR_ANCHORS).filter(
   (anchor) => anchor !== TOUR_ANCHORS.helpMenu && anchor !== TOUR_ANCHORS.agentRow,
 );
+const START = "/servers/local/mail?view=all";
 
 function LocationProbe() {
-  return <output data-testid="location">{useLocation().pathname}</output>;
+  const { pathname, search } = useLocation();
+  return <output data-testid="location">{pathname + search}</output>;
 }
 
-function renderTour({ anchors = ALL }: { anchors?: TourAnchor[] } = {}) {
+function renderTour({
+  anchors = ALL,
+  banner = false,
+}: { anchors?: TourAnchor[]; banner?: boolean } = {}) {
   return render(
-    <MemoryRouter initialEntries={["/servers/local/mail"]}>
+    <MemoryRouter initialEntries={[START]}>
       <OnboardingProvider>
+        {banner && <div data-daemon-banner="error">tariboyd: down</div>}
         {anchors.map((anchor) => (
           <button key={anchor} type="button" data-tour={anchor}>
             {anchor}
@@ -35,18 +47,26 @@ function renderTour({ anchors = ALL }: { anchors?: TourAnchor[] } = {}) {
 
 const card = (name: string) => screen.findByRole("dialog", { name });
 const next = () => fireEvent.keyDown(window, { key: "ArrowRight" });
-const stepIndex = (id: string) => TOUR_STEPS.findIndex((step) => step.id === id);
 
-async function goTo(id: string) {
-  await card("Welcome to Tariboy");
-  for (let i = 0; i < stepIndex(id); i++) {
+async function takeTour() {
+  await userEvent.click(screen.getByRole("button", { name: "Help" }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: "Take the tour" }));
+  return card("Welcome to Tariboy");
+}
+
+/** Presses Next until the card of `title` shows. */
+async function goTo(title: string) {
+  for (let i = 0; i < TOUR_STEPS.length; i++) {
+    if (screen.queryByRole("dialog", { name: title })) return;
     next();
-    await card(TOUR_STEPS[i + 1].title).catch(() => undefined);
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
   }
+  await card(title);
 }
 
 beforeEach(() => {
   localStorage.clear();
+  vi.mocked(toast).mockClear();
 });
 
 afterEach(() => {
@@ -54,25 +74,69 @@ afterEach(() => {
 });
 
 describe("onboarding tour", () => {
-  it("starts by itself on the first run", async () => {
+  it("starts no tour on the first run and stores the version as seen", async () => {
     renderTour();
-    const welcome = await card("Welcome to Tariboy");
-    expect(within(welcome).getByText(`1 of ${TOUR_STEPS.length}`)).toBeInTheDocument();
+    await waitFor(() => expect(readKey(storageKeys.onboarding)).toBe(UI_VERSION));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("counts only the steps it shows: no agent steps without agents", async () => {
+    renderTour();
+    const welcome = await takeTour();
+    expect(within(welcome).getByText("1 of 10")).toBeInTheDocument();
     expect(screen.queryByTestId("tour-highlight")).toBeNull();
   });
 
-  it("does not start again after Skip tour", async () => {
-    const first = renderTour();
-    await userEvent.click(
-      within(await card("Welcome to Tariboy")).getByRole("button", { name: "Skip tour" }),
-    );
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(readKey(storageKeys.onboarding)).toBe(UI_VERSION);
-    first.unmount();
+  it("counts the agent steps when the sidebar has an agent", async () => {
+    renderTour({ anchors: [...ALL, TOUR_ANCHORS.agentRow] });
+    const welcome = await takeTour();
+    expect(within(welcome).getByText(`1 of ${TOUR_STEPS.length}`)).toBeInTheDocument();
+  });
 
+  it("goes back to the start route after Skip tour", async () => {
     renderTour();
+    await takeTour();
+    await goTo("Tasks");
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent("/servers/local/tasks"),
+    );
+    await userEvent.click(within(await card("Tasks")).getByRole("button", { name: "Skip tour" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByTestId("location")).toHaveTextContent(START);
+    expect(readKey(storageKeys.onboarding)).toBe(UI_VERSION);
+  });
+
+  it("goes back to the start route after Done", async () => {
+    renderTour();
+    await takeTour();
+    await goTo("Help");
+    await userEvent.click(within(await card("Help")).getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByTestId("location")).toHaveTextContent(START);
+  });
+
+  it("opens the home screen and its New agent button on the Agents step", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 10, y: 20, width: 80, height: 24 }),
+    );
+    renderTour();
+    await takeTour();
+    next();
+    await card("Agents");
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/"));
+    await waitFor(() =>
+      expect(screen.getByTestId("tour-highlight")).toHaveAttribute("data-anchor", "new-agent"),
+    );
+  });
+
+  it("does not start while the daemon error banner shows, and says why", async () => {
+    renderTour({ banner: true });
+    await userEvent.click(screen.getByRole("button", { name: "Help" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Take the tour" }));
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(screen.queryByRole("dialog")).toBeNull();
+    expect(toast).toHaveBeenCalledWith("The tour opens after the daemon error is fixed.");
   });
 
   it("highlights the element of the step", async () => {
@@ -81,9 +145,8 @@ describe("onboarding tour", () => {
       DOMRect.fromRect({ x: 10, y: 20, width: 80, height: 24 }),
     );
     renderTour();
-    await card("Welcome to Tariboy");
-    await userEvent.click(screen.getByRole("button", { name: "Next" }));
-    await card("Servers");
+    await takeTour();
+    await goTo("Servers");
     await waitFor(() =>
       expect(screen.getByTestId("tour-highlight")).toHaveAttribute("data-anchor", "servers-tab"),
     );
@@ -91,8 +154,8 @@ describe("onboarding tour", () => {
 
   it("opens the server section of a step", async () => {
     renderTour();
-    await goTo("images");
-    await card("Agent images");
+    await takeTour();
+    await goTo("Agent images");
     await waitFor(() =>
       expect(screen.getByTestId("location")).toHaveTextContent("/servers/local/images"),
     );
@@ -103,7 +166,8 @@ describe("onboarding tour", () => {
       DOMRect.fromRect({ x: 10, y: 20, width: 80, height: 24 }),
     );
     renderTour({ anchors: ALL.filter((anchor) => anchor !== TOUR_ANCHORS.addHost) });
-    await goTo("servers");
+    await takeTour();
+    await goTo("Servers");
     await waitFor(() => expect(screen.getByTestId("tour-highlight")).toBeInTheDocument());
     next();
     await card("Add a server");
@@ -113,8 +177,8 @@ describe("onboarding tour", () => {
 
   it("skips the agent steps when there is no agent", async () => {
     renderTour();
-    await goTo("agents");
-    await card("Agents");
+    await takeTour();
+    await goTo("Agents");
     next();
     expect(await card("Tasks")).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "ArrowLeft" });
@@ -145,27 +209,20 @@ describe("onboarding tour", () => {
           </SidebarStateContext.Provider>
         </MemoryRouter>,
       );
-      await card("Welcome to Tariboy");
-      next();
-      await card("Servers");
+      await takeTour();
+      await goTo("Servers");
       await waitFor(() => expect(sidebar[call]).toHaveBeenCalledWith(arg));
     },
   );
 
-  it("closes with Escape and records the version", async () => {
+  it("closes with Escape, records the version and goes back", async () => {
     renderTour();
-    await card("Welcome to Tariboy");
+    await takeTour();
+    await goTo("Agent images");
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(readKey(storageKeys.onboarding)).toBe(UI_VERSION);
-  });
-
-  it("starts again from the help menu", async () => {
-    localStorage.setItem(storageKeys.onboarding.name, UI_VERSION);
-    renderTour();
-    await userEvent.click(screen.getByRole("button", { name: "Help" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Take the tour" }));
-    expect(await card("Welcome to Tariboy")).toBeInTheDocument();
+    expect(screen.getByTestId("location")).toHaveTextContent(START);
   });
 
   it("shows the changelog of the selected version", async () => {

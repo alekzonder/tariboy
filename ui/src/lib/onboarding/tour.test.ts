@@ -5,10 +5,11 @@ import {
   TOUR_ANCHORS,
   TOUR_STEPS,
   tourMode,
+  tourSteps,
   whatsNewSteps,
   type TourStep,
 } from "./tour";
-import { readKey, storageKeys, writeKey } from "@/lib/storage";
+import { readKey, storageKeyFamilies, storageKeys, writeKey } from "@/lib/storage";
 
 const step = (id: string, since?: string, updated?: boolean): TourStep => ({
   id,
@@ -30,8 +31,8 @@ describe("compareVersions", () => {
 describe("tourMode", () => {
   const steps = [step("base"), step("queues", "0.99.0")];
 
-  it("runs the full tour when nothing is saved", () => {
-    expect(tourMode("", "0.99.0", steps)).toBe("full");
+  it("starts nothing on the first run", () => {
+    expect(tourMode("", "0.99.0", steps)).toBe("none");
   });
 
   it("runs What's new when a step changed after the saved version", () => {
@@ -73,6 +74,33 @@ describe("TOUR_STEPS", () => {
     expect(new Set(TOUR_STEPS.map((s) => s.id)).size).toBe(TOUR_STEPS.length);
   });
 
+  it("goes through the work process in the design order", () => {
+    expect(TOUR_STEPS.map((s) => s.id)).toEqual([
+      "welcome",
+      "agents",
+      "agent-workspace",
+      "agent-settings",
+      "tasks",
+      "images",
+      "stores",
+      "servers",
+      "add-server",
+      "queues",
+      "workflows",
+      "help",
+    ]);
+  });
+
+  it("points the Agents step at the home New agent button, not the sidebar +", () => {
+    const agents = TOUR_STEPS.find((s) => s.id === "agents");
+    expect(agents).toMatchObject({ anchor: TOUR_ANCHORS.newAgent, home: true });
+    expect(agents?.sidebar).toBeFalsy();
+  });
+
+  it("marks no step as new in this release", () => {
+    expect(TOUR_STEPS.filter((s) => s.since !== undefined)).toEqual([]);
+  });
+
   it("covers the whole working process", () => {
     const titles = TOUR_STEPS.map((s) => s.title).join(" ");
     for (const topic of [
@@ -87,6 +115,26 @@ describe("TOUR_STEPS", () => {
     ]) {
       expect(titles).toContain(topic);
     }
+  });
+});
+
+describe("tourSteps", () => {
+  it("drops the agent steps when there is no agent, so the counter counts the rest", () => {
+    const steps = tourSteps(TOUR_STEPS, false);
+    expect(steps).toHaveLength(10);
+    expect(steps.some((s) => s.agent)).toBe(false);
+    expect(tourSteps(TOUR_STEPS, true)).toHaveLength(TOUR_STEPS.length);
+  });
+});
+
+describe("the hint storage family", () => {
+  it("keeps one dismissal per host, agent and tab", () => {
+    const key = storageKeyFamilies.onboardingHint.key("h1", "dev", "tasks");
+    expect(key.name).toBe("onboarding:hint:v1:h1:dev:tasks");
+    expect(readKey(key)).toBe(false);
+    expect(writeKey(key, true)).toBe(true);
+    expect(readKey(key)).toBe(true);
+    expect(readKey(storageKeyFamilies.onboardingHint.key("h1", "other", "tasks"))).toBe(false);
   });
 });
 

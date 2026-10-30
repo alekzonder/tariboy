@@ -6,6 +6,7 @@ import type {
   AgentRunResult,
   AgentView,
   CreateAgentSpec,
+  FsListing,
   HarnessModelCatalog,
   ImageManifest,
   ImageSummary,
@@ -19,8 +20,12 @@ import {
   setupCreateAgentDialog,
   manifest,
   completeOrdinarySpec,
+  chooseManagedFolder,
+  createButton,
+  openAdvanced,
   renderDialog,
   selectHarness,
+  showRuntimeFields,
 } from "@/test/terminals/createAgentDialog";
 
 // The dialog's requests, each recorded with the host of the client that sent
@@ -34,8 +39,9 @@ const calls = vi.hoisted(() => ({
   listImages:
     vi.fn<(target: Daemon | null) => Promise<{ images: ImageSummary[]; count: number }>>(),
   startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentActionResult>>(),
+  fsList: vi.fn<(path: string) => Promise<FsListing>>(),
 }));
-const { createAgent, getHarnessModelsOn, imageManifestGet, listImages, startAgent } = calls;
+const { createAgent, getHarnessModelsOn, imageManifestGet, listImages, startAgent, fsList } = calls;
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -50,6 +56,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
         createAgent: (spec: CreateAgentSpec) => calls.createAgent(spec, host),
         startAgent: (name: string) => calls.startAgent(name, host),
       },
+      files: { ...client.files, fsList: (path: string) => calls.fsList(path) },
       harnesses: {
         ...client.harnesses,
         getHarnessModels: (harness: string) => calls.getHarnessModelsOn(host, harness),
@@ -95,30 +102,34 @@ vi.mock("@/components/PathAutocomplete", () => ({
   },
 }));
 
-beforeEach(() => setupCreateAgentDialog(calls));
+beforeEach(() => {
+  setupCreateAgentDialog(calls);
+  fsList.mockResolvedValue({ path: "/work", parent: "/", entries: [{ name: "app", dir: true }] });
+});
 
 afterEach(() => vi.restoreAllMocks());
 
 it("uses a newly selected host for image/default loading, cwd, creation, and start", async () => {
   renderDialog();
 
-  expect(await screen.findByLabelText("cwd")).toHaveAttribute("data-host", "d1");
+  expect(await screen.findByLabelText("folder")).toHaveAttribute("data-host", "d1");
   expect(listImages).toHaveBeenCalledWith(targetFor("d1"));
   expect(imageManifestGet).toHaveBeenCalledWith("worker:v1", targetFor("d1"));
 
-  fireEvent.click(screen.getByRole("combobox", { name: "Host" }));
+  fireEvent.click(screen.getByRole("combobox", { name: "Run on" }));
   fireEvent.click(await screen.findByRole("option", { name: "local" }));
   await waitFor(() => expect(listImages).toHaveBeenLastCalledWith(null));
-  expect(screen.getByLabelText("cwd")).toHaveAttribute("data-host", "local");
+  expect(screen.getByLabelText("folder")).toHaveAttribute("data-host", "local");
   expect(screen.getByLabelText("image")).toHaveValue("");
 
   fireEvent.focus(screen.getByLabelText("image"));
-  fireEvent.click(await screen.findByRole("option", { name: "worker:v1" }));
+  fireEvent.click(await screen.findByRole("option", { name: "worker" }));
   await waitFor(() => expect(imageManifestGet).toHaveBeenLastCalledWith("worker:v1", null));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Create agent" })).toBeEnabled());
-  fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+  fireEvent.change(screen.getByLabelText("folder"), { target: { value: "/work/app" } });
+  await waitFor(() => expect(createButton()).toBeEnabled());
+  fireEvent.click(createButton());
   await waitFor(() => expect(createAgent).toHaveBeenCalled());
-  expect(createAgent).toHaveBeenCalledWith(expect.any(Object), null);
+  expect(createAgent).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/work/app" }), null);
   expect(startAgent).toHaveBeenCalledWith("created", null);
 });
 
@@ -135,9 +146,10 @@ it("retries a cold remote Run Agent selection when the host becomes ready", asyn
     onCreated: vi.fn(),
   };
   const view = render(<CreateAgentDialog {...props} />);
+  fireEvent.change(screen.getByLabelText("folder"), { target: { value: "/work/app" } });
 
   expect(await screen.findByRole("alert")).toHaveTextContent(/host d1 is not ready/i);
-  expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
+  expect(createButton()).toBeDisabled();
 
   view.rerender(
     <CreateAgentDialog
@@ -149,14 +161,14 @@ it("retries a cold remote Run Agent selection when the host becomes ready", asyn
   await waitFor(() => expect(resolveDaemon).toHaveBeenCalledTimes(2));
   expect(listImages).toHaveBeenLastCalledWith(targetFor("d1"));
   expect(imageManifestGet).toHaveBeenLastCalledWith("worker:v1", targetFor("d1"));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Create agent" })).toBeEnabled());
+  await waitFor(() => expect(createButton()).toBeEnabled());
 });
 
 it("shows image defaults as editable values and submits the complete defaults", async () => {
   renderDialog();
-  await screen.findByDisplayValue("o3");
+  await showRuntimeFields();
 
-  expect(screen.getByLabelText("harness")).toHaveValue("codex");
+  expect(screen.getByRole("radio", { name: "Codex" })).toBeChecked();
   expect(screen.getByLabelText("model")).toHaveValue("o3");
   expect(screen.getByLabelText("effort")).toHaveValue("high");
   fireEvent.focus(screen.getByLabelText("model"));
@@ -170,18 +182,21 @@ it("shows image defaults as editable values and submits the complete defaults", 
   expect(getHarnessModelsOn).toHaveBeenCalledWith(targetFor("d1"), "codex");
   fireEvent.blur(screen.getByLabelText("model"));
 
+  openAdvanced();
   expect(screen.getByLabelText("environment JSON")).toHaveValue("{}");
   // The manifest says interactive: false, but new agents default to interactive.
-  expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
+  expect(screen.getByRole("switch", { name: "Headless (no terminal)" })).not.toBeChecked();
 
-  fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+  await chooseManagedFolder();
+  await waitFor(() => expect(createButton()).toBeEnabled());
+  fireEvent.click(createButton());
   await waitFor(() => expect(createAgent).toHaveBeenCalled());
   expect(createAgent).toHaveBeenCalledWith(completeOrdinarySpec(), targetFor("d1"));
 });
 
 it("submits edited runtime values with the complete configuration", async () => {
   renderDialog();
-  await screen.findByDisplayValue("o3");
+  await showRuntimeFields();
   await selectHarness("claude");
   fireEvent.change(screen.getByLabelText("model"), {
     target: { value: "opus" },
@@ -189,7 +204,9 @@ it("submits edited runtime values with the complete configuration", async () => 
   fireEvent.change(screen.getByLabelText("effort"), {
     target: { value: "medium" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+  await chooseManagedFolder();
+  await waitFor(() => expect(createButton()).toBeEnabled());
+  fireEvent.click(createButton());
 
   await waitFor(() => expect(createAgent).toHaveBeenCalled());
   expect(createAgent).toHaveBeenCalledWith(
@@ -204,7 +221,7 @@ it("submits edited runtime values with the complete configuration", async () => 
 
 it("changes suggestions with harness without clearing a custom model", async () => {
   renderDialog();
-  await screen.findByDisplayValue("o3");
+  await showRuntimeFields();
   fireEvent.change(screen.getByLabelText("model"), {
     target: { value: "private-model" },
   });
@@ -222,7 +239,7 @@ it("changes suggestions with harness without clearing a custom model", async () 
 
 it("offers the efforts of the selected harness model", async () => {
   renderDialog();
-  await screen.findByDisplayValue("o3");
+  await showRuntimeFields();
   fireEvent.change(screen.getByLabelText("model"), {
     target: { value: "gpt-5.6-luna" },
   });
@@ -242,7 +259,7 @@ it("keeps runtime drafts when the same selected image is reloaded", async () => 
       { id: "d1", label: "prod", revision: "initial" },
     ],
   });
-  await screen.findByDisplayValue("o3");
+  await showRuntimeFields();
   fireEvent.change(screen.getByLabelText("model"), {
     target: { value: "private-model" },
   });
@@ -287,25 +304,25 @@ it("initializes defaults again when the same image is selected on another host",
       { id: "d2", label: "staging" },
     ],
   });
-  await screen.findByDisplayValue("o3");
+  await showRuntimeFields();
   fireEvent.change(screen.getByLabelText("model"), {
     target: { value: "private-model" },
   });
 
-  fireEvent.click(screen.getByRole("combobox", { name: "Host" }));
+  fireEvent.click(screen.getByRole("combobox", { name: "Run on" }));
   fireEvent.click(await screen.findByRole("option", { name: "staging" }));
   await waitFor(() => expect(screen.getByLabelText("image")).toHaveValue(""));
   fireEvent.focus(screen.getByLabelText("image"));
-  fireEvent.click(await screen.findByRole("option", { name: "worker:v1" }));
+  fireEvent.click(await screen.findByRole("option", { name: "worker" }));
 
-  expect(await screen.findByLabelText("harness")).toHaveValue("claude");
+  await waitFor(() => expect(screen.getByRole("radio", { name: "Claude Code" })).toBeChecked());
   expect(screen.getByLabelText("model")).toHaveValue("claude-opus-4-8");
   expect(screen.getByLabelText("effort")).toHaveValue("max");
 });
 
 it("remembers unknown model and effort after successful creation", async () => {
   renderDialog();
-  await screen.findByDisplayValue("o3");
+  await showRuntimeFields();
   fireEvent.change(screen.getByLabelText("model"), {
     target: { value: "private-model" },
   });
@@ -313,7 +330,9 @@ it("remembers unknown model and effort after successful creation", async () => {
     target: { value: "ultra-custom" },
   });
 
-  fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+  await chooseManagedFolder();
+  await waitFor(() => expect(createButton()).toBeEnabled());
+  fireEvent.click(createButton());
   await waitFor(() => expect(createAgent).toHaveBeenCalledOnce());
 
   expect(JSON.parse(localStorage.getItem(RUNTIME_PRESETS_STORAGE_KEY) ?? "{}")).toEqual({
@@ -327,7 +346,7 @@ it("remembers unknown model and effort after successful creation", async () => {
 it("does not remember custom runtime values when creation fails", async () => {
   createAgent.mockRejectedValueOnce(new Error("rejected"));
   renderDialog();
-  await screen.findByDisplayValue("o3");
+  await showRuntimeFields();
   fireEvent.change(screen.getByLabelText("model"), {
     target: { value: "private-model" },
   });
@@ -335,7 +354,9 @@ it("does not remember custom runtime values when creation fails", async () => {
     target: { value: "ultra-custom" },
   });
 
-  fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+  await chooseManagedFolder();
+  await waitFor(() => expect(createButton()).toBeEnabled());
+  fireEvent.click(createButton());
 
   expect(await screen.findByRole("alert")).toHaveTextContent("rejected");
   expect(localStorage.getItem(RUNTIME_PRESETS_STORAGE_KEY)).toBeNull();

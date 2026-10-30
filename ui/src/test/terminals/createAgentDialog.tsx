@@ -93,6 +93,8 @@ export const cloneSource: AgentView = {
 
 export const completeOrdinarySpec = (overrides: Record<string, unknown> = {}) => ({
   image: "worker:v1",
+  // The suggested name for a managed folder is the image name.
+  name: "worker",
   cwd: "",
   harness: "codex",
   model: "o3",
@@ -142,11 +144,39 @@ export async function setSwitch(name: string, value: boolean) {
   if (control.getAttribute("aria-checked") === String(!value)) fireEvent.click(control);
 }
 
+/** Opens the dialog's Advanced disclosure when it is closed. */
+export function openAdvanced() {
+  const toggle = screen.getByRole("button", { name: "Advanced" });
+  if (toggle.getAttribute("aria-expanded") !== "true") fireEvent.click(toggle);
+}
+
+/** Lets the daemon pick the folder, so the request carries an empty cwd. */
+export async function chooseManagedFolder() {
+  openAdvanced();
+  await setSwitch("Use a managed folder", true);
+}
+
+/** Shows the model and effort fields hidden under the coding tool radios,
+ *  once the image defaults have filled them. */
+export async function showRuntimeFields() {
+  const change = screen.queryByRole("button", { name: "change" });
+  if (change) fireEvent.click(change);
+  await screen.findByDisplayValue("o3");
+}
+
+/** The footer's create button: "Start agent", or "Create agent" when the
+ *  draft creates without starting. */
+export const createButton = () => screen.getByRole("button", { name: /^(Start|Create) agent$/ });
+
+/** Chooses a coding tool by its type, as the radio group offers it. */
 export async function selectHarness(value: string) {
-  const control = screen.getByRole("combobox", { name: "harness" });
+  const control = screen
+    .getByRole("radiogroup", { name: "Coding tool" })
+    .querySelector<HTMLInputElement>(`input[value="${value}"]`);
+  if (!control) throw new Error(`no coding tool ${value}`);
   await waitFor(() => expect(control).toBeEnabled());
-  fireEvent.change(control, { target: { value } });
-  expect(control).toHaveValue(value);
+  fireEvent.click(control);
+  expect(control).toBeChecked();
 }
 
 const harnessCatalogs: Record<string, HarnessModelCatalog> = {

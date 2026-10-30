@@ -569,6 +569,7 @@ describe("AgentWorkspace", () => {
     const workspace = await screen.findByTestId("tasks-workspace");
     expect(workspace).toHaveAttribute("data-scope-agent", "worker");
     expect(workspace).toHaveAttribute("data-goal-task-key", "IMPROVE-37");
+    expect(screen.getByText("Tasks you create here are given to this agent.")).toBeInTheDocument();
   });
 
   it("loads Configuration from the host identified by the route", async () => {

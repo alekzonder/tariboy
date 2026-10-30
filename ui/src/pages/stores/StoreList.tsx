@@ -1,7 +1,11 @@
 import { Link } from "react-router-dom";
-import { type StoreView, TARIBOY_STORE } from "@/lib/api";
+import type { OnboardingDefaultStore, OnboardingStatus, StoreView } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useApi } from "@/components/apiContext";
+import { GettingReady } from "@/components/onboarding/GettingReady";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+import { checklistRows } from "@/lib/onboarding/firstRun";
 import type { StoreActions } from "./useStoreActions";
 import { hasTariboyStore } from "./storeStatus";
 
@@ -16,20 +20,23 @@ interface StoreListProps {
   setSource: (source: string) => void;
 }
 
-function TariboyStoreCard({ actions }: Pick<StoreListProps, "actions">) {
+function TariboyStoreCard({
+  actions,
+  store,
+}: Pick<StoreListProps, "actions"> & { store: OnboardingDefaultStore }) {
   return (
     <section className="flex flex-wrap items-center justify-between gap-3 rounded border p-4">
       <div className="min-w-0 space-y-1">
         <h2 className="font-medium">Tariboy Store</h2>
         <p className="break-all text-sm text-muted-foreground">
           Images and workflows published by Tariboy, registered as{" "}
-          <span className="font-mono">{TARIBOY_STORE.name}</span> from{" "}
-          <span className="font-mono">{TARIBOY_STORE.source}</span>.
+          <span className="font-mono">{store.name}</span> from{" "}
+          <span className="font-mono">{store.source}</span>.
         </p>
       </div>
       <Button
         disabled={Boolean(actions.busy)}
-        onClick={() => void actions.add(TARIBOY_STORE, "add-tariboy")}
+        onClick={() => void actions.add({ name: store.name, source: store.source }, "add-tariboy")}
       >
         {actions.busy === "add-tariboy" ? "Adding…" : "Add tariboy Store"}
       </Button>
@@ -40,9 +47,9 @@ function TariboyStoreCard({ actions }: Pick<StoreListProps, "actions">) {
 function AddStoreForm({ actions, storeName, setStoreName, source, setSource }: StoreListProps) {
   const { busy } = actions;
   return (
-    <section className="space-y-3 rounded border p-4">
-      <h2 className="font-medium">Add Store</h2>
-      <div className="grid gap-3 md:grid-cols-[14rem_minmax(0,1fr)_auto]">
+    <details className="rounded border p-4">
+      <summary className="cursor-pointer font-medium">Add another catalog</summary>
+      <div className="mt-3 grid gap-3 md:grid-cols-[14rem_minmax(0,1fr)_auto]">
         <Input
           aria-label="Store name"
           required
@@ -66,9 +73,23 @@ function AddStoreForm({ actions, storeName, setStoreName, source, setSource }: S
           {busy === "add" ? "Adding…" : "Add store"}
         </Button>
       </div>
-    </section>
+    </details>
   );
 }
+
+// The checklist is shown while the host still sets up the catalog or the
+// starter image; the coding tool row alone does not concern this page.
+const setupPending = (status: OnboardingStatus) =>
+  checklistRows(status).some((row) => row.key !== "tool" && row.state !== "done");
+
+// The card offers the default Store the daemon reports, also after it was
+// removed. A daemon without the onboarding status offers none, and neither
+// does one that is connecting it right now.
+const offeredStore = (status: OnboardingStatus | null, stores: StoreView[]) => {
+  const store = status?.default_store;
+  if (!store || store.state === "pending" || hasTariboyStore(stores, store)) return null;
+  return store;
+};
 
 function StoresTable({ basePath, stores }: Pick<StoreListProps, "basePath" | "stores">) {
   return (
@@ -111,6 +132,9 @@ function StoresTable({ basePath, stores }: Pick<StoreListProps, "basePath" | "st
 
 export default function StoreList(props: StoreListProps) {
   const { loading, stores } = props;
+  const onboarding = useOnboardingStatus(useApi());
+  const { status } = onboarding;
+  const offered = loading ? null : offeredStore(status, stores);
   return (
     <>
       <div>
@@ -119,7 +143,8 @@ export default function StoreList(props: StoreListProps) {
           Register image source repositories and directories on this server.
         </p>
       </div>
-      {!loading && !hasTariboyStore(stores) && <TariboyStoreCard actions={props.actions} />}
+      {status && setupPending(status) && <GettingReady status={status} retry={onboarding.retry} />}
+      {offered && <TariboyStoreCard actions={props.actions} store={offered} />}
       <AddStoreForm {...props} />
       {loading && (
         <p role="status" className="text-sm text-muted-foreground">

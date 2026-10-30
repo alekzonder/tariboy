@@ -40,7 +40,7 @@ function AgentGoal({
   onOpenGoal: (taskKey: string) => void;
 }) {
   return (
-    <span className="flex min-w-0 flex-1 items-center gap-1.25 overflow-hidden text-body-sm whitespace-nowrap text-muted-foreground max-lg:flex-none">
+    <span className="flex min-w-0 flex-1 items-center gap-1.25 overflow-hidden text-body-sm whitespace-nowrap text-muted-foreground max-[75rem]:flex-none">
       <span className="shrink-0">Goal:</span>
       {goalTaskKey ? (
         <button
@@ -75,9 +75,9 @@ function AgentIdentityRow({
 }) {
   const tone = agentTone(agent.state, outOfBudget);
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-2.25 gap-y-1 lg:flex-nowrap">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2.25 gap-y-1 min-[75rem]:flex-nowrap">
       <StatusDot tone={tone} size={8} />
-      <h1 className="min-w-0 truncate text-title font-semibold tracking-[-.01em] lg:shrink-0">
+      <h1 className="min-w-0 truncate text-title font-semibold tracking-[-.01em] min-[75rem]:shrink-0">
         {agent.name}
       </h1>
       <StatusPill tone={tone}>{outOfBudget ? "no budget" : agent.state}</StatusPill>
@@ -87,7 +87,7 @@ function AgentIdentityRow({
       <span
         title={agent.image}
         data-testid="agent-image"
-        className="inline-flex h-5 max-w-full min-w-0 items-center gap-1.25 rounded-sm bg-muted px-1.75 font-mono text-meta whitespace-nowrap text-muted-foreground lg:shrink-0"
+        className="inline-flex h-5 max-w-full min-w-0 items-center gap-1.25 rounded-sm bg-muted px-1.75 font-mono text-meta whitespace-nowrap text-muted-foreground min-[75rem]:shrink-0"
       >
         <Container className="size-2.5 shrink-0" aria-hidden="true" />
         <span className="truncate">{agent.image}</span>
@@ -96,7 +96,7 @@ function AgentIdentityRow({
         <span
           data-testid="agent-runtime"
           title={`Harness · model · effort: ${runtime}`}
-          className="inline-flex h-5 max-w-full min-w-0 items-center rounded-sm bg-muted px-1.75 font-mono text-meta whitespace-nowrap text-muted-foreground lg:shrink-0"
+          className="inline-flex h-5 max-w-full min-w-0 items-center rounded-sm bg-muted px-1.75 font-mono text-meta whitespace-nowrap text-muted-foreground min-[75rem]:shrink-0"
         >
           <span className="truncate">{runtime}</span>
         </span>
@@ -199,10 +199,10 @@ export function AgentWorkspaceHeader(props: AgentWorkspaceHeaderProps) {
   const runtime = agentRuntimeLabel({ agentHarness: agent.harness, view });
   return (
     <header className="shrink-0">
-      {/* Below lg the identity wraps and the lifecycle cluster takes a row of
+      {/* Below 1200px the identity wraps and the lifecycle cluster takes a row of
           its own, so neither ever covers the other. */}
-      <div className="flex flex-wrap items-start gap-2.5 px-4 pt-3.5 pb-2.75 lg:flex-nowrap">
-        <div className="flex min-w-0 flex-1 flex-col gap-1.25 max-lg:basis-full">
+      <div className="flex flex-wrap items-start gap-2.5 px-4 pt-3.5 pb-2.75 min-[75rem]:flex-nowrap">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.25 max-[75rem]:basis-full">
           <AgentIdentityRow
             agent={agent}
             hostId={hostId}

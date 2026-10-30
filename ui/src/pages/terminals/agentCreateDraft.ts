@@ -7,6 +7,8 @@ export interface AgentCreateDraft {
   name: string;
   cwd: string;
   createCwd: boolean;
+  /** The daemon picks the folder: the request carries an empty cwd. */
+  managedFolder: boolean;
   harness: string;
   model: string;
   effort: string;
@@ -39,6 +41,7 @@ export function newAgentDraft(image = ""): AgentCreateDraft {
     name: "",
     cwd: "",
     createCwd: false,
+    managedFolder: false,
     harness: "",
     model: "",
     effort: "",
@@ -83,6 +86,7 @@ export function cloneAgentDraft(source: AgentView): AgentCreateDraft {
     name: "",
     cwd: source.configured_cwd,
     createCwd: false,
+    managedFolder: source.configured_cwd === "",
     harness: source.harness,
     model: source.model,
     effort: source.effort,

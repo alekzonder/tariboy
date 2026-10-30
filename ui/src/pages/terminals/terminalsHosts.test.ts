@@ -34,16 +34,21 @@ describe("buildCreateHosts", () => {
       true,
     );
     expect(hosts).toEqual([
-      { id: "", label: "This daemon (local)", revision: "pending\u0000\u0000" },
-      { id: "a", label: "label-a", revision: "down\u0000\u0000https://a" },
-      { id: "b", label: "daemon-b", revision: "pending\u0000\u0000https://b" },
+      { id: "", label: "This daemon (local)", revision: "pending\u0000\u0000", agents: [] },
+      { id: "a", label: "label-a", revision: "down\u0000\u0000https://a", agents: [] },
+      { id: "b", label: "daemon-b", revision: "pending\u0000\u0000https://b", agents: [] },
     ]);
   });
 
   it("leaves the local daemon out when there is none", () => {
     expect(buildCreateHosts([host("a")], [], false)).toEqual([
-      { id: "a", label: "label-a", revision: "reachable\u0000\u0000" },
+      { id: "a", label: "label-a", revision: "reachable\u0000\u0000", agents: [] },
     ]);
+  });
+
+  it("names the agents a host already has, for a unique suggested name", () => {
+    const agents = [{ name: "app-basic" }] as HostAgents["agents"];
+    expect(buildCreateHosts([host("a", { agents })], [], false)[0].agents).toEqual(["app-basic"]);
   });
 });
 
@@ -52,7 +57,7 @@ describe("buildWorkspaceHosts", () => {
     const created = buildCreateHosts([host("a"), host("b", { error: "x" })], [], false);
     expect(
       buildWorkspaceHosts(
-        [...created, { id: "c", label: "c", revision: "" }],
+        [...created, { id: "c", label: "c", revision: "", agents: [] }],
         [host("a"), host("b", { error: "x" })],
         [daemon("a", { state: "connecting" })],
       ),

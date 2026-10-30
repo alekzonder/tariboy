@@ -18,30 +18,19 @@ async function findEventually(
   return desktop.findElement(using, selector);
 }
 
-test("selects a harness in the New agent dialog", async ({ desktop }) => {
+test("selects a coding tool on the first-run card", async ({ desktop }) => {
   await waitForMainWindow(desktop);
 
-  const openDialog = await desktop.findElement(
-    "xpath",
-    "//main//button[normalize-space(.)='New agent']",
+  // A host with no agent shows the New agent form inline on its home.
+  await findEventually(desktop, "xpath", "//main//h2[normalize-space(.)='Run your first agent']");
+  const codex = await findEventually(
+    desktop,
+    "css selector",
+    "main input[name='create-agent-harness'][value='codex']",
   );
-  await expect(desktop.elementText(openDialog)).resolves.toBe("New agent");
-  await desktop.elementClick(openDialog);
-
-  const harness = await expect
-    .poll(async () => {
-      try {
-        return await desktop.findElement("css selector", "#create-agent-harness");
-      } catch {
-        return null;
-      }
-    })
-    .not.toBeNull()
-    .then(async () => desktop.findElement("css selector", "#create-agent-harness"));
-
-  await expect(desktop.elementProperty(harness, "value")).resolves.not.toBe("codex");
-  await desktop.elementSendKeys(harness, "codex");
-  await expect.poll(() => desktop.elementProperty(harness, "value")).toBe("codex");
+  await expect.poll(() => desktop.elementProperty(codex, "disabled")).toBe(false);
+  await desktop.elementClick(codex);
+  await expect.poll(() => desktop.elementProperty(codex, "checked")).toBe(true);
 });
 
 test("clones complete agent configuration through the production Desktop", async ({ desktop }) => {
@@ -121,8 +110,9 @@ test("clones complete agent configuration through the production Desktop", async
     .toBe(true);
 
   const expectedValues: Array<[string, string]> = [
-    ["#create-agent-name", ""],
-    ["[aria-label='cwd']", ""],
+    // A managed folder suggests the image name.
+    ["#create-agent-name", "basic"],
+    ["[aria-label='folder']", ""],
     ["#create-agent-model", "gpt-5"],
     ["#create-agent-effort", "high"],
     ["#create-agent-alias", "Source alias"],
@@ -160,16 +150,21 @@ test("clones complete agent configuration through the production Desktop", async
     desktop.execute<string>(`
     return document.querySelector('#create-agent-interactive')?.getAttribute('aria-checked') || "";
   `),
-  ).resolves.toBe("false");
+  ).resolves.toBe("true");
   await expect(
     desktop.execute<string>(`
-    return document.querySelector('#create-agent-start')?.getAttribute('aria-checked') || "";
+    return document.querySelector('#create-agent-no-start')?.getAttribute('aria-checked') || "";
   `),
-  ).resolves.toBe("false");
+  ).resolves.toBe("true");
+  await expect(
+    desktop.execute<string>(`
+    return document.querySelector('#create-agent-managed-folder')?.getAttribute('aria-checked') || "";
+  `),
+  ).resolves.toBe("true");
 
   await desktop.elementSendKeys(
     await desktop.findElement("css selector", "#create-agent-name"),
-    "clone-copy",
+    "-copy",
   );
   await desktop.elementClick(
     await desktop.findElement("xpath", "//button[normalize-space(.)='Create agent']"),
@@ -181,7 +176,7 @@ test("clones complete agent configuration through the production Desktop", async
         desktop.execute<string>(`
     if (window.__desktopCloneInspectPending) return "pending";
     window.__desktopCloneInspectPending = true;
-    fetch(window.__desktopCloneBaseURL + "/api/agents/clone-copy")
+    fetch(window.__desktopCloneBaseURL + "/api/agents/basic-copy")
       .then((response) => response.json())
       .then((envelope) => {
         window.__desktopCloneInspect = envelope.ok ? envelope.result : null;
@@ -196,7 +191,7 @@ test("clones complete agent configuration through the production Desktop", async
     "return window.__desktopCloneInspect;",
   );
   expect(result).toMatchObject({
-    name: "clone-copy",
+    name: "basic-copy",
     image: "basic:latest",
     configured_cwd: "",
     harness: "codex",

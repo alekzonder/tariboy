@@ -12,6 +12,7 @@ import { buildUnits, readBaseline } from "./configuration/commits";
 import { ConfigSaveBar, ConfigSearch } from "./configuration/ConfigControls";
 import { ConfigurationBlocks } from "./configuration/ConfigurationBlocks";
 import TabPage from "@/components/TabPage";
+import { FirstVisitHint } from "@/components/onboarding/FirstVisitHint";
 
 export default function AgentConfigurationTab({ refresh }: { refresh: () => void }) {
   const name = useAgentName();
@@ -25,6 +26,7 @@ export default function AgentConfigurationTab({ refresh }: { refresh: () => void
   return (
     <ConfigurationPage
       key={`${targetId ?? ""}\u0000${name}`}
+      hostId={targetId ?? ""}
       name={name}
       status={status}
       refresh={refresh}
@@ -33,10 +35,12 @@ export default function AgentConfigurationTab({ refresh }: { refresh: () => void
 }
 
 function ConfigurationPage({
+  hostId,
   name,
   status,
   refresh,
 }: {
+  hostId: string;
   name: string;
   status: AgentStatus | null;
   refresh: () => void;
@@ -109,6 +113,7 @@ function ConfigurationPage({
           <p className="text-xs text-muted-foreground">Run actions apply immediately.</p>
         </div>
       </header>
+      <FirstVisitHint hostId={hostId} agent={name} tab="configuration" />
       <ConfigSearch
         query={query}
         onQuery={setQuery}

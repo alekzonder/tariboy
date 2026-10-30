@@ -47,6 +47,7 @@ describe("newAgentDraft", () => {
       name: "",
       cwd: "",
       createCwd: false,
+      managedFolder: false,
       harness: "",
       model: "",
       effort: "",
@@ -82,6 +83,8 @@ describe("cloneAgentDraft", () => {
       name: "",
       cwd: "",
       createCwd: false,
+      // An empty configured cwd is the managed folder.
+      managedFolder: true,
       harness: "codex",
       model: "gpt-5",
       effort: "high",

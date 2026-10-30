@@ -151,6 +151,8 @@ export default function StoreDetail(props: StoreDetailProps) {
                 setAutoImages={data.setAutoImages}
                 busy={actions.busy}
                 build={actions.build}
+                buildErrors={actions.buildErrors}
+                operationHref={actions.operationHref}
               />
             </TabsContent>
             <TabsContent value="workflow">

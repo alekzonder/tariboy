@@ -1,4 +1,5 @@
 import { CircleHelp } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -8,7 +9,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
-import { useOnboarding } from "./onboardingContext";
+import { useOnboarding, type OnboardingCtx } from "./onboardingContext";
+
+/** Opens the tour, or says why it stays closed. */
+function openTour(onboarding: OnboardingCtx, mode: "full" | "whats-new") {
+  if (!onboarding.startTour(mode)) toast("The tour opens after the daemon error is fixed.");
+}
 
 /** The same three actions as the titlebar menu, on Application settings. */
 export function HelpCard() {
@@ -20,10 +26,10 @@ export function HelpCard() {
         <CardTitle>Help</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => onboarding.startTour("full")}>
+        <Button variant="outline" onClick={() => openTour(onboarding, "full")}>
           Take the tour
         </Button>
-        <Button variant="outline" onClick={() => onboarding.startTour("whats-new")}>
+        <Button variant="outline" onClick={() => openTour(onboarding, "whats-new")}>
           What&apos;s new
         </Button>
         <Button variant="outline" onClick={onboarding.openChangelog}>
@@ -53,10 +59,10 @@ export function HelpMenu() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => onboarding.startTour("full")}>
+        <DropdownMenuItem onSelect={() => openTour(onboarding, "full")}>
           Take the tour
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onboarding.startTour("whats-new")}>
+        <DropdownMenuItem onSelect={() => openTour(onboarding, "whats-new")}>
           What&apos;s new
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={onboarding.openChangelog}>Changelog</DropdownMenuItem>

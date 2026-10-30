@@ -31,9 +31,8 @@ export function TuiAbsentPanel({
         drop.dragActive && "ring-2 ring-primary",
       )}
     >
-      <div>Session not running or not interactive</div>
-      <div className="text-xs">
-        Start the agent and enable interactive mode (Settings → Runtime config).
+      <div>
+        No terminal session. Start the agent, or turn on Interactive in Configuration → Runtime.
       </div>
       <div className="mt-2 flex items-center gap-2">
         {onStart && (

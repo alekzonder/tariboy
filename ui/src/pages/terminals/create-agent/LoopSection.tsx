@@ -1,19 +1,16 @@
 import { Field, NumberField, PolicyField } from "./formControls";
 import { Textarea } from "@/components/ui/textarea";
-import { GoalFields } from "./GoalFields";
 import { MessagesFields } from "./MessagesFields";
 import type { CreateAgentForm } from "./useCreateAgentForm";
 
+/** The Autopilot group: how the agent keeps working without you. */
 export function LoopSection({
   draft,
   updateDraft,
   formDisabled,
 }: Pick<CreateAgentForm, "draft" | "updateDraft" | "formDisabled">) {
   return (
-    <section aria-labelledby="create-agent-loop-section" className="space-y-3 rounded border p-3">
-      <h3 id="create-agent-loop-section" className="font-medium">
-        Loop
-      </h3>
+    <>
       <div className="grid gap-3 sm:grid-cols-2">
         <NumberField
           label="interval seconds"
@@ -61,9 +58,16 @@ export function LoopSection({
           disabled={formDisabled}
           min={0}
         />
+        <NumberField
+          label="AI inactivity timeout seconds"
+          id="create-agent-ai-stall-timeout"
+          value={draft.aiStallTimeoutS}
+          onChange={(value) => updateDraft("aiStallTimeoutS", value)}
+          disabled={formDisabled}
+          min={1}
+        />
         <MessagesFields draft={draft} updateDraft={updateDraft} formDisabled={formDisabled} />
       </div>
-      <GoalFields draft={draft} updateDraft={updateDraft} formDisabled={formDisabled} />
       <Field label="standing user prompt" id="create-agent-user-prompt">
         <Textarea
           id="create-agent-user-prompt"
@@ -73,6 +77,6 @@ export function LoopSection({
           disabled={formDisabled}
         />
       </Field>
-    </section>
+    </>
   );
 }

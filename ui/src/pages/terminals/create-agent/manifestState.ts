@@ -16,11 +16,13 @@ export interface ManifestInputs {
 function manifestDefaults(current: ImageManifest | null, draftPlugins: string[]) {
   const schemaV1 = current?.schema_version === 1;
   const schemaV2 = current?.schema_version === 2;
+  const harness = schemaV1 ? current.harness : undefined;
   return {
     bare: current?.bare === true,
     schemaV2,
-    defaultModel: schemaV1 ? (current.harness?.model ?? "") : "",
-    defaultEffort: schemaV1 ? (current.harness?.effort ?? "") : "",
+    defaultHarness: harness?.type ?? "",
+    defaultModel: harness?.model ?? "",
+    defaultEffort: harness?.effort ?? "",
     displayedPlugins: schemaV2
       ? (current.plugins?.map((plugin) => plugin.name) ?? [])
       : draftPlugins,

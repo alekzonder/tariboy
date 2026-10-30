@@ -10,6 +10,8 @@ export interface CreateHost {
   id: string;
   label: string;
   revision: string;
+  /** The names already used on the host. */
+  agents: string[];
 }
 
 export const fallbackHostLabel = (id: string) => (id === "" ? "This daemon (local)" : id);
@@ -44,6 +46,7 @@ export function buildCreateHosts(
         metadata?.state ?? "",
         metadata?.baseURL ?? "",
       ].join("\u0000"),
+      agents: aggregate?.agents.map((agent) => agent.name) ?? [],
     };
   });
 }

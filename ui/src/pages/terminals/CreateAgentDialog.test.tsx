@@ -18,6 +18,9 @@ import {
   manifest,
   cloneSource,
   completeOrdinarySpec,
+  chooseManagedFolder,
+  createButton,
+  openAdvanced,
   renderDialog,
   setSwitch,
 } from "@/test/terminals/createAgentDialog";
@@ -108,10 +111,12 @@ it("loads a complete clone draft from the explicit source host and submits every
   expect(await screen.findByRole("heading", { name: "Clone agent" })).toBeInTheDocument();
   expect(screen.getByText(/source.*prod/i)).toBeInTheDocument();
   expect(agentGetOn).toHaveBeenCalledWith(targetFor("d1"), "source", "");
-  expect(screen.getByLabelText("name")).toHaveValue("");
-  expect(screen.getByLabelText("cwd")).toHaveValue("");
   await waitFor(() => expect(screen.getByLabelText("alias")).toHaveValue("Source alias"));
-  expect(screen.getByLabelText("group")).toHaveValue("reviewers");
+  // A clone suggests a free name; an empty configured cwd is a managed folder.
+  expect(screen.getByLabelText("name")).toHaveValue("worker");
+  expect(screen.getByLabelText("folder")).toHaveValue("");
+  expect(screen.getByRole("switch", { name: "Use a managed folder" })).toBeChecked();
+  expect(screen.getByLabelText("team")).toHaveValue("reviewers");
   expect(screen.getByLabelText("color")).toHaveValue("#123abc");
   expect(screen.getByLabelText("notes")).toHaveValue("source notes");
   expect(screen.getByLabelText("model")).toHaveValue("gpt-5");
@@ -130,8 +135,8 @@ it("loads a complete clone draft from the explicit source host and submits every
   expect(screen.getByLabelText("maximum queued messages")).toHaveValue(900);
   expect(screen.getByRole("switch", { name: "Goal" })).not.toBeChecked();
   expect(screen.getByLabelText("wait customer timeout seconds")).toHaveValue(120);
-  expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
-  expect(screen.getByRole("switch", { name: "Start now" })).not.toBeChecked();
+  expect(screen.getByRole("switch", { name: "Headless (no terminal)" })).not.toBeChecked();
+  expect(screen.getByRole("switch", { name: "Create without starting" })).toBeChecked();
 
   fireEvent.change(screen.getByLabelText("name"), {
     target: { value: "copy" },
@@ -186,7 +191,7 @@ it("retries a failed source load without allowing a partial clone", async () => 
   });
 
   expect(await screen.findByRole("alert")).toHaveTextContent("source unavailable");
-  expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
+  expect(createButton()).toBeDisabled();
   expect(createAgent).not.toHaveBeenCalled();
 
   fireEvent.click(screen.getByRole("button", { name: "Retry source" }));
@@ -205,7 +210,7 @@ it("requires a daemon with the complete clone projection", async () => {
   });
 
   expect(await screen.findByRole("alert")).toHaveTextContent(/update.*host.*complete clone/i);
-  expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
+  expect(createButton()).toBeDisabled();
   expect(createAgent).not.toHaveBeenCalled();
 });
 
@@ -223,7 +228,7 @@ it("retains clone drafts while target host and image readiness change", async ()
     target: { value: "clone-model" },
   });
 
-  fireEvent.click(screen.getByRole("combobox", { name: "Host" }));
+  fireEvent.click(screen.getByRole("combobox", { name: "Run on" }));
   fireEvent.click(await screen.findByRole("option", { name: "staging" }));
   expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
   await waitFor(() =>
@@ -241,18 +246,21 @@ it("retains clone drafts while target host and image readiness change", async ()
     }),
   );
   fireEvent.focus(screen.getByLabelText("image"));
-  fireEvent.click(await screen.findByRole("option", { name: "bare:latest" }));
+  fireEvent.click(await screen.findByRole("option", { name: "Plain terminal (bare)" }));
   expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
   expect(await screen.findByText("Terminal only")).toBeInTheDocument();
-  expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
+  // A plain terminal always has a terminal and runs no coding tool.
+  expect(screen.getByRole("switch", { name: "Headless (no terminal)" })).not.toBeChecked();
+  expect(screen.getByRole("switch", { name: "Headless (no terminal)" })).toBeDisabled();
+  expect(screen.queryByRole("radiogroup", { name: "Coding tool" })).not.toBeInTheDocument();
   expect(screen.getByLabelText("alias")).toHaveValue("Source alias");
-  expect(screen.getByLabelText("model")).toHaveValue("clone-model");
 
   imageManifestGet.mockResolvedValueOnce(manifest());
   fireEvent.focus(screen.getByLabelText("image"));
-  fireEvent.click(await screen.findByRole("option", { name: "worker:v1" }));
+  fireEvent.click(await screen.findByRole("option", { name: "worker" }));
   await waitFor(() => expect(screen.queryByText("Terminal only")).not.toBeInTheDocument());
-  expect(screen.getByRole("switch", { name: "Interactive" })).not.toBeChecked();
+  expect(screen.getByRole("switch", { name: "Headless (no terminal)" })).toBeChecked();
+  expect(screen.getByLabelText("model")).toHaveValue("clone-model");
 });
 
 it("keeps schema-v1 plugins editable and makes schema-v2 plugins image-owned", async () => {
@@ -284,8 +292,7 @@ it("keeps schema-v1 plugins editable and makes schema-v2 plugins image-owned", a
   fireEvent.click(screen.getByRole("button", { name: "Add plugin" }));
   expect(screen.getByText("draft-plugin")).toBeInTheDocument();
 
-  fireEvent.focus(screen.getByLabelText("image"));
-  fireEvent.click(await screen.findByRole("option", { name: "worker:v2" }));
+  fireEvent.change(screen.getByLabelText("version"), { target: { value: "v2" } });
   expect(await screen.findByText("image-plugin")).toBeInTheDocument();
   expect(screen.getByText(/plugins are owned by this schema-v2 image/i)).toBeInTheDocument();
   expect(screen.queryByRole("textbox", { name: "plugin name" })).not.toBeInTheDocument();
@@ -323,21 +330,23 @@ it("keeps Interactive on for a schema-v2 image after a bare image was selected",
   );
   renderDialog({ imageRef: "bare:latest" });
   expect(await screen.findByText("Terminal only")).toBeInTheDocument();
-  expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
+  openAdvanced();
+  expect(screen.getByRole("switch", { name: "Headless (no terminal)" })).not.toBeChecked();
 
   fireEvent.focus(screen.getByLabelText("image"));
-  fireEvent.click(await screen.findByRole("option", { name: "worker:v2" }));
+  fireEvent.click(await screen.findByRole("option", { name: "worker" }));
   await waitFor(() => expect(screen.queryByText("Terminal only")).not.toBeInTheDocument());
-  expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
+  expect(screen.getByRole("switch", { name: "Headless (no terminal)" })).not.toBeChecked();
 });
 
 it("rejects invalid environment JSON before creation", async () => {
   renderDialog();
-  await screen.findByDisplayValue("o3");
+  await chooseManagedFolder();
+  await waitFor(() => expect(createButton()).toBeEnabled());
   fireEvent.change(screen.getByLabelText("environment JSON"), {
     target: { value: '{"COUNT": 3}' },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+  fireEvent.click(createButton());
 
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Environment must be a JSON object whose values are strings",
@@ -347,11 +356,12 @@ it("rejects invalid environment JSON before creation", async () => {
 
 it("rejects non-integral numeric configuration before creation", async () => {
   renderDialog();
-  await screen.findByDisplayValue("o3");
+  await chooseManagedFolder();
+  await waitFor(() => expect(createButton()).toBeEnabled());
   fireEvent.change(screen.getByLabelText("interval seconds"), {
     target: { value: "1.5" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+  fireEvent.click(createButton());
 
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Interval seconds must be a whole number of at least 0",
@@ -367,12 +377,15 @@ describe.each([
 ])("creation matrix $startNow/$interactive", ({ startNow, interactive }) => {
   it("creates stopped without a loop flag and starts only on request", async () => {
     const { onCreated } = renderDialog();
-    await screen.findByDisplayValue("worker:v1");
-    await waitFor(() => expect(screen.getByRole("button", { name: "Create agent" })).toBeEnabled());
-    await setSwitch("Start now", startNow);
-    await setSwitch("Interactive", interactive);
+    await screen.findByDisplayValue("worker");
+    await chooseManagedFolder();
+    await waitFor(() => expect(createButton()).toBeEnabled());
+    await setSwitch("Create without starting", !startNow);
+    await setSwitch("Headless (no terminal)", !interactive);
 
-    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: startNow ? "Start agent" : "Create agent" }),
+    );
 
     await waitFor(() => expect(createAgent).toHaveBeenCalledOnce());
     expect(createAgent).toHaveBeenCalledWith(

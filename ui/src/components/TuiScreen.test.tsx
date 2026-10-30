@@ -194,7 +194,11 @@ describe("TuiScreen", () => {
   it("shows the Start panel when the session is absent and wires onStart", () => {
     const onStart = vi.fn();
     render(<TuiScreen controller={ctrl({ absent: true })} onStart={onStart} />);
-    expect(screen.getByText(/not running or not interactive/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "No terminal session. Start the agent, or turn on Interactive in Configuration → Runtime.",
+      ),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     expect(onStart).toHaveBeenCalled();
   });

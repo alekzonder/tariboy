@@ -2,7 +2,6 @@ import {
   type StoreView,
   type StoreImageView,
   type StoreWorkflowView,
-  TARIBOY_STORE,
   type WorkflowImageListing,
 } from "@/lib/api";
 
@@ -57,7 +56,9 @@ export const latestWorkflowVersion = (
     ? workflowImages.find((image) => image.name === workflowName && image.tag === "latest")?.version
     : null;
 
-export const hasTariboyStore = (stores: StoreView[]) =>
-  stores.some(
-    (store) => store.name === TARIBOY_STORE.name || store.source === TARIBOY_STORE.source,
-  );
+/** Whether a registered Store already is the default Store, by name or by source. */
+export const hasTariboyStore = (
+  stores: StoreView[],
+  defaultStore: { name: string; source: string },
+) =>
+  stores.some((store) => store.name === defaultStore.name || store.source === defaultStore.source);

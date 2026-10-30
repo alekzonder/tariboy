@@ -127,6 +127,19 @@ export const storageKeyFamilies = {
     prefix: "tui:draft:",
     key: (agent, section) => stringKey("local", `tui:draft:${agent}:${section}`, null),
   } satisfies StorageKeyFamily<string, [string, string]>,
+  /** A dismissed first-visit hint of one agent's tab; absent = still shown. */
+  onboardingHint: {
+    area: "local",
+    prefix: "onboarding:hint:v1:",
+    key: (host, agent, tab) => ({
+      area: "local",
+      name: `onboarding:hint:v1:${host}:${agent}:${tab}`,
+      version: 1,
+      parse: (raw) => (raw === "dismissed" ? true : undefined),
+      serialize: (value) => (value ? "dismissed" : ""),
+      fallback: false,
+    }),
+  } satisfies StorageKeyFamily<boolean, [string, string, string]>,
   /** Browser-mode host token; Desktop keeps tokens in the Keychain instead. */
   daemonToken: {
     area: "session",

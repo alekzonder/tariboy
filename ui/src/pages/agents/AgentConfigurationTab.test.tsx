@@ -338,6 +338,24 @@ it("lays out in the shared narrow tab page", async () => {
   expect(page).toHaveClass("max-w-5xl");
 });
 
+it("shows the autopilot hint once per agent of the host", async () => {
+  fakeServer();
+  const text =
+    "Autopilot: set a schedule here to let the agent keep working without you. Everything else is optional.";
+  const view = render(tree());
+  await ready();
+  expect(screen.getByText(text)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss hint" }));
+  expect(screen.queryByText(text)).not.toBeInTheDocument();
+  expect(localStorage.getItem(`onboarding:hint:v1:${remote.id}:worker:configuration`)).toBe(
+    "dismissed",
+  );
+  view.unmount();
+  render(tree());
+  await ready();
+  expect(screen.queryByText(text)).not.toBeInTheDocument();
+});
+
 it("has no save buttons inside the blocks", async () => {
   fakeServer();
   render(tree());

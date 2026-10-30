@@ -18,7 +18,7 @@ const LOCAL_HOST_VALUE = "__local__";
 
 /** The selected host's daemon and its image list, loaded again whenever the
  *  host or its revision changes. */
-function useTargetImages(host: string, selectedHostRevision: string) {
+function useTargetImages(host: string, selectedHostRevision: string, reloadKey: number) {
   const [target, setTarget] = useState<Daemon | null>(null);
   const [resolvedRevision, setResolvedRevision] = useState("");
   const [images, setImages] = useState<ImageSummary[]>([]);
@@ -47,7 +47,7 @@ function useTargetImages(host: string, selectedHostRevision: string) {
     return () => {
       alive = false;
     };
-  }, [host, selectedHostRevision]);
+  }, [host, selectedHostRevision, reloadKey]);
 
   const resetTarget = useCallback(() => {
     setTarget(null);
@@ -97,10 +97,13 @@ export function useCreateAgentResources(
   updateDraft: <K extends keyof AgentCreateDraft>(key: K, value: AgentCreateDraft[K]) => void,
 ) {
   const [host, setHost] = useState(hostId);
+  // Bumped to list the images again, for example when the starter image is built.
+  const [imagesRound, setImagesRound] = useState(0);
   const selectedHostRevision = hosts.find((entry) => entry.id === host)?.revision ?? "missing";
   const { target, resolvedRevision, images, imagesError, resetTarget } = useTargetImages(
     host,
     selectedHostRevision,
+    imagesRound,
   );
   const {
     manifest,
@@ -172,6 +175,8 @@ export function useCreateAgentResources(
     loaded,
   ]);
 
+  const reloadImages = useCallback(() => setImagesRound((round) => round + 1), []);
+
   const changeHost = (value: string) => {
     const next = value === LOCAL_HOST_VALUE ? "" : value;
     if (next === host) return;
@@ -182,6 +187,9 @@ export function useCreateAgentResources(
   };
 
   const changeImage = (image: string) => {
+    // The manifest load reacts to a new image only; a reset for the same one
+    // would leave it loading forever.
+    if (image === draft.image) return;
     updateDraft("image", image);
     resetManifest();
   };
@@ -202,5 +210,6 @@ export function useCreateAgentResources(
     changeHost,
     changeImage,
     retryImage,
+    reloadImages,
   };
 }

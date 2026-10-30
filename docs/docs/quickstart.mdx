@@ -38,9 +38,13 @@ Never disable Gatekeeper globally and never run `spctl --master-disable`.
 Desktop opens the workspace directly. Daemon startup and saved-host reconnect
 continue in the background, with their state visible in the workspace.
 
-On the first start, a short tour highlights the servers, images, stores,
-agents, tasks, queues, and workflows. To take it again, or to read the
-changelog, open the **?** (Help) menu in the titlebar.
+On the first start, the home screen shows **Getting ready**. The daemon
+connects the Tariboy catalog, builds the starter image `basic`, and looks for
+the coding tools installed on the host. Each row turns green by itself. If a
+row fails, it says why in one sentence, with **Details** and **Retry**. A
+missing coding tool is shown in that list with its install hint, not as an
+error banner. To take the tour of the interface, or to read the changelog, open
+the **?** (Help) menu in the titlebar. The tour does not start by itself.
 
 This alpha includes WebView developer tools in release builds. Open
 them with **Option-Command-I** on macOS or choose **Inspect Element** from the
@@ -77,7 +81,8 @@ handoff; legacy daemons fail closed when active work cannot be preserved.
 
 ## 3. Create or select an image
 
-Open **Images**:
+For the first agent you do not have to do anything here: the daemon builds
+`basic` by itself. To use another image, open **Images**:
 
 - use `basic:latest`: at its first start the daemon registers
   `https://github.com/alekzonder/tariboy-store.git` as the Store `tariboy`
@@ -96,19 +101,32 @@ An image is a reusable template. It is not an agent and does not start work.
 
 ## 4. Create an agent
 
-Open **Agents → New agent**, select the host and image, and name the workspace.
-Harness, model, and effort are shown directly in the Runtime section. Model and
-effort stay editable and suggest values in two groups: **From harness** lists
-what the harness CLI on the selected host reports, and **Saved** lists values
-entered earlier for that harness. They are runtime settings, not schema-v2
-image content. A successful create remembers the model and effort locally for
-that harness.
-An agent has one on/off switch. **Start now** in the Lifecycle section, or
-**Start** in the agent header later, turns on the whole agent: Terminal and
-timer/message-triggered iterations. **Interactive** is on by default and
-enables Terminal; turn it off for a headless agent.
+On a host with no agent, the home screen has the card **Run your first agent**.
+Later, use **New agent** in the sidebar; it opens the same form.
 
-For the first walkthrough, keep Interactive on and use a non-bare image. From
+1. In **Folder**, type the path of your repository, for example
+   `~/code/my-app`. If the folder does not exist, click **Create it**.
+2. Keep **Image** `basic` and the selected **Coding tool**. The form selects a
+   coding tool that it found on the host.
+3. Keep the suggested **Name**, for example `my-app-basic`, or type another.
+4. Click **Start agent**.
+
+The agent opens on its **Terminal** tab. The line above the terminal says what
+happens while the coding tool starts, and the reason with **Retry** if it did
+not start.
+
+Every other setting has a default and is under **Advanced**. Model and effort
+are shown as one line under the coding tool; click **change** to edit them.
+They suggest values in two groups: **From harness** lists what the harness CLI
+on the selected host reports, and **Saved** lists values entered earlier for
+that harness. They are runtime settings, not schema-v2 image content. A
+successful create remembers the model and effort locally for that harness.
+An agent has one on/off switch. **Start agent**, or **Start** in the agent
+header later, turns on the whole agent: Terminal and timer/message-triggered
+iterations. **Advanced → Create without starting** creates it stopped.
+**Advanced → Headless (no terminal)** creates an agent without Terminal.
+
+For the first walkthrough, keep the terminal and use a non-bare image. From
 the CLI, `tariboy agent run IMAGE:TAG` creates an
 interactive agent too; pass `--interactive=false` for a headless one.
 A `--cwd` that does not exist is rejected; add `--create-cwd` to make the

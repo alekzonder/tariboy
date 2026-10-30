@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { usePolling } from "@/hooks/usePolling";
 import { setLocalBaseURL } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
+import { bannerMessage } from "@/lib/onboarding/firstRun";
 import {
   hasLocalDaemon,
   isDesktop,
@@ -32,8 +33,8 @@ function BrowserBanner() {
   const api = useApi();
   const { data, error } = usePolling(api.daemon.getDaemonStatus, PROBE_POLL_MS);
   if (error) return <Bar tone="error">daemon unreachable — is tariboyd running?</Bar>;
-  if (data?.state === "error") return <Bar tone="error">tariboyd: {data.message}</Bar>;
-  return null;
+  const message = data ? bannerMessage(data) : null;
+  return message ? <Bar tone="error">tariboyd: {message}</Bar> : null;
 }
 
 /** Status/liveness cadence, per the design spec's error-handling table. */
@@ -134,8 +135,10 @@ function DesktopBanner() {
       </Bar>
     );
   }
-  if (probeable && status?.state === "error") {
-    return <Bar tone="error">tariboyd: {status.message}</Bar>;
+  // A missing coding tool alone is shown in the checklist, never as a red bar.
+  const message = probeable && status ? bannerMessage(status) : null;
+  if (message) {
+    return <Bar tone="error">tariboyd: {message}</Bar>;
   }
   if (missingHTTPListener(view)) {
     return (
@@ -166,7 +169,11 @@ function Bar({ tone, children }: { tone: "error" | "warn" | "info"; children: Re
         ? "bg-amber-500 text-black"
         : "bg-muted text-muted-foreground";
   return (
-    <div className={`flex items-center justify-center gap-3 px-4 py-1 text-center text-sm ${cls}`}>
+    // The tour does not start while a red bar is shown, so it looks for this mark.
+    <div
+      data-daemon-banner={tone === "error" ? "error" : undefined}
+      className={`flex items-center justify-center gap-3 px-4 py-1 text-center text-sm ${cls}`}
+    >
       {children}
     </div>
   );

@@ -26,6 +26,13 @@ describe("buildCreateAgentSpec", () => {
     expect(specModule.buildCreateAgentSpec(draft, false, false).plugins).toEqual(["git"]);
   });
 
+  it("sends an empty cwd for a managed folder", () => {
+    const draft = { ...newAgentDraft("worker:latest"), cwd: "/work", createCwd: true };
+    const spec = specModule.buildCreateAgentSpec({ ...draft, managedFolder: true }, false, false);
+    expect(spec.cwd).toBe("");
+    expect(spec).not.toHaveProperty("create_cwd");
+  });
+
   it("rejects invalid environment values and fractional numbers", () => {
     const draft = newAgentDraft();
     expect(() =>
