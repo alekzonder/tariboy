@@ -11,7 +11,6 @@ import AgentWorkspace from "@/pages/agents/AgentWorkspace";
 import { RouteHostBoundary } from "./RouteHostBoundary";
 import type { ServerView } from "./TerminalsPage";
 import { agentPath, type CreateHost } from "./terminalsHosts";
-import { FirstRunHome } from "./FirstRunHome";
 import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
 
 // Server pages load on first open, so the initial bundle carries only the
@@ -29,6 +28,9 @@ const ImageLayout = lazy(() =>
   import("@/components/ImageLayout").then((m) => ({ default: m.ImageLayout })),
 );
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
+const FirstRunHome = lazy(() =>
+  import("./FirstRunHome").then((m) => ({ default: m.FirstRunHome })),
+);
 
 interface ServerRoute {
   hostId: string;

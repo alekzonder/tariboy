@@ -1,8 +1,7 @@
-import { useContext, useMemo, useState } from "react";
+import { lazy, Suspense, useContext, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { paramToHost } from "@/lib/terminalsHost";
-import { CreateAgentDialog } from "./CreateAgentDialog";
 import { ServerDialog } from "./ServerDialog";
 import { useDaemons } from "@/components/daemonContext";
 import { hasLocalDaemon } from "@/lib/desktop";
@@ -40,6 +39,11 @@ export type ServerView =
   | "settings";
 
 /** `?new=1` or `?image=<ref>` opens the create dialog on arrival. */
+// The New agent form loads when it first opens, so it stays out of the entry chunk.
+const CreateAgentDialog = lazy(() =>
+  import("./CreateAgentDialog").then((m) => ({ default: m.CreateAgentDialog })),
+);
+
 /** Shows a created agent at once and opens it on its Terminal in both modes,
  *  so the first run shows the coding tool starting. */
 const openCreatedAgent =
@@ -221,17 +225,21 @@ function TerminalsDialogs({
   const workspaces = useWorkspaces();
   return (
     <>
-      <CreateAgentDialog
-        open={createFor !== null}
-        hostId={createFor?.hostId ?? ""}
-        imageRef={createFor?.imageRef}
-        cloneSource={createFor?.cloneSource}
-        hosts={createHosts}
-        onOpenChange={(o) => {
-          if (!o) setCreateFor(null);
-        }}
-        onCreated={openCreatedAgent(navigate, refresh)}
-      />
+      {createFor !== null && (
+        <Suspense fallback={null}>
+          <CreateAgentDialog
+            open
+            hostId={createFor.hostId}
+            imageRef={createFor.imageRef}
+            cloneSource={createFor.cloneSource}
+            hosts={createHosts}
+            onOpenChange={(o) => {
+              if (!o) setCreateFor(null);
+            }}
+            onCreated={openCreatedAgent(navigate, refresh)}
+          />
+        </Suspense>
+      )}
       <WorkspaceManager
         hosts={workspaceHosts}
         open={workspaceManager !== null}
