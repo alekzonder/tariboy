@@ -47,7 +47,10 @@ type SkillBridgeRequest struct {
 	ImageName   string
 	ImageDigest string
 	BridgeDir   string
-	Skills      []SkillDescriptor
+	// ImageSkillsDir is the absolute image/skills directory of the agent's
+	// active image. Prompt catalogs name skill files under it.
+	ImageSkillsDir string
+	Skills         []SkillDescriptor
 }
 
 type SkillLaunchConfig struct {
@@ -178,13 +181,25 @@ func codexSkillBridge(request SkillBridgeRequest) (SkillBridge, error) {
 	if len(request.Skills) == 0 {
 		return SkillBridge{}, nil
 	}
-	if err := validateSkillBridgeRequest(request, "codex"); err != nil {
+	if err := validateCatalogSkillBridgeRequest(request, "codex"); err != nil {
 		return SkillBridge{}, err
 	}
 	return SkillBridge{
 		Plan:   agentdir.BridgePlan{SkillDestination: "skills"},
 		Launch: SkillLaunchConfig{PromptPrefix: codexSkillCatalog(request)},
 	}, nil
+}
+
+// validateCatalogSkillBridgeRequest also requires the image skills directory
+// that a prompt catalog names.
+func validateCatalogSkillBridgeRequest(request SkillBridgeRequest, harness string) error {
+	if err := validateSkillBridgeRequest(request, harness); err != nil {
+		return err
+	}
+	if !filepath.IsAbs(request.ImageSkillsDir) {
+		return fmt.Errorf("%s image skill catalog requires the absolute image skills directory", harness)
+	}
+	return nil
 }
 
 type codexCatalogEntry struct {
@@ -197,7 +212,7 @@ func codexSkillCatalog(request SkillBridgeRequest) string {
 	entries := make([]codexCatalogEntry, 0, len(request.Skills))
 	minimalRunes := 0
 	for _, skill := range request.Skills {
-		path := filepath.Join(request.BridgeDir, "skills", skill.Name, "SKILL.md")
+		path := filepath.Join(request.ImageSkillsDir, skill.Name, "SKILL.md")
 		entry := codexCatalogEntry{
 			prefix:      "- " + escapeCodexCatalogMetadata(skill.Name),
 			description: []rune(escapeCodexCatalogMetadata(skill.Description)),
@@ -288,7 +303,7 @@ func cursorSkillBridge(request SkillBridgeRequest) (SkillBridge, error) {
 	if len(request.Skills) == 0 {
 		return SkillBridge{}, nil
 	}
-	if err := validateSkillBridgeRequest(request, "cursor"); err != nil {
+	if err := validateCatalogSkillBridgeRequest(request, "cursor"); err != nil {
 		return SkillBridge{}, err
 	}
 	return SkillBridge{

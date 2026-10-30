@@ -1354,6 +1354,10 @@ func TestActiveCodexImageSkillBridgeNeedsNoPluginProbe(t *testing.T) {
 	if activated.Skills.PromptPrefix == "" || strings.Contains(activated.Skills.PromptPrefix, "PROOF BODY") {
 		t.Fatalf("Codex prompt catalog = %q", activated.Skills.PromptPrefix)
 	}
+	if want := "(file: " + filepath.Join(l.ImageDir(), "skills", "review", "SKILL.md") + ")"; !strings.Contains(activated.Skills.PromptPrefix, want) ||
+		strings.Contains(activated.Skills.PromptPrefix, "image-bridges") {
+		t.Fatalf("Codex prompt catalog = %q, want compact path %s", activated.Skills.PromptPrefix, want)
+	}
 	bridgeDir, err := l.ImageBridgeDir(manifest.Digest, harness.SkillAdapterContractVersion, "codex")
 	if err != nil {
 		t.Fatal(err)

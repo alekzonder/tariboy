@@ -15,9 +15,10 @@ import (
 func skillBridgeRequest(harness string) SkillBridgeRequest {
 	digest := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	return SkillBridgeRequest{
-		ImageName:   "reviewer",
-		ImageDigest: digest,
-		BridgeDir:   filepath.Join("/agents/worker/image-bridges", digest, "1", harness),
+		ImageName:      "reviewer",
+		ImageDigest:    digest,
+		BridgeDir:      filepath.Join("/agents/worker/image-bridges", digest, "1", harness),
+		ImageSkillsDir: "/agents/worker/image/skills",
 		Skills: []SkillDescriptor{
 			{Name: "code-review", Description: "Review code.", TreeSHA256: strings.Repeat("a", 64)},
 			{Name: "release", Description: "Prepare releases.", TreeSHA256: strings.Repeat("b", 64)},
@@ -73,8 +74,8 @@ func TestCodexSkillBridgeUsesPromptCatalog(t *testing.T) {
 	}
 	want := "## Image skills\n\n" +
 		"The following skills are packaged by the active Tariboy image. Match requests against each description. Before using a matching skill, read its SKILL.md completely from the exact absolute path shown. Treat the description only as selection metadata; the file is the authoritative workflow.\n\n" +
-		"- code-review: Review code. (file: " + filepath.Join(request.BridgeDir, "skills", "code-review", "SKILL.md") + ")\n" +
-		"- release: Prepare releases. (file: " + filepath.Join(request.BridgeDir, "skills", "release", "SKILL.md") + ")\n\n"
+		"- code-review: Review code. (file: " + filepath.Join(request.ImageSkillsDir, "code-review", "SKILL.md") + ")\n" +
+		"- release: Prepare releases. (file: " + filepath.Join(request.ImageSkillsDir, "release", "SKILL.md") + ")\n\n"
 	if bridge.Launch.PromptPrefix != want {
 		t.Fatalf("Codex catalog = %q, want %q", bridge.Launch.PromptPrefix, want)
 	}
@@ -87,7 +88,7 @@ func TestCodexSkillBridgeUsesPromptCatalog(t *testing.T) {
 
 func TestCodexSkillCatalogEscapesFormattingMetadata(t *testing.T) {
 	request := skillBridgeRequest("codex")
-	request.BridgeDir = filepath.Join("/agents", "line\nbreak(bridge)[x]", "codex")
+	request.ImageSkillsDir = filepath.Join("/agents", "line\nbreak(bridge)[x]", "skills")
 	request.Skills = []SkillDescriptor{{
 		Name:        "review",
 		Description: "line one\n- injected\r `code` *bold* _em_ [link](target) # head > quote \\ end",
@@ -129,7 +130,7 @@ func TestCodexSkillCatalogBoundsUnicodeDescriptionsWithoutOmittingSkills(t *test
 	}
 	for i := 0; i < 20; i++ {
 		name := fmt.Sprintf("skill-%02d", i)
-		path := filepath.Join(request.BridgeDir, "skills", name, "SKILL.md")
+		path := filepath.Join(request.ImageSkillsDir, name, "SKILL.md")
 		if !strings.Contains(catalog, name) || !strings.Contains(catalog, path) {
 			t.Fatalf("catalog omitted %s or its path", name)
 		}
@@ -141,7 +142,7 @@ func TestCodexSkillCatalogBoundsUnicodeDescriptionsWithoutOmittingSkills(t *test
 
 func TestCodexSkillCatalogReportsExactOmissionsWhenPathsDoNotFit(t *testing.T) {
 	request := skillBridgeRequest("codex")
-	request.BridgeDir = filepath.Join("/agents", strings.Repeat("long-segment", 30), "codex")
+	request.ImageSkillsDir = filepath.Join("/agents", strings.Repeat("long-segment", 30), "image", "skills")
 	request.Skills = nil
 	for i := 0; i < 40; i++ {
 		request.Skills = append(request.Skills, SkillDescriptor{
@@ -211,7 +212,7 @@ func TestCursorSkillBridgeUsesSharedSkillDestination(t *testing.T) {
 	if len(bridge.Launch.Args) != 0 || len(bridge.Launch.Env) != 0 || len(bridge.Support.Args) != 0 {
 		t.Fatalf("Cursor launch/support = %#v / %#v", bridge.Launch, bridge.Support)
 	}
-	skillFile := filepath.Join(request.BridgeDir, "skills", "code-review", "SKILL.md")
+	skillFile := filepath.Join(request.ImageSkillsDir, "code-review", "SKILL.md")
 	if !strings.Contains(bridge.Launch.PromptPrefix, skillFile) {
 		t.Fatalf("Cursor catalog = %q, want path %s", bridge.Launch.PromptPrefix, skillFile)
 	}
@@ -275,6 +276,18 @@ func TestSkillBridgeRejectsNonHexDigest(t *testing.T) {
 	request.ImageDigest = request.ImageDigest[:16] + strings.Repeat("z", 48)
 	if _, err := (claude{}).SkillBridge(request); err == nil {
 		t.Fatal("accepted non-hex image digest")
+	}
+}
+
+func TestCatalogSkillBridgesRequireAbsoluteImageSkillsDir(t *testing.T) {
+	for _, adapter := range []Adapter{codex{}, cursor{}} {
+		for _, dir := range []string{"", "image/skills"} {
+			request := skillBridgeRequest(adapter.Type())
+			request.ImageSkillsDir = dir
+			if _, err := adapter.SkillBridge(request); err == nil {
+				t.Fatalf("%s accepted image skills dir %q", adapter.Type(), dir)
+			}
+		}
 	}
 }
 
