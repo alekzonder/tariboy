@@ -114,6 +114,7 @@ export const storageKeys = {
   taskColumns: jsonKey("local", "tasks:columns:v1", 1),
   taskPanelWidths: jsonKey("local", "tasks:workspace:v1", 1),
   newTaskQueue: jsonKey("local", "tasks:new-task-queue:v1", 1),
+  newTaskQueueByAgent: jsonKey("local", "tasks:new-task-queue-by-agent:v1", 1),
   taskQueueFilter: stringKey("session", "tasks:queue-filter:v1", 1),
   allTasksView: jsonKey("session", "tasks:all-view:v1", 1),
   storeToken: stringKey("session", "tariboy_store_token", null),

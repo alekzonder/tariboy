@@ -524,6 +524,54 @@ describe("TasksWorkspace", () => {
     expect(screen.getByLabelText("Task queue")).toHaveValue("OPS");
   });
 
+  it("remembers the queue per agent in the agent's Tasks tab", async () => {
+    const ops = { ...queue, prefix: "OPS", name: "Operations" };
+    api.listTaskQueues.mockResolvedValue({ queues: [queue, ops], count: 2 });
+    const createIn = async (agent: string, prefix: string) => {
+      const view = render(<TasksWorkspace scopeAgent={agent} />);
+      await screen.findByText("Ship native tasks");
+      await userEvent.click(screen.getByRole("button", { name: "New task" }));
+      fireEvent.change(screen.getByLabelText("Task queue"), { target: { value: prefix } });
+      fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "New root" } });
+      await userEvent.click(screen.getByRole("button", { name: "Create task" }));
+      await waitFor(() =>
+        expect(api.createTask).toHaveBeenLastCalledWith(
+          expect.objectContaining({ queue: prefix }),
+          null,
+        ),
+      );
+      view.unmount();
+    };
+    await createIn("alpha", "OPS");
+    await createIn("beta", "TEST");
+
+    const alpha = render(<TasksWorkspace scopeAgent="alpha" />);
+    await screen.findByText("Ship native tasks");
+    await userEvent.click(screen.getByRole("button", { name: "New task" }));
+    expect(screen.getByLabelText("Task queue")).toHaveValue("OPS");
+    alpha.unmount();
+
+    sessionStorage.setItem("tasks:queue-filter:v1", "TEST");
+    render(<TasksWorkspace scopeAgent="alpha" />);
+    await screen.findByText("Ship native tasks");
+    await userEvent.click(screen.getByRole("button", { name: "New task" }));
+    expect(screen.getByLabelText("Task queue")).toHaveValue("TEST");
+  });
+
+  it("falls back to the server's queue when the agent's queue is gone", async () => {
+    const ops = { ...queue, prefix: "OPS", name: "Operations" };
+    api.listTaskQueues.mockResolvedValue({ queues: [queue, ops], count: 2 });
+    localStorage.setItem("tasks:new-task-queue:v1", JSON.stringify({ local: "OPS" }));
+    localStorage.setItem(
+      "tasks:new-task-queue-by-agent:v1",
+      JSON.stringify({ local: { alpha: "GONE" } }),
+    );
+    render(<TasksWorkspace scopeAgent="alpha" />);
+    await screen.findByText("Ship native tasks");
+    await userEvent.click(screen.getByRole("button", { name: "New task" }));
+    expect(screen.getByLabelText("Task queue")).toHaveValue("OPS");
+  });
+
   it("does not remember the queue of a child task or a failed create", async () => {
     render(<TasksWorkspace />);
     await screen.findByText("Ship native tasks");

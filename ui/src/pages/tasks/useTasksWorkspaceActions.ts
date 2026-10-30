@@ -19,6 +19,7 @@ export function useTasksWorkspaceActions(
   server: string,
   state: TasksWorkspaceView,
   data: TasksWorkspaceData,
+  scopeAgent?: string,
 ) {
   const api = useApi();
   const client = useQueryClient();
@@ -29,7 +30,7 @@ export function useTasksWorkspaceActions(
   const create = async (input: { queue: string; parent_key: string; title: string }) => {
     try {
       const created = await write(() => api.tasks.createTask(input));
-      if (!input.parent_key) rememberQueue(server, input.queue);
+      if (!input.parent_key) rememberQueue(server, input.queue, scopeAgent);
       setCreatingParent(null);
       if (input.parent_key) {
         setExpanded((current) => new Set(current).add(input.parent_key));

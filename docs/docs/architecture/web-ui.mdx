@@ -793,6 +793,7 @@ stays in the registry only so it can be read once, like `terminals:workspace:v1`
 | `tasks:columns:v1` | local | task tables | JSON column order and widths | default layout |
 | `tasks:workspace:v1` | local | task detail panel | JSON detail width | half the window |
 | `tasks:new-task-queue:v1` | local | new task form | JSON last queue per server | none |
+| `tasks:new-task-queue-by-agent:v1` | local | new task form in an agent's Tasks tab | JSON last queue per server and agent | the queue for the server |
 | `tasks:queue-filter:v1` | session | task queue filter | queue prefix | none |
 | `tasks:all-view:v1` | session | All tasks | JSON search, status view, and server | active, all servers |
 | `tariboy_store_token` | session | Store UI | Store bearer token | none |
@@ -1036,9 +1037,13 @@ of the last root task created from a form on that server, or the first queue
 when that queue no longer exists. After a root task is created, its queue is
 saved in `localStorage` under `tasks:new-task-queue:v1`, a JSON object from
 server (`local` for the local daemon, otherwise the Desktop server id) to queue
-prefix. A child task, a cancelled form, or a failed create saves nothing. The
-record survives a restart, stays on one device, and is ignored when it is
-unreadable.
+prefix. In the Tasks tab of an agent, the created root task also saves its
+queue for that agent in `tasks:new-task-queue-by-agent:v1`, a JSON object from
+server to agent name to queue prefix. When `All queues` is selected there, the
+form preselects the queue of that agent. If that queue no longer exists, the
+form uses the queue for the server, then the first queue. A child task, a
+cancelled form, or a failed create saves nothing. Each record survives a
+restart, stays on one device, and is ignored when it is unreadable.
 
 The table header and its rows read one column layout, so a column cannot
 drift from its heading. By default `Pri` comes first in every table, then

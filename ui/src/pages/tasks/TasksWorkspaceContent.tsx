@@ -13,9 +13,16 @@ import type { TasksWorkspaceData } from "./useTasksWorkspaceData";
 import type { TasksWorkspaceActions } from "./useTasksWorkspaceActions";
 import type { useTasksWorkspaceLayout } from "./useTasksWorkspaceLayout";
 
-// A toolbar filter is the explicit context; otherwise the queue of the last task made here.
-const newTaskQueue = (queue: string, queues: Queue[], server: string) =>
-  queue || queues.find((item) => item.prefix === readRememberedQueue(server))?.prefix || "";
+// A toolbar filter is the explicit context; otherwise the queue of the last task made
+// for this agent, then on this server.
+const newTaskQueue = (queue: string, queues: Queue[], server: string, agent?: string) => {
+  if (queue) return queue;
+  const exists = (prefix: string) => queues.some((item) => item.prefix === prefix);
+  const own = agent ? readRememberedQueue(server, agent) : "";
+  if (own && exists(own)) return own;
+  const shared = readRememberedQueue(server);
+  return exists(shared) ? shared : "";
+};
 
 export function TasksWorkspaceContent({
   scopeAgent,
@@ -96,7 +103,7 @@ export function TasksWorkspaceContent({
         {creatingParent === "" && (
           <TaskForm
             queues={queues}
-            initialQueue={newTaskQueue(queue, queues, server)}
+            initialQueue={newTaskQueue(queue, queues, server, scopeAgent)}
             onCreate={create}
             onCancel={() => setCreatingParent(null)}
           />
