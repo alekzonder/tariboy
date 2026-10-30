@@ -53,9 +53,12 @@ async function overflowing(page: Page) {
   });
 }
 
-async function expectFits(page: Page, route: string) {
+async function expectFits(page: Page, route: string, ready?: (page: Page) => Promise<void>) {
   await page.goto(`${fixture}${route}`);
-  await page.waitForLoadState("networkidle");
+  // A page with a live stream (the Runs log tails its events) never goes
+  // network-idle; it names the element that shows it has rendered instead.
+  if (ready) await ready(page);
+  else await page.waitForLoadState("networkidle");
   // RESPONSIVE_SHOTS=dir keeps a picture of each page for a person to look at.
   if (process.env.RESPONSIVE_SHOTS) {
     await page.screenshot({
@@ -190,7 +193,16 @@ for (const route of [
 
 for (const tab of ["work", "console", "activity", "settings", "mailbox", "advanced"]) {
   test(`agent ${tab} tab fits the window`, async ({ page }) => {
-    await expectFits(page, `/agents/local/${AGENT}/${tab}`);
+    await expectFits(
+      page,
+      `/agents/local/${AGENT}/${tab}`,
+      tab === "activity"
+        ? async (p) => {
+            await expect(p.getByRole("radiogroup", { name: "More" })).toBeVisible();
+            await expect(p.getByRole("radio", { name: "Runs log" })).toBeChecked();
+          }
+        : undefined,
+    );
     await expect(page.getByRole("heading", { name: AGENT })).toBeVisible();
   });
 }
