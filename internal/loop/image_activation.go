@@ -415,6 +415,9 @@ func (m *Manager) prepareImageSkillBridge(ag agent.Agent, manifest image.Manifes
 	}
 	bridge, err := adapter.SkillBridge(harness.SkillBridgeRequest{
 		ImageName: manifest.Name, ImageDigest: manifest.Digest, BridgeDir: bridgeDir, Skills: descriptors,
+		// The catalog names the final image directory, not the staged one: the
+		// iteration starts only after the swap succeeds.
+		ImageSkillsDir: filepath.Join(l.ImageDir(), "skills"),
 	})
 	if err != nil {
 		return harness.SkillLaunchConfig{}, err

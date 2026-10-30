@@ -1173,7 +1173,7 @@ func TestRunnerSchemaV2AttachesImageSkillBridgeWithoutChangingCWDOrHome(t *testi
 			}
 			bridgeDir := filepath.Join(l.ImageBridgesDir(), digest, harness.SkillAdapterContractVersion, tc.harnessType)
 			bridge, err := adapter.SkillBridge(harness.SkillBridgeRequest{
-				ImageName: "reviewer", ImageDigest: digest, BridgeDir: bridgeDir,
+				ImageName: "reviewer", ImageDigest: digest, BridgeDir: bridgeDir, ImageSkillsDir: filepath.Join(l.ImageDir(), "skills"),
 				Skills: []harness.SkillDescriptor{{Name: "review", Description: "Review changes.", TreeSHA256: strings.Repeat("b", 64)}},
 			})
 			if err != nil {
@@ -1209,6 +1209,9 @@ func TestRunnerSchemaV2AttachesImageSkillBridgeWithoutChangingCWDOrHome(t *testi
 				}
 				if !strings.Contains(string(promptBody)[len(bridge.Launch.PromptPrefix):], "# You are agent worker") {
 					t.Fatalf("%s prompt lost rendered image template:\n%s", tc.name, promptBody)
+				}
+				if !strings.Contains(string(promptBody), filepath.Join(l.ImageDir(), "skills", "review", "SKILL.md")) || strings.Contains(string(promptBody), "image-bridges") {
+					t.Fatalf("%s prompt did not name the compact image skill path:\n%s", tc.name, promptBody)
 				}
 				if strings.Contains(strings.Join(harnessArgv, "\n"), "marketplaces.") {
 					t.Fatalf("%s retained marketplace overrides: %v", tc.name, harnessArgv)

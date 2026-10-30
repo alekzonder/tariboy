@@ -224,16 +224,19 @@ The adapters attach the bridge additively:
 | Harness | Projection |
 | --- | --- |
 | Claude Code | `--plugin-dir <absolute bridge>` |
-| Codex CLI | At-most-8,000-character prompt catalog with absolute bridge `SKILL.md` paths |
+| Codex CLI | At-most-8,000-character prompt catalog with absolute `<agent>/image/skills/<name>/SKILL.md` paths |
 | OpenCode | `OPENCODE_CONFIG_DIR=<absolute bridge>` with an absolute `skills.paths` entry |
-| Cursor CLI | The same bounded prompt catalog as Codex, with absolute bridge `SKILL.md` paths |
+| Cursor CLI | The same bounded prompt catalog as Codex, with the same `image/skills` paths |
 
 Claude Code requires version `2.1.227` or newer. OpenCode is capability-probed
 with `opencode debug config`; its effective configuration must report the
 generated absolute skill path. Codex needs no image-skill version probe and no
 plugin installation: Tariboy prepends escaped name, description, and path
 metadata to the shared prompt file, and Codex reads the selected skill on
-demand. Tariboy does not change CWD, `HOME`, or `CODEX_HOME`, and it does not
+demand. The catalog names the active image's `image/skills` directory rather
+than the digest-keyed bridge, which holds the same files, so each path is about
+90 characters shorter. Activation swaps `image/` only before an iteration
+starts, so the files do not change while an iteration reads them. Tariboy does not change CWD, `HOME`, or `CODEX_HOME`, and it does not
 disable normal global or CWD discovery. Schema-v1 images retain their legacy
 CWD-relative skill materialization.
 
