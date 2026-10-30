@@ -81,10 +81,12 @@ describe("AgentConsoleTab non-interactive uploads", () => {
     renderTab(agent({ interactive: false }));
 
     expect(screen.getByTestId("send-files")).toHaveAttribute("data-daemon-id", "remote");
-    expect(screen.getByText("This agent has no interactive terminal.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open Configuration" })).toHaveAttribute(
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "No interactive terminal. Enable it in Settings → Model.",
+    );
+    expect(screen.getByRole("link", { name: "Settings → Model" })).toHaveAttribute(
       "href",
-      "/agents/remote/worker/configuration",
+      "/agents/remote/worker/settings",
     );
   });
 
@@ -92,7 +94,7 @@ describe("AgentConsoleTab non-interactive uploads", () => {
     renderTab(agent({ interactive: true, state: "running" }));
 
     expect(screen.getByTestId("tui-screen")).toBeInTheDocument();
-    expect(screen.queryByText("This agent has no interactive terminal.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/No interactive terminal/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("send-files")).not.toBeInTheDocument();
   });
 
@@ -115,11 +117,14 @@ describe("AgentConsoleTab non-interactive uploads", () => {
   });
 });
 
-it("leaves starting a stopped interactive agent to the header", () => {
+it("says a stopped agent is off and starts it from the banner", async () => {
+  startAgent.mockResolvedValue({ name: "worker", action: "start" });
   renderTab(agent({ interactive: true, state: "stopped", enabled: false }));
 
-  expect(screen.getByText("Agent is stopped.")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("Off.");
+  expect(screen.queryByTestId("tui-screen")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Start" }));
+  await waitFor(() => expect(startAgent).toHaveBeenCalledWith("worker"));
 });
 
 describe("AgentConsoleTab and header Exec", () => {
@@ -153,7 +158,7 @@ describe("AgentConsoleTab and header Exec", () => {
   });
 });
 
-describe("AgentConsoleTab status line", () => {
+describe("AgentConsoleTab banner", () => {
   const live = { interactive: true, enabled: true, state: "running", cwd: "~/code/my-app" };
 
   it("names the coding tool and folder while the terminal connects", () => {
@@ -178,13 +183,23 @@ describe("AgentConsoleTab status line", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Starting the terminal in ~/code/my-app…");
   });
 
-  it("shows no line once the terminal is open", () => {
-    renderTab(agent({ ...live, harness: "claude" }));
+  it("says the screen is the live run of the Goal task while working", () => {
+    renderTab(agent({ ...live, harness: "claude", current_goal_task_key: "DEV-1" }));
 
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Working on DEV-1 — this is its live screen.",
+    );
   });
 
-  it("shows why the agent did not start, retries the start and links to Configuration", async () => {
+  it("says an idle agent's screen appears when a run starts", () => {
+    renderTab(agent({ ...live, state: "idle", harness: "claude" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Idle. The screen appears when a run starts. Type here to talk to the agent directly; this is not recorded in a task.",
+    );
+  });
+
+  it("shows why the agent did not start, retries the start and links to Settings", async () => {
     socket.status = "connecting";
     startAgent.mockResolvedValue({ name: "worker", action: "start" });
     const refresh = renderTab(agent({ ...live, harness: "claude", halt_reason: "auth expired" }));
@@ -192,7 +207,7 @@ describe("AgentConsoleTab status line", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Claude Code did not start: auth expired");
     expect(screen.getByRole("link", { name: "Open settings" })).toHaveAttribute(
       "href",
-      "/agents/remote/worker/configuration",
+      "/agents/remote/worker/settings",
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
@@ -215,4 +230,19 @@ describe("AgentConsoleTab status line", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("OpenCode did not start: boom");
   });
+});
+
+it("keeps an idle_limit halt out of the error banner", () => {
+  renderTab(
+    agent({
+      interactive: true,
+      enabled: false,
+      state: "stopped",
+      halt_kind: "idle_limit",
+      halt_reason: "idle_limit: 3 idle runs",
+    }),
+  );
+
+  expect(screen.getByRole("status")).toHaveTextContent("Off.");
+  expect(screen.queryByText(/did not start/)).not.toBeInTheDocument();
 });

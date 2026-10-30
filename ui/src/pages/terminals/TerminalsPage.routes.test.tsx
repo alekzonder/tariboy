@@ -59,11 +59,11 @@ vi.mock("@/lib/api", async (importOriginal) => {
         createAgent: (spec: CreateAgentSpec) => calls.createAgent(spec, host),
         startAgent: (name: string) => calls.startAgent(name, host),
       },
-      tasks: { ...client.tasks, listTasks: () => calls.listTasks() },
+      tasks: { ...client.tasks, listTasks: () => calls.listTasks() as never },
       mail: {
         ...client.mail,
-        unread: async () => ({ open: 0 }),
-        list: async () => ({ letters: [] }),
+        unread: async () => ({ open: 0 }) as never,
+        list: async () => ({ letters: [] }) as never,
       },
       images: {
         ...client.images,
