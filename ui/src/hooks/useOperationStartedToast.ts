@@ -13,27 +13,40 @@ function operationPath(hostParam: string, id: number): string {
   return `/servers/${encodeURIComponent(hostParam)}/settings/operations/${id}`;
 }
 
+/** The route of an operation's page on the current server. */
+export function useOperationHref() {
+  const api = useApi();
+  const { hostId } = useParams();
+  const host = hostId ?? hostToParam(api.target?.id ?? "");
+  return useCallback((id: number) => operationPath(host, id), [host]);
+}
+
 /**
  * Report a build the daemon accepted and now runs in the background: a toast
  * with a link to the operation page, where its log and result appear. While
  * the caller stays mounted, it watches the operations socket and calls
- * `onSucceeded` when one of its builds ends well, so lists can reload.
+ * `onSucceeded` when one of its builds ends well, so lists can reload, and
+ * `onFailed` with the operation id when one ends otherwise.
  */
-export function useOperationStartedToast(onSucceeded?: () => void) {
+export function useOperationStartedToast(
+  onSucceeded?: () => void,
+  onFailed?: (id: number) => void,
+) {
   const api = useApi();
   const navigate = useNavigate();
-  const { hostId } = useParams();
-  const host = hostId ?? hostToParam(api.target?.id ?? "");
+  const href = useOperationHref();
   const pending = useRef(new Set<number>());
   const [watching, setWatching] = useState(false);
   const onSucceededRef = useRef(onSucceeded);
+  const onFailedRef = useRef(onFailed);
   useEffect(() => {
     onSucceededRef.current = onSucceeded;
-  }, [onSucceeded]);
+    onFailedRef.current = onFailed;
+  }, [onSucceeded, onFailed]);
 
   const open = useCallback(
-    (id: number) => ({ label: "Open operation", onClick: () => navigate(operationPath(host, id)) }),
-    [host, navigate],
+    (id: number) => ({ label: "Open operation", onClick: () => navigate(href(id)) }),
+    [href, navigate],
   );
 
   const onHint = useCallback(
@@ -41,8 +54,12 @@ export function useOperationStartedToast(onSucceeded?: () => void) {
       if (!pending.current.has(hint.id) || !ENDED.has(hint.status)) return;
       pending.current.delete(hint.id);
       if (pending.current.size === 0) setWatching(false);
-      if (hint.status === "succeeded") onSucceededRef.current?.();
-      else toast.error(`Build ${hint.status}`, { action: open(hint.id) });
+      if (hint.status === "succeeded") {
+        onSucceededRef.current?.();
+        return;
+      }
+      toast.error(`Build ${hint.status}`, { action: open(hint.id) });
+      onFailedRef.current?.(hint.id);
     },
     [open],
   );
@@ -60,7 +77,7 @@ export function useOperationStartedToast(onSucceeded?: () => void) {
   return useCallback(
     (started: OperationStarted) => {
       const { id, title } = started.operation;
-      if (onSucceededRef.current) {
+      if (onSucceededRef.current || onFailedRef.current) {
         pending.current.add(id);
         setWatching(true);
       }

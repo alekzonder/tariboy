@@ -13,7 +13,8 @@ import { subscribeImagesChanged } from "@/lib/imageEvents";
 import StoresPage from "@/pages/StoresPage";
 import { routeFetch } from "@/test/fetchRoutes";
 import { FakeWebSocket } from "@/test/fakeWebSocket";
-import { operationStarted } from "@/test/fixtures/apiFixtures";
+import { operation, operationStarted } from "@/test/fixtures/apiFixtures";
+import type { OnboardingStatus } from "@/lib/api";
 
 vi.mock("@/lib/aggregate", () => ({ fetchAllAgents: vi.fn() }));
 
@@ -35,6 +36,19 @@ const envelope = (result: unknown, ok = true): Response =>
           : { ok: false, error: { code: "store_failed", message: String(result) } },
       ),
   }) as Response;
+
+const TARIBOY_SOURCE = "https://github.com/alekzonder/tariboy-store.git";
+
+/** The first-run status of a host whose default Store is in the given state. */
+const onboardingStatus = (
+  store: Partial<OnboardingStatus["default_store"]> = {},
+  starter: Partial<OnboardingStatus["starter_image"]> = { state: "ready" },
+): OnboardingStatus => ({
+  agents: 0,
+  default_store: { name: "tariboy", source: TARIBOY_SOURCE, state: "registered", ...store },
+  starter_image: { state: "ready", ...starter },
+  harnesses: [{ type: "claude", found: true, install: "npm i -g claude" }],
+});
 
 function RouteButtons({
   hostParam,
@@ -137,6 +151,7 @@ describe("Stores workspace", () => {
       {
         "GET /api/stores": () =>
           envelope([{ name: "team", source: "/srv/team", path: "/srv/team" }]),
+        "GET /api/onboarding": () => envelope(onboardingStatus()),
         "POST /api/stores": () =>
           envelope({
             name: "design",
@@ -230,6 +245,7 @@ describe("Stores workspace", () => {
       `/servers/${encodeURIComponent(host.id)}/stores`,
     );
 
+    fireEvent.click(screen.getByText("Add another catalog"));
     fireEvent.change(screen.getByLabelText("Store name"), { target: { value: "design" } });
     fireEvent.change(screen.getByLabelText("Store source"), {
       target: { value: "git@example.com:design.git" },
@@ -959,10 +975,7 @@ describe("Store reconnect", () => {
 });
 
 describe("Tariboy Store button", () => {
-  const tariboyStore = {
-    name: "tariboy",
-    source: "https://github.com/alekzonder/tariboy-store.git",
-  };
+  const tariboyStore = { name: "tariboy", source: TARIBOY_SOURCE };
   const target = {
     id: "remote",
     label: "Remote",
@@ -987,18 +1000,38 @@ describe("Tariboy Store button", () => {
       </MemoryRouter>,
     );
 
-  const stubStores = (stores: unknown[], post: () => Response) => {
+  const notFound = () =>
+    ({
+      ok: false,
+      status: 404,
+      text: async () =>
+        JSON.stringify({ ok: false, error: { code: "not_found", message: "no route" } }),
+    }) as Response;
+
+  const stubStores = (
+    stores: unknown[],
+    post: () => Response,
+    onboarding: () => Response = () => envelope(onboardingStatus({ state: "failed" })),
+  ) => {
     const calls: Call[] = [];
+    const routes = routeFetch(
+      {
+        "GET /api/onboarding": onboarding,
+        "POST /api/onboarding/retry": () => envelope(onboardingStatus()),
+        "GET /api/stores": () => envelope(stores),
+        "POST /api/stores": post,
+      },
+      notFound,
+    );
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((input: RequestInfo | URL, init: RequestInit = {}) => {
-        const method = init.method ?? "GET";
         calls.push({
           url: String(input),
-          method,
+          method: init.method ?? "GET",
           body: typeof init.body === "string" ? init.body : undefined,
         });
-        return Promise.resolve(method === "POST" ? post() : envelope(stores));
+        return routes(input, init);
       }),
     );
     return calls;
@@ -1018,6 +1051,26 @@ describe("Tariboy Store button", () => {
     });
   });
 
+  it("names and adds the default Store the daemon reports", async () => {
+    const calls = stubStores(
+      [],
+      () => envelope({ name: "official", source: "/srv/official", path: "/stores/official" }),
+      () =>
+        envelope(onboardingStatus({ name: "official", source: "/srv/official", state: "removed" })),
+    );
+    renderList();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add tariboy Store" }));
+
+    expect(screen.getByText("/srv/official", { selector: "span" })).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Opened Store detail" });
+    expect(calls).toContainEqual({
+      url: "https://store.example/api/stores",
+      method: "POST",
+      body: JSON.stringify({ name: "official", source: "/srv/official" }),
+    });
+  });
+
   it("shows the daemon error and enables the button again", async () => {
     stubStores([], () => envelope("clone Store: git failed", false));
     renderList();
@@ -1028,14 +1081,158 @@ describe("Tariboy Store button", () => {
     expect(screen.getByRole("button", { name: "Add tariboy Store" })).toBeEnabled();
   });
 
+  it("comes back after the default Store was removed", async () => {
+    stubStores(
+      [{ name: "team", source: "/srv/team", path: "/srv/team" }],
+      () => envelope({}),
+      () => envelope(onboardingStatus({ state: "removed" })),
+    );
+    renderList();
+
+    expect(await screen.findByRole("button", { name: "Add tariboy Store" })).toBeInTheDocument();
+  });
+
   it.each([
+    ["the Store is registered", { name: "tariboy", source: TARIBOY_SOURCE }],
     ["the name is taken", { name: "tariboy", source: "/srv/other" }],
-    ["the source is registered", { name: "official", source: tariboyStore.source }],
+    ["the source is registered", { name: "official", source: TARIBOY_SOURCE }],
   ])("is hidden when %s", async (_case, store) => {
-    stubStores([{ ...store, path: "/stores/x" }], () => envelope({}));
+    stubStores(
+      [{ ...store, path: "/stores/x" }],
+      () => envelope({}),
+      () => envelope(onboardingStatus()),
+    );
     renderList();
 
     expect(await screen.findByText(store.source)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add tariboy Store" })).toBeNull();
+  });
+
+  it("is not offered by a daemon without the onboarding status", async () => {
+    stubStores([], () => envelope({}), notFound);
+    renderList();
+
+    expect(await screen.findByText("No Stores registered on this server.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add tariboy Store" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "Getting ready" })).toBeNull();
+  });
+
+  it("keeps the Add Store form in a closed Add another catalog disclosure", async () => {
+    stubStores(
+      [],
+      () => envelope({}),
+      () => envelope(onboardingStatus()),
+    );
+    renderList();
+
+    const summary = await screen.findByText("Add another catalog");
+    const disclosure = summary.closest("details")!;
+    expect(disclosure).not.toHaveAttribute("open");
+    expect(within(disclosure).getByLabelText("Store name")).toBeInTheDocument();
+    expect(within(disclosure).getByLabelText("Store source")).toBeInTheDocument();
+    fireEvent.click(summary);
+    expect(disclosure).toHaveAttribute("open");
+  });
+
+  it("shows the checklist with Retry when the catalog could not be connected", async () => {
+    const calls = stubStores(
+      [],
+      () => envelope({}),
+      () => envelope(onboardingStatus({ state: "failed", error: "git clone: network down" })),
+    );
+    renderList();
+
+    const checklist = await screen.findByRole("list", { name: "Getting ready" });
+    expect(checklist).toHaveTextContent("Could not connect the Tariboy catalog");
+    expect(within(checklist).getByText("Details")).toBeInTheDocument();
+    expect(checklist).toHaveTextContent("git clone: network down");
+    fireEvent.click(within(checklist).getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(calls).toContainEqual(
+        expect.objectContaining({
+          url: "https://store.example/api/onboarding/retry",
+          method: "POST",
+        }),
+      ),
+    );
+  });
+
+  it("hides the checklist when the catalog and the starter image are ready", async () => {
+    stubStores(
+      [{ ...tariboyStore, path: "/stores/tariboy" }],
+      () => envelope({}),
+      () => envelope(onboardingStatus()),
+    );
+    renderList();
+
+    expect(await screen.findByText(TARIBOY_SOURCE)).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Getting ready" })).toBeNull();
+  });
+});
+
+describe("Store build failures", () => {
+  it("shows the reason of a failed build in the image row until the next build", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      { host: { id: "", label: "This daemon (local)" }, agents: [] },
+    ]);
+    let builds = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(
+        routeFetch(
+          {
+            "GET /api/stores/team": () =>
+              envelope({
+                name: "team",
+                source: "/srv/team",
+                path: "/srv/team",
+                images: [
+                  {
+                    name: "reviewer",
+                    version: "1.0.0",
+                    built_version: "",
+                    update_needed: false,
+                    latest_status: "missing",
+                  },
+                ],
+              }),
+            "POST /api/images/build": () => {
+              builds++;
+              return envelope(
+                operationStarted({ id: 6 + builds, title: "Build image team/reviewer" }),
+              );
+            },
+            "GET /api/operations/7": () =>
+              envelope(
+                operation({
+                  id: 7,
+                  status: "failed",
+                  error_message: "docker build: exit status 1",
+                }),
+              ),
+          },
+          () => envelope({ agents: [], groups: [], count: 0 }),
+        ),
+      ),
+    );
+    renderPage("/servers/local/stores/team", "local");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Build reviewer" }));
+    await screen.findByText("Build started: Build image team/reviewer.");
+    (await FakeWebSocket.dialed("/api/operations/ws")).send({ id: 7, status: "failed", ts: "t" });
+
+    const row = (await screen.findByText("Build failed: docker build: exit status 1")).closest(
+      "tr",
+    )!;
+    expect(within(row).getByText("reviewer")).toBeInTheDocument();
+    expect(within(row).getByRole("link", { name: "Open operation" })).toHaveAttribute(
+      "href",
+      "/servers/local/settings/operations/7",
+    );
+
+    fireEvent.click(within(row).getByRole("button", { name: "Build reviewer" }));
+    await waitFor(() =>
+      expect(screen.queryByText(/Build failed: docker build/)).not.toBeInTheDocument(),
+    );
   });
 });

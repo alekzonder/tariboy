@@ -1,7 +1,9 @@
 import type { Dispatch, SetStateAction } from "react";
+import { Link } from "react-router-dom";
 import type { StoreImageView } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { imageStatuses, latestImageVersionLabel } from "./storeStatus";
+import type { ImageBuildError } from "./useStoreActions";
 
 interface StoreImageRowProps {
   image: StoreImageView;
@@ -9,9 +11,31 @@ interface StoreImageRowProps {
   setAutoImages: Dispatch<SetStateAction<string[]>>;
   busy: string;
   build: (imageName: string) => Promise<void>;
+  buildErrors: Record<string, ImageBuildError>;
+  operationHref: (id: number) => string;
 }
 
-function StoreImageRow({ image, autoImages, setAutoImages, busy, build }: StoreImageRowProps) {
+function BuildFailure({ failure, href }: { failure: ImageBuildError; href: string }) {
+  return (
+    <div className="text-destructive">
+      Build failed: {failure.reason}{" "}
+      <Link className="underline underline-offset-2" to={href}>
+        Open operation
+      </Link>
+    </div>
+  );
+}
+
+function StoreImageRow({
+  image,
+  autoImages,
+  setAutoImages,
+  busy,
+  build,
+  buildErrors,
+  operationHref,
+}: StoreImageRowProps) {
+  const failure = buildErrors[image.name];
   return (
     <tr className={`border-t ${image.update_needed ? "bg-amber-50 dark:bg-amber-950/30" : ""}`}>
       <td className="px-3 py-2">
@@ -38,6 +62,7 @@ function StoreImageRow({ image, autoImages, setAutoImages, busy, build }: StoreI
         {imageStatuses(image).map((status) => (
           <div key={status}>{status}</div>
         ))}
+        {failure && <BuildFailure failure={failure} href={operationHref(failure.id)} />}
       </td>
       <td className="px-3 py-2 text-right">
         <Button

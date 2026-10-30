@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  type StoreImageView,
-  type StoreWorkflowView,
-  TARIBOY_STORE,
-  type WorkflowImageListing,
-} from "@/lib/api";
+import { type StoreImageView, type StoreWorkflowView, type WorkflowImageListing } from "@/lib/api";
 import {
   hasTariboyStore,
   imageStatuses,
@@ -110,14 +105,13 @@ describe("latestWorkflowVersion", () => {
 });
 
 describe("hasTariboyStore", () => {
-  it("matches the Tariboy Store by name or by source", () => {
-    expect(hasTariboyStore([{ name: TARIBOY_STORE.name, source: "elsewhere", path: "/s" }])).toBe(
-      true,
-    );
-    expect(hasTariboyStore([{ name: "mine", source: TARIBOY_STORE.source, path: "/s" }])).toBe(
-      true,
-    );
-    expect(hasTariboyStore([{ name: "mine", source: "elsewhere", path: "/s" }])).toBe(false);
-    expect(hasTariboyStore([])).toBe(false);
+  const defaultStore = { name: "tariboy", source: "https://example.com/store.git" };
+
+  it("matches the default Store by name or by source", () => {
+    const store = (name: string, source: string) => [{ name, source, path: "/s" }];
+    expect(hasTariboyStore(store("tariboy", "elsewhere"), defaultStore)).toBe(true);
+    expect(hasTariboyStore(store("mine", defaultStore.source), defaultStore)).toBe(true);
+    expect(hasTariboyStore(store("mine", "elsewhere"), defaultStore)).toBe(false);
+    expect(hasTariboyStore([], defaultStore)).toBe(false);
   });
 });

@@ -3,7 +3,7 @@ import { type NavigateFunction, useNavigate } from "react-router-dom";
 import type { ApiClient, OperationStarted } from "@/lib/api";
 import { notifyImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
-import { useOperationStartedToast } from "@/hooks/useOperationStartedToast";
+import { useOperationHref, useOperationStartedToast } from "@/hooks/useOperationStartedToast";
 import { errorText } from "@/lib/errors";
 import type { StoreData } from "./useStoreData";
 
@@ -18,7 +18,55 @@ interface StoreActionContext {
   setStatus: (status: string) => void;
   setRemoveError: (error: string) => void;
   buildStarted: (started: OperationStarted) => void;
+  builds: BuildFailures;
 }
+
+/** Why the last build of an image failed, shown in its row. */
+export interface ImageBuildError {
+  id: number;
+  reason: string;
+}
+
+interface TrackedBuild {
+  api: ApiClient;
+  store: string;
+  image: string;
+}
+
+// BuildFailures remembers which image each started build is for, so a failure
+// reported by operation id lands in that image's row. An entry is tied to the
+// client and the Store it was started on: another host or Store shows none.
+function useBuildFailures(api: ApiClient, name: string | undefined) {
+  const tracked = useRef(new Map<number, TrackedBuild>());
+  const [failures, setFailures] = useState<(TrackedBuild & ImageBuildError)[]>([]);
+  const clear = (store: string, image: string) =>
+    setFailures((current) =>
+      current.filter((failure) => failure.store !== store || failure.image !== image),
+    );
+  const track = (id: number, store: string, image: string) => {
+    tracked.current.set(id, { api, store, image });
+    clear(store, image);
+  };
+  const failed = (id: number) => {
+    const build = tracked.current.get(id);
+    if (!build) return;
+    tracked.current.delete(id);
+    void build.api.operations
+      .get(id)
+      .then(
+        (operation) => operation.error_message || `Build ${operation.status}`,
+        () => "Read the operation log for the reason",
+      )
+      .then((reason) => setFailures((current) => [...current, { ...build, id, reason }]));
+  };
+  const errors: Record<string, ImageBuildError> = {};
+  for (const failure of failures) {
+    if (failure.api === api && failure.store === name) errors[failure.image] = failure;
+  }
+  return { track, clear, failed, errors };
+}
+
+type BuildFailures = ReturnType<typeof useBuildFailures>;
 
 const start = (ctx: StoreActionContext, busyKey: string) => {
   ctx.setBusy(busyKey);
@@ -70,6 +118,7 @@ const startBuild = async (
   ctx: StoreActionContext,
   busyKey: string,
   request: () => Promise<OperationStarted>,
+  onStarted?: (id: number) => void,
 ) => {
   const isCurrent = currentBuild(ctx);
   start(ctx, busyKey);
@@ -77,6 +126,7 @@ const startBuild = async (
     const started = await request();
     // A build on a host the page has since left is not reported against this one.
     if (isCurrent()) {
+      onStarted?.(started.operation.id);
       ctx.buildStarted(started);
       ctx.setStatus(`Build started: ${started.operation.title}.`);
     }
@@ -87,10 +137,16 @@ const startBuild = async (
   }
 };
 
-const buildImage = (ctx: StoreActionContext, name: string, imageName: string) =>
-  startBuild(ctx, `build:${imageName}`, () =>
-    ctx.api.stores.buildStoreImage({ source: `${name}/${imageName}` }),
+// A new build of an image clears the failure its row shows.
+const buildImage = (ctx: StoreActionContext, name: string, imageName: string) => {
+  ctx.builds.clear(name, imageName);
+  return startBuild(
+    ctx,
+    `build:${imageName}`,
+    () => ctx.api.stores.buildStoreImage({ source: `${name}/${imageName}` }),
+    (id) => ctx.builds.track(id, name, imageName),
   );
+};
 
 const buildWorkflowImage = (ctx: StoreActionContext, name: string, workflowName: string) =>
   startBuild(ctx, `workflow:${workflowName}`, () =>
@@ -175,7 +231,13 @@ export function useStoreActions(name: string | undefined, basePath: string, data
   const [removeError, setRemoveError] = useState("");
   const [removeOpen, setRemoveOpen] = useState(false);
   const builtRef = useRef<() => void>(() => undefined);
-  const buildStarted = useOperationStartedToast(() => builtRef.current());
+  const builds = useBuildFailures(api, name);
+  const failedRef = useRef(builds.failed);
+  const buildStarted = useOperationStartedToast(
+    () => builtRef.current(),
+    (id) => failedRef.current(id),
+  );
+  const operationHref = useOperationHref();
 
   useEffect(() => {
     mounted.current = true;
@@ -195,15 +257,19 @@ export function useStoreActions(name: string | undefined, basePath: string, data
     setStatus,
     setRemoveError,
     buildStarted,
+    builds,
   };
   useEffect(() => {
     builtRef.current = () => {
       if (name) void reloadAfterBuild(ctx, name);
     };
+    failedRef.current = builds.failed;
   });
   return {
     busy,
     status,
+    buildErrors: builds.errors,
+    operationHref,
     removeError,
     removeOpen,
     changeRemoveOpen: (open: boolean) => {
