@@ -82,22 +82,67 @@ function AgentFacts({
   );
 }
 
+// The loop stopped as configured (an idle_limit halt), said but not alarmed,
+// and a full inbox.
+function StatusNotes({ status }: { status: AgentStatus | null }) {
+  return (
+    <>
+      {status?.halt_kind === "idle_limit" && status.halt_reason && (
+        <p data-testid="agent-halt-reason" className="text-caption text-muted-foreground">
+          {status.halt_reason}
+        </p>
+      )}
+      {status?.messages_queue_full && (
+        <p className="text-caption font-medium text-destructive">
+          Inbox full: {status.messages_pending} / {status.messages_max_queue}
+        </p>
+      )}
+    </>
+  );
+}
+
+function HeaderControls({ props, cwd }: { props: AgentWorkspaceHeaderProps; cwd: string }) {
+  const { hostId, agent, status, agentState, base } = props;
+  const navigate = useNavigate();
+  const pinned = usePinnedAgents();
+  const answerKey = agentState.kind === "needs" ? agentState.needs.first?.key : undefined;
+  const pinKey = agentKey(hostId, agent.name);
+  const canOpen = Boolean(cwd) && canOpenAgentCwdInVSCode(hostId, props.daemons);
+  return (
+    <AgentControls
+      name={agent.name}
+      alive={status?.enabled ?? agent.enabled ?? agent.state !== "stopped"}
+      image={agent.image}
+      disabled={props.unavailable}
+      primary={primaryAction(agentState)}
+      workPath={answerKey ? `${base}/work?task=${encodeURIComponent(answerKey)}` : `${base}/work`}
+      settingsPath={`${base}/settings`}
+      refresh={props.refresh}
+      onExec={props.onExec}
+      onDeleted={() => navigate("/")}
+      onClone={props.onClone}
+      pinned={pinned.has(pinKey)}
+      onTogglePin={() => togglePinnedAgent(pinKey)}
+      onOpenFolder={
+        canOpen
+          ? () =>
+              void openHostPathInVSCode(hostId, cwd).catch((error) => toast.error(String(error)))
+          : undefined
+      }
+    />
+  );
+}
+
 // Agent header: the name with the one primary action, one sentence on what
 // the agent does or waits for, and a muted line of facts — on every tab.
 export function AgentWorkspaceHeader(props: AgentWorkspaceHeaderProps) {
-  const { hostId, agent, status, view, agentState, unavailable, base } = props;
-  const navigate = useNavigate();
-  const pinned = usePinnedAgents();
+  const { agent, status, view, agentState, base } = props;
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), MINUTE_MS);
     return () => window.clearInterval(timer);
   }, []);
   const cwd = agent.cwd || view?.cwd || "";
-  const runtime = agentRuntimeLabel({ agentHarness: agent.harness, view });
-  const primary = primaryAction(agentState);
-  const answerKey = agentState.kind === "needs" ? agentState.needs.first?.key : undefined;
-  const pinKey = agentKey(hostId, agent.name);
   const sentence = headerSentence(agentState, {
     goalTaskKey: agent.current_goal_task_key,
     runs: status?.iterations ?? 0,
@@ -124,44 +169,14 @@ export function AgentWorkspaceHeader(props: AgentWorkspaceHeaderProps) {
           >
             {sentence}
           </p>
-          {status?.halt_kind === "idle_limit" && status.halt_reason && (
-            // The loop stopped as configured: said, not alarmed.
-            <p data-testid="agent-halt-reason" className="text-caption text-muted-foreground">
-              {status.halt_reason}
-            </p>
-          )}
-          <AgentFacts runtime={runtime} cwd={cwd} status={status} />
-          {status?.messages_queue_full && (
-            <p className="text-caption font-medium text-destructive">
-              Inbox full: {status.messages_pending} / {status.messages_max_queue}
-            </p>
-          )}
+          <StatusNotes status={status} />
+          <AgentFacts
+            runtime={agentRuntimeLabel({ agentHarness: agent.harness, view })}
+            cwd={cwd}
+            status={status}
+          />
         </div>
-        <AgentControls
-          name={agent.name}
-          alive={status?.enabled ?? agent.enabled ?? agent.state !== "stopped"}
-          image={agent.image}
-          disabled={unavailable}
-          primary={primary}
-          workPath={
-            answerKey ? `${base}/work?task=${encodeURIComponent(answerKey)}` : `${base}/work`
-          }
-          settingsPath={`${base}/settings`}
-          refresh={props.refresh}
-          onExec={props.onExec}
-          onDeleted={() => navigate("/")}
-          onClone={props.onClone}
-          pinned={pinned.has(pinKey)}
-          onTogglePin={() => togglePinnedAgent(pinKey)}
-          onOpenFolder={
-            cwd && canOpenAgentCwdInVSCode(hostId, props.daemons)
-              ? () =>
-                  void openHostPathInVSCode(hostId, cwd).catch((error) =>
-                    toast.error(String(error)),
-                  )
-              : undefined
-          }
-        />
+        <HeaderControls props={props} cwd={cwd} />
       </div>
       <AgentWorkspaceTabs base={base} needsCount={props.needsCount} stripRef={props.stripRef} />
     </header>

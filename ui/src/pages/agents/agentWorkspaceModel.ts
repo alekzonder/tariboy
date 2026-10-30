@@ -1,4 +1,4 @@
-import type { AgentState } from "@/lib/agentState";
+import type { AgentNeeds, AgentState } from "@/lib/agentState";
 import type { AgentBudget, AgentView } from "@/lib/api";
 import { elapsed } from "@/pages/home/homeModel";
 
@@ -58,25 +58,30 @@ const clock = (iso: string) => {
   return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
 };
 
+function needsSentence({ count, first }: AgentNeeds, now: Date): string {
+  if (count > 1 || !first) return `Waiting for you: ${count} things`;
+  const what = first.question ? "a question" : first.status || "a decision";
+  const age = elapsed(first.at, now);
+  return `Waiting for you: ${what} for ${first.key}${age ? ` (${age})` : ""}`;
+}
+
+function workingSentence(since: string | undefined, goalTaskKey: string, runs: number): string {
+  const time = since ? clock(since) : "";
+  const head = goalTaskKey ? `Working on ${goalTaskKey}` : "Working";
+  const run = goalTaskKey && runs > 0 ? ` · run ${runs}` : "";
+  return `${head}${time ? ` since ${time}` : ""}${run}`;
+}
+
 /** The header's one sentence: what the agent does, or what it waits for. */
 export function headerSentence(
   state: AgentState,
   { goalTaskKey, runs, now }: { goalTaskKey: string; runs: number; now: Date },
 ): string {
   switch (state.kind) {
-    case "needs": {
-      const { count, first } = state.needs;
-      if (count > 1 || !first) return `Waiting for you: ${count} things`;
-      const what = first.question ? "a question" : first.status || "a decision";
-      const age = elapsed(first.at, now);
-      return `Waiting for you: ${what} for ${first.key}${age ? ` (${age})` : ""}`;
-    }
-    case "working": {
-      const since = state.since ? clock(state.since) : "";
-      const head = goalTaskKey ? `Working on ${goalTaskKey}` : "Working";
-      const run = goalTaskKey && runs > 0 ? ` · run ${runs}` : "";
-      return `${head}${since ? ` since ${since}` : ""}${run}`;
-    }
+    case "needs":
+      return needsSentence(state.needs, now);
+    case "working":
+      return workingSentence(state.since, goalTaskKey, runs);
     case "idle":
       return "Idle. Give it a task.";
     case "off":
