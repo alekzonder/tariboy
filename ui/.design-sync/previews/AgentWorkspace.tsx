@@ -110,13 +110,7 @@ const Workspace = ({ tab }: { tab: string }) => (
         <Routes>
           <Route
             path="/agents/:hostId/:agent/:tab/*"
-            element={
-              <AgentWorkspace
-                hostId=""
-                agent={BUILDER}
-                refresh={() => {}}
-              />
-            }
+            element={<AgentWorkspace hostId="" agent={BUILDER} refresh={() => {}} />}
           />
         </Routes>
       </Providers>
