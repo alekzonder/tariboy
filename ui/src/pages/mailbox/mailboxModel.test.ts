@@ -70,7 +70,7 @@ describe("mailboxModel", () => {
     expect(letterState(letter())).toBe("open");
   });
 
-  it("marks an unread inbox letter read on open: a notice then moves to Archive, a request stays", () => {
+  it("marks an unread inbox letter read on open", () => {
     expect(marksReadOnOpen(letter({ needs_reply: false }), "inbox")).toBe(true);
     expect(marksReadOnOpen(letter(), "inbox")).toBe(true);
     expect(marksReadOnOpen(letter({ read_at: "x" }), "inbox")).toBe(false);

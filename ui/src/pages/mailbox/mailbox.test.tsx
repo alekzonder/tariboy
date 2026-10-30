@@ -137,18 +137,19 @@ describe("Mailbox", () => {
     expect(screen.queryByRole("region", { name: "Letter" })).toBeNull();
   });
 
-  it("reads an unread letter on open; a read notice moves to Archive but stays open", async () => {
+  it("keeps a read customer notice in the Inbox until Archive", async () => {
     boxes.inbox = [letter({ id: "note", subject: "FYI", needs_reply: false })];
     renderMailbox();
 
     await userEvent.click(await screen.findByRole("button", { name: /FYI/ }));
     await waitFor(() => expect(mail.read).toHaveBeenCalledWith(["note"], undefined));
-    boxes.archive = [{ ...boxes.inbox[0], read_at: "now", answered_at: "now", close_note: "read" }];
-    boxes.inbox = [];
+    boxes.inbox = [{ ...boxes.inbox[0], read_at: "now" }];
     await act(async () => socket.onHint?.({ from: "agent:dev", to: "user:customer" }));
 
-    await waitFor(() => expect(screen.getByText("No open letters.")).toBeVisible());
-    expect(screen.getByRole("heading", { name: "FYI" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /FYI/ })).toBeVisible();
+    expect(screen.queryByText("No open letters.")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Archive" }));
+    expect(mail.close).toHaveBeenCalledWith("note", { as: undefined });
   });
 
   it("keeps a request in the Inbox after reading until Reply or Archive", async () => {

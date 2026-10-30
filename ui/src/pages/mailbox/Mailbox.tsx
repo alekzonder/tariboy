@@ -101,7 +101,7 @@ function MailboxListPane({
 }
 
 /** The opened letter as the box lists it now, or as it was opened once it
- *  left the box (a read notice moves to Archive). */
+ *  left the box (an agent's read notice moves to Archive). */
 function useCurrentLetter(as: string, box: MailBox, opened: Letter | null): Letter | null {
   const api = useApi();
   const list = useInfiniteQuery(mailQueries.box(api, as, box));

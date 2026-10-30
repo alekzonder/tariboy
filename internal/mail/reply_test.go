@@ -141,23 +141,39 @@ func TestCloseArchivesWithNote(t *testing.T) {
 	}
 }
 
-func TestMarkReadClosesNoticesOnly(t *testing.T) {
+func TestMarkReadKeepsCustomerNoticesOpen(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	notice := f.sendOne(t, mail.Letter{From: "agent:alice", To: "user:customer", Body: "fyi"})
 	request := f.sendOne(t, mail.Letter{From: "agent:alice", To: "user:customer", Body: "?", NeedsReply: true})
 	closedNotices, read, err := f.m.MarkRead("user:customer", []string{notice.ID, request.ID})
-	if err != nil || closedNotices != 1 || read != 2 {
-		t.Fatalf("mark read = %d %d %v; want 1 2", closedNotices, read, err)
+	if err != nil || closedNotices != 0 || read != 2 {
+		t.Fatalf("mark read = %d %d %v; want 0 2", closedNotices, read, err)
 	}
-	if got := f.show(t, "user:customer", notice.ID); got.AnsweredAt == "" || got.CloseNote != "read" || got.ReadAt == "" {
-		t.Fatalf("notice = %+v", got)
-	}
-	if got := f.show(t, "user:customer", request.ID); got.AnsweredAt != "" || got.ReadAt == "" {
-		t.Fatalf("request = %+v", got)
+	for _, id := range []string{notice.ID, request.ID} {
+		if got := f.show(t, "user:customer", id); got.AnsweredAt != "" || got.CloseNote != "" || got.ReadAt == "" {
+			t.Fatalf("letter = %+v; want read and open", got)
+		}
 	}
 	_, _, err = f.m.MarkRead("agent:bob", []string{request.ID})
 	wantCode(t, err, "forbidden")
+}
+
+func TestMarkReadClosesAgentNotices(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	notice := f.sendOne(t, mail.Letter{From: "agent:bob", To: "agent:alice", Body: "fyi"})
+	request := f.sendOne(t, mail.Letter{From: "agent:bob", To: "agent:alice", Body: "?", NeedsReply: true})
+	closedNotices, read, err := f.m.MarkRead("agent:alice", []string{notice.ID, request.ID})
+	if err != nil || closedNotices != 1 || read != 2 {
+		t.Fatalf("mark read = %d %d %v; want 1 2", closedNotices, read, err)
+	}
+	if got := f.show(t, "agent:alice", notice.ID); got.AnsweredAt == "" || got.CloseNote != "read" || got.ReadAt == "" {
+		t.Fatalf("notice = %+v", got)
+	}
+	if got := f.show(t, "agent:alice", request.ID); got.AnsweredAt != "" || got.ReadAt == "" {
+		t.Fatalf("request = %+v", got)
+	}
 }
 
 func TestReplyToVanishedSenderClosesOriginal(t *testing.T) {

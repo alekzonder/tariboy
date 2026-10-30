@@ -323,7 +323,7 @@ reference](/docs/reference/mail) for flags, routes and debugging.
 | `tmail reply ID TEXT [--ask]` | Answer a letter, which closes it |
 | `tmail requeue ID` | Return a dead letter to the inbox |
 | `tmail close ID [--note T]` | Archive without a reply (operator only) |
-| `tmail read ID...` | Mark letters read; a read notice closes (operator only) |
+| `tmail read ID...` | Mark letters read; a read notice to an agent closes (operator only) |
 | `tmail unread` | Count open letters by sender and kind (operator only) |
 | `tmail clear --as agent:NAME [--yes]` | Delete an agent's open letters (operator only) |
 

@@ -44,7 +44,7 @@ var helpText = map[string]commandHelp{
 		"Closes a letter in the mailbox without answering it and keeps the note with it." + operatorOnlyNote + " Agents answer a letter with reply.",
 		"ID  Letter id (required)", "tmail close m-20261026T104200Z-000007 --note 'answered in chat'"},
 	"read": {"Mark letters read (operator-only)", "read ID...",
-		"Marks the letters read. A read notice closes." + operatorOnlyNote,
+		"Marks the letters read. A read notice to an agent closes; a notice to the customer stays open until it is archived." + operatorOnlyNote,
 		"ID  Letter ids (at least one)", "tmail read m-20261026T104200Z-000007"},
 	"unread": {"Count the open letters by sender and kind (operator-only)", "unread",
 		"Prints the open and unread counts of the mailbox and the open letters per sender and kind." + operatorOnlyNote,

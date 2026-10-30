@@ -19503,7 +19503,7 @@
             "description": "Typed error"
           }
         },
-        "summary": "Mark letters read; a read notice closes"
+        "summary": "Mark letters read; a read notice to an agent closes"
       }
     },
     "/api/mail/unread": {

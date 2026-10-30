@@ -201,7 +201,7 @@
     "next_before": ""
   },
   "mail.read": {
-    "closed_notices": 1,
+    "closed_notices": 0,
     "read": 2
   },
   "mail.reply": {

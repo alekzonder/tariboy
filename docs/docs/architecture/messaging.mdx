@@ -61,7 +61,8 @@ the key later rewrites nothing.
 Every letter is a **request** or a **notice**, chosen by its sender:
 
 - A request needs an answer. It leaves the inbox when its recipient replies.
-- A notice needs no answer. It leaves the inbox when its recipient has read it.
+- A notice needs no answer. It leaves an agent's inbox when the agent has read it,
+  and the customer's inbox when the customer archives it.
 
 A reply goes to the original sender with subject `Re: <subject>` and
 `in_reply_to` set, and closes the original in the same transaction. A reply is
@@ -87,7 +88,7 @@ leaves it empty and records a `close_note`.
 | Recipient | A request closes when | A notice closes when |
 | --- | --- | --- |
 | `agent:*` | the agent replies | it was rendered into an iteration that finished successfully (`close_note = read`) |
-| `user:*` | the customer replies or archives it | the customer opens it in the Desktop or runs `tariboy mail read` (`read`) |
+| `user:*` | the customer replies or archives it | the customer archives it; opening it or `tariboy mail read` only marks it read |
 | `plugin:*` | the plugin's `/deliver` accepts it (`delivered`) | the same |
 | `system:*`, `queue:*` | at once: stored closed | at once |
 | any, `task.question` | the question is answered on the task (`task-comment:<id>`), or a workflow outcome resolves it (`task-outcome:<status>`) | — |
