@@ -51,7 +51,8 @@ export function TaskComposer({
 
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
-      <div className="flex min-w-0 items-center gap-1.5">
+      {/* On a phone the field takes its own row, so the buttons do not squeeze it. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:flex-nowrap">
         <Input
           ref={input}
           aria-label={`New task for ${agent.name}`}
@@ -65,7 +66,7 @@ export function TaskComposer({
             event.preventDefault();
             void draft.submit();
           }}
-          className="h-8 min-w-0 flex-1"
+          className="h-8 min-w-0 basis-full sm:basis-0 sm:flex-1"
         />
         <Button
           type="button"

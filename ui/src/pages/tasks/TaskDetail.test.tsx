@@ -417,6 +417,42 @@ it("opens the workflow section when the workflow reports a problem", async () =>
   );
 });
 
+it("keeps the workflow section open after its problem clears", async () => {
+  const troubled = {
+    ...workflowTask,
+    workflow_attention: { kind: "rejected" as const, message: "CI is red", count: 1 },
+  };
+  const element = (task: Task) => (
+    <TaskDetail
+      detail={{
+        task,
+        comments: [],
+        waiting_for: [],
+        relations: [],
+        descendants: 0,
+        active_descendants: 0,
+      }}
+      events={[]}
+      principals={people}
+      width={600}
+      resizeHandle={null}
+      onClose={vi.fn()}
+      onSave={vi.fn()}
+      onComment={vi.fn()}
+      onAddRelation={vi.fn()}
+      onDeleteRelation={vi.fn()}
+      onTransfer={vi.fn()}
+      onRequeue={vi.fn()}
+    />
+  );
+  const { rerender } = render(element(troubled));
+  await screen.findByText("release@1.2.0");
+  rerender(element({ ...troubled, workflow_attention: undefined, revision: 5 }));
+  expect(screen.getByText("Workflow", { selector: "summary" }).closest("details")).toHaveAttribute(
+    "open",
+  );
+});
+
 it("picks a flexible task's assignee from me and the agents, never from typed text", async () => {
   const { onSave } = renderDetail({ ...flexible, assignee: "agent:gone" }, [], [], people);
   const select = screen.getByRole("combobox", { name: "Assignee" });
