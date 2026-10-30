@@ -38,7 +38,7 @@ export default function TaskDetail({
   const [uploadingDescription, setUploadingDescription] = useState(false);
   const [uploadingComment, setUploadingComment] = useState(false);
   const [commentOrder, setCommentOrder] = useState<"newest" | "oldest">("newest");
-  const [historyOpen, setHistoryOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [requeueOpen, setRequeueOpen] = useState(false);
   const pending = draft.saving || uploadingDescription || uploadingComment;

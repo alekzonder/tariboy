@@ -25,6 +25,9 @@ vi.mock("@/hooks/useTaskActivity", () => ({
     error: "",
   }),
 }));
+vi.mock("@/pages/tasks/NeedsYouCard", () => ({
+  default: ({ taskKey }: { taskKey: string }) => <div data-testid="needs-card">{taskKey}</div>,
+}));
 vi.mock("@/pages/tasks/TaskDrawer", () => ({
   default: ({ taskKey, onClose }: { taskKey: string; onClose: () => void }) => (
     <div data-testid="task-drawer">
@@ -103,6 +106,17 @@ describe("HomePage", () => {
     expect(await screen.findByTestId("task-drawer")).toHaveTextContent("DEV-1");
     fireEvent.click(screen.getByRole("button", { name: "Close drawer" }));
     expect(reload).toHaveBeenCalled();
+  });
+
+  it("expands a task row into its Needs you card, and the row still opens the drawer", async () => {
+    renderHome([needs({ tasks: [task] })]);
+    const expand = screen.getByRole("button", { name: "Answer in place" });
+    expect(expand).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(expand);
+    expect(expand).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByTestId("needs-card")).toHaveTextContent("DEV-1");
+    fireEvent.click(screen.getByRole("button", { name: /DEV-1/ }));
+    expect(await screen.findByTestId("task-drawer")).toHaveTextContent("DEV-1");
   });
 
   it("opens a letter in the Inbox", async () => {

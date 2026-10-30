@@ -603,6 +603,9 @@ describe("TasksWorkspace", () => {
     const dependencies = screen.getByText("Dependencies").closest("section")!;
     expect(within(dependencies).getByText("blocks")).toBeInTheDocument();
     expect(within(dependencies).getByText("TEST-2")).toBeInTheDocument();
+    // History starts collapsed.
+    expect(screen.queryByText("task.updated")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Expand" }));
     expect(screen.getByText("task.updated")).toBeInTheDocument();
 
     await userEvent.selectOptions(screen.getByLabelText("Relation type"), "related");

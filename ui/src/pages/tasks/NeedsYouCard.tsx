@@ -4,7 +4,7 @@ import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useApiQuery } from "@/hooks/useApiQuery";
-import type { TaskDetail, WorkflowView } from "@/lib/api";
+import type { PrincipalInfo, TaskDetail, WorkflowView } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 import { idempotencyKey } from "@/lib/ids";
 import { isWorkflowTask } from "@/lib/tasks";
@@ -52,10 +52,15 @@ const decides = (view: WorkflowView | undefined) =>
  */
 export default function NeedsYouCard({
   taskKey,
+  detail: loaded,
+  principals: knownPrincipals,
   onChanged,
   focus = false,
 }: {
   taskKey: string;
+  /** The task as its owner already holds it; the card reads it otherwise. */
+  detail?: TaskDetail;
+  principals?: PrincipalInfo | null;
   /** An answer or an outcome went through. */
   onChanged?: () => void;
   /** Scroll the card into view and focus its first button once it loads. */
@@ -63,11 +68,12 @@ export default function NeedsYouCard({
 }) {
   const api = useApi();
   const client = useQueryClient();
-  const detailQuery = useApiQuery(taskQueries.detail(api, taskKey));
-  const task = detailQuery.data?.task;
-  const workflow = !!task && isWorkflowTask(task);
-  const viewQuery = useApiQuery({ ...taskQueries.workflow(api, taskKey), enabled: workflow });
-  const principals = useApiQuery(taskQueries.principals(api)).data;
+  const { detail, detailQuery, workflow, viewQuery, principals } = useCardReads(
+    taskKey,
+    loaded,
+    knownPrincipals,
+  );
+  const task = detail?.task;
   const view = viewQuery.data;
   const changed = () => {
     void refreshTasks(client, api);
@@ -75,7 +81,7 @@ export default function NeedsYouCard({
   };
   const ref = useFocusOnLoad(focus && !!task && (!workflow || !!view));
 
-  if (!detailQuery.data || !task) {
+  if (!detail || !task) {
     return (
       <CardFrame>
         <span className={EMPTY} role="status">
@@ -84,7 +90,7 @@ export default function NeedsYouCard({
       </CardFrame>
     );
   }
-  const question = principals ? openQuestion(detailQuery.data, principals.customer) : undefined;
+  const question = principals ? openQuestion(detail, principals.customer) : undefined;
   const refetchView = () => void viewQuery.refetch();
   return (
     <CardFrame cardRef={ref}>
@@ -155,6 +161,31 @@ function WorkflowAsk({
       <ArtifactViewer view={view} />
     </>
   );
+}
+
+/** The task, its workflow view and the principals: each read only when the
+ *  owner did not pass it. */
+function useCardReads(
+  taskKey: string,
+  loaded: TaskDetail | undefined,
+  knownPrincipals: PrincipalInfo | null | undefined,
+) {
+  const api = useApi();
+  const detailQuery = useApiQuery({ ...taskQueries.detail(api, taskKey), enabled: !loaded });
+  const detail = loaded ?? detailQuery.data;
+  const workflow = !!detail && isWorkflowTask(detail.task);
+  const viewQuery = useApiQuery({ ...taskQueries.workflow(api, taskKey), enabled: workflow });
+  const principalsQuery = useApiQuery({
+    ...taskQueries.principals(api),
+    enabled: !knownPrincipals,
+  });
+  return {
+    detail,
+    detailQuery,
+    workflow,
+    viewQuery,
+    principals: knownPrincipals ?? principalsQuery.data,
+  };
 }
 
 function CardFrame({
