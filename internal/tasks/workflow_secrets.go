@@ -177,6 +177,10 @@ func (s *Admin) setQueueValue(ctx context.Context, actor Actor, queue, key, valu
 	if err := validateQueueSecret(key, value); err != nil {
 		return "", err
 	}
+	if secret && key == CustomerAgentPoolEnv {
+		return "", newError(http.StatusBadRequest, "invalid_secret_key",
+			CustomerAgentPoolEnv+" names a pool and is a plain env var, not a secret")
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
@@ -185,6 +189,11 @@ func (s *Admin) setQueueValue(ctx context.Context, actor Actor, queue, key, valu
 	revision, err := queueSecretRevision(ctx, tx, queue)
 	if err != nil {
 		return "", err
+	}
+	if !secret && key == CustomerAgentPoolEnv {
+		if err := requireCustomerAgentPoolTx(ctx, tx, queue, value); err != nil {
+			return "", err
+		}
 	}
 	now := s.now()
 	if _, err := tx.ExecContext(ctx, `

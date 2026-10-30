@@ -140,7 +140,7 @@ func (s *WorkflowEngine) RecordIterationEnd(ctx context.Context, end IterationEn
 	if err != nil {
 		return err
 	}
-	status, ok := currentStatus(manifest, task.WorkflowStatus)
+	status, ok := taskStatus(manifest, task)
 	if !ok || status.Terminal || status.Owner.Kind != workflowfile.OwnerPool {
 		return nil
 	}
@@ -396,7 +396,7 @@ func (s *WorkflowEngine) checkHolder(ctx context.Context, id int64, now time.Tim
 		}
 		return false, manifestLoadError{err}
 	}
-	status, ok := currentStatus(manifest, task.WorkflowStatus)
+	status, ok := taskStatus(manifest, task)
 	if !ok || status.Terminal || status.Owner.Kind != workflowfile.OwnerPool {
 		return false, nil
 	}

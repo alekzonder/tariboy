@@ -42,7 +42,7 @@ func workflowManagedErrorFor(ctx context.Context, q queryer, task Task) error {
 		return err
 	}
 	outcomes := []string{}
-	if status, ok := currentStatus(manifest, task.WorkflowStatus); ok {
+	if status, ok := taskStatus(manifest, task); ok {
 		outcomes = statusOutcomes(status)
 	}
 	return workflowManagedError().WithData(map[string]any{"status": task.WorkflowStatus, "outcomes": outcomes})
@@ -56,6 +56,13 @@ func (s *WorkflowEngine) enterStatusTx(ctx context.Context, tx *sql.Tx, task *Ta
 	if !ok {
 		return fmt.Errorf("workflow %s:%s has no status %q", manifest.Name, manifest.Version, statusID)
 	}
+	ownerPool := ""
+	if !next.Terminal && next.Owner.Kind == workflowfile.OwnerCustomer {
+		var err error
+		if ownerPool, err = customerAgentPoolTx(ctx, tx, task.Queue); err != nil {
+			return err
+		}
+	}
 	now := s.now()
 	from := task.WorkflowStatus
 	if from != "" {
@@ -63,7 +70,7 @@ func (s *WorkflowEngine) enterStatusTx(ctx context.Context, tx *sql.Tx, task *Ta
 		// customer status's question); leaving a pool status makes the holder's
 		// questions to the customer moot.
 		holder := ""
-		if previous, ok := currentStatus(manifest, from); ok && !previous.Terminal && previous.Owner.Kind == workflowfile.OwnerPool {
+		if previous, ok := taskStatus(manifest, *task); ok && !previous.Terminal && previous.Owner.Kind == workflowfile.OwnerPool {
 			holder = task.Assignee
 		}
 		if err := resolveWorkflowWaitsTx(ctx, tx, *task, holder, now); err != nil {
@@ -89,14 +96,15 @@ func (s *WorkflowEngine) enterStatusTx(ctx context.Context, tx *sql.Tx, task *Ta
 		nextWatch = store.FormatTime(s.clock())
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO task_status_visits(task_id, sequence, status_id, entered_at, entered_by, next_watch_at, workflow_digest)
-		VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT workflow_digest FROM tasks WHERE id = ?), ''))`,
-		task.ID, last+1, statusID, now, via, nextWatch, task.ID); err != nil {
+		INSERT INTO task_status_visits(task_id, sequence, status_id, entered_at, entered_by, next_watch_at, workflow_digest, owner_pool)
+		VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT workflow_digest FROM tasks WHERE id = ?), ''), ?)`,
+		task.ID, last+1, statusID, now, via, nextWatch, task.ID, ownerPool); err != nil {
 		return err
 	}
 
 	previousAssignee, previousCategory := task.Assignee, task.Status
-	task.WorkflowStatus = statusID
+	task.WorkflowStatus, task.workflowOwnerPool = statusID, ownerPool
+	next = withOwnerPool(next, ownerPool)
 	task.CompletedAt = ""
 	if next.Terminal {
 		task.CompletedAt = now

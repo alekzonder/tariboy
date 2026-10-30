@@ -92,7 +92,7 @@ func (s *WorkflowEngine) ReassignWorkflow(ctx context.Context, actor Actor, key,
 // over: an open, unpaused pool status with no pending request, and a member of
 // its pool that can work by holderUnavailableCauseSQL.
 func reassignStatusTx(ctx context.Context, tx *sql.Tx, task Task, manifest workflowimage.Manifest, name string) (workflowfile.Status, error) {
-	status, ok := currentStatus(manifest, task.WorkflowStatus)
+	status, ok := taskStatus(manifest, task)
 	if !ok || status.Terminal || status.Owner.Kind != workflowfile.OwnerPool {
 		return workflowfile.Status{}, newError(http.StatusConflict, "invalid_status_owner",
 			"only a status owned by an agent pool can be reassigned; status "+task.WorkflowStatus+" is not")

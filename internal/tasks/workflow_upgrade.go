@@ -47,7 +47,7 @@ func (s *WorkflowEngine) UpgradeWorkflow(ctx context.Context, actor Actor, key, 
 	// The old version knows who holds its status: its holder's questions end
 	// with it. enterStatusTx reads the new version, which may not declare it.
 	holder := ""
-	if previous, ok := currentStatus(from, task.WorkflowStatus); ok && !previous.Terminal && previous.Owner.Kind == workflowfile.OwnerPool {
+	if previous, ok := taskStatus(from, task); ok && !previous.Terminal && previous.Owner.Kind == workflowfile.OwnerPool {
 		holder = task.Assignee
 	}
 	if err := resolveWorkflowWaitsTx(ctx, tx, task, holder, now); err != nil {
@@ -110,7 +110,11 @@ func (s *WorkflowEngine) upgradeTargetTx(ctx context.Context, tx *sql.Tx, task T
 	if err != nil {
 		return workflowimage.Manifest{}, err
 	}
-	if missing, err := emptyPools(ctx, tx, task.Queue, manifest.Definition.Pools()); err != nil {
+	pools, err := workflowPoolsTx(ctx, tx, task.Queue, manifest)
+	if err != nil {
+		return workflowimage.Manifest{}, err
+	}
+	if missing, err := emptyPools(ctx, tx, task.Queue, pools); err != nil {
 		return workflowimage.Manifest{}, err
 	} else if len(missing) > 0 {
 		return workflowimage.Manifest{}, poolsEmptyError(missing)
