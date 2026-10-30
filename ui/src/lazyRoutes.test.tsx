@@ -20,7 +20,7 @@ const gates = vi.hoisted(() => {
   return { images: gate(), console: gate() };
 });
 
-vi.mock("@/pages/ImagesPage", async () => {
+vi.mock("@/pages/images/LibraryImagesPage", async () => {
   await gates.images.promise;
   return { default: () => <h1>Images page</h1> };
 });
@@ -64,7 +64,7 @@ beforeEach(() => {
 
 describe("lazily loaded screens", () => {
   it("keeps the titlebar and the sidebar while a Library page loads", async () => {
-    renderAt("/servers/local/images");
+    renderAt("/library/images");
 
     expect(await screen.findByText("Loading…", { selector: "[role=status]" })).toBeInTheDocument();
     expect(screen.getByTestId("app-titlebar")).toBeInTheDocument();

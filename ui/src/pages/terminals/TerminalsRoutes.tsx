@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useDaemons } from "@/components/daemonContext";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import type { HostAgents } from "@/lib/aggregate";
+import { navPath } from "@/lib/navRoutes";
 import { hostToParam } from "@/lib/terminalsHost";
 import { defaultAgentTab } from "@/lib/uiMode";
 import { useWorkspaces } from "@/lib/workspaces";
@@ -18,8 +19,7 @@ import { agentPath, type CreateHost } from "./terminalsHosts";
 const InboxPage = lazy(() => import("@/pages/mailbox/InboxPage"));
 const TasksWorkspace = lazy(() => import("@/pages/tasks/TasksWorkspace"));
 const ServerActivityPage = lazy(() => import("@/pages/activity/ServerActivityPage"));
-const ImagesPage = lazy(() => import("@/pages/ImagesPage"));
-const ImageTags = lazy(() => import("@/pages/images/ImageTags"));
+const LibraryImagesPage = lazy(() => import("@/pages/images/LibraryImagesPage"));
 const StoresPage = lazy(() => import("@/pages/StoresPage"));
 const WorkflowImagesPage = lazy(() => import("@/pages/workflows/WorkflowImagesPage"));
 const WorkflowImageDetail = lazy(() => import("@/pages/workflows/WorkflowImageDetail"));
@@ -35,9 +35,11 @@ const FirstRunHome = lazy(() =>
   import("./FirstRunHome").then((m) => ({ default: m.FirstRunHome })),
 );
 
+const LIBRARY_WORKFLOWS = navPath("library-workflows", "");
+
 interface ServerRoute {
   hostId: string;
-  /** `/servers/<host>`, the root of Library and Settings links. */
+  /** `/servers/<host>`, the root of Settings links. */
   basePath: string;
   storeName?: string;
   routeTag?: string;
@@ -63,19 +65,12 @@ const SERVER_VIEWS: Record<ServerView, (route: ServerRoute) => ReactNode> = {
   activity: (route) => (
     <ServerActivityPage key={route.hostId} hostId={route.hostId} hostControl={route.hostControl} />
   ),
-  images: (route) =>
-    library(route, <ImagesPage hostId={route.hostId} basePath={`${route.basePath}/images`} />),
-  "image-tags": (route) =>
-    library(route, <ImageTags hostId={route.hostId} basePath={`${route.basePath}/images`} />),
-  "image-detail": (route) =>
-    library(route, <ImageLayout hostId={route.hostId} basePath={`${route.basePath}/images`} />),
+  images: (route) => library(route, <LibraryImagesPage key={route.hostId} hostId={route.hostId} />),
+  "image-detail": (route) => library(route, <ImageLayout hostId={route.hostId} />),
   workflows: (route) =>
-    library(
-      route,
-      <WorkflowImagesPage key={route.hostId} basePath={`${route.basePath}/workflows`} />,
-    ),
+    library(route, <WorkflowImagesPage key={route.hostId} basePath={LIBRARY_WORKFLOWS} />),
   "workflow-detail": (route) => {
-    const { hostId, storeName, routeTag, basePath } = route;
+    const { hostId, storeName, routeTag } = route;
     return storeName && routeTag
       ? library(
           route,
@@ -83,7 +78,7 @@ const SERVER_VIEWS: Record<ServerView, (route: ServerRoute) => ReactNode> = {
             key={`${hostId}\u0000${storeName}\u0000${routeTag}`}
             name={storeName}
             tag={routeTag}
-            basePath={`${basePath}/workflows`}
+            basePath={LIBRARY_WORKFLOWS}
           />,
         )
       : null;
@@ -105,12 +100,12 @@ function library(route: ServerRoute, page: ReactNode) {
   );
 }
 
-function storesPage({ hostId, storeName, basePath }: ServerRoute) {
+function storesPage({ hostId, storeName }: ServerRoute) {
   return (
     <StoresPage
       key={`${hostId}\u0000${storeName ?? ""}`}
       name={storeName}
-      basePath={`${basePath}/stores`}
+      basePath={navPath("library-sources", hostId)}
     />
   );
 }

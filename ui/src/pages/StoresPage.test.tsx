@@ -60,17 +60,25 @@ function RouteButtons({
   const navigate = useNavigate();
   return (
     <>
-      <button onClick={() => navigate(`/servers/${hostParam}/stores/old`)}>Open old</button>
-      <button onClick={() => navigate(`/servers/${otherHostParam ?? hostParam}/stores/new`)}>
+      <button onClick={() => navigate(`/library/sources/old?host=${hostParam}`)}>Open old</button>
+      <button onClick={() => navigate(`/library/sources/new?host=${otherHostParam ?? hostParam}`)}>
         Open new
       </button>
       {otherHostParam && (
-        <button onClick={() => navigate(`/servers/${otherHostParam}/stores/old`)}>
+        <button onClick={() => navigate(`/library/sources/old?host=${otherHostParam}`)}>
           Switch host
         </button>
       )}
     </>
   );
+}
+
+/** Opens the `⋯` menu of the Store `name` and picks `item`. */
+async function storeMenu(name: string, item: string) {
+  fireEvent.keyDown(screen.getByRole("button", { name: `Store actions ${name}` }), {
+    key: "Enter",
+  });
+  fireEvent.click(await screen.findByRole("menuitem", { name: item }));
 }
 
 function renderPage(path: string, hostParam: string, otherHostParam?: string) {
@@ -84,12 +92,12 @@ function renderPage(path: string, hostParam: string, otherHostParam?: string) {
             <RouteButtons hostParam={hostParam} otherHostParam={otherHostParam} />
             <Routes>
               <Route
-                path="/servers/:hostId/stores"
-                element={<TerminalsPage serverView="stores" />}
+                path="/library/sources"
+                element={<TerminalsPage serverView="stores" scoped />}
               />
               <Route
-                path="/servers/:hostId/stores/:name"
-                element={<TerminalsPage serverView="store-detail" />}
+                path="/library/sources/:name"
+                element={<TerminalsPage serverView="store-detail" scoped />}
               />
             </Routes>
           </SidebarStateProvider>
@@ -152,6 +160,8 @@ describe("Stores workspace", () => {
         "GET /api/stores": () =>
           envelope([{ name: "team", source: "/srv/team", path: "/srv/team" }]),
         "GET /api/onboarding": () => envelope(onboardingStatus()),
+        "GET /api/stores/team": () =>
+          envelope({ name: "team", source: "/srv/team", path: "/srv/team", images: [] }),
         "POST /api/stores": () =>
           envelope({
             name: "design",
@@ -232,17 +242,19 @@ describe("Stores workspace", () => {
       () => envelope({ agents: [], groups: [], count: 0 }),
     );
 
-    renderPage(`/servers/${encodeURIComponent(host.id)}/stores`, encodeURIComponent(host.id));
+    renderPage(`/library/sources?host=${encodeURIComponent(host.id)}`, encodeURIComponent(host.id));
 
-    expect(await screen.findByRole("heading", { name: "Stores" })).toBeInTheDocument();
-    expect(await screen.findByText("/srv/team")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Images" })).toHaveAttribute(
+    expect(await screen.findByRole("heading", { name: "Sources" })).toBeInTheDocument();
+    expect(await screen.findByText("/srv/team · 0 images")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "team" })).toHaveAttribute(
       "href",
-      `/servers/${encodeURIComponent(host.id)}/images`,
+      "/library/sources/team",
     );
+    expect(screen.getByRole("button", { name: "Store actions team" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Images" })).toHaveAttribute("href", "/library/images");
     expect(screen.getByRole("link", { name: "Sources" })).toHaveAttribute(
       "href",
-      `/servers/${encodeURIComponent(host.id)}/stores`,
+      "/library/sources",
     );
 
     fireEvent.click(screen.getByText("Add another catalog"));
@@ -253,42 +265,46 @@ describe("Stores workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add store" }));
 
     expect(await screen.findByRole("heading", { name: "design" })).toBeInTheDocument();
-    expect(
-      await screen.findByRole("columnheader", { name: "Source image_version" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Latest image_version" })).toBeInTheDocument();
-    const reviewerRow = screen.getByText("reviewer").closest("tr")!;
-    expect(reviewerRow).toHaveTextContent("1.0.0");
-    expect(reviewerRow).toHaveTextContent("Update needed");
-    expect(reviewerRow).toHaveClass("bg-amber-50");
-    const equalRow = screen.getByText("equal").closest("tr")!;
-    expect(equalRow).toHaveTextContent("Up to date");
+    expect((await screen.findAllByRole("columnheader")).map((cell) => cell.textContent)).toEqual([
+      "Image",
+      "Version",
+      "Status",
+      "",
+    ]);
+    const reviewerRow = screen.getByText("reviewer", { selector: "td" }).closest("tr")!;
+    expect(reviewerRow).toHaveTextContent("Update available (1.0.0 → 1.2.3)");
+    expect(within(reviewerRow).getByRole("button", { name: "Update reviewer" })).toBeEnabled();
+    const equalRow = screen.getByText("equal", { selector: "td" }).closest("tr")!;
+    expect(equalRow).toHaveTextContent("Built");
     expect(within(equalRow).getByRole("button", { name: "Build equal" })).toBeEnabled();
-    const missingLatestRow = screen.getByText("missing-latest").closest("tr")!;
+    const missingLatestRow = screen.getByText("missing-latest", { selector: "td" }).closest("tr")!;
     expect(missingLatestRow).toHaveTextContent("Not built");
-    expect(missingLatestRow).toHaveTextContent("Latest not built");
     expect(
       within(missingLatestRow).getByRole("button", { name: "Build missing-latest" }),
     ).toBeEnabled();
-    const sourceUnversionedRow = screen.getByText("source-unversioned").closest("tr")!;
-    expect(sourceUnversionedRow).toHaveTextContent(
-      "Source image_version missing; comparison unavailable",
-    );
-    expect(sourceUnversionedRow).not.toHaveTextContent("Up to date");
-    const latestUnversionedRow = screen.getByText("latest-unversioned").closest("tr")!;
-    expect(latestUnversionedRow).toHaveTextContent(
-      "Latest image_version missing; comparison unavailable",
-    );
-    expect(latestUnversionedRow).not.toHaveTextContent("Up to date");
-    const latestBrokenRow = screen.getByText("latest-broken").closest("tr")!;
-    expect(latestBrokenRow).toHaveTextContent("Latest error: invalid latest manifest");
+    expect(
+      screen.getByText("source-unversioned", { selector: "td" }).closest("tr"),
+    ).toHaveTextContent("Built");
+    expect(
+      screen.getByText("latest-unversioned", { selector: "td" }).closest("tr"),
+    ).toHaveTextContent("Built");
+    const latestBrokenRow = screen.getByText("latest-broken", { selector: "td" }).closest("tr")!;
+    expect(latestBrokenRow).toHaveTextContent("Could not read the built image");
+    expect(within(latestBrokenRow).getByText("Details")).toBeInTheDocument();
+    expect(latestBrokenRow).toHaveTextContent("invalid latest manifest");
     expect(
       within(latestBrokenRow).getByRole("button", { name: "Build latest-broken" }),
     ).toBeEnabled();
-    const brokenRow = screen.getByText("broken").closest("tr")!;
-    expect(brokenRow).toHaveTextContent("Source error: invalid Tariboyfile");
-    expect(brokenRow).toHaveTextContent("Latest not built");
-    expect(within(brokenRow).getByRole("button", { name: "Build broken" })).toBeDisabled();
+    const brokenRow = screen.getByText("broken", { selector: "td" }).closest("tr")!;
+    expect(brokenRow).toHaveTextContent("The Store entry is invalid");
+    expect(brokenRow).toHaveTextContent("invalid Tariboyfile");
+    expect(within(brokenRow).queryByRole("button")).toBeNull();
+    const automatic = screen.getByText("Automatic builds").closest("details")!;
+    expect(automatic).not.toHaveAttribute("open");
+    expect(
+      screen.getByRole("table").compareDocumentPosition(automatic) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(calls).toContainEqual({
       url: "https://store.example/api/stores",
       method: "POST",
@@ -302,9 +318,8 @@ describe("Stores workspace", () => {
       baseURL: "https://other.example",
       token: "other-token",
     });
-    const refresh = screen.getByRole("button", { name: "Refresh" });
-    const removeStore = screen.getByRole("button", { name: "Remove store" });
-    fireEvent.click(refresh);
+    const menu = screen.getByRole("button", { name: "Store actions design" });
+    await storeMenu("design", "Refresh");
     expect(await screen.findByRole("alert")).toHaveTextContent("refresh failed");
     expect(screen.getByRole("heading", { name: "design" })).toBeInTheDocument();
     expect(calls).toContainEqual(
@@ -315,7 +330,7 @@ describe("Stores workspace", () => {
       }),
     );
 
-    fireEvent.click(within(reviewerRow).getByRole("button", { name: "Build reviewer" }));
+    fireEvent.click(within(reviewerRow).getByRole("button", { name: "Update reviewer" }));
     await waitFor(() =>
       expect(calls).toContainEqual({
         url: "https://store.example/api/images/build",
@@ -325,8 +340,7 @@ describe("Stores workspace", () => {
       }),
     );
     expect(within(reviewerRow).getByRole("button", { name: "Building reviewer…" })).toBeDisabled();
-    expect(refresh).toBeDisabled();
-    expect(removeStore).toBeDisabled();
+    expect(menu).toBeDisabled();
 
     finishBuild(envelope(operationStarted({ id: 11, title: "Build image design/reviewer" })));
     expect(
@@ -341,10 +355,11 @@ describe("Stores workspace", () => {
       ts: "t",
     });
     await waitFor(() => expect(detailReads).toBe(2));
-    expect(screen.getByText("reviewer").closest("tr")).not.toHaveClass("bg-amber-50");
-    expect(screen.getByText("reviewer").closest("tr")).toHaveTextContent("Up to date");
+    expect(screen.getByText("reviewer", { selector: "td" }).closest("tr")).toHaveTextContent(
+      "Built",
+    );
     expect(
-      within(screen.getByText("reviewer").closest("tr")!).getByRole("button", {
+      within(screen.getByText("reviewer", { selector: "td" }).closest("tr")!).getByRole("button", {
         name: "Build reviewer",
       }),
     ).toBeEnabled();
@@ -352,15 +367,18 @@ describe("Stores workspace", () => {
 
     detailReloadFails = true;
     fireEvent.click(
-      within(screen.getByText("reviewer").closest("tr")!).getByRole("button", {
+      within(screen.getByText("reviewer", { selector: "td" }).closest("tr")!).getByRole("button", {
         name: "Build reviewer",
       }),
     );
     await waitFor(() =>
       expect(
-        within(screen.getByText("reviewer").closest("tr")!).getByRole("button", {
-          name: "Build reviewer",
-        }),
+        within(screen.getByText("reviewer", { selector: "td" }).closest("tr")!).getByRole(
+          "button",
+          {
+            name: "Build reviewer",
+          },
+        ),
       ).toBeEnabled(),
     );
     // The first build ended, so its socket closed; the second build dials again.
@@ -378,7 +396,7 @@ describe("Stores workspace", () => {
     expect(screen.getByText("Build started: Build image design/reviewer.")).toBeInTheDocument();
     expect(imageBuilt).toHaveBeenCalledTimes(2);
 
-    fireEvent.click(removeStore);
+    await storeMenu("design", "Remove store…");
     const dialog = await screen.findByRole("alertdialog");
     expect(
       within(dialog).getByText(/preserves local sources and built images/i),
@@ -396,7 +414,7 @@ describe("Stores workspace", () => {
         }),
       ),
     );
-    expect(await screen.findByRole("heading", { name: "Stores" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Sources" })).toBeInTheDocument();
 
     stopImageBuilt();
   });
@@ -431,7 +449,7 @@ describe("Stores workspace", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     const hostParam = encodeURIComponent(host.id);
-    renderPage(`/servers/${hostParam}/stores/old`, hostParam);
+    renderPage(`/library/sources/old?host=${hostParam}`, hostParam);
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -543,7 +561,7 @@ describe("Stores workspace", () => {
     );
     const hostParam = encodeURIComponent(host.id);
     const newHostParam = encodeURIComponent(newHost.id);
-    renderPage(`/servers/${hostParam}/stores/old`, hostParam, newHostParam);
+    renderPage(`/library/sources/old?host=${hostParam}`, hostParam, newHostParam);
 
     fireEvent.click(await screen.findByRole("button", { name: "Build old-image" }));
     expect(screen.getByRole("button", { name: "Building old-image…" })).toBeDisabled();
@@ -594,7 +612,7 @@ describe("Stores workspace", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Building new-image…" })).toBeDisabled(),
     );
-    expect(screen.getByText("new-image")).toBeInTheDocument();
+    expect(screen.getByText("new-image", { selector: "td" })).toBeInTheDocument();
     finishThirdFailure(envelope("third build failed", false));
     expect(await screen.findByRole("alert")).toHaveTextContent("third build failed");
     expect(screen.getByRole("button", { name: "Build new-image" })).toBeEnabled();
@@ -654,7 +672,7 @@ describe("Stores workspace", () => {
       }),
     );
     const hostParam = encodeURIComponent(host.id);
-    renderPage(`/servers/${hostParam}/stores/team`, hostParam);
+    renderPage(`/library/sources/team?host=${hostParam}`, hostParam);
 
     fireEvent.click(await screen.findByRole("button", { name: "Build reviewer" }));
     expect(
@@ -667,14 +685,15 @@ describe("Stores workspace", () => {
       ts: "t",
     });
     await waitFor(() => expect(detailReads).toBe(2));
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-    expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+    await storeMenu("team", "Refresh");
+    expect(screen.getByText("Refreshing…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Store actions team" })).toBeDisabled();
 
     finishStaleRead(envelope("stale inventory failed", false));
     await waitFor(() =>
       expect(screen.queryByText("stale inventory failed")).not.toBeInTheDocument(),
     );
-    expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Store actions team" })).toBeDisabled();
 
     finishRefresh(
       envelope({
@@ -693,8 +712,8 @@ describe("Stores workspace", () => {
       }),
     );
     expect(await screen.findByText("Refreshed team.")).toBeInTheDocument();
-    expect(screen.getByText("fresh")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
+    expect(screen.getByText("fresh", { selector: "td" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Store actions team" })).toBeEnabled();
   });
 });
 
@@ -752,7 +771,7 @@ describe("Store automatic builds", () => {
       }),
     );
 
-    renderPage("/servers/local/stores/old", "local");
+    renderPage("/library/sources/old?host=local", "local");
 
     const interval = await screen.findByLabelText("Automatic build interval");
     await waitFor(() => expect(interval).toHaveValue(15));
@@ -778,8 +797,8 @@ describe("Store automatic builds", () => {
   });
 });
 
-describe("Store workflow images", () => {
-  it("lists workflow sources in their own tab and builds one from the Store", async () => {
+describe("Store workflows", () => {
+  it("lists workflow sources under Workflows and builds one from the Store", async () => {
     vi.mocked(fetchAllAgents).mockResolvedValue([
       { host: { id: "", label: "This daemon (local)" }, agents: [] },
     ]);
@@ -854,13 +873,12 @@ describe("Store workflow images", () => {
       }),
     );
 
-    renderPage("/servers/local/stores/old", "local");
+    renderPage("/library/sources/old?host=local", "local");
 
     expect(await screen.findByRole("button", { name: "Build reviewer" })).toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Workflow images" }));
+    expect(screen.getByRole("heading", { name: "Workflows" })).toBeInTheDocument();
     const row = async (workflow: string) =>
       (await screen.findByText(workflow, { selector: "td" })).closest("tr") as HTMLElement;
-    expect(screen.queryByRole("button", { name: "Build reviewer" })).not.toBeInTheDocument();
     await waitFor(async () =>
       expect(within(await row("development")).getByText("Update needed")).toBeInTheDocument(),
     );
@@ -919,9 +937,9 @@ describe("Store workflow images", () => {
       }),
     );
 
-    renderPage("/servers/local/stores/old", "local");
+    renderPage("/library/sources/old?host=local", "local");
 
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Workflow images" }));
+    expect(await screen.findByRole("heading", { name: "Workflows" })).toBeInTheDocument();
     expect(await screen.findByText("Comparison unavailable")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Build development" })).toBeEnabled();
   });
@@ -952,7 +970,7 @@ describe("Store reconnect", () => {
     const page = (baseURL: string) => (
       <MemoryRouter>
         <ApiProvider target={{ id: "remote", label: "Remote", baseURL, token: "t" }}>
-          <StoresPage name="old" basePath="/servers/remote/stores" />
+          <StoresPage name="old" basePath="/library/sources" />
         </ApiProvider>
       </MemoryRouter>
     );
@@ -985,17 +1003,17 @@ describe("Tariboy Store button", () => {
 
   const renderList = () =>
     render(
-      <MemoryRouter initialEntries={["/servers/remote/stores"]}>
+      <MemoryRouter initialEntries={["/library/sources"]}>
         <Routes>
           <Route
-            path="/servers/remote/stores"
+            path="/library/sources"
             element={
               <ApiProvider target={target}>
-                <StoresPage basePath="/servers/remote/stores" />
+                <StoresPage basePath="/library/sources" />
               </ApiProvider>
             }
           />
-          <Route path="/servers/remote/stores/:name" element={<h1>Opened Store detail</h1>} />
+          <Route path="/library/sources/:name" element={<h1>Opened Store detail</h1>} />
         </Routes>
       </MemoryRouter>,
     );
@@ -1112,7 +1130,7 @@ describe("Tariboy Store button", () => {
     stubStores([], () => envelope({}), notFound);
     renderList();
 
-    expect(await screen.findByText("No Stores registered on this server.")).toBeInTheDocument();
+    expect(await screen.findByText("No Stores registered on this host.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add tariboy Store" })).toBeNull();
     expect(screen.queryByRole("list", { name: "Getting ready" })).toBeNull();
   });
@@ -1215,7 +1233,7 @@ describe("Store build failures", () => {
         ),
       ),
     );
-    renderPage("/servers/local/stores/team", "local");
+    renderPage("/library/sources/team?host=local", "local");
 
     fireEvent.click(await screen.findByRole("button", { name: "Build reviewer" }));
     await screen.findByText("Build started: Build image team/reviewer.");

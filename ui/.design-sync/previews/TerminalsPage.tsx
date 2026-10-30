@@ -99,11 +99,11 @@ export const ServerTasks = () => (
 );
 
 export const ServerImages = () => (
-  <MemoryRouter initialEntries={["/servers/local/images"]}>
+  <MemoryRouter initialEntries={["/library/images"]}>
     <Providers>
       <Shell>
         <Routes>
-          <Route path="/servers/:hostId/images" element={<TerminalsPage serverView="images" />} />
+          <Route path="/library/images" element={<TerminalsPage serverView="images" scoped />} />
         </Routes>
       </Shell>
     </Providers>

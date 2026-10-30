@@ -1,29 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Plus } from "lucide-react";
 import type { WorkflowImageListing } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { errorText } from "@/lib/errors";
 import WorkflowBuildFromDirectory from "./WorkflowBuildFromDirectory";
-import { WorkflowTransferDialog } from "./WorkflowTransferDialog";
-import {
-  boundTo,
-  groupWorkflowImages,
-  useQueueBindings,
-  useTransferDaemons,
-} from "./workflowImages";
+import { boundTo, groupWorkflowImages, useQueueBindings } from "./workflowImages";
 
 const CELL = "px-3 py-2";
 
-/** The workflow image registry of one server: build, list, and copy to other servers. */
+/** The workflow images of one host: one row per name, its versions in the detail. */
 export default function WorkflowImagesPage({ basePath }: { basePath: string }) {
   const api = useApi();
   const [images, setImages] = useState<WorkflowImageListing[] | null>(null);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
-  const [transfer, setTransfer] = useState<WorkflowImageListing | null>(null);
+  const [adding, setAdding] = useState(false);
   const bindings = useQueueBindings();
-  const transferDaemons = useTransferDaemons();
   const reloadBindings = bindings.reload;
 
   useEffect(() => {
@@ -51,94 +46,80 @@ export default function WorkflowImagesPage({ basePath }: { basePath: string }) {
   const groups = useMemo(() => groupWorkflowImages(images ?? []), [images]);
 
   return (
-    <div className="h-full space-y-3 overflow-auto p-3">
-      <WorkflowBuildFromDirectory onBuilt={reload} />
-      {error && (
-        <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
-          <span>{error}</span>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => {
-              setError("");
-              reload();
-            }}
-          >
-            Retry
-          </Button>
-        </div>
-      )}
-      {images === null ? (
-        !error && <p className="text-sm text-muted-foreground">Loading workflow images…</p>
-      ) : images.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No workflow images</p>
-      ) : (
-        <div className="overflow-x-auto rounded border">
+    <div className="flex h-full min-h-0 flex-col">
+      <div data-toolbar className="flex shrink-0 flex-nowrap items-center gap-3 px-4 py-2">
+        <Button size="xs" className="ml-auto shrink-0" onClick={() => setAdding(true)}>
+          <Plus aria-hidden="true" />
+          Add workflow
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 space-y-3 overflow-auto px-4 pb-4">
+        {error && (
+          <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
+            <span>{error}</span>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setError("");
+                reload();
+              }}
+            >
+              Retry
+            </Button>
+          </div>
+        )}
+        {images === null ? (
+          !error && <p className="text-sm text-muted-foreground">Loading workflows…</p>
+        ) : images.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No workflows on this host.</p>
+        ) : (
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+            <thead className="text-left text-xs text-muted-foreground">
               <tr>
-                {["Name", "Tag", "Version", "Digest", "Built at", "Bound to", ""].map((label) => (
-                  <th key={label} className={CELL}>
+                {["Name", "Version", "Bound to"].map((label) => (
+                  <th key={label} className={`${CELL} font-medium`}>
                     {label}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {groups.flatMap(({ name, tags }) =>
-                tags.map((image, index) => {
-                  const ref = `${image.name}:${image.tag}`;
-                  const bound = bindings.loaded ? boundTo(bindings, image.digest) : { text: "…" };
-                  return (
-                    <tr key={ref} className={index === 0 ? "border-t" : ""}>
-                      <td className={`${CELL} font-medium`}>{index === 0 ? name : ""}</td>
-                      <td className={CELL}>
-                        <Link
-                          className="font-mono text-primary hover:underline"
-                          to={`${basePath}/${encodeURIComponent(image.name)}/${encodeURIComponent(image.tag)}`}
-                        >
-                          {image.tag}
-                        </Link>
-                      </td>
-                      <td className={CELL}>{image.version}</td>
-                      <td className={`${CELL} font-mono text-xs`}>
-                        <span title={image.digest}>{image.digest.slice(0, 12)}</span>
-                      </td>
-                      <td className={`${CELL} text-xs text-muted-foreground`}>{image.built_at}</td>
-                      <td className={`${CELL} text-xs`}>
-                        <span title={bound.title}>{bound.text}</span>
-                      </td>
-                      <td className={CELL}>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          aria-label={`Upload to servers ${ref}`}
-                          disabled={!transferDaemons.ready}
-                          onClick={() => setTransfer(image)}
-                        >
-                          Upload to servers
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                }),
-              )}
+              {groups.map(({ name, tags }) => {
+                const newest = tags[0];
+                const bound = bindings.loaded
+                  ? boundTo(
+                      bindings,
+                      tags.map((image) => image.digest),
+                    )
+                  : { text: "…" };
+                return (
+                  <tr key={name} className="border-t">
+                    <td className={CELL}>
+                      <Link
+                        className="font-medium text-primary hover:underline"
+                        to={`${basePath}/${encodeURIComponent(name)}/${encodeURIComponent(newest.tag)}`}
+                      >
+                        {name}
+                      </Link>
+                    </td>
+                    <td className={CELL}>{newest.version}</td>
+                    <td className={`${CELL} text-xs`}>
+                      <span title={bound.title}>{bound.text}</span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-        </div>
-      )}
-      {transfer && (
-        <WorkflowTransferDialog
-          open
-          onOpenChange={(open) => {
-            if (!open) setTransfer(null);
-          }}
-          name={transfer.name}
-          tag={transfer.tag}
-          daemons={transferDaemons.daemons}
-          onComplete={() => undefined}
-        />
-      )}
+        )}
+      </div>
+      <Dialog open={adding} onOpenChange={setAdding}>
+        <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-3xl">
+          <DialogTitle>Add workflow</DialogTitle>
+          <WorkflowBuildFromDirectory onBuilt={reload} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -35,7 +35,7 @@ const pages = [
   // preview's Hosts cell renders `undefined` ("Element type is invalid") - the
   // shell draws, the right-hand pane stays blank.
   "DaemonsPage.tsx",
-  "ImagesPage.tsx",
+  "images/LibraryImagesPage.tsx",
   "StoresPage.tsx",
 ];
 

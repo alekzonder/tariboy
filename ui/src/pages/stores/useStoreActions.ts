@@ -19,6 +19,7 @@ interface StoreActionContext {
   setRemoveError: (error: string) => void;
   buildStarted: (started: OperationStarted) => void;
   builds: BuildFailures;
+  onRemoved?: () => void;
 }
 
 /** Why the last build of an image failed, shown in its row. */
@@ -209,7 +210,10 @@ const removeStore = async (ctx: StoreActionContext, name: string) => {
   ctx.setStatus("");
   try {
     await ctx.api.stores.removeStore(name);
-    if (ctx.mounted.current) ctx.navigate(ctx.basePath);
+    if (ctx.mounted.current) {
+      if (ctx.onRemoved) ctx.onRemoved();
+      else ctx.navigate(ctx.basePath);
+    }
   } catch (cause) {
     if (ctx.mounted.current) {
       const failure = errorText(cause);
@@ -221,7 +225,14 @@ const removeStore = async (ctx: StoreActionContext, name: string) => {
   }
 };
 
-export function useStoreActions(name: string | undefined, basePath: string, data: StoreData) {
+/** The actions of the Store `name`, or only Add without a name. A removal
+ *  calls `onRemoved` when given, else returns to `basePath`. */
+export function useStoreActions(
+  name: string | undefined,
+  basePath: string,
+  data: StoreData,
+  onRemoved?: () => void,
+) {
   const api = useApi();
   const navigate = useNavigate();
   const mounted = useRef(true);
@@ -258,6 +269,7 @@ export function useStoreActions(name: string | undefined, basePath: string, data
     setRemoveError,
     buildStarted,
     builds,
+    onRemoved,
   };
   useEffect(() => {
     builtRef.current = () => {

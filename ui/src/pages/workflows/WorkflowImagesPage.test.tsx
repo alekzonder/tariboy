@@ -73,42 +73,55 @@ const renderPage = () =>
   render(
     <MemoryRouter>
       <ApiProvider client={remoteApi}>
-        <WorkflowImagesPage basePath="/servers/remote/workflows" />
+        <WorkflowImagesPage basePath="/library/workflows" />
       </ApiProvider>
     </MemoryRouter>,
   );
 
-it("lists tags grouped by name with latest first, short digests, and bindings", async () => {
+it("lists one row per name with its newest version and every bound queue", async () => {
   renderPage();
   const table = await screen.findByRole("table");
-  await waitFor(() => expect(within(table).getAllByText("DEV, unknown")).toHaveLength(2));
+  // development has digests A (bound to DEV) and B; research only B.
+  await waitFor(() => expect(within(table).getByText("DEV, unknown")).toBeInTheDocument());
+  expect(
+    within(table)
+      .getAllByRole("columnheader")
+      .map((cell) => cell.textContent),
+  ).toEqual(["Name", "Version", "Bound to"]);
   const rows = within(table).getAllByRole("row").slice(1);
-  expect(rows.map((row) => within(row).getAllByRole("cell")[1].textContent)).toEqual([
-    "latest",
-    "0.10.0",
-    "0.9.0",
-    "0.1.0",
+  expect(rows.map((row) => within(row).getAllByRole("cell")[0].textContent)).toEqual([
+    "development",
+    "research",
   ]);
-  expect(within(rows[0]).getByText(digestA.slice(0, 12))).toHaveAttribute("title", digestA);
-  expect(within(rows[0]).getByRole("link", { name: "latest" })).toHaveAttribute(
+  expect(rows[0]).toHaveTextContent("0.10.0");
+  expect(within(rows[0]).getByRole("link", { name: "development" })).toHaveAttribute(
     "href",
-    "/servers/remote/workflows/development/latest",
+    "/library/workflows/development/latest",
   );
-  expect(within(rows[2]).getByText("unknown")).toHaveAttribute(
+  expect(within(rows[0]).getByText("DEV, unknown")).toBeInTheDocument();
+  expect(within(rows[1]).getByText("unknown")).toHaveAttribute(
     "title",
     "Could not read the binding of BAD",
   );
   expect(api.listWorkflowImages).toHaveBeenCalledWith();
   expect(api.listTaskQueues).toHaveBeenCalledWith();
+  expect(screen.queryByRole("button", { name: /Upload to servers/ })).toBeNull();
+  expect(screen.queryByLabelText("Workflow source directory")).toBeNull();
+});
+
+it("opens the build form in a dialog from Add workflow", async () => {
+  renderPage();
+  await screen.findByRole("table");
+  fireEvent.click(screen.getByRole("button", { name: "Add workflow" }));
   expect(
-    within(rows[0]).getByRole("button", { name: "Upload to servers development:latest" }),
+    within(await screen.findByRole("dialog")).getByLabelText("Workflow source directory"),
   ).toBeInTheDocument();
 });
 
 it("shows an empty registry", async () => {
   api.listWorkflowImages.mockResolvedValue([]);
   renderPage();
-  expect(await screen.findByText("No workflow images")).toBeInTheDocument();
+  expect(await screen.findByText("No workflows on this host.")).toBeInTheDocument();
 });
 
 it("shows a list failure with Retry", async () => {
@@ -131,7 +144,7 @@ it("keeps the table and skips loads while the host reconnects", async () => {
   view.rerender(
     <MemoryRouter>
       <ApiProvider client={clientFor(offline, offlineCalls)}>
-        <WorkflowImagesPage basePath="/servers/remote/workflows" />
+        <WorkflowImagesPage basePath="/library/workflows" />
       </ApiProvider>
     </MemoryRouter>,
   );

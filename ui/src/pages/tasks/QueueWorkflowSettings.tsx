@@ -236,11 +236,10 @@ function BindingSummary({
   if (!binding) return <span className={EMPTY}>No workflow</span>;
   return (
     <p data-testid="binding" className="text-body-sm">
-      {/* The queue settings live at /servers/:hostId/tasks; the image page is a sibling section. */}
+      {/* Tasks and the Library both open on the active host. */}
       <Link
-        relative="path"
         className="font-semibold text-primary hover:underline"
-        to={`../workflows/${encodeURIComponent(binding.name)}/${encodeURIComponent(bindingRef(binding, images))}`}
+        to={`/library/workflows/${encodeURIComponent(binding.name)}/${encodeURIComponent(bindingRef(binding, images))}`}
       >
         {binding.name}
       </Link>{" "}

@@ -6,7 +6,8 @@ describe("hostScopeTarget", () => {
     ["/tasks", "", "d1", "/tasks?host=d1"],
     ["/tasks", "?host=d1&task=DEV-1", "", "/tasks?host=local&task=DEV-1"],
     ["/inbox", "?letter=m-1", "d1", "/inbox?letter=m-1&host=d1"],
-    ["/servers/local/images", "", "d1", "/servers/d1/images"],
+    ["/library/sources", "", "d1", "/library/sources?host=d1"],
+    ["/library/images/x/1", "?host=d1", "", "/library/images/x/1?host=local"],
     [
       "/servers/d1/settings/advanced/usage",
       "?x=1",

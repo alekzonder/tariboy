@@ -69,7 +69,7 @@ export default function StoreWorkflowsTable({
           {!workflows?.length && (
             <tr>
               <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
-                No workflow images in this Store.
+                No workflows in this Store.
               </td>
             </tr>
           )}

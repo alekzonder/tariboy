@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { AgentImageStatus } from "@/lib/api";
-import { serverPath } from "@/lib/terminalsHost";
 import {
   imageHref,
   imageSides,
@@ -18,13 +17,16 @@ describe("shortDigest", () => {
 });
 
 describe("imageHref", () => {
-  it("links a ref to its image page on the target host", () => {
-    const base = serverPath("host-1", "images");
-    expect(imageHref("host-1", "team/base:v 1")).toBe(`${base}/team%2Fbase/v%201`);
+  it("links a ref to its Library page, naming the host only with several", () => {
+    expect(imageHref("host-1", "team/base:v 1", false)).toBe("/library/images/team%2Fbase/v%201");
+    expect(imageHref("host-1", "team/base:v 1", true)).toBe(
+      "/library/images/team%2Fbase/v%201?host=host-1",
+    );
+    expect(imageHref("", "base:latest", true)).toBe("/library/images/base/latest?host=local");
   });
 
   it("links a ref without a tag to the image list", () => {
-    expect(imageHref("", "base")).toBe(serverPath("", "images"));
+    expect(imageHref("", "base", false)).toBe("/library/images");
   });
 });
 

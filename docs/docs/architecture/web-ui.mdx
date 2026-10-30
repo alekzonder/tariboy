@@ -197,11 +197,24 @@ The sidebar has six items:
 | **Agents** | nothing: it opens and closes the agent list in place |
 | **Tasks** | `/tasks` |
 | **Inbox** | `/inbox` |
-| **Library** | `/servers/:hostId/images`, with **Images**, **Workflows**, and **Sources** tabs |
+| **Library** | `/library/images`, with **Images**, **Workflows**, and **Sources** tabs |
 | **Settings** | `/servers/:hostId/settings`, with **Application** (`/app-settings`) as its last entry |
 
-Library and Settings open on the host of the current page. They keep their
-`/servers/:hostId/…` routes until they get their own pages.
+Settings opens on the host of the current page. It keeps its
+`/servers/:hostId/…` route until it gets its own pages.
+
+The Library has these routes:
+
+| Route | Page |
+| --- | --- |
+| `/library` | redirects to `/library/images` |
+| `/library/images` | the Images tab |
+| `/library/images/:name` | the newest tag of the image, with its Versions |
+| `/library/images/:name/:tag/*` | that tag: Overview, `template`, `skills`, `files` |
+| `/library/workflows` | the Workflows tab |
+| `/library/workflows/:name/:tag` | one workflow image, with its Versions |
+| `/library/sources` | the Sources tab: one card per Store |
+| `/library/sources/:name` | the card of one Store |
 
 **Tasks** shows the number of tasks that need you, and **Inbox** shows the
 number of your open letters. A task needs you when its `waiting_on` is
@@ -249,13 +262,13 @@ archive uploads and downloads.
 
 ## Routes and host scope
 
-`/tasks`, `/inbox`, and `/activity` show one host. They take an optional
+`/tasks`, `/inbox`, `/activity`, and the Library pages show one host. They take an optional
 `?host=<id>` (`local` is the local daemon). Without it, the page shows the
 remembered active host. A `?host=` that names another host selects it through
 the route host boundary, which shows **Connecting to host…** or **Host
 unavailable.** while it does. With two or more hosts in the workspace, the
-page has a host selector, and a pick replaces `?host=`; Library and Settings
-pages have the same selector, which changes the host in their path. With one
+page has a host selector, and a pick replaces `?host=`. Settings pages have
+the same selector, which changes the host in their path. With one
 host nothing about hosts is shown, and links that the UI builds carry
 `?host=` only with two or more hosts. A desktop notification always names its
 host.
@@ -267,11 +280,20 @@ The old URLs redirect, and keep the rest of their query:
 | `/servers/:hostId/mail` | `/inbox?host=:hostId` |
 | `/servers/:hostId/tasks` | `/tasks?host=:hostId` |
 | `/servers/:hostId/activity` | `/activity?host=:hostId` |
+| `/servers/:hostId/images/*` | `/library/images/*?host=:hostId` |
+| `/servers/:hostId/workflows/*` | `/library/workflows/*?host=:hostId` |
+| `/servers/:hostId/stores/*` | `/library/sources/*?host=:hostId` |
 | `/` or `/agents/…` with `?view=all` | `/tasks` |
 
-`legacyServerRedirect` in `ui/src/lib/navRoutes.ts` computes each target.
-`/images/*` and `/settings/*` still redirect to the `/servers/<active host>/…`
-pages.
+`legacyServerRedirect` in `ui/src/lib/navRoutes.ts` computes each target. A
+Library redirect copies the rest of the path unchanged, so an old tag list
+(`/servers/:hostId/images/:name`) opens the image page with its Versions.
+`/images/*` redirects to `/library/images/*`. `/settings/*` still redirects to
+the `/servers/<active host>/settings` pages.
+
+Links inside the Library carry no `?host=`, because the route host is the
+active host while a Library page is open. The image links of an agent's
+**Configuration** carry `?host=` when two or more hosts are registered.
 
 ## Home
 
@@ -306,7 +328,7 @@ first host by default. It reads `GET /api/onboarding` through
 `useOnboardingStatus` and has three rows:
 
 - the Tariboy catalog: connected, connecting, could not connect, or removed
-  (add it again on the Stores page);
+  (add it again in Library → Sources);
 - the starter image `basic`: ready (also when an image named `basic` already
   existed), building, or could not build;
 - the coding tool: which harnesses the host found and which it did not, with
@@ -357,8 +379,8 @@ line at the foot of the sidebar, its `⋯` menu (**Add a host**), the
 agent** button of Home, or **Start agent** on the first-run card; it never
 highlights the sidebar's **New agent** button. A step with a `route` opens that
 page through `navPath` in `ui/src/lib/navRoutes.ts`: `tasks` and `inbox` open
-`/tasks` and `/inbox`, and the Library items open the Library page of the host
-on screen, or of the selected host. The agent steps open the first
+`/tasks` and `/inbox`, and the Library items open `/library/images`,
+`/library/sources`, and `/library/workflows` on the active host. The agent steps open the first
 agent of the sidebar. If the sidebar has no agent row when the tour starts, the
 tour leaves out the agent steps, and the counter counts only the steps it shows
 (**1 of 10**). Done, **Skip tour**, and Esc go back to the route where the tour
@@ -526,20 +548,37 @@ folders and SSH-host paths through VS Code Remote SSH in a new editor window.
 The native Desktop host resolves the saved SSH alias and constructs the editor
 URI; the WebView never supplies an alias. HTTPS hosts do not render this action.
 
-The **Images** workspace owns validation, directory builds, runnable artifact
-import/export, and transparent template inspection. It shows the original
-source CWD when provenance exists and reuses the same native VS Code folder
-action for local and SSH paths. Validation previews the exact ordered resolved
-template, plugin names, hashes, warnings, and errors without creating an
-artifact. The workspace owns vertical scrolling within the height-constrained
-server shell, so validation output and built images remain reachable at small
-window heights. **Close** dismisses the in-memory validation preview, warnings,
-and diagnostics without changing build inputs or any built artifact. The
-built-image root groups by image name and distinguishes the version and build
-date inside `latest` from the newest tag by parsed build date. A name opens its
-tag table with versions, digests, build dates, Latest/Newest badges, current and
-pending agent usage, and existing tag actions. Import remains at the root.
-Breadcrumbs preserve the explicit host and existing direct tag routes.
+The Library's **Images** tab (`/library/images`) shows one row per image name:
+the name, the version of the newest tag, the Store that built it, **Used by**,
+the build time as a relative time (the full time is in its title), and **Run
+agent**. **Used by** counts the distinct agents whose current or pending image
+is any tag of that name. The UI computes it from `current_agents` and
+`pending_agents` of `GET /api/images`, which the daemon reads from the same
+agents table as the agent list. The rows are sorted by **Used by**, then by
+name. **Show unused** is off by default, so names that no agent uses are hidden.
+The image `bare` is never listed: the New agent dialog offers it as **Plain
+terminal**. The search field filters by name. The pure model is
+`ui/src/pages/images/libraryImages.ts`.
+
+The **Add image** menu has **Build from directory** and **Import archive**,
+which open the build form and the archive import in dialogs, and **Get from a
+source**, which opens Sources. The build form owns validation, directory builds,
+and transparent template inspection. Validation previews the exact ordered
+resolved template, plugin names, hashes, warnings, and errors without creating
+an artifact. The dialog scrolls, so the validation output stays reachable at
+small window heights. **Close** dismisses the in-memory validation preview,
+warnings, and diagnostics without changing build inputs or any built artifact.
+
+An image page (`/library/images/:name`) shows the newest tag by parsed build
+date with its **Overview**, **Template**, **Skills**, and **Files** tabs. The
+tab links go to `/library/images/:name/:tag/…`. Below the Overview, a
+**Versions** section lists the tags with version, digest, build date, Source,
+Latest/Newest badges, current and pending agents, and the tag actions **Run
+agent**, **Export**, **Upload to servers**, and **Remove**. It shows the newest
+five tags and **Show all N**, and it marks the tag on screen. The Source cell
+stays on one line and shows the full text in its title. The page shows the
+original source CWD when provenance exists and reuses the same native VS Code
+folder action for local and SSH paths.
 Manifest, provenance, template, and file reads carry the same expected digest;
 a changed mutable ref clears the old view and reloads once, then offers manual
 refresh if it changes again. Directory builds and all detail requests capture
@@ -576,41 +615,47 @@ archive has its own **Exporting** phase: controls and cancellation are disabled
 until the one download completes, after which cancellation only skips
 unstarted destinations.
 
-The **Stores** workspace registers Git URLs or local absolute source directories
-on the route-selected daemon. The daemon registers the default Store `tariboy`
-by itself, so the page reads its name and source from `GET /api/onboarding`.
-**Add tariboy Store** registers it with the same add request and opens its
-detail. The card is shown only when no Store has that name or source, for
+The Library's **Sources** tab (`/library/sources`) registers Git URLs or local
+absolute source directories as Stores on the route-selected daemon. It shows
+one card per Store, and each card reads its own Store detail. The card header
+has the name, the source, the number of images, and a `⋯` menu with
+**Refresh** and **Remove store…**. The catalog table has the image, its source
+version, one status sentence, and one button: **Built**, **Update available
+(built → source)** with **Update**, **Not built** with **Build**, **Could not
+read the built image** with **Details** and **Build**, or **The Store entry is
+invalid** with **Details** and no button. The Store's workflows follow under
+**Workflows**. The **Automatic builds** disclosure is below the tables.
+`/library/sources/:name` shows one card. The daemon registers the default Store
+`tariboy` by itself, so the page reads its name and source from
+`GET /api/onboarding`. **Add tariboy Store** registers it with the same add
+request and opens its card. The offer is shown only when no Store has that name or source, for
 example after you removed it (`default_store.state` is `removed`). It is hidden
 while the daemon still connects the catalog and on a daemon without the
 onboarding route. The add form is folded under **Add another catalog**. When the
 host's catalog or starter-image checklist row is not done, the page shows those
 rows above the list, with **Details** and **Retry**. A Store build that fails
 shows **Build failed:** and the operation's error in that image's row, with
-**Open operation**. A new build of the image, or a reload, clears it. Its detail
-shows the current disk-backed image
+**Open operation**. A new build of the image, or a reload, clears it. The card
+reads the current disk-backed image
 inventory, each source `image_version`, and the `image_version` read directly
-from that image's `latest` manifest. It distinguishes missing latest,
-unversioned source or latest, source validation errors, and latest inspection
-errors; it highlights only known version mismatches and never reports an
-unknown comparison as up to date. Source errors disable Build, while missing or
-damaged latest and equal versions retain the manual Build action. A successful
+from that image's `latest` manifest (`catalogRow` in
+`ui/src/pages/stores/storeStatus.ts`). It shows **Update available** only for
+a known version mismatch. A built image whose versions cannot be compared shows
+**Built**. A source error removes the button, while missing or damaged latest
+and equal versions keep the manual Build action. A successful
 default versioned build reports publication of both the version tag and
 `latest`, then reloads the detail to update its comparison. Build controls
 become available when the build request finishes; a slow
 follow-up inventory read does not keep the image labelled as building. An older
 follow-up read cannot replace a newer build's result. Version comparison does
 not detect changed bytes when the source keeps the same `image_version`.
-Store build controls also accept a target name and optional explicit tag. Every
-non-reserved tag can be replaced, including a source version and `latest`. An
-explicit tag publishes only that tag.
-The detail also edits that Store's automatic refresh-and-build policy: an
-interval in whole minutes and one **Auto** checkbox per image, saved together
-and reported back from the daemon. An interval of `0` disables it. See
+The **Automatic builds** disclosure edits that Store's automatic
+refresh-and-build policy: an interval in whole minutes and one checkbox per
+image, saved together with **Save automatic builds** and reported back from the
+daemon. An interval of `0` disables it. See
 [Images → Automatic refresh and build](/docs/images#automatic-refresh-and-build)
 for the daemon-side cycle.
-Image sources sit on the **Agent images** tab of the detail. Its **Workflow
-images** tab lists the Store's workflow sources, each source `workflow_version`,
+The **Workflows** table of the card lists the Store's workflow sources, each source `workflow_version`,
 and the version of that workflow's built `latest` tag on the same host. It shows
 source errors (Build disabled), missing latest, update needed (highlighted), and
 up to date; when the workflow image list cannot be read it shows "Comparison
@@ -623,15 +668,19 @@ new Store view. Removal uses an in-app confirmation and preserves local sources
 and built images; pending operations disable duplicate actions. See
 [Images → Stores](/docs/images#stores-on-a-server) for paths and prerequisites.
 
-The **Workflow images** workspace (`/servers/:hostId/workflows`) builds a
-workflow image from a directory on the route-selected daemon, lists its tags
-with the queues bound to each digest, shows one image's manifest, removes a tag
-after an in-app confirmation, and copies an image to other ready servers with
-the export and import archive routes; every request carries the explicit host
-target. See [Workflow images → Desktop](/docs/workflow-images#desktop).
+The Library's **Workflows** tab (`/library/workflows`) shows one row per
+workflow name with the version of its first tag (`latest` first) and the
+queues bound to any digest of the name. **Add workflow** opens the build form
+in a dialog, which builds a workflow image from a directory on the
+route-selected daemon. The page of a tag (`/library/workflows/:name/:tag`)
+shows its manifest, removes the tag after an in-app confirmation, and lists the
+**Versions** of the name with version, build time, bound queues, and **Upload
+to servers**, which copies that tag to other ready servers with the export and
+import archive routes. Every request carries the explicit host target. See
+[Workflow images → Desktop](/docs/workflow-images#desktop).
 
-The sidebar's **Library** item opens Images, with **Workflows** (the Workflow
-images page) and **Sources** (the Stores page) as tabs of one Library header.
+The sidebar's **Library** item opens Images, with **Workflows** and **Sources**
+as tabs of one Library header.
 Settings discovers declarative pages from enabled plugins on that explicit
 server and lists them under **Integrations**. One generic React renderer owns
 the supported form controls and forwards actions through the daemon's existing
@@ -678,7 +727,7 @@ reads the log on from the last offset; a hint that arrives during a read
 causes one more read after it. See
 [Background operations](/docs/architecture#background-operations).
 
-**Build** in Images, Workflow images and a Store detail does not wait for the
+**Build** in Images, Workflows and a Store card does not wait for the
 build. When the daemon accepts the build, a "Build started" toast offers
 **Open operation**, a link to the operation page. An argument error still
 shows at once in place. While the page that started a build stays open, it
@@ -1481,7 +1530,7 @@ phases from title prefixes or assignee. Operator history remains available after
 Above an agent, the island shows only the agent's own Mailbox, Tasks,
 Terminal, Activity, Configuration, and Advanced tabs; there is no server row.
 There is no Autopilot tab: an old `/autopilot` route is treated as an unknown
-tab. Agent and Library routes include the explicit host id, and a `?host=` on
+tab. Agent routes include the explicit host id, and a `?host=` on
 a page names its host; both fail closed rather than silently falling back to
 local.
 

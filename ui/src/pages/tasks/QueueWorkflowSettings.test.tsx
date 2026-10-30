@@ -271,7 +271,7 @@ it("links the bound image to its detail page by its version tag, else by digest"
   await waitFor(() =>
     expect(screen.getByRole("link", { name: "release" })).toHaveAttribute(
       "href",
-      "/servers/h1/workflows/release/1.2.0",
+      "/library/workflows/release/1.2.0",
     ),
   );
   view.unmount();
@@ -283,7 +283,7 @@ it("links the bound image to its detail page by its version tag, else by digest"
   await waitFor(() =>
     expect(screen.getByRole("link", { name: "release" })).toHaveAttribute(
       "href",
-      `/servers/h1/workflows/release/${digest}`,
+      `/library/workflows/release/${digest}`,
     ),
   );
 });

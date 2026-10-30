@@ -110,7 +110,13 @@ async function toolbarRows(page: Page) {
 }
 
 // At 1024 px and wider, toolbars collapse controls into a menu before they wrap.
-for (const route of ["/tasks", "/inbox", "/servers/local/images"]) {
+for (const route of [
+  "/tasks",
+  "/inbox",
+  "/library/images",
+  "/library/workflows",
+  "/library/sources",
+]) {
   test(`${route} toolbar stays one row on a desktop`, async ({ page }) => {
     test.skip(page.viewportSize()!.width < 1024, "phones and tablets may wrap");
     await page.goto(`${fixture}${route}`);
@@ -161,9 +167,10 @@ for (const route of [
   "/tasks",
   "/inbox",
   "/activity",
-  "/servers/local/images",
-  "/servers/local/workflows",
-  "/servers/local/stores",
+  "/library/images",
+  "/library/images/bare/latest",
+  "/library/workflows",
+  "/library/sources",
   "/servers/local/settings",
   "/servers/local/settings/hosts",
   "/servers/local/settings/advanced",
@@ -227,4 +234,10 @@ test("the agent list is a drawer on compact screens and a column on wide ones", 
   await drawer.getByText(AGENT, { exact: true }).click();
   await expect(drawer).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`/agents/local/${AGENT}/tasks`));
+});
+
+test("an old Library URL opens its Library page", async ({ page }) => {
+  await page.goto(`${fixture}/servers/local/images`);
+  await expect(page.getByRole("navigation", { name: "Library" })).toBeVisible();
+  expect(new URL(page.url()).hash).toBe("#/library/images?host=local");
 });

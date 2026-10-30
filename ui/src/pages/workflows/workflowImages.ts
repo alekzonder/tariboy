@@ -83,14 +83,15 @@ export function useQueueBindings(): QueueBindings {
   return { ...state, reload };
 }
 
-/** The "Bound to" cell of a digest. */
+/** The "Bound to" cell of a digest, or of every digest of a name. */
 export function boundTo(
   bindings: Omit<QueueBindings, "reload">,
-  digest: string,
+  digest: string | string[],
 ): { text: string; title?: string } {
   if (bindings.failed)
     return { text: "unknown", title: `Could not list queues: ${bindings.failed}` };
-  const queues = [...(bindings.byDigest.get(digest) ?? [])];
+  const digests = typeof digest === "string" ? [digest] : digest;
+  const queues = [...new Set(digests.flatMap((value) => bindings.byDigest.get(value) ?? []))];
   if (bindings.unknown.length) queues.push("unknown");
   return {
     text: queues.length ? queues.join(", ") : "—",

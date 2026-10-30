@@ -82,7 +82,7 @@ function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/images/:name/:tag" element={<ImageLayout />}>
+        <Route path="/library/images/:name/:tag" element={<ImageLayout />}>
           <Route index element={<div>overview body</div>} />
           <Route path="template" element={<div>template body</div>} />
           <Route path="skills" element={<div>skills body</div>} />
@@ -102,10 +102,7 @@ function renderServerAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <LocationProbe />
       <Routes>
-        <Route
-          path="/servers/remote-1/images/:name/:tag"
-          element={<ImageLayout hostId="remote-1" basePath="/servers/remote-1/images" />}
-        >
+        <Route path="/library/images/:name/:tag" element={<ImageLayout hostId="remote-1" />}>
           <Route index element={<div>overview body</div>} />
           <Route path="template" element={<div>template body</div>} />
           <Route path="skills" element={<div>skills body</div>} />
@@ -118,7 +115,7 @@ function renderServerAt(path: string) {
 
 describe("ImageLayout", () => {
   it("renders the ref header and tab strip, routing to the index (Overview) tab", async () => {
-    renderAt("/images/foo/v1");
+    renderAt("/library/images/foo/v1");
     expect(await screen.findByText("overview body")).toBeInTheDocument();
     expect(screen.getByText("foo:v1")).toBeInTheDocument();
     // All three tabs are present.
@@ -131,28 +128,28 @@ describe("ImageLayout", () => {
   });
 
   it("routes to the Template tab", async () => {
-    renderAt("/images/foo/v1/template");
+    renderAt("/library/images/foo/v1/template");
     expect(await screen.findByText("template body")).toBeInTheDocument();
     expect(screen.queryByText("overview body")).not.toBeInTheDocument();
   });
 
   it("routes to the Files tab", async () => {
-    renderAt("/images/foo/v1/files");
+    renderAt("/library/images/foo/v1/files");
     expect(await screen.findByText("files body")).toBeInTheDocument();
     expect(screen.queryByText("overview body")).not.toBeInTheDocument();
   });
 
   it("routes to the Skills tab", async () => {
-    renderAt("/images/foo/v1/skills");
+    renderAt("/library/images/foo/v1/skills");
     expect(await screen.findByText("skills body")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Skills" })).toHaveAttribute(
       "href",
-      "/images/foo/v1/skills",
+      "/library/images/foo/v1/skills",
     );
   });
 
   it("offers run, source CWD, and remove for an image built from a directory", async () => {
-    renderAt("/images/foo/v1");
+    renderAt("/library/images/foo/v1");
     expect(await screen.findByRole("link", { name: "Run Agent" })).toHaveAttribute(
       "href",
       "/?new=1&host=&image=foo%3Av1",
@@ -160,11 +157,12 @@ describe("ImageLayout", () => {
     expect(await screen.findByText("/srv/images/foo")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open in VS Code" }));
     expect(openHostPathInVSCode).toHaveBeenCalledWith("", "/srv/images/foo");
-    expect(screen.getByRole("button", { name: "Remove foo:v1" })).toBeInTheDocument();
+    // The header and the tag's row in Versions both offer it.
+    expect(await screen.findAllByRole("button", { name: "Remove foo:v1" })).toHaveLength(2);
   });
 
   it("makes bare terminal-only and read-only", async () => {
-    renderAt("/images/bare/latest");
+    renderAt("/library/images/bare/latest");
     expect(await screen.findByText("Terminal-only")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Rebuild/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Remove bare/i })).not.toBeInTheDocument();
@@ -172,19 +170,56 @@ describe("ImageLayout", () => {
   });
 
   it("keeps image actions scoped to an explicit server route", async () => {
-    renderServerAt("/servers/remote-1/images/foo/v1");
+    renderServerAt("/library/images/foo/v1");
 
     expect(await screen.findByRole("link", { name: "Run Agent" })).toHaveAttribute(
       "href",
       "/?new=1&host=remote-1&image=foo%3Av1",
     );
     fireEvent.click(screen.getByRole("link", { name: "Template" }));
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      "/servers/remote-1/images/foo/v1/template",
-    );
+    expect(screen.getByTestId("location")).toHaveTextContent("/library/images/foo/v1/template");
     fireEvent.click(screen.getByRole("link", { name: "Skills" }));
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      "/servers/remote-1/images/foo/v1/skills",
+    expect(screen.getByTestId("location")).toHaveTextContent("/library/images/foo/v1/skills");
+  });
+
+  it("shows the Versions below the Overview only", async () => {
+    renderAt("/library/images/foo/v1");
+    expect(await screen.findByTestId("built-image-foo:v1")).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("region", { name: "Versions" })).toBeInTheDocument();
+    renderAt("/library/images/foo/v1/template");
+    expect(await screen.findByText("template body")).toBeInTheDocument();
+    expect(screen.getAllByRole("region", { name: "Versions" })).toHaveLength(1);
+  });
+
+  it("opens the newest tag of a name with links to that tag's tabs", async () => {
+    render(
+      <MemoryRouter initialEntries={["/library/images/foo"]}>
+        <Routes>
+          <Route path="/library/images/:name" element={<ImageLayout />}>
+            <Route index element={<div>overview body</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
     );
+    expect(await screen.findByText("overview body")).toBeInTheDocument();
+    expect(screen.getByText("foo:v1")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Template" })).toHaveAttribute(
+      "href",
+      "/library/images/foo/v1/template",
+    );
+    expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("region", { name: "Versions" })).toBeInTheDocument();
+  });
+
+  it("says when a name has no tags left", async () => {
+    render(
+      <MemoryRouter initialEntries={["/library/images/gone"]}>
+        <Routes>
+          <Route path="/library/images/:name" element={<ImageLayout />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("No tags for this image on this host.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Images" })).toHaveAttribute("href", "/library/images");
   });
 });

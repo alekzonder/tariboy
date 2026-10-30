@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/components/apiContext";
 import type { AgentImageStatus, AgentView } from "@/lib/api";
+import { useMultiHost } from "@/lib/navRoutes";
 import { guard } from "@/lib/toast-guard";
 import { ActionRow } from "./ConfigControls";
 import { imageHref, imageSides, nextReasonText, updatesOnNext } from "./generalImageModel";
@@ -19,10 +20,14 @@ function ImageSide({
   value: NonNullable<ImageSideValue>;
   targetId: string;
 }) {
+  const multiHost = useMultiHost();
   return (
     <div role="group" aria-label={label} className="space-y-0.5">
       <div className="font-medium">{label}</div>
-      <Link className="font-mono text-primary hover:underline" to={imageHref(targetId, value.ref)}>
+      <Link
+        className="font-mono text-primary hover:underline"
+        to={imageHref(targetId, value.ref, multiHost)}
+      >
         {value.ref}
       </Link>
       <div>
@@ -62,6 +67,7 @@ export function ImageIdentity({
   stopped: boolean;
 }) {
   const targetId = useApi().target?.id ?? "";
+  const multiHost = useMultiHost();
   return (
     <div className="grid gap-4 text-sm sm:grid-cols-2">
       {imageSides(imageStatus, stopped).map(
@@ -74,7 +80,7 @@ export function ImageIdentity({
           Pending:{" "}
           <Link
             className="font-mono text-primary hover:underline"
-            to={imageHref(targetId, imageStatus.pending.ref)}
+            to={imageHref(targetId, imageStatus.pending.ref, multiHost)}
           >
             {imageStatus.pending.ref}
           </Link>

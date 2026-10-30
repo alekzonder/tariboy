@@ -5,38 +5,52 @@ import {
   type WorkflowImageListing,
 } from "@/lib/api";
 
-const builtComparison = (image: StoreImageView) => {
-  if (!image.version) return "Source image_version missing; comparison unavailable";
-  return image.update_needed ? "Update needed" : "Up to date";
-};
+/** A catalog row of a Store: one status sentence, its raw detail, and the
+ *  one button the row offers (none for an entry that cannot build). */
+export interface CatalogRow {
+  status: string;
+  /** The raw message behind a failure, shown under Details. */
+  detail?: string;
+  tone: "muted" | "update" | "error";
+  action: "build" | "update" | null;
+  /** The operation of a failed build of this session. */
+  operation?: number;
+}
 
-const comparisonStatus = (image: StoreImageView) => {
-  if (
-    image.latest_status === "unversioned" ||
-    (image.latest_status === "built" && !image.built_version)
-  ) {
-    return "Latest image_version missing; comparison unavailable";
-  }
-  if (image.latest_status === "built" && !image.error) return builtComparison(image);
-  if (!image.latest_status && !image.error) return "Comparison unavailable";
-  return "";
-};
-
-export const imageStatuses = (image: StoreImageView) => {
-  const statuses: string[] = [];
-  if (image.error) statuses.push(`Source error: ${image.error}`);
+export const catalogRow = (
+  image: StoreImageView,
+  failure?: { id: number; reason: string },
+): CatalogRow => {
+  if (image.error)
+    return {
+      status: "The Store entry is invalid",
+      detail: image.error,
+      tone: "error",
+      action: null,
+    };
+  if (failure)
+    return {
+      status: `Build failed: ${failure.reason}`,
+      tone: "error",
+      action: "build",
+      operation: failure.id,
+    };
   if (image.latest_status === "error")
-    statuses.push(`Latest error: ${image.latest_error || "inspection failed"}`);
-  if (image.latest_status === "missing") statuses.push("Latest not built");
-  const comparison = comparisonStatus(image);
-  if (comparison) statuses.push(comparison);
-  return statuses;
-};
-
-export const latestImageVersionLabel = (image: StoreImageView) => {
-  if (image.latest_status === "missing") return "Not built";
-  if (image.latest_status === "error") return "Inspection failed";
-  return image.built_version || "Not specified";
+    return {
+      status: "Could not read the built image",
+      detail: image.latest_error || "inspection failed",
+      tone: "error",
+      action: "build",
+    };
+  if (image.latest_status === "missing")
+    return { status: "Not built", tone: "muted", action: "build" };
+  if (image.update_needed)
+    return {
+      status: `Update available (${image.built_version} → ${image.version})`,
+      tone: "update",
+      action: "update",
+    };
+  return { status: "Built", tone: "muted", action: "build" };
 };
 
 // latest is the built latest workflow_version: undefined when not built, null

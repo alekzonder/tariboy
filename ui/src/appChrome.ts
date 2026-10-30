@@ -1,4 +1,4 @@
-const CONSOLE = /^\/(?:$|tasks$|inbox$|activity$|agents\/|servers\/)/;
+const CONSOLE = /^\/(?:$|tasks$|inbox$|activity$|agents\/|servers\/|library(?:$|\/))/;
 
 /** Whether the path is a console page: the sidebar, its toggle and the
  *  global search belong there. */

@@ -9,6 +9,8 @@ describe("sidebarRoute", () => {
     ["/activity", true],
     ["/agents/local/a/console", true],
     ["/servers/local/images", true],
+    ["/library/images", true],
+    ["/library/sources/tariboy", true],
     ["/app-settings", false],
     ["/agents", false],
     ["/tasksx", false],

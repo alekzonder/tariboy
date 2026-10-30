@@ -73,6 +73,7 @@ export function BuiltImageTagActions({
     <div className="flex justify-end gap-1">
       <Button size="sm" variant="outline" asChild>
         <Link
+          aria-label={`Run agent ${imageRef}`}
           to={`/?new=1&host=${encodeURIComponent(hostId)}&image=${encodeURIComponent(imageRef)}`}
         >
           Run Agent

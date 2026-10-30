@@ -33,6 +33,9 @@ test("portable image export, source states, and import retag work in a real brow
 
   await page.goto("/tests/images-fixture.html?mode=build");
   await page.setViewportSize({ width: 1200, height: 300 });
+  await page.getByRole("button", { name: "Add image" }).click();
+  await page.getByRole("menuitem", { name: "Build from directory" }).click();
+  const dialog = page.getByRole("dialog");
   await page.getByLabel("Image source directory").fill("/srv/images/browser-built");
   await page.getByLabel("Image name").fill("browser-built");
   await expect(page.getByLabel("Image tag")).toHaveValue("latest");
@@ -41,13 +44,10 @@ test("portable image export, source states, and import retag work in a real brow
   await expect(template).toContainText("identity");
   await expect(template).toContainText("$CURRENT_VERSION_STORE/prompts/iteration-finish.md");
   await expect(template).toContainText("context");
-  const imagesWorkspace = page.getByRole("heading", { name: "Images" }).locator("../..");
-  await imagesWorkspace.hover();
+  await dialog.hover();
   await page.mouse.wheel(0, 600);
-  await expect
-    .poll(() => imagesWorkspace.evaluate((element) => element.scrollTop))
-    .toBeGreaterThan(0);
-  await page.getByRole("button", { name: "Close" }).click();
+  await expect.poll(() => dialog.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await dialog.locator("section").getByRole("button", { name: "Close" }).click();
   await expect(template).toHaveCount(0);
   await page.getByRole("button", { name: "Build", exact: true }).click();
   await expect
@@ -84,11 +84,10 @@ test("portable image export, source states, and import retag work in a real brow
   await expect(page.getByText("context")).toBeVisible();
 
   await page.goto("/tests/images-fixture.html?mode=agent");
-  const currentBasic = page
-    .getByText("Current:")
-    .locator("..")
-    .getByRole("link", { name: "basic:latest" });
-  await expect(currentBasic).toHaveAttribute("href", "/servers/local/images/basic/latest");
+  // The fixture agent is stopped: its current image is the Activated version.
+  const activated = page.getByRole("group", { name: "Activated version" });
+  const currentBasic = activated.getByRole("link", { name: "basic:latest" });
+  await expect(currentBasic).toHaveAttribute("href", "/library/images/basic/latest");
   const imageSelector = page.getByRole("combobox", { name: "Agent image" });
   await imageSelector.click();
   const builtOption = page.getByRole("option", { name: "browser-built:latest" });
@@ -99,7 +98,7 @@ test("portable image export, source states, and import retag work in a real brow
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Pending:").locator("..")).toContainText("browser-built:latest");
   await page.getByRole("button", { name: "Simulate next iteration" }).click();
-  await expect(page.getByText("Current:").locator("..")).toContainText("browser-built:latest");
+  await expect(activated).toContainText("browser-built:latest");
   await expect(page.getByText("Pending:")).toHaveCount(0);
 });
 
