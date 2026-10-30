@@ -38,13 +38,17 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<TerminalsPage />} />
+      <Route path="/tasks" element={<TerminalsPage serverView="tasks" scoped />} />
+      <Route path="/inbox" element={<TerminalsPage serverView="mail" scoped />} />
+      <Route path="/activity" element={<TerminalsPage serverView="activity" scoped />} />
       <Route path="/app-settings" element={<AppSettings />} />
       <Route path="/agents/new" element={<CanonicalCreateRedirect />} />
       <Route path="/agents/:hostId/teams/:team" element={<TerminalsPage />} />
       <Route path="/agents/:hostId/:agent/:tab/*" element={<TerminalsPage />} />
-      <Route path="/servers/:hostId/mail" element={<TerminalsPage serverView="mail" />} />
-      <Route path="/servers/:hostId/tasks" element={<TerminalsPage serverView="tasks" />} />
-      <Route path="/servers/:hostId/activity" element={<TerminalsPage serverView="activity" />} />
+      {/* TerminalsPage sends these to /inbox, /tasks and /activity. */}
+      <Route path="/servers/:hostId/mail" element={<TerminalsPage />} />
+      <Route path="/servers/:hostId/tasks" element={<TerminalsPage />} />
+      <Route path="/servers/:hostId/activity" element={<TerminalsPage />} />
 
       <Route path="/servers/:hostId/images" element={<TerminalsPage serverView="images" />} />
       <Route
@@ -90,7 +94,6 @@ export function AppRoutes() {
         <Route path="advanced/groups" element={<GroupsPage />} />
       </Route>
 
-      <Route path="/tasks" element={<LegacyServerSurfaceRedirect section="tasks" />} />
       <Route path="/images/*" element={<LegacyServerSurfaceRedirect section="images" />} />
       <Route path="/settings/*" element={<LegacyServerSurfaceRedirect section="settings" />} />
 
@@ -157,7 +160,7 @@ function LegacyAgentRedirect() {
   );
 }
 
-function LegacyServerSurfaceRedirect({ section }: { section: "tasks" | "images" | "settings" }) {
+function LegacyServerSurfaceRedirect({ section }: { section: "images" | "settings" }) {
   const location = useLocation();
   const { activeId } = useDaemons();
   const legacyBase = `/${section}`;

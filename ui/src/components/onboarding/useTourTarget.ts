@@ -1,7 +1,9 @@
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, type NavigateFunction } from "react-router-dom";
 import { useOptionalDaemons } from "@/components/daemonContext";
-import { paramToHost, serverPath } from "@/lib/terminalsHost";
+import { sidebarRoute } from "@/appChrome";
+import { navPath } from "@/lib/navRoutes";
+import { paramToHost } from "@/lib/terminalsHost";
 import { firstAgentRow, type Rect, type TourStep } from "@/lib/onboarding/tour";
 import { SidebarStateContext, type SidebarStateValue } from "@/pages/terminals/sidebarStateContext";
 
@@ -40,12 +42,12 @@ function openFirstAgent(pathname: string): boolean {
 /** Puts the screen in the state the step talks about. */
 function prepare(step: TourStep, ctx: StepContext) {
   if (step.home && ctx.pathname !== "/") ctx.navigate("/");
-  const onWorkspace = ctx.pathname === "/" || WORKSPACE.test(ctx.pathname);
+  const onWorkspace = sidebarRoute(ctx.pathname);
   // The sidebar exists only on the workspace screens.
-  const section = step.route ?? (step.sidebar && !onWorkspace ? "tasks" : undefined);
-  if (section) {
-    const path = serverPath(hostOf(ctx.pathname, ctx.activeId), section);
-    if (!ctx.pathname.startsWith(path)) ctx.navigate(path);
+  const item = step.route ?? (step.sidebar && !onWorkspace ? "tasks" : undefined);
+  if (item) {
+    const path = navPath(item, hostOf(ctx.pathname, ctx.activeId));
+    if (ctx.pathname !== path && !ctx.pathname.startsWith(`${path}/`)) ctx.navigate(path);
   }
   const sidebar = ctx.sidebar;
   if (!sidebar) return;

@@ -240,7 +240,7 @@ describe("Stores workspace", () => {
       "href",
       `/servers/${encodeURIComponent(host.id)}/images`,
     );
-    expect(screen.getByRole("link", { name: "Stores" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Sources" })).toHaveAttribute(
       "href",
       `/servers/${encodeURIComponent(host.id)}/stores`,
     );
@@ -549,7 +549,7 @@ describe("Stores workspace", () => {
     expect(screen.getByRole("button", { name: "Building old-image…" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Switch host" }));
     expect(await screen.findByRole("button", { name: "Build new-image" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Open server New Store host" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Open host New Store host" })).toHaveAttribute(
       "aria-current",
       "page",
     );

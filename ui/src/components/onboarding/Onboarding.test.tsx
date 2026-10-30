@@ -18,7 +18,7 @@ vi.mock("sonner", async (importOriginal) => ({
 const ALL = Object.values(TOUR_ANCHORS).filter(
   (anchor) => anchor !== TOUR_ANCHORS.helpMenu && anchor !== TOUR_ANCHORS.agentRow,
 );
-const START = "/servers/local/mail?view=all";
+const START = "/inbox?letter=m-1";
 
 function LocationProbe() {
   const { pathname, search } = useLocation();
@@ -98,9 +98,7 @@ describe("onboarding tour", () => {
     renderTour();
     await takeTour();
     await goTo("Tasks");
-    await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/servers/local/tasks"),
-    );
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/tasks"));
     await userEvent.click(within(await card("Tasks")).getByRole("button", { name: "Skip tour" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(screen.getByTestId("location")).toHaveTextContent(START);
@@ -146,13 +144,13 @@ describe("onboarding tour", () => {
     );
     renderTour();
     await takeTour();
-    await goTo("Servers");
+    await goTo("Hosts");
     await waitFor(() =>
-      expect(screen.getByTestId("tour-highlight")).toHaveAttribute("data-anchor", "servers-tab"),
+      expect(screen.getByTestId("tour-highlight")).toHaveAttribute("data-anchor", "hosts-line"),
     );
   });
 
-  it("opens the server section of a step", async () => {
+  it("opens the page of a step", async () => {
     renderTour();
     await takeTour();
     await goTo("Agent images");
@@ -167,10 +165,10 @@ describe("onboarding tour", () => {
     );
     renderTour({ anchors: ALL.filter((anchor) => anchor !== TOUR_ANCHORS.addHost) });
     await takeTour();
-    await goTo("Servers");
+    await goTo("Hosts");
     await waitFor(() => expect(screen.getByTestId("tour-highlight")).toBeInTheDocument());
     next();
-    await card("Add a server");
+    await card("Add a host");
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(screen.queryByTestId("tour-highlight")).toBeNull();
   });
@@ -201,7 +199,7 @@ describe("onboarding tour", () => {
         setDrawerOpen: vi.fn(),
       };
       render(
-        <MemoryRouter initialEntries={["/servers/local/mail"]}>
+        <MemoryRouter initialEntries={["/inbox"]}>
           <SidebarStateContext.Provider value={sidebar}>
             <OnboardingProvider>
               <HelpMenu />
@@ -210,7 +208,7 @@ describe("onboarding tour", () => {
         </MemoryRouter>,
       );
       await takeTour();
-      await goTo("Servers");
+      await goTo("Hosts");
       await waitFor(() => expect(sidebar[call]).toHaveBeenCalledWith(arg));
     },
   );

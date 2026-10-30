@@ -89,15 +89,78 @@ test.beforeEach(async ({ request }) => {
 });
 
 test("task detail fits the window", async ({ page }) => {
-  await expectFits(page, `/servers/local/tasks?task=${taskKey}`);
+  await expectFits(page, `/tasks?task=${taskKey}`);
   await expect(page.getByText(taskKey).first()).toBeVisible();
+});
+
+// The tops of the direct children of every visible [data-toolbar]: a toolbar
+// that wrapped has children on two rows.
+async function toolbarRows(page: Page) {
+  return page.evaluate(() =>
+    [...document.querySelectorAll("[data-toolbar]")]
+      .filter((bar) => bar.getBoundingClientRect().height > 0)
+      .map((bar) => {
+        const tops = [...bar.children]
+          .map((child) => child.getBoundingClientRect())
+          .filter((rect) => rect.width > 0 && rect.height > 0)
+          .map((rect) => Math.round(rect.top + rect.height / 2));
+        return { label: bar.getAttribute("aria-label") ?? "", rows: new Set(tops).size };
+      }),
+  );
+}
+
+// At 1024 px and wider, toolbars collapse controls into a menu before they wrap.
+for (const route of ["/tasks", "/inbox", "/servers/local/images"]) {
+  test(`${route} toolbar stays one row on a desktop`, async ({ page }) => {
+    test.skip(page.viewportSize()!.width < 1024, "phones and tablets may wrap");
+    await page.goto(`${fixture}${route}`);
+    await page.waitForLoadState("networkidle");
+    const bars = await toolbarRows(page);
+    expect(bars.length).toBeGreaterThan(0);
+    for (const bar of bars) expect(bar.rows, `${route} ${bar.label}`).toBe(1);
+  });
+}
+
+test("Home sections do not overlap on a desktop", async ({ page }) => {
+  test.skip(page.viewportSize()!.width < 1024, "phones and tablets stack the sections");
+  await page.goto(`${fixture}/`);
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  const boxes = await page
+    .locator("main section")
+    .evaluateAll((sections) =>
+      sections.map((section) => section.getBoundingClientRect().toJSON() as DOMRect),
+    );
+  for (const [i, a] of boxes.entries()) {
+    for (const b of boxes.slice(i + 1)) {
+      const overlap =
+        a.left < b.right - 1 &&
+        b.left < a.right - 1 &&
+        a.top < b.bottom - 1 &&
+        b.top < a.bottom - 1;
+      const nested =
+        (a.left <= b.left && a.right >= b.right && a.top <= b.top && a.bottom >= b.bottom) ||
+        (b.left <= a.left && b.right >= a.right && b.top <= a.top && b.bottom >= a.bottom);
+      expect(overlap && !nested, "Home sections overlap").toBe(false);
+    }
+  }
+  // Each Today tile holds its label and number without spilling into the next.
+  const spilled = await page
+    .locator("[data-total]")
+    .evaluateAll((tiles) =>
+      tiles
+        .filter((tile) => tile.scrollWidth > tile.clientWidth + 1)
+        .map((tile) => tile.getAttribute("data-total")),
+    );
+  expect(spilled).toEqual([]);
 });
 
 for (const route of [
   "/",
-  "/?view=all",
   "/?new=1",
-  "/servers/local/tasks",
+  "/tasks",
+  "/inbox",
+  "/activity",
   "/servers/local/images",
   "/servers/local/workflows",
   "/servers/local/stores",
@@ -114,7 +177,7 @@ for (const route of [
   });
 }
 
-for (const tab of ["tasks", "activity", "configuration", "advanced"]) {
+for (const tab of ["tasks", "console", "activity", "configuration", "advanced"]) {
   test(`agent ${tab} tab fits the window`, async ({ page }) => {
     await expectFits(page, `/agents/local/${AGENT}/${tab}`);
     await expect(page.getByRole("heading", { name: AGENT })).toBeVisible();
@@ -153,7 +216,7 @@ test("the agent list is a drawer on compact screens and a column on wide ones", 
   }
   await expect(page.getByTestId("agents-sidebar")).toHaveCount(0);
   await page.getByRole("button", { name: "Open menu" }).click();
-  const drawer = page.getByRole("dialog", { name: "Agents" });
+  const drawer = page.getByRole("dialog", { name: "Navigation" });
   await expect(drawer).toBeVisible();
   // No focus in the search field, so a phone keeps its keyboard down.
   await expect(drawer.getByRole("searchbox", { name: "Search agents" })).not.toBeFocused();
@@ -161,7 +224,6 @@ test("the agent list is a drawer on compact screens and a column on wide ones", 
   await expect.poll(async () => (await drawer.boundingBox())?.x).toBe(0);
   const box = await drawer.boundingBox();
   expect(box!.x + box!.width).toBeLessThanOrEqual(width);
-  await drawer.getByRole("tab", { name: "Agents" }).click();
   await drawer.getByText(AGENT, { exact: true }).click();
   await expect(drawer).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`/agents/local/${AGENT}/tasks`));

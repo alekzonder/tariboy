@@ -108,6 +108,14 @@ describe("Mailbox", () => {
     ]);
   });
 
+  it("opens the letter that letterId names", async () => {
+    mail.show.mockResolvedValueOnce({ letter: letter({ id: "req", subject: "Need input" }) });
+    renderMailbox({ letterId: "req" });
+    const pane = screen.getByRole("region", { name: "Letter" });
+    expect(await within(pane).findByRole("heading", { name: "Need input" })).toBeVisible();
+    expect(mail.show).toHaveBeenCalledWith("req", undefined);
+  });
+
   it("shows the list and the open letter side by side", async () => {
     renderMailbox();
 

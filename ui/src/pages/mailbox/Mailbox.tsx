@@ -1,4 +1,4 @@
-import { lazy, useState, type ReactNode } from "react";
+import { lazy, useEffect, useRef, useState, type ReactNode } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { PenLine } from "lucide-react";
 import { useApi } from "@/components/apiContext";
@@ -28,6 +28,30 @@ export interface MailboxProps {
   recipients?: readonly string[];
   /** Controls at the end of the toolbar, e.g. the agent's counts. */
   toolbar?: ReactNode;
+  /** A letter to open, such as one picked on Home (`?letter=`). */
+  letterId?: string;
+}
+
+/** Opens `letterId` once per id; a letter that cannot be read stays closed. */
+function useOpenLetter(as: string, letterId: string, open: (letter: Letter) => void) {
+  const api = useApi();
+  const latest = useRef(open);
+  useEffect(() => {
+    latest.current = open;
+  });
+  useEffect(() => {
+    if (!letterId) return;
+    let current = true;
+    api.mail
+      .show(letterId, as || undefined)
+      .then((thread) => {
+        if (current) latest.current(thread.letter);
+      })
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [api, as, letterId]);
 }
 
 function MailboxToolbar({
@@ -49,7 +73,7 @@ function MailboxToolbar({
       : option,
   );
   return (
-    <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">
+    <div data-toolbar className="flex h-12 shrink-0 flex-nowrap items-center gap-2 pr-3 pl-4">
       <Segmented label="Mailbox" value={box} onChange={onBox} options={options} />
       <div className="ml-auto flex items-center gap-2">
         {children}
@@ -114,7 +138,14 @@ function useCurrentLetter(as: string, box: MailBox, opened: Letter | null): Lett
  * One mailbox: Inbox, Sent and Archive of `as`, a list on the left and the
  * selected letter on the right. On a narrow screen only one pane shows.
  */
-export default function Mailbox({ as, mode, fixedTo, recipients = [], toolbar }: MailboxProps) {
+export default function Mailbox({
+  as,
+  mode,
+  fixedTo,
+  recipients = [],
+  toolbar,
+  letterId = "",
+}: MailboxProps) {
   const api = useApi();
   const narrow = useMediaQuery(DRAWER_QUERY);
   const [box, setBox] = useState<MailBox>("inbox");
@@ -130,6 +161,7 @@ export default function Mailbox({ as, mode, fixedTo, recipients = [], toolbar }:
     setOpened(letter);
     if (marksReadOnOpen(letter, box)) void actions.read(letter);
   };
+  useOpenLetter(as, letterId, open);
   // The answered question leaves Inbox; show it as the daemon closed it.
   const answer = async (letter: Letter, body: string, key: string) => {
     if (!(await actions.answer(letter, body, key))) return false;

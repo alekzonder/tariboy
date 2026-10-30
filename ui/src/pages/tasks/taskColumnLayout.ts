@@ -13,7 +13,6 @@ const TASK_COLUMN_IDS = [
   "key",
   "task",
   "agent",
-  "server",
   "status",
   "duration",
   "updated",
@@ -26,7 +25,6 @@ export const TASK_COLUMN_LABELS: Record<TaskColumnId, string> = {
   key: "Key",
   task: "Task",
   agent: "Agent",
-  server: "Server",
   status: "Status",
   duration: "Duration",
   updated: "Updated",
@@ -35,7 +33,6 @@ export const TASK_COLUMN_LABELS: Record<TaskColumnId, string> = {
 const MODE_COLUMNS: Record<TaskRowMode, ReadonlySet<TaskColumnId>> = {
   agent: new Set(["priority", "key", "task", "status", "duration", "updated"]),
   all: new Set(["priority", "key", "task", "agent", "status", "updated"]),
-  servers: new Set(["priority", "key", "task", "agent", "server", "status", "updated"]),
 };
 
 // `key` carries the tree indents and the chevron, so it cannot get narrow.
@@ -43,7 +40,6 @@ const MIN_WIDTH: Record<SizedTaskColumnId, number> = {
   priority: 24,
   key: 96,
   agent: 40,
-  server: 40,
   status: 40,
   duration: 40,
   updated: 40,
@@ -58,10 +54,10 @@ export type TaskColumnLayout = {
 export type TaskColumn = { id: TaskColumnId; width?: number };
 
 export function defaultTaskColumnLayout(): TaskColumnLayout {
-  const { priority, key, agent, server, status, duration, updated } = TASK_COLUMNS;
+  const { priority, key, agent, status, duration, updated } = TASK_COLUMNS;
   return {
     order: [...TASK_COLUMN_IDS],
-    widths: { priority, key, agent, server, status, duration, updated },
+    widths: { priority, key, agent, status, duration, updated },
   };
 }
 

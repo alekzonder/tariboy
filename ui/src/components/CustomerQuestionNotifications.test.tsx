@@ -1,14 +1,7 @@
 import { act, render, screen, waitFor } from "@/test/queryRender";
 import { useLayoutEffect, useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  MemoryRouter,
-  Route,
-  Routes,
-  useLocation,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useSearchParams } from "react-router-dom";
 import type { Letter, Task, TaskDetail } from "@/lib/api";
 import { letter } from "@/test/fixtures/mailFixtures";
 
@@ -257,8 +250,8 @@ function ActivateOnAttention({
 }
 
 function ActivatedTaskWorkspace() {
-  const { hostId = "" } = useParams();
   const [searchParams] = useSearchParams();
+  const hostId = searchParams.get("host") ?? "";
   return (
     <ApiProvider
       target={
@@ -314,7 +307,7 @@ function renderActivationFlow() {
         <RoutedLocation />
         <Routes>
           <Route path="/" element={<p>Inbox</p>} />
-          <Route path="/servers/:hostId/tasks" element={<ActivatedTaskWorkspace />} />
+          <Route path="/tasks" element={<ActivatedTaskWorkspace />} />
         </Routes>
       </CustomerQuestionNotifications>
     </MemoryRouter>,
@@ -334,7 +327,7 @@ function renderImmediateActivationFlow(payload: {
         <RoutedLocation />
         <Routes>
           <Route path="/" element={<p>Inbox</p>} />
-          <Route path="/servers/:hostId/tasks" element={<ActivatedTaskWorkspace />} />
+          <Route path="/tasks" element={<ActivatedTaskWorkspace />} />
         </Routes>
       </CustomerQuestionNotifications>
     </MemoryRouter>,
@@ -667,7 +660,7 @@ describe("CustomerQuestionNotifications", () => {
 
     await waitFor(() =>
       expect(screen.getByTestId("location")).toHaveTextContent(
-        "/servers/remote-1/tasks?task=ASK-8%2Fneeds-answer",
+        "/tasks?host=remote-1&task=ASK-8%2Fneeds-answer",
       ),
     );
     expect(await screen.findByRole("heading", { name: taskKey })).toBeInTheDocument();
@@ -692,9 +685,7 @@ describe("CustomerQuestionNotifications", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent(
-        "/servers/remote-1/tasks?task=ASK-8",
-      ),
+      expect(screen.getByTestId("location")).toHaveTextContent("/tasks?host=remote-1&task=ASK-8"),
     );
     expect(await screen.findByRole("heading", { name: taskKey })).toBeInTheDocument();
     // Reading keeps the question waiting; the answer on the task closes it.
@@ -721,9 +712,7 @@ describe("CustomerQuestionNotifications", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent(
-        "/servers/remote-1/tasks?task=ASK-9",
-      ),
+      expect(screen.getByTestId("location")).toHaveTextContent("/tasks?host=remote-1&task=ASK-9"),
     );
     expect(await screen.findByRole("heading", { name: taskKey })).toBeInTheDocument();
   });
@@ -748,9 +737,7 @@ describe("CustomerQuestionNotifications", () => {
         await vi.advanceTimersByTimeAsync(1000);
       });
 
-      expect(screen.getByTestId("location")).toHaveTextContent(
-        "/servers/remote-1/tasks?task=ASK-10",
-      );
+      expect(screen.getByTestId("location")).toHaveTextContent("/tasks?host=remote-1&task=ASK-10");
     } finally {
       vi.useRealTimers();
     }
@@ -774,9 +761,7 @@ describe("CustomerQuestionNotifications", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent(
-        "/servers/remote-1/tasks?task=ASK-11",
-      ),
+      expect(screen.getByTestId("location")).toHaveTextContent("/tasks?host=remote-1&task=ASK-11"),
     );
   });
 });

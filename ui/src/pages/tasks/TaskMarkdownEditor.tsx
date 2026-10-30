@@ -139,7 +139,9 @@ export default function MarkdownEditor({
   const showSource = mode ? mode === "source" : source;
 
   useEffect(() => {
-    if (!editor) return;
+    // A boundary that hid the editor lets Tiptap destroy it; the reveal can
+    // still hold that instance until the replacement renders.
+    if (!editor || editor.isDestroyed) return;
     editor.setEditable(!disabled && !showSource, false);
     if (!showSource) {
       const content = richMarkdown(value, editor);

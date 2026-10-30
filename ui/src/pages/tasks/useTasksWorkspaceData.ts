@@ -6,12 +6,8 @@ import { useApiQuery } from "@/hooks/useApiQuery";
 import { isConnectionError, type Task } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 import { countTasksByQueue } from "@/lib/tasks";
-import {
-  principalScope,
-  taskListFilters,
-  tasksWithQuestionsAndOpen,
-  unreadQuestionTaskKeys,
-} from "@/lib/taskList";
+import { tasksWithQuestionsAndOpen, unreadQuestionTaskKeys } from "@/lib/taskList";
+import { taskListScope } from "./taskListScope";
 import { taskKeys, taskQueries } from "./taskQueries";
 import { useMarkTaskQuestionsRead, useMissingQuestionTasks } from "./useTaskQuestions";
 import { useTaskQueryEvents } from "./useTaskQueryEvents";
@@ -54,22 +50,19 @@ export function useTasksWorkspaceData(
 ) {
   const api = useApi();
   const client = useQueryClient();
-  const { view, query, statusView, selectedKey, queue } = state;
+  const { assignee, waiting, query, statusView, selectedKey, queue } = state;
   const { queueQuery, peopleQuery, inboxQuery, queues, principals, notifications } =
     useTaskMetadata();
-  const { principalFilter, principalMetadataError, waitingForPrincipal } = principalScope({
-    scopeAgent,
-    view,
-    customer: principals?.customer,
-    error: peopleQuery.error,
-  });
-  const filters = taskListFilters({
-    view,
-    scopeAgent,
-    principal: principalFilter,
-    query,
-    statusView,
-  });
+  const { principalFilter, principalMetadataError, waitingForPrincipal, filters, filtering } =
+    taskListScope({
+      scopeAgent,
+      assignee,
+      waiting,
+      customer: principals?.customer,
+      error: peopleQuery.error,
+      query,
+      statusView,
+    });
   const treeQuery = useApiQuery({
     ...taskQueries.list(api, filters),
     enabled: !waitingForPrincipal,
@@ -109,9 +102,9 @@ export function useTasksWorkspaceData(
     [notifications],
   );
 
-  // The Active list with no search or principal filter is the one view that
-  // keeps every task with an unread question, and the open task, in its rows.
-  const everyQuestion = statusView === "active" && !query && !view;
+  // The Active list with no search, assignee or waiting filter is the one view
+  // that keeps every task with an unread question, and the open task, in its rows.
+  const everyQuestion = statusView === "active" && !query && !filtering;
   const questionTasks = useMissingQuestionTasks({
     enabled: everyQuestion,
     notifications,
@@ -140,6 +133,7 @@ export function useTasksWorkspaceData(
     refreshing,
     principalFilter,
     principalMetadataError,
+    waitingForPrincipal,
     treeQuery,
     detailQuery,
     historyQuery,

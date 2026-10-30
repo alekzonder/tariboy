@@ -1,13 +1,12 @@
-import type { ComponentProps } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useDaemons } from "@/components/daemonContext";
-import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import type { HostAgents } from "@/lib/aggregate";
-import { hostToParam, paramToHost, serverPath } from "@/lib/terminalsHost";
+import { scopedPath } from "@/lib/navRoutes";
+import { hostToParam } from "@/lib/terminalsHost";
 import { defaultAgentTab } from "@/lib/uiMode";
 import type { CloneAgentSource } from "./CreateAgentDialog";
-import { AgentSidebar } from "./sidebar/AgentSidebar";
+import { AgentSidebar, type SidebarActions } from "./sidebar/AgentSidebar";
 import type { ReorderKind } from "./sidebar/sidebarDnd";
 import { useSharedSidebarState } from "./sidebarStateContext";
 import { agentPath, fallbackHostLabel } from "./terminalsHosts";
@@ -20,32 +19,46 @@ export type CreateDialogState = {
 };
 
 /**
- * The agent list beside the content island: a column on a wide screen, a
+ * The navigation beside the content island: a column on a wide screen, a
  * drawer on a compact one. A pick in the drawer leaves it, because navigation
  * or a dialog takes over the screen.
  */
 export function TerminalsSidebar({
   hosts,
   labelHosts,
+  hostId,
+  pageHostId,
+  counts,
+  query,
+  onQuery,
   server,
   onReorder,
   onCreate,
   onAddServer,
+  onSelectWorkspace,
+  onManageWorkspaces,
 }: {
   /** The hosts of the current workspace, in sidebar order. */
   hosts: HostAgents[];
   /** Every host, to name a clone source. */
   labelHosts: HostAgents[];
+  /** The route's host, from its path or `?host=`; none on Home. */
+  hostId?: string;
+  /** The host Library and Settings open on. */
+  pageHostId: string;
+  counts: { tasks: number | null; inbox: number | null };
+  query: string;
+  onQuery: (query: string) => void;
   server: ReturnType<typeof useServerActions>;
   onReorder: (kind: ReorderKind, id: string, ids: string[]) => void;
   onCreate: (state: CreateDialogState) => void;
   onAddServer: () => void;
+  onSelectWorkspace: (id: string) => void;
+  onManageWorkspaces: (focusNew: boolean) => void;
 }) {
-  const { hostId: hostParam, agent: agentName, tab: agentTab } = useParams();
-  const hostId = hostParam !== undefined ? paramToHost(hostParam) : undefined;
+  const { agent: agentName, tab: agentTab } = useParams();
   const navigate = useNavigate();
   const { daemons, appVersion } = useDaemons();
-  const { attention } = useCustomerQuestionNotifications();
   const sidebar = useSharedSidebarState();
 
   const closing =
@@ -54,11 +67,9 @@ export function TerminalsSidebar({
       sidebar.setDrawerOpen(false);
       act(...args);
     };
-  const sidebarProps: ComponentProps<typeof AgentSidebar> = {
-    hosts,
+  const actions: SidebarActions = {
     selectedHostId: hostId,
-    selected: hostId !== undefined && agentName ? { hostId, agent: agentName } : undefined,
-    onSelectHost: closing((id: string) => navigate(serverPath(id, "tasks"))),
+    onSelectHost: closing((id: string) => navigate(scopedPath("tasks", id))),
     // Switching agents keeps the tab the operator is reading, so the same
     // view answers the same question about the next agent. Any query (a
     // selected task) belongs to the agent being left, so it is dropped.
@@ -83,15 +94,26 @@ export function TerminalsSidebar({
     onEditServer: closing((id: string) => void server.editServer(id)),
     onUpdateAll: (ids) => void server.updateAllServers(ids),
     onRemoveServer: (id) => void server.removeServer(id),
+    onConnectHost: (id) => void server.connectHost(id),
+    onSelectWorkspace: closing(onSelectWorkspace),
+    onManageWorkspaces: closing(onManageWorkspaces),
+    onNavigate: () => sidebar.setDrawerOpen(false),
+  };
+  const props = {
+    hosts,
+    selected: hostId !== undefined && agentName ? { hostId, agent: agentName } : undefined,
+    pageHostId,
+    counts,
+    query,
+    onQuery,
     daemonViews: daemons,
     appVersion,
-    onConnectHost: (id) => void server.connectHost(id),
-    attention,
+    actions,
     width: sidebar.width,
     onResize: sidebar.setWidth,
   };
 
-  if (!sidebar.compact) return sidebar.hidden ? null : <AgentSidebar {...sidebarProps} />;
+  if (!sidebar.compact) return sidebar.hidden ? null : <AgentSidebar {...props} />;
   return (
     <Sheet open={sidebar.drawerOpen} onOpenChange={sidebar.setDrawerOpen}>
       <SheetContent
@@ -102,8 +124,8 @@ export function TerminalsSidebar({
         onOpenAutoFocus={(e) => e.preventDefault()}
         className="w-[85vw] max-w-85 gap-0 bg-background px-1.5 pt-3 pb-2"
       >
-        <SheetTitle className="sr-only">Agents</SheetTitle>
-        <AgentSidebar {...sidebarProps} drawer />
+        <SheetTitle className="sr-only">Navigation</SheetTitle>
+        <AgentSidebar {...props} drawer />
       </SheetContent>
     </Sheet>
   );

@@ -41,7 +41,6 @@ interface TaskRowCellProps {
   row: VisibleTaskRow;
   style: CSSProperties;
   readOnly: boolean;
-  server?: string;
   hasActiveQuestion: boolean;
   expanded: boolean;
   onToggle: () => void;
@@ -159,18 +158,6 @@ function AgentCell({ row, style }: TaskRowCellProps) {
   );
 }
 
-function ServerCell({ style, server }: TaskRowCellProps) {
-  return (
-    <span
-      data-column="server"
-      style={style}
-      className="shrink-0 truncate font-mono text-meta text-muted-foreground"
-    >
-      {server}
-    </span>
-  );
-}
-
 function WorkflowStatusBadge({ task }: { task: VisibleTaskRow["task"] }): ReactNode {
   switch (workflowStatusBadge(task)) {
     case "paused":
@@ -256,7 +243,6 @@ const TASK_ROW_CELLS: Record<TaskColumnId, (props: TaskRowCellProps) => ReactNod
   key: KeyCell,
   task: TitleCell,
   agent: AgentCell,
-  server: ServerCell,
   status: StatusCell,
   duration: DurationCell,
   updated: UpdatedCell,

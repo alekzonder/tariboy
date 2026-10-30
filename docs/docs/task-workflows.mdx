@@ -287,6 +287,10 @@ task's view. Both are absent on a flexible task and on a closed one.
 status in the manifest, counted from 1, and the number of statuses the manifest
 declares.
 
+`workflow_initial` is `true` while an open workflow task is in its manifest's
+`initial_status`, and absent otherwise. It comes from the same manifest read as
+`workflow_step`.
+
 `workflow_attention` is present only while something needs a person. It is
 derived from the task's open visit: its counters, its latest transition
 request, and its latest finished script run. The first kind that applies wins:
@@ -1829,6 +1833,13 @@ Desktop's Tasks workspace reads the routes on this page, always against the
 server the task or queue belongs to. A flexible task looks and behaves as it
 always did; everything below applies to a workflow task and a workflow queue.
 How the list shows these tasks is in [Tasks](/docs/tasks#desktop).
+
+The number next to **Tasks** in the sidebar, and the **Needs you** list on
+Home and Inbox, count the workflow tasks that wait for you: a task whose
+`waiting_on` is `customer`, unless it is still in its workflow's initial
+status, and a paused task (`waiting_on` is `pause`). The task list reports the
+initial status as `workflow_initial: true`, so a task that only waits for you
+to start it is not counted.
 
 ### The workflow panel
 

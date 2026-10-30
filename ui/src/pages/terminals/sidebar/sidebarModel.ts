@@ -6,9 +6,9 @@ import { customerQuestionAttentionKey } from "@/components/customerQuestionNotif
  *  customer-question notifications use, so one key looks both sets up. */
 export const agentKey = customerQuestionAttentionKey;
 
-/** One agent, carrying the host it came from — the Agents and Groups tabs list
- *  agents across every server, so a row cannot rely on a surrounding section to
- *  say where it lives. */
+/** One agent, carrying the host it came from — the pinned block, Home and the
+ *  search list agents across every host, so a row cannot rely on a
+ *  surrounding section to say where it lives. */
 export interface SidebarAgent {
   key: string;
   hostId: string;
@@ -72,26 +72,53 @@ export function allAgents(hosts: HostAgents[]): SidebarAgent[] {
   return hosts.flatMap(hostAgents);
 }
 
+/** One host's part of the agent list: its teams, then its other agents. */
+export interface HostSection {
+  host: HostAgents;
+  teams: Map<string, SidebarAgent[]>;
+  individuals: SidebarAgent[];
+}
+
 /**
- * The Agents tab order, and the only place that decides it: pinned agents on
- * top, then the ones calling for a person (an unread customer question), then
- * the rest in the operator's own order. The whole sort happens here, across every
- * server, because only the Desktop sees all of them.
+ * The agent list under Agents: pinned agents on top, then each host's teams
+ * and individual agents in the saved order. A pinned agent shows only on top.
+ * Host headings appear only when the workspace has two or more hosts.
  */
-export function rankAgents(
-  agents: SidebarAgent[],
+export function sidebarLayout(
+  hosts: HostAgents[],
   pinned: ReadonlySet<string>,
-  attention: ReadonlyMap<string, number>,
-): { pinned: SidebarAgent[]; rest: SidebarAgent[] } {
-  const band = (row: SidebarAgent) => (attention.has(row.key) ? 0 : 1);
+): { pinned: SidebarAgent[]; byHost: boolean; sections: HostSection[] } {
+  const sections = hosts.map((host) => {
+    const agents = hostAgents(host);
+    const teams = groupTeams(host, agents);
+    for (const [name, rows] of teams)
+      teams.set(
+        name,
+        rows.filter((row) => !pinned.has(row.key)),
+      );
+    return {
+      host,
+      teams,
+      individuals: agents.filter((row) => !row.group && !pinned.has(row.key)),
+    };
+  });
   return {
-    pinned: agents.filter((row) => pinned.has(row.key)),
-    rest: agents
-      .filter((row) => !pinned.has(row.key))
-      .map((row, index) => ({ row, index }))
-      .sort((left, right) => band(left.row) - band(right.row) || left.index - right.index)
-      .map(({ row }) => row),
+    pinned: allAgents(hosts).filter((row) => pinned.has(row.key)),
+    byHost: hosts.length >= 2,
+    sections,
   };
+}
+
+/** The sidebar footer's line: "Local · ready", "2 hosts · 1 unreachable". */
+export function hostsLine(hosts: HostAgents[]): string {
+  if (hosts.length === 0) return "No hosts";
+  const unreachable = hosts.filter((host) => host.error).length;
+  if (hosts.length === 1) {
+    const [only] = hosts;
+    const name = only.host.id === "" ? "Local" : only.host.label;
+    return `${name} · ${unreachable ? "unreachable" : "ready"}`;
+  }
+  return `${hosts.length} hosts · ${unreachable ? `${unreachable} unreachable` : "ready"}`;
 }
 
 /**

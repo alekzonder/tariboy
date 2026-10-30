@@ -745,3 +745,46 @@ func isCode(err error, code string) bool {
 	var pe *registry.ParamError
 	return errors.As(err, &pe) && pe.Code == code
 }
+
+// agent.ps tells a running agent's iteration start and every agent's latest
+// iteration start, so the list needs no per-agent status call.
+func TestAgentPsReportsIterationTimes(t *testing.T) {
+	t.Parallel()
+	c, as, _ := ctxWithStore(t)
+	for _, name := range []string{"busy", "idle", "fresh"} {
+		if err := as.Create(agent.Agent{Name: name, ImageRef: "basic:latest"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, it := range []agent.Iteration{
+		{ID: "busy-1", Agent: "busy", Status: "done", StartedAt: "2026-07-14T09:00:00Z"},
+		{ID: "busy-2", Agent: "busy", Status: "running", StartedAt: "2026-07-14T10:00:00Z"},
+		{ID: "idle-1", Agent: "idle", Status: "done", StartedAt: "2026-07-14T08:00:00Z"},
+		{ID: "idle-2", Agent: "idle", Status: "timeout", StartedAt: "2026-07-14T08:30:00Z"},
+	} {
+		if err := as.CreateIteration(it); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ps, err := h(t, "agent.ps")(c, registry.Params{})
+	rows := map[string]AgentRow{}
+	for _, row := range mustAgentRows(t, ps, err) {
+		rows[row.Name] = row
+	}
+	if got := rows["busy"]; got.CurrentIterationStartedAt != "2026-07-14T10:00:00Z" || got.LastIterationAt != "2026-07-14T10:00:00Z" {
+		t.Fatalf("busy = %q / %q", got.CurrentIterationStartedAt, got.LastIterationAt)
+	}
+	if got := rows["idle"]; got.CurrentIterationStartedAt != "" || got.LastIterationAt != "2026-07-14T08:30:00Z" {
+		t.Fatalf("idle = %q / %q", got.CurrentIterationStartedAt, got.LastIterationAt)
+	}
+	if got := rows["fresh"]; got.CurrentIterationStartedAt != "" || got.LastIterationAt != "" {
+		t.Fatalf("fresh = %q / %q", got.CurrentIterationStartedAt, got.LastIterationAt)
+	}
+	raw, err := json.Marshal(rows["idle"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "current_iteration_started_at") || !strings.Contains(string(raw), `"last_iteration_at":"2026-07-14T08:30:00Z"`) {
+		t.Fatalf("idle JSON = %s", raw)
+	}
+}

@@ -93,6 +93,10 @@ type AgentRow struct {
 	Schedule                 string            `json:"schedule"`
 	ScheduleNextAt           string            `json:"schedule_next_at"`
 	Budget                   AgentBudget       `json:"budget"`
+	// CurrentIterationStartedAt is set only while an iteration runs.
+	CurrentIterationStartedAt string `json:"current_iteration_started_at,omitempty" jsonschema:"description=Start time of the running iteration (RFC 3339); absent while no iteration runs"`
+	// LastIterationAt is absent for an agent that has never run an iteration.
+	LastIterationAt string `json:"last_iteration_at,omitempty" jsonschema:"description=Start time of the agent's most recent iteration in any status (RFC 3339)"`
 	AgentHalt
 }
 

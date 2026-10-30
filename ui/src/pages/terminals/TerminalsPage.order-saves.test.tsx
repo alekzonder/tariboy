@@ -16,7 +16,6 @@ import {
   renderAt,
   mockRowRects,
   keyboardMove,
-  serversTab,
 } from "@/test/terminals/terminalsPage";
 import { agentRow } from "@/test/fixtures/apiFixtures";
 
@@ -83,13 +82,15 @@ vi.mock("@/hooks/useTerminalSocket", () => ({
 vi.mock("@/components/TuiScreen", () => ({
   TuiScreen: () => <div data-testid="tui-screen" />,
 }));
+// "/" is Home: its live "needs you" read would hit the unmocked network and
+// raise a second alert that can win the race with the order-save alert.
+vi.mock("@/pages/terminals/NeedsYouLive", () => ({ default: () => null }));
 
 beforeEach(() => setupTerminalsPage(calls));
 afterEach(cleanupTerminalsPage);
 
 describe("TerminalsPage order rollback", () => {
   it("rolls back agent order when daemon persistence fails", async () => {
-    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([
       {
         host: { id: "", label: "local" },
@@ -134,7 +135,6 @@ describe("TerminalsPage order rollback", () => {
 });
 
 it("serializes daemon order writes so an older request cannot finish last", async () => {
-  serversTab();
   vi.mocked(fetchAllAgents).mockResolvedValue([
     {
       host: { id: "", label: "local" },

@@ -17,7 +17,6 @@ import {
   renderAt,
   registerProd,
   openManageMenu,
-  serversTab,
 } from "@/test/terminals/terminalsPage";
 import { agentRow } from "@/test/fixtures/apiFixtures";
 
@@ -89,7 +88,6 @@ afterEach(cleanupTerminalsPage);
 
 describe("TerminalsPage host status", () => {
   it("shows native SSH connection failures in the terminal workspace", async () => {
-    serversTab();
     vi.stubGlobal("__TAURI_INTERNALS__", {});
     vi.spyOn(desktop, "hostsList").mockResolvedValue([
       {
@@ -122,7 +120,6 @@ describe("TerminalsPage host status", () => {
   });
 
   it("hides Update in the agent sidebar when the remote version is current", async () => {
-    serversTab();
     vi.stubGlobal("__TAURI_INTERNALS__", {});
     vi.spyOn(desktop, "daemonState").mockResolvedValue({
       state: "ready",
@@ -165,7 +162,6 @@ describe("TerminalsPage host status", () => {
 describe("TerminalsPage Update all", () => {
   /** Two SSH hosts behind the app version: the state "Update all (N)" renders for. */
   async function staleHosts() {
-    serversTab();
     vi.stubGlobal("__TAURI_INTERNALS__", {});
     vi.spyOn(desktop, "daemonState").mockResolvedValue({
       state: "ready",
@@ -201,7 +197,10 @@ describe("TerminalsPage Update all", () => {
       { host: { id: "d2", label: "beta" }, agents: [] },
     ]);
     renderAt("/terminals");
-    return screen.findByRole("button", { name: "Update all (2)" });
+    // Update all lives in the footer's hosts menu; Radix opens it from the keyboard.
+    await screen.findByRole("img", { name: "2 hosts can be updated" });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Hosts menu" }), { key: "Enter" });
+    return screen.findByRole("menuitem", { name: "Update all (2)" });
   }
 
   it("updates every outdated server once Update all is confirmed", async () => {
@@ -249,7 +248,6 @@ describe("TerminalsPage Update all", () => {
 
 describe("TerminalsPage server management", () => {
   it("offers a manage menu for remote servers but not for the local daemon", async () => {
-    serversTab();
     await registerProd();
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("prod")).toBeInTheDocument());
@@ -258,7 +256,6 @@ describe("TerminalsPage server management", () => {
   });
 
   it("edits a server and re-polls immediately with the new values", async () => {
-    serversTab();
     const id = await registerProd();
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("prod")).toBeInTheDocument());
@@ -292,7 +289,6 @@ describe("TerminalsPage server management", () => {
   });
 
   it("removes a server after confirmation and re-polls", async () => {
-    serversTab();
     const id = await registerProd();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderAt("/terminals");
@@ -314,7 +310,6 @@ describe("TerminalsPage server management", () => {
   });
 
   it("keeps the server when the confirm is declined", async () => {
-    serversTab();
     const id = await registerProd();
     vi.spyOn(window, "confirm").mockReturnValue(false);
     renderAt("/terminals");
@@ -328,7 +323,6 @@ describe("TerminalsPage server management", () => {
   });
 
   it("navigates away when the server open in the route is removed", async () => {
-    serversTab();
     const id = (
       await addDaemon({
         label: "prod",

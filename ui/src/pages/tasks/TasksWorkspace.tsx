@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useApi } from "@/components/apiContext";
 import { hostToParam } from "@/lib/terminalsHost";
 import { useTasksWorkspaceView } from "./useTasksWorkspaceView";
@@ -14,11 +14,15 @@ type TasksWorkspaceProps = {
   goalTaskKey?: string;
   initialTaskKey?: string;
   onNotificationsChanged?: () => void;
+  /** Shown at the start of the toolbar row, e.g. a host selector when the
+   *  workspace has several hosts. */
+  hostControl?: ReactNode;
 };
 
 function TasksWorkspaceController({
   scopeAgent,
   goalTaskKey,
+  hostControl,
   initialTaskKey,
   onNotificationsChanged,
   server,
@@ -39,6 +43,7 @@ function TasksWorkspaceController({
     <TasksWorkspaceContent
       scopeAgent={scopeAgent}
       goalTaskKey={goalTaskKey}
+      hostControl={hostControl}
       server={server}
       state={state}
       data={data}

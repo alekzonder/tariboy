@@ -10,6 +10,7 @@ import {
   onHost,
   root,
 } from "@/test/tasks/tasksWorkspace";
+import { pickTaskAssignee, toggleWaitingForMe } from "@/test/tasks/taskFilters";
 import TasksWorkspace from "./TasksWorkspace";
 
 const api = vi.hoisted(() => ({
@@ -388,7 +389,7 @@ describe("TasksWorkspace", () => {
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
     const callsBeforeFilter = api.listTasks.mock.calls.length;
 
-    await userEvent.click(screen.getByRole("button", { name: "My tasks" }));
+    await pickTaskAssignee("My tasks");
     expect(await screen.findByText("Loading tasks…")).toBeInTheDocument();
     expect(api.listTasks).toHaveBeenCalledTimes(callsBeforeFilter);
 
@@ -417,7 +418,7 @@ describe("TasksWorkspace", () => {
 
     render(<TasksWorkspace />);
     expect(await screen.findByText("Loading tasks…")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "My tasks" }));
+    await pickTaskAssignee("My tasks");
     await act(async () => allTasks.resolve({ tasks: [root, child], sequence: 10 }));
 
     expect(screen.getByText("Loading tasks…")).toBeInTheDocument();
@@ -440,7 +441,7 @@ describe("TasksWorkspace", () => {
     render(<TasksWorkspace />);
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
     await act(async () => people.reject(new Error("principals failed")));
-    await userEvent.click(screen.getByRole("button", { name: "My tasks" }));
+    await pickTaskAssignee("My tasks");
     expect(await screen.findByText("principals failed")).toBeInTheDocument();
 
     api.listTaskPrincipals.mockResolvedValueOnce({
@@ -469,7 +470,7 @@ describe("TasksWorkspace", () => {
 
     render(<TasksWorkspace />);
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "My tasks" }));
+    await pickTaskAssignee("My tasks");
     await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }));
     await act(async () => newerPeople.resolve({ customer: "user:new", agents: [], groups: [] }));
     await waitFor(() =>
@@ -495,7 +496,7 @@ describe("TasksWorkspace", () => {
 
     render(<TasksWorkspace />);
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }));
+    await toggleWaitingForMe();
     await userEvent.click(screen.getByRole("button", { name: "Refresh tasks" }));
     await act(async () => newerPeople.resolve({ customer: "user:new", agents: [], groups: [] }));
     await waitFor(() =>
@@ -567,7 +568,7 @@ describe("TasksWorkspace", () => {
 
     const { rerender } = render(onHost(firstTarget, <TasksWorkspace />));
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }));
+    await toggleWaitingForMe();
     await waitFor(() =>
       expect(api.listTasks).toHaveBeenLastCalledWith(
         expect.objectContaining({ waiting_for: "user:first" }),
@@ -578,7 +579,7 @@ describe("TasksWorkspace", () => {
 
     rerender(onHost(secondTarget, <TasksWorkspace />));
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }));
+    await toggleWaitingForMe();
     const secondTargetCalls = () =>
       api.listTasks.mock.calls.filter(([, callTarget]) => callTarget === secondTarget);
     expect(secondTargetCalls()).toHaveLength(1);
@@ -617,7 +618,7 @@ describe("TasksWorkspace", () => {
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
     rerender(onHost(secondTarget, <TasksWorkspace />));
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "My tasks" }));
+    await pickTaskAssignee("My tasks");
     await waitFor(() =>
       expect(api.listTasks).toHaveBeenLastCalledWith(
         expect.objectContaining({ assignee: "user:second" }),

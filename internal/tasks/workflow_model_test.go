@@ -276,6 +276,39 @@ func TestListTasksCarriesWorkflowAttention(t *testing.T) {
 	}
 }
 
+// A list row marks an open workflow task that is still in its workflow's
+// initial status, so a list can show it as not started.
+func TestListTasksMarksWorkflowInitialStatus(t *testing.T) {
+	svc, actor, later, _ := runFixture(t)
+	fresh := mustCreateDev(t, svc, actor, "fresh")
+	page, err := svc.ListTasks(context.Background(), actor, ListFilter{Queue: "DEV"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[string]Task{}
+	for _, task := range page.Tasks {
+		listed[task.Key] = task
+	}
+	if got, ok := listed[fresh.Key]; !ok || !got.WorkflowInitial {
+		t.Fatalf("initial task = %#v", got)
+	}
+	if fields := jsonFields(t, listed[fresh.Key]); fields["workflow_initial"] != true {
+		t.Fatalf("initial JSON = %v", fields)
+	}
+	if got, ok := listed[later.Key]; !ok || got.WorkflowInitial {
+		t.Fatalf("later task = %#v", got)
+	}
+	if _, ok := jsonFields(t, listed[later.Key])["workflow_initial"]; ok {
+		t.Fatalf("later JSON carries workflow_initial")
+	}
+	if _, err := svc.CancelWorkflowTask(context.Background(), actor, fresh.Key); err != nil {
+		t.Fatal(err)
+	}
+	if storedTask(t, svc, fresh.Key).WorkflowInitial {
+		t.Fatalf("a closed task is not in its initial status")
+	}
+}
+
 // The task select reaches the open visit, its latest request, and its latest
 // run through indexes, so a page of tasks does not scan those tables.
 func TestTaskSelectUsesIndexes(t *testing.T) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import type { PluginContribution } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
@@ -28,7 +28,14 @@ const ADVANCED = [
   ["groups", "Groups"],
 ] as const;
 
-export default function SettingsPage({ basePath = "/settings" }: { basePath?: string }) {
+export default function SettingsPage({
+  basePath = "/settings",
+  hostControl,
+}: {
+  basePath?: string;
+  /** The host selector, shown when the workspace has two or more hosts. */
+  hostControl?: ReactNode;
+}) {
   const api = useApi();
   const location = useLocation();
   const advanced = location.pathname.startsWith(`${basePath}/advanced`);
@@ -63,6 +70,7 @@ export default function SettingsPage({ basePath = "/settings" }: { basePath?: st
         className="w-52 shrink-0 overflow-y-auto border-r p-3 max-lg:scrollbar-none max-lg:flex max-lg:w-auto max-lg:items-center max-lg:gap-2 max-lg:overflow-x-auto max-lg:border-r-0 max-lg:border-b max-lg:py-1.5"
       >
         <h1 className="mb-3 text-lg font-semibold max-lg:sr-only">Settings</h1>
+        {hostControl && <div className="mb-3 max-lg:mb-0 max-lg:shrink-0">{hostControl}</div>}
         <nav
           aria-label="Settings"
           className="space-y-1 max-lg:flex max-lg:shrink-0 max-lg:gap-1 max-lg:space-y-0"
@@ -77,6 +85,13 @@ export default function SettingsPage({ basePath = "/settings" }: { basePath?: st
               {item.label}
             </NavLink>
           ))}
+          {/* The titlebar has no gear: the application's own settings are here. */}
+          <NavLink
+            to="/app-settings"
+            className={({ isActive }) => cn(link({ isActive }), "lg:py-2")}
+          >
+            Application
+          </NavLink>
         </nav>
         {integrations.length > 0 && (
           <nav aria-label="Integration settings" className={cn("mt-4 border-t pt-3", group)}>

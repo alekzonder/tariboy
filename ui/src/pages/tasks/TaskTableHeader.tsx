@@ -73,9 +73,7 @@ export default function TaskTableHeader({
         {columns.map((column) => (
           <TaskHeaderCell key={column.id} column={column} editable={editable} />
         ))}
-        {mode !== "servers" && (
-          <span aria-hidden="true" style={{ width: TASK_COLUMNS.add }} className="shrink-0" />
-        )}
+        <span aria-hidden="true" style={{ width: TASK_COLUMNS.add }} className="shrink-0" />
       </div>
     </DndContext>
   );

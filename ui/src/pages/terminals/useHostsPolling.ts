@@ -33,5 +33,13 @@ export function useHostsPolling(hostId: string | undefined) {
     () => withLastSuccessful(hosts, lastSuccessfulHostsById),
     [hosts, lastSuccessfulHostsById],
   );
-  return { hosts, refresh, setAgentStatesLive, liveSelectedHost, selectedHost, sidebarHosts };
+  return {
+    hosts,
+    refresh,
+    agentStatesLive,
+    setAgentStatesLive,
+    liveSelectedHost,
+    selectedHost,
+    sidebarHosts,
+  };
 }

@@ -17,16 +17,14 @@ import {
   SidebarSectionHeader,
 } from "./SidebarSectionHeader";
 import { SidebarAgentRow, type AgentRowActions } from "./SidebarAgentRow";
-import { groupTeams, hostAgents, type SidebarAgent } from "./sidebarModel";
+import type { HostSection, SidebarAgent, sidebarLayout } from "./sidebarModel";
 import { SortableButton } from "./SortableButton";
 
-export interface ServerTabActions {
+export interface HostActions {
   selectedHostId?: string;
   onSelectHost: (hostId: string) => void;
   onSelectTeam: (hostId: string, team: string) => void;
-  onCreate: (hostId: string) => void;
   onEditServer: (hostId: string) => void;
-  onUpdateAll: (hostIds: string[]) => void;
   onRemoveServer: (hostId: string) => void;
   onConnectHost: (hostId: string) => void;
 }
@@ -34,9 +32,9 @@ export interface ServerTabActions {
 const SUBHEADING_CLASS =
   "px-2 pt-1.5 pb-1 text-caption font-medium tracking-[.02em] text-muted-foreground";
 
-/** The server's own menu. The implicit local host has no registry entry (id
+/** The host's own menu. The implicit local host has no registry entry (id
  *  ""), so there is nothing to edit or remove for it. */
-function ServerMenu({ host, servers }: { host: HostAgents; servers: ServerTabActions }) {
+function HostMenu({ host, actions }: { host: HostAgents; actions: HostActions }) {
   if (host.host.id === "") return null;
   return (
     <DropdownMenu>
@@ -51,10 +49,10 @@ function ServerMenu({ host, servers }: { host: HostAgents; servers: ServerTabAct
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => servers.onEditServer(host.host.id)}>
+        <DropdownMenuItem onSelect={() => actions.onEditServer(host.host.id)}>
           Edit host
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => servers.onRemoveServer(host.host.id)}>
+        <DropdownMenuItem onSelect={() => actions.onRemoveServer(host.host.id)}>
           Remove host
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -62,27 +60,27 @@ function ServerMenu({ host, servers }: { host: HostAgents; servers: ServerTabAct
   );
 }
 
-function ServerSectionHeader({
+function HostHeader({
   host,
   view,
   appVersion,
-  servers,
+  actions,
 }: {
   host: HostAgents;
   view?: DaemonMeta;
   appVersion: string;
-  servers: ServerTabActions;
+  actions: HostActions;
 }) {
-  const selected = servers.selectedHostId === host.host.id;
+  const selected = actions.selectedHostId === host.host.id;
   return (
     <SidebarSectionHeader
       title={
         <SortableButton
           dragKey={dragId("servers", "", host.host.id, undefined, host.host.label)}
           type="button"
-          aria-label={`Open server ${host.host.label}`}
+          aria-label={`Open host ${host.host.label}`}
           aria-current={selected ? "page" : undefined}
-          onClick={() => servers.onSelectHost(host.host.id)}
+          onClick={() => actions.onSelectHost(host.host.id)}
           className={cn(
             SECTION_TITLE_CLASS,
             "px-1 py-0.5 hover:bg-sidebar-accent",
@@ -96,13 +94,11 @@ function ServerSectionHeader({
       state={host.error ? "offline" : (view?.state ?? "ready")}
       update={
         view && hostUpdateAvailable(view, appVersion)
-          ? () => servers.onEditServer(host.host.id)
+          ? () => actions.onEditServer(host.host.id)
           : undefined
       }
       updateLabel={`Update ${host.host.label}`}
-      menu={<ServerMenu host={host} servers={servers} />}
-      onAdd={host.error ? undefined : () => servers.onCreate(host.host.id)}
-      addLabel={`new agent on ${host.host.label}`}
+      menu={<HostMenu host={host} actions={actions} />}
     />
   );
 }
@@ -112,14 +108,14 @@ function TeamsSection({
   teams,
   filtering,
   disabled,
-  actions,
+  rowActions,
   onSelectTeam,
 }: {
   hostId: string;
   teams: Map<string, SidebarAgent[]>;
   filtering: boolean;
   disabled: boolean;
-  actions: AgentRowActions;
+  rowActions: AgentRowActions;
   onSelectTeam: (hostId: string, team: string) => void;
 }) {
   if (teams.size === 0) return null;
@@ -151,7 +147,7 @@ function TeamsSection({
                 <SidebarAgentRow
                   key={row.key}
                   row={row}
-                  actions={actions}
+                  actions={rowActions}
                   dragKey={dragId("agents", hostId, row.agent.name, row.group)}
                 />
               ))}
@@ -162,114 +158,115 @@ function TeamsSection({
   );
 }
 
-function ServerSection({
-  host,
+function HostPart({
+  section,
+  byHost,
   view,
   filtering,
   appVersion,
+  rowActions,
   actions,
-  servers,
 }: {
-  host: HostAgents;
+  section: HostSection;
+  byHost: boolean;
   view?: DaemonMeta;
   filtering: boolean;
   appVersion: string;
-  actions: AgentRowActions;
-  servers: ServerTabActions;
+  rowActions: AgentRowActions;
+  actions: HostActions;
 }) {
-  const agents = hostAgents(host);
-  const individuals = agents.filter((row) => !row.group);
+  const { host, teams, individuals } = section;
   return (
     <section className="pb-2">
-      <ServerSectionHeader host={host} view={view} appVersion={appVersion} servers={servers} />
-      {view?.kind === "ssh" && (
+      {byHost && <HostHeader host={host} view={view} appVersion={appVersion} actions={actions} />}
+      {byHost && view?.kind === "ssh" && (
         <div className="px-2 pb-1">
           <HostStatus
             host={view}
             appVersion={appVersion}
             showUpdate={false}
             showState={false}
-            onConnect={() => servers.onConnectHost(view.id)}
-            onUpdate={() => servers.onEditServer(view.id)}
+            onConnect={() => actions.onConnectHost(view.id)}
+            onUpdate={() => actions.onEditServer(view.id)}
           />
         </div>
       )}
       {host.error && <div className="px-2 text-xs text-destructive">{host.error}</div>}
       <TeamsSection
         hostId={host.host.id}
-        teams={groupTeams(host, agents)}
+        teams={teams}
         filtering={filtering}
         disabled={Boolean(host.error)}
-        actions={actions}
-        onSelectTeam={servers.onSelectTeam}
+        rowActions={rowActions}
+        onSelectTeam={actions.onSelectTeam}
       />
-      <div className="mt-1">
-        <div className={SUBHEADING_CLASS}>Individual agents</div>
-        {individuals.map((row) => (
-          <SidebarAgentRow
-            key={row.key}
-            row={row}
-            actions={actions}
-            dragKey={dragId("agents", host.host.id, row.agent.name, "")}
-          />
-        ))}
-      </div>
-      {!host.error && host.agents.length === 0 && <SectionEmpty />}
+      {/* The heading only separates the agents from teams above them. */}
+      {teams.size > 0 && <div className={cn(SUBHEADING_CLASS, "mt-1")}>Individual agents</div>}
+      {individuals.map((row) => (
+        <SidebarAgentRow
+          key={row.key}
+          row={row}
+          actions={rowActions}
+          dragKey={dragId("agents", host.host.id, row.agent.name, "")}
+        />
+      ))}
+      {byHost && !host.error && host.agents.length === 0 && <SectionEmpty />}
     </section>
   );
 }
 
 /**
- * The machines, as they are: every server with its agents, its groups and the
- * order the operator dragged them into. The one tab that persists an order, so
- * the one tab whose rows are drag sources.
+ * The agent list under Agents: pinned agents on top, then teams and agents in
+ * the order the operator dragged them into. With two or more hosts each host
+ * gets its heading, state and menu; with one the list is flat.
  */
-export function ServersTab({
-  hosts,
+export function AgentList({
+  layout,
   filtering,
   daemonViews,
   appVersion,
+  rowActions,
   actions,
-  servers,
 }: {
-  hosts: HostAgents[];
-  /** A search is on, so a group with no surviving member is hidden. */
+  layout: ReturnType<typeof sidebarLayout>;
+  /** A search is on, so a team with no surviving member is hidden. */
   filtering: boolean;
   daemonViews: DaemonMeta[];
   appVersion: string;
-  actions: AgentRowActions;
-  servers: ServerTabActions;
+  rowActions: AgentRowActions;
+  actions: HostActions;
 }) {
   const viewFor = (hostId: string) => daemonViews.find((candidate) => candidate.id === hostId);
-  const pendingUpdates = hosts.filter((host) => {
-    const view = viewFor(host.host.id);
-    return view ? hostUpdateAvailable(view, appVersion) : false;
-  });
-
+  const empty =
+    layout.pinned.length === 0 &&
+    layout.sections.every(
+      (section) =>
+        section.host.agents.length === 0 && section.teams.size === 0 && !section.host.error,
+    );
+  if (empty && !layout.byHost) {
+    return <div className="px-2 pt-1.5 text-body-sm text-muted-foreground">No agents.</div>;
+  }
   return (
     <>
-      {pendingUpdates.length > 0 && (
-        <div className="flex justify-end px-2 pt-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-5 rounded-sm border-border px-1.75 text-tiny font-medium tracking-[.02em] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-            title="Update all servers with available updates"
-            onClick={() => servers.onUpdateAll(pendingUpdates.map((host) => host.host.id))}
-          >
-            Update all ({pendingUpdates.length})
-          </Button>
-        </div>
+      {layout.pinned.map((row) => (
+        <SidebarAgentRow key={row.key} row={row} actions={rowActions} />
+      ))}
+      {layout.pinned.length > 0 && (
+        <div
+          aria-hidden="true"
+          className="mx-3.5 my-2.5 h-px bg-[color-mix(in_oklab,var(--border)_55%,transparent)]"
+        />
       )}
-      {hosts.map((host) => (
-        <ServerSection
-          key={host.host.id || "__local__"}
-          host={host}
-          view={viewFor(host.host.id)}
+      {layout.sections.map((section) => (
+        <HostPart
+          key={section.host.host.id || "__local__"}
+          section={section}
+          byHost={layout.byHost}
+          view={viewFor(section.host.host.id)}
           filtering={filtering}
           appVersion={appVersion}
+          rowActions={rowActions}
           actions={actions}
-          servers={servers}
         />
       ))}
     </>

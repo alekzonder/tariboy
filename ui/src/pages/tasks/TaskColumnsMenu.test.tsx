@@ -7,12 +7,25 @@ import {
   resetTaskColumns,
   setTaskColumnWidth,
 } from "./taskColumnLayout";
-import TaskColumnsMenu from "./TaskColumnsMenu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import TaskColumnsMenuItems from "./TaskColumnsMenu";
 
 beforeEach(() => resetTaskColumns());
 
-async function openMenu(mode: "agent" | "all" | "servers" = "agent") {
-  render(<TaskColumnsMenu mode={mode} />);
+// The items live in the toolbar's Filters menu; a bare menu hosts them here.
+async function openMenu(mode: "agent" | "all" = "agent") {
+  render(
+    <DropdownMenu>
+      <DropdownMenuTrigger>Columns</DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <TaskColumnsMenuItems mode={mode} />
+      </DropdownMenuContent>
+    </DropdownMenu>,
+  );
   await userEvent.click(screen.getByRole("button", { name: "Columns" }));
 }
 
@@ -38,7 +51,6 @@ describe("task columns menu", () => {
       "status",
       "task",
       "agent",
-      "server",
       "duration",
       "updated",
     ]);

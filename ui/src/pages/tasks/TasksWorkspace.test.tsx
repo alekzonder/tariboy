@@ -10,6 +10,12 @@ import {
   queue,
   root,
 } from "@/test/tasks/tasksWorkspace";
+import {
+  openManageQueues,
+  pickTaskAssignee,
+  pickTaskQueue,
+  toggleWaitingForMe,
+} from "@/test/tasks/taskFilters";
 import TasksWorkspace from "./TasksWorkspace";
 
 const api = vi.hoisted(() => ({
@@ -135,8 +141,7 @@ describe("TasksWorkspace", () => {
     });
 
     render(<TasksWorkspace />);
-    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }));
+    await openManageQueues();
     expect(await screen.findByRole("dialog", { name: "Queues" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Pools" }));
     const developers = await screen.findByRole("group", { name: "Pool developers" });
@@ -189,8 +194,7 @@ describe("TasksWorkspace", () => {
       });
 
     render(<TasksWorkspace />);
-    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }));
+    await openManageQueues();
     expect(await screen.findByRole("alert", { name: "Queue TEST error" })).toHaveTextContent(
       "permission denied",
     );
@@ -283,7 +287,7 @@ describe("TasksWorkspace", () => {
 
     await userEvent.click(
       within(screen.getByRole("radiogroup", { name: "Task status" })).getByRole("radio", {
-        name: "Closed",
+        name: "Done",
       }),
     );
     await waitFor(() =>
@@ -409,7 +413,7 @@ describe("TasksWorkspace", () => {
     render(<TasksWorkspace scopeAgent="worker" />);
 
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Queue: all" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filters" })).toBeInTheDocument();
     expect(screen.queryByText("Desktop tree")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Expand TEST-1" }));
     expect(screen.getByText("Desktop tree")).toBeInTheDocument();
@@ -624,7 +628,7 @@ describe("TasksWorkspace", () => {
     render(<TasksWorkspace />);
     await screen.findByText("Ship native tasks");
 
-    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }));
+    await toggleWaitingForMe();
     await waitFor(() =>
       expect(api.listTasks).toHaveBeenLastCalledWith(
         expect.objectContaining({ waiting_for: "user:owner" }),
@@ -638,8 +642,7 @@ describe("TasksWorkspace", () => {
     render(<TasksWorkspace />);
     await screen.findByText("Ship native tasks");
 
-    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }));
+    await openManageQueues();
     await userEvent.click(await screen.findByRole("button", { name: "New queue" }));
     fireEvent.change(screen.getByLabelText("Queue prefix"), { target: { value: "OPS" } });
     fireEvent.change(screen.getByLabelText("New queue name"), { target: { value: "Operations" } });
@@ -668,11 +671,8 @@ describe("TasksWorkspace", () => {
     expect(document.querySelector(".tasks-navigation")).toBeNull();
     expect(screen.queryByRole("separator", { name: "Resize task navigation" })).toBeNull();
 
-    expect(screen.getByRole("button", { name: "My tasks" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    await userEvent.click(screen.getByRole("button", { name: "My tasks" }));
+    expect(screen.getByRole("button", { name: "Filters" })).toBeInTheDocument();
+    await pickTaskAssignee("My tasks");
     await waitFor(() =>
       expect(api.listTasks).toHaveBeenLastCalledWith(
         expect.objectContaining({ assignee: "user:owner" }),
@@ -680,23 +680,50 @@ describe("TasksWorkspace", () => {
         expect.any(AbortSignal),
       ),
     );
-    expect(screen.getByRole("button", { name: "My tasks" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "Filters, 1 on" })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }));
+    // Waiting for me narrows the assignee's tasks further.
+    await toggleWaitingForMe();
     await waitFor(() =>
       expect(api.listTasks).toHaveBeenLastCalledWith(
-        expect.objectContaining({ waiting_for: "user:owner" }),
+        expect.objectContaining({ assignee: "user:owner", waiting_for: "user:owner" }),
         null,
         expect.any(AbortSignal),
       ),
     );
-    expect(api.listTasks.mock.calls.at(-1)?.[0].assignee).toBeUndefined();
+    expect(screen.getByRole("button", { name: "Filters, 2 on" })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }));
-    await waitFor(() => expect(api.listTasks.mock.calls.at(-1)?.[0].waiting_for).toBeUndefined());
+    await toggleWaitingForMe();
+    await pickTaskAssignee("Anyone");
+    await waitFor(() => {
+      const last = api.listTasks.mock.calls.at(-1)?.[0];
+      expect(last.waiting_for).toBeUndefined();
+      expect(last.assignee).toBeUndefined();
+    });
+    expect(screen.getByRole("button", { name: "Filters" })).toBeInTheDocument();
+  });
+
+  it("filters by one agent from the principals list", async () => {
+    render(<TasksWorkspace />);
+    await screen.findByText("Ship native tasks");
+
+    await pickTaskAssignee("triager");
+    await waitFor(() =>
+      expect(api.listTasks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ assignee: "agent:triager" }),
+        null,
+        expect.any(AbortSignal),
+      ),
+    );
+  });
+
+  it("puts the host control at the start of the toolbar", async () => {
+    render(<TasksWorkspace hostControl={<button type="button">Host: local</button>} />);
+    await screen.findByText("Ship native tasks");
+    const toolbar = screen.getByRole("toolbar", { name: "Task filters" });
+    expect(toolbar.firstElementChild).toContainElement(
+      within(toolbar).getByRole("button", { name: "Host: local" }),
+    );
   });
 
   it("filters the tree by queue from the toolbar without narrowing the daemon request", async () => {
@@ -710,16 +737,15 @@ describe("TasksWorkspace", () => {
     await screen.findByText("Ship native tasks");
     expect(screen.getByText("Rotate credentials")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: /^TEST/ }));
+    await pickTaskQueue("TEST");
 
-    expect(await screen.findByRole("button", { name: "Queue: TEST" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Filters, 1 on" })).toBeInTheDocument();
     expect(screen.queryByText("Rotate credentials")).toBeNull();
     expect(screen.getByText("Ship native tasks")).toBeInTheDocument();
     for (const call of api.listTasks.mock.calls) expect(call[0].queue).toBeUndefined();
   });
 
-  it("keeps the queue filter across the Agents and All tasks switch", async () => {
+  it("keeps the queue filter between the agent and server workspaces", async () => {
     const ops: Task = { ...root, key: "OPS-1", queue: "OPS", title: "Rotate credentials" };
     api.listTaskQueues.mockResolvedValue({
       queues: [queue, { ...queue, prefix: "OPS", name: "Operations" }],
@@ -729,13 +755,12 @@ describe("TasksWorkspace", () => {
 
     const agent = render(<TasksWorkspace scopeAgent="worker" />);
     await screen.findByText("Ship native tasks");
-    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: /^OPS/ }));
-    expect(await screen.findByRole("button", { name: "Queue: OPS" })).toBeInTheDocument();
+    await pickTaskQueue("OPS");
+    expect(await screen.findByRole("button", { name: "Filters, 1 on" })).toBeInTheDocument();
     agent.unmount();
 
     render(<TasksWorkspace />);
-    expect(await screen.findByRole("button", { name: "Queue: OPS" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Filters, 1 on" })).toBeInTheDocument();
     expect(await screen.findByText("Rotate credentials")).toBeInTheDocument();
     expect(screen.queryByText("Ship native tasks")).toBeNull();
   });

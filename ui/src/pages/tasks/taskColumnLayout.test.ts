@@ -23,12 +23,11 @@ const ids = (columns: { id: string }[]) => columns.map((column) => column.id);
 describe("task column layout record", () => {
   it("defaults to today's table", () => {
     expect(defaultTaskColumnLayout()).toEqual({
-      order: ["priority", "key", "task", "agent", "server", "status", "duration", "updated"],
+      order: ["priority", "key", "task", "agent", "status", "duration", "updated"],
       widths: {
         priority: 30,
         key: 168,
         agent: 104,
-        server: 96,
         status: 148,
         duration: 74,
         updated: 76,
@@ -69,21 +68,21 @@ describe("task column layout record", () => {
           "task",
           "status",
           "agent",
-          "duration",
+          // A column the table no longer has, such as the removed `server`.
+          "server",
           "updated",
         ],
-        widths: { key: 10, status: 9000, agent: "wide", updated: 90, bogus: 50 },
+        widths: { key: 10, status: 9000, agent: "wide", updated: 90, server: 50 },
       }),
     );
 
-    // `server` is missing, so it comes back after `agent`, its default neighbour.
+    // `duration` is missing, so it comes back after `status`, its default neighbour.
     expect(readTaskColumnLayout()).toEqual({
-      order: ["status", "priority", "key", "task", "agent", "server", "duration", "updated"],
+      order: ["status", "duration", "priority", "key", "task", "agent", "updated"],
       widths: {
         priority: 30,
         key: 96,
         agent: 104,
-        server: 96,
         status: 480,
         duration: 74,
         updated: 90,
@@ -99,7 +98,7 @@ describe("task column store", () => {
 
     expect(JSON.parse(localStorage.getItem(TASK_COLUMN_LAYOUT_KEY)!)).toEqual({
       schemaVersion: 1,
-      order: ["priority", "key", "status", "task", "agent", "server", "duration", "updated"],
+      order: ["priority", "key", "status", "task", "agent", "duration", "updated"],
       widths: { ...defaultTaskColumnLayout().widths, status: 150 },
     });
     expect(readTaskColumnLayout().widths.status).toBe(150);
@@ -117,7 +116,6 @@ describe("task column store", () => {
       "key",
       "task",
       "agent",
-      "server",
       "status",
       "priority",
       "duration",
@@ -129,7 +127,6 @@ describe("task column store", () => {
       "key",
       "task",
       "agent",
-      "server",
       "status",
       "priority",
       "duration",
@@ -168,15 +165,6 @@ describe("useTaskColumns", () => {
       "key",
       "task",
       "agent",
-      "status",
-      "updated",
-    ]);
-    expect(ids(renderHook(() => useTaskColumns("servers")).result.current)).toEqual([
-      "priority",
-      "key",
-      "task",
-      "agent",
-      "server",
       "status",
       "updated",
     ]);
