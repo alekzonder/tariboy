@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { activeNav, legacyServerRedirect, navPath, scopedPath } from "./navRoutes";
+import {
+  activeNav,
+  legacyServerRedirect,
+  legacySettingsPath,
+  navPath,
+  scopedPath,
+} from "./navRoutes";
 
 describe("legacyServerRedirect", () => {
   it.each([
@@ -31,6 +37,22 @@ describe("legacyServerRedirect", () => {
     ["/servers/local/stores", "", "/library/sources?host=local"],
     ["/servers/local/stores/tariboy", "", "/library/sources/tariboy?host=local"],
     ["/servers/remote%201/stores", "?host=x", "/library/sources?host=remote+1"],
+    ["/servers/local/settings", "", "/settings/agent-defaults?host=local"],
+    ["/servers/local/settings/", "", "/settings/agent-defaults?host=local"],
+    ["/servers/d_abc/settings/hosts", "", "/settings/hosts?host=d_abc"],
+    ["/servers/local/settings/advanced/groups", "?team=t1", "/settings/teams?host=local&team=t1"],
+    ["/servers/local/settings/operations/7", "", "/settings/maintenance/operations/7?host=local"],
+    [
+      "/servers/local/settings/integrations/telegram",
+      "",
+      "/settings/integrations/telegram?host=local",
+    ],
+    ["/settings", "", "/settings/agent-defaults"],
+    ["/settings/", "", "/settings/agent-defaults"],
+    ["/settings/advanced/usage", "?range=7d", "/settings/usage?range=7d"],
+    ["/settings/advanced/groups", "?team=t1", "/settings/teams?team=t1"],
+    ["/settings/operations/3", "", "/settings/maintenance/operations/3"],
+    ["/settings/unknown/page", "", "/settings/hosts"],
   ])("sends %s%s to %s", (pathname, search, target) => {
     expect(legacyServerRedirect(pathname, search)).toBe(target);
   });
@@ -40,10 +62,41 @@ describe("legacyServerRedirect", () => {
     ["/tasks", "?host=local"],
     ["/library/images", "?host=local"],
     ["/servers/local/imagesx", ""],
-    ["/servers/local/settings/hosts", ""],
+    ["/settings/hosts", ""],
+    ["/settings/teams", "?team=t1"],
+    ["/settings/usage", "?host=d_abc"],
+    ["/settings/agent-defaults", ""],
+    ["/settings/integrations", ""],
+    ["/settings/integrations/telegram", ""],
+    ["/settings/maintenance", ""],
+    ["/settings/maintenance/operations/4", ""],
     ["/agents/local/a1/advanced", "?view=logs"],
   ])("leaves %s%s alone", (pathname, search) => {
     expect(legacyServerRedirect(pathname, search)).toBeNull();
+  });
+});
+
+describe("legacySettingsPath", () => {
+  it.each([
+    ["", "/settings/agent-defaults"],
+    ["hosts", "/settings/hosts"],
+    ["advanced/daemons", "/settings/hosts"],
+    ["cli", "/settings/hosts"],
+    ["appearance", "/settings/hosts"],
+    ["advanced", "/settings/hosts"],
+    ["advanced/groups", "/settings/teams"],
+    ["advanced/usage", "/settings/usage"],
+    ["advanced/budgets", "/settings/usage"],
+    ["operations", "/settings/maintenance"],
+    ["advanced/ops", "/settings/maintenance"],
+    ["operations/12", "/settings/maintenance/operations/12"],
+    ["advanced/plugins", "/settings/integrations"],
+    ["integrations/telegram", "/settings/integrations/telegram"],
+    ["teams", "/settings/teams"],
+    ["maintenance/operations/2", "/settings/maintenance/operations/2"],
+    ["nothing/here", "/settings/hosts"],
+  ])("maps the old tail %j to %s", (tail, target) => {
+    expect(legacySettingsPath(tail)).toBe(target);
   });
 });
 
@@ -55,13 +108,9 @@ describe("navPath and activeNav", () => {
     ["library-images", "/library/images"],
     ["library-workflows", "/library/workflows"],
     ["library-sources", "/library/sources"],
-    ["settings", "/servers/d_abc/settings"],
+    ["settings", "/settings/hosts"],
   ] as const)("opens %s at %s", (item, path) => {
     expect(navPath(item, "d_abc")).toBe(path);
-  });
-
-  it("names the local host in Settings paths", () => {
-    expect(navPath("settings", "")).toBe("/servers/local/settings");
   });
 
   it.each([
@@ -73,8 +122,9 @@ describe("navPath and activeNav", () => {
     ["/library/images/basic/latest/skills", "library"],
     ["/library/workflows/x/1", "library"],
     ["/library/sources/tariboy", "library"],
-    ["/servers/local/settings", "settings"],
-    ["/servers/local/settings/advanced/usage", "settings"],
+    ["/settings/hosts", "settings"],
+    ["/settings/maintenance/operations/3", "settings"],
+    ["/settingsx", null],
     ["/app-settings", "settings"],
     ["/agents/local/a1/console", null],
     ["/agents/local/teams/t", null],

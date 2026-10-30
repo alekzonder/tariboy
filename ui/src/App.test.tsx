@@ -102,7 +102,7 @@ describe("product routing", () => {
 
   it("opens daemon-independent application settings from Settings", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("daemon down")));
-    renderAt("/servers/local/settings");
+    renderAt("/settings/hosts");
 
     const settings = await screen.findByRole("link", { name: "Application" });
     expect(settings).toHaveAttribute("href", "/app-settings");
@@ -135,7 +135,6 @@ describe("product routing", () => {
     for (const anchor of [
       "hosts-line",
       "add-agent",
-      "add-host",
       "section-tasks",
       "section-images",
       "queue-menu",
@@ -152,7 +151,24 @@ describe("product routing", () => {
     ["/servers/local/tasks?task=X-1", "/tasks?host=local&task=X-1"],
     ["/servers/local/mail", "/inbox?host=local"],
     ["/servers/remote-1/activity?view=agents", "/activity?host=remote-1&view=agents"],
-    ["/settings/advanced/usage?range=7d", "/servers/local/settings/advanced/usage?range=7d"],
+    ["/settings/advanced/usage?range=7d", "/settings/usage?range=7d"],
+    ["/servers/local/settings", "/settings/agent-defaults?host=local"],
+    ["/servers/local/settings/hosts", "/settings/hosts?host=local"],
+    ["/servers/local/settings/cli", "/settings/hosts?host=local"],
+    ["/servers/local/settings/appearance", "/settings/hosts?host=local"],
+    ["/servers/local/settings/advanced", "/settings/hosts?host=local"],
+    ["/servers/local/settings/advanced/daemons", "/settings/hosts?host=local"],
+    ["/servers/local/settings/advanced/groups?team=t", "/settings/teams?host=local&team=t"],
+    ["/servers/local/settings/advanced/usage", "/settings/usage?host=local"],
+    ["/servers/local/settings/advanced/budgets", "/settings/usage?host=local"],
+    ["/servers/local/settings/advanced/plugins", "/settings/integrations?host=local"],
+    ["/servers/local/settings/advanced/ops", "/settings/maintenance?host=local"],
+    ["/servers/local/settings/operations", "/settings/maintenance?host=local"],
+    ["/servers/local/settings/operations/5", "/settings/maintenance/operations/5?host=local"],
+    ["/servers/local/settings/integrations/telegram", "/settings/integrations/telegram?host=local"],
+    ["/servers/local/settings/no/such/page", "/settings/hosts?host=local"],
+    ["/settings", "/settings/agent-defaults"],
+    ["/settings/whatever", "/settings/hosts"],
     [
       "/servers/remote-1/images/worker/v1/files?x=1",
       "/library/images/worker/v1/files?host=remote-1&x=1",
@@ -162,7 +178,7 @@ describe("product routing", () => {
     ["/library", "/library/images"],
   ])("redirects legacy server surface %s without losing its tail", async (from, to) => {
     renderAt(from);
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(to));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe(to));
   });
 
   it("sends an old image detail straight to the Library", async () => {
@@ -265,12 +281,30 @@ describe("product routing", () => {
   });
 
   it.each([
-    ["/usage", "/settings/advanced/usage"],
-    ["/groups", "/settings/advanced/groups"],
-    ["/ops", "/settings/advanced/ops"],
+    ["/hosts", "/settings/hosts"],
+    ["/daemons", "/settings/hosts"],
+    ["/usage", "/settings/usage"],
+    ["/budgets", "/settings/usage"],
+    ["/groups", "/settings/teams"],
+    ["/plugins", "/settings/integrations"],
+    ["/ops", "/settings/maintenance"],
   ])("redirects operator route %s under Settings", async (from, to) => {
     renderAt(from);
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(to));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe(to));
+  });
+
+  it.each([
+    ["/settings/hosts", "Hosts"],
+    ["/settings/teams", "Teams"],
+    ["/settings/usage", "Usage & budgets"],
+    ["/settings/agent-defaults", "Agent defaults"],
+    ["/settings/integrations", "Integrations"],
+    ["/settings/maintenance", "Maintenance"],
+  ])("opens %s as the %s page", async (path, heading) => {
+    renderAt(path);
+    expect(await screen.findByRole("heading", { level: 1, name: heading })).toBeInTheDocument();
+    expect(screen.getByTestId("location").textContent).toBe(path);
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
   });
 
   it("keeps an unknown host id fail-closed instead of rewriting it to local", async () => {

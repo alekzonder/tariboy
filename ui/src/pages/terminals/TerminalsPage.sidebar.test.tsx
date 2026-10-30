@@ -111,22 +111,29 @@ describe("host workspaces", () => {
     ]);
   });
 
-  it("filters the sidebar and its counts to the current workspace and follows the switch", async () => {
+  it("filters the sidebar to the workspace picked on Settings → Hosts", async () => {
     addHostToWorkspace("d1", createWorkspace("Production")!);
-    renderAt("/agents/local/a1/activity");
+    renderAt("/settings/hosts");
     expect(await screen.findByRole("button", { name: "Open a1" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open b1" })).toBeNull();
     expect(screen.getByText("Local · ready")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Hosts menu" })).toBeNull();
 
-    await userEvent.click(screen.getByRole("button", { name: "Hosts menu" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Workspace: Default" }));
     await userEvent.click(await screen.findByRole("menuitemradio", { name: /Production/ }));
 
-    // The open agent is not in Production, so its first agent opens in the same tab.
-    await waitFor(() =>
-      expect(screen.getByTestId("location").textContent).toBe("/agents/d1/b1/activity"),
-    );
     expect(await screen.findByRole("button", { name: "Open b1" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open a1" })).toBeNull();
+    expect(screen.getByTestId("location").textContent).toBe("/settings/hosts");
+  });
+
+  it("opens Settings → Hosts from the footer line", async () => {
+    renderAt("/");
+    await screen.findByRole("button", { name: "Open a1" });
+    expect(screen.getByRole("link", { name: /2 hosts · ready/ })).toHaveAttribute(
+      "href",
+      "/settings/hosts",
+    );
   });
 
   it("lists only the workspace's hosts and offers no workspace switch with one workspace", async () => {
@@ -139,25 +146,20 @@ describe("host workspaces", () => {
     expect(screen.queryByRole("button", { name: "Open a1" })).toBeNull();
   });
 
-  it("opens the workspace manager from the hosts menu", async () => {
-    renderAt("/");
+  it("opens the workspace manager from Settings → Hosts", async () => {
+    renderAt("/settings/hosts");
     await screen.findByRole("button", { name: "Open a1" });
     expect(screen.getByText("2 hosts · ready")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Hosts menu" }));
-    expect(screen.queryByRole("menuitemradio")).toBeNull();
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage workspaces…" }));
+    // One workspace: no selector, only the manager.
+    expect(screen.queryByRole("button", { name: /^Workspace:/ })).toBeNull();
+    await userEvent.click(await screen.findByRole("button", { name: "Manage workspaces…" }));
     expect(await screen.findByRole("dialog", { name: "Manage workspaces" })).toBeInTheDocument();
   });
 
   it("shows an empty workspace in the island with a way to manage it", async () => {
-    createWorkspace("Lab");
-    renderAt("/agents/local/a1/console");
-    await screen.findByRole("button", { name: "Open a1" });
+    selectWorkspace(createWorkspace("Lab")!);
+    renderAt("/");
 
-    await userEvent.click(screen.getByRole("button", { name: "Hosts menu" }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: /Lab/ }));
-
-    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/"));
     expect(await screen.findByText("Lab has no agents yet")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Manage workspaces" }));
     const dialog = await screen.findByRole("dialog", { name: "Manage workspaces" });

@@ -1245,7 +1245,7 @@ describe("Store build failures", () => {
     expect(within(row).getByText("reviewer")).toBeInTheDocument();
     expect(within(row).getByRole("link", { name: "Open operation" })).toHaveAttribute(
       "href",
-      "/servers/local/settings/operations/7",
+      "/settings/maintenance/operations/7",
     );
 
     fireEvent.click(within(row).getByRole("button", { name: "Build reviewer" }));

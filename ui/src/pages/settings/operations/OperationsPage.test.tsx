@@ -22,10 +22,10 @@ function OperationStub() {
 function renderPage() {
   const api = fakeApi({ operations: { list } });
   render(
-    <MemoryRouter initialEntries={["/servers/local/settings/operations"]}>
+    <MemoryRouter initialEntries={["/settings/maintenance?host=d1"]}>
       <Routes>
-        <Route path="/servers/:hostId/settings/operations" element={<OperationsPage />} />
-        <Route path="/servers/:hostId/settings/operations/:id" element={<OperationStub />} />
+        <Route path="/settings/maintenance" element={<OperationsPage />} />
+        <Route path="/settings/maintenance/operations/:id" element={<OperationStub />} />
       </Routes>
     </MemoryRouter>,
     { wrapper: apiWrapper(api) },
@@ -75,7 +75,9 @@ it("lists operations in the order the daemon returns, newest first, with links",
   expect(list).toHaveBeenCalledWith(1, 50);
   expect(screen.getByText("Page 1 of 1")).toBeInTheDocument();
 
-  fireEvent.click(within(rows[0]).getByRole("link", { name: "Build workflow dev" }));
+  const link = within(rows[0]).getByRole("link", { name: "Build workflow dev" });
+  expect(link).toHaveAttribute("href", "/settings/maintenance/operations/2?host=d1");
+  fireEvent.click(link);
   expect(await screen.findByText("operation 2")).toBeInTheDocument();
 });
 

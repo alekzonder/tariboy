@@ -198,10 +198,24 @@ The sidebar has six items:
 | **Tasks** | `/tasks` |
 | **Inbox** | `/inbox` |
 | **Library** | `/library/images`, with **Images**, **Workflows**, and **Sources** tabs |
-| **Settings** | `/servers/:hostId/settings`, with **Application** (`/app-settings`) as its last entry |
+| **Settings** | `/settings/hosts`, the first of the Settings pages |
 
-Settings opens on the host of the current page. It keeps its
-`/servers/:hostId/…` route until it gets its own pages.
+Settings has one flat list of seven pages. There is no index page:
+
+| Page | Route | Content |
+| --- | --- | --- |
+| **Hosts** | `/settings/hosts` | the local and SSH hosts: **Add host**, **Edit**, **Remove**, **Update**, **Update all (N)** when hosts are behind, and the host workspaces |
+| **Teams** | `/settings/teams` | create, edit, import, and export teams; `?team=<name>` opens one team |
+| **Usage & budgets** | `/settings/usage` | the AI usage of the host and its budgets, as two sections |
+| **Agent defaults** | `/settings/agent-defaults` | the Global Agent Shell Script, the Codex card, and Backup & data retention |
+| **Integrations** | `/settings/integrations/:plugin?` | an **Installed plugins** tab and one tab for each plugin with settings, such as Telegram |
+| **Maintenance** | `/settings/maintenance` | **Backup and restore**, the **Operations log**, and the **Support bundle**; an operation opens at `/settings/maintenance/operations/:id` |
+| **Application** | `/app-settings` | the application settings; the list shows this page last, as a link |
+
+Hosts reads the host registry of the app, so it opens when the selected host
+does not answer. Every other page reads one host. The route host boundary
+wraps its body, not the Settings list, so the list and Hosts stay usable when
+a host is unreachable.
 
 The Library has these routes:
 
@@ -239,12 +253,11 @@ is in **Inbox** and its task is in **Tasks**.
 
 The foot of the sidebar is one line about the workspace's hosts: **Local ·
 ready**, **2 hosts · ready**, or **2 hosts · 1 unreachable**, with a dot when
-a host can be updated. The line opens Settings → Hosts. Its `⋯` menu has
-**Add host…**, **Update all (N)** when hosts are behind, the host workspaces
-when there are two or more, **New workspace…**, and **Manage workspaces…**.
-**Update all** confirms the named hosts first, then runs the same host update
-on each of them in turn; a host that fails is reported in the page error line
-and the remaining hosts are still updated.
+a host can be updated. The line opens Settings → Hosts, which holds **Add
+host**, **Update all (N)**, and the host workspaces. **Update all** asks you to
+confirm the named hosts first. Then it runs the same host update on each of
+them in turn. If a host fails, the page error line names it, and the other
+hosts are still updated.
 
 Host headings, team headings, and agent rows are themselves
 pointer- and keyboard-accessible drag surfaces; no separate drag handle is
@@ -254,7 +267,7 @@ versioned `sidebar_order_v1` value under `daemon_config`; missing or newly
 created names retain their current stable order. The Desktop WebView stores
 the cross-host order, including the implicit local host, in
 `terminals:server-order:v1`. Failed daemon writes restore the previous order
-and report the failure. The Groups workspace owns team creation and editing: arbitrary custom
+and report the failure. Settings → Teams owns team creation and editing: arbitrary custom
 members, per-member runtime fields, rename/lead and membership controls,
 compose clipboard transfer, and portable archive
 import/export. All requests retain the active explicit host, including raw
@@ -262,13 +275,14 @@ archive uploads and downloads.
 
 ## Routes and host scope
 
-`/tasks`, `/inbox`, `/activity`, and the Library pages show one host. They take an optional
+`/tasks`, `/inbox`, `/activity`, the Library pages, and the Settings pages
+other than Hosts show one host. They take an optional
 `?host=<id>` (`local` is the local daemon). Without it, the page shows the
 remembered active host. A `?host=` that names another host selects it through
 the route host boundary, which shows **Connecting to host…** or **Host
 unavailable.** while it does. With two or more hosts in the workspace, the
-page has a host selector, and a pick replaces `?host=`. Settings pages have
-the same selector, which changes the host in their path. With one
+page has a host selector, and a pick replaces `?host=`. Settings → Hosts and
+Settings → Application have no selector. With one
 host nothing about hosts is shown, and links that the UI builds carry
 `?host=` only with two or more hosts. A desktop notification always names its
 host.
@@ -283,13 +297,33 @@ The old URLs redirect, and keep the rest of their query:
 | `/servers/:hostId/images/*` | `/library/images/*?host=:hostId` |
 | `/servers/:hostId/workflows/*` | `/library/workflows/*?host=:hostId` |
 | `/servers/:hostId/stores/*` | `/library/sources/*?host=:hostId` |
+| `/servers/:hostId/settings/*` | the `/settings/*` page in the next table, with `?host=:hostId` |
 | `/` or `/agents/…` with `?view=all` | `/tasks` |
 
 `legacyServerRedirect` in `ui/src/lib/navRoutes.ts` computes each target. A
 Library redirect copies the rest of the path unchanged, so an old tag list
 (`/servers/:hostId/images/:name`) opens the image page with its Versions.
-`/images/*` redirects to `/library/images/*`. `/settings/*` still redirects to
-the `/servers/<active host>/settings` pages.
+`/images/*` redirects to `/library/images/*`.
+
+`legacySettingsPath` maps an old Settings path to its page. It serves both
+`/servers/:hostId/settings/*` and the older bare `/settings/*` paths, which
+add no `?host=`:
+
+| Old Settings path | Page |
+| --- | --- |
+| (none), the old General page | `/settings/agent-defaults` |
+| `hosts`, `advanced/daemons`, `cli`, `appearance`, `advanced` | `/settings/hosts` |
+| `advanced/groups` | `/settings/teams` |
+| `advanced/usage`, `advanced/budgets` | `/settings/usage` |
+| `operations`, `advanced/ops` | `/settings/maintenance` |
+| `operations/:id` | `/settings/maintenance/operations/:id` |
+| `advanced/plugins` | `/settings/integrations` |
+| `integrations/:plugin` | `/settings/integrations/:plugin` |
+| any other path | `/settings/hosts` |
+
+`/hosts` and `/daemons` open `/settings/hosts`, `/groups` opens
+`/settings/teams`, `/usage` and `/budgets` open `/settings/usage`, `/plugins`
+opens `/settings/integrations`, and `/ops` opens `/settings/maintenance`.
 
 Links inside the Library carry no `?host=`, because the route host is the
 active host while a Library page is open. The image links of an agent's
@@ -373,14 +407,15 @@ create objects.
 The steps go through the screen in this order: Welcome, **Agents**, the agent
 workspace, the agent's **Configuration**, the sidebar's **Tasks** item, the
 sidebar's **Library** item (images), the Library's **Sources** tab, the hosts
-line at the foot of the sidebar, its `⋯` menu (**Add a host**), the
+line at the foot of the sidebar, **Add host** on Settings → Hosts, the
 **Filters** menu of Tasks (queues), the Library's **Workflows** tab, and the
 **?** (Help) button. The **Agents** step goes to `/` and highlights the **New
 agent** button of Home, or **Start agent** on the first-run card; it never
 highlights the sidebar's **New agent** button. A step with a `route` opens that
 page through `navPath` in `ui/src/lib/navRoutes.ts`: `tasks` and `inbox` open
 `/tasks` and `/inbox`, and the Library items open `/library/images`,
-`/library/sources`, and `/library/workflows` on the active host. The agent steps open the first
+`/library/sources`, and `/library/workflows` on the active host, and
+`settings` opens `/settings/hosts`. The agent steps open the first
 agent of the sidebar. If the sidebar has no agent row when the tour starts, the
 tour leaves out the agent steps, and the counter counts only the steps it shows
 (**1 of 10**). Done, **Skip tour**, and Esc go back to the route where the tour
@@ -510,7 +545,7 @@ CLI and API operation.
 
 ## Server Usage
 
-The host-scoped **Settings → Advanced → Usage** screen loads current groups
+The host-scoped **Settings → Usage & budgets** page loads current groups
 from the route-selected daemon. Its selector offers **All groups**,
 **Ungrouped**, and each current group. Choosing a value immediately reloads the
 summary cards, daily series, group-aware aggregate table, and recent-request
@@ -688,7 +723,7 @@ plugin bridge; plugin-provided executable UI, HTML, and styles are never loaded.
 Password controls are write-only and status responses contain only the safe
 projection selected by the plugin contract.
 
-**Settings → General** edits the selected host's **Global Agent Shell Script**;
+**Settings → Agent defaults** edits the selected host's **Global Agent Shell Script**;
 an agent's **Configuration** edits its **Agent Shell Script** in the
 Environment block. Both controls use the route's explicit host target, retain
 an invalid draft and accessible Bash error after rejection, and keep drafts
@@ -697,7 +732,7 @@ stay unavailable until loading succeeds and while a save is pending, so saves
 cannot overlap; the agent script is saved with the Configuration page's single
 Save. Edits made during a save remain an unsaved draft.
 
-**Settings → General** also carries **Backup & data retention** for the same
+**Settings → Agent defaults** also carries **Backup & data retention** for the same
 explicit host: the nightly switch and time, retention days, chat history days,
 backups to keep,
 compaction switch and threshold, the server-wide iteration retention defaults
@@ -708,17 +743,20 @@ last run's time, deleted counts, and size change; a failed save or run is
 reported in place. See
 [State model](/docs/architecture/state-model#nightly-backup-and-data-retention).
 
-**Settings → General** also carries a **Codex** card for the same explicit host:
+**Settings → Agent defaults** also carries a **Codex** card for the same explicit host:
 a choice between **Yolo** (`--yolo`) and **Approve for me**
 (`--approve-for-me`). Selecting a mode saves it to that host at once; a failed
 load or save is reported in place and the previous mode stays selected. The
 new mode applies from the host's next Codex iteration. See
 [Iteration loop](/docs/architecture/iteration-loop).
 
-**Settings → Operations** lists the image and workflow builds of the explicit
-host, newest first, 50 per page, with **Previous** and **Next**. The columns are
-kind, title, status, start time and duration. A row opens
-`/servers/:hostId/settings/operations/:id`. That page shows the status, kind,
+**Settings → Maintenance** has three sections for the explicit host:
+**Backup and restore**, the **Operations log**, and the **Support bundle**.
+The **Operations log** lists the image and workflow builds of the host, newest
+first, 50 per page, with **Previous** and **Next**. The columns are kind,
+title, status, start time and duration. A row opens
+`/settings/maintenance/operations/:id`, with the `?host=` of the page. Its
+**← Maintenance** link goes back. That page shows the status, kind,
 initiator, arguments, times, the result or the error code and message, and
 the full log with **Download log**. When the log file is gone, the page shows
 "Log unavailable". The list and the page of a running operation listen on
@@ -729,7 +767,7 @@ causes one more read after it. See
 
 **Build** in Images, Workflows and a Store card does not wait for the
 build. When the daemon accepts the build, a "Build started" toast offers
-**Open operation**, a link to the operation page. An argument error still
+**Open operation**, a link to the operation page, with `?host=` when two or more hosts are registered. An argument error still
 shows at once in place. While the page that started a build stays open, it
 watches the socket: a succeeded build reloads its lists, and a failed or
 interrupted build shows an error toast with the same link.
@@ -1038,7 +1076,7 @@ All tasks view).
 | `tariboy_active_daemon` | local | host registry | selected host ID | none |
 | `tariboy_daemons_rejected_cleartext` | local | Desktop host migration | JSON cleartext hosts not imported | none |
 | `tariboy_daemon_token_<id>` | session | browser host registry | host token (browser mode only; Desktop uses the Keychain) | empty |
-| `tariboy:team-import` | local | Groups | JSON pending team import ID and host | none |
+| `tariboy:team-import` | local | Settings → Teams | JSON pending team import ID and host | none |
 | `terminals:server-order:v1` | local | sidebar | JSON host order | registry order |
 | `terminals:sidebar:v1` | local | sidebar | JSON width and hidden state | 268px, shown |
 | `terminals:workspace:v1` | local | sidebar (legacy, read once) | JSON record of the removed canvas | none |
@@ -1537,14 +1575,14 @@ local.
 ### Host workspaces
 
 A workspace is a named, independent list of registered hosts in one app
-window. The `⋯` menu of the hosts line at the foot of the sidebar lists the
-workspaces with a check on the current one when there are two or more,
-followed by **New workspace…** and **Manage workspaces…**. (A later change
-moves them to Settings → Hosts.) Choosing a workspace narrows the agent list,
-the hosts line, the search, the Tasks and Inbox counts, and Home to that
-workspace's hosts, so an empty workspace shows no agents.
-When the open agent's host is not in it, its first agent opens in the same tab, or the island shows `<name> has no agents yet`
-with a **Manage workspaces** button when it has none. Polling continues for
+window. Settings → Hosts has a **Manage workspaces…** button. When there are
+two or more workspaces, it also has a selector that lists them with a check on
+the current one, followed by **New workspace…** and **Manage workspaces…**.
+Choosing a workspace narrows the agent list, the hosts line, the search, the
+Tasks and Inbox counts, and Home to that workspace's hosts, so an empty
+workspace shows no agents. Settings → Hosts stays open after the pick. Home
+of an empty workspace shows `<name> has no agents yet` with a **Manage
+workspaces** button. Polling continues for
 every host, so the manager can show each host as ready or offline, and agents
 on hosts outside the current workspace keep running: a workspace filters the
 window, it does not isolate hosts. Agents and tasks live on their daemon, so a

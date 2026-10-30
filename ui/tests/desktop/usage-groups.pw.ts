@@ -79,35 +79,21 @@ test("filters request-time group snapshots in the production Desktop Usage view"
   await desktop.elementClick(settingsLink);
   await expect
     .poll(() => desktop.execute<string>("return window.location.hash;"))
-    .toBe("#/servers/local/settings");
-  const advancedLink = await expect
-    .poll(async () => {
-      try {
-        return await desktop.findElement("xpath", "//a[normalize-space(.)='Advanced']");
-      } catch {
-        return null;
-      }
-    })
-    .not.toBeNull()
-    .then(() => desktop.findElement("xpath", "//a[normalize-space(.)='Advanced']"));
-  await desktop.elementClick(advancedLink);
-  await expect
-    .poll(() => desktop.execute<string>("return window.location.hash;"))
-    .toBe("#/servers/local/settings/advanced");
+    .toBe("#/settings/hosts");
   const usageLink = await expect
     .poll(async () => {
       try {
-        return await desktop.findElement("xpath", "//a[normalize-space(.)='Usage']");
+        return await desktop.findElement("xpath", "//a[normalize-space(.)='Usage & budgets']");
       } catch {
         return null;
       }
     })
     .not.toBeNull()
-    .then(() => desktop.findElement("xpath", "//a[normalize-space(.)='Usage']"));
+    .then(() => desktop.findElement("xpath", "//a[normalize-space(.)='Usage & budgets']"));
   await desktop.elementClick(usageLink);
   await expect
     .poll(() => desktop.execute<string>("return window.location.hash;"))
-    .toBe("#/servers/local/settings/advanced/usage");
+    .toBe("#/settings/usage");
 
   await expect.poll(() => bodyText(desktop)).toContain("Usage by agent");
   await expect

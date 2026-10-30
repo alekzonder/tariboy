@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { ApiClient, Operation } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
@@ -25,8 +25,11 @@ export default function OperationRoute() {
   return <OperationPage key={operationId} id={operationId} />;
 }
 
+const MAINTENANCE = "/settings/maintenance";
+
 function OperationPage({ id }: { id: number }) {
   const api = useApi();
+  const { search } = useLocation();
   const [operation, setOperation] = useState<Operation | null>(null);
   const [error, setError] = useState("");
   const log = useOperationLog(id);
@@ -59,8 +62,8 @@ function OperationPage({ id }: { id: number }) {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      <Link to=".." relative="path" className="text-sm text-primary hover:underline">
-        ← Operations
+      <Link to={{ pathname: MAINTENANCE, search }} className="text-sm text-primary hover:underline">
+        ← Maintenance
       </Link>
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-xl font-semibold">{operation?.title || `Operation ${id}`}</h2>

@@ -70,6 +70,7 @@ export * from "@/pages/agents/AgentWorkspace";
 export * from "@/pages/tasks/TasksWorkspace";
 export * from "@/pages/tasks/TaskDetail";
 export * from "@/pages/settings/SettingsPage";
+export * from "@/pages/settings/settingsSections";
 export * from "@/pages/DaemonsPage";
 export * from "@/pages/images/LibraryImagesPage";
 export * from "@/pages/StoresPage";

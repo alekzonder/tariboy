@@ -129,6 +129,12 @@ describe("TerminalsPage server sections", () => {
     expect(screen.getByText("Individual agents")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open lead" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open solo" })).toBeInTheDocument();
+
+    // One host: the link names the team only.
+    fireEvent.click(screen.getByRole("button", { name: "Manage team" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toBe("/settings/teams?team=dev-team"),
+    );
   });
 
   it.each([

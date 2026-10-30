@@ -115,7 +115,7 @@ export default function PluginsPage() {
 
   return (
     <div className="space-y-4 p-6">
-      <h1 className="text-lg font-semibold">Plugins</h1>
+      <h2 className="text-lg font-semibold">Installed plugins</h2>
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Install plugin</CardTitle>
@@ -124,7 +124,7 @@ export default function PluginsPage() {
           <Input
             value={path}
             onChange={(e) => setPath(e.target.value)}
-            placeholder="daemon-accessible plugin dir"
+            placeholder="plugin directory on the host"
             className="h-8 w-96 min-w-0"
           />
           <Button

@@ -2,7 +2,6 @@ import { lazy } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useDaemons } from "@/components/daemonContext";
 import TerminalsPage from "@/pages/terminals/TerminalsPage";
-import { hostToParam } from "@/lib/terminalsHost";
 import { defaultAgentTab } from "@/lib/uiMode";
 import { AppSettings } from "@/components/DesktopUpdates";
 
@@ -12,26 +11,14 @@ const ImageOverview = lazy(() => import("@/pages/ImageOverview"));
 const ImageTemplate = lazy(() => import("@/pages/images/ImageTemplate"));
 const ImageSkills = lazy(() => import("@/pages/images/ImageSkills"));
 const ImageFiles = lazy(() => import("@/pages/ImageFiles"));
-const GeneralSettings = lazy(() =>
-  import("@/pages/settings/SettingsPage").then((m) => ({ default: m.GeneralSettings })),
-);
-const CliSettings = lazy(() =>
-  import("@/pages/settings/SettingsPage").then((m) => ({ default: m.CliSettings })),
-);
-const AppearanceSettings = lazy(() =>
-  import("@/pages/settings/SettingsPage").then((m) => ({ default: m.AppearanceSettings })),
-);
-const AdvancedSettingsIndex = lazy(() =>
-  import("@/pages/settings/SettingsPage").then((m) => ({ default: m.AdvancedSettingsIndex })),
-);
-const PluginSettings = lazy(() => import("@/pages/settings/PluginSettings"));
-const OperationsPage = lazy(() => import("@/pages/settings/operations/OperationsPage"));
+const settingsSection = (name: keyof typeof import("@/pages/settings/settingsSections")) =>
+  lazy(() => import("@/pages/settings/settingsSections").then((m) => ({ default: m[name] })));
+const UsageSettings = settingsSection("UsageSettings");
+const AgentDefaultsSettings = settingsSection("AgentDefaultsSettings");
+const IntegrationsSettings = settingsSection("IntegrationsSettings");
+const MaintenanceSettings = settingsSection("MaintenanceSettings");
 const OperationPage = lazy(() => import("@/pages/settings/operations/OperationPage"));
-const UsagePage = lazy(() => import("@/pages/UsagePage"));
 const GroupsPage = lazy(() => import("@/pages/GroupsPage"));
-const BudgetsPage = lazy(() => import("@/pages/BudgetsPage"));
-const PluginsPage = lazy(() => import("@/pages/PluginsPage"));
-const OpsPage = lazy(() => import("@/pages/OpsPage"));
 const DaemonsPage = lazy(() => import("@/pages/DaemonsPage"));
 
 export function AppRoutes() {
@@ -82,44 +69,35 @@ export function AppRoutes() {
       <Route path="/servers/:hostId/workflows/*" element={<TerminalsPage />} />
       <Route path="/servers/:hostId/stores/*" element={<TerminalsPage />} />
 
-      <Route path="/servers/:hostId/settings" element={<TerminalsPage serverView="settings" />}>
-        <Route index element={<GeneralSettings />} />
+      <Route path="/settings" element={<TerminalsPage serverView="settings" scoped />}>
         <Route path="hosts" element={<DaemonsPage />} />
-        <Route path="cli" element={<CliSettings />} />
-        <Route path="appearance" element={<AppearanceSettings />} />
-        <Route path="operations" element={<OperationsPage />} />
-        <Route path="operations/:id" element={<OperationPage />} />
-        <Route path="integrations/:plugin" element={<PluginSettingsRoute />} />
-        <Route path="advanced" element={<AdvancedSettingsIndex />} />
-        <Route path="advanced/usage" element={<UsagePage />} />
-        <Route path="advanced/budgets" element={<BudgetsPage />} />
-        <Route path="advanced/plugins" element={<PluginsPage />} />
-        <Route path="advanced/ops" element={<OpsPage />} />
-        <Route path="advanced/daemons" element={<DaemonsPage />} />
-        <Route path="advanced/groups" element={<GroupsPage />} />
+        <Route path="teams" element={<GroupsPage />} />
+        <Route path="usage" element={<UsageSettings />} />
+        <Route path="agent-defaults" element={<AgentDefaultsSettings />} />
+        <Route path="integrations/:plugin?" element={<IntegrationsSettings />} />
+        <Route path="maintenance" element={<MaintenanceSettings />} />
+        <Route path="maintenance/operations/:id" element={<OperationPage />} />
       </Route>
+      {/* TerminalsPage sends these, and an unknown Settings page, to the
+          /settings page that holds them now. */}
+      <Route path="/settings/*" element={<TerminalsPage />} />
+      <Route path="/servers/:hostId/settings/*" element={<TerminalsPage />} />
 
       <Route path="/images/*" element={<LegacyImagesRedirect />} />
-      <Route path="/settings/*" element={<LegacyServerSurfaceRedirect section="settings" />} />
 
       <Route path="/terminals" element={<CanonicalTerminalsRedirect />} />
       <Route path="/terminals/:hostId/:agent" element={<LegacyTerminalRedirect />} />
       <Route path="/agent/:name/*" element={<LegacyAgentRedirect />} />
       <Route path="/hosts" element={<Navigate to="/settings/hosts" replace />} />
-      <Route path="/usage" element={<Navigate to="/settings/advanced/usage" replace />} />
-      <Route path="/budgets" element={<Navigate to="/settings/advanced/budgets" replace />} />
-      <Route path="/plugins" element={<Navigate to="/settings/advanced/plugins" replace />} />
-      <Route path="/ops" element={<Navigate to="/settings/advanced/ops" replace />} />
-      <Route path="/daemons" element={<Navigate to="/settings/advanced/daemons" replace />} />
-      <Route path="/groups" element={<Navigate to="/settings/advanced/groups" replace />} />
+      <Route path="/usage" element={<Navigate to="/settings/usage" replace />} />
+      <Route path="/budgets" element={<Navigate to="/settings/usage" replace />} />
+      <Route path="/plugins" element={<Navigate to="/settings/integrations" replace />} />
+      <Route path="/ops" element={<Navigate to="/settings/maintenance" replace />} />
+      <Route path="/daemons" element={<Navigate to="/settings/hosts" replace />} />
+      <Route path="/groups" element={<Navigate to="/settings/teams" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
-}
-
-function PluginSettingsRoute() {
-  const { plugin = "" } = useParams();
-  return <PluginSettings name={plugin} />;
 }
 
 function LegacyTerminalRedirect() {
@@ -168,17 +146,4 @@ function LegacyAgentRedirect() {
 function LegacyImagesRedirect() {
   const location = useLocation();
   return <Navigate to={`/library${location.pathname}${location.search}`} replace />;
-}
-
-function LegacyServerSurfaceRedirect({ section }: { section: "settings" }) {
-  const location = useLocation();
-  const { activeId } = useDaemons();
-  const legacyBase = `/${section}`;
-  const tail = location.pathname.slice(legacyBase.length);
-  return (
-    <Navigate
-      to={`/servers/${encodeURIComponent(hostToParam(activeId))}/${section}${tail}${location.search}`}
-      replace
-    />
-  );
 }

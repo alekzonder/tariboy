@@ -34,7 +34,7 @@ function withRouter(Api: ComponentType<PropsWithChildren>) {
         <MemoryRouter initialEntries={["/servers/local/images"]}>
           <Routes>
             <Route path="/servers/:hostId/images" element={children} />
-            <Route path="/servers/:hostId/settings/operations/:id" element={<OperationRoute />} />
+            <Route path="/settings/maintenance/operations/:id" element={<OperationRoute />} />
           </Routes>
         </MemoryRouter>
       </Api>
@@ -82,7 +82,7 @@ it("sends an explicit name and non-default tag while leaving sources in place", 
   expect(options.description).toBe("Build image reviewer:v3");
   expect(options.action.label).toBe("Open operation");
   act(() => options.action.onClick());
-  expect(await screen.findByText("operation /servers/local/settings/operations/4")).toBeTruthy();
+  expect(await screen.findByText("operation /settings/maintenance/operations/4")).toBeTruthy();
 });
 
 it("reports a refused build as an error", async () => {

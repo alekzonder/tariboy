@@ -2,7 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DaemonProvider } from "@/components/DaemonProvider";
+import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import DaemonsPage from "./DaemonsPage";
+import type { HostsOutletContext } from "@/pages/settings/hostsContext";
+import { createWorkspace, resetWorkspacesForTest } from "@/lib/workspaces";
 import { listDaemons, getDaemonToken } from "@/lib/daemons";
 import * as desktop from "@/lib/desktop";
 
@@ -15,13 +18,106 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderPage() {
+function renderPage(context?: HostsOutletContext) {
   return render(
     <DaemonProvider>
-      <DaemonsPage />
+      <MemoryRouter>
+        <Routes>
+          <Route element={<Outlet context={context} />}>
+            <Route index element={<DaemonsPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
     </DaemonProvider>,
   );
 }
+
+function sshHost(id: string, label: string, version: string): desktop.DesktopHostView {
+  return {
+    id,
+    label,
+    kind: "ssh",
+    ssh_alias: `${label}-box`,
+    remote_install_dir: "~/.local/lib/tariboy",
+    remote_port: 9990,
+    https_base_url: "",
+    last_daemon_version: version,
+    state: "ready",
+    base_url: "http://127.0.0.1:18444",
+    local_port: 18444,
+    phase: "connect",
+    platform: "Linux",
+    arch: "x86_64",
+    prerequisites: [],
+    message: "",
+  };
+}
+
+function desktopAt(appVersion: string, hosts: desktop.DesktopHostView[]) {
+  vi.stubGlobal("__TAURI_INTERNALS__", {});
+  vi.spyOn(desktop, "daemonState").mockResolvedValue({
+    state: "ready",
+    base_url: "http://127.0.0.1:9990",
+    daemon_version: appVersion,
+    app_version: appVersion,
+    base_dir: "/tmp/tariboy",
+    pid: 42,
+    adopted: false,
+    message: "",
+  });
+  vi.spyOn(desktop, "hostsList").mockResolvedValue(hosts);
+}
+
+describe("DaemonsPage host actions", () => {
+  beforeEach(() => resetWorkspacesForTest());
+
+  it("updates every host that is behind from one action", async () => {
+    desktopAt("0.11.5", [sshHost("ssh-1", "gpu", "0.11.4"), sshHost("ssh-2", "cpu", "0.11.5")]);
+    const update = vi.spyOn(desktop, "hostUpdate").mockResolvedValue({ operation_id: "op-1" });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Update all (1)" }));
+
+    expect(confirm).toHaveBeenCalledWith("Update 1 host(s) to 0.11.5? gpu");
+    await waitFor(() => expect(update).toHaveBeenCalledWith("ssh-1"));
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it("has no Update all while every host runs the app version", async () => {
+    desktopAt("0.11.5", [sshHost("ssh-1", "gpu", "0.11.5")]);
+    renderPage();
+
+    expect(await screen.findByText("gpu")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Update all/ })).toBeNull();
+  });
+
+  it("opens the workspace manager and shows the selector only with two workspaces", async () => {
+    const onManageWorkspaces = vi.fn();
+    const { unmount } = renderPage({ workspaceHosts: [], onManageWorkspaces });
+
+    await userEvent.click(screen.getByRole("button", { name: "Manage workspaces…" }));
+    expect(onManageWorkspaces).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("button", { name: /^Workspace:/ })).toBeNull();
+    unmount();
+
+    createWorkspace("Lab");
+    renderPage({ workspaceHosts: [], onManageWorkspaces });
+    expect(screen.getByRole("button", { name: /^Workspace:/ })).toBeInTheDocument();
+  });
+
+  it("says host, not daemon or server, when it asks to remove a host", async () => {
+    desktopAt("0.11.5", [sshHost("ssh-1", "gpu", "0.11.5")]);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Remove" }));
+
+    expect(confirm).toHaveBeenCalledWith(
+      "Remove host gpu from this app? The host and its data stay as they are.",
+    );
+  });
+});
 
 describe("DaemonsPage", () => {
   it("adds a daemon; token input is masked and never rendered back", async () => {

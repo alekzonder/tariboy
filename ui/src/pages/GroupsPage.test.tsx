@@ -231,7 +231,7 @@ it("opens the team named by the workspace management link", async () => {
     ),
   );
   render(
-    <MemoryRouter initialEntries={["/settings/advanced/groups?team=team"]}>
+    <MemoryRouter initialEntries={["/settings/teams?team=team"]}>
       <GroupsPage />
     </MemoryRouter>,
   );

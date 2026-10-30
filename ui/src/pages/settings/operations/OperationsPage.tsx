@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import type { OperationList } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
@@ -63,9 +63,9 @@ export default function OperationsPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold">Operations</h2>
+        <h2 className="text-xl font-semibold">Operations log</h2>
         <p className="text-sm text-muted-foreground">
-          Image and workflow builds run in the background on this server. Open one to read its log.
+          Image and workflow builds run in the background on this host. Open one to read its log.
         </p>
       </div>
       {error && (
@@ -108,6 +108,8 @@ export default function OperationsPage() {
 }
 
 function OperationsTable({ list }: { list: OperationList }) {
+  // The page host stays with the operation it opens.
+  const { search } = useLocation();
   return (
     <div className="overflow-x-auto rounded border">
       <table className="w-full text-sm">
@@ -125,7 +127,10 @@ function OperationsTable({ list }: { list: OperationList }) {
             <tr key={operation.id} className="border-t">
               <td className={`${CELL} whitespace-nowrap`}>{kindLabel(operation.kind)}</td>
               <td className={CELL}>
-                <Link className="text-primary hover:underline" to={String(operation.id)}>
+                <Link
+                  className="text-primary hover:underline"
+                  to={{ pathname: `/settings/maintenance/operations/${operation.id}`, search }}
+                >
                   {operation.title || `Operation ${operation.id}`}
                 </Link>
               </td>

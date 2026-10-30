@@ -31,9 +31,10 @@ const pages = [
   "tasks/TasksWorkspace.tsx",
   "tasks/TaskDetail.tsx",
   "settings/SettingsPage.tsx",
-  // The /hosts section body SettingsPage routes to. Without it the SettingsPage
-  // preview's Hosts cell renders `undefined` ("Element type is invalid") - the
+  // The page bodies SettingsPage routes to. Without them the SettingsPage
+  // preview's cells render `undefined` ("Element type is invalid") - the
   // shell draws, the right-hand pane stays blank.
+  "settings/settingsSections.tsx",
   "DaemonsPage.tsx",
   "images/LibraryImagesPage.tsx",
   "StoresPage.tsx",

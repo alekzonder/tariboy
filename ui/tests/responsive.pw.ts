@@ -5,6 +5,14 @@ const fixture = "/tests/tasks-fixture.html#";
 const AGENT = "responsive-agent-with-a-long-name";
 // The width below which the agent list is a drawer behind the menu button.
 const COMPACT = 768;
+const SETTINGS_PAGES = [
+  "/settings/hosts",
+  "/settings/teams",
+  "/settings/usage",
+  "/settings/agent-defaults",
+  "/settings/integrations",
+  "/settings/maintenance",
+];
 
 async function ensureAgent(request: APIRequestContext) {
   const existing = await request.get(`${daemonURL}/api/agents/${AGENT}`);
@@ -171,12 +179,8 @@ for (const route of [
   "/library/images/bare/latest",
   "/library/workflows",
   "/library/sources",
-  "/servers/local/settings",
-  "/servers/local/settings/hosts",
-  "/servers/local/settings/advanced",
-  ...["usage", "budgets", "plugins", "ops", "daemons", "groups"].map(
-    (page) => `/servers/local/settings/advanced/${page}`,
-  ),
+  ...SETTINGS_PAGES,
+  "/settings/maintenance/operations/1",
   "/app-settings",
 ]) {
   test(`${route} fits the window`, async ({ page }) => {
@@ -240,4 +244,25 @@ test("an old Library URL opens its Library page", async ({ page }) => {
   await page.goto(`${fixture}/servers/local/images`);
   await expect(page.getByRole("navigation", { name: "Library" })).toBeVisible();
   expect(new URL(page.url()).hash).toBe("#/library/images?host=local");
+});
+
+test("an old Settings URL opens its Settings page", async ({ page }) => {
+  await page.goto(`${fixture}/servers/local/settings/advanced/groups`);
+  await expect(page.getByRole("heading", { name: "Teams" })).toBeVisible();
+  expect(new URL(page.url()).hash).toBe("#/settings/teams?host=local");
+});
+
+test("the Settings nav fits without scrolling", async ({ page }) => {
+  const width = page.viewportSize()!.width;
+  test.skip(width < 1024, "below lg the Settings nav is a sideways strip");
+  for (const route of SETTINGS_PAGES) {
+    await page.goto(`${fixture}${route}`);
+    const nav = page.getByRole("navigation", { name: "Settings" });
+    await expect(nav.getByRole("link", { name: "Application" })).toBeVisible();
+    const aside = nav.locator("xpath=..");
+    expect(
+      await aside.evaluate((element) => element.scrollHeight <= element.clientHeight),
+      `${route} scrolls its Settings nav`,
+    ).toBe(true);
+  }
 });

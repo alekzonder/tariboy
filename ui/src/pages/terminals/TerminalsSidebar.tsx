@@ -34,9 +34,6 @@ export function TerminalsSidebar({
   server,
   onReorder,
   onCreate,
-  onAddServer,
-  onSelectWorkspace,
-  onManageWorkspaces,
 }: {
   /** The hosts of the current workspace, in sidebar order. */
   hosts: HostAgents[];
@@ -52,9 +49,6 @@ export function TerminalsSidebar({
   server: ReturnType<typeof useServerActions>;
   onReorder: (kind: ReorderKind, id: string, ids: string[]) => void;
   onCreate: (state: CreateDialogState) => void;
-  onAddServer: () => void;
-  onSelectWorkspace: (id: string) => void;
-  onManageWorkspaces: (focusNew: boolean) => void;
 }) {
   const { agent: agentName, tab: agentTab } = useParams();
   const navigate = useNavigate();
@@ -90,13 +84,9 @@ export function TerminalsSidebar({
       });
     }),
     onCreate: closing((id: string) => onCreate({ hostId: id })),
-    onAddServer: closing(onAddServer),
     onEditServer: closing((id: string) => void server.editServer(id)),
-    onUpdateAll: (ids) => void server.updateAllServers(ids),
     onRemoveServer: (id) => void server.removeServer(id),
     onConnectHost: (id) => void server.connectHost(id),
-    onSelectWorkspace: closing(onSelectWorkspace),
-    onManageWorkspaces: closing(onManageWorkspaces),
     onNavigate: () => sidebar.setDrawerOpen(false),
   };
   const props = {

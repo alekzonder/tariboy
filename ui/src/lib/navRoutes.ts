@@ -1,7 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import { useDaemons, useOptionalDaemons } from "@/components/daemonContext";
 import { hasLocalDaemon } from "./desktop";
-import { hostToParam, paramToHost, serverPath } from "./terminalsHost";
+import { hostToParam, paramToHost } from "./terminalsHost";
 
 /** The host-scoped pages of the sidebar. Each takes an optional `?host=`. */
 export type ScopedSection = "tasks" | "inbox" | "activity";
@@ -19,8 +19,39 @@ const LEGACY_LIBRARY: Record<string, string> = {
   stores: "sources",
 };
 
-/** A place the sidebar or the tour opens. Settings still lives under
- *  `/servers/:hostId/…` until it gets its own routes. */
+/** The pages of Settings, each at `/settings/<page>`. */
+const SETTINGS_PAGES = new Set([
+  "hosts",
+  "teams",
+  "usage",
+  "agent-defaults",
+  "integrations",
+  "maintenance",
+]);
+
+/** The old Settings pages, by their tail under `/servers/:hostId/settings`. */
+const LEGACY_SETTINGS: Record<string, string> = {
+  "": "agent-defaults",
+  "advanced/groups": "teams",
+  "advanced/usage": "usage",
+  "advanced/budgets": "usage",
+  operations: "maintenance",
+  "advanced/ops": "maintenance",
+  "advanced/plugins": "integrations",
+};
+
+/** The Settings page of a Settings tail, old or new: an old page opens the
+ *  page that holds it now, an unknown one opens Hosts. */
+export function legacySettingsPath(tail: string): string {
+  const path = tail.replace(/^\/+|\/+$/g, "");
+  if (path in LEGACY_SETTINGS) return `/settings/${LEGACY_SETTINGS[path]}`;
+  const operation = /^(?:maintenance\/)?operations\/([^/]+)$/.exec(path);
+  if (operation) return `/settings/maintenance/operations/${operation[1]}`;
+  if (/^integrations\/[^/]+$/.test(path) || SETTINGS_PAGES.has(path)) return `/settings/${path}`;
+  return "/settings/hosts";
+}
+
+/** A place the sidebar or the tour opens. */
 export type NavItem =
   | "home"
   | "tasks"
@@ -31,7 +62,7 @@ export type NavItem =
   | "settings";
 
 /** The path of a nav item on the page host `hostId`. */
-export function navPath(item: NavItem, hostId: string): string {
+export function navPath(item: NavItem, _hostId: string): string {
   switch (item) {
     case "home":
       return "/";
@@ -45,7 +76,7 @@ export function navPath(item: NavItem, hostId: string): string {
     case "library-sources":
       return "/library/sources";
     case "settings":
-      return serverPath(hostId, "settings");
+      return "/settings/hosts";
   }
 }
 
@@ -57,7 +88,7 @@ export function activeNav(
   if (pathname === "/tasks" || pathname === "/inbox") return pathname.slice(1) as "tasks" | "inbox";
   if (pathname === "/app-settings") return "settings";
   if (pathname === "/library" || pathname.startsWith("/library/")) return "library";
-  if (/^\/servers\/[^/]+\/settings(\/|$)/.test(pathname)) return "settings";
+  if (pathname === "/settings" || pathname.startsWith("/settings/")) return "settings";
   return null;
 }
 
@@ -80,8 +111,9 @@ export function scopedPath(
  * host-exact `/servers/:hostId/mail|tasks|activity` pages move the path host
  * into `?host=` and keep the rest of the query, the Library sections
  * `/servers/:hostId/images|workflows|stores/…` move to `/library/…` with the
- * rest of the path unchanged, and the former All tasks view (`?view=all`)
- * opens Tasks.
+ * rest of the path unchanged, an old Settings page (host-exact or bare
+ * `/settings/…`) opens the `/settings/<page>` that holds it now, and the
+ * former All tasks view (`?view=all`) opens Tasks.
  */
 export function legacyServerRedirect(pathname: string, search: string): string | null {
   const params = new URLSearchParams(search);
@@ -90,6 +122,13 @@ export function legacyServerRedirect(pathname: string, search: string): string |
     for (const [key, value] of params) if (key !== "host") next.append(key, value);
     return next.toString();
   };
+  const settings = /^\/servers\/([^/]+)\/settings(\/.*)?$/.exec(pathname);
+  if (settings) return `${legacySettingsPath(settings[2] ?? "")}?${withHost(settings[1])}`;
+  const bareSettings = /^\/settings(\/.*)?$/.exec(pathname);
+  if (bareSettings) {
+    const next = legacySettingsPath(bareSettings[1] ?? "");
+    return next === pathname ? null : `${next}${search}`;
+  }
   const match = /^\/servers\/([^/]+)\/(mail|tasks|activity)\/?$/.exec(pathname);
   if (match) return `/${LEGACY_SECTIONS[match[2]]}?${withHost(match[1])}`;
   const library = /^\/servers\/([^/]+)\/(images|workflows|stores)(\/.*)?$/.exec(pathname);

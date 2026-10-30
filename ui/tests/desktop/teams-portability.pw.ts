@@ -22,8 +22,8 @@ test("real Desktop creates, separates, copies, exports, previews, and imports a 
       if (marker > 0) window.__desktopApiBase = url.slice(0, marker);
       return originalFetch(input, init);
     };`);
-  await openPath(desktop, "/servers/local/settings/advanced/groups");
-  await expect.poll(() => bodyText(desktop)).toContain("New group (wizard)");
+  await openPath(desktop, "/settings/teams");
+  await expect.poll(() => bodyText(desktop)).toContain("New team (wizard)");
 
   const created =
     await desktop.execute<boolean>(`const input = document.querySelector('input[placeholder="group name"]');
@@ -57,7 +57,7 @@ test("real Desktop creates, separates, copies, exports, previews, and imports a 
   await expect.poll(() => bodyText(desktop)).toContain("desktop-team");
   await expect.poll(() => bodyText(desktop)).toContain("Individual agents");
 
-  await openPath(desktop, "/servers/local/settings/advanced/groups?team=desktop-team");
+  await openPath(desktop, "/settings/teams?team=desktop-team");
   await expect.poll(() => bodyText(desktop)).toContain("Copy YAML");
   const copyStarted = await desktop.execute<boolean>(`window.__desktopCopiedYAML = "";
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text) => { window.__desktopCopiedYAML = text; } } });
@@ -131,7 +131,7 @@ test("real Desktop creates, separates, copies, exports, previews, and imports a 
     .poll(() => bodyText(desktop), { timeout: 60_000 })
     .toContain("Import status: complete");
 
-  await openPath(desktop, "/servers/local/settings/advanced/groups?team=desktop-team");
+  await openPath(desktop, "/settings/teams?team=desktop-team");
   await expect.poll(() => bodyText(desktop)).toContain("desktop-worker");
   await openPath(desktop, "/servers/local/images?tab=built");
   await expect.poll(() => bodyText(desktop)).toContain("portable-image");

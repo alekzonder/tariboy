@@ -12,7 +12,7 @@ export default function OpsPage() {
 
   return (
     <div className="space-y-4 p-6">
-      <h1 className="text-lg font-semibold">Ops</h1>
+      <h2 className="text-lg font-semibold">Backup and restore</h2>
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Backup</CardTitle>
@@ -42,7 +42,7 @@ export default function OpsPage() {
           <Input
             value={file}
             onChange={(e) => setFile(e.target.value)}
-            placeholder="daemon-accessible archive path"
+            placeholder="archive path on the host"
             className="h-8 w-96 min-w-0"
           />
           <Button
@@ -56,7 +56,7 @@ export default function OpsPage() {
         </CardContent>
       </Card>
       <p className="text-xs text-muted-foreground">
-        Paths are resolved on the daemon host; backups land under the daemon base dir's backups/ by
+        Paths are resolved on the host; backups land under backups/ in the host's base directory by
         default.
       </p>
     </div>

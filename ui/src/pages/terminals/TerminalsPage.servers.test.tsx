@@ -196,11 +196,10 @@ describe("TerminalsPage Update all", () => {
       { host: { id: "d1", label: "alpha" }, agents: [] },
       { host: { id: "d2", label: "beta" }, agents: [] },
     ]);
-    renderAt("/terminals");
-    // Update all lives in the footer's hosts menu; Radix opens it from the keyboard.
+    renderAt("/settings/hosts");
+    // The footer shows that hosts are behind; Update all lives on Settings → Hosts.
     await screen.findByRole("img", { name: "2 hosts can be updated" });
-    fireEvent.keyDown(screen.getByRole("button", { name: "Hosts menu" }), { key: "Enter" });
-    return screen.findByRole("menuitem", { name: "Update all (2)" });
+    return screen.findByRole("button", { name: "Update all (2)" });
   }
 
   it("updates every outdated server once Update all is confirmed", async () => {
@@ -299,7 +298,7 @@ describe("TerminalsPage server management", () => {
     fireEvent.click(await screen.findByText("Remove host"));
 
     await waitFor(() => expect(confirm).toHaveBeenCalled());
-    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/remote daemon and data remain/i));
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/host and its data stay/i));
     await waitFor(async () =>
       expect((await listDaemons()).find((m) => m.id === id)).toBeUndefined(),
     );

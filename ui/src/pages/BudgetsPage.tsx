@@ -40,7 +40,7 @@ export default function BudgetsPage() {
 
   return (
     <div className="space-y-4 p-6">
-      <h1 className="text-lg font-semibold">Budgets</h1>
+      <h2 className="text-lg font-semibold">Budgets</h2>
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Set budget</CardTitle>

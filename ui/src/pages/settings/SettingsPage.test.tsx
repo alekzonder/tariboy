@@ -1,195 +1,65 @@
-import {
-  fireEvent,
-  render as rtlRender,
-  screen,
-  waitFor,
-  type RenderOptions,
-} from "@testing-library/react";
-import type { ReactElement } from "react";
+import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import SettingsPage, { GeneralSettings } from "./SettingsPage";
-import type { ApiClient } from "@/lib/api";
-import type { Daemon } from "@/lib/daemons";
-import { apiWrapper, fakeApi } from "@/test/api";
+import { describe, expect, it } from "vitest";
+import SettingsPage from "./SettingsPage";
 
-const getGlobalAgentShellScript = vi.fn();
-const setGlobalAgentShellScript = vi.fn();
-const getPluginContributions = vi.fn();
-
-function client(target: Daemon | null = null): ApiClient {
-  return fakeApi(
-    {
-      harnesses: { getCodexApproval: vi.fn().mockResolvedValue({ mode: "yolo" }) },
-      daemon: {
-        getGlobalAgentShellScript,
-        setGlobalAgentShellScript,
-        getIterationRetentionDefault: vi
-          .fn()
-          .mockResolvedValue({ keep_iterations: 0, keep_days: 0, max_bytes: 0 }),
-        getMaintenance: vi.fn().mockResolvedValue({
-          settings: {
-            enabled: true,
-            time: "03:00",
-            keep_backups: 7,
-            retention_days: 90,
-            chat_retention_days: 7,
-            compact: true,
-            compact_threshold_pct: 10,
-          },
-          last_run: null,
-        }),
-      },
-      plugins: { getPluginContributions },
-    },
-    target,
+function renderAt(path: string, hostControl = <button type="button">Host picker</button>) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route
+          path="/settings"
+          element={
+            <SettingsPage
+              hostControl={hostControl}
+              boundary={(page) => <div data-testid="host-boundary">{page}</div>}
+            />
+          }
+        >
+          <Route path="hosts" element={<p>hosts page</p>} />
+          <Route path="usage" element={<p>usage page</p>} />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
   );
 }
 
-function render(element: ReactElement, options: RenderOptions & { api?: ApiClient } = {}) {
-  const { api = client(), ...rest } = options;
-  return rtlRender(element, { ...rest, wrapper: apiWrapper(api) });
-}
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  getGlobalAgentShellScript.mockResolvedValue({ script: "export OK=1" });
-  getPluginContributions.mockResolvedValue({ plugins: [], count: 0 });
-  setGlobalAgentShellScript.mockResolvedValue({ saved: true });
-});
-
 describe("SettingsPage", () => {
-  it("keeps settings navigation inside the explicit server base path", () => {
-    render(
-      <MemoryRouter initialEntries={["/servers/remote-1/settings/advanced"]}>
-        <Routes>
-          <Route
-            path="/servers/remote-1/settings/*"
-            element={<SettingsPage basePath="/servers/remote-1/settings" />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    );
+  it("lists the seven Settings pages in one flat list, Application last", () => {
+    renderAt("/settings/hosts");
 
-    expect(screen.getByRole("link", { name: "General" })).toHaveAttribute(
-      "href",
-      "/servers/remote-1/settings",
-    );
-    expect(screen.queryByRole("link", { name: "Task reminders" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Rules" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Advanced" })).toHaveAttribute(
-      "href",
-      "/servers/remote-1/settings/advanced",
-    );
-    expect(screen.getByRole("link", { name: "Usage" })).toHaveAttribute(
-      "href",
-      "/servers/remote-1/settings/advanced/usage",
-    );
-    expect(screen.queryByRole("link", { name: "Evals" })).not.toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "Settings" });
+    const links = within(nav).getAllByRole("link");
+    expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
+      ["Hosts", "/settings/hosts"],
+      ["Teams", "/settings/teams"],
+      ["Usage & budgets", "/settings/usage"],
+      ["Agent defaults", "/settings/agent-defaults"],
+      ["Integrations", "/settings/integrations"],
+      ["Maintenance", "/settings/maintenance"],
+      ["Application", "/app-settings"],
+    ]);
+    expect(screen.getAllByRole("navigation")).toHaveLength(1);
+    for (const gone of ["Operator tools", "General", "CLI", "Appearance", "Advanced", "Daemons"]) {
+      expect(screen.queryByText(gone)).not.toBeInTheDocument();
+    }
   });
 
-  it("adds settings contributions under the selected server", async () => {
-    getPluginContributions.mockResolvedValue({
-      plugins: [{ name: "telegram", settings: { title: "Telegram" } }],
-      count: 1,
-    });
-    render(
-      <MemoryRouter initialEntries={["/servers/remote-1/settings"]}>
-        <Routes>
-          <Route
-            path="/servers/remote-1/settings/*"
-            element={<SettingsPage basePath="/servers/remote-1/settings" />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    );
+  it("keeps the Hosts page outside the host boundary and without the host selector", () => {
+    renderAt("/settings/hosts");
 
-    expect(await screen.findByRole("link", { name: "Telegram" })).toHaveAttribute(
-      "href",
-      "/servers/remote-1/settings/integrations/telegram",
-    );
-    expect(getPluginContributions).toHaveBeenCalledWith();
+    expect(screen.getByText("hosts page")).toBeInTheDocument();
+    expect(screen.queryByTestId("host-boundary")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Host picker" })).not.toBeInTheDocument();
   });
 
-  it("keeps an invalid global shell draft and shows Bash stderr", async () => {
-    const target = {
-      id: "remote-1",
-      label: "Remote",
-      baseURL: "https://remote.test",
-      token: "secret",
-    };
-    setGlobalAgentShellScript.mockRejectedValue(new Error("line 1: syntax error"));
-    render(
-      <MemoryRouter>
-        <Routes>
-          <Route index element={<GeneralSettings />} />
-        </Routes>
-      </MemoryRouter>,
-      { api: client(target) },
-    );
+  it("puts a host page inside the host boundary and its host selector above it", () => {
+    renderAt("/settings/usage");
 
-    const script = await screen.findByLabelText("Global Agent Shell Script");
-    await waitFor(() => expect(script).toBeEnabled());
-    fireEvent.change(script, {
-      target: { value: "if then" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save global agent shell script" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("line 1: syntax error");
-    expect(screen.getByLabelText("Global Agent Shell Script")).toHaveValue("if then");
-    expect(getGlobalAgentShellScript).toHaveBeenCalledWith();
-    expect(setGlobalAgentShellScript).toHaveBeenCalledWith("if then");
-  });
-
-  it("blocks shell-script editing and saving until its initial load succeeds", async () => {
-    const target = {
-      id: "remote-1",
-      label: "Remote",
-      baseURL: "https://remote.test",
-      token: "secret",
-    };
-    let resolveLoad!: (value: { script: string }) => void;
-    getGlobalAgentShellScript.mockReturnValue(
-      new Promise((resolve) => {
-        resolveLoad = resolve;
-      }),
-    );
-    render(
-      <MemoryRouter>
-        <Routes>
-          <Route index element={<GeneralSettings />} />
-        </Routes>
-      </MemoryRouter>,
-      { api: client(target) },
-    );
-
-    const script = await screen.findByLabelText("Global Agent Shell Script");
-    const save = screen.getByRole("button", { name: "Save global agent shell script" });
-    expect(script).toBeDisabled();
-    expect(save).toBeDisabled();
-    fireEvent.click(save);
-    expect(setGlobalAgentShellScript).not.toHaveBeenCalled();
-    fireEvent.change(script, { target: { value: "if then" } });
-    expect(script).toHaveValue("");
-
-    resolveLoad({ script: "export READY=1" });
-    await waitFor(() => expect(script).toBeEnabled());
-    expect(script).toHaveValue("export READY=1");
-    expect(save).toBeEnabled();
-  });
-
-  it("keeps shell-script editing and saving unavailable after load failure", async () => {
-    getGlobalAgentShellScript.mockRejectedValue(new Error("load failed"));
-    render(
-      <MemoryRouter>
-        <Routes>
-          <Route index element={<GeneralSettings />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("load failed");
-    expect(screen.getByLabelText("Global Agent Shell Script")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Save global agent shell script" })).toBeDisabled();
+    const boundary = screen.getByTestId("host-boundary");
+    expect(within(boundary).getByText("usage page")).toBeInTheDocument();
+    // An unreachable host replaces the page, never the way to pick another.
+    const picker = screen.getByRole("button", { name: "Host picker" });
+    expect(boundary).not.toContainElement(picker);
   });
 });
