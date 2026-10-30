@@ -16,7 +16,6 @@ import {
   renderAt,
   mockRowRects,
   keyboardMove,
-  serversTab,
 } from "@/test/terminals/terminalsPage";
 import { agentRow } from "@/test/fixtures/apiFixtures";
 
@@ -89,7 +88,6 @@ afterEach(cleanupTerminalsPage);
 
 describe("TerminalsPage order rollback", () => {
   it("rolls back agent order when daemon persistence fails", async () => {
-    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([
       {
         host: { id: "", label: "local" },
@@ -134,7 +132,6 @@ describe("TerminalsPage order rollback", () => {
 });
 
 it("serializes daemon order writes so an older request cannot finish last", async () => {
-  serversTab();
   vi.mocked(fetchAllAgents).mockResolvedValue([
     {
       host: { id: "", label: "local" },

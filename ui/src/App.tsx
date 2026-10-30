@@ -1,21 +1,18 @@
 import { useState } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { DaemonBanner } from "@/components/DaemonBanner";
 import { DaemonProvider } from "@/components/DaemonProvider";
-import { Button } from "@/components/ui/button";
-import { Settings } from "lucide-react";
 import { isDesktop } from "@/lib/desktop";
 import { SidebarStateProvider } from "@/pages/terminals/SidebarStateProvider";
 import { TitlebarSlotContext } from "@/pages/terminals/titlebarSlotContext";
 import { CustomerQuestionNotifications } from "@/components/CustomerQuestionNotifications";
 import { DesktopUpdatesProvider, UpdateBanner } from "@/components/DesktopUpdates";
 import { SidebarToggle } from "@/components/SidebarToggle";
-import { ViewSwitch } from "@/components/ViewSwitch";
 import { HelpMenu } from "@/components/onboarding/HelpMenu";
 import { OnboardingProvider } from "@/components/onboarding/OnboardingProvider";
-import { appChromeState } from "@/appChrome";
+import { sidebarRoute } from "@/appChrome";
 import { AppRoutes } from "@/routes";
 
 export default function App() {
@@ -39,12 +36,8 @@ export default function App() {
 
 function MainApp() {
   const location = useLocation();
-  const [searchParams] = useSearchParams();
   const [titlebarSlot, setTitlebarSlot] = useState<HTMLElement | null>(null);
-  const { sidebarRoute, viewSwitch, allTasks } = appChromeState({
-    pathname: location.pathname,
-    view: searchParams.get("view"),
-  });
+  const withSidebar = sidebarRoute(location.pathname);
   return (
     <TitlebarSlotContext.Provider value={titlebarSlot}>
       {/* Topbar: 42px, no bottom border — the separation between chrome and the
@@ -54,7 +47,7 @@ function MainApp() {
         data-tauri-drag-region="deep"
         data-testid="app-titlebar"
       >
-        <div className="flex min-w-0 items-center">
+        <div className="flex min-w-0 items-center gap-1.5">
           {/* Room for the macOS traffic lights under the Desktop app's overlay
               titlebar; a browser or the Android app has none. */}
           {isDesktop() && (
@@ -64,24 +57,14 @@ function MainApp() {
               className="h-full w-18 shrink-0"
             />
           )}
-          {sidebarRoute && !allTasks && <SidebarToggle />}
-          {/* The workspace switcher of the console pages portals in here. */}
-          {sidebarRoute && <div ref={setTitlebarSlot} className="ml-1 flex min-w-0" />}
-          {viewSwitch && <ViewSwitch allTasks={allTasks} />}
+          {withSidebar && <SidebarToggle />}
+          <span className="text-body font-semibold">Tariboy</span>
         </div>
         <div aria-hidden="true" className="h-full min-w-4 flex-1" />
+        {/* The console pages portal the global search in here. */}
+        {withSidebar && <div ref={setTitlebarSlot} className="flex min-w-0" />}
         <div className="flex items-center gap-0.5">
           <HelpMenu />
-          <Button
-            asChild
-            variant="ghost"
-            size="icon-sm"
-            className="size-6.5 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <Link to="/app-settings" aria-label="Application settings" title="Application settings">
-              <Settings className="size-3.75" />
-            </Link>
-          </Button>
           <ThemeToggle
             variant="ghost"
             className="size-6.5 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"

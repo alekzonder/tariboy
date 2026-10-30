@@ -81,7 +81,7 @@ describe("task table columns", () => {
     },
   );
 
-  it.each(["agent", "all", "servers"] as const)(
+  it.each(["agent", "all"] as const)(
     "puts priority first, before the key, in the %s table",
     (mode) => {
       renderRow(mode);

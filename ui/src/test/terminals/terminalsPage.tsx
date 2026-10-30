@@ -136,8 +136,9 @@ export function renderAt(path: string, attention: ReadonlyMap<string, number> = 
                 <Route path="/terminals/:hostId/:agent" element={<TerminalsPage />} />
                 <Route path="/agents/:hostId/:agent/:tab" element={<TerminalsPage />} />
                 <Route path="/agents/:hostId/teams/:team" element={<TerminalsPage />} />
-                <Route path="/servers/:hostId/mail" element={<TerminalsPage serverView="mail" />} />
-                <Route path="/servers/:hostId/tasks" element={<TerminalsPage />} />
+                <Route path="/servers/:hostId/mail" element={<TerminalsPage />} />
+                <Route path="/inbox" element={<TerminalsPage serverView="mail" scoped />} />
+                <Route path="/tasks" element={<TerminalsPage scoped />} />
               </Routes>
             </SidebarStateProvider>
           </MemoryRouter>
@@ -190,20 +191,4 @@ export async function registerProd(): Promise<string> {
 // does not synthesize — drive it from the keyboard instead.
 export async function openManageMenu(): Promise<void> {
   fireEvent.keyDown(await screen.findByRole("button", { name: "manage prod" }), { key: "Enter" });
-}
-
-/** Open the Servers tab before mounting — the tab the sidebar remembers is the
- *  one the server sections, host status and drag-and-drop live in. */
-export function serversTab() {
-  localStorage.setItem("terminals:sidebar-tab:v1", "servers");
-}
-
-/** Open the Agents tab before mounting — the flat list across servers. */
-export function agentsTab() {
-  localStorage.setItem("terminals:sidebar-tab:v1", "agents");
-}
-
-/** Radix activates a tab on mousedown, which fireEvent.click does not send. */
-export function pickSidebarTab(name: string) {
-  fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0 });
 }

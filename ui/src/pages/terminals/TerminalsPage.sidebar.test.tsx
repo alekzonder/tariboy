@@ -12,13 +12,7 @@ import type {
 import { type Daemon } from "@/lib/daemons";
 import { addHostToWorkspace, createWorkspace, selectWorkspace } from "@/lib/workspaces";
 import userEvent from "@testing-library/user-event";
-import {
-  cleanupTerminalsPage,
-  setupTerminalsPage,
-  renderAt,
-  agentsTab,
-  pickSidebarTab,
-} from "@/test/terminals/terminalsPage";
+import { cleanupTerminalsPage, setupTerminalsPage, renderAt } from "@/test/terminals/terminalsPage";
 import { agentRow } from "@/test/fixtures/apiFixtures";
 
 vi.mock("@/lib/aggregate", () => ({
@@ -122,9 +116,9 @@ describe("host workspaces", () => {
     renderAt("/agents/local/a1/activity");
     expect(await screen.findByRole("button", { name: "Open a1" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open b1" })).toBeNull();
-    expect(screen.getByText("1 server · 1 agent")).toBeInTheDocument();
+    expect(screen.getByText("Local · ready")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Workspace: Default" }));
+    await userEvent.click(screen.getByRole("button", { name: "Hosts menu" }));
     await userEvent.click(await screen.findByRole("menuitemradio", { name: /Production/ }));
 
     // The open agent is not in Production, so its first agent opens in the same tab.
@@ -135,26 +129,24 @@ describe("host workspaces", () => {
     expect(screen.queryByRole("button", { name: "Open a1" })).toBeNull();
   });
 
-  it("limits All tasks to the current workspace's servers", async () => {
+  it("lists only the workspace's hosts and offers no workspace switch with one workspace", async () => {
     const production = createWorkspace("Production")!;
     addHostToWorkspace("d1", production);
     selectWorkspace(production);
-    renderAt("/?view=all");
-    await screen.findByTestId("all-tasks-workspace");
-    await waitFor(() => expect(fetchAllAgents).toHaveBeenCalled());
-
-    await userEvent.click(await screen.findByRole("button", { name: "Server: all" }));
-    const menu = await screen.findByRole("menu");
-    expect(within(menu).getByRole("menuitem", { name: /prod/ })).toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitem", { name: /This daemon/ })).toBeNull();
+    renderAt("/");
+    expect(await screen.findByRole("button", { name: "Open b1" })).toBeInTheDocument();
+    expect(screen.getByText("prod · ready")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open a1" })).toBeNull();
   });
 
-  it("shows an empty task table, not a loading one, in a workspace with no servers", async () => {
-    selectWorkspace(createWorkspace("Lab")!);
-    renderAt("/?view=all");
-    await waitFor(() => expect(fetchAllAgents).toHaveBeenCalled());
-    expect(await screen.findByText("No tasks")).toBeInTheDocument();
-    expect(screen.queryByRole("status", { name: "Loading tasks" })).toBeNull();
+  it("opens the workspace manager from the hosts menu", async () => {
+    renderAt("/");
+    await screen.findByRole("button", { name: "Open a1" });
+    expect(screen.getByText("2 hosts · ready")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Hosts menu" }));
+    expect(screen.queryByRole("menuitemradio")).toBeNull();
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage workspaces…" }));
+    expect(await screen.findByRole("dialog", { name: "Manage workspaces" })).toBeInTheDocument();
   });
 
   it("shows an empty workspace in the island with a way to manage it", async () => {
@@ -162,7 +154,7 @@ describe("host workspaces", () => {
     renderAt("/agents/local/a1/console");
     await screen.findByRole("button", { name: "Open a1" });
 
-    await userEvent.click(screen.getByRole("button", { name: "Workspace: Default" }));
+    await userEvent.click(screen.getByRole("button", { name: "Hosts menu" }));
     await userEvent.click(await screen.findByRole("menuitemradio", { name: /Lab/ }));
 
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/"));
@@ -185,13 +177,13 @@ describe("sidebar width", () => {
   it("starts at the persisted width", async () => {
     localStorage.setItem("terminals:sidebar:v1", JSON.stringify({ width: 380, hidden: false }));
     renderAt("/terminals");
-    await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
+    await screen.findByRole("button", { name: "Open a1" });
     expect(screen.getByTestId("agents-sidebar")).toHaveStyle({ width: "380px" });
   });
 
   it("drags to a new width and persists it", async () => {
     renderAt("/terminals");
-    await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
+    await screen.findByRole("button", { name: "Open a1" });
     const handle = screen.getByRole("separator", { name: "resize sidebar" });
 
     // jsdom has no layout, so the aside's rect.left is 0 and clientX is the width.
@@ -215,7 +207,7 @@ describe("sidebar width", () => {
 
   it("clamps a drag past the maximum", async () => {
     renderAt("/terminals");
-    await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
+    await screen.findByRole("button", { name: "Open a1" });
     fireEvent.pointerDown(screen.getByRole("separator", { name: "resize sidebar" }));
     fireEvent.pointerMove(window, { clientX: 5000 });
     fireEvent.pointerUp(window);
@@ -228,7 +220,7 @@ describe("sidebar width", () => {
   it("resets to the default on double-click", async () => {
     localStorage.setItem("terminals:sidebar:v1", JSON.stringify({ width: 500, hidden: false }));
     renderAt("/terminals");
-    await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
+    await screen.findByRole("button", { name: "Open a1" });
     fireEvent.doubleClick(screen.getByRole("separator", { name: "resize sidebar" }));
     expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!)).toMatchObject({
       width: 268,
@@ -239,7 +231,7 @@ describe("sidebar width", () => {
   it("resizes with arrow keys", async () => {
     localStorage.setItem("terminals:sidebar:v1", JSON.stringify({ width: 300, hidden: false }));
     renderAt("/terminals");
-    await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
+    await screen.findByRole("button", { name: "Open a1" });
     const handle = screen.getByRole("separator", { name: "resize sidebar" });
     fireEvent.keyDown(handle, { key: "ArrowRight" });
     expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!)).toMatchObject({
@@ -254,7 +246,7 @@ describe("sidebar width", () => {
   });
 });
 
-describe("sidebar tabs", () => {
+describe("sidebar agent list", () => {
   const twoHosts = [
     {
       host: { id: "", label: "This daemon (local)" },
@@ -292,54 +284,54 @@ describe("sidebar tabs", () => {
     },
   ];
 
-  it("opens on Servers, the first of two tabs, with Groups hidden", async () => {
+  it("groups agents under host headings with two hosts, with no tabs", async () => {
     vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
     renderAt("/");
 
-    expect(await screen.findByRole("button", { name: "Open server prod" })).toBeInTheDocument();
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Servers", "Agents"]);
-    expect(screen.getByRole("tab", { name: "Servers" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.queryByRole("tab", { name: "Groups" })).toBeNull();
+    expect(await screen.findByRole("button", { name: "Open host prod" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open gamma" })).toBeInTheDocument();
+    expect(screen.queryAllByRole("tab")).toEqual([]);
   });
 
-  it("lists every server's agents without server sections on Agents", async () => {
-    agentsTab();
-    vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
+  it("shows one host's teams and agents without a host heading", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts.slice(0, 1));
     renderAt("/");
 
     expect(await screen.findByRole("button", { name: "Open alpha" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open gamma" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open server prod" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Open team release" })).toBeInTheDocument();
+    expect(screen.getByText("Individual agents")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Open host/ })).toBeNull();
   });
 
-  it("remembers the chosen tab across mounts", async () => {
+  it("opens and closes the agent list under Agents and remembers it", async () => {
     vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
     const first = renderAt("/");
-    expect(await screen.findByRole("button", { name: "Open server prod" })).toBeInTheDocument();
-    pickSidebarTab("Agents");
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Open server prod" })).toBeNull(),
+    expect(await screen.findByRole("button", { name: "Open gamma" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
+    expect(screen.getByRole("button", { name: "Agents" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
     );
+    expect(screen.queryByRole("button", { name: "Open gamma" })).toBeNull();
     first.unmount();
 
     renderAt("/");
-    expect(await screen.findByRole("button", { name: "Open gamma" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open server prod" })).toBeNull();
+    await screen.findByRole("link", { name: "Tasks" });
+    expect(screen.queryByRole("button", { name: "Open gamma" })).toBeNull();
   });
 
-  it("puts a called-for agent above the rest, and a pinned one above that", async () => {
-    agentsTab();
+  it("puts a pinned agent on top and shows it only there", async () => {
     vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
-    renderAt("/", new Map([[JSON.stringify(["prod", "gamma"]), 1]]));
+    renderAt("/");
 
     const names = () => screen.getAllByTestId("sidebar-agent").map((row) => row.textContent);
     await waitFor(() => expect(names()).toHaveLength(3));
-    expect(names()[0]).toMatch(/gamma/);
+    expect(names()[0]).toMatch(/alpha/);
 
     fireEvent.contextMenu(screen.getByRole("button", { name: "Open beta" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "Pin" }));
     await waitFor(() => expect(names()[0]).toMatch(/beta/));
-    expect(names()[1]).toMatch(/gamma/);
+    expect(names().filter((name) => /beta/.test(name ?? ""))).toHaveLength(1);
     expect(JSON.parse(localStorage.getItem("terminals:sidebar-pinned:v1")!)).toEqual({
       version: 1,
       keys: [JSON.stringify(["", "beta"])],

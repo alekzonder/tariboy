@@ -16,7 +16,6 @@ import {
   setupTerminalsPage,
   renderAt,
   registerProd,
-  serversTab,
 } from "@/test/terminals/terminalsPage";
 import { chooseManagedFolder } from "@/test/terminals/createAgentDialog";
 import { agentRow } from "@/test/fixtures/apiFixtures";
@@ -144,50 +143,43 @@ describe("TerminalsPage agent routes", () => {
     expect(screen.getByTestId("agent-workspace-content")).not.toHaveAttribute("inert");
   }, 10_000);
 
-  it("opens a server workspace from a selectable server heading", async () => {
-    serversTab();
+  it("opens a host's Tasks from its heading", async () => {
     renderAt("/");
 
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Open server This daemon (local)",
+        name: "Open host This daemon (local)",
       }),
     );
 
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/servers/local/tasks"),
+      expect(screen.getByTestId("location").textContent).toBe("/tasks?host=local"),
     );
-    expect(screen.getByRole("navigation", { name: "Server workspace" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open server This daemon (local)" })).toHaveAttribute(
+    expect(screen.queryByRole("navigation", { name: "Server workspace" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Open host This daemon (local)" })).toHaveAttribute(
       "aria-current",
       "page",
     );
   });
 
-  it("opens the server Mailbox, the first server section, at /servers/<host>/mail", async () => {
-    serversTab();
-    renderAt("/servers/local/tasks");
-
-    const bar = await screen.findByRole("navigation", { name: "Server workspace" });
-    const links = within(bar).getAllByRole("link");
-    expect(links[0]).toHaveTextContent("Mailbox");
-    expect(links[1]).toHaveTextContent("Tasks");
-    fireEvent.click(links[0]);
+  it("sends the old server Mailbox to the Inbox of that host", async () => {
+    renderAt("/servers/local/mail");
 
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/servers/local/mail"),
+      expect(screen.getByTestId("location").textContent).toBe("/inbox?host=local"),
     );
     expect(await screen.findByRole("radiogroup", { name: "Mailbox" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Compose" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Needs you" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
   });
 
-  it("shows server context above agent context with distinct selected states", async () => {
-    serversTab();
+  it("shows only the agent's own tabs above an agent, with its host and row selected", async () => {
     renderAt("/agents/local/a1/console");
 
-    expect(await screen.findByRole("navigation", { name: "Server workspace" })).toBeInTheDocument();
     expect(await screen.findByRole("navigation", { name: "Agent workspace" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open server This daemon (local)" })).toHaveAttribute(
+    expect(screen.queryByRole("navigation", { name: "Server workspace" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Open host This daemon (local)" })).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -212,7 +204,7 @@ describe("TerminalsPage agent routes", () => {
 
   it("opens a sidebar agent in Terminal", async () => {
     renderAt("/");
-    await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
+    await screen.findByRole("button", { name: "Open a1" });
 
     fireEvent.click(screen.getByRole("button", { name: "Open a1" }));
 
@@ -223,7 +215,7 @@ describe("TerminalsPage agent routes", () => {
 
   it("opens a non-interactive sidebar agent in Terminal", async () => {
     renderAt("/");
-    await waitFor(() => expect(screen.getByText("a2")).toBeInTheDocument());
+    await screen.findByRole("button", { name: "Open a2", hidden: true });
 
     fireEvent.click(screen.getByRole("button", { name: "Open a2" }));
 
@@ -237,7 +229,7 @@ describe("TerminalsPage agent routes", () => {
 describe("TerminalsPage route changes", () => {
   it("keeps the current agent tab when switching to another agent", async () => {
     renderAt("/agents/local/a1/activity");
-    await waitFor(() => expect(screen.getByText("a2")).toBeInTheDocument());
+    await screen.findByRole("button", { name: "Open a2", hidden: true });
 
     fireEvent.click(screen.getByRole("button", { name: "Open a2" }));
 
@@ -246,23 +238,14 @@ describe("TerminalsPage route changes", () => {
     );
   });
 
-  it("shows All tasks without the agent sidebar and does not narrow to the route agent", async () => {
+  it("opens the former All tasks view of an agent route as Tasks", async () => {
     renderAt("/agents/local/a1/console?view=all");
-    const workspace = await screen.findByTestId("all-tasks-workspace");
-    await waitFor(() => expect(fetchAllAgents).toHaveBeenCalled());
-    await act(async () => {});
-
-    expect(screen.queryByRole("button", { name: "Open a2" })).toBeNull();
-    expect(screen.queryByRole("separator", { name: "resize sidebar" })).toBeNull();
-    expect(within(workspace).queryByRole("button", { name: "Clear agent filter" })).toBeNull();
-    expect(screen.queryByTestId("tui-screen")).toBeNull();
-    // The route keeps the agent, so switching back to Agents reopens it.
-    expect(screen.getByTestId("location").textContent).toBe("/agents/local/a1/console?view=all");
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/tasks"));
   });
 
   it("drops the selected task when switching agents on the Tasks tab", async () => {
     renderAt("/agents/local/a1/tasks?task=DEV-1");
-    await waitFor(() => expect(screen.getByText("a2")).toBeInTheDocument());
+    await screen.findByRole("button", { name: "Open a2", hidden: true });
 
     fireEvent.click(screen.getByRole("button", { name: "Open a2", hidden: true }));
 
@@ -275,10 +258,8 @@ describe("TerminalsPage route changes", () => {
     localStorage.setItem("terminals:sidebar:v1", JSON.stringify({ width: 268, hidden: true }));
     renderAt("/");
 
-    expect(
-      await screen.findByText("Pick an agent on the left, or create one."),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Agents")).toBeNull();
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
+    expect(screen.queryByTestId("agents-sidebar")).toBeNull();
     expect(screen.queryByRole("separator", { name: "resize sidebar" })).toBeNull();
   });
 
@@ -288,8 +269,9 @@ describe("TerminalsPage route changes", () => {
       vi.mocked(fetchAllAgents).mockResolvedValue([]);
       renderAt("/");
 
-      fireEvent.click(await screen.findByRole("button", { name: "Add server" }));
-      expect(await screen.findByText("Add host")).toBeInTheDocument();
+      const main = await screen.findByRole("main");
+      fireEvent.click(await within(main).findByRole("button", { name: "Add host" }));
+      expect(await screen.findByRole("dialog", { name: "Add host" })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "New agent" })).toBeNull();
     } finally {
       vi.unstubAllEnvs();
@@ -298,7 +280,7 @@ describe("TerminalsPage route changes", () => {
 
   it("opens a sidebar agent in the product Terminal route", async () => {
     renderAt("/");
-    fireEvent.click(await screen.findByText("a1"));
+    fireEvent.click(await screen.findByRole("button", { name: "Open a1" }));
     await waitFor(() =>
       expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/a1/console"),
     );
@@ -307,7 +289,7 @@ describe("TerminalsPage route changes", () => {
   it("opens a sidebar agent on Tasks in Simple mode", async () => {
     localStorage.setItem(UI_MODE_KEY, "simple");
     renderAt("/");
-    fireEvent.click(await screen.findByText("a1"));
+    fireEvent.click(await screen.findByRole("button", { name: "Open a1" }));
     await waitFor(() =>
       expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/a1/tasks"),
     );
@@ -315,15 +297,17 @@ describe("TerminalsPage route changes", () => {
 });
 
 describe("TerminalsPage empty state and create", () => {
-  it("empty state prompts to pick or create an agent when none selected", async () => {
-    serversTab();
+  it("shows Home with New agent when no agent is selected", async () => {
     renderAt("/terminals");
-    await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "New agent" })).toBeInTheDocument();
+    const main = await screen.findByRole("main");
+    expect(await within(main).findByRole("heading", { name: "Home" })).toBeInTheDocument();
+    expect(within(main).getByRole("button", { name: "New agent" })).toBeInTheDocument();
+    for (const section of ["Needs you", "Running now", "Today", "Recent"]) {
+      expect(within(main).getByRole("heading", { name: new RegExp(`^${section}`) })).toBeVisible();
+    }
   });
 
   it("re-polls immediately after creating an agent instead of waiting for the next tick", async () => {
-    serversTab();
     createAgent.mockResolvedValue({
       name: "new-agent",
       state: "running",
@@ -332,10 +316,10 @@ describe("TerminalsPage empty state and create", () => {
       goal_delivery_cooldown_s: 0,
     });
     renderAt("/terminals");
-    await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
+    await screen.findByRole("button", { name: "Open a1" });
     const callsBefore = vi.mocked(fetchAllAgents).mock.calls.length;
 
-    fireEvent.click(screen.getByRole("button", { name: "New agent" }));
+    fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "New agent" }));
     // The form picks the only built image by itself.
     const dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(within(dialog).getByLabelText("image")).toHaveValue("worker"));
@@ -352,7 +336,6 @@ describe("TerminalsPage empty state and create", () => {
 
   it("opens a new agent on its Terminal in Simple mode, where a sidebar agent opens on Tasks", async () => {
     localStorage.setItem(UI_MODE_KEY, "simple");
-    serversTab();
     createAgent.mockResolvedValue({
       name: "new-agent",
       state: "running",
@@ -361,9 +344,9 @@ describe("TerminalsPage empty state and create", () => {
       goal_delivery_cooldown_s: 0,
     });
     renderAt("/terminals");
-    await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
+    await screen.findByRole("button", { name: "Open a1" });
 
-    fireEvent.click(screen.getByRole("button", { name: "New agent" }));
+    fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "New agent" }));
     // The form picks the only built image by itself.
     const dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(within(dialog).getByLabelText("image")).toHaveValue("worker"));

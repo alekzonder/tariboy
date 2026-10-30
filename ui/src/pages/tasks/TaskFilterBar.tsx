@@ -1,76 +1,43 @@
+import type { ReactNode } from "react";
 import { Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
-import type { Queue, TaskStatusView } from "@/lib/api";
-import TaskColumnsMenu from "./TaskColumnsMenu";
-import {
-  TaskPrincipalChips,
-  TaskQueueMenu,
-  TaskScopeAgentChip,
-  TaskServerMenu,
-} from "./TaskFilterMenus";
-import type { TaskRowMode } from "./taskColumns";
+import type { TaskStatusView } from "@/lib/api";
+import { TaskFiltersMenu, TaskScopeAgentChip, type TaskFiltersMenuProps } from "./TaskFilterMenus";
 
 const STATUS_OPTIONS = [
   { value: "active", label: "Active" },
-  { value: "closed", label: "Closed" },
+  { value: "closed", label: "Done" },
   { value: "all", label: "All" },
 ] as const satisfies ReadonlyArray<{ value: TaskStatusView; label: string }>;
 
-/** The two daemon-side narrowings that used to be rail entries. They are
- *  filters, not sections, so they live here as chips and are off by default. */
-export type TaskPrincipalFilter = "" | "mine" | "waiting";
-
 /**
- * The bar above the task table: what to search, which statuses to show, which
- * queue, whether the table is narrowed to the signed-in principal, and — in the
- * agent-scoped view — the chip that says it is narrowed to one agent. `Closed`
- * is done + cancelled, which is what the daemon's `status_view` already means.
+ * The one row above the task table: an optional host picker, the search, which
+ * statuses to show, the Filters menu (queue, assignee, "Waiting for me",
+ * columns), the scope agent's chip in the agent view, then refresh and New
+ * task. `Done` is done + cancelled, which is what the daemon's `closed` status
+ * view already means. The row never wraps; the search gives up width first.
  */
 export function TaskFilterBar({
-  mode,
+  hostControl,
   query,
   onQuery,
   statusView,
   onStatusView,
-  principalFilter,
-  onPrincipalFilter,
-  queues,
-  queue,
-  onQueue,
-  queueCounts,
-  onManageQueues,
-  servers,
-  server = "",
-  onServer,
   scopeAgent,
   onClearScopeAgent,
   refreshing,
   onRefresh,
   onCreate,
-}: {
-  mode: TaskRowMode;
+  ...filters
+}: TaskFiltersMenuProps & {
+  /** Rendered first, e.g. a host selector when the workspace has several. */
+  hostControl?: ReactNode;
   query: string;
   onQuery: (value: string) => void;
   statusView: TaskStatusView;
   onStatusView: (value: TaskStatusView) => void;
-  principalFilter?: TaskPrincipalFilter;
-  onPrincipalFilter?: (value: TaskPrincipalFilter) => void;
-  queues: ReadonlyArray<Pick<Queue, "prefix">>;
-  /** Empty means every queue. */
-  queue: string;
-  onQueue: (prefix: string) => void;
-  /** Listed tasks per queue prefix, for the menu's trailing counts. */
-  queueCounts: ReadonlyMap<string, number>;
-  /** Queues belong to one server, so the every-server table cannot manage them. */
-  onManageQueues?: () => void;
-  /** The every-server table's server menu; an unavailable server is listed but
-   *  cannot be picked. */
-  servers?: ReadonlyArray<{ id: string; label: string; count: number; unavailable: boolean }>;
-  /** Empty means every server. */
-  server?: string;
-  onServer?: (id: string) => void;
   /** Set when the table is scoped to one agent; shown as a removable chip. */
   scopeAgent?: string;
   onClearScopeAgent?: () => void;
@@ -79,12 +46,18 @@ export function TaskFilterBar({
   onCreate: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2.75 pb-2.25">
+    <div
+      role="toolbar"
+      aria-label="Task filters"
+      data-toolbar
+      className="flex flex-nowrap items-center gap-1.5 px-4 pt-2.75 pb-2.25"
+    >
+      {hostControl && <div className="flex h-7 shrink-0 items-center">{hostControl}</div>}
       <SearchInput
-        className="h-7 w-55 shrink-0"
+        className="h-7 w-55 min-w-0 shrink"
         inputClassName="text-ui"
         aria-label="Search tasks"
-        placeholder={mode === "agent" ? "Search tasks" : "Search all tasks"}
+        placeholder={filters.mode === "agent" ? "Search tasks" : "Search all tasks"}
         value={query}
         onChange={(event) => onQuery(event.target.value)}
       />
@@ -94,27 +67,11 @@ export function TaskFilterBar({
         value={statusView}
         onChange={onStatusView}
       />
-      <TaskQueueMenu
-        queues={queues}
-        queue={queue}
-        onQueue={onQueue}
-        queueCounts={queueCounts}
-        onManageQueues={onManageQueues}
-      />
-      {servers && onServer && (
-        <TaskServerMenu servers={servers} server={server} onServer={onServer} />
-      )}
-      {mode !== "servers" && (
-        <TaskPrincipalChips
-          principalFilter={principalFilter}
-          onPrincipalFilter={onPrincipalFilter}
-        />
-      )}
+      <TaskFiltersMenu {...filters} />
       {scopeAgent && (
         <TaskScopeAgentChip scopeAgent={scopeAgent} onClearScopeAgent={onClearScopeAgent} />
       )}
-      <div className="ml-auto flex items-center gap-1.5">
-        <TaskColumnsMenu mode={mode} />
+      <div className="ml-auto flex h-7 shrink-0 items-center gap-1.5">
         <Button
           type="button"
           variant="ghost"

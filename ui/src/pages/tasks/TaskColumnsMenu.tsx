@@ -1,11 +1,5 @@
-import { ChevronLeft, ChevronRight, Columns3, Minus, Plus, RotateCcw } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ChevronLeft, ChevronRight, Minus, Plus, RotateCcw } from "lucide-react";
+import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import {
   clampTaskColumnWidth,
   moveTaskColumn,
@@ -27,86 +21,74 @@ const keepOpen = (action: () => void) => (event: Event) => {
 
 const stepClass = "size-7 justify-center rounded-control p-0";
 
-/** The touch path to the column layout: order and width per column of the
- *  current table, and a reset. */
-export default function TaskColumnsMenu({ mode }: { mode: TaskRowMode }) {
+/** The touch path to the column layout, as the items of a menu: order and
+ *  width per column of the current table, and a reset. */
+export default function TaskColumnsMenuItems({ mode }: { mode: TaskRowMode }) {
   const columns = useTaskColumns(mode);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label="Columns"
-          className="flex h-7 shrink-0 items-center gap-1.75 rounded-md bg-muted px-2.25 text-ui text-muted-foreground hover:bg-accent hover:text-foreground max-sm:hidden"
-        >
-          <Columns3 aria-hidden="true" className="size-3" />
-          Columns
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-60 rounded-card p-1.25">
-        {columns.map((column, index) => {
-          const label = TASK_COLUMN_LABELS[column.id];
-          const id = column.id;
-          const width = column.width;
-          return (
-            <div
-              key={id}
-              data-testid="task-column-menu-row"
-              data-column={id}
-              className="flex h-8 items-center gap-0.5 pl-2.25 text-body-sm"
+    <>
+      {columns.map((column, index) => {
+        const label = TASK_COLUMN_LABELS[column.id];
+        const id = column.id;
+        const width = column.width;
+        return (
+          <div
+            key={id}
+            data-testid="task-column-menu-row"
+            data-column={id}
+            className="flex h-8 items-center gap-0.5 pl-2.25 text-body-sm"
+          >
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+            {id !== "task" && width !== undefined && (
+              <>
+                <span className="w-9 text-right text-meta text-muted-foreground tabular-nums">
+                  {width}
+                </span>
+                <DropdownMenuItem
+                  aria-label={`Narrow ${label}`}
+                  disabled={width <= clampTaskColumnWidth(id, 0)}
+                  onSelect={keepOpen(() => setTaskColumnWidth(id, width - WIDTH_STEP))}
+                  className={stepClass}
+                >
+                  <Minus aria-hidden="true" className="size-3" />
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  aria-label={`Widen ${label}`}
+                  disabled={width >= clampTaskColumnWidth(id, Infinity)}
+                  onSelect={keepOpen(() => setTaskColumnWidth(id, width + WIDTH_STEP))}
+                  className={stepClass}
+                >
+                  <Plus aria-hidden="true" className="size-3" />
+                </DropdownMenuItem>
+              </>
+            )}
+            <DropdownMenuItem
+              aria-label={`Move ${label} left`}
+              disabled={index === 0}
+              onSelect={keepOpen(() => moveTaskColumn(id, columns[index - 1].id))}
+              className={stepClass}
             >
-              <span className="min-w-0 flex-1 truncate">{label}</span>
-              {id !== "task" && width !== undefined && (
-                <>
-                  <span className="w-9 text-right text-meta text-muted-foreground tabular-nums">
-                    {width}
-                  </span>
-                  <DropdownMenuItem
-                    aria-label={`Narrow ${label}`}
-                    disabled={width <= clampTaskColumnWidth(id, 0)}
-                    onSelect={keepOpen(() => setTaskColumnWidth(id, width - WIDTH_STEP))}
-                    className={stepClass}
-                  >
-                    <Minus aria-hidden="true" className="size-3" />
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    aria-label={`Widen ${label}`}
-                    disabled={width >= clampTaskColumnWidth(id, Infinity)}
-                    onSelect={keepOpen(() => setTaskColumnWidth(id, width + WIDTH_STEP))}
-                    className={stepClass}
-                  >
-                    <Plus aria-hidden="true" className="size-3" />
-                  </DropdownMenuItem>
-                </>
-              )}
-              <DropdownMenuItem
-                aria-label={`Move ${label} left`}
-                disabled={index === 0}
-                onSelect={keepOpen(() => moveTaskColumn(id, columns[index - 1].id))}
-                className={stepClass}
-              >
-                <ChevronLeft aria-hidden="true" className="size-3.5" />
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                aria-label={`Move ${label} right`}
-                disabled={index === columns.length - 1}
-                onSelect={keepOpen(() => moveTaskColumn(id, columns[index + 1].id))}
-                className={stepClass}
-              >
-                <ChevronRight aria-hidden="true" className="size-3.5" />
-              </DropdownMenuItem>
-            </div>
-          );
-        })}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={resetTaskColumns}
-          className="h-7 gap-2 rounded-control px-2.25 text-body-sm"
-        >
-          <RotateCcw aria-hidden="true" className="size-3" />
-          Reset columns
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+              <ChevronLeft aria-hidden="true" className="size-3.5" />
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              aria-label={`Move ${label} right`}
+              disabled={index === columns.length - 1}
+              onSelect={keepOpen(() => moveTaskColumn(id, columns[index + 1].id))}
+              className={stepClass}
+            >
+              <ChevronRight aria-hidden="true" className="size-3.5" />
+            </DropdownMenuItem>
+          </div>
+        );
+      })}
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        onSelect={resetTaskColumns}
+        className="h-7 gap-2 rounded-control px-2.25 text-body-sm"
+      >
+        <RotateCcw aria-hidden="true" className="size-3" />
+        Reset columns
+      </DropdownMenuItem>
+    </>
   );
 }

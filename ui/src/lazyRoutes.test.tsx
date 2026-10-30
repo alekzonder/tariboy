@@ -63,12 +63,12 @@ beforeEach(() => {
 });
 
 describe("lazily loaded screens", () => {
-  it("keeps the titlebar and server navigation while a server page loads", async () => {
+  it("keeps the titlebar and the sidebar while a Library page loads", async () => {
     renderAt("/servers/local/images");
 
     expect(await screen.findByText("Loading…", { selector: "[role=status]" })).toBeInTheDocument();
     expect(screen.getByTestId("app-titlebar")).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Server workspace" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Sections" })).toBeInTheDocument();
 
     await act(async () => gates.images.release());
     expect(await screen.findByRole("heading", { name: "Images page" })).toBeInTheDocument();
@@ -78,7 +78,7 @@ describe("lazily loaded screens", () => {
     renderAt("/agents/local/builder/console");
 
     expect(await screen.findByText("Loading…", { selector: "[role=status]" })).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: "Agents" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Navigation" })).toBeInTheDocument();
 
     await act(async () => gates.console.release());
     expect(await screen.findByRole("heading", { name: "Console tab" })).toBeInTheDocument();

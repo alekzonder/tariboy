@@ -109,14 +109,14 @@ export const storageKeys = {
   terminalsSidebar: jsonKey("local", "terminals:sidebar:v1", 1),
   /** Legacy: read once so the sidebar of the removed canvas survives. */
   terminalsLegacyWorkspace: jsonKey("local", "terminals:workspace:v1", 1),
-  terminalsSidebarTab: oneOfKey("terminals:sidebar-tab:v1", 1, ["servers", "agents"], "servers"),
+  /** Whether the agent list under Agents is open; open unless closed once. */
+  terminalsSidebarAgents: oneOfKey("terminals:sidebar-agents:v1", 1, ["open", "closed"], "open"),
   terminalsSidebarPinned: jsonKey("local", "terminals:sidebar-pinned:v1", 1),
   taskColumns: jsonKey("local", "tasks:columns:v1", 1),
   taskPanelWidths: jsonKey("local", "tasks:workspace:v1", 1),
   newTaskQueue: jsonKey("local", "tasks:new-task-queue:v1", 1),
   newTaskQueueByAgent: jsonKey("local", "tasks:new-task-queue-by-agent:v1", 1),
   taskQueueFilter: stringKey("session", "tasks:queue-filter:v1", 1),
-  allTasksView: jsonKey("session", "tasks:all-view:v1", 1),
   storeToken: stringKey("session", "tariboy_store_token", null),
 };
 

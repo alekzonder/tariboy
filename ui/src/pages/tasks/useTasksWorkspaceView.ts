@@ -1,10 +1,11 @@
 import { useCallback, useState } from "react";
 import type { TaskStatusView } from "@/lib/api";
-import type { TaskPrincipalFilter } from "./TaskFilterBar";
 import { persistTaskQueueFilter, readTaskQueueFilter } from "./taskFilterStorage";
+import type { TaskAssigneeFilter } from "./taskListScope";
 
 export function useTasksWorkspaceView() {
-  const [view, setView] = useState<TaskPrincipalFilter>("");
+  const [assignee, setAssignee] = useState<TaskAssigneeFilter>("");
+  const [waiting, setWaiting] = useState(false);
   const [queuesOpen, setQueuesOpen] = useState(false);
   const [statusView, setStatusView] = useState<TaskStatusView>("active");
   const [queue, setQueue] = useState(readTaskQueueFilter);
@@ -17,7 +18,7 @@ export function useTasksWorkspaceView() {
   const [selectedKey, setSelectedKey] = useState("");
   const [creatingParent, setCreatingParent] = useState<string | null>(null);
   // "+ New task" from the handoff: the new row must be visible the moment it
-  // lands, so the search that would hide it is cleared and a Closed-only view
+  // lands, so the search that would hide it is cleared and a Done-only view
   // switches back to Active. The expansion state is deliberately untouched.
   const startCreate = () => {
     setQuery("");
@@ -37,8 +38,10 @@ export function useTasksWorkspaceView() {
       return next;
     });
   return {
-    view,
-    setView,
+    assignee,
+    setAssignee,
+    waiting,
+    setWaiting,
     queuesOpen,
     setQueuesOpen,
     statusView,

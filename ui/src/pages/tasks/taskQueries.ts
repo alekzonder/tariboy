@@ -2,7 +2,7 @@ import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import type { ApiClient, Task, TaskDetail, TaskEvent, TaskFilters } from "@/lib/api";
 import type { Daemon } from "@/lib/daemons";
 import { apiServerKey } from "@/lib/queryClient";
-import { listAllTasks } from "./useAllServersTasks";
+import { listAllTasks } from "./listAllTasks";
 
 // Keys are built from the client's host; credentials never enter a key.
 type Target = Daemon | null;

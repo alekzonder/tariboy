@@ -1,17 +1,22 @@
-import type { ServerSection } from "@/lib/terminalsHost";
+import type { NavItem } from "@/lib/navRoutes";
 
 /** The `data-tour` values the tour looks for. Components and steps take them
  *  from here, so a step cannot name an anchor that no element carries. */
 export const TOUR_ANCHORS = {
-  serversTab: "servers-tab",
+  /** The sidebar footer's hosts line. */
+  hostsLine: "hosts-line",
+  /** The sidebar footer's menu, which holds Add host. */
   addHost: "add-host",
+  /** The sidebar's "New agent" text button. */
   addAgent: "add-agent",
-  /** The home "New agent" and first-run "Start agent" buttons, not the sidebar "+". */
+  /** The Home "New agent" and first-run "Start agent" buttons. */
   newAgent: "new-agent",
   agentRow: "agent-row",
-  serverSections: "server-sections",
+  /** The sidebar's Tasks item. */
   sectionTasks: "section-tasks",
+  /** The sidebar's Library item. */
   sectionImages: "section-images",
+  /** The Library's Workflows and Sources tabs. */
   sectionWorkflows: "section-workflows",
   sectionStores: "section-stores",
   agentTabs: "agent-tabs",
@@ -29,13 +34,8 @@ export function firstAgentRow(): HTMLElement | null {
 
 export type TourAnchor = (typeof TOUR_ANCHORS)[keyof typeof TOUR_ANCHORS];
 
-/** The server-bar links that a step points at. */
-export const SECTION_ANCHORS: Partial<Record<ServerSection, TourAnchor>> = {
-  tasks: TOUR_ANCHORS.sectionTasks,
-  images: TOUR_ANCHORS.sectionImages,
-  workflows: TOUR_ANCHORS.sectionWorkflows,
-  stores: TOUR_ANCHORS.sectionStores,
-};
+/** The release whose navigation moved the anchors of the changed steps. */
+const LEAN_NAVIGATION = "0.101.0";
 
 export interface TourStep {
   id: string;
@@ -43,8 +43,8 @@ export interface TourStep {
   body: string;
   /** The element to highlight; without one the card stands in the center. */
   anchor?: TourAnchor;
-  /** A section of the current server to open before the highlight. */
-  route?: ServerSection;
+  /** A page to open, on the current host, before the highlight. */
+  route?: NavItem;
   /** Opens the home screen (`/`) first. */
   home?: boolean;
   /** Opens the first agent first; the step is skipped when there is none. */
@@ -61,7 +61,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "welcome",
     title: "Welcome to Tariboy",
-    body: "Tariboy runs AI coding agents on your servers and gives them work through tasks. This tour takes two minutes.",
+    body: "Tariboy runs AI coding agents on your hosts and gives them work through tasks. This tour takes two minutes.",
   },
   {
     id: "agents",
@@ -87,51 +87,65 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "tasks",
     title: "Tasks",
-    body: "A task is a piece of work for an agent. Agents ask you questions in the task, and you answer there.",
+    body: "A task is a piece of work for an agent. Agents ask you questions in the task, and you answer there. The number next to Tasks counts the tasks that wait for you.",
     anchor: TOUR_ANCHORS.sectionTasks,
     route: "tasks",
+    since: LEAN_NAVIGATION,
+    updated: true,
   },
   {
     id: "images",
     title: "Agent images",
-    body: "An image is an agent template: prompt, skills, files and tools. Every agent made from it starts the same way.",
+    body: "An image is an agent template: prompt, skills, files and tools. Every agent made from it starts the same way. Images are in the Library.",
     anchor: TOUR_ANCHORS.sectionImages,
-    route: "images",
+    route: "library-images",
+    since: LEAN_NAVIGATION,
+    updated: true,
   },
   {
     id: "stores",
-    title: "Store",
-    body: "A store is a shared catalog. Install images and workflows from it, or publish your own.",
+    title: "Sources",
+    body: "A source is a shared catalog, such as a Store. Install images and workflows from it, or publish your own.",
     anchor: TOUR_ANCHORS.sectionStores,
-    route: "stores",
+    route: "library-sources",
+    since: LEAN_NAVIGATION,
+    updated: true,
   },
   {
     id: "servers",
-    title: "Servers",
-    body: "A server is a computer that runs the Tariboy daemon. Your computer is the first one.",
-    anchor: TOUR_ANCHORS.serversTab,
+    title: "Hosts",
+    body: "A host is a computer that runs the Tariboy daemon. Your computer is the first one. This line says whether your hosts are ready and opens their settings.",
+    anchor: TOUR_ANCHORS.hostsLine,
     sidebar: true,
+    since: LEAN_NAVIGATION,
+    updated: true,
   },
   {
     id: "add-server",
-    title: "Add a server",
-    body: "Connect another computer over SSH.",
+    title: "Add a host",
+    body: "Connect another computer over SSH from this menu. Host workspaces are here too.",
     anchor: TOUR_ANCHORS.addHost,
     sidebar: true,
+    since: LEAN_NAVIGATION,
+    updated: true,
   },
   {
     id: "queues",
     title: "Queues",
-    body: "A queue groups tasks under a key, such as DEV, and picks the agents that take them. Open Manage queues… from this menu.",
+    body: "A queue groups tasks under a key, such as DEV, and picks the agents that take them. Open Manage queues… from the Filters menu.",
     anchor: TOUR_ANCHORS.queueMenu,
     route: "tasks",
+    since: LEAN_NAVIGATION,
+    updated: true,
   },
   {
     id: "workflows",
     title: "Task workflows",
-    body: "A workflow is the process of a queue: statuses, owners and checks. You approve; agents do the work. Attach one in queue settings.",
+    body: "A workflow is the process of a queue: statuses, owners and checks. You approve; agents do the work. Workflows are in the Library; attach one in queue settings.",
     anchor: TOUR_ANCHORS.sectionWorkflows,
-    route: "workflows",
+    route: "library-workflows",
+    since: LEAN_NAVIGATION,
+    updated: true,
   },
   {
     id: "help",

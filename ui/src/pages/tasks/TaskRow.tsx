@@ -23,7 +23,6 @@ function goalRow(goal: boolean, selected: boolean) {
 export default function TaskRow({
   row,
   mode,
-  server,
   hasActiveQuestion,
   expanded,
   selected,
@@ -35,8 +34,6 @@ export default function TaskRow({
 }: {
   row: VisibleTaskRow;
   mode: TaskRowMode;
-  /** The server the task lives on; shown only in the `servers` table. */
-  server?: string;
   hasActiveQuestion: boolean;
   expanded: boolean;
   selected: boolean;
@@ -50,31 +47,27 @@ export default function TaskRow({
   onPriorityChange?: (priority: TaskPriority) => Promise<void> | void;
 }) {
   const readOnly = row.task.access === "context" || row.task.access === "respond";
-  // The every-server table has no drag and no add-child: neither can cross the
-  // server boundary the rows sit on.
-  const disabled = readOnly || mode === "servers";
   const { setNodeRef, setActivatorNodeRef, isDragging, listeners, attributes } = useDraggable({
     id: row.task.key,
-    disabled,
+    disabled: readOnly,
   });
   const { setNodeRef: setBeforeRef, isOver: overBefore } = useDroppable({
     id: `before:${row.task.key}`,
-    disabled,
+    disabled: readOnly,
   });
   const { setNodeRef: setInsideRef, isOver: overInside } = useDroppable({
     id: `inside:${row.task.key}`,
-    disabled,
+    disabled: readOnly,
   });
   const { setNodeRef: setAfterRef, isOver: overAfter } = useDroppable({
     id: `after:${row.task.key}`,
-    disabled,
+    disabled: readOnly,
   });
   const columns = useTaskColumns(mode);
   const goalMark = goalRow(goal, selected);
   const cell = {
     row,
     readOnly,
-    server,
     hasActiveQuestion,
     expanded,
     onToggle,
@@ -121,35 +114,31 @@ export default function TaskRow({
       />
       {/* The grip lives in the row's own left padding: the reference table has
           no column for it, and it is only there under the pointer anyway. */}
-      {mode !== "servers" && (
-        <button
-          type="button"
-          ref={setActivatorNodeRef}
-          className="task-row-grip absolute top-1/2 left-0 z-2 grid h-6 w-4 -translate-y-1/2 cursor-grab place-items-center text-muted-foreground opacity-0 group-hover/row:opacity-60"
-          aria-label={`Move ${row.task.key}`}
-          {...listeners}
-          {...attributes}
-        >
-          <GripVertical aria-hidden="true" className="size-3" />
-        </button>
-      )}
+      <button
+        type="button"
+        ref={setActivatorNodeRef}
+        className="task-row-grip absolute top-1/2 left-0 z-2 grid h-6 w-4 -translate-y-1/2 cursor-grab place-items-center text-muted-foreground opacity-0 group-hover/row:opacity-60"
+        aria-label={`Move ${row.task.key}`}
+        {...listeners}
+        {...attributes}
+      >
+        <GripVertical aria-hidden="true" className="size-3" />
+      </button>
       {columns.map((column) => (
         <TaskRowCell key={column.id} column={column.id} {...cell} style={{ width: column.width }} />
       ))}
-      {mode !== "servers" && (
-        <span style={{ width: TASK_COLUMNS.add }} className="shrink-0">
-          {!disabled && (
-            <button
-              type="button"
-              className="relative z-2 grid size-6 place-items-center rounded-control text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground group-hover/row:opacity-100"
-              aria-label={`Add child to ${row.task.key}`}
-              onClick={onAddChild}
-            >
-              <Plus aria-hidden="true" className="size-3.5" />
-            </button>
-          )}
-        </span>
-      )}
+      <span style={{ width: TASK_COLUMNS.add }} className="shrink-0">
+        {!readOnly && (
+          <button
+            type="button"
+            className="relative z-2 grid size-6 place-items-center rounded-control text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground group-hover/row:opacity-100"
+            aria-label={`Add child to ${row.task.key}`}
+            onClick={onAddChild}
+          >
+            <Plus aria-hidden="true" className="size-3.5" />
+          </button>
+        )}
+      </span>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { queueMenuItems, serverMenuItems } from "./taskFilterMenus";
+import { queueMenuItems } from "./taskFilterMenus";
 
 describe("queueMenuItems", () => {
   it("leads with every queue and its total, then each queue with its count", () => {
@@ -20,18 +20,5 @@ describe("queueMenuItems", () => {
 
   it("lists only the every-queue entry when there are no queues", () => {
     expect(queueMenuItems([], new Map())).toEqual([{ prefix: "", label: "All queues", count: 0 }]);
-  });
-});
-
-describe("serverMenuItems", () => {
-  it("leads with every server and the summed count, then each server as given", () => {
-    const servers = [
-      { id: "a", label: "Alpha", count: 2, unavailable: false },
-      { id: "b", label: "Beta", count: 5, unavailable: true },
-    ];
-    expect(serverMenuItems(servers)).toEqual([
-      { id: "", label: "All servers", count: 7, unavailable: false },
-      ...servers,
-    ]);
   });
 });

@@ -10,6 +10,7 @@ import {
   type TourStep,
 } from "./tour";
 import { readKey, storageKeyFamilies, storageKeys, writeKey } from "@/lib/storage";
+import { navPath } from "@/lib/navRoutes";
 
 const step = (id: string, since?: string, updated?: boolean): TourStep => ({
   id,
@@ -97,16 +98,49 @@ describe("TOUR_STEPS", () => {
     expect(agents?.sidebar).toBeFalsy();
   });
 
-  it("marks no step as new in this release", () => {
-    expect(TOUR_STEPS.filter((s) => s.since !== undefined)).toEqual([]);
+  it("shows the steps whose place moved to the sidebar in What's new", () => {
+    expect(TOUR_STEPS.filter((s) => s.since !== undefined).map((s) => s.id)).toEqual([
+      "tasks",
+      "images",
+      "stores",
+      "servers",
+      "add-server",
+      "queues",
+      "workflows",
+    ]);
+    for (const s of TOUR_STEPS.filter((s) => s.since !== undefined)) {
+      expect(s).toMatchObject({ since: "0.101.0", updated: true });
+    }
+  });
+
+  it("opens every step's page through navPath", () => {
+    for (const s of TOUR_STEPS.filter((s) => s.route)) {
+      expect(navPath(s.route!, "")).toMatch(/^\//);
+    }
+  });
+
+  it("puts every anchor a step names on an element of some component", () => {
+    const sources = Object.entries(
+      import.meta.glob<string>(["/src/**/*.tsx", "!/src/**/*.test.tsx"], {
+        query: "?raw",
+        import: "default",
+        eager: true,
+      }),
+    );
+    const keyOf = new Map(Object.entries(TOUR_ANCHORS).map(([key, value]) => [value, key]));
+    for (const s of TOUR_STEPS.filter((s) => s.anchor)) {
+      const key = keyOf.get(s.anchor!);
+      const used = sources.some(([, text]) => text.includes(`TOUR_ANCHORS.${key}`));
+      expect(used, `${s.id}: TOUR_ANCHORS.${key}`).toBe(true);
+    }
   });
 
   it("covers the whole working process", () => {
     const titles = TOUR_STEPS.map((s) => s.title).join(" ");
     for (const topic of [
-      "Server",
+      "Host",
       "image",
-      "Store",
+      "Sources",
       "Agent",
       "Tasks",
       "Queues",

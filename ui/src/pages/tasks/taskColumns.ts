@@ -1,8 +1,7 @@
 /** Which columns a row carries. `agent` is one agent's tasks (priority, how
- *  long the work has run); `all` is a whole server's (who owns it); `servers`
- *  is every server's at once (who owns it and where it lives). The table
- *  header renders the same three shapes. */
-export type TaskRowMode = "agent" | "all" | "servers";
+ *  long the work has run); `all` is a whole server's (who owns it). The table
+ *  header renders the same two shapes. */
+export type TaskRowMode = "agent" | "all";
 
 /** The one set of column widths. The header and every row read it, so a column
  *  cannot drift from its heading. `Key` includes the tree indents and the
@@ -11,7 +10,6 @@ export const TASK_COLUMNS = {
   key: 168,
   priority: 30,
   agent: 104,
-  server: 96,
   // A workflow status pill, its `k/n` step, and a problem mark fit side by side.
   status: 148,
   duration: 74,

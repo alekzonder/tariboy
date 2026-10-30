@@ -6,18 +6,17 @@ import { useCustomerQuestionNotifications } from "@/components/customerQuestionN
 import type { HostAgents } from "@/lib/aggregate";
 import { hostToParam } from "@/lib/terminalsHost";
 import { defaultAgentTab } from "@/lib/uiMode";
-import { inWorkspace, useWorkspaces } from "@/lib/workspaces";
+import { useWorkspaces } from "@/lib/workspaces";
 import AgentWorkspace from "@/pages/agents/AgentWorkspace";
 import { RouteHostBoundary } from "./RouteHostBoundary";
 import type { ServerView } from "./TerminalsPage";
+import { LibraryHeader } from "./LibraryHeader";
 import { agentPath, type CreateHost } from "./terminalsHosts";
-import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
 
-// Server pages load on first open, so the initial bundle carries only the
-// shell, the agent list and the agent workspace.
-const ServerMailboxTab = lazy(() => import("@/pages/mailbox/ServerMailboxTab"));
+// Pages load on first open, so the initial bundle carries only the shell, the
+// agent list and the agent workspace.
+const InboxPage = lazy(() => import("@/pages/mailbox/InboxPage"));
 const TasksWorkspace = lazy(() => import("@/pages/tasks/TasksWorkspace"));
-const AllTasksWorkspace = lazy(() => import("@/pages/tasks/AllTasksWorkspace"));
 const ServerActivityPage = lazy(() => import("@/pages/activity/ServerActivityPage"));
 const ImagesPage = lazy(() => import("@/pages/ImagesPage"));
 const ImageTags = lazy(() => import("@/pages/images/ImageTags"));
@@ -28,53 +27,83 @@ const ImageLayout = lazy(() =>
   import("@/components/ImageLayout").then((m) => ({ default: m.ImageLayout })),
 );
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
+const HostScopeSelect = lazy(() =>
+  import("./HostScopeSelect").then((m) => ({ default: m.HostScopeSelect })),
+);
+const HomePage = lazy(() => import("@/pages/home/HomePage"));
 const FirstRunHome = lazy(() =>
   import("./FirstRunHome").then((m) => ({ default: m.FirstRunHome })),
 );
 
 interface ServerRoute {
   hostId: string;
-  /** `/servers/<host>`, the root of every server page's own links. */
+  /** `/servers/<host>`, the root of Library and Settings links. */
   basePath: string;
   storeName?: string;
   routeTag?: string;
   initialTaskKey?: string;
+  multiHost: boolean;
+  /** The host selector; null with one host. */
+  hostControl: ReactNode;
   onNotificationsChanged: () => void;
 }
 
-/** Each server page, or null when its route lacks what the page needs. */
+/** Each page, or null when its route lacks what the page needs. */
 const SERVER_VIEWS: Record<ServerView, (route: ServerRoute) => ReactNode> = {
-  mail: (route) => <ServerMailboxTab key={route.hostId} />,
+  mail: (route) => (
+    <InboxPage key={route.hostId} multiHost={route.multiHost} hostControl={route.hostControl} />
+  ),
   tasks: (route) => (
     <TasksWorkspace
       initialTaskKey={route.initialTaskKey}
+      hostControl={route.hostControl}
       onNotificationsChanged={route.onNotificationsChanged}
     />
   ),
-  activity: (route) => <ServerActivityPage key={route.hostId} hostId={route.hostId} />,
-  images: (route) => <ImagesPage hostId={route.hostId} basePath={`${route.basePath}/images`} />,
-  "image-tags": (route) => (
-    <ImageTags hostId={route.hostId} basePath={`${route.basePath}/images`} />
+  activity: (route) => (
+    <ServerActivityPage key={route.hostId} hostId={route.hostId} hostControl={route.hostControl} />
   ),
-  "image-detail": (route) => (
-    <ImageLayout hostId={route.hostId} basePath={`${route.basePath}/images`} />
+  images: (route) =>
+    library(route, <ImagesPage hostId={route.hostId} basePath={`${route.basePath}/images`} />),
+  "image-tags": (route) =>
+    library(route, <ImageTags hostId={route.hostId} basePath={`${route.basePath}/images`} />),
+  "image-detail": (route) =>
+    library(route, <ImageLayout hostId={route.hostId} basePath={`${route.basePath}/images`} />),
+  workflows: (route) =>
+    library(
+      route,
+      <WorkflowImagesPage key={route.hostId} basePath={`${route.basePath}/workflows`} />,
+    ),
+  "workflow-detail": (route) => {
+    const { hostId, storeName, routeTag, basePath } = route;
+    return storeName && routeTag
+      ? library(
+          route,
+          <WorkflowImageDetail
+            key={`${hostId}\u0000${storeName}\u0000${routeTag}`}
+            name={storeName}
+            tag={routeTag}
+            basePath={`${basePath}/workflows`}
+          />,
+        )
+      : null;
+  },
+  stores: (route) => library(route, storesPage(route)),
+  "store-detail": (route) => library(route, storesPage(route)),
+  settings: (route) => (
+    <SettingsPage basePath={`${route.basePath}/settings`} hostControl={route.hostControl} />
   ),
-  workflows: (route) => (
-    <WorkflowImagesPage key={route.hostId} basePath={`${route.basePath}/workflows`} />
-  ),
-  "workflow-detail": ({ hostId, storeName, routeTag, basePath }) =>
-    storeName && routeTag ? (
-      <WorkflowImageDetail
-        key={`${hostId}\u0000${storeName}\u0000${routeTag}`}
-        name={storeName}
-        tag={routeTag}
-        basePath={`${basePath}/workflows`}
-      />
-    ) : null,
-  stores: (route) => storesPage(route),
-  "store-detail": (route) => storesPage(route),
-  settings: (route) => <SettingsPage basePath={`${route.basePath}/settings`} />,
 };
+
+/** A Library page under its Images · Workflows · Sources tabs. */
+function library(route: ServerRoute, page: ReactNode) {
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <LibraryHeader hostId={route.hostId} hostControl={route.hostControl} />
+      <div className="min-h-0 flex-1">{page}</div>
+    </div>
+  );
+}
 
 function storesPage({ hostId, storeName, basePath }: ServerRoute) {
   return (
@@ -87,13 +116,13 @@ function storesPage({ hostId, storeName, basePath }: ServerRoute) {
 }
 
 /**
- * The content island's page for the current route: All tasks, a server page,
- * a team, or an agent. Every server page and the team page sit in the same
+ * The content island's page for the current route: a page of the sidebar, a
+ * team, or an agent. Every host page and the team page sit in the same
  * RouteHostBoundary slot, so moving between them keeps the boundary mounted.
  */
 export function TerminalsRoutes({
   serverView,
-  hosts,
+  workspaceHosts,
   hostId,
   selectedHost,
   routeUnavailable,
@@ -101,7 +130,8 @@ export function TerminalsRoutes({
   fallback,
 }: {
   serverView?: ServerView;
-  hosts: HostAgents[];
+  /** The current workspace's hosts, for the host selector. */
+  workspaceHosts: HostAgents[];
   hostId?: string;
   selectedHost?: HostAgents;
   routeUnavailable: boolean;
@@ -114,23 +144,9 @@ export function TerminalsRoutes({
   const navigate = useNavigate();
   const { select: selectDaemon } = useDaemons();
   const { refreshHost } = useCustomerQuestionNotifications();
-  const workspaces = useWorkspaces();
 
-  if (searchParams.get("view") === "all") {
-    // Tasks, like the sidebar, come only from the current workspace's servers.
-    const workspaceHosts = hosts.filter((entry) =>
-      inWorkspace(workspaces, entry.host.id, workspaces.active),
-    );
-    // Once the first poll found hosts, an empty list is an empty workspace,
-    // not one still loading.
-    return (
-      <AllTasksWorkspace
-        hosts={workspaceHosts}
-        noServers={hosts.length > 0 && workspaceHosts.length === 0}
-      />
-    );
-  }
   if (hostId === undefined) return fallback;
+  const multiHost = workspaceHosts.length >= 2;
   const page = serverView
     ? SERVER_VIEWS[serverView]({
         hostId,
@@ -138,6 +154,8 @@ export function TerminalsRoutes({
         storeName,
         routeTag,
         initialTaskKey: searchParams.get("task") ?? undefined,
+        multiHost,
+        hostControl: multiHost ? <HostScopeSelect hosts={workspaceHosts} hostId={hostId} /> : null,
         onNotificationsChanged: () => void refreshHost(hostId),
       })
     : null;
@@ -183,9 +201,10 @@ export function TerminalsRoutes({
 }
 
 /** The island when no page is open: a dead agent route, an empty workspace, no
- *  servers at all, or the invitation to pick an agent. */
+ *  hosts at all, the first-run card, or Home. */
 export function TerminalsEmptyState({
   hosts,
+  pageHostId,
   firstHostId,
   createHosts,
   onCreated,
@@ -195,6 +214,8 @@ export function TerminalsEmptyState({
 }: {
   /** The current workspace's hosts. */
   hosts: HostAgents[];
+  /** The host Home's numbers are read from. */
+  pageHostId: string;
   /** The first host an agent can be created on, if any. */
   firstHostId?: string;
   /** Every host an agent can be created on, for the first-run card. */
@@ -229,8 +250,8 @@ export function TerminalsEmptyState({
   if (firstHostId === undefined) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-        <p>Add a server to start.</p>
-        <Button onClick={onAddServer}>Add server</Button>
+        <p>Add a host to start.</p>
+        <Button onClick={onAddServer}>Add host</Button>
       </div>
     );
   }
@@ -238,12 +259,7 @@ export function TerminalsEmptyState({
     return <FirstRunHome hostId={firstHostId} hosts={createHosts} onCreated={onCreated} />;
   }
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-      <p>Pick an agent on the left, or create one.</p>
-      <Button data-tour={TOUR_ANCHORS.newAgent} onClick={() => onNewAgent(firstHostId)}>
-        New agent
-      </Button>
-    </div>
+    <HomePage hosts={hosts} pageHostId={pageHostId} onNewAgent={() => onNewAgent(firstHostId)} />
   );
 }
 

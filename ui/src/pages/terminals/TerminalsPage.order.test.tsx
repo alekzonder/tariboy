@@ -17,7 +17,6 @@ import {
   renderAt,
   mockRowRects,
   keyboardMove,
-  serversTab,
 } from "@/test/terminals/terminalsPage";
 import { agentRow } from "@/test/fixtures/apiFixtures";
 
@@ -90,7 +89,6 @@ afterEach(cleanupTerminalsPage);
 
 describe("TerminalsPage restored order", () => {
   it("restores server, team, and agent order", async () => {
-    serversTab();
     localStorage.setItem(
       "terminals:server-order:v1",
       JSON.stringify({
@@ -144,8 +142,8 @@ describe("TerminalsPage restored order", () => {
 
     renderAt("/");
 
-    const prod = await screen.findByRole("button", { name: "Open server prod" });
-    const local = screen.getByRole("button", { name: "Open server local" });
+    const prod = await screen.findByRole("button", { name: "Open host prod" });
+    const local = screen.getByRole("button", { name: "Open host local" });
     expect(prod.compareDocumentPosition(local) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const beta = screen.getByRole("button", { name: "Open team beta" });
     const alpha = screen.getByRole("button", { name: "Open team alpha" });
@@ -156,14 +154,13 @@ describe("TerminalsPage restored order", () => {
   });
 
   it("uses the whole server row as an accessible drag surface", async () => {
-    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([
       { host: { id: "", label: "local" }, agents: [], groups: [] },
       { host: { id: "d1", label: "prod" }, agents: [], groups: [] },
     ]);
     renderAt("/");
 
-    const local = await screen.findByRole("button", { name: "Open server local" });
+    const local = await screen.findByRole("button", { name: "Open host local" });
     expect(local).toHaveAttribute("aria-roledescription", "draggable");
     expect(screen.queryByRole("button", { name: /Move server/ })).toBeNull();
   });
@@ -171,16 +168,15 @@ describe("TerminalsPage restored order", () => {
 
 describe("TerminalsPage keyboard reorder", () => {
   it("persists server order after a keyboard drag", async () => {
-    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([
       { host: { id: "", label: "local" }, agents: [], groups: [] },
       { host: { id: "d1", label: "prod" }, agents: [], groups: [] },
     ]);
-    mockRowRects({ "Open server local": 0, "Open server prod": 30 });
+    mockRowRects({ "Open host local": 0, "Open host prod": 30 });
     renderAt("/");
-    await screen.findByRole("button", { name: "Open server local" });
+    await screen.findByRole("button", { name: "Open host local" });
 
-    await keyboardMove("Open server local", "ArrowDown");
+    await keyboardMove("Open host local", "ArrowDown");
 
     expect(JSON.parse(localStorage.getItem("terminals:server-order:v1")!)).toEqual({
       version: 1,
@@ -189,7 +185,6 @@ describe("TerminalsPage keyboard reorder", () => {
   });
 
   it("keeps the saved position of hosts in other workspaces when reordering servers", async () => {
-    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([
       { host: { id: "", label: "local" }, agents: [], groups: [] },
       { host: { id: "d1", label: "prod" }, agents: [], groups: [] },
@@ -200,11 +195,11 @@ describe("TerminalsPage keyboard reorder", () => {
       JSON.stringify({ version: 1, ids: ["", "d2", "d1"] }),
     );
     addHostToWorkspace("d2", createWorkspace("Lab")!);
-    mockRowRects({ "Open server local": 0, "Open server prod": 30 });
+    mockRowRects({ "Open host local": 0, "Open host prod": 30 });
     renderAt("/");
-    await screen.findByRole("button", { name: "Open server local" });
+    await screen.findByRole("button", { name: "Open host local" });
 
-    await keyboardMove("Open server local", "ArrowDown");
+    await keyboardMove("Open host local", "ArrowDown");
 
     expect(JSON.parse(localStorage.getItem("terminals:server-order:v1")!)).toEqual({
       version: 1,
@@ -213,7 +208,6 @@ describe("TerminalsPage keyboard reorder", () => {
   });
 
   it("persists team order after a keyboard drag", async () => {
-    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([
       {
         host: { id: "", label: "local" },

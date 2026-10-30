@@ -7,7 +7,8 @@ import {
   groupSections,
   groupTeams,
   hostAgents,
-  rankAgents,
+  hostsLine,
+  sidebarLayout,
 } from "./sidebarModel";
 import type { AgentRow } from "@/lib/api";
 import { agentRow } from "@/test/fixtures/apiFixtures";
@@ -38,21 +39,44 @@ describe("sidebar agent list", () => {
       "prod/delta",
     ]);
   });
+});
 
-  it("puts agents with an unread question above the rest and pinned above both", () => {
-    const rows = allAgents(hosts);
-    const { pinned, rest } = rankAgents(
-      rows,
-      new Set([agentKey("prod", "delta")]),
-      new Map([[agentKey("prod", "gamma"), 1]]),
-    );
-    expect(pinned.map((row) => row.agent.name)).toEqual(["delta"]);
-    expect(rest.map((row) => row.agent.name)).toEqual(["gamma", "beta", "alpha"]);
+describe("sidebar layout", () => {
+  const names = (rows: Array<{ agent: { name: string } }>) => rows.map((row) => row.agent.name);
+
+  it("shows one host's teams and agents without a host heading", () => {
+    const layout = sidebarLayout(hosts.slice(0, 1), new Set());
+    expect(layout.byHost).toBe(false);
+    expect(layout.pinned).toEqual([]);
+    expect(layout.sections).toHaveLength(1);
+    expect([...layout.sections[0].teams.keys()]).toEqual(["release"]);
+    expect(names(layout.sections[0].individuals)).toEqual(["beta"]);
   });
 
-  it("keeps the saved order inside a band", () => {
-    const { rest } = rankAgents(allAgents(hosts), new Set(), new Map());
-    expect(rest.map((row) => row.agent.name)).toEqual(["beta", "alpha", "gamma", "delta"]);
+  it("groups two hosts under their headings and shows a pinned agent only on top", () => {
+    const layout = sidebarLayout(
+      hosts,
+      new Set([agentKey("prod", "delta"), agentKey("", "alpha")]),
+    );
+    expect(layout.byHost).toBe(true);
+    expect(names(layout.pinned)).toEqual(["alpha", "delta"]);
+    expect(layout.sections.map((section) => section.host.host.id)).toEqual(["", "prod"]);
+    expect(names(layout.sections[0].teams.get("release") ?? [])).toEqual([]);
+    expect(names(layout.sections[1].individuals)).toEqual([]);
+    expect(names(layout.sections[1].teams.get("release") ?? [])).toEqual(["gamma"]);
+    expect([...layout.sections[1].teams.keys()]).toEqual(["idle-team", "release"]);
+  });
+});
+
+describe("hosts line", () => {
+  it.each([
+    [[], "No hosts"],
+    [[hosts[0]], "Local · ready"],
+    [[{ ...hosts[1], error: "down" }], "prod · unreachable"],
+    [hosts, "2 hosts · ready"],
+    [[hosts[0], { ...hosts[1], error: "down" }], "2 hosts · 1 unreachable"],
+  ] as Array<[HostAgents[], string]>)("reads %#", (list, text) => {
+    expect(hostsLine(list)).toBe(text);
   });
 });
 

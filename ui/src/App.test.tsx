@@ -82,53 +82,29 @@ describe("product routing", () => {
     expect(within(titlebar).getByRole("button", { name: "Toggle theme" })).toBeInTheDocument();
   });
 
-  it("switches between Agents and All tasks through ?view=all on the current route", async () => {
-    renderAt("/agents/local/builder/console?task=X-1");
+  it("has no gear, no view switch and no workspace dropdown in the titlebar", () => {
+    renderAt("/agents/local/builder/console");
 
     const titlebar = screen.getByTestId("app-titlebar");
-    const view = within(titlebar).getByRole("radiogroup", { name: "View" });
-    expect(within(view).getByRole("radio", { name: "Agents" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-
-    fireEvent.click(within(view).getByRole("radio", { name: "All tasks" }));
-    // The navigation commits once the lazily loaded All tasks screen is ready.
-    await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent(
-        "/agents/local/builder/console?task=X-1&view=all",
-      ),
-    );
-    expect(within(view).getByRole("radio", { name: "All tasks" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-
-    fireEvent.click(within(view).getByRole("radio", { name: "Agents" }));
-    await waitFor(() =>
-      expect(screen.getByTestId("location").textContent).toBe(
-        "/agents/local/builder/console?task=X-1",
-      ),
-    );
+    expect(within(titlebar).getByText("Tariboy")).toBeInTheDocument();
+    expect(within(titlebar).queryByRole("link", { name: "Application settings" })).toBeNull();
+    expect(within(titlebar).queryByRole("radiogroup", { name: "View" })).toBeNull();
+    expect(within(titlebar).queryByRole("button", { name: /^Workspace:/ })).toBeNull();
+    expect(
+      within(titlebar).getByRole("combobox", { name: "Search agents and tasks" }),
+    ).toBeVisible();
   });
 
-  it("hides the agents sidebar control in All tasks", () => {
+  it("opens the former All tasks view as Tasks", async () => {
     renderAt("/agents/local/builder/console?view=all");
-
-    const titlebar = screen.getByTestId("app-titlebar");
-    expect(within(titlebar).queryByRole("button", { name: "Hide agents" })).toBeNull();
-    expect(within(titlebar).queryByRole("button", { name: "Show agents" })).toBeNull();
-
-    fireEvent.click(within(titlebar).getByRole("radio", { name: "Agents" }));
-    expect(within(titlebar).getByRole("button", { name: "Hide agents" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/tasks"));
   });
 
-  it("opens daemon-independent application settings from the titlebar", async () => {
+  it("opens daemon-independent application settings from Settings", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("daemon down")));
-    renderAt("/");
+    renderAt("/servers/local/settings");
 
-    const titlebar = screen.getByTestId("app-titlebar");
-    const settings = within(titlebar).getByRole("link", { name: "Application settings" });
+    const settings = await screen.findByRole("link", { name: "Application" });
     expect(settings).toHaveAttribute("href", "/app-settings");
     fireEvent.click(settings);
 
@@ -137,17 +113,18 @@ describe("product routing", () => {
     expect(screen.getByText("Updates are only available in the Desktop app.")).toBeInTheDocument();
   });
 
-  it("renders Tasks inside an explicit server workspace", async () => {
-    renderAt("/servers/local/tasks");
+  it("renders Tasks at /tasks with no server bar", async () => {
+    renderAt("/tasks");
 
     expect(await screen.findByLabelText("Search tasks")).toBeInTheDocument();
     expect(screen.getByTestId("tasks-workspace")).toHaveAttribute("data-scope-agent", "");
-    expect(screen.getByRole("navigation", { name: "Server workspace" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Server workspace" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute("aria-current", "page");
   });
 
   it("starts no tour on the first run and marks the elements the tour explains", async () => {
     localStorage.removeItem("onboarding:state:v1");
-    renderAt("/servers/local/tasks");
+    renderAt("/tasks");
 
     await screen.findByLabelText("Search tasks");
     expect(screen.queryByRole("dialog", { name: "Welcome to Tariboy" })).not.toBeInTheDocument();
@@ -156,14 +133,11 @@ describe("product routing", () => {
       el.getAttribute("data-tour"),
     );
     for (const anchor of [
-      "servers-tab",
+      "hosts-line",
       "add-agent",
       "add-host",
-      "server-sections",
       "section-tasks",
       "section-images",
-      "section-workflows",
-      "section-stores",
       "queue-menu",
       "help-menu",
     ]) {
@@ -175,7 +149,9 @@ describe("product routing", () => {
   });
 
   it.each([
-    ["/tasks?queue=ops", "/servers/local/tasks?queue=ops"],
+    ["/servers/local/tasks?task=X-1", "/tasks?host=local&task=X-1"],
+    ["/servers/local/mail", "/inbox?host=local"],
+    ["/servers/remote-1/activity?view=agents", "/activity?host=remote-1&view=agents"],
     ["/settings/advanced/usage?range=7d", "/servers/local/settings/advanced/usage?range=7d"],
   ])("redirects legacy server surface %s without losing its tail", async (from, to) => {
     renderAt(from);
@@ -223,10 +199,21 @@ describe("product routing", () => {
     ).toBeTruthy();
   });
 
-  it("uses Agents as the default route", () => {
+  it("uses Home as the default route", () => {
     renderAt("/");
     expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/);
-    expect(screen.getByRole("complementary", { name: "Agents" })).toBeInTheDocument();
+    const sidebar = screen.getByRole("complementary", { name: "Navigation" });
+    expect(within(sidebar).getByRole("link", { name: "Home" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    for (const name of ["Tasks", "Inbox", "Library", "Settings"]) {
+      expect(within(sidebar).getByRole("link", { name })).toBeInTheDocument();
+    }
+    expect(within(sidebar).getByRole("button", { name: "Agents" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
   });
 
   it("redirects a legacy terminal route to the Terminal tab", async () => {
@@ -339,7 +326,7 @@ describe("compact screens", () => {
     expect(within(titlebar).queryByRole("button", { name: "Hide agents" })).toBeNull();
     fireEvent.click(within(titlebar).getByRole("button", { name: "Open menu" }));
 
-    const drawer = await screen.findByRole("dialog", { name: "Agents" });
+    const drawer = await screen.findByRole("dialog", { name: "Navigation" });
     expect(within(drawer).getByTestId("agents-sidebar")).toBeInTheDocument();
     // Focus in the search field would raise the on-screen keyboard on a phone.
     expect(document.activeElement).not.toBe(
@@ -348,7 +335,7 @@ describe("compact screens", () => {
     expect(within(drawer).queryByRole("separator", { name: "resize sidebar" })).toBeNull();
     fireEvent.click(await within(drawer).findByRole("button", { name: "Open bob" }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Agents" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull());
     expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/tasks");
     // The wide layout's saved state is not touched by the drawer.
     expect(localStorage.getItem("terminals:sidebar:v1")).toBeNull();
@@ -376,14 +363,14 @@ describe("compact screens", () => {
     fireEvent.click(
       within(screen.getByTestId("app-titlebar")).getByRole("button", { name: "Open menu" }),
     );
-    await screen.findByRole("dialog", { name: "Agents" });
+    await screen.findByRole("dialog", { name: "Navigation" });
 
     // The drawer is modal, so Back comes from outside it, as Android's does.
     act(() => {
       screen.getByText("Back", { selector: "button" }).click();
     });
 
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Agents" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull());
     expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/tasks");
   });
 

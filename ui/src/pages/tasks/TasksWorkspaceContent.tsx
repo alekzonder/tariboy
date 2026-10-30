@@ -27,6 +27,7 @@ const newTaskQueue = (queue: string, queues: Queue[], server: string, agent?: st
 export function TasksWorkspaceContent({
   scopeAgent,
   goalTaskKey,
+  hostControl,
   server,
   state,
   data,
@@ -35,6 +36,7 @@ export function TasksWorkspaceContent({
 }: {
   scopeAgent?: string;
   goalTaskKey?: string;
+  hostControl?: ReactNode;
   server: string;
   state: TasksWorkspaceView;
   data: TasksWorkspaceData;
@@ -47,8 +49,10 @@ export function TasksWorkspaceContent({
     setQuery,
     statusView,
     setStatusView,
-    view,
-    setView,
+    assignee,
+    setAssignee,
+    waiting,
+    setWaiting,
     queue,
     selectQueue,
     queuesOpen,
@@ -58,7 +62,7 @@ export function TasksWorkspaceContent({
     startCreate,
     closeDetail,
   } = state;
-  const { queues, queueCounts, refreshing, principalFilter, loadMetadata, loadTree, tasks } = data;
+  const { queues, queueCounts, refreshing, principals, loadMetadata, loadTree, tasks } = data;
   const { create, createQueue, updateQueue } = actions;
   const detailResizeHandle = (
     <TaskPanelResizeHandle
@@ -68,8 +72,9 @@ export function TasksWorkspaceContent({
       onResize={setDetailWidth}
     />
   );
+  // A customer filter without its customer has no list to reload yet.
   const refresh = () => {
-    if (!scopeAgent && view !== "" && !principalFilter) void loadMetadata();
+    if (data.waitingForPrincipal) void loadMetadata();
     else void loadTree();
   };
 
@@ -84,12 +89,16 @@ export function TasksWorkspaceContent({
       <main className="min-h-0 min-w-0 overflow-auto">
         <TaskFilterBar
           mode={scopeAgent ? "agent" : "all"}
+          hostControl={hostControl}
           query={query}
           onQuery={setQuery}
           statusView={statusView}
           onStatusView={setStatusView}
-          principalFilter={view}
-          onPrincipalFilter={setView}
+          assignee={assignee}
+          onAssignee={setAssignee}
+          agents={principals?.agents ?? []}
+          waiting={waiting}
+          onWaiting={setWaiting}
           queues={queues}
           queue={queue}
           onQueue={selectQueue}

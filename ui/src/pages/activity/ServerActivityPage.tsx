@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { periodQuery, useActivityWindow } from "@/lib/activityPeriod";
 import { hostToParam } from "@/lib/terminalsHost";
@@ -22,7 +22,14 @@ const VIEWS: Array<{ view: View; label: string }> = [
 
 /** Work on tasks across every agent of one server in the selected period. The
  *  server is the surrounding ApiProvider's. */
-export default function ServerActivityPage({ hostId }: { hostId: string }) {
+export default function ServerActivityPage({
+  hostId,
+  hostControl,
+}: {
+  hostId: string;
+  /** The host selector, shown when the workspace has two or more hosts. */
+  hostControl?: ReactNode;
+}) {
   const { window, setPeriod, setCustom } = useActivityWindow();
   const [searchParams, setSearchParams] = useSearchParams();
   const view: View = searchParams.get("view") === "agents" ? "agents" : "tasks";
@@ -36,7 +43,10 @@ export default function ServerActivityPage({ hostId }: { hostId: string }) {
 
   return (
     <TabPage className="overflow-auto">
-      <ActivityPeriodBar window={window} onPeriod={setPeriod} onCustom={setCustom} />
+      <div className="flex flex-wrap items-center gap-2">
+        {hostControl}
+        <ActivityPeriodBar window={window} onPeriod={setPeriod} onCustom={setCustom} />
+      </div>
       <ActivityTotals totals={report?.totals ?? null} />
       {error && (
         <p role="alert" className="text-sm text-destructive">

@@ -5,7 +5,7 @@ import { hasLocalDaemon, onTaskNotificationActivated, showTaskNotification } fro
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import { createApi } from "@/lib/api";
 import { letterTaskKey } from "@/lib/letters";
-import { serverPath } from "@/lib/terminalsHost";
+import { scopedPath } from "@/lib/navRoutes";
 import {
   CustomerQuestionNotificationsContext,
   type CustomerQuestionNotificationsValue,
@@ -135,9 +135,9 @@ export function CustomerQuestionNotifications({ children }: { children: ReactNod
             // The route still identifies the original host and task, so the user
             // can answer even when marking the letter read was interrupted.
           } finally {
-            navigate(
-              `${serverPath(activation.host_id, "tasks")}?task=${encodeURIComponent(activation.task_key)}`,
-            );
+            // The notification names its host: the task opens there, whichever
+            // host is active.
+            navigate(scopedPath("tasks", activation.host_id, { task: activation.task_key }));
             void withTimeout(
               refreshHost(activation.host_id),
               CUSTOMER_QUESTION_ACTIVATION_TIMEOUT_MS,

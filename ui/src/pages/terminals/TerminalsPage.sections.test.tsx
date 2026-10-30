@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { screen, waitFor, fireEvent } from "@/test/queryRender";
+import { screen, waitFor, fireEvent, within } from "@/test/queryRender";
 import { fetchAllAgents } from "@/lib/aggregate";
 import type {
   AgentActionResult,
@@ -15,7 +15,6 @@ import {
   cleanupTerminalsPage,
   setupTerminalsPage,
   renderAt,
-  serversTab,
   cloneProjection,
 } from "@/test/terminals/terminalsPage";
 import { agentRow } from "@/test/fixtures/apiFixtures";
@@ -89,7 +88,6 @@ afterEach(cleanupTerminalsPage);
 
 describe("TerminalsPage server sections", () => {
   it("groups agents under server sections and shows host errors", async () => {
-    serversTab();
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("This daemon (local)")).toBeInTheDocument());
     expect(screen.getByText("prod")).toBeInTheDocument();
@@ -98,7 +96,6 @@ describe("TerminalsPage server sections", () => {
   });
 
   it("separates team members from individual agents", async () => {
-    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([
       {
         host: { id: "", label: "This daemon (local)" },
@@ -188,7 +185,6 @@ describe("TerminalsPage server sections", () => {
   });
 
   it("keeps the individual agents subsection visible when a host only has an empty team", async () => {
-    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([
       {
         host: { id: "", label: "This daemon (local)" },
@@ -205,9 +201,10 @@ describe("TerminalsPage server sections", () => {
 describe("TerminalsPage agent rows", () => {
   it("marks non-interactive agents in the sidebar and leaves interactive ones unmarked", async () => {
     renderAt("/terminals");
-    await waitFor(() => expect(screen.getByText("a2")).toBeInTheDocument());
-    const a1Row = screen.getByText("a1").closest("button")!;
-    const a2Row = screen.getByText("a2").closest("button")!;
+    const sidebar = await screen.findByTestId("agents-sidebar");
+    await waitFor(() => expect(within(sidebar).getByText("a2")).toBeInTheDocument());
+    const a1Row = within(sidebar).getByText("a1").closest("button")!;
+    const a2Row = within(sidebar).getByText("a2").closest("button")!;
     expect(a2Row.textContent).toMatch(/non-tty/);
     expect(a1Row.textContent).not.toMatch(/non-tty/);
   });

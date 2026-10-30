@@ -102,6 +102,30 @@ async function assertNoLoadFailedToast(page: Page) {
   await expect(page.getByText(/network error: Load failed/i)).toHaveCount(0);
 }
 
+const TASKS_PAGE = "/tests/tasks-fixture.html#/tasks";
+
+// The queue, assignee, "Waiting for me" and columns sit in the toolbar's
+// Filters menu; a submenu row opens on click.
+async function openFiltersSub(page: Page, name: RegExp) {
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  await page.getByRole("menuitem", { name }).click();
+}
+
+async function openManageQueues(page: Page) {
+  await openFiltersSub(page, /^Queue/);
+  await page.getByRole("menuitem", { name: "Manage queues…" }).click();
+}
+
+async function pickAssignee(page: Page, name: string) {
+  await openFiltersSub(page, /^Assignee/);
+  await page.getByRole("menuitemradio", { name, exact: true }).click();
+}
+
+async function toggleWaitingForMe(page: Page) {
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Waiting for me" }).click();
+}
+
 test("Tasks production workspace opens, closes, resizes, and restores the detail sheet", async ({
   page,
   request,
@@ -119,7 +143,7 @@ test("Tasks production workspace opens, closes, resizes, and restores the detail
   });
   expect(response.ok()).toBe(true);
   const resizeKey = (await response.json()).result.key as string;
-  await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
+  await page.goto(TASKS_PAGE);
   await expect(page.getByLabel("Search tasks")).toBeVisible();
   await expect(page.getByRole("separator", { name: "Resize task details" })).toHaveCount(0);
 
@@ -175,6 +199,19 @@ test("Tasks production workspace opens, closes, resizes, and restores the detail
   ).toBeVisible();
 });
 
+test("Tasks toolbar keeps every control in one row at 1024 px", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto(TASKS_PAGE);
+  const toolbar = page.locator("[data-toolbar]");
+  await expect(toolbar.getByLabel("Search tasks")).toBeVisible();
+  await expect(toolbar.getByRole("button", { name: "New task" })).toBeVisible();
+  const tops = await toolbar.evaluate((element) =>
+    [...element.children].map((child) => Math.round(child.getBoundingClientRect().top)),
+  );
+  expect(tops.length).toBeGreaterThan(3);
+  expect(new Set(tops).size).toBe(1);
+});
+
 test("Tasks detail keeps its header reachable under a long description", async ({
   page,
   request,
@@ -194,7 +231,7 @@ test("Tasks detail keeps its header reachable under a long description", async (
   });
   expect(response.ok()).toBe(true);
   const key = (await response.json()).result.key as string;
-  await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
+  await page.goto(TASKS_PAGE);
   await page.getByTestId(`task-row-${key}`).locator(".task-row-main").click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("line 80")).toBeVisible();
@@ -217,9 +254,8 @@ test("Tasks production workspace lists the agent pools of a queue", async ({ pag
   });
   expect(response.ok()).toBe(true);
 
-  await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
-  await page.getByRole("button", { name: "Queue: all" }).click();
-  await page.getByRole("menuitem", { name: "Manage queues…" }).click();
+  await page.goto(TASKS_PAGE);
+  await openManageQueues(page);
   await page.getByRole("button", { name: /^Queue FLOW/ }).click();
   await page.getByRole("tab", { name: "Pools" }).click();
   await expect(
@@ -235,11 +271,10 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   request,
 }) => {
   test.setTimeout(60_000);
-  await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
+  await page.goto(TASKS_PAGE);
   await expect(page.getByLabel("Search tasks")).toBeVisible();
 
-  await page.getByRole("button", { name: "Queue: all" }).click();
-  await page.getByRole("menuitem", { name: "Manage queues…" }).click();
+  await openManageQueues(page);
   await page.getByRole("button", { name: "New queue" }).click();
   await page.getByLabel("Queue prefix").fill("test");
   await page.getByLabel("New queue name").fill("Tasks E2E");
@@ -347,7 +382,7 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
 
   await page.reload();
   await expect(page.getByLabel("Search tasks")).toBeVisible();
-  await page.getByRole("button", { name: "Waiting for me" }).click();
+  await toggleWaitingForMe(page);
   await expect(page.getByTestId(`task-row-${rootKey}`)).toBeVisible();
   await page.getByTestId(`task-row-${rootKey}`).locator(".task-row-main").click();
   await detail.getByLabel("Comment", { exact: true }).fill("Confirmed from the customer");
@@ -356,7 +391,7 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await expect(detail.getByText("Confirmed from the customer")).toBeVisible();
 
   await detail.getByRole("button", { name: "Close task detail" }).click();
-  await page.getByRole("button", { name: "Waiting for me" }).click();
+  await toggleWaitingForMe(page);
   await page.getByTestId(`task-row-${rootKey}`).locator(".task-row-main").click();
   await detail.getByLabel("Relation type").selectOption("related");
   await detail.getByLabel("Related task key").fill(secondRootKey);
@@ -457,12 +492,13 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
     })
     .toBe(true);
 
-  await page.getByRole("button", { name: "My tasks" }).click();
-  await expect(page.getByRole("button", { name: "My tasks" })).toHaveAttribute(
-    "aria-pressed",
+  await pickAssignee(page, "My tasks");
+  await openFiltersSub(page, /^Assignee/);
+  await expect(page.getByRole("menuitemradio", { name: "My tasks" })).toHaveAttribute(
+    "aria-checked",
     "true",
   );
-  await page.getByRole("button", { name: "My tasks" }).click();
+  await page.getByRole("menuitemradio", { name: "Anyone", exact: true }).click();
   await page.getByLabel("Search tasks").fill("Root task updated");
   await expect(page.getByTestId(`task-row-${rootKey}`)).toBeVisible();
   await expect(page.getByTestId(`task-row-${secondRootKey}`)).toHaveCount(0);
@@ -530,10 +566,9 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   });
   expect(response.ok()).toBe(true);
 
-  await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
+  await page.goto(TASKS_PAGE);
   await expect(page.getByLabel("Search tasks")).toBeVisible();
-  await page.getByRole("button", { name: "Queue: all" }).click();
-  await page.getByRole("menuitem", { name: "Manage queues…" }).click();
+  await openManageQueues(page);
   await page.getByRole("button", { name: /^Queue WFUI/ }).click();
   await page.getByRole("tab", { name: "Workflow" }).click();
   const settings = page.getByRole("region", { name: "Workflow WFUI" });
@@ -587,7 +622,7 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   ).toBeVisible({ timeout: 15_000 });
   await expect.poll(async () => (await taskFromAPI(request, key)).status).toBe("done");
   await detail.getByRole("button", { name: "Close task detail" }).click();
-  await page.getByRole("radio", { name: "Closed", exact: true }).click();
+  await page.getByRole("radio", { name: "Done", exact: true }).click();
   await expect(
     page.getByTestId(`task-row-${key}`),
     "step 5: the closed task is listed",
@@ -635,8 +670,7 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   step("5b moved and cancelled by hand");
 
   // Step 6: queue settings show the binding and manage secrets.
-  await page.getByRole("button", { name: "Queue: all" }).click();
-  await page.getByRole("menuitem", { name: "Manage queues…" }).click();
+  await openManageQueues(page);
   await page.getByRole("button", { name: /^Queue WFUI/ }).click();
   await page.getByRole("tab", { name: "Workflow" }).click();
   const queueSettings = page.getByRole("region", { name: "Workflow WFUI" });
@@ -658,8 +692,7 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   // After a reload the key is read back from the daemon, and the value never is.
   await page.reload();
   await expect(page.getByLabel("Search tasks")).toBeVisible();
-  await page.getByRole("button", { name: "Queue: all" }).click();
-  await page.getByRole("menuitem", { name: "Manage queues…" }).click();
+  await openManageQueues(page);
   await page.getByRole("button", { name: /^Queue WFUI/ }).click();
   await page.getByRole("tab", { name: "Environment" }).click();
   const reloaded = page.getByRole("region", { name: "Secrets WFUI" });
@@ -798,7 +831,7 @@ test("Tasks production workspace explains a workflow task's problem, maps its st
   step("1 published, bound, task created");
 
   // Step 2: the row counts the step; the panel maps the workflow and opens a step.
-  await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
+  await page.goto(TASKS_PAGE);
   await expect(page.getByLabel("Search tasks")).toBeVisible();
   const row = page.getByTestId(`task-row-${key}`);
   await expect(row.getByTitle("Step 2 of 4"), "step 2: the row counts the step").toHaveText("2/4");

@@ -1,30 +1,28 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  SIDEBAR_AGENTS_KEY,
   SIDEBAR_PINNED_KEY,
-  SIDEBAR_TAB_KEY,
+  readAgentsOpen,
   readPinnedAgents,
-  readSidebarTab,
+  writeAgentsOpen,
   writePinnedAgents,
-  writeSidebarTab,
 } from "./sidebarPrefs";
 
 beforeEach(() => localStorage.clear());
 
-describe("sidebar tab preference", () => {
-  it("defaults to servers and survives a round trip", () => {
-    expect(readSidebarTab()).toBe("servers");
-    writeSidebarTab("agents");
-    expect(readSidebarTab()).toBe("agents");
+describe("agent list preference", () => {
+  it("opens by default and survives a round trip", () => {
+    expect(readAgentsOpen()).toBe(true);
+    writeAgentsOpen(false);
+    expect(readAgentsOpen()).toBe(false);
+    writeAgentsOpen(true);
+    expect(readAgentsOpen()).toBe(true);
   });
 
-  it("falls back to servers for a value that is not a tab", () => {
-    localStorage.setItem(SIDEBAR_TAB_KEY, "__gone__");
-    expect(readSidebarTab()).toBe("servers");
-  });
-
-  it("falls back to servers for the hidden groups tab", () => {
-    localStorage.setItem(SIDEBAR_TAB_KEY, "groups");
-    expect(readSidebarTab()).toBe("servers");
+  it("opens for an unknown value and ignores the former tab key", () => {
+    localStorage.setItem(SIDEBAR_AGENTS_KEY, "__gone__");
+    localStorage.setItem("terminals:sidebar-tab:v1", "agents");
+    expect(readAgentsOpen()).toBe(true);
   });
 });
 
