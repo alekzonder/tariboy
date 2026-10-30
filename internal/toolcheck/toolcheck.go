@@ -34,6 +34,42 @@ var required = []Tool{
 
 var harnesses = []string{"claude", "codex", "opencode", "agent"}
 
+// Harness reports whether one harness CLI is on the daemon PATH.
+type Harness struct {
+	Type    string `json:"type"`
+	Found   bool   `json:"found"`
+	Install string `json:"install"`
+}
+
+// harnessTools maps each harness type except stub to its executable.
+var harnessTools = []struct{ typ, exe, install string }{
+	{"claude", "claude", "install Claude Code and put claude on the daemon PATH"},
+	{"codex", "codex", "install Codex CLI and put codex on the daemon PATH"},
+	{"opencode", "opencode", "install OpenCode and put opencode on the daemon PATH"},
+	{"cursor", "agent", "install Cursor Agent and put agent on the daemon PATH"},
+}
+
+// Harnesses resolves every harness CLI with the same lookup as Check.
+func Harnesses() []Harness {
+	out := make([]Harness, len(harnessTools))
+	for i, h := range harnessTools {
+		_, err := exec.LookPath(h.exe)
+		out[i] = Harness{Type: h.typ, Found: err == nil, Install: h.install}
+	}
+	return out
+}
+
+// Missing returns the required tool named name when it is not on PATH.
+func Missing(name string) (Tool, bool) {
+	for _, tool := range required {
+		if tool.Name == name {
+			_, err := exec.LookPath(name)
+			return tool, err != nil
+		}
+	}
+	return Tool{}, false
+}
+
 // Check resolves every tool on the current PATH.
 func Check() Result {
 	var missing []Tool

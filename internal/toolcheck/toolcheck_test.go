@@ -61,3 +61,37 @@ func TestCheckRequiresAtLeastOneHarness(t *testing.T) {
 		t.Fatalf("Check() = %+v, want one missing harness entry", r)
 	}
 }
+
+func TestHarnessesReportsEachHarnessWithoutStub(t *testing.T) {
+	fakePath(t, "claude", "agent")
+	got := Harnesses()
+	var types []string
+	found := map[string]bool{}
+	for _, h := range got {
+		types = append(types, h.Type)
+		found[h.Type] = h.Found
+		if h.Install == "" {
+			t.Fatalf("harness %+v lacks an install hint", h)
+		}
+	}
+	if want := []string{"claude", "codex", "opencode", "cursor"}; !reflect.DeepEqual(types, want) {
+		t.Fatalf("types = %v, want %v", types, want)
+	}
+	if !found["claude"] || !found["cursor"] || found["codex"] || found["opencode"] {
+		t.Fatalf("found = %v, want claude and cursor only", found)
+	}
+}
+
+func TestMissingNamesARequiredToolOnlyWhenAbsent(t *testing.T) {
+	fakePath(t, "git")
+	if _, missing := Missing("git"); missing {
+		t.Fatal("git is on PATH but reported missing")
+	}
+	tool, missing := Missing("npx")
+	if !missing || tool.Install != "install Node.js (npm ships npx)" {
+		t.Fatalf("Missing(npx) = %+v, %v", tool, missing)
+	}
+	if _, missing := Missing("unknown-tool"); missing {
+		t.Fatal("a tool outside the list is never reported")
+	}
+}
