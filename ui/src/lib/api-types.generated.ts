@@ -3234,6 +3234,8 @@ export interface components {
       budget: components["schemas"]["AgentBudget"];
       color: string;
       current_goal_task_key: string;
+      /** @description Start time of the running iteration (RFC 3339); absent while no iteration runs */
+      current_iteration_started_at?: string;
       cwd: string;
       enabled: boolean;
       env: {
@@ -3250,6 +3252,8 @@ export interface components {
       image: string;
       interactive: boolean;
       interval_s: number;
+      /** @description Start time of the agent's most recent iteration in any status (RFC 3339) */
+      last_iteration_at?: string;
       max_idle_iterations: number;
       name: string;
       on_error: string;
@@ -4431,6 +4435,8 @@ export interface components {
       waiting_on?: "customer" | "script" | "pause";
       workflow_attention?: components["schemas"]["WorkflowAttention"];
       workflow_digest?: string;
+      /** @description True when an open workflow task is in its workflow's initial status */
+      workflow_initial?: boolean;
       workflow_name?: string;
       workflow_paused_reason?: string;
       workflow_step?: components["schemas"]["WorkflowStep"];

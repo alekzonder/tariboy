@@ -471,6 +471,10 @@ func agentPs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
+			times, err := agentStore(c).IterationTimesByAgent()
+			if err != nil {
+				return nil, err
+			}
 			rows := make([]AgentRow, 0, len(list))
 			for _, a := range list {
 				state := liveStateOf(c, a)
@@ -487,8 +491,10 @@ func agentPs() registry.Command {
 					GoalEnabled:       a.GoalEnabled, GoalWaitCustomerTimeoutS: a.GoalWaitCustomerTimeoutS, GoalDeliveryCooldownS: a.GoalDeliveryCooldownS,
 					CurrentGoalTaskKey: a.CurrentGoalTaskKey,
 					Schedule:           a.ScheduleRRule, ScheduleNextAt: scheduleNextAt(a),
-					Budget:    budgetView(budgets[a.Name]),
-					AgentHalt: agentHalt(a, state),
+					Budget:                    budgetView(budgets[a.Name]),
+					CurrentIterationStartedAt: times[a.Name].Running,
+					LastIterationAt:           times[a.Name].Last,
+					AgentHalt:                 agentHalt(a, state),
 				})
 			}
 			return AgentListResult{Agents: rows, Count: len(rows)}, nil

@@ -717,6 +717,10 @@
           "current_goal_task_key": {
             "type": "string"
           },
+          "current_iteration_started_at": {
+            "description": "Start time of the running iteration (RFC 3339); absent while no iteration runs",
+            "type": "string"
+          },
           "cwd": {
             "type": "string"
           },
@@ -761,6 +765,10 @@
           },
           "interval_s": {
             "type": "integer"
+          },
+          "last_iteration_at": {
+            "description": "Start time of the agent's most recent iteration in any status (RFC 3339)",
+            "type": "string"
           },
           "max_idle_iterations": {
             "type": "integer"
@@ -5520,6 +5528,10 @@
           },
           "workflow_digest": {
             "type": "string"
+          },
+          "workflow_initial": {
+            "description": "True when an open workflow task is in its workflow's initial status",
+            "type": "boolean"
           },
           "workflow_name": {
             "type": "string"

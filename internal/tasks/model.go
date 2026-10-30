@@ -184,6 +184,9 @@ type Task struct {
 	// Both are derived by scanTask and absent on a flexible or closed task.
 	WorkflowAttention *WorkflowAttention `json:"workflow_attention,omitempty"`
 	WorkflowStep      *WorkflowStep      `json:"workflow_step,omitempty"`
+	// WorkflowInitial marks an open workflow task that is in its workflow's
+	// initial status; scanTask derives it with WorkflowStep.
+	WorkflowInitial bool `json:"workflow_initial,omitempty" jsonschema:"description=True when an open workflow task is in its workflow's initial status"`
 	// Filed marks a task that was just created as a report into a queue its author does not
 	// own: unassigned, ungrouped, and no longer visible to that author. Set only on the
 	// create response, so the caller can say so instead of leaving the agent to discover it
@@ -228,7 +231,7 @@ func (t *Task) UnmarshalJSON(data []byte) error {
 	next := *t
 	next.WorkflowDigest, next.WorkflowName, next.WorkflowVersion = "", "", ""
 	next.WorkflowStatus, next.WorkflowPausedReason, next.WaitingOn = "", "", ""
-	next.WorkflowAttention, next.WorkflowStep = nil, nil
+	next.WorkflowAttention, next.WorkflowStep, next.WorkflowInitial = nil, nil, false
 	aux := struct {
 		*plainTask
 		Status   *string `json:"status"`

@@ -904,6 +904,41 @@ func (s *Store) ListIterations(agentName string) ([]Iteration, error) {
 	return s.FindIterations(agentName, IterationFilter{})
 }
 
+// IterationTimes are the start times of an agent's running iteration and of
+// its most recent iteration in any status, in the stored format. Running is
+// empty while no iteration runs.
+type IterationTimes struct {
+	Running string
+	Last    string
+}
+
+// IterationTimesByAgent reads the IterationTimes of every agent that has an
+// iteration in one query; an agent without one is absent from the map. An
+// agent runs one iteration at a time, so a running iteration is its newest
+// one: each agent costs one lookup in idx_iterations_agent instead of a scan
+// of its whole history, which matters because agent.ps is polled.
+func (s *Store) IterationTimesByAgent() (map[string]IterationTimes, error) {
+	rows, err := s.db.Query(`SELECT a.name,
+		CASE WHEN i.status = 'running' THEN i.started_at ELSE '' END,
+		i.started_at
+		FROM agents a JOIN iterations i ON i.rowid = (
+			SELECT rowid FROM iterations WHERE agent = a.name ORDER BY started_at DESC LIMIT 1)`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]IterationTimes{}
+	for rows.Next() {
+		var name string
+		var times IterationTimes
+		if err := rows.Scan(&name, &times.Running, &times.Last); err != nil {
+			return nil, err
+		}
+		out[name] = times
+	}
+	return out, rows.Err()
+}
+
 // IdleStreak returns how many of the most-recent iterations the agent
 // self-declared idle (productive=0), counted newest-first and stopping at the
 // first productive iteration. Abnormal outcomes (timeout/harness_error/

@@ -78,8 +78,8 @@ type QueueWorkflow struct {
 // JSON columns, both NULL unless the task is an open workflow task, so a list
 // query opens no manifest and reads no visit it does not need:
 //
-//   - the position of the current status in the manifest: its index and the
-//     number of statuses;
+//   - the position of the current status in the manifest: its index, the
+//     number of statuses, and whether it is the initial status;
 //   - the open visit's counters, its latest transition request, and its
 //     latest finished run, from which WorkflowAttention is derived, and the
 //     pool it recorded in place of the customer.
@@ -92,7 +92,8 @@ const TaskWorkflowColumns = `
        COALESCE(t.workflow_digest, ''), COALESCE(t.workflow_status, ''), t.workflow_paused_reason,
        COALESCE(wi.name, ''), COALESCE(wi.version, ''), t.workflow_owner_kind,
        CASE WHEN t.workflow_digest IS NOT NULL AND t.status NOT IN ('done', 'cancelled') THEN (
-         SELECT json_object('index', s.key, 'total', json_array_length(wi.manifest, '$.definition.statuses'))
+         SELECT json_object('index', s.key, 'total', json_array_length(wi.manifest, '$.definition.statuses'),
+                            'initial', json_extract(wi.manifest, '$.definition.initial_status') = t.workflow_status)
          FROM json_each(wi.manifest, '$.definition.statuses') s
          WHERE json_extract(s.value, '$.id') = t.workflow_status
        ) END,
@@ -134,6 +135,7 @@ func WorkflowScanTargets(t *Task) ([]any, func()) {
 		if position.Valid && step.Total > 0 {
 			t.WorkflowStep = &WorkflowStep{Index: step.Index + 1, Total: step.Total}
 		}
+		t.WorkflowInitial = position.Valid && step.Initial != 0
 		var open scannedVisit
 		if visit.Valid {
 			tidy.Log(nil, "workflow visit is not valid JSON", json.Unmarshal([]byte(visit.String), &open), "workflow", t.WorkflowName)
@@ -147,6 +149,8 @@ func WorkflowScanTargets(t *Task) ([]any, func()) {
 type scannedStep struct {
 	Index int `json:"index"`
 	Total int `json:"total"`
+	// Initial is SQLite's 1 or 0 for the comparison with the initial status.
+	Initial int `json:"initial"`
 }
 
 type scannedVisit struct {
@@ -184,7 +188,7 @@ func settleWorkflowSummary(t *Task) {
 		return
 	}
 	if t.Status == StatusDone || t.Status == StatusCancelled {
-		t.WorkflowAttention, t.WorkflowStep = nil, nil
+		t.WorkflowAttention, t.WorkflowStep, t.WorkflowInitial = nil, nil, false
 		return
 	}
 	if t.WorkflowPausedReason != "" && (t.WorkflowAttention == nil || t.WorkflowAttention.Kind != AttentionPaused) {
