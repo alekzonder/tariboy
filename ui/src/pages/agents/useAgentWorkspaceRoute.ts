@@ -1,10 +1,9 @@
-import { useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useParams, useSearchParams } from "react-router-dom";
 import { hostToParam } from "@/lib/terminalsHost";
-import { useUiMode } from "@/lib/uiMode";
-import { agentTabs, resolveAgentTab } from "./agentWorkspaceModel";
+import { resolveAgentTab } from "./agentWorkspaceModel";
 
-// The workspace route: which tabs the UI mode shows, the tab the URL names (or
-// where an unknown or hidden one redirects), and the base every tab link uses.
+// The workspace route: the tab the URL names (or where an old or unknown one
+// redirects), and the base every tab link uses.
 export function useAgentWorkspaceRoute({
   hostId,
   agentName,
@@ -12,11 +11,10 @@ export function useAgentWorkspaceRoute({
   hostId: string;
   agentName: string;
 }) {
-  const simple = useUiMode() === "simple";
-  const tabs = agentTabs(simple);
-  const { tab = "console" } = useParams();
+  const { tab = "" } = useParams();
+  const { search } = useLocation();
   const [searchParams] = useSearchParams();
   const base = `/agents/${hostToParam(hostId)}/${encodeURIComponent(agentName)}`;
-  const resolved = resolveAgentTab({ tab, simple, base });
-  return { tabs, base, initialTaskKey: searchParams.get("task") ?? undefined, ...resolved };
+  const resolved = resolveAgentTab({ tab, base, search });
+  return { base, initialTaskKey: searchParams.get("task") ?? undefined, ...resolved };
 }

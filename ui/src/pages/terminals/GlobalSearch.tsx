@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { SearchInput } from "@/components/ui/search-input";
 import type { HostAgents } from "@/lib/aggregate";
 import { scopedPath } from "@/lib/navRoutes";
-import { defaultAgentTab } from "@/lib/uiMode";
+import { DEFAULT_AGENT_TAB } from "@/pages/agents/agentWorkspaceModel";
 import { cn } from "@/lib/utils";
 import { allAgents } from "./sidebar/sidebarModel";
 import { agentPath } from "./terminalsHosts";
@@ -30,7 +30,7 @@ function hits(hosts: HostAgents[], query: string, tasks: TaskHit[]): Hit[] {
       id: row.key,
       label: row.agent.name,
       detail: multiHost ? `${row.agent.state} · ${row.hostLabel}` : row.agent.state,
-      path: agentPath(row.hostId, row.agent.name, defaultAgentTab()),
+      path: agentPath(row.hostId, row.agent.name, DEFAULT_AGENT_TAB),
     }));
   const found: Hit[] = tasks.map((task) => ({
     kind: "task",

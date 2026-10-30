@@ -67,7 +67,6 @@ function jsonKey(area: StorageArea, name: string, version: number | null): Stora
 
 export const storageKeys = {
   theme: oneOfKey<Theme>("tariboy-theme", null, ["light", "dark", "system"], "system"),
-  uiMode: oneOfKey("app:ui-mode:v1", 1, ["simple", "expert"], "simple"),
   workspaces: jsonKey("local", "app:workspaces:v2", 2),
   /** Legacy: read once so each host keeps its one workspace. */
   workspacesLegacy: jsonKey("local", "app:workspaces:v1", 1),

@@ -10,7 +10,7 @@ import { scopedPath } from "@/lib/navRoutes";
 import { needsYouRows } from "@/lib/needsYou";
 import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
 import { targetFor } from "@/lib/terminalsHost";
-import { defaultAgentTab } from "@/lib/uiMode";
+import { DEFAULT_AGENT_TAB } from "@/pages/agents/agentWorkspaceModel";
 import { ActivityTotals } from "@/pages/activity/ActivityParts";
 import { useNeedsYou } from "@/pages/terminals/needsYouContext";
 import { agentPath } from "@/pages/terminals/terminalsHosts";
@@ -150,7 +150,7 @@ export default function HomePage({
           {recent.map((row) => (
             <li key={row.key} className="min-w-0">
               <Link
-                to={agentPath(row.hostId, row.agent.name, defaultAgentTab())}
+                to={agentPath(row.hostId, row.agent.name, DEFAULT_AGENT_TAB)}
                 className="flex items-baseline gap-2 rounded-control px-2 py-1 text-body-sm hover:bg-accent"
               >
                 <span className="min-w-0 truncate">{row.agent.name}</span>

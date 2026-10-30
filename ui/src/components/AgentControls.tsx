@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { MoreVertical, Settings2, Trash2 } from "lucide-react";
+import { Copy, Code2, MoreHorizontal, Pin, Play, Settings2, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
@@ -31,6 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import type { PrimaryAction } from "@/pages/agents/agentWorkspaceModel";
 
 function useAction(refresh?: () => void) {
   return async (label: string, fn: () => Promise<unknown>) => {
@@ -102,9 +103,9 @@ function ExecDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Exec one-shot iteration</DialogTitle>
+          <DialogTitle>Run once</DialogTitle>
           <DialogDescription>
-            Runs one iteration now; the optional text applies only to it.
+            Starts one run now; the optional text applies only to it.
           </DialogDescription>
         </DialogHeader>
         <Textarea
@@ -118,7 +119,7 @@ function ExecDialog({
             Cancel
           </Button>
           <Button disabled={pending || disabled} onClick={onExec}>
-            Exec
+            Run once
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -172,47 +173,175 @@ function DeleteAgentDialog({
   );
 }
 
+function ForceStopDialog({
+  name,
+  open,
+  setOpen,
+  onForceStop,
+}: {
+  name: string;
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  onForceStop: () => void;
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Force-stop the current run of {name}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This kills the running session at once. The agent stays on and starts its next run as
+            usual.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={onForceStop}>
+            Force-stop
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+const MENU_ITEM = "h-7 rounded-control px-2.25 text-body";
+
+const PRIMARY_LABEL: Record<PrimaryAction, string> = {
+  answer: "Answer",
+  give: "Give task",
+  start: "Start",
+  restart: "Restart",
+};
+
+type AgentControlsProps = {
+  name: string;
+  /** The agent is up — the toggle offers Stop; otherwise it offers Start. */
+  alive: boolean;
+  /** `bare:latest` has no iteration loop, so it gets no Run once…. */
+  image?: string;
+  disabled?: boolean;
+  /** The one primary button the derived state asks for. */
+  primary: PrimaryAction;
+  /** Where Answer and Give task go: the Work tab, with the task to open. */
+  workPath: string;
+  /** Route of this agent's Settings tab, for the menu's Settings item. */
+  settingsPath: string;
+  refresh?: () => void;
+  /** Called after a Run once request succeeds, e.g. to reconnect a terminal. */
+  onExec?: () => void;
+  /** Called after the agent is deleted, so the caller can leave the route. */
+  onDeleted?: () => void;
+  onClone?: () => void;
+  pinned?: boolean;
+  onTogglePin?: () => void;
+  /** Present only where the folder can open in VS Code. */
+  onOpenFolder?: () => void;
+};
+
+function OverflowMenu({
+  props,
+  canRunOnce,
+  onRunOnce,
+  onForceStop,
+  onDelete,
+}: {
+  props: AgentControlsProps;
+  canRunOnce: boolean;
+  onRunOnce: () => void;
+  onForceStop: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="More agent actions"
+          className="size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <MoreHorizontal className="size-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      {/* The handoff's menu: 12px radius, --lift, no ring — one raised
+          surface, same family as the content island. */}
+      <DropdownMenuContent
+        align="end"
+        className="min-w-41 rounded-card p-1.25 shadow-[var(--lift)] ring-0"
+      >
+        {canRunOnce && (
+          <DropdownMenuItem className={MENU_ITEM} disabled={props.disabled} onSelect={onRunOnce}>
+            <Play aria-hidden="true" />
+            Run once…
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem className={MENU_ITEM} disabled={props.disabled} onSelect={onForceStop}>
+          <Square aria-hidden="true" />
+          Force-stop current run
+        </DropdownMenuItem>
+        {props.onOpenFolder && (
+          <DropdownMenuItem
+            className={MENU_ITEM}
+            disabled={props.disabled}
+            onSelect={props.onOpenFolder}
+          >
+            <Code2 aria-hidden="true" />
+            Open folder in VS Code
+          </DropdownMenuItem>
+        )}
+        {props.onClone && (
+          <DropdownMenuItem
+            className={MENU_ITEM}
+            disabled={props.disabled}
+            onSelect={props.onClone}
+          >
+            <Copy aria-hidden="true" />
+            Clone
+          </DropdownMenuItem>
+        )}
+        {props.onTogglePin && (
+          <DropdownMenuItem className={MENU_ITEM} onSelect={props.onTogglePin}>
+            <Pin aria-hidden="true" />
+            {props.pinned ? "Unpin" : "Pin"}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem asChild className={MENU_ITEM}>
+          <Link to={props.settingsPath}>
+            <Settings2 aria-hidden="true" />
+            Settings
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="mx-0.75 my-1" />
+        <DropdownMenuItem
+          className={`${MENU_ITEM} text-destructive focus:bg-destructive/10 focus:text-destructive`}
+          onSelect={onDelete}
+        >
+          <Trash2 aria-hidden="true" />
+          Delete agent
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 /**
- * The action cluster on the right of the agent header: the run-state toggle,
- * Kill, and an overflow menu for everything that is not a per-second decision.
- * It rides in the header rather than in a tab, so the lifecycle of the agent is
- * reachable from every tab — which is why the Terminal tab no longer carries a
- * second copy of these buttons.
- *
- * Exec (a one-shot iteration with an optional prompt) sits in front of the
- * toggle and only while the agent is enabled.
+ * The action cluster on the right of the agent header: the one primary action
+ * of the derived state, the on/off toggle, and a `⋯` menu for everything that
+ * is not a per-second decision (Run once…, Force-stop, VS Code, Clone, Pin,
+ * Settings, Delete). It rides in the header rather than in a tab, so the
+ * lifecycle of the agent is reachable from every tab.
  *
  * Every call goes through the client of the nearest ApiProvider: the workspace
  * is addressed by route, and must never fall back to the active daemon.
  */
-export function AgentControls({
-  name,
-  alive,
-  image,
-  disabled = false,
-  configurationPath,
-  refresh,
-  onExec,
-  onDeleted,
-}: {
-  name: string;
-  /** The agent is up — the toggle offers Stop; otherwise it offers Start. */
-  alive: boolean;
-  /** `bare:latest` has no iteration loop, so it gets no Exec. */
-  image?: string;
-  disabled?: boolean;
-  /** Route of this agent's Configuration tab, for the menu's Settings item. */
-  configurationPath: string;
-  refresh?: () => void;
-  /** Called after an Exec request succeeds, e.g. to reconnect a terminal. */
-  onExec?: () => void;
-  /** Called after the agent is deleted, so the caller can leave the route. */
-  onDeleted?: () => void;
-}) {
+export function AgentControls(props: AgentControlsProps) {
+  const { name, alive, disabled = false, primary, refresh, onExec, onDeleted } = props;
   const api = useApi();
   const run = useAction(refresh);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
+  const [forceStopOpen, setForceStopOpen] = useState(false);
   const [execOpen, setExecOpen] = useState(false);
   const [execPending, setExecPending] = useState(false);
   const [prompt, setPrompt] = useState("");
@@ -226,7 +355,7 @@ export function AgentControls({
       setExecOpen(false);
       refresh?.();
       onExec?.();
-      toast.success("exec started");
+      toast.success("run started");
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : String(error));
     } finally {
@@ -248,77 +377,39 @@ export function AgentControls({
     }
   };
 
+  const post = (action: "start" | "stop" | "restart") => () =>
+    void run(action, () => api.agentPost(name, action));
+
   return (
     <div data-testid="agent-controls" className="flex shrink-0 items-center gap-1.5">
-      {alive && image !== "bare:latest" && (
-        <Button size="sm" variant="secondary" disabled={disabled} onClick={() => setExecOpen(true)}>
-          Exec
-        </Button>
-      )}
-      {alive ? (
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={disabled}
-          onClick={() => run("stop", () => api.agentPost(name, "stop"))}
-        >
-          Stop
+      {primary === "answer" || primary === "give" ? (
+        <Button asChild size="sm">
+          <Link to={props.workPath} aria-disabled={disabled || undefined}>
+            {PRIMARY_LABEL[primary]}
+          </Link>
         </Button>
       ) : (
-        <Button
-          size="sm"
-          disabled={disabled}
-          onClick={() => run("start", () => api.agentPost(name, "start"))}
-        >
-          Start
+        <Button size="sm" disabled={disabled} onClick={post(primary)}>
+          {PRIMARY_LABEL[primary]}
         </Button>
       )}
-      <Button
-        size="sm"
-        variant="secondary"
-        disabled={disabled}
-        className="text-destructive"
-        onClick={() => {
-          if (window.confirm(`Kill the session for ${name}?`)) {
-            void run("kill", () => api.agentPost(name, "kill"));
-          }
-        }}
-      >
-        Kill
-      </Button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Agent settings"
-            className="size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <MoreVertical className="size-3.5" />
+      {primary !== "start" &&
+        (alive ? (
+          <Button size="sm" variant="secondary" disabled={disabled} onClick={post("stop")}>
+            Stop
           </Button>
-        </DropdownMenuTrigger>
-        {/* The handoff's menu: 12px radius, --lift, no ring — one raised
-            surface, same family as the content island. */}
-        <DropdownMenuContent
-          align="end"
-          className="min-w-41 rounded-card p-1.25 shadow-[var(--lift)] ring-0"
-        >
-          <DropdownMenuItem asChild className="h-7 rounded-control px-2.25 text-body">
-            <Link to={configurationPath}>
-              <Settings2 aria-hidden="true" />
-              Settings
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator className="mx-0.75 my-1" />
-          <DropdownMenuItem
-            className="h-7 rounded-control px-2.25 text-body text-destructive focus:bg-destructive/10 focus:text-destructive"
-            onSelect={() => setDeleteOpen(true)}
-          >
-            <Trash2 aria-hidden="true" />
-            Delete agent
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+        ) : (
+          <Button size="sm" variant="secondary" disabled={disabled} onClick={post("start")}>
+            Start
+          </Button>
+        ))}
+      <OverflowMenu
+        props={props}
+        canRunOnce={alive && props.image !== "bare:latest"}
+        onRunOnce={() => setExecOpen(true)}
+        onForceStop={() => setForceStopOpen(true)}
+        onDelete={() => setDeleteOpen(true)}
+      />
 
       <ExecDialog
         open={execOpen}
@@ -328,6 +419,12 @@ export function AgentControls({
         setPrompt={setPrompt}
         setOpen={setExecOpen}
         onExec={() => void exec()}
+      />
+      <ForceStopDialog
+        name={name}
+        open={forceStopOpen}
+        setOpen={setForceStopOpen}
+        onForceStop={() => void run("force-stop", () => api.agentPost(name, "kill"))}
       />
       <DeleteAgentDialog
         name={name}

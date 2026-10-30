@@ -18,9 +18,9 @@ describe("FirstVisitHint", () => {
       "console",
       "Type what you want done. To hand work over and let the agent run on its own, give it a task.",
     ],
-    ["tasks", "Tasks you create here are given to this agent."],
+    ["work", "Tasks you create here are given to this agent."],
     [
-      "configuration",
+      "settings",
       "Autopilot: set a schedule here to let the agent keep working without you. Everything else is optional.",
     ],
   ] as const)("shows the %s line once per agent until it is dismissed", async (tab, text) => {
@@ -43,12 +43,12 @@ describe("FirstVisitHint", () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new DOMException("blocked", "SecurityError");
     });
-    const first = render(<FirstVisitHint hostId="" agent="dev" tab="tasks" />);
+    const first = render(<FirstVisitHint hostId="" agent="dev" tab="work" />);
     await userEvent.click(screen.getByRole("button", { name: "Dismiss hint" }));
-    expect(screen.queryByText(HINT_TEXT.tasks)).toBeNull();
+    expect(screen.queryByText(HINT_TEXT.work)).toBeNull();
     first.unmount();
 
-    render(<FirstVisitHint hostId="" agent="dev" tab="tasks" />);
-    expect(screen.getByText(HINT_TEXT.tasks)).toBeInTheDocument();
+    render(<FirstVisitHint hostId="" agent="dev" tab="work" />);
+    expect(screen.getByText(HINT_TEXT.work)).toBeInTheDocument();
   });
 });

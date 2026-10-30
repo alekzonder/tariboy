@@ -73,14 +73,14 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "agent-workspace",
     title: "Agent workspace",
-    body: "Mail, tasks and the live terminal of one agent.",
+    body: "Work, Terminal, Activity and Settings of one agent: its tasks, its live screen, what it did and what it cost, and how it runs.",
     anchor: TOUR_ANCHORS.agentTabs,
     agent: true,
   },
   {
     id: "agent-settings",
     title: "Agent settings",
-    body: "Configuration sets the harness, model, schedule, environment and budget of the agent.",
+    body: "Settings sets the harness, model, schedule, environment and budget of the agent.",
     anchor: TOUR_ANCHORS.agentConfiguration,
     agent: true,
   },

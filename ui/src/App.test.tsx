@@ -4,7 +4,6 @@ import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { fetchAllAgents } from "@/lib/aggregate";
 import App from "./App";
-import { UI_MODE_KEY } from "@/lib/uiMode";
 import { UI_VERSION } from "@/lib/onboarding/version";
 
 vi.mock("@/lib/aggregate", () => ({
@@ -239,19 +238,14 @@ describe("product routing", () => {
     );
   });
 
-  it("redirects a legacy terminal route to the Terminal tab", async () => {
-    localStorage.setItem(UI_MODE_KEY, "expert");
-    renderAt("/terminals/local/worker");
-    await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console"),
-    );
-  });
-
-  it("redirects a legacy terminal route to Tasks in Simple mode", async () => {
-    renderAt("/terminals/local/worker");
-    await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/tasks"),
-    );
+  it.each([
+    ["a legacy terminal route", "/terminals/local/worker", "/agents/local/worker/work"],
+    ["an agent route without a tab", "/agents/local/worker", "/agents/local/worker/work"],
+    ["the legacy agent settings", "/agent/worker/settings", "/agents/local/worker/settings"],
+    ["a legacy agent route without a tab", "/agent/worker", "/agents/local/worker/work"],
+  ])("redirects %s to a real tab", async (_name, from, to) => {
+    renderAt(from);
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(to));
   });
 
   it("preserves create preselection while canonicalizing old entry points", async () => {
@@ -360,7 +354,7 @@ describe("compact screens", () => {
   });
 
   it("keeps the agent list behind a menu button and closes it after a pick", async () => {
-    renderAt("/agents/local/alice/tasks");
+    renderAt("/agents/local/alice/work");
 
     expect(screen.queryByTestId("agents-sidebar")).toBeNull();
     const titlebar = screen.getByTestId("app-titlebar");
@@ -377,7 +371,7 @@ describe("compact screens", () => {
     fireEvent.click(await within(drawer).findByRole("button", { name: "Open bob" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull());
-    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/tasks");
+    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/work");
     // The wide layout's saved state is not touched by the drawer.
     expect(localStorage.getItem("terminals:sidebar:v1")).toBeNull();
   });
@@ -393,7 +387,7 @@ describe("compact screens", () => {
     }
     render(
       <MemoryRouter
-        initialEntries={["/agents/local/bob/tasks", "/agents/local/alice/tasks"]}
+        initialEntries={["/agents/local/bob/work", "/agents/local/alice/work"]}
         initialIndex={1}
       >
         <App />
@@ -412,7 +406,7 @@ describe("compact screens", () => {
     });
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull());
-    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/tasks");
+    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/work");
   });
 
   it("drops the macOS traffic-light gap outside the Desktop app", () => {
@@ -442,7 +436,7 @@ describe("medium screens", () => {
   });
 
   it("shows the agent column with a toggle that collapses it", async () => {
-    renderAt("/agents/local/alice/tasks");
+    renderAt("/agents/local/alice/work");
 
     expect(await screen.findByTestId("agents-sidebar")).toBeInTheDocument();
     const titlebar = screen.getByTestId("app-titlebar");

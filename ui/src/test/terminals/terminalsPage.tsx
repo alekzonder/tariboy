@@ -7,7 +7,6 @@ import { CustomerQuestionNotificationsContext } from "@/components/customerQuest
 import { fetchAllAgents } from "@/lib/aggregate";
 import type { AgentActionResult, ImageManifest, ImageSummary } from "@/lib/api";
 import { addDaemon } from "@/lib/daemons";
-import { UI_MODE_KEY } from "@/lib/uiMode";
 import { resetWorkspacesForTest } from "@/lib/workspaces";
 import { SidebarStateProvider } from "@/pages/terminals/SidebarStateProvider";
 import TerminalsPage from "@/pages/terminals/TerminalsPage";
@@ -66,8 +65,6 @@ export function setupTerminalsPage({
   localStorage.clear();
   sessionStorage.clear();
   resetWorkspacesForTest();
-  // Terminal navigation is Expert behaviour; Simple opens Chat.
-  localStorage.setItem(UI_MODE_KEY, "expert");
   apiOn.mockReset().mockResolvedValue(undefined);
   vi.mocked(fetchAllAgents).mockResolvedValue([
     {

@@ -1,5 +1,5 @@
 import { lazy, useState, type ReactNode } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import { ApiProvider } from "@/components/ApiProvider";
 import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
@@ -8,7 +8,8 @@ import type { AgentRow, AgentView } from "@/lib/api";
 import { LazyBoundary } from "@/components/LazyBoundary";
 import { FirstVisitHint } from "@/components/onboarding/FirstVisitHint";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
-import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
+import { agentNeeds, deriveAgentState, type AgentState } from "@/lib/agentState";
+import { useNeedsYou } from "@/pages/terminals/needsYouContext";
 import type { AgentTab } from "./agentWorkspaceModel";
 import { AgentWorkspaceHeader } from "./AgentWorkspaceHeader";
 import { useAgentWorkspaceRoute } from "./useAgentWorkspaceRoute";
@@ -22,19 +23,21 @@ const AgentActivityTab = lazy(() => import("./AgentActivityTab"));
 const AgentConfigurationTab = lazy(() => import("./AgentConfigurationTab"));
 const AgentAdvancedTab = lazy(() => import("./AgentAdvancedTab"));
 const TasksWorkspace = lazy(() => import("@/pages/tasks/TasksWorkspace"));
-const TaskDrawer = lazy(() => import("@/pages/tasks/TaskDrawer"));
 
 type AgentWorkspaceProps = {
   hostId: string;
-  hostLabel?: string;
   agent: AgentRow;
   refresh: () => void;
   unavailable?: boolean;
+  /** Opens the create dialog with this agent as the clone source. */
+  onClone?: () => void;
 };
 
 type TabContext = {
   hostId: string;
   agent: AgentRow;
+  agentState: AgentState;
+  base: string;
   view: AgentView | null;
   refresh: () => void;
   execCount: number;
@@ -48,9 +51,10 @@ const TAB_CONTENT: Record<AgentTab, (ctx: TabContext) => ReactNode> = {
     <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} execCount={execCount} />
   ),
   activity: () => <AgentActivityTab />,
-  tasks: ({ hostId, agent, initialTaskKey, onNotificationsChanged }) => (
+  // Until Work gets its own layout it shows the agent's task list.
+  work: ({ hostId, agent, initialTaskKey, onNotificationsChanged }) => (
     <div className="flex h-full min-h-0 flex-col">
-      <FirstVisitHint hostId={hostId} agent={agent.name} tab="tasks" className="mx-3 mt-3" />
+      <FirstVisitHint hostId={hostId} agent={agent.name} tab="work" className="mx-3 mt-3" />
       <div className="min-h-0 flex-1">
         <TasksWorkspace
           scopeAgent={agent.name}
@@ -61,7 +65,15 @@ const TAB_CONTENT: Record<AgentTab, (ctx: TabContext) => ReactNode> = {
       </div>
     </div>
   ),
-  configuration: ({ refresh }) => <AgentConfigurationTab refresh={refresh} />,
+  settings: ({ refresh, base }) => (
+    <>
+      <p className="mx-4 mt-3 text-caption text-muted-foreground">
+        Other views: <Link to={`${base}/mailbox`}>Open mailbox</Link> ·{" "}
+        <Link to={`${base}/advanced`}>Advanced</Link>
+      </p>
+      <AgentConfigurationTab refresh={refresh} />
+    </>
+  ),
   advanced: () => <AgentAdvancedTab />,
 };
 
@@ -99,18 +111,22 @@ function ConnectionNotice({
 
 function AgentWorkspaceContent({
   hostId,
-  hostLabel,
   agent,
   refresh,
   unavailable = false,
+  onClone,
 }: AgentWorkspaceProps) {
   const route = useAgentWorkspaceRoute({ hostId, agentName: agent.name });
   const { activeId, daemons, connection, status, currentView, refreshStatus } =
     useAgentWorkspaceStatus({ hostId, agentName: agent.name, unavailable });
   const [execCount, setExecCount] = useState(0);
-  // The Goal task opens over whichever tab is showing, not in Tasks.
-  const [goalTask, setGoalTask] = useState("");
-  const { attention, refreshHost } = useCustomerQuestionNotifications();
+  const { refreshHost } = useCustomerQuestionNotifications();
+  const needsYou = useNeedsYou();
+  const needs = agentNeeds(
+    needsYou.hosts.find((host) => host.hostId === hostId),
+    agent.name,
+  );
+  const agentState = deriveAgentState({ agent, status, needs });
   const tabStrip = useActiveLinkIntoView<HTMLElement>();
 
   if ("redirect" in route) return <Navigate to={route.redirect} replace />;
@@ -121,11 +137,16 @@ function AgentWorkspaceContent({
   const content = TAB_CONTENT[tab]({
     hostId,
     agent,
+    agentState,
+    base: route.base,
     view: currentView,
     refresh,
     execCount,
     initialTaskKey: route.initialTaskKey,
-    onNotificationsChanged: () => void refreshHost(hostId),
+    onNotificationsChanged: () => {
+      void refreshHost(hostId);
+      needsYou.reload();
+    },
   });
 
   return (
@@ -134,19 +155,21 @@ function AgentWorkspaceContent({
         <div className="flex h-full min-h-0 flex-col">
           <AgentWorkspaceHeader
             hostId={hostId}
-            hostLabel={hostLabel}
             agent={agent}
             status={status}
             view={currentView}
+            agentState={agentState}
+            needsCount={needs.count}
             daemons={daemons}
             unavailable={unavailable}
             base={route.base}
-            tabs={route.tabs}
             stripRef={tabStrip}
-            questionTasks={attention.get(customerQuestionAttentionKey(hostId, agent.name)) ?? 0}
-            refresh={refresh}
+            refresh={() => {
+              refresh();
+              needsYou.reload();
+            }}
             onExec={() => setExecCount((n) => n + 1)}
-            onOpenGoal={setGoalTask}
+            onClone={onClone}
           />
           {unavailable && (
             <p role="status" className="mb-2 text-sm text-muted-foreground">
@@ -161,11 +184,6 @@ function AgentWorkspaceContent({
           >
             <LazyBoundary resetKey={tab}>{content}</LazyBoundary>
           </section>
-          {goalTask && (
-            <LazyBoundary resetKey={goalTask}>
-              <TaskDrawer key={goalTask} taskKey={goalTask} onClose={() => setGoalTask("")} />
-            </LazyBoundary>
-          )}
         </div>
       </AgentStatusContext.Provider>
     </AgentNameContext.Provider>

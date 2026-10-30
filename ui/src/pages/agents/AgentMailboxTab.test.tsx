@@ -7,7 +7,6 @@ import { letter } from "@/test/fixtures/mailFixtures";
 import { AgentStatusContext } from "@/lib/agent";
 import type { AgentStatus, MailListQuery } from "@/lib/api";
 import AgentMailboxTab from "./AgentMailboxTab";
-import { agentTabs } from "./agentWorkspaceModel";
 
 vi.mock("@/hooks/useMailSocket", () => ({ useMailSocket: () => "open" }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -43,14 +42,6 @@ function renderTab() {
 beforeEach(() => vi.clearAllMocks());
 
 describe("AgentMailboxTab", () => {
-  it("replaces Chat with Mailbox in full and simple mode", () => {
-    for (const simple of [false, true]) {
-      const labels = agentTabs(simple).map(([, label]) => label);
-      expect(labels[0]).toBe("Mailbox");
-      expect(labels).not.toContain("Chat");
-    }
-  });
-
   it("shows the batch and the inbox against its cap", async () => {
     renderTab();
     expect(await screen.findByText("batch 5 · inbox 3/100")).toBeVisible();

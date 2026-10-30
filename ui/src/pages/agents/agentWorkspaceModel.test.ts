@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  AGENT_TABS,
+  headerSentence,
+  primaryAction,
   agentRuntimeLabel,
-  agentTabs,
   hasBudgetLimits,
   resolveAgentTab,
 } from "./agentWorkspaceModel";
@@ -9,45 +11,34 @@ import type { AgentBudget } from "@/lib/api";
 
 const base = "/agents/local/dev";
 
-describe("agentTabs", () => {
-  it("lists every tab in Expert mode", () => {
-    expect(agentTabs(false).map(([key]) => key)).toEqual([
-      "mailbox",
-      "tasks",
-      "console",
-      "activity",
-      "configuration",
-      "advanced",
-    ]);
-  });
-
-  it("keeps only the Simple tabs in Simple mode", () => {
-    expect(agentTabs(true).map(([key]) => key)).toEqual([
-      "mailbox",
-      "tasks",
-      "console",
-      "configuration",
+describe("AGENT_TABS", () => {
+  it("lists Work, Terminal, Activity and Settings", () => {
+    expect(AGENT_TABS).toEqual([
+      ["work", "Work"],
+      ["console", "Terminal"],
+      ["activity", "Activity"],
+      ["settings", "Settings"],
     ]);
   });
 });
 
 describe("resolveAgentTab", () => {
   it.each<[string, Parameters<typeof resolveAgentTab>[0], ReturnType<typeof resolveAgentTab>]>([
-    ["a known tab", { tab: "activity", simple: false, base }, { tab: "activity" }],
-    ["a Simple tab", { tab: "tasks", simple: true, base }, { tab: "tasks" }],
-    ["Mailbox in Expert", { tab: "mailbox", simple: false, base }, { tab: "mailbox" }],
-    ["Mailbox in Simple", { tab: "mailbox", simple: true, base }, { tab: "mailbox" }],
+    ["a tab", { tab: "activity", base, search: "" }, { tab: "activity" }],
+    ["Mailbox, a route without a tab", { tab: "mailbox", base, search: "" }, { tab: "mailbox" }],
+    ["Advanced, a route without a tab", { tab: "advanced", base, search: "" }, { tab: "advanced" }],
     [
-      "an unknown tab in Expert",
-      { tab: "nope", simple: false, base },
-      { redirect: `${base}/console` },
+      "the old Tasks tab, with its query",
+      { tab: "tasks", base, search: "?task=T-1" },
+      { redirect: `${base}/work?task=T-1` },
     ],
     [
-      "an unknown tab in Simple",
-      { tab: "nope", simple: true, base },
-      { redirect: `${base}/tasks` },
+      "the old Configuration tab",
+      { tab: "configuration", base, search: "?section=budget" },
+      { redirect: `${base}/settings?section=budget` },
     ],
-    ["a tab Simple hides", { tab: "advanced", simple: true, base }, { redirect: `${base}/tasks` }],
+    ["no tab", { tab: "", base, search: "" }, { redirect: `${base}/work` }],
+    ["an unknown tab", { tab: "nope", base, search: "?x=1" }, { redirect: `${base}/work` }],
   ])("resolves %s", (_name, input, expected) => {
     expect(resolveAgentTab(input)).toEqual(expected);
   });
@@ -99,4 +90,60 @@ describe("hasBudgetLimits", () => {
       expect(hasBudgetLimits({ ...none, [key]: 5 })).toBe(true);
     },
   );
+});
+
+describe("headerSentence", () => {
+  const now = new Date("2026-10-30T12:30:00Z");
+  const ctx = { goalTaskKey: "", runs: 0, now };
+  const item = { key: "DEV-1", at: "2026-10-30T12:01:00Z", status: "approval", question: false };
+
+  it("names the one thing the agent waits for, with its age", () => {
+    expect(headerSentence({ kind: "needs", needs: { count: 1, first: item } }, ctx)).toBe(
+      "Waiting for you: approval for DEV-1 (29 min)",
+    );
+    expect(
+      headerSentence(
+        {
+          kind: "needs",
+          needs: { count: 1, first: { ...item, status: undefined, question: true } },
+        },
+        ctx,
+      ),
+    ).toBe("Waiting for you: a question for DEV-1 (29 min)");
+  });
+
+  it("counts several things", () => {
+    expect(headerSentence({ kind: "needs", needs: { count: 3, first: item } }, ctx)).toBe(
+      "Waiting for you: 3 things",
+    );
+  });
+
+  it("names the Goal task and the run while working", () => {
+    const since = new Date(2026, 9, 30, 9, 5).toISOString();
+    expect(
+      headerSentence({ kind: "working", since }, { goalTaskKey: "DEV-2", runs: 14, now }),
+    ).toBe("Working on DEV-2 since 09:05 · run 14");
+    expect(headerSentence({ kind: "working", since }, ctx)).toBe("Working since 09:05");
+    expect(headerSentence({ kind: "working" }, ctx)).toBe("Working");
+  });
+
+  it.each([
+    [{ kind: "idle" }, "Idle. Give it a task."],
+    [{ kind: "off" }, "Off. Start to let it work on tasks."],
+    [{ kind: "error", reason: "Out of budget: day" }, "Out of budget: day"],
+  ] as const)("says %o", (state, text) => {
+    expect(headerSentence(state, ctx)).toBe(text);
+  });
+});
+
+describe("primaryAction", () => {
+  it.each([
+    [{ kind: "needs", needs: { count: 1 } }, "answer"],
+    [{ kind: "working" }, "give"],
+    [{ kind: "idle" }, "give"],
+    [{ kind: "off" }, "start"],
+    [{ kind: "error", reason: "x" }, "restart"],
+  ] as const)("%o → %s", (state, action) => {
+    expect(primaryAction(state)).toBe(action);
+  });
 });

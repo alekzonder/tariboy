@@ -2,7 +2,7 @@ import { lazy } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useDaemons } from "@/components/daemonContext";
 import TerminalsPage from "@/pages/terminals/TerminalsPage";
-import { defaultAgentTab } from "@/lib/uiMode";
+import { DEFAULT_AGENT_TAB } from "@/pages/agents/agentWorkspaceModel";
 import { AppSettings } from "@/components/DesktopUpdates";
 
 // Server sub-pages load on first open, inside the Suspense boundary of the
@@ -31,6 +31,7 @@ export function AppRoutes() {
       <Route path="/app-settings" element={<AppSettings />} />
       <Route path="/agents/new" element={<CanonicalCreateRedirect />} />
       <Route path="/agents/:hostId/teams/:team" element={<TerminalsPage />} />
+      <Route path="/agents/:hostId/:agent" element={<LegacyTerminalRedirect />} />
       <Route path="/agents/:hostId/:agent/:tab/*" element={<TerminalsPage />} />
       {/* TerminalsPage sends these to /inbox, /tasks and /activity. */}
       <Route path="/servers/:hostId/mail" element={<TerminalsPage />} />
@@ -103,7 +104,7 @@ export function AppRoutes() {
 function LegacyTerminalRedirect() {
   const { hostId = "local", agent = "" } = useParams();
   return (
-    <Navigate to={`/agents/${hostId}/${encodeURIComponent(agent)}/${defaultAgentTab()}`} replace />
+    <Navigate to={`/agents/${hostId}/${encodeURIComponent(agent)}/${DEFAULT_AGENT_TAB}`} replace />
   );
 }
 
@@ -129,9 +130,9 @@ function LegacyAgentRedirect() {
     first === "logs" || first === "usage"
       ? "activity"
       : first === "settings"
-        ? "configuration"
+        ? "settings"
         : first === ""
-          ? defaultAgentTab()
+          ? DEFAULT_AGENT_TAB
           : "advanced";
   const query =
     tab === "advanced" && first ? `?view=${encodeURIComponent(first)}` : location.search;

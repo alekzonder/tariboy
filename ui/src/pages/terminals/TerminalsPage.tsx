@@ -205,6 +205,7 @@ function ConsolePage({
                   routeUnavailable={Boolean(liveSelectedHost?.error)}
                   refresh={refresh}
                   hostsContext={{ workspaceHosts, onManageWorkspaces: manageWorkspaces }}
+                  onCreate={setCreateFor}
                   fallback={
                     <TerminalsEmptyState
                       hosts={orderedSidebarHosts}

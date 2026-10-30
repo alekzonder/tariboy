@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, screen, waitFor, fireEvent, within } from "@/test/queryRender";
-import { UI_MODE_KEY } from "@/lib/uiMode";
 import { fetchAllAgents } from "@/lib/aggregate";
 import type {
   AgentActionResult,
@@ -9,6 +8,7 @@ import type {
   CreateAgentSpec,
   ImageManifest,
   ImageSummary,
+  Task,
 } from "@/lib/api";
 import { addDaemon, type Daemon } from "@/lib/daemons";
 import {
@@ -37,6 +37,8 @@ const calls = vi.hoisted(() => ({
   listImages:
     vi.fn<(target: Daemon | null) => Promise<{ images: ImageSummary[]; count: number }>>(),
   startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentActionResult>>(),
+  // The "needs you" read: the host's active tasks.
+  listTasks: vi.fn<() => Promise<{ tasks: Task[] }>>(),
 }));
 const { createAgent, imageManifestGet, listImages } = calls;
 
@@ -56,6 +58,12 @@ vi.mock("@/lib/api", async (importOriginal) => {
         getAgent: (name: string) => calls.agentGetOn(host, name, "") as Promise<AgentView>,
         createAgent: (spec: CreateAgentSpec) => calls.createAgent(spec, host),
         startAgent: (name: string) => calls.startAgent(name, host),
+      },
+      tasks: { ...client.tasks, listTasks: () => calls.listTasks() },
+      mail: {
+        ...client.mail,
+        unread: async () => ({ open: 0 }),
+        list: async () => ({ letters: [] }),
       },
       images: {
         ...client.images,
@@ -84,7 +92,10 @@ vi.mock("@/components/TuiScreen", () => ({
   TuiScreen: () => <div data-testid="tui-screen" />,
 }));
 
-beforeEach(() => setupTerminalsPage(calls));
+beforeEach(() => {
+  setupTerminalsPage(calls);
+  calls.listTasks.mockReset().mockResolvedValue({ tasks: [] });
+});
 afterEach(cleanupTerminalsPage);
 
 describe("TerminalsPage agent routes", () => {
@@ -138,7 +149,6 @@ describe("TerminalsPage agent routes", () => {
     });
     expect(vi.mocked(fetchAllAgents).mock.calls.length).toBeGreaterThan(2);
     expect(screen.getByRole("heading", { name: "worker" })).toBeInTheDocument();
-    expect(screen.getByText("worker:v2")).toBeInTheDocument();
     expect(screen.queryByText(/temporarily unavailable/i)).toBeNull();
     expect(screen.getByTestId("agent-workspace-content")).not.toHaveAttribute("inert");
   }, 10_000);
@@ -186,24 +196,31 @@ describe("TerminalsPage agent routes", () => {
     expect(screen.getByRole("button", { name: "Open a1" })).toHaveAttribute("aria-current", "page");
   });
 
-  it("counts the agent's open questions on the Tasks tab", async () => {
-    renderAt("/agents/local/a1/console", new Map([[JSON.stringify(["", "a1"]), 2]]));
+  it("counts what the agent waits on the user for on the Work tab and its sidebar row", async () => {
+    calls.listTasks.mockResolvedValue({
+      tasks: [
+        { key: "DEV-1", assignee: "agent:a1", waiting_on: "customer", updated_at: "" } as Task,
+        { key: "DEV-2", assignee: "agent:a1", waiting_on: "pause", updated_at: "" } as Task,
+      ],
+    });
+    renderAt("/agents/local/a1/console");
 
-    const count = await screen.findByLabelText("2 open agent questions");
+    const count = await screen.findByLabelText("2 waiting for you");
     expect(count).toHaveTextContent("2");
     const nav = screen.getByRole("navigation", { name: "Agent workspace" });
-    expect(within(nav).getByRole("link", { name: /Tasks/ })).toContainElement(count);
+    expect(within(nav).getByRole("link", { name: /Work/ })).toContainElement(count);
+    expect(screen.getByRole("button", { name: "Open a1" })).toHaveTextContent("needs you · 2");
   });
 
-  it("shows no Tasks count without open agent questions", async () => {
+  it("shows no Work count when nothing waits for the user", async () => {
     renderAt("/agents/local/a1/console");
 
     expect(await screen.findByRole("navigation", { name: "Agent workspace" })).toBeInTheDocument();
-    expect(screen.queryByLabelText(/open agent question/)).toBeNull();
+    expect(screen.queryByLabelText(/waiting for you/)).toBeNull();
   });
 
-  it("opens a sidebar agent in Terminal", async () => {
-    renderAt("/");
+  it("keeps the Terminal tab when switching agents from it", async () => {
+    renderAt("/agents/local/a2/console");
     await screen.findByRole("button", { name: "Open a1" });
 
     fireEvent.click(screen.getByRole("button", { name: "Open a1" }));
@@ -214,7 +231,7 @@ describe("TerminalsPage agent routes", () => {
   });
 
   it("opens a non-interactive sidebar agent in Terminal", async () => {
-    renderAt("/");
+    renderAt("/agents/local/a1/console");
     await screen.findByRole("button", { name: "Open a2", hidden: true });
 
     fireEvent.click(screen.getByRole("button", { name: "Open a2" }));
@@ -243,14 +260,14 @@ describe("TerminalsPage route changes", () => {
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/tasks"));
   });
 
-  it("drops the selected task when switching agents on the Tasks tab", async () => {
-    renderAt("/agents/local/a1/tasks?task=DEV-1");
+  it("drops the selected task when switching agents on the Work tab", async () => {
+    renderAt("/agents/local/a1/work?task=DEV-1");
     await screen.findByRole("button", { name: "Open a2", hidden: true });
 
     fireEvent.click(screen.getByRole("button", { name: "Open a2", hidden: true }));
 
     await waitFor(() =>
-      expect(screen.getByTestId("location").textContent).toBe("/agents/local/a2/tasks"),
+      expect(screen.getByTestId("location").textContent).toBe("/agents/local/a2/work"),
     );
   });
 
@@ -278,20 +295,11 @@ describe("TerminalsPage route changes", () => {
     }
   });
 
-  it("opens a sidebar agent in the product Terminal route", async () => {
+  it("opens a sidebar agent on Work", async () => {
     renderAt("/");
     fireEvent.click(await screen.findByRole("button", { name: "Open a1" }));
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/a1/console"),
-    );
-  });
-
-  it("opens a sidebar agent on Tasks in Simple mode", async () => {
-    localStorage.setItem(UI_MODE_KEY, "simple");
-    renderAt("/");
-    fireEvent.click(await screen.findByRole("button", { name: "Open a1" }));
-    await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/a1/tasks"),
+      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/a1/work"),
     );
   });
 });
@@ -334,8 +342,7 @@ describe("TerminalsPage empty state and create", () => {
     );
   });
 
-  it("opens a new agent on its Terminal in Simple mode, where a sidebar agent opens on Tasks", async () => {
-    localStorage.setItem(UI_MODE_KEY, "simple");
+  it("opens a new agent on its Terminal, where a sidebar agent opens on Work", async () => {
     createAgent.mockResolvedValue({
       name: "new-agent",
       state: "running",

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { render, screen, fireEvent, waitFor, within } from "@/test/queryRender";
 import { fakeApi } from "@/test/api";
+import type { PrimaryAction } from "@/pages/agents/agentWorkspaceModel";
 import { AgentControls } from "./AgentControls";
 
 const target = { id: "remote", label: "Remote", baseURL: "https://remote.test", token: "secret" };
@@ -20,17 +21,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderControls(alive: boolean) {
+const paths = {
+  settingsPath: "/agents/local/alpha/settings",
+  workPath: "/agents/local/alpha/work",
+};
+
+function renderControls(alive: boolean, primary: PrimaryAction = alive ? "give" : "start") {
   return render(
     <MemoryRouter>
-      <AgentControls
-        name="alpha"
-        alive={alive}
-        configurationPath="/agents/local/alpha/configuration"
-      />
+      <AgentControls name="alpha" alive={alive} primary={primary} {...paths} />
     </MemoryRouter>,
   );
 }
+
+// Radix opens a DropdownMenu on pointerdown, which jsdom's fireEvent.click
+// does not synthesize — drive it from the keyboard instead.
+const openMenu = () =>
+  fireEvent.keyDown(screen.getByRole("button", { name: "More agent actions" }), { key: "Enter" });
 
 it("posts the run-state action of the toggle to the route host", async () => {
   const calls: Array<{ method: string; path: string }> = [];
@@ -47,6 +54,8 @@ it("posts the run-state action of the toggle to the route host", async () => {
   );
   const { unmount } = renderControls(false);
 
+  // Off: Start is the primary action, and the only Start.
+  expect(screen.getAllByRole("button", { name: "Start" })).toHaveLength(1);
   fireEvent.click(screen.getByRole("button", { name: "Start" }));
   await waitFor(() =>
     expect(calls.some((c) => c.path === "/api/agents/alpha/start" && c.method === "POST")).toBe(
@@ -64,35 +73,99 @@ it("posts the run-state action of the toggle to the route host", async () => {
   );
 });
 
-it("confirms before killing the session and does nothing when the confirm is declined", async () => {
-  const calls: string[] = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation((path: string) => {
-      calls.push(path);
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        text: async () => JSON.stringify({ ok: true, result: {} }),
-      } as Response);
-    }),
+it.each([
+  ["answer", "Answer"],
+  ["give", "Give task"],
+])("links the %s primary action to Work", (primary, label) => {
+  renderControls(true, primary as PrimaryAction);
+  expect(screen.getByRole("link", { name: label })).toHaveAttribute(
+    "href",
+    "/agents/local/alpha/work",
   );
-  vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
-  renderControls(true);
+  expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+});
 
-  fireEvent.click(screen.getByRole("button", { name: "Kill" }));
-  expect(calls).not.toContain("/api/agents/alpha/kill");
+it("posts restart for the Restart primary action", async () => {
+  const agentPost = vi.fn().mockResolvedValue({});
+  render(
+    <MemoryRouter>
+      <AgentControls name="alpha" alive primary="restart" {...paths} />
+    </MemoryRouter>,
+    { api: fakeApi({ agentPost }, target) },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Restart" }));
+  await waitFor(() => expect(agentPost).toHaveBeenCalledWith("alpha", "restart"));
+});
 
-  vi.mocked(window.confirm).mockReturnValue(true);
-  fireEvent.click(screen.getByRole("button", { name: "Kill" }));
-  await waitFor(() => expect(calls).toContain("/api/agents/alpha/kill"));
+it("force-stops the current run only after the confirmation dialog", async () => {
+  const agentPost = vi.fn().mockResolvedValue({});
+  render(
+    <MemoryRouter>
+      <AgentControls name="alpha" alive primary="give" {...paths} />
+    </MemoryRouter>,
+    { api: fakeApi({ agentPost }, target) },
+  );
+  openMenu();
+  fireEvent.click(await screen.findByText("Force-stop current run"));
+  const dialog = screen.getByRole("alertdialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(agentPost).not.toHaveBeenCalled();
+
+  openMenu();
+  fireEvent.click(await screen.findByText("Force-stop current run"));
+  fireEvent.click(
+    within(screen.getByRole("alertdialog")).getByRole("button", { name: "Force-stop" }),
+  );
+  await waitFor(() => expect(agentPost).toHaveBeenCalledWith("alpha", "kill"));
+});
+
+it("offers Run once, VS Code, Clone, Pin, Settings and Delete in the menu", async () => {
+  const onClone = vi.fn();
+  const onTogglePin = vi.fn();
+  const onOpenFolder = vi.fn();
+  render(
+    <MemoryRouter>
+      <AgentControls
+        name="alpha"
+        alive
+        image="basic:latest"
+        primary="give"
+        {...paths}
+        onClone={onClone}
+        pinned={false}
+        onTogglePin={onTogglePin}
+        onOpenFolder={onOpenFolder}
+      />
+    </MemoryRouter>,
+  );
+  openMenu();
+  const items = (await screen.findAllByRole("menuitem")).map((item) => item.textContent);
+  expect(items).toEqual([
+    "Run once…",
+    "Force-stop current run",
+    "Open folder in VS Code",
+    "Clone",
+    "Pin",
+    "Settings",
+    "Delete agent",
+  ]);
+  expect(screen.getByRole("menuitem", { name: "Settings" })).toHaveAttribute(
+    "href",
+    "/agents/local/alpha/settings",
+  );
+  fireEvent.click(screen.getByRole("menuitem", { name: "Pin" }));
+  expect(onTogglePin).toHaveBeenCalledOnce();
+  openMenu();
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Clone" }));
+  expect(onClone).toHaveBeenCalledOnce();
+  openMenu();
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Open folder in VS Code" }));
+  expect(onOpenFolder).toHaveBeenCalledOnce();
 });
 
 describe("delete from the overflow menu", () => {
-  // Radix opens a DropdownMenu on pointerdown, which jsdom's fireEvent.click
-  // does not synthesize — drive it from the keyboard instead.
   const openDelete = async () => {
-    fireEvent.keyDown(screen.getByRole("button", { name: "Agent settings" }), { key: "Enter" });
+    openMenu();
     fireEvent.click(await screen.findByText("Delete agent"));
   };
 
@@ -105,7 +178,8 @@ describe("delete from the overflow menu", () => {
         <AgentControls
           name="worker"
           alive
-          configurationPath="/agents/remote/worker/configuration"
+          primary="give"
+          {...paths}
           refresh={refresh}
           onDeleted={onDeleted}
         />
@@ -177,7 +251,7 @@ describe("delete from the overflow menu", () => {
   });
 });
 
-describe("Exec in the header", () => {
+describe("Run once… in the menu", () => {
   const agentPost = vi.fn();
   beforeEach(() => {
     agentPost.mockReset();
@@ -194,7 +268,8 @@ describe("Exec in the header", () => {
           name="worker"
           alive={alive}
           image={image}
-          configurationPath="/agents/remote/worker/configuration"
+          primary="give"
+          {...paths}
           refresh={refresh}
           onExec={onExec}
         />
@@ -204,28 +279,28 @@ describe("Exec in the header", () => {
     return { refresh, onExec };
   }
 
-  it("is shown before Stop only for an enabled agent that is not bare", () => {
-    renderExec();
-    const buttons = screen.getAllByRole("button").map((b) => b.textContent);
-    expect(buttons.indexOf("Exec")).toBeGreaterThanOrEqual(0);
-    expect(buttons.indexOf("Exec")).toBeLessThan(buttons.indexOf("Stop"));
-  });
+  const openRunOnce = async () => {
+    openMenu();
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Run once…" }));
+  };
 
   it.each([
     ["disabled", { alive: false }],
     ["bare", { image: "bare:latest" }],
-  ])("is hidden for a %s agent", (_label, opts) => {
+  ])("is hidden for a %s agent", async (_label, opts) => {
     renderExec(opts);
-    expect(screen.queryByRole("button", { name: "Exec" })).not.toBeInTheDocument();
+    openMenu();
+    await screen.findByRole("menuitem", { name: "Settings" });
+    expect(screen.queryByRole("menuitem", { name: "Run once…" })).not.toBeInTheDocument();
   });
 
   it("sends the optional one-shot prompt from the modal and closes it", async () => {
     agentPost.mockResolvedValue({});
     const { refresh, onExec } = renderExec();
-    fireEvent.click(screen.getByRole("button", { name: "Exec" }));
+    await openRunOnce();
     const input = screen.getByPlaceholderText("one-shot prompt (optional)");
     fireEvent.change(input, { target: { value: "continue this task" } });
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Exec" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Run once" }));
 
     await waitFor(() =>
       expect(agentPost).toHaveBeenCalledWith("worker", "exec", { prompt: "continue this task" }),
@@ -244,8 +319,8 @@ describe("Exec in the header", () => {
         }),
     );
     renderExec();
-    fireEvent.click(screen.getByRole("button", { name: "Exec" }));
-    const submit = within(screen.getByRole("dialog")).getByRole("button", { name: "Exec" });
+    await openRunOnce();
+    const submit = within(screen.getByRole("dialog")).getByRole("button", { name: "Run once" });
 
     fireEvent.click(submit);
     fireEvent.click(submit);
@@ -260,10 +335,10 @@ describe("Exec in the header", () => {
   it("keeps the modal and the prompt after an API failure", async () => {
     agentPost.mockRejectedValue(new Error("iteration already running"));
     const { onExec } = renderExec();
-    fireEvent.click(screen.getByRole("button", { name: "Exec" }));
+    await openRunOnce();
     const input = screen.getByPlaceholderText("one-shot prompt (optional)");
     fireEvent.change(input, { target: { value: "retry me" } });
-    const submit = within(screen.getByRole("dialog")).getByRole("button", { name: "Exec" });
+    const submit = within(screen.getByRole("dialog")).getByRole("button", { name: "Run once" });
     fireEvent.click(submit);
 
     await waitFor(() => expect(agentPost).toHaveBeenCalledOnce());

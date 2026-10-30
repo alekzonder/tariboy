@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor, within } from "@/test/queryRender";
+import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { DaemonProvider } from "@/components/DaemonProvider";
+import type { AgentRow, Task } from "@/lib/api";
+import type { HostNeeds } from "@/lib/needsYou";
+import { NeedsYouContext } from "@/pages/terminals/needsYouContext";
 import { addDaemon } from "@/lib/daemons";
 import AgentWorkspace from "./AgentWorkspace";
 import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
@@ -10,7 +13,6 @@ import { ApiError } from "@/lib/api";
 import { agentRow } from "@/test/fixtures/apiFixtures";
 import type { Daemon } from "@/lib/daemons";
 import * as desktop from "@/lib/desktop";
-import { UI_MODE_KEY } from "@/lib/uiMode";
 
 // Every agent-scoped GET the workspace sends, recorded with the host of the
 // client that sent it: (host, agent, action).
@@ -47,12 +49,14 @@ vi.mock("@/hooks/useTerminalSocket", () => ({
   })),
 }));
 vi.mock("@/components/TuiScreen", () => ({ TuiScreen: () => <div>terminal</div> }));
-vi.mock("@/pages/tasks/TaskDrawer", () => ({
-  default: ({ taskKey }: { taskKey: string }) => <div data-testid="task-drawer">{taskKey}</div>,
-}));
 
 function Location() {
-  return <output data-testid="location">{useLocation().pathname}</output>;
+  return (
+    <output data-testid="location">
+      {useLocation().pathname}
+      {useLocation().search}
+    </output>
+  );
 }
 
 const agent = agentRow({
@@ -64,144 +68,134 @@ const agent = agentRow({
   current_goal_task_key: "IMPROVE-37",
 });
 
+const runningStatus = {
+  name: "worker",
+  state: "running",
+  enabled: true,
+  iterations: 0,
+  last_iteration: null,
+  last_iteration_id: null,
+  status_message: "",
+  status_updated: "",
+};
+
+function renderAt(
+  path: string,
+  {
+    hostId = "",
+    row = agent,
+    unavailable = false,
+    needs = [],
+  }: { hostId?: string; row?: AgentRow; unavailable?: boolean; needs?: HostNeeds[] } = {},
+) {
+  return render(
+    <DaemonProvider>
+      <NeedsYouContext.Provider value={{ hosts: needs, loaded: true, reload: () => {} }}>
+        <MemoryRouter initialEntries={[path]}>
+          <Location />
+          <Routes>
+            <Route
+              path="/agents/:hostId/:agent/:tab"
+              element={
+                <AgentWorkspace
+                  hostId={hostId}
+                  agent={row}
+                  refresh={vi.fn()}
+                  unavailable={unavailable}
+                />
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </NeedsYouContext.Provider>
+    </DaemonProvider>,
+  );
+}
+
+// Radix opens a DropdownMenu on pointerdown, which jsdom's click does not
+// synthesize — drive it from the keyboard instead.
+const openMenu = () =>
+  fireEvent.keyDown(screen.getByRole("button", { name: "More agent actions" }), { key: "Enter" });
+
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
-  // These cases cover the full workspace; Simple mode has its own block below.
-  localStorage.setItem(UI_MODE_KEY, "expert");
-  agentGetOn.mockResolvedValue({
-    name: "worker",
-    state: "running",
-    iterations: 0,
-    last_iteration: null,
-    last_iteration_id: null,
-    status_message: "",
-    status_updated: "",
-  });
+  agentGetOn.mockResolvedValue(runningStatus);
 });
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
-describe("AgentWorkspace", () => {
-  it("opens the current Goal task in place and explains how Goal is selected", async () => {
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
-          <Location />
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
+describe("AgentWorkspace header", () => {
+  it("says what the agent works on and offers Give task", async () => {
+    renderAt("/agents/local/worker/console");
 
-    await userEvent.click(await screen.findByRole("button", { name: "IMPROVE-37" }));
-    expect(await screen.findByTestId("task-drawer")).toHaveTextContent("IMPROVE-37");
-    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console");
-    await userEvent.click(screen.getByRole("button", { name: "How Goal is selected" }));
-    expect(await screen.findByRole("dialog")).toHaveTextContent(
-      "Tariboy keeps the selected task until it is released",
+    expect(await screen.findByTestId("agent-sentence")).toHaveTextContent("Working on IMPROVE-37");
+    expect(screen.getByRole("link", { name: "Give task" })).toHaveAttribute(
+      "href",
+      "/agents/local/worker/work",
     );
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
   });
 
-  it("shows Goal help when no task is currently selected", async () => {
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace
-                  hostId=""
-                  hostLabel="Local"
-                  agent={{ ...agent, current_goal_task_key: "" }}
-                  refresh={vi.fn()}
-                />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
-
-    expect(await screen.findByText("No current goal")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "How Goal is selected" })).toBeInTheDocument();
-  });
-
-  it("shows the configured harness, model, and effort before Goal", async () => {
-    agentGetOn.mockImplementation(async (_target, _name, action) => {
-      if (action === "")
-        return { ...agent, harness: "codex", model: "gpt-5-codex", effort: "high" };
-      return {
-        name: "worker",
-        state: "running",
-        iterations: 0,
-        last_iteration: null,
-        last_iteration_id: null,
-        status_message: "",
-        status_updated: "",
-      };
+  it("offers Answer for a task that waits for approval and counts it on Work", async () => {
+    const task = {
+      key: "DEV-1",
+      assignee: "agent:worker",
+      status: "approval",
+      waiting_on: "customer",
+      updated_at: new Date().toISOString(),
+    } as Task;
+    renderAt("/agents/local/worker/console", {
+      needs: [{ hostId: "", hostLabel: "Local", tasks: [task], letters: [], open: 0 }],
     });
 
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
+    expect(await screen.findByTestId("agent-sentence")).toHaveTextContent(
+      "Waiting for you: approval for DEV-1",
     );
+    await userEvent.click(screen.getByRole("link", { name: "Answer" }));
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/agents/local/worker/work?task=DEV-1",
+    );
+    const nav = screen.getByRole("navigation", { name: "Agent workspace" });
+    expect(within(nav).getByRole("link", { name: /Work/ })).toContainElement(
+      screen.getByRole("img", { name: "1 waiting for you" }),
+    );
+  });
+
+  it("offers one Start for an agent that is off", async () => {
+    agentGetOn.mockResolvedValue({ ...runningStatus, state: "stopped", enabled: false });
+    renderAt("/agents/local/worker/console", {
+      row: { ...agent, state: "stopped", enabled: false },
+    });
+
+    expect(await screen.findByTestId("agent-sentence")).toHaveTextContent(
+      "Off. Start to let it work on tasks.",
+    );
+    expect(screen.getAllByRole("button", { name: "Start" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
+  });
+
+  it("shows the configured harness, model, and effort on the facts line", async () => {
+    agentGetOn.mockImplementation(async (_target, _name, action) =>
+      action === ""
+        ? { ...agent, harness: "codex", model: "gpt-5-codex", effort: "high" }
+        : runningStatus,
+    );
+    renderAt("/agents/local/worker/console");
 
     await waitFor(() =>
       expect(screen.getByTestId("agent-runtime")).toHaveTextContent("codex · gpt-5-codex · high"),
     );
-    const runtime = screen.getByTestId("agent-runtime");
-    const goal = screen.getByText("Goal:");
-    expect(runtime.compareDocumentPosition(goal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId("agent-facts")).toContainElement(screen.getByTestId("agent-cwd"));
   });
 
   it("omits model and effort the harness does not report", async () => {
-    agentGetOn.mockImplementation(async (_target, _name, action) => {
-      if (action === "") return { ...agent, harness: "opencode", model: "", effort: "" };
-      return {
-        name: "worker",
-        state: "running",
-        iterations: 0,
-        last_iteration: null,
-        last_iteration_id: null,
-        status_message: "",
-        status_updated: "",
-      };
-    });
-
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
+    agentGetOn.mockImplementation(async (_target, _name, action) =>
+      action === "" ? { ...agent, harness: "opencode", model: "", effort: "" } : runningStatus,
     );
+    renderAt("/agents/local/worker/console");
 
     await waitFor(() => expect(screen.getByTestId("agent-runtime")).toHaveTextContent("opencode"));
     expect(screen.getByTestId("agent-runtime")).not.toHaveTextContent("·");
@@ -209,75 +203,48 @@ describe("AgentWorkspace", () => {
 
   it("shows daemon-authoritative message queue saturation", async () => {
     agentGetOn.mockResolvedValue({
-      name: "worker",
-      state: "running",
-      iterations: 0,
-      last_iteration: null,
-      last_iteration_id: null,
-      status_message: "",
-      status_updated: "",
+      ...runningStatus,
       messages_pending: 100,
       messages_max_queue: 100,
       messages_queue_full: true,
     });
-
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
+    renderAt("/agents/local/worker/console");
 
     expect(await screen.findByText("Inbox full: 100 / 100")).toHaveClass("text-destructive");
-    const nav = screen.getByRole("navigation", { name: "Agent workspace" });
-    expect(within(nav).getByRole("link", { name: /Mailbox/ })).toContainElement(
-      screen.getByRole("img", { name: "100 open letters" }),
-    );
   });
 
-  it("shows why the loop halted, so a failed iteration launch is visible on every tab", async () => {
+  it("says why the loop halted in red and offers Restart, on every tab", async () => {
+    const reason =
+      "halted: image activation failed: prepare claude image skill bridge: skills missing";
     agentGetOn.mockResolvedValue({
-      name: "worker",
+      ...runningStatus,
       state: "error",
-      iterations: 0,
-      last_iteration: null,
-      last_iteration_id: null,
-      status_message: "",
-      status_updated: "",
       halt_kind: "error",
-      halt_reason:
-        "halted: image activation failed: prepare claude image skill bridge: skills missing",
-      error_reason:
-        "halted: image activation failed: prepare claude image skill bridge: skills missing",
+      halt_reason: reason,
+      error_reason: reason,
     });
+    renderAt("/agents/local/worker/console");
 
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
+    await waitFor(() => expect(screen.getByTestId("agent-sentence")).toHaveTextContent(reason));
+    expect(screen.getByTestId("agent-sentence")).toHaveClass("text-destructive");
+    expect(screen.getByRole("button", { name: "Restart" })).toBeInTheDocument();
+  });
+
+  it("keeps an idle_limit halt muted", async () => {
+    agentGetOn.mockResolvedValue({
+      ...runningStatus,
+      state: "stopped",
+      enabled: false,
+      halt_kind: "idle_limit",
+      halt_reason: "idle_limit: 3 idle runs",
+    });
+    renderAt("/agents/local/worker/console");
 
     expect(await screen.findByTestId("agent-halt-reason")).toHaveTextContent(
-      "halted: image activation failed: prepare claude image skill bridge: skills missing",
+      "idle_limit: 3 idle runs",
     );
-    expect(screen.getByTestId("agent-halt-reason")).toHaveClass("text-destructive");
+    expect(screen.getByTestId("agent-halt-reason")).toHaveClass("text-muted-foreground");
+    expect(screen.getByTestId("agent-sentence")).not.toHaveClass("text-destructive");
   });
 
   it("keeps the last status in the header while a status poll cannot reach the host", async () => {
@@ -286,55 +253,25 @@ describe("AgentWorkspace", () => {
     agentGetOn.mockImplementation(async (_target, _name, action) => {
       if (!reachable) throw new ApiError(0, "network_error", "network error: Failed to fetch");
       return action === "status"
-        ? {
-            name: "worker",
-            state: "error",
-            iterations: 0,
-            last_iteration: null,
-            last_iteration_id: null,
-            status_message: "",
-            status_updated: "",
-            halt_kind: "error",
-            halt_reason: "halted: boom",
-          }
+        ? { ...runningStatus, state: "error", halt_kind: "error", halt_reason: "halted: boom" }
         : agent;
     });
-
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
+    renderAt("/agents/local/worker/console");
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(screen.getByTestId("agent-halt-reason")).toHaveTextContent("halted: boom");
+    expect(screen.getByTestId("agent-sentence")).toHaveTextContent("halted: boom");
 
     reachable = false;
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);
     });
-    expect(screen.getByTestId("agent-halt-reason")).toHaveTextContent("halted: boom");
+    expect(screen.getByTestId("agent-sentence")).toHaveTextContent("halted: boom");
   });
 
-  it("renders configured budget rows when an older daemon omits exhausted periods", async () => {
+  it("shows today's spend when the agent has a budget, even from an older daemon", async () => {
     agentGetOn.mockResolvedValue({
-      name: "worker",
-      state: "running",
-      iterations: 0,
-      last_iteration: null,
-      last_iteration_id: null,
-      status_message: "",
-      status_updated: "",
+      ...runningStatus,
       budget: {
         hour_usd: 1,
         day_usd: 0,
@@ -346,24 +283,10 @@ describe("AgentWorkspace", () => {
         month_spent_usd: 0.25,
       },
     });
+    renderAt("/agents/local/worker/console");
 
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
-
-    expect(await screen.findByTestId("agent-budget-header")).toHaveTextContent("Hour 0.25 / 1");
-    expect(screen.queryByText(/Out of budget:/)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("agent-facts")).toHaveTextContent("$0.25 today"));
+    expect(screen.getByTestId("agent-sentence")).not.toHaveTextContent(/Out of budget/);
   });
 
   it("offers the action only for local and resolved SSH hosts", () => {
@@ -378,193 +301,74 @@ describe("AgentWorkspace", () => {
     expect(canOpenAgentCwdInVSCode("missing", daemons)).toBe(false);
   });
 
-  it("shows the complete effective cwd and opens the local directory in VS Code", async () => {
+  it("shows the effective cwd and opens the local directory in VS Code from the menu", async () => {
     const open = vi.spyOn(desktop, "openHostPathInVSCode").mockResolvedValue(null);
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
+    renderAt("/agents/local/worker/console");
 
     const cwd = await screen.findByTestId("agent-cwd");
     expect(cwd).toHaveTextContent("/srv/worker project");
-    expect(cwd).not.toHaveClass("truncate");
-    await userEvent.click(screen.getByRole("button", { name: "Open in VS Code" }));
+    expect(cwd).toHaveAttribute("title", "/srv/worker project");
+    openMenu();
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Open folder in VS Code" }));
     expect(open).toHaveBeenCalledWith("", "/srv/worker project");
   });
 
   it("disables the VS Code action while the host is unavailable", async () => {
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace
-                  hostId=""
-                  hostLabel="Local"
-                  agent={agent}
-                  refresh={vi.fn()}
-                  unavailable
-                />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
+    renderAt("/agents/local/worker/console", { unavailable: true });
 
-    expect(await screen.findByRole("button", { name: "Open in VS Code" })).toBeDisabled();
+    await screen.findByTestId("agent-sentence");
+    openMenu();
+    expect(await screen.findByRole("menuitem", { name: "Open folder in VS Code" })).toHaveAttribute(
+      "data-disabled",
+    );
   });
 
   it("retries effective cwd inspection after a transient failure", async () => {
     vi.useFakeTimers();
     let inspections = 0;
     agentGetOn.mockImplementation(async (_target, _name, action) => {
-      if (action !== "") {
-        return {
-          name: "worker",
-          state: "running",
-          iterations: 0,
-          last_iteration: null,
-          last_iteration_id: null,
-          status_message: "",
-          status_updated: "",
-        };
-      }
+      if (action !== "") return runningStatus;
       inspections += 1;
       if (inspections === 1) throw new Error("temporary inspect failure");
       return { ...agent, cwd: "/managed/worker" };
     });
-
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace
-                  hostId=""
-                  hostLabel="Local"
-                  agent={{ ...agent, cwd: "" }}
-                  refresh={vi.fn()}
-                />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
+    renderAt("/agents/local/worker/console", { row: { ...agent, cwd: "" } });
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(inspections).toBe(1);
-    expect(screen.getByTestId("agent-cwd")).toHaveTextContent("…");
+    expect(screen.queryByTestId("agent-cwd")).not.toBeInTheDocument();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);
     });
     expect(screen.getByTestId("agent-cwd")).toHaveTextContent("/managed/worker");
     expect(inspections).toBeGreaterThanOrEqual(2);
   });
+});
 
-  it("orders the workspace tabs with Mailbox and Tasks first", async () => {
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
+describe("AgentWorkspace tabs", () => {
+  it("shows Work, Terminal, Activity and Settings with host and agent in every link", async () => {
+    renderAt("/agents/local/worker/console");
 
     const nav = await screen.findByRole("navigation", { name: "Agent workspace" });
-    expect(
-      within(nav)
-        .getAllByRole("link")
-        .map((link) => link.textContent),
-    ).toEqual(["Mailbox", "Tasks", "Terminal", "Activity", "Configuration", "Advanced"]);
-  });
-
-  it("keeps host and agent identity in every tab link", async () => {
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
-
-    await waitFor(() =>
-      expect(screen.getByRole("navigation", { name: "Agent workspace" })).toBeInTheDocument(),
-    );
-    expect(screen.getByRole("link", { name: "Terminal" })).toHaveAttribute(
-      "href",
+    const links = within(nav).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual([
+      "Work",
+      "Terminal",
+      "Activity",
+      "Settings",
+    ]);
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "/agents/local/worker/work",
       "/agents/local/worker/console",
-    );
-    expect(screen.queryByRole("link", { name: "Autopilot" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Activity" })).toHaveAttribute(
-      "href",
       "/agents/local/worker/activity",
-    );
-    expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute(
-      "href",
-      "/agents/local/worker/tasks",
-    );
-    expect(screen.getByRole("link", { name: "Configuration" })).toHaveAttribute(
-      "href",
-      "/agents/local/worker/configuration",
-    );
-    expect(screen.getByRole("link", { name: "Advanced" })).toHaveAttribute(
-      "href",
-      "/agents/local/worker/advanced",
-    );
-    expect(screen.getByText("This agent has no interactive terminal.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open Configuration" })).toHaveAttribute(
-      "href",
-      "/agents/local/worker/configuration",
-    );
+      "/agents/local/worker/settings",
+    ]);
   });
 
-  it("reuses the Tasks workspace scoped to the route agent", async () => {
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/tasks"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
+  it("shows the agent's task list on Work", async () => {
+    renderAt("/agents/local/worker/work");
 
     const workspace = await screen.findByTestId("tasks-workspace");
     expect(workspace).toHaveAttribute("data-scope-agent", "worker");
@@ -572,32 +376,13 @@ describe("AgentWorkspace", () => {
     expect(screen.getByText("Tasks you create here are given to this agent.")).toBeInTheDocument();
   });
 
-  it("loads Configuration from the host identified by the route", async () => {
+  it("loads Settings from the host identified by the route and links the other views", async () => {
     const host = await addDaemon({
       label: "Remote",
       baseURL: "https://remote.example",
       token: "secret",
     });
-
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={[`/agents/${host.id}/worker/configuration`]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <AgentWorkspace
-                  hostId={host.id}
-                  hostLabel="Remote"
-                  agent={agent}
-                  refresh={vi.fn()}
-                />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
+    renderAt(`/agents/${host.id}/worker/settings`, { hostId: host.id });
 
     await waitFor(() =>
       expect(agentGetOn.mock.calls).toContainEqual([
@@ -606,91 +391,38 @@ describe("AgentWorkspace", () => {
         "",
       ]),
     );
-  });
-
-  it("treats the removed autopilot tab as unknown and opens Terminal", async () => {
-    function Location() {
-      return <p data-testid="location">{useLocation().pathname}</p>;
-    }
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={["/agents/local/worker/autopilot"]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <>
-                  <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
-                  <Location />
-                </>
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
+    expect(await screen.findByRole("link", { name: "Open mailbox" })).toHaveAttribute(
+      "href",
+      `/agents/${host.id}/worker/mailbox`,
     );
-
-    await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console"),
+    expect(screen.getByRole("link", { name: "Advanced" })).toHaveAttribute(
+      "href",
+      `/agents/${host.id}/worker/advanced`,
     );
   });
-});
 
-describe("AgentWorkspace in Simple mode", () => {
-  function Location() {
-    return <p data-testid="location">{useLocation().pathname}</p>;
-  }
-  function renderAt(path: string) {
-    render(
-      <DaemonProvider>
-        <MemoryRouter initialEntries={[path]}>
-          <Routes>
-            <Route
-              path="/agents/:hostId/:agent/:tab"
-              element={
-                <>
-                  <AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />
-                  <Location />
-                </>
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </DaemonProvider>,
-    );
-  }
-
-  beforeEach(() => localStorage.removeItem(UI_MODE_KEY));
-
-  it("shows only Mailbox, Tasks, Terminal and Configuration with the full header", async () => {
-    renderAt("/agents/local/worker/tasks");
-
-    const nav = await screen.findByRole("navigation", { name: "Agent workspace" });
-    expect(
-      within(nav)
-        .getAllByRole("link")
-        .map((link) => link.textContent),
-    ).toEqual(["Mailbox", "Tasks", "Terminal", "Configuration"]);
-    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "IMPROVE-37" })).toBeInTheDocument();
+  it.each([
+    [
+      "the old Tasks tab",
+      "/agents/local/worker/tasks?task=DEV-1",
+      "/agents/local/worker/work?task=DEV-1",
+    ],
+    [
+      "the old Configuration tab",
+      "/agents/local/worker/configuration",
+      "/agents/local/worker/settings",
+    ],
+    ["the removed autopilot tab", "/agents/local/worker/autopilot", "/agents/local/worker/work"],
+  ])("redirects %s", async (_name, from, to) => {
+    renderAt(from);
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(to));
   });
 
-  it("keeps the Terminal tab open", async () => {
-    renderAt("/agents/local/worker/console");
-
-    const nav = await screen.findByRole("navigation", { name: "Agent workspace" });
-    expect(within(nav).getByRole("link", { name: "Terminal" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console");
-  });
-
-  it.each(["activity", "advanced"])("sends a hidden %s tab to Tasks", async (tab) => {
+  it.each(["mailbox", "advanced"])("opens the %s route without a tab", async (tab) => {
     renderAt(`/agents/local/worker/${tab}`);
 
-    await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/tasks"),
-    );
+    await screen.findByRole("navigation", { name: "Agent workspace" });
+    expect(screen.getByTestId("location")).toHaveTextContent(`/agents/local/worker/${tab}`);
+    expect(screen.queryByText("Pick an agent")).not.toBeInTheDocument();
   });
 });

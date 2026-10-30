@@ -347,7 +347,7 @@ it("shows the autopilot hint once per agent of the host", async () => {
   expect(screen.getByText(text)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Dismiss hint" }));
   expect(screen.queryByText(text)).not.toBeInTheDocument();
-  expect(localStorage.getItem(`onboarding:hint:v1:${remote.id}:worker:configuration`)).toBe(
+  expect(localStorage.getItem(`onboarding:hint:v1:${remote.id}:worker:settings`)).toBe(
     "dismissed",
   );
   view.unmount();

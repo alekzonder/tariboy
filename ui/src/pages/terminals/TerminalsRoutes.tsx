@@ -5,14 +5,15 @@ import { useCustomerQuestionNotifications } from "@/components/customerQuestionN
 import type { HostAgents } from "@/lib/aggregate";
 import { navPath } from "@/lib/navRoutes";
 import { hostToParam } from "@/lib/terminalsHost";
-import { defaultAgentTab } from "@/lib/uiMode";
+import { DEFAULT_AGENT_TAB } from "@/pages/agents/agentWorkspaceModel";
 import { useWorkspaces } from "@/lib/workspaces";
 import AgentWorkspace from "@/pages/agents/AgentWorkspace";
 import type { HostsOutletContext } from "@/pages/settings/hostsContext";
 import { RouteHostBoundary } from "./RouteHostBoundary";
 import type { ServerView } from "./TerminalsPage";
 import { LibraryHeader } from "./LibraryHeader";
-import { agentPath, type CreateHost } from "./terminalsHosts";
+import { agentPath, fallbackHostLabel, type CreateHost } from "./terminalsHosts";
+import type { CreateDialogState } from "./TerminalsSidebar";
 
 // Pages load on first open, so the initial bundle carries only the shell, the
 // agent list and the agent workspace.
@@ -136,6 +137,7 @@ export function TerminalsRoutes({
   routeUnavailable,
   refresh,
   hostsContext,
+  onCreate,
   fallback,
 }: {
   serverView?: ServerView;
@@ -147,6 +149,8 @@ export function TerminalsRoutes({
   refresh: () => Promise<void>;
   /** The host workspaces, for Settings → Hosts. */
   hostsContext: HostsOutletContext;
+  /** Opens the create dialog, for an agent's Clone. */
+  onCreate: (state: CreateDialogState) => void;
   /** What shows when the route names no page this component can open. */
   fallback: ReactNode;
 }) {
@@ -190,7 +194,7 @@ export function TerminalsRoutes({
           name={teamName}
           hostLabel={selectedHost.host.label}
           members={selectedHost.agents.filter((agent) => agent.group === teamName)}
-          onOpen={(agent) => navigate(agentPath(hostId, agent, defaultAgentTab()))}
+          onOpen={(agent) => navigate(agentPath(hostId, agent, DEFAULT_AGENT_TAB))}
           onManage={() => navigate(teamSettingsPath(teamName, multiHost ? hostId : undefined))}
         />
       </RouteHostBoundary>
@@ -204,10 +208,19 @@ export function TerminalsRoutes({
     <AgentWorkspace
       key={`${hostId}\u0000${selectedAgent.name}`}
       hostId={hostId}
-      hostLabel={selectedHost?.host.label}
       agent={selectedAgent}
       refresh={refresh}
       unavailable={routeUnavailable}
+      onClone={() =>
+        onCreate({
+          hostId,
+          cloneSource: {
+            hostId,
+            agentName: selectedAgent.name,
+            hostLabel: selectedHost?.host.label ?? fallbackHostLabel(hostId),
+          },
+        })
+      }
     />
   );
 }
