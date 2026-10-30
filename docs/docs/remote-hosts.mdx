@@ -353,7 +353,7 @@ in the Terminal tab on a tap (there is no Command key). Other link schemes open
 nothing. If no browser can open the address, nothing opens and the app shows no
 message.
 
-On a phone or a tablet narrower than 1024 CSS pixels the agent list is a
+On a phone or a tablet narrower than 768 CSS pixels the sidebar is a
 drawer: the menu button at the left of the titlebar opens it, and picking an
-agent, a server or a team closes it. See
+item, an agent, a host or a team closes it. See
 [Web UI](/docs/architecture/web-ui#compact-screens).

@@ -104,48 +104,47 @@ export default function HomePage({
           }
         />
       </Section>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Section title={`Running now (${running.length})`}>
-          {running.length === 0 && (
-            <p className="px-2 text-body-sm text-muted-foreground">No agent is running.</p>
-          )}
-          <ul className="space-y-0.5">
-            {running.map((row) => (
-              <li key={row.key}>
-                <Link
-                  to={agentPath(row.hostId, row.agent.name, "console")}
-                  className="flex items-baseline gap-2 rounded-control px-2 py-1 text-body-sm hover:bg-accent"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 shrink-0 self-center rounded-full bg-status-running"
-                  />
-                  <span className="min-w-0 truncate">{row.agent.name}</span>
-                  <span className="shrink-0 text-caption text-muted-foreground">
-                    {elapsed(row.agent.current_iteration_started_at ?? "", now)}
-                    {hostSuffix(row.hostLabel)}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Section>
-        <Section
-          title="Today"
-          aside={
-            <Link
-              to={scopedPath("activity", multiHost ? pageHostId : undefined)}
-              className="ml-auto text-body-sm text-muted-foreground hover:text-foreground"
-            >
-              History ›
-            </Link>
-          }
-        >
-          <ApiProvider target={targetFor(pageHostId)}>
-            <Today />
-          </ApiProvider>
-        </Section>
-      </div>
+      {/* Full width: the six Today tiles need it at 1024 px. */}
+      <Section title={`Running now (${running.length})`}>
+        {running.length === 0 && (
+          <p className="px-2 text-body-sm text-muted-foreground">No agent is running.</p>
+        )}
+        <ul className="space-y-0.5">
+          {running.map((row) => (
+            <li key={row.key}>
+              <Link
+                to={agentPath(row.hostId, row.agent.name, "console")}
+                className="flex items-baseline gap-2 rounded-control px-2 py-1 text-body-sm hover:bg-accent"
+              >
+                <span
+                  aria-hidden="true"
+                  className="size-1.5 shrink-0 self-center rounded-full bg-status-running"
+                />
+                <span className="min-w-0 truncate">{row.agent.name}</span>
+                <span className="shrink-0 text-caption text-muted-foreground">
+                  {elapsed(row.agent.current_iteration_started_at ?? "", now)}
+                  {hostSuffix(row.hostLabel)}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Section>
+      <Section
+        title="Today"
+        aside={
+          <Link
+            to={scopedPath("activity", multiHost ? pageHostId : undefined)}
+            className="ml-auto text-body-sm text-muted-foreground hover:text-foreground"
+          >
+            History ›
+          </Link>
+        }
+      >
+        <ApiProvider target={targetFor(pageHostId)}>
+          <Today />
+        </ApiProvider>
+      </Section>
       <Section title="Recent">
         <ul className="grid gap-x-6 gap-y-0.5 sm:grid-cols-2">
           {recent.map((row) => (

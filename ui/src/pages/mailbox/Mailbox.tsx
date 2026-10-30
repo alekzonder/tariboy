@@ -73,7 +73,7 @@ function MailboxToolbar({
       : option,
   );
   return (
-    <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">
+    <div data-toolbar className="flex h-12 shrink-0 flex-nowrap items-center gap-2 pr-3 pl-4">
       <Segmented label="Mailbox" value={box} onChange={onBox} options={options} />
       <div className="ml-auto flex items-center gap-2">
         {children}

@@ -167,12 +167,19 @@ kinds are notices; the agent's Goal letter drives the work.
 
 ## Desktop
 
-The top-level **Tasks** tab is global. Each Agent workspace includes the same
-component with `scope_agent` fixed to that agent. The layout is Tree-first:
+**Tasks** in the sidebar opens `/tasks`, the tasks of one host. With two or
+more hosts in the workspace, a host selector at the start of the toolbar
+picks the host, and the URL carries it as `?host=<id>`. The number next to
+**Tasks** counts the tasks that need you on every host of the workspace: a
+workflow task that waits for you past its first status, or a paused workflow
+task. Each Agent workspace includes the same component with `scope_agent`
+fixed to that agent. The layout is Tree-first:
 
-- one toolbar: search, the Active/Closed/All segment, the queue filter with its
-  `Manage queues…` dialog, and the optional `My tasks` and `Waiting for me`
-  chips;
+- one toolbar row that does not wrap: search, the Active/Done/All segment, a
+  **Filters** menu with **Queue** (with its `Manage queues…` dialog),
+  **Assignee** (**Anyone**, **My tasks**, or one agent), **Waiting for me**,
+  and **Columns**, then refresh and **New task**. The **Filters** button shows
+  how many filters are on;
 - full width: dense expandable tree ordered by priority at every depth,
   with inline task/child creation and same-queue drag reparenting; manual before/after drag
   order is limited to the task's current priority bucket. In-progress tasks
@@ -246,9 +253,10 @@ dots.
 
 Opening a native question notification marks that exact question letter as
 read and selects its task on its original server. The Desktop route is exactly
-`/servers/:hostId/tasks?task=<key>` (for example,
-`/servers/local/tasks?task=ASK-1`); in the packaged single-page application it
-appears after the URL hash as `#/servers/local/tasks?task=ASK-1`. Routing keeps
+`/tasks?host=<hostId>&task=<key>` (for example,
+`/tasks?host=local&task=ASK-1`); in the packaged single-page application it
+appears after the URL hash as `#/tasks?host=local&task=ASK-1`. An older
+`/servers/<hostId>/tasks?task=<key>` link opens the same page. Routing keeps
 the notification's explicit host identity and never substitutes the local
 daemon for a missing remote host. The task still opens if the read request is
 interrupted, so the customer can answer it and mark the letter read later.
@@ -305,8 +313,7 @@ for the details.
 Each host keeps its own tasks, so work that belongs with another host is moved
 rather than copied by hand. In the task panel, the actions menu beside **Save
 task** opens **Move to another server**, which lists the other hosts registered
-in the desktop app. In the **All tasks** view, choosing an assignee that runs on
-another server performs the same move and then assigns the task there.
+in the desktop app.
 
 The desktop app is the only component authenticated against both daemons, so it
 drives the move: it exports the task tree from this daemon, imports it into the

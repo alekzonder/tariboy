@@ -23,8 +23,7 @@ vi.mock("@/lib/terminalsHost", async (importOriginal) => ({
   targetFor: (id: string) => (id === "" ? null : { id, label: id, baseURL: "", token: "" }),
 }));
 
-const agent = (name: string) =>
-  agentRow({ name, image: "img", state: "idle", harness: "claude" });
+const agent = (name: string) => agentRow({ name, image: "img", state: "idle", harness: "claude" });
 const oneHost: HostAgents[] = [{ host: { id: "", label: "Local" }, agents: [agent("builder")] }];
 const twoHosts: HostAgents[] = [
   ...oneHost,
