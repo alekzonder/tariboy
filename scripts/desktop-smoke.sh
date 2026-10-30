@@ -30,6 +30,7 @@ case "$SMOKE_ROOT" in
 esac
 export TARIBOY_BASE_DIR="$SMOKE_ROOT/base"
 export TARIBOY_RUNTIME_DIR="$SMOKE_ROOT/runtime"
+export TARIBOY_ONBOARDING=off
 export TARIBOY_DESKTOP_APP_DATA_DIR="$SMOKE_ROOT/app-data"
 export TARIBOY_STUB_HARNESS="$ROOT/scripts/stub-harness.sh"
 export TMUX_TMPDIR="$SMOKE_ROOT/tmux"

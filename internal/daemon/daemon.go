@@ -62,6 +62,12 @@ type Options struct {
 	// wait on it instead of polling the socket.
 	Ready func()
 
+	// Onboarding turns the first-run routine on or off: "on", "off", or empty
+	// to follow $TARIBOY_ONBOARDING (on unless it is "off").
+	Onboarding string
+	// onboardingSource replaces the default Store source; test-only seam.
+	onboardingSource string
+
 	// onShutdownStep and serveHook are test-only seams: onShutdownStep gets the
 	// name of each shutdown step before it runs, and serveHook may wrap the
 	// serve function of a server ("ai-proxy", "api", "web").

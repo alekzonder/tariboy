@@ -11,6 +11,7 @@ RUNTIME="$(mktemp -d)"
 WEB_PORT="${TARIBOY_TIMEOUT_E2E_WEB_PORT:-18765}"
 export TARIBOY_BASE_DIR="$BASE"
 export TARIBOY_RUNTIME_DIR="$RUNTIME"
+export TARIBOY_ONBOARDING=off
 export TARIBOY_SHIM_BIN="$BIN/tariboy-shim"
 export TARIBOY_STUB_HARNESS="$ROOT/scripts/stub-harness.sh"
 chmod +x "$TARIBOY_STUB_HARNESS"

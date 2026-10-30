@@ -26,8 +26,14 @@ func parseFlags(args []string) (daemon.Options, bool, error) {
 	// UI, but wrappers (scripts/tariboy-smoke.sh among them) still pass
 	// --web-addr "" to switch the listener off.
 	webAddr := fs.String("web-addr", "127.0.0.1:9990", "deprecated alias for --http-addr")
+	onboarding := fs.String("onboarding", "", "on|off: register the default Store and build basic at start (default $TARIBOY_ONBOARDING, else on)")
 	showVer := fs.Bool("version", false, "print version and exit")
 	if err := fs.Parse(args); err != nil {
+		return daemon.Options{}, false, err
+	}
+	if *onboarding != "" && *onboarding != "on" && *onboarding != "off" {
+		err := fmt.Errorf("--onboarding must be on or off, got %q", *onboarding)
+		fmt.Fprintln(os.Stderr, "tariboyd:", err)
 		return daemon.Options{}, false, err
 	}
 
@@ -51,6 +57,7 @@ func parseFlags(args []string) (daemon.Options, bool, error) {
 	return daemon.Options{
 		BaseDir: *baseDir, Listen: *listen,
 		AuthTokenFile: *authFile, LogLevel: *logLevel, HTTPAddr: addr,
+		Onboarding: *onboarding,
 	}, *showVer, nil
 }
 

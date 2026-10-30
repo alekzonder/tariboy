@@ -41,6 +41,7 @@ const daemonEnv = {
   USER: "tasks-e2e",
   TARIBOY_BASE_DIR: baseDir,
   TARIBOY_RUNTIME_DIR: runtimeDir,
+  TARIBOY_ONBOARDING: "off",
 };
 
 const daemon = spawn(daemonBin, ["--http-addr", apiAddr, "--log-level", "error"], {

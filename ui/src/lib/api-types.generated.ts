@@ -10772,7 +10772,7 @@ export interface operations {
           detach?: boolean;
           /** @description source Git commit */
           "git-commit"?: string;
-          /** @description who started the operation, as the operations list shows it: ui, cli, compose or auto */
+          /** @description who started the operation, as the operations list shows it: ui, cli, compose, auto or onboarding */
           initiator?: string;
           /** @description target image name */
           name?: string;
@@ -15506,7 +15506,7 @@ export interface operations {
         "application/json": {
           /** @description CLI: print only the operation id and do not follow its log */
           detach?: boolean;
-          /** @description who started the operation, as the operations list shows it: ui, cli, compose or auto */
+          /** @description who started the operation, as the operations list shows it: ui, cli, compose, auto or onboarding */
           initiator?: string;
           /** @description Workflowfile.yaml or its directory */
           path?: string;

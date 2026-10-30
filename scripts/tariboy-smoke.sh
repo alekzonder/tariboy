@@ -27,6 +27,7 @@ export TARIBOY_STUB_HARNESS="$ROOT/scripts/stub-harness.sh"
 # agents. Smoke no longer stops the user's daemon, so it must not share its state.
 export TARIBOY_BASE_DIR="$(mktemp -d)"
 export TARIBOY_RUNTIME_DIR="$(mktemp -d)"
+export TARIBOY_ONBOARDING=off
 . "$ROOT/scripts/test-image-fixture.sh"
 TEST_IMAGE_SOURCE="$TARIBOY_BASE_DIR/test-image"
 make_test_image_fixture "$TEST_IMAGE_SOURCE"

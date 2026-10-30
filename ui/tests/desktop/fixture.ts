@@ -504,6 +504,7 @@ function workerEnvironment(dirs: WorkerDirs): NodeJS.ProcessEnv {
     ...process.env,
     TARIBOY_BASE_DIR: dirs.baseDir,
     TARIBOY_RUNTIME_DIR: dirs.runtimeDir,
+    TARIBOY_ONBOARDING: "off",
     TARIBOY_DESKTOP_APP_DATA_DIR: dirs.appDataDir,
     TARIBOY_DESKTOP_EXTERNAL_OPEN_LOG: dirs.externalOpenLog,
     TARIBOY_DESKTOP_NOTIFICATION_TEST: "1",

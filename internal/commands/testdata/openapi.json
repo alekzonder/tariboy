@@ -18466,7 +18466,7 @@
                     "type": "string"
                   },
                   "initiator": {
-                    "description": "who started the operation, as the operations list shows it: ui, cli, compose or auto",
+                    "description": "who started the operation, as the operations list shows it: ui, cli, compose, auto or onboarding",
                     "type": "string"
                   },
                   "name": {
@@ -27884,7 +27884,7 @@
                     "type": "boolean"
                   },
                   "initiator": {
-                    "description": "who started the operation, as the operations list shows it: ui, cli, compose or auto",
+                    "description": "who started the operation, as the operations list shows it: ui, cli, compose, auto or onboarding",
                     "type": "string"
                   },
                   "path": {
