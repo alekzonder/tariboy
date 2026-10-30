@@ -1,31 +1,28 @@
 import { expect, test } from "./fixture";
 
+// The shared text controls set the attributes on each field; the WebView must
+// keep them on a field rendered by the app.
 test("the real Desktop WebView disables automatic input assistance", async ({ desktop }) => {
   await expect
     .poll(() =>
-      desktop.execute<Record<string, string | number | boolean | null> | null>(`
-    const root = document.getElementById("root");
-    if (typeof window.__TAURI_INTERNALS__ !== "object" || !root) return null;
-    const input = document.createElement("input");
-    const textarea = document.createElement("textarea");
-    root.append(input, textarea);
-    const attributes = {
-      spellcheck: root.getAttribute("spellcheck"),
-      autocorrect: root.getAttribute("autocorrect"),
-      autocapitalize: root.getAttribute("autocapitalize"),
-      editableCount: 2,
-      editablesDisableSpellcheck: input.spellcheck === false && textarea.spellcheck === false,
+      desktop.execute<Record<string, string | boolean | null> | null>(`
+    if (typeof window.__TAURI_INTERNALS__ !== "object") return null;
+    const toggle = document.querySelector('header button[aria-label="Show agents"]');
+    if (toggle instanceof HTMLButtonElement) toggle.click();
+    const field = document.querySelector('input[aria-label="Search agents"]');
+    if (!(field instanceof HTMLInputElement)) return null;
+    return {
+      spellcheck: field.getAttribute("spellcheck"),
+      autocorrect: field.getAttribute("autocorrect"),
+      autocapitalize: field.getAttribute("autocapitalize"),
+      spellcheckOff: field.spellcheck === false,
     };
-    input.remove();
-    textarea.remove();
-    return attributes;
   `),
     )
     .toEqual({
       spellcheck: "false",
       autocorrect: "off",
       autocapitalize: "off",
-      editableCount: 2,
-      editablesDisableSpellcheck: true,
+      spellcheckOff: true,
     });
 });

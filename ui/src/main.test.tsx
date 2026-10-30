@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { configureDesktopInputAssistance, desktopStartHash, usesHashRouter } from "./main";
+import { desktopStartHash, usesHashRouter } from "./main";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -16,29 +16,6 @@ describe("desktopStartHash", () => {
   it("leaves an existing route alone (a reload must not bounce home)", () => {
     vi.stubGlobal("__TAURI_INTERNALS__", {});
     expect(desktopStartHash("#/usage")).toBeNull();
-  });
-});
-
-describe("configureDesktopInputAssistance", () => {
-  it("disables all input assistance on the Desktop root", () => {
-    vi.stubGlobal("__TAURI_INTERNALS__", {});
-    const root = document.createElement("div");
-
-    configureDesktopInputAssistance(root);
-
-    expect(root).toHaveAttribute("spellcheck", "false");
-    expect(root).toHaveAttribute("autocorrect", "off");
-    expect(root).toHaveAttribute("autocapitalize", "off");
-  });
-
-  it("leaves the browser root unchanged", () => {
-    const root = document.createElement("div");
-
-    configureDesktopInputAssistance(root);
-
-    expect(root).not.toHaveAttribute("spellcheck");
-    expect(root).not.toHaveAttribute("autocorrect");
-    expect(root).not.toHaveAttribute("autocapitalize");
   });
 });
 

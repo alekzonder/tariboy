@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Input } from "@/components/ui/input";
 import { ACTIVITY_PERIODS, type ActivityPeriod, type ActivityWindow } from "@/lib/activityPeriod";
 import type { TaskActivityAgent, TaskActivityRow, TaskActivityTotals } from "@/lib/api";
 import { fmtDateTime } from "@/lib/time";
@@ -42,20 +43,20 @@ export function ActivityPeriodBar({
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <label className="flex items-center gap-1">
             <span className="text-muted-foreground">From</span>
-            <input
+            <Input
               type="datetime-local"
               value={window.customSince}
               onChange={(e) => onCustom("since", e.target.value)}
-              className="rounded border bg-background px-2 py-1"
+              className="h-auto w-auto rounded border bg-background px-2 py-1 text-sm dark:bg-background"
             />
           </label>
           <label className="flex items-center gap-1">
             <span className="text-muted-foreground">To</span>
-            <input
+            <Input
               type="datetime-local"
               value={window.customUntil}
               onChange={(e) => onCustom("until", e.target.value)}
-              className="rounded border bg-background px-2 py-1"
+              className="h-auto w-auto rounded border bg-background px-2 py-1 text-sm dark:bg-background"
             />
           </label>
         </div>

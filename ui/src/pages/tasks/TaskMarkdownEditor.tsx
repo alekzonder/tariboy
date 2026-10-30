@@ -8,6 +8,7 @@ import { TableKit } from "@tiptap/extension-table";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
+import { TEXT_INPUT_ASSISTANCE_ATTRIBUTES } from "@/components/ui/input-assistance";
 import { Textarea } from "@/components/ui/textarea";
 import { MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown";
 import { markdownFence, markdownStyles, openMarkdownLink } from "./taskMarkdownShared";
@@ -128,6 +129,7 @@ export default function MarkdownEditor({
         ...(id ? { id } : {}),
         role: "textbox",
         "aria-multiline": "true",
+        ...TEXT_INPUT_ASSISTANCE_ATTRIBUTES,
         ...(placeholder ? { "aria-label": placeholder, "data-placeholder": placeholder } : {}),
         class: `${markdownStyles} min-h-32 px-3 py-2.75 outline-none focus-visible:ring-2 focus-visible:ring-ring`,
       },

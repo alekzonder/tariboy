@@ -14,6 +14,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ApiError, type AgentPool } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EMPTY, FIELD, MONO } from "./panelStyles";
@@ -103,10 +104,10 @@ export default function QueuePools({
       })}
       {adding ? (
         <form className="flex items-center gap-1.5" onSubmit={addRow}>
-          <input
+          <Input
             aria-label="New pool name"
             autoFocus
-            className={cn(FIELD, MONO, "h-7 w-48")}
+            className={cn(FIELD, MONO, "h-7 w-48 dark:bg-muted")}
             value={newName}
             onChange={(event) => setNewName(event.target.value)}
             placeholder="pool name"
@@ -235,10 +236,10 @@ function PoolRow({
           </span>
         ))}
         <span className="inline-flex items-center gap-1">
-          <input
+          <Input
             aria-label={`Add agent to ${name}`}
             list={listId}
-            className={cn(FIELD, "h-6.5 w-40")}
+            className={cn(FIELD, "h-6.5 w-40 dark:bg-muted")}
             value={entry}
             placeholder="Add agent…"
             onChange={(event) => setEntry(event.target.value)}

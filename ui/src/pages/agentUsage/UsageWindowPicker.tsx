@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { GROUPINGS, PRESET_ORDER, type GroupBy, type Preset } from "./usageParams";
 
@@ -54,11 +55,11 @@ function RangeInput({
   return (
     <label className="flex items-center gap-1">
       <span className="text-muted-foreground">{label}</span>
-      <input
+      <Input
         type="datetime-local"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded border bg-background px-2 py-1"
+        className="h-auto w-auto rounded border bg-background px-2 py-1 text-sm dark:bg-background"
       />
     </label>
   );

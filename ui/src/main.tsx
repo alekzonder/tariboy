@@ -20,13 +20,6 @@ export function desktopStartHash(currentHash: string): string | null {
   return "#/";
 }
 
-export function configureDesktopInputAssistance(root: HTMLElement): void {
-  if (!isDesktop()) return;
-  root.setAttribute("spellcheck", "false");
-  root.setAttribute("autocorrect", "off");
-  root.setAttribute("autocapitalize", "off");
-}
-
 /**
  * HashRouter in both Tauri shells: their asset protocol serves files, not an
  * SPA fallback, so a reload at a nested agent route would 404 before React
@@ -53,7 +46,6 @@ async function boot() {
 
   const root = document.getElementById("root");
   if (!root) return; // no mount point (e.g. a unit test importing this module)
-  configureDesktopInputAssistance(root);
   createRoot(root).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>

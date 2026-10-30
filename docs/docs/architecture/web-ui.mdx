@@ -729,6 +729,17 @@ primitives under `ui/src/components/ui/` are not checked, so they stay the same
 as upstream. An inline `style` is only for a value that the code calculates at
 run time, such as a column width or a CSS variable.
 
+Text fields use the shared controls: `Input`, `Textarea` and `CommandInput`
+under `ui/src/components/ui/`, `SearchInput` for a search field with an icon,
+and `TaskMarkdownEditor` for task Markdown. These controls turn off spell
+checking, autocorrection and autocapitalization in the browser, in Desktop and
+in the Android shell, so WebKit does not change names, paths or identifiers.
+The defaults are in `components/ui/input-assistance.ts`. To turn one on for a
+single field, pass the prop, for example `<Input autoCorrect="on" />`.
+`ui/src/test/textInputPolicy.test.ts` fails when production code outside
+`components/ui` renders a `<textarea>`, an `<input>` of a type other than
+`checkbox`, `radio` or `file`, or a `contentEditable` element.
+
 A CSS file is only for a rule that utilities cannot express clearly:
 pseudo-elements, a media query for one widget, or a rule that must override
 another component. `ui/src/pages/tasks/tasks.css` lists the rules it keeps

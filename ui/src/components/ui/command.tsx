@@ -1,8 +1,8 @@
 import * as React from "react";
 import { Command as CommandPrimitive } from "cmdk";
 
-import { isDesktop } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
+import { TEXT_INPUT_ASSISTANCE } from "./input-assistance";
 
 // shadcn/ui Command primitives (thin styled wrappers over cmdk). Added for the
 // cwd PathAutocomplete typeahead; the full CommandDialog/shortcut set is
@@ -25,10 +25,6 @@ function CommandInput({
   className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
-  const desktopInputAssistance = isDesktop()
-    ? { spellCheck: false, autoCorrect: "off", autoCapitalize: "off" }
-    : {};
-
   return (
     <CommandPrimitive.Input
       data-slot="command-input"
@@ -36,7 +32,7 @@ function CommandInput({
         "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30",
         className,
       )}
-      {...desktopInputAssistance}
+      {...TEXT_INPUT_ASSISTANCE}
       {...props}
     />
   );

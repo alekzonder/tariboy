@@ -1,6 +1,7 @@
 import { useState, type RefObject } from "react";
 import { Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_WORKSPACE_ID,
@@ -56,7 +57,7 @@ export function WorkspaceList({
         ))}
       </div>
       <div className="grid shrink-0 gap-1.5 border-t p-2.5">
-        <input
+        <Input
           ref={newNameRef}
           value={newName}
           onChange={(event) => setNewName(event.target.value)}
@@ -65,7 +66,7 @@ export function WorkspaceList({
           }}
           placeholder="New workspace name"
           aria-label="New workspace name"
-          className="h-7 min-w-0 rounded-md bg-muted px-2.25 text-body-sm outline-none placeholder:text-muted-foreground"
+          className="h-7 min-w-0 rounded-md border-0 bg-muted px-2.25 py-0 text-body-sm outline-none placeholder:text-muted-foreground md:text-body-sm dark:bg-muted"
         />
         <Button size="sm" variant="secondary" onClick={create}>
           Create workspace

@@ -1,5 +1,6 @@
-import { Plus, RefreshCw, Search } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
 import type { Queue, TaskStatusView } from "@/lib/api";
 import TaskColumnsMenu from "./TaskColumnsMenu";
@@ -79,17 +80,14 @@ export function TaskFilterBar({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2.75 pb-2.25">
-      <label className="flex h-7 w-55 shrink-0 items-center gap-1.75 rounded-md bg-muted px-2.25 text-muted-foreground">
-        <Search aria-hidden="true" className="size-3 shrink-0" />
-        <input
-          type="search"
-          aria-label="Search tasks"
-          placeholder={mode === "agent" ? "Search tasks" : "Search all tasks"}
-          value={query}
-          onChange={(event) => onQuery(event.target.value)}
-          className="min-w-0 flex-1 bg-transparent text-ui text-foreground outline-none placeholder:text-muted-foreground"
-        />
-      </label>
+      <SearchInput
+        className="h-7 w-55 shrink-0"
+        inputClassName="text-ui"
+        aria-label="Search tasks"
+        placeholder={mode === "agent" ? "Search tasks" : "Search all tasks"}
+        value={query}
+        onChange={(event) => onQuery(event.target.value)}
+      />
       <Segmented
         label="Task status"
         options={STATUS_OPTIONS}
