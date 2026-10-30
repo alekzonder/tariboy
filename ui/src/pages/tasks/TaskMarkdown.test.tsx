@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Activity, useState } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { Editor } from "@tiptap/react";
 import { describe, expect, it, vi } from "vitest";
@@ -14,6 +14,11 @@ vi.mock("@/lib/desktop", () => ({
   opensWebLinks: () => true,
   openExternalUrl,
 }));
+
+function FireTimers({ fire }: { fire: boolean }) {
+  if (fire) vi.advanceTimersByTime(5);
+  return null;
+}
 
 describe("task Markdown", () => {
   it("opens absolute web links outside the Desktop WebView", () => {
@@ -38,6 +43,34 @@ describe("task Markdown", () => {
 
     expect(click.defaultPrevented).toBe(true);
     expect(openExternalUrl).toHaveBeenCalledWith("https://example.com/edit");
+  });
+
+  it("survives a reveal that races its editor's destruction", () => {
+    // A Suspense or Activity boundary that hides the editor disconnects its
+    // effects, and Tiptap destroys the editor 1 ms later. When that timer
+    // fires after the reveal render read the editor but before the reveal's
+    // effects run, those effects must not touch the destroyed instance.
+    // FireTimers renders after the editor, which puts the timer in that gap.
+    vi.useFakeTimers();
+    try {
+      const view = (mode: "visible" | "hidden", value: string, fire = false) => (
+        <>
+          <Activity mode={mode}>
+            <MarkdownEditor value={value} onChange={() => {}} placeholder="Description" />
+          </Activity>
+          <FireTimers fire={fire} />
+        </>
+      );
+      const { rerender } = render(view("visible", "First"));
+      act(() => vi.advanceTimersByTime(5));
+      rerender(view("hidden", "First"));
+      rerender(view("visible", "Second", true));
+      act(() => vi.advanceTimersByTime(5));
+
+      expect(screen.getByRole("textbox", { name: "Description" })).toHaveTextContent("Second");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders task formatting and neutralizes executable markup", () => {
