@@ -57,6 +57,15 @@ describe("task Markdown", () => {
     expect(container.querySelector('a[href^="javascript:"]')).toBeNull();
   });
 
+  it("disables text assistance in the rich editor", () => {
+    render(<MarkdownEditor id="description" value="Hello" onChange={vi.fn()} />);
+
+    const textbox = screen.getByRole("textbox");
+    expect(textbox).toHaveAttribute("spellcheck", "false");
+    expect(textbox).toHaveAttribute("autocorrect", "off");
+    expect(textbox).toHaveAttribute("autocapitalize", "off");
+  });
+
   it("keeps unsupported Markdown visible and editable in rich mode", () => {
     const value =
       "# Plan\n\n<!-- keep this -->\n\nReference [Tariboy][site].\n\n[site]: https://example.com\n";

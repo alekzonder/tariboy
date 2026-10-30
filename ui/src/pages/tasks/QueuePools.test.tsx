@@ -126,6 +126,19 @@ it("adds a row for a new pool by name", () => {
   expect(screen.getByRole("group", { name: "Pool qa" })).toBeInTheDocument();
 });
 
+it("keeps pool and agent names as typed, with no browser text assistance", () => {
+  renderIt();
+  fireEvent.click(screen.getByRole("button", { name: "Add pool" }));
+  for (const field of [
+    screen.getByLabelText("New pool name"),
+    screen.getByLabelText("Add agent to developers"),
+  ]) {
+    expect(field).toHaveAttribute("spellcheck", "false");
+    expect(field).toHaveAttribute("autocorrect", "off");
+    expect(field).toHaveAttribute("autocapitalize", "off");
+  }
+});
+
 it("suggests the server's agents", () => {
   renderIt();
   const input = screen.getByLabelText("Add agent to developers");
