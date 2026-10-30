@@ -48,16 +48,17 @@ func startOnboardingWorkers(t *testing.T, mode string) (*managerParts, *process)
 func TestStartWorkersRegistersDefaultStoreAndBuildsBasic(t *testing.T) {
 	t.Parallel()
 	mg, proc := startOnboardingWorkers(t, "on")
-	images := &image.Store{Dir: paths.New(proc.paths.Base).ImagesDir()}
 	deadline := time.Now().Add(60 * time.Second)
-	for !images.Exists(image.Ref{Name: "basic", Tag: "latest"}) {
-		if time.Now().After(deadline) {
-			t.Fatalf("basic:latest never built: %#v", mg.cctx.Onboarding.Status(context.Background(), false))
+	st := mg.cctx.Onboarding.Status(context.Background(), false)
+	for st.StarterImage.State != onboarding.StateReady {
+		if time.Now().After(deadline) || st.StarterImage.State == onboarding.StateFailed {
+			t.Fatalf("basic:latest never built: %#v", st)
 		}
 		time.Sleep(20 * time.Millisecond)
+		st = mg.cctx.Onboarding.Status(context.Background(), false)
 	}
-	st := mg.cctx.Onboarding.Status(context.Background(), false)
-	if st.DefaultStore.State != onboarding.StateRegistered || st.StarterImage.State != onboarding.StateReady {
+	images := &image.Store{Dir: paths.New(proc.paths.Base).ImagesDir()}
+	if st.DefaultStore.State != onboarding.StateRegistered || !images.Exists(image.Ref{Name: "basic", Tag: "latest"}) {
 		t.Fatalf("status = %#v", st)
 	}
 }

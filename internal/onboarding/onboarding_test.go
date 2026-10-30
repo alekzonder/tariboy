@@ -233,6 +233,29 @@ func TestRetryRunsOneRoutineAtATime(t *testing.T) {
 	}
 }
 
+// The build publishes basic before it returns; until then the image is the
+// routine's own build, not a pre-existing one.
+func TestStatusKeepsBuildingWhileTheBuildFinishes(t *testing.T) {
+	f := newFixture(t)
+	published := make(chan struct{})
+	release := make(chan struct{})
+	f.svc.Build = func(context.Context, string) error {
+		err := plantImage(t, f.svc.Images, image.Ref{Name: StarterImage, Tag: "latest"})
+		close(published)
+		<-release
+		return err
+	}
+	done := make(chan struct{})
+	go func() { f.svc.Run(context.Background()); close(done) }()
+	<-published
+	st := f.svc.Status(context.Background(), false)
+	close(release)
+	<-done
+	if st.StarterImage.State != StateBuilding {
+		t.Fatalf("starter while the build finishes = %#v, want building", st.StarterImage)
+	}
+}
+
 func TestHarnessesAreCachedUntilRefresh(t *testing.T) {
 	f := newFixture(t)
 	t.Setenv("PATH", t.TempDir())

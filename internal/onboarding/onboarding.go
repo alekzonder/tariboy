@@ -238,13 +238,17 @@ func (s *Service) starterStatus(storeFound bool) Starter {
 	s.mu.Lock()
 	mem := s.starter
 	s.mu.Unlock()
+	// The build publishes basic before it returns.
+	if mem.State == StateBuilding {
+		return mem
+	}
 	if ref, ok := s.basicRef(); ok {
 		if mem.State == StateReady {
 			return Starter{State: StateReady, Ref: ref}
 		}
 		return Starter{State: StateSkipped, Ref: ref}
 	}
-	if mem.State == StateBuilding || mem.State == StateFailed {
+	if mem.State == StateFailed {
 		return mem
 	}
 	if !storeFound {
