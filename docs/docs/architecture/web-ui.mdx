@@ -344,7 +344,9 @@ agent** button and four sections:
 - **Needs you (N)**: the tasks that need you on every workspace host, newest
   first, then your open letters. A question letter about a listed task is not
   shown again. A task row opens the task drawer on its host, and a letter row
-  opens `/inbox?letter=<id>`. With nothing to show it says **Nothing needs
+  opens `/inbox?letter=<id>`. The chevron button **Answer in place** before a
+  task row expands the row into its
+  [Needs you card](#needs-you-card), so you can answer without the drawer. With nothing to show it says **Nothing needs
   you.** When no host could be read, it shows the error and **Retry**.
 - **Running now (N)**: the agents in state `running`, with the time since
   `current_iteration_started_at`. Each row opens the agent's Terminal.
@@ -592,10 +594,6 @@ separate confirmation starts the durable operation and displays persisted
 per-item progress. The target daemon descriptor is captured at upload and
 reused for confirmation, status, and retry even if the global host switcher
 changes.
-
-On the agent's **Work** tab, the row of the agent's Goal task has a green tint
-and a green left stripe. If the current filter or a collapsed parent hides the
-Goal task, no row is highlighted.
 
 **Open folder in VS Code** in the agent header's `⋯` menu opens local paths as
 local folders and SSH-host paths through VS Code Remote SSH in a new editor
@@ -928,6 +926,8 @@ Everything else loads with `React.lazy` when it first renders:
 - `NeedsYouLive`, which reads the counts and rows of "needs you", the task
   lookup of the search field, and the workspace manager dialog;
 - every agent workspace tab and the Goal task drawer in `AgentWorkspace`;
+- the Needs you card (`tasks/NeedsYouCard.tsx`) in the Work tab and in the
+  Home list, because it brings the Markdown renderer;
 - the TipTap editor (`tasks/TaskMarkdownEditor.tsx`): `MarkdownEditor` in
   `TaskMarkdown.tsx` is a lazy wrapper, so `MarkdownContent` never loads TipTap;
 - the file viewer of `FileBrowser`, with CodeMirror, its languages, and the
@@ -1106,8 +1106,8 @@ All tasks view).
 | `tui:draft:<agent>:<section>` | local | inject modal | draft text | empty |
 | `tasks:columns:v1` | local | task tables | JSON column order and widths | default layout |
 | `tasks:workspace:v1` | local | task detail panel | JSON detail width | half the window |
-| `tasks:new-task-queue:v1` | local | new task form | JSON last queue per server | none |
-| `tasks:new-task-queue-by-agent:v1` | local | new task form in an agent's Work tab | JSON last queue per server and agent | the queue for the server |
+| `tasks:new-task-queue:v1` | local | new task form, Work tab composer | JSON last queue per server | none |
+| `tasks:new-task-queue-by-agent:v1` | local | Work tab composer | JSON last queue per server and agent | `TASK` |
 | `tasks:queue-filter:v1` | session | task queue filter | queue prefix | none |
 | `tariboy_store_token` | session | Store UI | Store bearer token | none |
 
@@ -1124,7 +1124,8 @@ this window, for example from the CLI, do not notify the lists.
 
 TanStack Query v5 owns the server data for Tasks. One QueryClient serves the
 application, and each component test uses an isolated client. The migrated
-read owners are TasksWorkspace, TaskDrawer, and WorkflowPanel. TaskDetail
+read owners are TasksWorkspace, the agent's Work tab, TaskDrawer,
+NeedsYouCard, and WorkflowPanel. TaskDetail
 keeps form drafts and uses a mutation for relation writes.
 
 A query key identifies one response. Its prefix is
@@ -1182,10 +1183,9 @@ to separate work. The drawer opened from those screens already shares the
 Tasks queries. Specialized workflow actions and log readers retain their own
 state.
 
-Tasks uses one reusable workspace at `/tasks` and inside each
-agent's Work tab. `/tasks` shows every task visible on its host;
-the Work tab sends
-`scope_agent=<name>` to render only that agent's inherited view. The tree fills
+Tasks uses one workspace at `/tasks`. It shows every task visible on its
+host. An agent's Work tab has its own layout and does not use this workspace
+(see [Work tab](#work-tab)). The tree fills
 the full width of the island and is expandable, ordered at every
 depth by priority, manual position, and
 task key, with inline creation and same-queue drag reparenting. Before/after
@@ -1205,12 +1205,35 @@ pointer-accessible left separator resizes it, and the pixel width persists in
 sheet while preserving the tree's expansion and scroll position. Dismissal
 protects unsaved task, comment, and relation drafts with the confirmation
 “Are you sure you want to close this task? Unsaved changes will be discarded.”
-Task Detail also offers `Wait customer` status and an editable `Pull request`
-field; both use the existing optimistic revision and explicit-host request path.
+Task Detail also offers the `wait_customer` status, labeled "Waiting for you"
+(`flexibleStatusLabel` gives this label everywhere), and an editable `Pull
+request` field. Both use the existing optimistic revision and explicit-host
+request path.
 The sheet is one `--card` island with its own scroll and a sticky identity
-header carrying the task key, title, status and assignee. A single banner under
-that header reports what needs a person — an unanswered customer question — and
-other statuses speak through the status pill alone. The sheet opens as soon as a task is
+header carrying the task key, title, status and assignee. `TaskDetailBody`
+then renders these parts, top down:
+
+1. The Needs you card (`NeedsYouCard`, see [Needs you card](#needs-you-card)),
+   pinned when the viewer can edit the task and the task waits on the
+   customer: `needsYouTask(task)` selects it, or an open comment wait
+   addresses the customer. While the card is pinned, the sheet does not show
+   the "Waiting for an answer" banner. Otherwise an open comment wait shows
+   that banner.
+2. The title and the description (`TaskDetailFields`).
+3. The comments.
+4. **Details**, collapsed: author, customer, queue, group, blocked, parent,
+   then `TaskDetailProperties` (the status of a flexible task, priority,
+   assignee, pull request, manual block reason) and the dependencies.
+5. **Workflow**, collapsed, for a workflow task only: the `WorkflowPanel`. The
+   section is open when the task has a `workflow_attention`. While the card is
+   pinned, the panel hides its Outcomes block and its pause banner, because
+   the card offers both.
+6. **History**, collapsed by default.
+
+The assignee of a flexible task is a select of "Unassigned", "me" (the
+customer principal), and each agent as `agent:<name>`. A current assignee
+outside that list shows as a disabled option. The UI has no field for a typed
+principal. Other statuses speak through the status pill alone. The sheet opens as soon as a task is
 chosen, in Tasks or from a letter, showing the task key and a loading line until
 the task and its history arrive; refreshing the task already open keeps the
 loaded panel in place. History rows read as time, kind, a
@@ -1249,7 +1272,8 @@ query it is a select of that pool's members (`listAgentPools` through
 `onTaskChanged`; otherwise it is text. `TaskDetail` hides **Move to
 another server…** for one, and neither its banner nor a comment chip asks for
 a comment on the workflow's own (`system:workflow`) wait. In place of the status
-select it renders `WorkflowPanel`, which reads the shared workflow query. A task revision, an event sequence, or
+select it renders `WorkflowPanel` in its **Workflow** section. The panel reads
+the shared workflow query. A task revision, an event sequence, or
 a completed write marks that query stale, so a workflow event refreshes the
 panel even when the task revision stays the same. It composes, top down,
 `WorkflowPauseBanner` (`resumeTaskWorkflow`, `cancelWorkflowTask`),
@@ -1259,7 +1283,8 @@ run's log through `RunRow` with `autoLoad`), `WorkflowStepper` (the view's
 `statuses` as steps, marked by `stepMarks` in `workflowGraph.ts`; the panel
 owns the selected step, which starts at the current status and follows it
 until the customer picks a step), the header with `stepOf`,
-`WorkflowOutcomes` (`advanceTask`), `WorkflowArtifacts`
+`WorkflowOutcomes` (`advanceTask` with `from`, through the `useWorkflowAdvance`
+hook that the Needs you card shares), `WorkflowArtifacts`
 (`setTaskArtifact`, `getTaskArtifactHistory`; for the selected step only the
 artifacts `stepArtifacts` finds in the `requires` of a transition into it,
 then out of it, each naming its transition; **Show all artifacts**, or a
@@ -1332,12 +1357,11 @@ loads once and on **Reload**, without polling. Its run rows and the task's
 text, and offers **Refresh** while the run is going. A flexible task renders
 exactly as before. The browser suite covers the path against an isolated daemon.
 
-One toolbar sits above the table in both places, in one row that does not
+One toolbar sits above the table, in one row that does not
 wrap (`data-toolbar`, `role="toolbar"`, label **Task filters**). It carries the
-host selector on `/tasks` when the workspace has two or more hosts, the search
+host selector when the workspace has two or more hosts, the search
 field (it gives up width first), the `Active | Done | All` segment (**Done**
-is the `closed` status view), a **Filters** menu, the agent chip in an Agent
-tab, refresh, and **New task**. The **Filters** button shows how many filters
+is the `closed` status view), a **Filters** menu, refresh, and **New task**. The **Filters** button shows how many filters
 are on. Its menu holds **Queue**, **Assignee** (**Anyone**, **My tasks**, or one
 agent from the principals list, sent as the daemon's `assignee` filter),
 **Waiting for me** (the daemon's `waiting_for` filter; it combines with an
@@ -1348,33 +1372,26 @@ list with **New queue**, and the selected queue in **General** (the existing
 `PATCH`), **Workflow**, **Pools**, **Environment**, and, for a bound queue,
 **Sources** tabs. The queue
 filter is applied in the client so that menu can count from the load the tree
-already performs; `scope_agent`, `status_view`, the text search, `assignee` and
+already performs; `status_view`, the text search, `assignee` and
 `waiting_for` stay daemon-side. The **New task** form preselects the queue
 selected in the filter. When `All queues` is selected, it preselects the queue
 of the last root task created from a form on that server, or the first queue
 when that queue no longer exists. After a root task is created, its queue is
 saved in `localStorage` under `tasks:new-task-queue:v1`, a JSON object from
 server (`local` for the local daemon, otherwise the Desktop server id) to queue
-prefix. In the Work tab of an agent, the created root task also saves its
-queue for that agent in `tasks:new-task-queue-by-agent:v1`, a JSON object from
-server to agent name to queue prefix. When `All queues` is selected there, the
-form preselects the queue of that agent. If that queue no longer exists, the
-form uses the queue for the server, then the first queue. A child task, a
-cancelled form, or a failed create saves nothing. Each record survives a
+prefix. The composer of an agent's Work tab also writes this record, and it
+keeps a second record for each agent (see [Work tab](#work-tab)). A child
+task, a cancelled form, or a failed create saves nothing. Each record survives a
 restart, stays on one device, and is ignored when it is unreadable.
 
 The table header and its rows read one column layout, so a column cannot
 drift from its heading. By default `Pri` comes first in every table, then
 `Key`, 168px holding the tree indents, the chevron and the key, which truncates
-rather than wrapping; `Task` takes the rest. The agent table adds `Duration` — the task's first move to
-`in_progress` (`started_at`) to completion, or to now while the task is open,
-and `—` for a task never started — and the server table adds `Agent`. There is no
-`Queue` column: the key prefix already names the queue. In the server table the
-header is sticky. The drag grip lives in the row's left padding and appears on
-hover.
+rather than wrapping; `Task` takes the rest. The table adds `Agent`. There is no
+`Queue` column: the key prefix already names the queue. The header is sticky.
+The drag grip lives in the row's left padding and appears on hover.
 
-The column order and widths are the user's. One order covers the agent and
-host tables; each shows its own columns in that order. Every column
+The column order and widths are the user's. Every column
 except `Task` has its own width, from 40px to 480px (`Key` from 96px, `Pri`
 from 24px); `Task` can move but always takes the rest of the row, so very wide
 columns on a narrow screen squeeze it. The layout is the versioned WebView
@@ -1391,8 +1408,7 @@ is unavailable changes last until the next reload.
 - **Order:** a header label is a drag grip in its own drag context, apart from
   the row drags. A mouse starts after 5px, a finger after a 250ms press, so a
   swipe still scrolls; Space or Enter starts a keyboard move.
-- **Columns menu:** **Filters → Columns** lists the current
-  table's columns with one-tap `Narrow`/`Widen` (16px) and left/right moves,
+- **Columns menu:** **Filters → Columns** lists the table's columns with one-tap `Narrow`/`Widen` (16px) and left/right moves,
   and `Reset columns`. It is the touch path on a phone or tablet and stays
   open between steps.
 
@@ -1423,10 +1439,11 @@ behavior. Vite's `build.license` generates bundled
 JavaScript dependency license texts and copyright notices in
 `desktop/dist/THIRD-PARTY-LICENSES.md` on each Desktop build; this generated
 asset is packaged with the app and is not committed.
-The comment form defaults its Ask selector to the task assignee, while typed
-mentions, explicit questions, and answer-wait semantics remain daemon-owned.
-Beside **Send comment**, a secondary **Send Ok** action includes the selected
-Ask mention and posts `Ok` without changing the Ask selection. It is hidden
+The comment form defaults its **Ask an agent** selector to the task assignee,
+while typed mentions, explicit questions, and answer-wait semantics remain
+daemon-owned. Beside **Send comment**, a secondary **Reply Ok to the question**
+action includes the selected mention and posts `Ok` without changing the
+selection. It is hidden
 as soon as the comment contains text.
 
 ### Mailbox
@@ -1641,8 +1658,8 @@ The primary button depends on the state:
 
 | State | Primary button | Action |
 | --- | --- | --- |
-| needs you | **Answer** | opens `…/work?task=<first KEY>`, which opens that task in the drawer |
-| working, idle | **Give task** | opens `…/work` |
+| needs you | **Answer** | opens `…/work?answer=<first KEY>`, which scrolls to that task's Needs you card and focuses it |
+| working, idle | **Give task** | opens `…/work?give=1`, which focuses the composer |
 | off | **Start** | starts the agent; the header then shows no second **Start** button |
 | error | **Restart** | restarts the agent |
 
@@ -1672,7 +1689,7 @@ The agent workspace has four tabs; there is no server row above them:
 
 | Tab | Route | Content |
 | --- | --- | --- |
-| **Work** (default) | `/agents/:hostId/:agent/work` | the agent's task list |
+| **Work** (default) | `/agents/:hostId/:agent/work` | see [Work tab](#work-tab) |
 | **Terminal** | `/agents/:hostId/:agent/console` | the live terminal |
 | **Activity** | `/agents/:hostId/:agent/activity` | see [Activity](#activity) |
 | **Settings** | `/agents/:hostId/:agent/settings` | the agent configuration page (component `AgentConfigurationTab`), headed **Settings** |
@@ -1701,6 +1718,101 @@ A legacy `/agent/:name` route opens the agent on the active host.
 Agent routes include the explicit host id, and a `?host=` on
 a page names its host; both fail closed rather than silently falling back to
 local.
+
+#### Work tab
+
+The Work tab (`ui/src/pages/agents/work/AgentWorkTab.tsx`) has its own layout.
+It does not use the Tasks workspace, so it has no `Active | Done | All`
+segment, no **Filters** or **Queue** menu, no **My tasks** or **Waiting for
+me**, no agent chip, no **Columns**, no refresh button, and no tree or table
+columns. Top down, it shows:
+
+1. The composer (`TaskComposer.tsx`), one line with the placeholder "Give
+   \<agent\> a task…", a **Give** button, and **Details**.
+2. **Needs you (n)**: one Needs you card for each item of the agent's
+   `needs you` state, the same items that the tab badge and the header count.
+3. **In progress (n)**.
+4. **Queued (n)**.
+5. **Done · last 7 days (n)**, with a search box and **Show all**.
+
+The composer works like this:
+
+- Enter, or **Give**, creates a task with the typed title and priority P2.
+  Each create sends an idempotency key, so a retry after a lost response does
+  not make a second task.
+- The queue is the one remembered for this agent in
+  `tasks:new-task-queue-by-agent:v1` (a JSON object from server to agent name
+  to queue prefix) while that queue exists, else `TASK`. A create saves the
+  queue in that record and in `tasks:new-task-queue:v1`.
+- **Details** reveals the queue, the priority, and a description editor.
+- For a flexible queue, the request sets the assignee to `agent:<name>`.
+- For a queue bound to a workflow, the request has no assignee, because the
+  daemon refuses one (`workflow_managed`). The composer shows the note
+  "Dispatched by the \<name\> workflow; a pool member takes it". After the
+  create it shows the line "\<KEY\> dispatched by the \<name\> workflow",
+  which opens the task drawer.
+- When the agent is off, the button reads **Start & give**. It creates the
+  task and then starts the agent. If the start fails, the task stays and the
+  composer shows the error.
+- When the agent's Goal setting is off, the composer shows "Goal is off: this
+  agent does not pick up tasks. Turn it on in Settings", with a link to
+  Settings. The create still works.
+
+The rows come from `listTasks` with `assignee=agent:<name>`, one read with
+`status_view=active` and one with `status_view=closed`, through the shared task
+queries (`useAgentWork.ts`). The task event stream keeps them fresh. A task
+that a Needs you card shows is not repeated in the other sections. Queued
+holds the active tasks in the `open` category and the tasks in their
+workflow's initial status (`workflow_initial`). In progress holds the other
+active tasks. Done holds the closed tasks of the last seven days. **Show all**
+shows every closed task in the same rows. The search box filters Done by key
+and title.
+
+A row shows the key, the title, the status in words (`statusWords` in
+`workModel.ts`), the age, and the cost from the task activity report when it
+is known. The status words are "Not started" for a task in the initial
+status, "Waiting for you", "Paused", or "Waiting on a check" by `waiting_on`,
+else the workflow status humanised or the flexible label. A Queued row of a
+task in its workflow's initial status has one button per item of its
+`workflow_outcomes`. The first outcome whose target is not terminal comes
+first, as the primary button. An outcome named `start` reads **Start**, and
+the others read "\<outcome\> → \<status\>". A button sends the advance
+through `useWorkflowAdvance`.
+
+A row click opens the task drawer. The tab reads these query parameters:
+
+| Query | Effect |
+| --- | --- |
+| `?task=KEY` | opens that task in the drawer |
+| `?answer=KEY` | scrolls to that task's Needs you card and focuses it |
+| `?give=1` | focuses the composer |
+
+#### Needs you card
+
+`NeedsYouCard` (`ui/src/pages/tasks/NeedsYouCard.tsx`) is one component for
+three places: the Work tab, the top of the task drawer, and the Needs you list
+on Home and Inbox when a task row is expanded. The Work tab and the list load
+it lazily. The card shows:
+
+- the key, the title, the status in words, and the age;
+- the open question, as Markdown: an unresolved wait that addresses the
+  customer and does not come from `system:workflow`;
+- for a customer status of a workflow, the sentence "\<agent\> waits for your
+  decision in \<status\>.", then the artifacts to review. These are the
+  artifacts that the step into the status required, then the artifacts that
+  its outcomes require, each with its latest value. Each artifact is
+  collapsible, the first one is open, and the value renders as Markdown;
+- one **Message** box;
+- for a customer status, one button per outcome, labeled "\<outcome\> → \<next
+  status\>". A button whose outcome misses an artifact is disabled, and its
+  title names the artifact. The advance carries the message and `from`, and
+  goes through the `useWorkflowAdvance` hook, the same path as the Outcomes
+  block of the workflow panel;
+- for an open question, **Send answer** and **Reply Ok to the question**. Both
+  post a customer comment, which resolves the wait. **Reply Ok to the
+  question** shows only while the message box is empty;
+- for a paused task, the pause reason with **Continue**, **Release holder**
+  (pool status only), and **Cancel task**.
 
 ### Host workspaces
 

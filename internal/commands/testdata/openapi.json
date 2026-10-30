@@ -5536,6 +5536,13 @@
           "workflow_name": {
             "type": "string"
           },
+          "workflow_outcomes": {
+            "description": "The outcomes of the current status when the customer owns it and the task is open",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowOutcomeRef"
+            },
+            "type": "array"
+          },
           "workflow_paused_reason": {
             "type": "string"
           },
@@ -7465,6 +7472,28 @@
         "required": [
           "script",
           "every"
+        ],
+        "type": "object"
+      },
+      "WorkflowOutcomeRef": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "description": "The outcome name",
+            "type": "string"
+          },
+          "terminal": {
+            "description": "True when the target status is terminal",
+            "type": "boolean"
+          },
+          "to": {
+            "description": "The status the outcome leads to",
+            "type": "string"
+          }
+        },
+        "required": [
+          "on",
+          "to"
         ],
         "type": "object"
       },

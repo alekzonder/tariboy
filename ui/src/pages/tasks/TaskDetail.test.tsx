@@ -5,6 +5,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import TaskDetail from "./TaskDetail";
 import {
   ApiError,
+  type PrincipalInfo,
   type Task,
   type TaskComment,
   type TaskDetail as Detail,
@@ -49,7 +50,12 @@ beforeEach(() => {
   api.getTaskWorkflow.mockResolvedValue(customerView);
 });
 
-function renderDetail(task: Task, waiting_for: WaitingFor[] = [], comments: TaskComment[] = []) {
+function renderDetail(
+  task: Task,
+  waiting_for: WaitingFor[] = [],
+  comments: TaskComment[] = [],
+  principals: PrincipalInfo | null = null,
+) {
   const detail: Detail = {
     task,
     comments,
@@ -65,7 +71,7 @@ function renderDetail(task: Task, waiting_for: WaitingFor[] = [], comments: Task
     <TaskDetail
       detail={detail}
       events={events}
-      principals={null}
+      principals={principals}
       width={600}
       resizeHandle={null}
       onClose={onClose}
@@ -173,7 +179,7 @@ it("keeps a flexible task's status select, fields and sections as they were", as
     within(status)
       .getAllByRole("option")
       .map((option) => option.textContent),
-  ).toEqual(["Open", "In progress", "Wait customer", "Done", "Cancelled"]);
+  ).toEqual(["Open", "In progress", "Waiting for you", "Done", "Cancelled"]);
   expect(status).toHaveValue("in_progress");
   for (const label of ["Title", "Priority", "Assignee", "Pull request", "Manual block reason"]) {
     expect(screen.getByLabelText(label)).toBeInTheDocument();
@@ -229,7 +235,7 @@ it("confirms a pause decision inside the open sheet without closing it", async (
   await waitFor(() => expect(api.resumeTaskWorkflow).toHaveBeenCalledWith("REL-1", "continue"));
   await waitFor(() => expect(onTaskChanged).toHaveBeenCalled());
   expect(onClose).not.toHaveBeenCalled();
-  expect(screen.getByText("Release notes")).toBeInTheDocument();
+  expect(screen.getByRole("dialog")).toHaveTextContent("Release notes");
 });
 
 const wait = (requesting_principal: string): WaitingFor => ({
@@ -248,7 +254,7 @@ it("leaves the workflow's own wait to the panel instead of asking for a comment"
 });
 
 it("still shows an agent's question on a workflow task, and every wait on a flexible task", async () => {
-  renderDetail(workflowTask, [wait("agent:writer")]);
+  renderDetail({ ...workflowTask, waiting_on: "script" }, [wait("agent:writer")]);
   expect(await screen.findByText(/Waiting for an answer from user:owner/)).toBeInTheDocument();
   cleanup();
   renderDetail(flexible, [wait("system:workflow")]);
@@ -365,4 +371,111 @@ it("keeps the assignee as text on a paused task in a pool status", async () => {
   renderDetail({ ...heldTask, waiting_on: "pause" });
   await screen.findByRole("button", { name: "Continue" });
   expect(screen.queryByRole("combobox", { name: "Assignee" })).not.toBeInTheDocument();
+});
+
+const people: PrincipalInfo = { customer: "user:owner", agents: ["writer", "editor"], groups: [] };
+
+it("pins the Needs you card on top of a task that waits for the customer", async () => {
+  renderDetail(workflowTask, [], [], people);
+  const card = await screen.findByRole("region", { name: "Needs you" });
+  expect(
+    await within(card).findByRole("button", { name: "approve → publish" }),
+  ).toBeInTheDocument();
+  // The card holds the decision, so the workflow section does not repeat it.
+  expect(screen.queryByRole("button", { name: "approve" })).not.toBeInTheDocument();
+  const title = screen.getByLabelText("Title");
+  expect(card.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+it("pins no card on a task that waits on nobody", () => {
+  renderDetail(flexible, [], [], people);
+  expect(screen.queryByRole("region", { name: "Needs you" })).not.toBeInTheDocument();
+});
+
+it("collapses Details and History and keeps the workflow in its own section", async () => {
+  renderDetail(workflowTask, [], [], people);
+  await screen.findByText("release@1.2.0");
+  const details = screen.getByText("Details", { selector: "summary" }).closest("details")!;
+  expect(details).not.toHaveAttribute("open");
+  expect(within(details).getByLabelText("Priority")).toBeInTheDocument();
+  expect(within(details).getByText("Dependencies")).toBeInTheDocument();
+  const workflow = screen.getByText("Workflow", { selector: "summary" }).closest("details")!;
+  expect(within(workflow).getByText("release@1.2.0")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Expand" })).toHaveAttribute("aria-expanded", "false");
+});
+
+it("opens the workflow section when the workflow reports a problem", async () => {
+  renderDetail(
+    { ...workflowTask, workflow_attention: { kind: "rejected", message: "CI is red", count: 1 } },
+    [],
+    [],
+    people,
+  );
+  await screen.findByText("release@1.2.0");
+  expect(screen.getByText("Workflow", { selector: "summary" }).closest("details")).toHaveAttribute(
+    "open",
+  );
+});
+
+it("keeps the workflow section open after its problem clears", async () => {
+  const troubled = {
+    ...workflowTask,
+    workflow_attention: { kind: "rejected" as const, message: "CI is red", count: 1 },
+  };
+  const element = (task: Task) => (
+    <TaskDetail
+      detail={{
+        task,
+        comments: [],
+        waiting_for: [],
+        relations: [],
+        descendants: 0,
+        active_descendants: 0,
+      }}
+      events={[]}
+      principals={people}
+      width={600}
+      resizeHandle={null}
+      onClose={vi.fn()}
+      onSave={vi.fn()}
+      onComment={vi.fn()}
+      onAddRelation={vi.fn()}
+      onDeleteRelation={vi.fn()}
+      onTransfer={vi.fn()}
+      onRequeue={vi.fn()}
+    />
+  );
+  const { rerender } = render(element(troubled));
+  await screen.findByText("release@1.2.0");
+  rerender(element({ ...troubled, workflow_attention: undefined, revision: 5 }));
+  expect(screen.getByText("Workflow", { selector: "summary" }).closest("details")).toHaveAttribute(
+    "open",
+  );
+});
+
+it("picks a flexible task's assignee from me and the agents, never from typed text", async () => {
+  const { onSave } = renderDetail({ ...flexible, assignee: "agent:gone" }, [], [], people);
+  const select = screen.getByRole("combobox", { name: "Assignee" });
+  expect(
+    within(select)
+      .getAllByRole("option")
+      .map((option) => [option.textContent, option.getAttribute("value")]),
+  ).toEqual([
+    ["Unassigned", ""],
+    ["me", "user:owner"],
+    ["writer", "agent:writer"],
+    ["editor", "agent:editor"],
+    ["agent:gone", "agent:gone"],
+  ]);
+  expect(within(select).getByRole("option", { name: "agent:gone" })).toBeDisabled();
+  expect(screen.queryByRole("textbox", { name: "Assignee" })).not.toBeInTheDocument();
+  await userEvent.selectOptions(select, "agent:writer");
+  await userEvent.click(screen.getByRole("button", { name: "Save task" }));
+  expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ assignee: "agent:writer" }));
+});
+
+it("labels the comment form's Ok and Ask controls by what they do", () => {
+  renderDetail(flexible, [], [], people);
+  expect(screen.getByRole("button", { name: "Reply Ok to the question" })).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Ask an agent" })).toBeInTheDocument();
 });

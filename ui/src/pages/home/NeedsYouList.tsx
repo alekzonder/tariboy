@@ -1,13 +1,18 @@
-import { useState } from "react";
-import { Mail } from "lucide-react";
+import { lazy, useState } from "react";
+import { ChevronRight, Mail } from "lucide-react";
 import { ApiProvider } from "@/components/ApiProvider";
+import { LazyBoundary } from "@/components/LazyBoundary";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { NeedsYouRow } from "@/lib/needsYou";
 import { targetFor } from "@/lib/terminalsHost";
 import { principalName } from "@/pages/mailbox/mailboxModel";
 import TaskDrawer from "@/pages/tasks/TaskDrawer";
 import { formatTaskTime } from "@/pages/tasks/taskTime";
 import { useNeedsYou } from "@/pages/terminals/needsYouContext";
+
+// Loaded on the first expand: the card brings the Markdown renderer.
+const NeedsYouCard = lazy(() => import("@/pages/tasks/NeedsYouCard"));
 
 const ROW_CLASS =
   "flex w-full min-w-0 items-baseline gap-3 rounded-control px-2 py-1.5 text-left text-body-sm hover:bg-accent";
@@ -33,6 +38,13 @@ export function NeedsYouList({
 }) {
   const { hosts, loaded, reload } = useNeedsYou();
   const [task, setTask] = useState<{ hostId: string; key: string } | null>(null);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (id: string) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
   const failed = loaded && hosts.length > 0 && hosts.every((host) => host.error);
 
   if (!loaded) return <p className="px-2 text-body-sm text-muted-foreground">Loading…</p>;
@@ -52,38 +64,71 @@ export function NeedsYouList({
   return (
     <>
       <ul className="space-y-0.5">
-        {rows.map((row) => (
-          <li key={`${row.hostId}\u0000${row.kind}\u0000${row.id}`}>
-            <button
-              type="button"
-              className={ROW_CLASS}
-              onClick={() =>
-                row.kind === "task"
-                  ? setTask({ hostId: row.hostId, key: row.task.key })
-                  : onOpenLetter(row.hostId, row.letter.id)
-              }
-            >
-              {row.kind === "task" ? (
-                <span className="w-24 shrink-0 truncate font-mono text-caption">
-                  {row.task.key}
-                </span>
-              ) : (
-                <span className="flex w-24 shrink-0 items-center gap-1 text-caption text-muted-foreground">
-                  <Mail className="size-3" aria-hidden="true" />
-                  {principalName(row.letter.from)}
-                </span>
+        {rows.map((row) => {
+          const id = `${row.hostId}\u0000${row.kind}\u0000${row.id}`;
+          const open = expanded.has(id);
+          return (
+            <li key={id}>
+              <div className="flex min-w-0 items-center gap-0.5">
+                {row.kind === "task" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 shrink-0"
+                    aria-label="Answer in place"
+                    aria-expanded={open}
+                    onClick={() => toggle(id)}
+                  >
+                    <ChevronRight
+                      aria-hidden="true"
+                      className={cn("size-3.5", open && "rotate-90")}
+                    />
+                  </Button>
+                ) : (
+                  <span className="size-6 shrink-0" />
+                )}
+                <button
+                  type="button"
+                  className={ROW_CLASS}
+                  onClick={() =>
+                    row.kind === "task"
+                      ? setTask({ hostId: row.hostId, key: row.task.key })
+                      : onOpenLetter(row.hostId, row.letter.id)
+                  }
+                >
+                  {row.kind === "task" ? (
+                    <span className="w-24 shrink-0 truncate font-mono text-caption">
+                      {row.task.key}
+                    </span>
+                  ) : (
+                    <span className="flex w-24 shrink-0 items-center gap-1 text-caption text-muted-foreground">
+                      <Mail className="size-3" aria-hidden="true" />
+                      {principalName(row.letter.from)}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1 truncate">
+                    {row.kind === "task" ? row.task.title : row.letter.subject || "(no subject)"}
+                  </span>
+                  <span className="shrink-0 truncate text-caption text-muted-foreground">
+                    {row.kind === "task" ? taskState(row) : "letter"}
+                    {multiHost ? ` · ${row.hostLabel}` : ""}
+                    {` · ${formatTaskTime(row.at)}`}
+                  </span>
+                </button>
+              </div>
+              {open && row.kind === "task" && (
+                <div className="py-1.5 pl-6.5">
+                  <ApiProvider target={targetFor(row.hostId)}>
+                    <LazyBoundary resetKey={id}>
+                      <NeedsYouCard taskKey={row.task.key} onChanged={reload} />
+                    </LazyBoundary>
+                  </ApiProvider>
+                </div>
               )}
-              <span className="min-w-0 flex-1 truncate">
-                {row.kind === "task" ? row.task.title : row.letter.subject || "(no subject)"}
-              </span>
-              <span className="shrink-0 truncate text-caption text-muted-foreground">
-                {row.kind === "task" ? taskState(row) : "letter"}
-                {multiHost ? ` · ${row.hostLabel}` : ""}
-                {` · ${formatTaskTime(row.at)}`}
-              </span>
-            </button>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
       {task && (
         <ApiProvider target={targetFor(task.hostId)}>

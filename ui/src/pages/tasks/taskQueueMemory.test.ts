@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { readRememberedQueue, rememberQueue } from "./taskQueueMemory";
+import { readAgentQueue, readRememberedQueue, rememberQueue } from "./taskQueueMemory";
 
 beforeEach(() => localStorage.clear());
 afterEach(() => vi.restoreAllMocks());
@@ -41,6 +41,13 @@ describe("taskQueueMemory", () => {
       local: { alpha: "OPS", beta: "TEST" },
       "mac-mini": { alpha: "QA" },
     });
+  });
+
+  it("reads an agent's own queue without the server's fallback", () => {
+    rememberQueue("local", "DEV");
+    expect(readAgentQueue("local", "alpha")).toBe("");
+    rememberQueue("local", "OPS", "alpha");
+    expect(readAgentQueue("local", "alpha")).toBe("OPS");
   });
 
   it("reads a broken agent record as nothing remembered", () => {

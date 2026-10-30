@@ -147,7 +147,8 @@ describe("TasksWorkspace", () => {
     });
     render(<TasksWorkspace />);
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
-    const approve = await screen.findByRole("button", { name: "approved" });
+    // The task waits for the customer, so the pinned card holds the outcome.
+    const approve = await screen.findByRole("button", { name: "approved → done" });
     const listed = api.listTasks.mock.calls.length;
     const inboxReads = api.mailList.mock.calls.length;
     const workflowReads = api.getTaskWorkflow.mock.calls.length;

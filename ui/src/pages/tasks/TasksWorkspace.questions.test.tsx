@@ -271,21 +271,21 @@ describe("TasksWorkspace", () => {
     );
   });
 
-  it("accepts a suggested or arbitrary assignee and posts questions as mentions", async () => {
+  it("picks an assignee from the agents and posts questions as mentions", async () => {
     render(<TasksWorkspace />);
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
     await screen.findByRole("heading", { name: "TEST-1" });
 
     const assignee = screen.getByLabelText("Assignee");
-    fireEvent.change(assignee, { target: { value: "freelance-reviewer" } });
+    await userEvent.selectOptions(assignee, "agent:triager");
     await userEvent.click(screen.getByRole("button", { name: "Save task" }));
     expect(api.updateTask).toHaveBeenCalledWith(
       "TEST-1",
-      expect.objectContaining({ assignee: "freelance-reviewer", revision: 2 }),
+      expect.objectContaining({ assignee: "agent:triager", revision: 2 }),
       null,
     );
 
-    await userEvent.selectOptions(screen.getByLabelText("Ask"), "user:owner");
+    await userEvent.selectOptions(screen.getByLabelText("Ask an agent"), "user:owner");
     await userEvent.click(
       within(screen.getByText("Comments").closest("section")!).getByRole("button", {
         name: "Markdown",
@@ -328,9 +328,9 @@ describe("TasksWorkspace", () => {
     await screen.findByRole("heading", { name: "TEST-1" });
 
     const comments = screen.getByText("Comments").closest("section")!;
-    await userEvent.selectOptions(screen.getByLabelText("Ask"), "user:owner");
+    await userEvent.selectOptions(screen.getByLabelText("Ask an agent"), "user:owner");
 
-    const sendOk = within(comments).getByRole("button", { name: "Send Ok" });
+    const sendOk = within(comments).getByRole("button", { name: "Reply Ok to the question" });
     const sendComment = within(comments).getByRole("button", { name: "Send comment" });
     expect(sendOk).toHaveAttribute("data-variant", "secondary");
     expect(
@@ -346,10 +346,10 @@ describe("TasksWorkspace", () => {
         expect.any(String),
       ),
     );
-    expect(screen.getByLabelText("Ask")).toHaveValue("user:owner");
+    expect(screen.getByLabelText("Ask an agent")).toHaveValue("user:owner");
   });
 
-  it("hides Send Ok when the comment contains text", async () => {
+  it("hides Reply Ok when the comment contains text", async () => {
     render(<TasksWorkspace />);
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
     await screen.findByRole("heading", { name: "TEST-1" });
@@ -358,7 +358,9 @@ describe("TasksWorkspace", () => {
     await userEvent.click(within(comments).getByRole("button", { name: "Markdown" }));
     fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Keep this draft" } });
 
-    expect(within(comments).queryByRole("button", { name: "Send Ok" })).not.toBeInTheDocument();
+    expect(
+      within(comments).queryByRole("button", { name: "Reply Ok to the question" }),
+    ).not.toBeInTheDocument();
   });
 
   it("updates and restores the default question when the assignee changes", async () => {
@@ -366,7 +368,7 @@ describe("TasksWorkspace", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
     await screen.findByRole("heading", { name: "TEST-1" });
 
-    const ask = screen.getByLabelText("Ask");
+    const ask = screen.getByLabelText("Ask an agent");
     expect(ask).toHaveValue("worker");
     await userEvent.selectOptions(ask, "");
     await userEvent.click(
@@ -377,12 +379,11 @@ describe("TasksWorkspace", () => {
     fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Can you verify?" } });
     expect(ask).toHaveValue("");
 
-    const reassigned = { ...root, assignee: "freelance-reviewer", revision: 3 };
+    const reassigned = { ...root, assignee: "agent:triager", revision: 3 };
     api.getTask.mockResolvedValue({ ...detail, task: reassigned });
-    fireEvent.change(screen.getByLabelText("Assignee"), { target: { value: reassigned.assignee } });
+    await userEvent.selectOptions(screen.getByLabelText("Assignee"), reassigned.assignee);
     await userEvent.click(screen.getByRole("button", { name: "Save task" }));
-    expect(ask).toHaveValue("freelance-reviewer");
-    expect(within(ask).getByRole("option", { name: "freelance-reviewer" })).toBeInTheDocument();
+    expect(ask).toHaveValue("triager");
 
     await userEvent.selectOptions(ask, "user:owner");
     await userEvent.click(screen.getByRole("button", { name: "Send comment" }));
@@ -394,6 +395,6 @@ describe("TasksWorkspace", () => {
         expect.any(String),
       ),
     );
-    expect(ask).toHaveValue("freelance-reviewer");
+    expect(ask).toHaveValue("triager");
   });
 });

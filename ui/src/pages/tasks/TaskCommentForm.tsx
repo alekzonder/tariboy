@@ -37,9 +37,9 @@ export function TaskCommentForm({
       onSubmit={(event) => void onSubmit(event)}
     >
       <label className="flex min-w-0 items-center gap-2">
-        <span className={LABEL}>Ask</span>
+        <span className={LABEL}>Ask an agent</span>
         <SelectShell
-          aria-label="Ask"
+          aria-label="Ask an agent"
           className="h-6 bg-card pl-2.5 text-meta md:text-meta"
           value={askPrincipal}
           onChange={(event) => onAskPrincipalChange(event.target.value)}
@@ -96,7 +96,7 @@ export function TaskCommentForm({
             disabled={busy || uploading}
             onClick={onSendOk}
           >
-            Send Ok
+            Reply Ok to the question
           </Button>
         )}
         <Button type="submit" size="sm" disabled={busy || uploading || !body.trim()}>

@@ -1,12 +1,11 @@
 import { ArrowRight, Check } from "lucide-react";
-import { useState } from "react";
-import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { OutcomeView, WorkflowView } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { DANGER_FILL, EMPTY, LABEL, MONO } from "./panelStyles";
-import { useFollowRequest, visibleNotice, type Notice } from "./workflowShared";
+import { useWorkflowAdvance } from "./useWorkflowAdvance";
+import { visibleNotice, type Notice } from "./workflowShared";
 
 const RESULT_LABEL: Record<string, string> = {
   rejected: "Rejected",
@@ -43,7 +42,7 @@ export default function WorkflowOutcomes({
 }) {
   const customer = view.owner === "customer";
   const paused = view.waiting_on === "pause";
-  const { message, setMessage, checking, notice, advance } = useAdvance(
+  const { message, setMessage, checking, notice, advance } = useWorkflowAdvance(
     taskKey,
     view,
     onChanged,
@@ -88,58 +87,6 @@ export default function WorkflowOutcomes({
       {shown && <OutcomeNotice notice={shown} onRefresh={onRefresh} />}
     </section>
   );
-}
-
-/**
- * The customer's advance with its message, followed until its checks finish.
- * A request that settled without applying leaves a notice.
- */
-function useAdvance(
-  taskKey: string,
-  view: WorkflowView,
-  onChanged: () => void,
-  onRefresh: () => void,
-) {
-  const api = useApi();
-  const [message, setMessage] = useState("");
-  const { checking, follow } = useFollowRequest(taskKey);
-  // A notice belongs to the status it was given in; once the view shows
-  // another status it no longer applies and is not shown.
-  const [held, setHeld] = useState<{ status: string; notice: Notice } | null>(null);
-  const notice = held?.status === view.status ? held.notice : null;
-  const setNotice = (next: Notice | null, status = view.status) =>
-    setHeld(next && { status, notice: next });
-
-  const advance = (outcome: string) => {
-    setNotice(null);
-    void follow(
-      () => api.workflows.advanceTask(taskKey, outcome, message, view.status),
-      (result) => {
-        switch (result.kind) {
-          case "applied":
-            setMessage("");
-            onChanged();
-            return;
-          case "result":
-            setNotice({ kind: "result", request: result.request });
-            onRefresh();
-            return;
-          case "timeout":
-            setNotice({ kind: "timeout", requestId: result.requestId });
-            return;
-          case "error":
-            // status_changed names the status the task is in now, where the
-            // refetched view lands, so its message survives that refetch.
-            setNotice(
-              { kind: "error", label: result.label, message: result.message },
-              result.status ?? view.status,
-            );
-            if (result.stale) onRefresh();
-        }
-      },
-    );
-  };
-  return { message, setMessage, checking, notice, advance };
 }
 
 /**
@@ -218,7 +165,7 @@ function RequiredArtifacts({ names, missing }: { names: string[]; missing: Set<s
 }
 
 /** A request is running; Refresh is offered when it was sent from elsewhere. */
-function CheckingStatus({ onRefresh }: { onRefresh?: () => void }) {
+export function CheckingStatus({ onRefresh }: { onRefresh?: () => void }) {
   return (
     <div className="flex items-center gap-2">
       <span role="status" className={EMPTY}>
@@ -260,7 +207,7 @@ function Checks({ outcome }: { outcome: OutcomeView }) {
   );
 }
 
-function OutcomeNotice({ notice, onRefresh }: { notice: Notice; onRefresh: () => void }) {
+export function OutcomeNotice({ notice, onRefresh }: { notice: Notice; onRefresh: () => void }) {
   if (notice.kind === "timeout") {
     return (
       <div role="status" className="flex items-center gap-2 text-ui text-muted-foreground">

@@ -172,8 +172,7 @@ more hosts in the workspace, a host selector at the start of the toolbar
 picks the host, and the URL carries it as `?host=<id>`. The number next to
 **Tasks** counts the tasks that need you on every host of the workspace: a
 workflow task that waits for you past its first status, or a paused workflow
-task. Each Agent workspace includes the same component with `scope_agent`
-fixed to that agent. The layout is Tree-first:
+task. The layout is Tree-first:
 
 - one toolbar row that does not wrap: search, the Active/Done/All segment, a
   **Filters** menu with **Queue** (with its `Manage queues…` dialog),
@@ -207,9 +206,17 @@ the script's words and the count behind it (see
 gives the reason). Active, Closed, and All use the category too. There is no
 filter by workflow status. Flexible tasks keep the labels described above.
 
-Clicking a task opens a right-side sheet over the tree with its description,
-priority, assignment, status, block reason, pull request URL, comments, and open
-answer requests. It starts at half the viewport width; drag its left separator
+Clicking a task opens a right-side sheet over the tree. When the task waits on
+you, its Needs you card is pinned at the top (see
+[The agent's Work tab](#the-agents-work-tab)). Then come the title and the
+description, and the comments. A collapsed **Details** section holds the
+author, customer, queue, group, blocked state, parent, the status of a
+flexible task, priority, assignee, pull request URL, block reason, and
+dependencies. **History** is collapsed by default. The flexible status
+`wait_customer` reads **Waiting for you**. The assignee is a list of
+**Unassigned**, **me**, and each agent. You cannot type a principal. In the
+comment form, the **Ask an agent** list mentions an agent, and **Reply Ok to
+the question** posts `Ok`. It starts at half the viewport width; drag its left separator
 or use its keyboard controls to resize it, and the chosen width survives reloads.
 **Back**, **Close**, Escape, or a backdrop click returns to the still-mounted
 tree with its expansion and scroll position preserved. Unsaved task, comment,
@@ -217,8 +224,9 @@ or relation drafts require confirmation before being discarded.
 
 For a workflow task the sheet has no status select, no Done action, no
 assignee control, and no **Move to another server…** (the daemon refuses to
-export a workflow task); it shows the **Workflow** panel instead, where the customer
-chooses outcomes, edits artifacts, reads script runs and logs, decides a pause,
+export a workflow task). It shows the **Workflow** panel instead, in a
+collapsed **Workflow** section that is open when the task needs attention.
+There the customer chooses outcomes, edits artifacts, reads script runs and logs, decides a pause,
 and moves or cancels the task. See [Desktop](/docs/task-workflows#desktop) in
 the workflow guide. Binding a queue to a workflow, its pools, and its env vars
 and secrets are in the `Manage queues…` dialog, in the queue's **Workflow**,
@@ -232,7 +240,7 @@ Both modes save the same Markdown strings used by the API and `ttasks`.
 
 **Send files** beside Description and Comment uploads selected files to the
 task's server and appends their absolute paths to that editor's current draft.
-It works without an assigned agent, including in Agent Tasks. Uploading does
+It works without an assigned agent. Uploading does
 not save the task or send the comment; use **Save task** or **Send comment**.
 If a later file fails, paths for files already uploaded are kept in the draft.
 
@@ -286,6 +294,42 @@ eligible child. In that response the child keeps its `parent_key`, but the
 client renders it as a root-level filtered orphan; the excluded parent is never
 included merely to reconstruct the tree. Switching views always refetches the
 authoritative selected view, and realtime refreshes retain that selection.
+
+### The agent's Work tab
+
+The **Work** tab of an agent shows the tasks assigned to that agent. It does
+not use the Tasks tree. At the top, a field reads "Give \<agent\> a task…".
+Type a title and press Enter to create a P2 task. **Details** reveals the
+queue, the priority, and the description. The queue is the last one you used
+for this agent, else `TASK`. In a flexible queue the task is assigned to the
+agent. In a queue bound to a workflow the task has no assignee: the composer
+says that the workflow dispatches it to a pool member, and after the create it
+shows a link to the task. When the agent is off, the button reads **Start &
+give**: it creates the task, then starts the agent. If the start fails, the
+task stays. When the agent's Goal setting is off, the composer says that the
+agent does not pick up tasks and links to Settings.
+
+Below the composer, the tab has these sections:
+
+- **Needs you**: one card per task that waits for you. The card shows the
+  open question with **Send answer** and **Reply Ok to the question**, or the
+  decision of a customer status with the artifacts to review, a message box,
+  and one button per outcome, such as **approved → merge**. For a paused task
+  it shows the reason with **Continue**, **Release holder**, and **Cancel
+  task**. The same card is pinned in the task sheet, and it opens on Home and
+  Inbox when you expand a Needs you row with **Answer in place**.
+- **In progress**: the other active tasks.
+- **Queued**: open tasks, and workflow tasks in their first status. Such a
+  workflow task has one button per outcome of that status, so you can start
+  it from the row.
+- **Done · last 7 days**: closed tasks, with a search box for the key and the
+  title. **Show all** shows every closed task.
+
+A row shows the key, the title, the status in words (for example **Not
+started** or **Waiting for you**), the age, and the cost when it is known.
+Click a row to open the task sheet. The agent header's **Answer** button
+opens the tab at the first task's card, and **Give task** focuses the
+composer.
 
 ## Moving a task to another queue
 

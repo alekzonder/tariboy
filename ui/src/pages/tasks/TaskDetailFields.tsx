@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { Task, TaskStatus, TaskPriority } from "@/lib/api";
+import type { PrincipalInfo, Task, TaskStatus, TaskPriority } from "@/lib/api";
 import { isWorkflowTask } from "@/lib/tasks";
 import { Input } from "@/components/ui/input";
 import { SendFilesButton } from "@/components/SendFilesButton";
@@ -11,40 +11,19 @@ import WorkflowAssignee from "./WorkflowAssignee";
 import type { TaskDetailProps } from "./TaskDetailTypes";
 import type { useTaskDetailDraft } from "./useTaskDetailDraft";
 
+/** The title and the description: what the drawer shows first. */
 export function TaskDetailFields({
-  task,
   draft,
-  principals,
-  assigneeOptions,
-  onTaskChanged,
   descriptionMode,
   setDescriptionMode,
   setUploadingDescription,
-}: Pick<TaskDetailProps, "principals" | "assigneeOptions" | "onTaskChanged"> & {
-  task: Task;
+}: {
   draft: ReturnType<typeof useTaskDetailDraft>;
   descriptionMode: MarkdownMode;
   setDescriptionMode: (mode: MarkdownMode) => void;
   setUploadingDescription: Dispatch<SetStateAction<boolean>>;
 }) {
-  const workflow = isWorkflowTask(task);
-  const {
-    saving,
-    title,
-    setTitle,
-    description,
-    setDescription,
-    status,
-    setStatus,
-    priority,
-    setPriority,
-    assignee,
-    setAssignee,
-    pullRequest,
-    setPullRequest,
-    blockReason,
-    setBlockReason,
-  } = draft;
+  const { saving, title, setTitle, description, setDescription } = draft;
   return (
     <fieldset className="contents" disabled={saving}>
       <label className="flex min-w-0 flex-col gap-1.5">
@@ -59,6 +38,53 @@ export function TaskDetailFields({
         setDescriptionMode={setDescriptionMode}
         setUploadingDescription={setUploadingDescription}
       />
+    </fieldset>
+  );
+}
+
+/** The closed list of assignees: nobody, the customer as "me", and each
+ *  agent. A current assignee outside the list stays shown but cannot be
+ *  picked again, so no principal is ever typed. */
+function assigneeChoices(principals: PrincipalInfo | null, current: string) {
+  const choices = [{ value: "", label: "Unassigned", disabled: false }];
+  if (principals?.customer)
+    choices.push({ value: principals.customer, label: "me", disabled: false });
+  for (const agent of principals?.agents ?? []) {
+    const value = agent.includes(":") ? agent : `agent:${agent}`;
+    choices.push({ value, label: value.replace(/^agent:/, ""), disabled: false });
+  }
+  if (current && !choices.some((choice) => choice.value === current))
+    choices.push({ value: current, label: current, disabled: true });
+  return choices;
+}
+
+/** Status, priority, assignee, pull request and block reason. */
+export function TaskDetailProperties({
+  task,
+  draft,
+  principals,
+  assigneeOptions,
+  onTaskChanged,
+}: Pick<TaskDetailProps, "principals" | "assigneeOptions" | "onTaskChanged"> & {
+  task: Task;
+  draft: ReturnType<typeof useTaskDetailDraft>;
+}) {
+  const workflow = isWorkflowTask(task);
+  const {
+    saving,
+    status,
+    setStatus,
+    priority,
+    setPriority,
+    assignee,
+    setAssignee,
+    pullRequest,
+    setPullRequest,
+    blockReason,
+    setBlockReason,
+  } = draft;
+  return (
+    <fieldset className="contents" disabled={saving}>
       <div className="task-properties grid min-w-0 grid-cols-2 gap-x-4 gap-y-2.5">
         {!workflow && (
           <SelectField
@@ -68,7 +94,7 @@ export function TaskDetailFields({
           >
             <option value="open">Open</option>
             <option value="in_progress">In progress</option>
-            <option value="wait_customer">Wait customer</option>
+            <option value="wait_customer">Waiting for you</option>
             <option value="done">Done</option>
             <option value="cancelled">Cancelled</option>
           </SelectField>
@@ -108,21 +134,13 @@ export function TaskDetailFields({
           </SelectField>
         )}
         {!workflow && !assigneeOptions && (
-          <label className="flex min-w-0 flex-col gap-1.25">
-            <span className={LABEL}>Assignee</span>
-            <Input
-              aria-label="Assignee"
-              list="task-assignees"
-              className={cn(FIELD, FIELD_MONO)}
-              value={assignee}
-              onChange={(event) => setAssignee(event.target.value)}
-            />
-            <datalist id="task-assignees">
-              {principals?.agents.map((agent) => (
-                <option key={agent} value={agent} />
-              ))}
-            </datalist>
-          </label>
+          <SelectField label="Assignee" value={assignee} onChange={setAssignee} mono>
+            {assigneeChoices(principals, task.assignee).map((choice) => (
+              <option key={choice.value} value={choice.value} disabled={choice.disabled}>
+                {choice.label}
+              </option>
+            ))}
+          </SelectField>
         )}
         <label className="flex min-w-0 flex-col gap-1.25">
           <span className={LABEL}>Pull request</span>

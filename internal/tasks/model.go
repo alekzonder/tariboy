@@ -187,6 +187,10 @@ type Task struct {
 	// WorkflowInitial marks an open workflow task that is in its workflow's
 	// initial status; scanTask derives it with WorkflowStep.
 	WorkflowInitial bool `json:"workflow_initial,omitempty" jsonschema:"description=True when an open workflow task is in its workflow's initial status"`
+	// WorkflowOutcomes lists the outcomes of the current status when the
+	// customer owns it and the task is open; scanTask derives it with
+	// WorkflowStep.
+	WorkflowOutcomes []WorkflowOutcomeRef `json:"workflow_outcomes,omitempty" jsonschema:"description=The outcomes of the current status when the customer owns it and the task is open"`
 	// Filed marks a task that was just created as a report into a queue its author does not
 	// own: unassigned, ungrouped, and no longer visible to that author. Set only on the
 	// create response, so the caller can say so instead of leaving the agent to discover it
@@ -232,6 +236,7 @@ func (t *Task) UnmarshalJSON(data []byte) error {
 	next.WorkflowDigest, next.WorkflowName, next.WorkflowVersion = "", "", ""
 	next.WorkflowStatus, next.WorkflowPausedReason, next.WaitingOn = "", "", ""
 	next.WorkflowAttention, next.WorkflowStep, next.WorkflowInitial = nil, nil, false
+	next.WorkflowOutcomes = nil
 	aux := struct {
 		*plainTask
 		Status   *string `json:"status"`

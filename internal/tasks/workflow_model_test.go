@@ -309,6 +309,72 @@ func TestListTasksMarksWorkflowInitialStatus(t *testing.T) {
 	}
 }
 
+// A list row of an open task in a customer status carries that status's
+// outcomes, so a list can offer them without reading the workflow view; a
+// pool, script or closed status, and a flexible task, carry none.
+func TestListTasksCarriesCustomerOutcomes(t *testing.T) {
+	svc, actor, _ := engineFixture(t)
+	ctx := context.Background()
+	pooled := mustCreateDev(t, svc, actor, "pooled")
+	approval := enter(t, svc, mustCreateDev(t, svc, actor, "approval").Key, "approval", "ask")
+	scripted := enter(t, svc, mustCreateDev(t, svc, actor, "merge").Key, "merge", "approved")
+	closed := mustCreateDev(t, svc, actor, "closed")
+	if _, err := svc.CancelWorkflowTask(ctx, actor, closed.Key); err != nil {
+		t.Fatal(err)
+	}
+	flexible, err := svc.CreateTask(ctx, actor, CreateTaskInput{Queue: "TASK", Title: "flex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[string]Task{}
+	for _, filter := range []ListFilter{{Queue: "DEV", StatusView: "all"}, {Queue: "TASK"}} {
+		page, err := svc.ListTasks(ctx, actor, filter)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, task := range page.Tasks {
+			listed[task.Key] = task
+		}
+	}
+	want := []WorkflowOutcomeRef{{On: "approved", To: "merge"}, {On: "rejected", To: "develop"}}
+	if got := listed[approval.Key].WorkflowOutcomes; !reflect.DeepEqual(got, want) {
+		t.Fatalf("approval outcomes = %#v", got)
+	}
+	// An outcome into a terminal status says so, so a list can tell the
+	// outcome that starts the work from the one that drops it.
+	dropping := enter(t, svc, mustCreateDev(t, svc, actor, "drop").Key, "approval", "ask")
+	if _, err := svc.db.Exec(`UPDATE task_workflow_images SET manifest = json_insert(manifest,
+		'$.definition.statuses[2].transitions[#]', json('{"on":"drop","to":"dropped"}'))`); err != nil {
+		t.Fatal(err)
+	}
+	page, err := svc.ListTasks(ctx, actor, ListFilter{Queue: "DEV"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range page.Tasks {
+		listed[task.Key] = task
+	}
+	want = append(want, WorkflowOutcomeRef{On: "drop", To: "dropped", Terminal: true})
+	if got := listed[dropping.Key].WorkflowOutcomes; !reflect.DeepEqual(got, want) {
+		t.Fatalf("dropping outcomes = %#v", got)
+	}
+	if got := listed[approval.Key].WorkflowOutcomes; !reflect.DeepEqual(got, want) {
+		t.Fatalf("approval outcomes = %#v", got)
+	}
+	if fields := jsonFields(t, listed[approval.Key]); fields["workflow_outcomes"] == nil {
+		t.Fatalf("approval JSON = %v", fields)
+	}
+	for _, key := range []string{pooled.Key, scripted.Key, closed.Key, flexible.Key} {
+		task, ok := listed[key]
+		if !ok || task.WorkflowOutcomes != nil {
+			t.Fatalf("%s = %#v", key, task)
+		}
+		if _, ok := jsonFields(t, task)["workflow_outcomes"]; ok {
+			t.Fatalf("%s JSON carries workflow_outcomes", key)
+		}
+	}
+}
+
 // The task select reaches the open visit, its latest request, and its latest
 // run through indexes, so a page of tasks does not scan those tables.
 func TestTaskSelectUsesIndexes(t *testing.T) {

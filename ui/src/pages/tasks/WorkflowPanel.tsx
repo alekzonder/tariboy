@@ -35,8 +35,11 @@ export function WorkflowPanel({
   task,
   eventSequence = 0,
   onTaskChanged,
+  decisionsElsewhere,
 }: {
   task: Task;
+  /** The Needs you card above holds the outcomes and the pause decisions. */
+  decisionsElsewhere?: boolean;
   /**
    * The latest task event the detail holds. A workflow event (a rejected
    * request, a script run) need not change the task's revision, so a new
@@ -125,7 +128,12 @@ export function WorkflowPanel({
 
   return (
     <div className="flex min-w-0 flex-col gap-4.5">
-      <PauseBanner task={task} view={view} onChanged={changed} />
+      <PauseBanner
+        task={task}
+        view={view}
+        hidden={decisionsElsewhere === true}
+        onChanged={changed}
+      />
       <WorkflowProblem taskKey={task.key} view={view} onChanged={changed} onRefresh={refresh} />
       <WorkflowStepper view={view} selected={selected} onSelect={setChosen} />
       <div className="flex min-w-0 items-center gap-2">
@@ -156,7 +164,13 @@ export function WorkflowPanel({
         view={view}
         actions={{ move, upgrade, changed, close: () => setForm(null) }}
       />
-      <WorkflowOutcomes taskKey={task.key} view={view} onChanged={changed} onRefresh={refresh} />
+      <Outcomes
+        hidden={decisionsElsewhere === true}
+        taskKey={task.key}
+        view={view}
+        onChanged={changed}
+        onRefresh={refresh}
+      />
       <WorkflowArtifacts
         taskKey={task.key}
         artifacts={view.artifacts}
@@ -228,17 +242,27 @@ function Loading() {
   );
 }
 
+/** The outcome block, unless the Needs you card above already offers it. */
+function Outcomes({
+  hidden,
+  ...props
+}: { hidden: boolean } & Parameters<typeof WorkflowOutcomes>[0]) {
+  return hidden ? null : <WorkflowOutcomes {...props} />;
+}
+
 /** The pause and its reason, while the workflow is paused. */
 function PauseBanner({
   task,
   view,
+  hidden,
   onChanged,
 }: {
   task: Task;
   view: WorkflowView;
+  hidden: boolean;
   onChanged: () => void;
 }) {
-  if (view.waiting_on !== "pause") return null;
+  if (hidden || view.waiting_on !== "pause") return null;
   return (
     <WorkflowPauseBanner
       taskKey={task.key}

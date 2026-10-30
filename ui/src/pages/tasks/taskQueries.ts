@@ -16,6 +16,8 @@ export const taskKeys = {
   workflow: (target: Target, key: string) => [...taskKeys.server(target), "workflow", key] as const,
   queues: (target: Target) => [...taskKeys.server(target), "queues"] as const,
   pools: (target: Target, queue: string) => [...taskKeys.server(target), "pools", queue] as const,
+  queueWorkflow: (target: Target, queue: string) =>
+    [...taskKeys.server(target), "queue-workflow", queue] as const,
   principals: (target: Target) => [...taskKeys.server(target), "principals"] as const,
   notifications: (target: Target) => [...taskKeys.server(target), "notifications"] as const,
 };
@@ -66,6 +68,13 @@ export const taskQueries = {
     queryOptions({
       queryKey: taskKeys.pools(api.target, queue),
       queryFn: () => api.tasks.listAgentPools(queue),
+      enabled: !!queue,
+    }),
+  /** The workflow a queue is bound to, or null for a flexible queue. */
+  queueWorkflow: (api: ApiClient, queue: string) =>
+    queryOptions({
+      queryKey: taskKeys.queueWorkflow(api.target, queue),
+      queryFn: () => api.workflows.getQueueWorkflow(queue),
       enabled: !!queue,
     }),
   principals: (api: ApiClient) =>

@@ -207,6 +207,30 @@ for (const tab of ["work", "console", "activity", "settings", "mailbox", "advanc
   });
 }
 
+// The Work tab is a composer and task sections; ensureTask gives it a Queued row.
+test("agent Work tab composer, details and sections fit the window", async ({ page }) => {
+  await expectFits(page, `/agents/local/${AGENT}/work`, async (p) => {
+    await expect(p.getByRole("region", { name: /^Queued \([1-9]\d*\)$/ })).toBeVisible();
+  });
+  const composer = page.getByRole("textbox", { name: `New task for ${AGENT}` });
+  await expect(composer).toBeVisible();
+  await expect(page.getByRole("region", { name: /^In progress \(\d+\)$/ })).toBeVisible();
+  await expect(page.getByRole("searchbox", { name: "Search done tasks" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: /^Queued/ })
+      .getByRole("button", { name: new RegExp(taskKey) }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Details", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Queue", exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Priority", exact: true })).toBeVisible();
+  expect(await overflowing(page), "overflow with the composer details open").toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+});
+
 test("agent header controls never cover the agent's details", async ({ page }) => {
   await page.goto(`${fixture}/agents/local/${AGENT}/work`);
   const heading = page.getByRole("heading", { name: AGENT });

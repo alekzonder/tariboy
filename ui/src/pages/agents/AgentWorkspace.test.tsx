@@ -134,7 +134,7 @@ describe("AgentWorkspace header", () => {
     expect(await screen.findByTestId("agent-sentence")).toHaveTextContent("Working on IMPROVE-37");
     expect(screen.getByRole("link", { name: "Give task" })).toHaveAttribute(
       "href",
-      "/agents/local/worker/work",
+      "/agents/local/worker/work?give=1",
     );
     expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
   });
@@ -156,7 +156,7 @@ describe("AgentWorkspace header", () => {
     );
     await userEvent.click(screen.getByRole("link", { name: "Answer" }));
     expect(screen.getByTestId("location")).toHaveTextContent(
-      "/agents/local/worker/work?task=DEV-1",
+      "/agents/local/worker/work?answer=DEV-1",
     );
     const nav = screen.getByRole("navigation", { name: "Agent workspace" });
     expect(within(nav).getByRole("link", { name: /Work/ })).toContainElement(
@@ -367,12 +367,12 @@ describe("AgentWorkspace tabs", () => {
     ]);
   });
 
-  it("shows the agent's task list on Work", async () => {
+  it("shows the composer and the agent's sections on Work", async () => {
     renderAt("/agents/local/worker/work");
 
-    const workspace = await screen.findByTestId("tasks-workspace");
-    expect(workspace).toHaveAttribute("data-scope-agent", "worker");
-    expect(workspace).toHaveAttribute("data-goal-task-key", "IMPROVE-37");
+    expect(await screen.findByRole("textbox", { name: "New task for worker" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Queued (0)" })).toBeInTheDocument();
+    expect(screen.queryByRole("toolbar", { name: "Task filters" })).not.toBeInTheDocument();
     expect(screen.getByText("Tasks you create here are given to this agent.")).toBeInTheDocument();
   });
 
