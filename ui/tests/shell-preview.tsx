@@ -307,9 +307,6 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   return real(input, init);
 }) as typeof fetch;
 
-// The preview shows the full Expert workspace.
-localStorage.setItem("app:ui-mode:v1", "expert");
-
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <MemoryRouter

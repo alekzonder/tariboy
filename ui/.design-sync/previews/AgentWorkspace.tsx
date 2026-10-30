@@ -110,14 +110,7 @@ const Workspace = ({ tab }: { tab: string }) => (
         <Routes>
           <Route
             path="/agents/:hostId/:agent/:tab/*"
-            element={
-              <AgentWorkspace
-                hostId=""
-                hostLabel="This daemon (local)"
-                agent={BUILDER}
-                refresh={() => {}}
-              />
-            }
+            element={<AgentWorkspace hostId="" agent={BUILDER} refresh={() => {}} />}
           />
         </Routes>
       </Providers>
@@ -127,6 +120,6 @@ const Workspace = ({ tab }: { tab: string }) => (
 
 export const Console = () => <Workspace tab="console" />;
 
-export const Tasks = () => <Workspace tab="tasks" />;
+export const Work = () => <Workspace tab="work" />;
 
-export const Configuration = () => <Workspace tab="configuration" />;
+export const Settings = () => <Workspace tab="settings" />;

@@ -98,7 +98,7 @@ function ConfigurationPage({
     <TabPage narrow>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <h2 className="font-semibold">Configuration</h2>
+          <h2 className="font-semibold">Settings</h2>
           {view && (
             <p className="text-sm">
               <span className="text-muted-foreground">Master switch</span>{" "}
@@ -113,7 +113,7 @@ function ConfigurationPage({
           <p className="text-xs text-muted-foreground">Run actions apply immediately.</p>
         </div>
       </header>
-      <FirstVisitHint hostId={hostId} agent={name} tab="configuration" />
+      <FirstVisitHint hostId={hostId} agent={name} tab="settings" />
       <ConfigSearch
         query={query}
         onQuery={setQuery}

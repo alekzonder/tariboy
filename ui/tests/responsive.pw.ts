@@ -53,9 +53,12 @@ async function overflowing(page: Page) {
   });
 }
 
-async function expectFits(page: Page, route: string) {
+async function expectFits(page: Page, route: string, ready?: (page: Page) => Promise<void>) {
   await page.goto(`${fixture}${route}`);
-  await page.waitForLoadState("networkidle");
+  // A page with a live stream (the Runs log tails its events) never goes
+  // network-idle; it names the element that shows it has rendered instead.
+  if (ready) await ready(page);
+  else await page.waitForLoadState("networkidle");
   // RESPONSIVE_SHOTS=dir keeps a picture of each page for a person to look at.
   if (process.env.RESPONSIVE_SHOTS) {
     await page.screenshot({
@@ -188,21 +191,34 @@ for (const route of [
   });
 }
 
-for (const tab of ["tasks", "console", "activity", "configuration", "advanced"]) {
+for (const tab of ["work", "console", "activity", "settings", "mailbox", "advanced"]) {
   test(`agent ${tab} tab fits the window`, async ({ page }) => {
-    await expectFits(page, `/agents/local/${AGENT}/${tab}`);
+    await expectFits(
+      page,
+      `/agents/local/${AGENT}/${tab}`,
+      tab === "activity"
+        ? async (p) => {
+            await expect(p.getByRole("radiogroup", { name: "More" })).toBeVisible();
+            await expect(p.getByRole("radio", { name: "Runs log" })).toBeChecked();
+          }
+        : undefined,
+    );
     await expect(page.getByRole("heading", { name: AGENT })).toBeVisible();
   });
 }
 
 test("agent header controls never cover the agent's details", async ({ page }) => {
-  await page.goto(`${fixture}/agents/local/${AGENT}/tasks`);
+  await page.goto(`${fixture}/agents/local/${AGENT}/work`);
   const heading = page.getByRole("heading", { name: AGENT });
   await expect(heading).toBeVisible();
   const controls = page.getByTestId("agent-controls");
   const controlsBox = await controls.boundingBox();
   expect(controlsBox).not.toBeNull();
-  for (const detail of [heading, page.getByTestId("agent-image"), page.getByTestId("agent-cwd")]) {
+  for (const detail of [
+    heading,
+    page.getByTestId("agent-sentence"),
+    page.getByTestId("agent-facts"),
+  ]) {
     const box = await detail.boundingBox();
     expect(box).not.toBeNull();
     const overlaps =
@@ -218,7 +234,7 @@ test("the agent list is a drawer on compact screens and a column on wide ones", 
   page,
 }) => {
   const width = page.viewportSize()!.width;
-  await page.goto(`${fixture}/agents/local/${AGENT}/tasks`);
+  await page.goto(`${fixture}/agents/local/${AGENT}/work`);
   await expect(page.getByRole("heading", { name: AGENT })).toBeVisible();
   if (width >= COMPACT) {
     await expect(page.getByTestId("agents-sidebar")).toBeVisible();
@@ -237,7 +253,7 @@ test("the agent list is a drawer on compact screens and a column on wide ones", 
   expect(box!.x + box!.width).toBeLessThanOrEqual(width);
   await drawer.getByText(AGENT, { exact: true }).click();
   await expect(drawer).toHaveCount(0);
-  await expect(page).toHaveURL(new RegExp(`/agents/local/${AGENT}/tasks`));
+  await expect(page).toHaveURL(new RegExp(`/agents/local/${AGENT}/work`));
 });
 
 test("an old Library URL opens its Library page", async ({ page }) => {

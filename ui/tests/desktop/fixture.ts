@@ -100,8 +100,6 @@ export async function waitForMainWindow(desktop: W3CClient): Promise<void> {
       ),
     )
     .toBe(true);
-  // These specs drive Console and the other Expert tabs; Simple is the default.
-  await desktop.execute(`localStorage.setItem("app:ui-mode:v1", "expert"); return true;`);
   await expect
     .poll(
       () =>

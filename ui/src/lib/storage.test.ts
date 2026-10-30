@@ -96,7 +96,7 @@ describe("storage key registry", () => {
 
 describe("storage access", () => {
   it("returns the fallback for a missing value", () => {
-    expect(readKey(storageKeys.uiMode)).toBe("simple");
+    expect(readKey(storageKeys.theme)).toBe("system");
     expect(readKey(storageKeys.workspaces)).toBeNull();
   });
 
@@ -130,8 +130,8 @@ describe("storage access", () => {
   });
 
   it("removes a value", () => {
-    writeKey(storageKeys.uiMode, "expert");
-    removeKey(storageKeys.uiMode);
-    expect(localStorage.getItem("app:ui-mode:v1")).toBeNull();
+    writeKey(storageKeys.theme, "dark");
+    removeKey(storageKeys.theme);
+    expect(localStorage.getItem("tariboy-theme")).toBeNull();
   });
 });

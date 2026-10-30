@@ -146,11 +146,28 @@ existing agent.
 
 ## 5. Use Terminal
 
-Open the agent's **Terminal** tab and start the session. This is a real terminal
-to the selected harness. Startup can take a few seconds while the shim socket
-appears; Terminal retries during that bounded window. Leaving the tab does not
-hide or stop the session, and returning attaches a new terminal client to the
-same tmux session.
+Open the agent's **Terminal** tab. This is a real terminal to the selected
+harness. Use it to work with the agent by hand. For work that the agent must
+do on its own, give it a task in **Work**; the agent runs it while it is on.
+Startup can take a few seconds while the shim socket appears; Terminal retries
+during that bounded window. Leaving the tab does not hide or stop the session,
+and returning attaches a new terminal client to the same tmux session.
+
+The line above the terminal always says what the screen shows:
+
+- **Starting Claude Code in ~/code/my-app…** while the coding tool starts.
+- **Working on DEV-1 — this is its live screen.** while a run works on a task.
+- **Idle. The screen appears when a run starts.** when the agent waits for
+  work. What you type here is not recorded in a task.
+- **Off.** with a **Start** button when the agent is off.
+- **Claude Code did not start:** and the reason, with **Retry** and **Open
+  settings**.
+- **No interactive terminal. Enable it in Settings → Model.** for an agent
+  without a terminal.
+
+The toolbar under the terminal has **Send files**, **Compose**,
+**Scrollback**, **Keys**, and **?** (help). Click **Keys** to show the
+**Esc**, **Enter**, **Ctrl-C**, **↑**, and **↓** keys.
 
 To try an ordinary terminal with no image instructions, create a separate agent
 from `bare:latest`. Bare requires Interactive and runs no autonomous
@@ -158,17 +175,25 @@ iterations.
 
 ## 6. Let Autopilot run
 
-Open **Configuration → Loop and timeouts**. Set a conservative interval and
+Open **Settings → Loop and timeouts**. Set a conservative interval and
 timeout, then save. While the agent is started, a letter to it stays open in
 its inbox and nudges the loop; a timer can also trigger it.
 
 ## 7. Inspect and stop safely
 
-Open **Activity** to see trigger, current/previous iterations, outcome, usage,
-cost, messages, and audit. Then:
+The agent header says in one sentence what the agent does or waits for. Its
+primary button follows that state: **Answer**, **Give task**, **Start**, or
+**Restart**.
 
-- use **Stop** to turn the agent off and prevent new iterations;
-- use **Kill** to terminate only current work.
+Open **Activity** to see the tasks done, runs, and cost of the period, with
+**Today** as the default. Under **More**, the **Runs log** shows the trigger,
+outcome, and audit of each run; **Usage** and **Status history** are there
+too. Then:
+
+- use **Stop** in the agent header to turn the agent off and prevent new runs;
+- use **⋯ → Force-stop current run** to stop only the current work, after you
+  confirm;
+- use **⋯ → Run once…** to start one run now while the agent is on.
 
 Quitting Tariboy leaves daemons and remote data running. Removing a host
 stops its local tunnel and removes local metadata, but does not delete the

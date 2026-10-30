@@ -55,16 +55,12 @@ only in Rust process memory, so quitting Desktop discards it. When one is ready,
 the route-independent banner below the titlebar requires an explicit install
 action and reports installation failures for retry.
 
-Application settings also choose the **Interface mode**: **Simple**, the
-default, or **Expert**. The choice persists in WebView localStorage under
-`app:ui-mode:v1` and applies at once; any other stored value, or unavailable
-storage, means Simple. Simple changes only what the agent workspace shows: its
-tabs are **Mailbox**, **Tasks**, **Terminal**, and **Configuration**, an agent
-opens on Tasks, and a route to a hidden tab (Activity, Advanced) is
-redirected to Tasks. The Mailbox tab is the same in both modes. The sidebar and the agent
-header — Start/Stop and Exec included — are the same in both modes. Expert is
-the complete workspace described below. The mode hides interface only; it is
-not an access control, and the API and CLI are unchanged.
+There is no interface mode. Every user gets the same agent workspace, and it
+uses progressive disclosure: the everyday views are tabs, and the rarer views
+are one step away. **Mailbox** and **Advanced** are routes that the agent's
+**Settings** links to, the terminal hotkeys are behind **Keys**, and the
+header's rarer actions are in its `⋯` menu. A value that an older release
+stored under `app:ui-mode:v1` is ignored.
 
 The **New agent** dialog shows five fields in this order: **Run on** (only when
 the workspace has more than one host), **Folder**, **Image**, **Coding tool**,
@@ -73,7 +69,7 @@ and the first-run card on the home screen (see [First run](#first-run)) are one
 component, `ui/src/pages/terminals/create-agent/NewAgentForm.tsx`, driven by
 `useCreateAgentForm`. Ordinary creation starts with the documented defaults and
 submits one complete create request; the daemon writes one complete stopped
-agent row. A new agent opens on its **Terminal** tab in both interface modes.
+agent row. A new agent opens on its **Terminal** tab.
 
 - **Folder** is the agent's working directory on the selected host, with path
   autocomplete. It is required. **Advanced → Folder → Use a managed folder**
@@ -117,13 +113,12 @@ Ordinary creation defaults the soft iteration timeout to 7,200 seconds (2
 hours) and the hard timeout to 10,800 seconds (3 hours). Clone mode continues
 to copy both timeout values from the source agent.
 
-Agent creation, clone, and **Configuration** carry the per-agent Goal settings:
-an enabled-by-default switch, a positive whole-second customer-wait timeout
-(300 by default), and a positive Goal delivery cooldown (60 seconds by
-default). Configuration shows the daemon-selected goal key read-only.
-The agent header links that key to its task detail, or shows **No current goal**
-when none is selected. A question-mark action in both the header and the
-Configuration Goal block explains the sticky selection and release rules.
+Agent creation, clone, and the agent's **Settings** carry the per-agent Goal
+settings: an enabled-by-default switch, a positive whole-second customer-wait
+timeout (300 by default), and a positive Goal delivery cooldown (60 seconds by
+default). Settings shows the daemon-selected goal key read-only. While the
+agent works, the header sentence names that key. A question-mark action in the
+Settings Goal block explains the sticky selection and release rules.
 The former server-global policy screen is not part of Settings.
 
 Right-clicking any grouped or individual sidebar agent exposes **Clone**.
@@ -170,7 +165,7 @@ models instead of failing. When the chosen model carries its own efforts
 **Saved** holds the values the operator entered earlier for that harness, the
 current value, and the image default, minus anything already listed under the
 harness. Schema-v1 image defaults remain readable for compatibility. Successful
-creates and successful Configuration Runtime saves remember the model and effort
+creates and successful Settings Runtime saves remember the model and effort
 in the Desktop WebView by harness; failed ones do not add values. Neither group
 validates a value: an unsupported model still fails at the harness.
 
@@ -233,8 +228,13 @@ The Library has these routes:
 **Tasks** shows the number of tasks that need you, and **Inbox** shows the
 number of your open letters. A task needs you when its `waiting_on` is
 `customer` and it is not in its workflow's initial status
-(`workflow_initial`), or when its `waiting_on` is `pause`. One read serves the
-two counts, Home, and Inbox: it reads each workspace host's active task list,
+(`workflow_initial`), or when its `waiting_on` is `pause` (`needsYouTask` in
+`ui/src/lib/needsYou.ts`). A task that waits on a script, or that is in the
+initial customer status (for example `backlog`), never counts. The **Tasks**
+count is the number of distinct task keys on the hosts that answered: a task
+counts when `needsYouTask` selects it or when it has an open `task.question`
+letter, and it counts once. One read serves the
+two counts, Home, Inbox, and the agent states below: it reads each workspace host's active task list,
 `GET /api/mail/unread`, and the Inbox box at the sidebar's poll interval (3
 seconds, or 15 seconds while the agent state socket is live). A host that does
 not answer adds nothing. When no host answers, the counts are hidden.
@@ -248,8 +248,14 @@ and its **Individual agents**. With one host in the workspace the list has no
 host heading. With two or more, each host has a heading with its
 reachability, an **Update** action when it runs an older daemon, and a `⋯`
 menu (**Edit host**, **Remove host**). A host heading opens `/tasks?host=<id>`.
-A row badge is the count of unread messages from that agent; an open question
-is in **Inbox** and its task is in **Tasks**.
+
+An agent row shows the agent's derived state (see
+[Agent state](#agent-state)). The dot has the color of the state. On the
+right, the row shows one pill: `needs you · n` in the accent color,
+`working · 12 min` with a clock that moves each minute, `error` in the danger
+color with the reason in its tooltip, or a muted `off`. An idle row shows no
+pill. The row has no other state, budget, or unread-letter badge; an open
+question is in **Inbox** and its task is in **Tasks**.
 
 The foot of the sidebar is one line about the workspace's hosts: **Local ·
 ready**, **2 hosts · ready**, or **2 hosts · 1 unreachable**, with a dot when
@@ -327,7 +333,7 @@ opens `/settings/integrations`, and `/ops` opens `/settings/maintenance`.
 
 Links inside the Library carry no `?host=`, because the route host is the
 active host while a Library page is open. The image links of an agent's
-**Configuration** carry `?host=` when two or more hosts are registered.
+**Settings** carry `?host=` when two or more hosts are registered.
 
 ## Home
 
@@ -383,16 +389,14 @@ are missing the banner names only those. A host added later shows its checklist
 inside the New agent dialog, when it has no built image except `bare`, and on
 its **Stores** page.
 
-After create, the agent opens on **Terminal**. Above the terminal, a status line
-says **Starting Claude Code in ~/code/my-app…** while the agent is enabled and
-interactive and the terminal socket is still connecting or reports no session.
-When the agent has a `halt_reason` or `error_reason`, the line says **Claude
-Code did not start:** and the reason, with **Retry** (start the agent and
-reconnect the terminal) and **Open settings**. When the socket is open, the line
-is gone. Without a session, the terminal says **No terminal session. Start the
-agent, or turn on Interactive in Configuration → Runtime.** Below 1200 px, the
-agent header puts its Exec, Stop, and Kill buttons on their own row under the
-chips.
+After create, the agent opens on **Terminal**. Above the terminal, one banner
+line always says what the screen shows (see [Agent terminal](#agent-terminal)),
+for example **Starting Claude Code in ~/code/my-app…** while the coding tool
+starts, or **Claude Code did not start:** and the reason, with **Retry** (start
+the agent and reconnect the terminal) and **Open settings**. Without a session,
+the terminal says **No terminal session. Start the agent, or turn on
+Interactive terminal in Settings → Model.** Below 1200 px, the agent header
+puts its buttons on their own row under the sentence.
 
 ## Onboarding
 
@@ -405,7 +409,7 @@ not pass. The tour shows where an action is, but it does not open dialogs or
 create objects.
 
 The steps go through the screen in this order: Welcome, **Agents**, the agent
-workspace, the agent's **Configuration**, the sidebar's **Tasks** item, the
+workspace, the agent's **Settings** tab, the sidebar's **Tasks** item, the
 sidebar's **Library** item (images), the Library's **Sources** tab, the hosts
 line at the foot of the sidebar, **Add host** on Settings → Hosts, the
 **Filters** menu of Tasks (queues), the Library's **Workflows** tab, and the
@@ -426,6 +430,11 @@ show their card in the center. A step whose element is not on the screen, or
 has no size, also shows the card in the center without a ring. The tour checks
 for the element every 100 ms, so the ring follows the element after a route
 change, a resize, or a scroll.
+
+The agent workspace step says "Work, Terminal, Activity and Settings of one
+agent: …". The agent settings step says "Settings sets the harness, model,
+schedule, environment and budget of the agent." Its ring is on the **Settings**
+tab link.
 
 `ui/src/lib/onboarding/tour.ts` holds the steps and `TOUR_ANCHORS`, the
 `data-tour` values. A component marks an element with
@@ -458,12 +467,15 @@ until you dismiss it:
 
 - **Terminal**: "Type what you want done. To hand work over and let the agent
   run on its own, give it a task."
-- **Tasks**: "Tasks you create here are given to this agent."
-- **Configuration**: "Autopilot: set a schedule here to let the agent keep
+- **Work**: "Tasks you create here are given to this agent."
+- **Settings**: "Autopilot: set a schedule here to let the agent keep
   working without you. Everything else is optional."
 
-A dismissal is stored under `onboarding:hint:v1:<host>:<agent>:<tab>`. If the
-storage is blocked, a dismissed hint comes back after a reload.
+A dismissal is stored under `onboarding:hint:v1:<host>:<agent>:<tab>`, where
+`<tab>` is `console`, `work`, or `settings`. Dismissals that an older release
+stored under `tasks` or `configuration` are not migrated, so those two hints
+show once more. If the storage is blocked, a dismissed hint comes back after a
+reload.
 
 The **?** menu in the titlebar, and the **Help** card in Application settings,
 have **Take the tour**, **What's new**, and **Changelog**. **What's new** from
@@ -482,17 +494,25 @@ file with `?raw`. The default deny list of Vite still applies.
 ## Activity
 
 An agent's **Activity** tab and the host **Activity** page (`/activity`, opened
-by **History** on Home) share one period: **Hour**, **Day** (the
-default), **Week**, or **Custom**. Hour, Day, and Week are rolling windows that
-end now and move once a minute. Custom takes a start and an optional end as
-local times; without an end it runs to now, and a missing or reversed range
-shows an error in the period bar. The period and the selected view live in the
-URL query (`?period=hour|day|week|custom`, `?since=`/`?until=` for Custom,
-`?view=`), so a view is shareable and survives a reload; a change replaces the
-history entry.
+by **History** on Home) use one period bar with different periods. The host
+page offers **Hour**, **Day** (the default), **Week**, and **Custom**. The
+agent tab offers **Today** (from local midnight until now, the default),
+**Week**, **Month** (30 days), and **Custom**; a URL with `hour` or `day`, such
+as a link from the host page, still works there. Hour, Day, Week, and Month are
+rolling windows that end now and move once a minute. Custom takes a start and
+an optional end as local times; without an end it runs to now, and a missing
+or reversed range shows an error in the period bar. The period and the selected
+view live in the URL query (`?period=hour|day|today|week|month|custom`,
+`?since=`/`?until=` for Custom, `?view=`), so a view is shareable and survives
+a reload; a change replaces the history entry.
 
-Under the period bar, cards total the work on tasks in the period: tasks,
-completed tasks, status changes, comments, iterations, and cost. They come from
+In labels an iteration is a **run**: the cards, the table headers, and the
+views say **Runs**. API and URL names keep `iteration`.
+
+Under the period bar, the host page has six cards that total the work on tasks
+in the period: tasks, completed tasks, status changes, comments, runs, and
+cost. The agent tab has four: **Tasks done**, **Runs**, **Cost**, and **Avg.
+cost per task** (**—** when no task completed). They come from
 one `GET /api/task-activity?since=&until=[&agent=]` response
 (`ttasks activity`), polled every 10 seconds; a response for an older
 period or host never replaces the current one. The daemon builds it from AI
@@ -501,37 +521,42 @@ iterations, requests, tokens, and cost, the comments, the outcomes an agent
 declared, the workflow statuses the task entered, whether it completed, and the
 first and last activity. With `agent` only that agent's requests and events
 count; without it the response also breaks the period down per agent. AI
-requests without a task do not appear here; they stay visible under Iterations
+requests without a task do not appear here; they stay visible in the Runs log
 and Usage. Tasks the caller cannot see, and tasks removed by maintenance, are
 left out. One response lists at most 500 tasks, most recent first, and says so;
 the totals still count every task.
 
-The agent tab has four views:
+The agent tab is one view for every user. Under the cards it shows:
 
-- **Tasks** (default): one row per task, newest activity first. The task key
+- the per-task table: one row per task, newest activity first. The task key
   opens the task panel in place, over the Activity tab; the tab and the URL
-  do not change.
-- **Iterations**: the iteration list and log, limited to iterations that
-  started in the period, with the tag filter below.
-- **Usage**: the agent's AI usage over the period; task and epic keys open the
-  task panel in place.
-- **Status history**: only the status messages from the period.
+  do not change;
+- the cost chart for the period, from `getAgentUsage`;
+- a **More** segment with three views:
+  - **Runs log** (default): the iteration audit view, the same component as
+    **Advanced → Full audit**, limited to runs that started in the period, with
+    the tag filter below;
+  - **Usage**: the agent's AI usage over the period; task and epic keys open
+    the task panel in place;
+  - **Status history**: only the status messages from the period.
 
-An old `?iteration=` link opens the Iterations view. The host page has a
+An old `?view=iterations`, `?view=usage`, or `?view=status` link opens the
+matching More view, and an old `?iteration=` link opens the Runs log. The host
+page has a
 **Tasks** view with an Agents column, whose keys open
 the task panel in place on that server, and an **Agents** view, whose names open
 that agent's Activity tab with the same period. All its requests go to the
 selected host.
 
-The agent's Configuration, Activity, and Advanced tabs and the server Activity
+The agent's Settings, Activity, and Advanced pages and the server Activity
 page share one frame, `TabPage`: 16 px side and top padding, 24 px bottom
-padding, and 16 px between blocks. Configuration is a centered column of at
-most `max-w-5xl`; the others use the full width. Mailbox, Tasks, and Terminal fill
-the tab without a frame.
+padding, and 16 px between blocks. Settings is a centered column of at
+most `max-w-5xl`; the others use the full width. Mailbox, Work, and Terminal fill
+the page without a frame.
 
 ## Iteration tags in Activity
 
-The Iterations view filters its iteration list by tag. The tag filter and the
+The Runs log filters its iteration list by tag. The tag filter and the
 selected iteration live in the URL query beside the period, and a filter change
 replaces the history entry instead of adding one per keystroke. Matching is the
 daemon's: an iteration matches any of the listed tags. Under **Advanced → Full
@@ -568,20 +593,16 @@ per-item progress. The target daemon descriptor is captured at upload and
 reused for confirmation, status, and retry even if the global host switcher
 changes.
 
-The Agent workspace header shows the agent's configured runtime as one compact
-`harness · model · effort` chip before **Goal**, omitting the values the
-selected harness does not report. It is read from the agent view alongside the
-header's status poll, so a Configuration change is reflected within one poll.
-The **Goal** task key opens the task panel over the current tab instead of
-switching to the Tasks tab. On the agent's **Tasks** tab, the row of that Goal
-task has a green tint and a green left stripe. If the current filter or a
-collapsed parent hides the Goal task, no row is highlighted.
+On the agent's **Work** tab, the row of the agent's Goal task has a green tint
+and a green left stripe. If the current filter or a collapsed parent hides the
+Goal task, no row is highlighted.
 
-Every Agent workspace header shows the agent's complete effective working
-directory. A following **Open in VS Code** action opens local paths as local
-folders and SSH-host paths through VS Code Remote SSH in a new editor window.
-The native Desktop host resolves the saved SSH alias and constructs the editor
-URI; the WebView never supplies an alias. HTTPS hosts do not render this action.
+**Open folder in VS Code** in the agent header's `⋯` menu opens local paths as
+local folders and SSH-host paths through VS Code Remote SSH in a new editor
+window. The native Desktop host resolves the saved SSH alias and constructs the
+editor URI; the WebView never supplies an alias. The menu shows the action only
+for the local host and for SSH hosts whose alias resolves; HTTPS hosts do not
+show it.
 
 The Library's **Images** tab (`/library/images`) shows one row per image name:
 the name, the version of the newest tag, the Store that built it, **Used by**,
@@ -617,7 +638,7 @@ folder action for local and SSH paths.
 Manifest, provenance, template, and file reads carry the same expected digest;
 a changed mutable ref clears the old view and reloads once, then offers manual
 refresh if it changes again. Directory builds and all detail requests capture
-the explicit route target. Agent **Configuration** only selects an already built
+the explicit route target. An agent's **Settings** only selects an already built
 image and links back to image detail. It shows the pinned **Current** (or
 **Activated version** when stopped) and the daemon's **Next iteration** preview,
 each with ref, manifest version, and digest. The next selection explains its
@@ -724,12 +745,12 @@ Password controls are write-only and status responses contain only the safe
 projection selected by the plugin contract.
 
 **Settings → Agent defaults** edits the selected host's **Global Agent Shell Script**;
-an agent's **Configuration** edits its **Agent Shell Script** in the
+an agent's **Settings** tab edits its **Agent Shell Script** in the
 Environment block. Both controls use the route's explicit host target, retain
 an invalid draft and accessible Bash error after rejection, and keep drafts
 only in React memory. The global editor keeps its own Save and Discard, which
 stay unavailable until loading succeeds and while a save is pending, so saves
-cannot overlap; the agent script is saved with the Configuration page's single
+cannot overlap; the agent script is saved with the agent Settings page's single
 Save. Edits made during a save remain an unsaved draft.
 
 **Settings → Agent defaults** also carries **Backup & data retention** for the same
@@ -959,7 +980,7 @@ Their internal modules separate form state, requests, and presentation:
   file actions. `FileBrowser` keeps the public API and source reset boundary.
 - `agents/configuration` owns the configuration blocks. The existing draft and
   commit modules still own the single Save operation for the page.
-- `mailbox` is one two-pane mailbox for both Mailbox tabs: `Mailbox` holds
+- `mailbox` is one two-pane mailbox for Inbox and the agent's Mailbox: `Mailbox` holds
   the box switch and the panes, `MailboxList`, `MailboxLetter` and
   `MailboxCompose` render them, `MailboxTaskAnswer` is the answer form of a
   task question, `mailboxModel` holds the pure readings, and
@@ -1059,13 +1080,13 @@ incompatibly, the key gets a new name with the next version. The old name
 stays in the registry only so it can be read once, like `terminals:workspace:v1`.
 A key that nothing reads any more leaves the registry; its old value stays in
 the WebView unread. This is the case for `terminals:sidebar-tab:v1` (the former
-Servers and Agents tabs) and the session key `tasks:all-view:v1` (the former
+Servers and Agents tabs), `app:ui-mode:v1` (the former interface mode), and
+the session key `tasks:all-view:v1` (the former
 All tasks view).
 
 | Key | Area | Owner | Value | Fallback |
 | --- | --- | --- | --- | --- |
 | `tariboy-theme` | local | theme provider | `light`, `dark`, or `system` | `system` |
-| `app:ui-mode:v1` | local | interface mode | `simple` or `expert` | `simple` |
 | `app:workspaces:v2` | local | host workspaces | JSON workspaces with their host lists, active workspace | Default only |
 | `app:workspaces:v1` | local | host workspaces (legacy, read once) | JSON workspaces, host map, active workspace | none |
 | `desktop:updates:auto-download:v1` | local | Desktop updates | `true` or `false` | `true` |
@@ -1086,7 +1107,7 @@ All tasks view).
 | `tasks:columns:v1` | local | task tables | JSON column order and widths | default layout |
 | `tasks:workspace:v1` | local | task detail panel | JSON detail width | half the window |
 | `tasks:new-task-queue:v1` | local | new task form | JSON last queue per server | none |
-| `tasks:new-task-queue-by-agent:v1` | local | new task form in an agent's Tasks tab | JSON last queue per server and agent | the queue for the server |
+| `tasks:new-task-queue-by-agent:v1` | local | new task form in an agent's Work tab | JSON last queue per server and agent | the queue for the server |
 | `tasks:queue-filter:v1` | session | task queue filter | queue prefix | none |
 | `tariboy_store_token` | session | Store UI | Store bearer token | none |
 
@@ -1162,8 +1183,8 @@ Tasks queries. Specialized workflow actions and log readers retain their own
 state.
 
 Tasks uses one reusable workspace at `/tasks` and inside each
-Agent tab. `/tasks` shows every task visible on its host;
-an Agent tab sends
+agent's Work tab. `/tasks` shows every task visible on its host;
+the Work tab sends
 `scope_agent=<name>` to render only that agent's inherited view. The tree fills
 the full width of the island and is expandable, ordered at every
 depth by priority, manual position, and
@@ -1334,7 +1355,7 @@ of the last root task created from a form on that server, or the first queue
 when that queue no longer exists. After a root task is created, its queue is
 saved in `localStorage` under `tasks:new-task-queue:v1`, a JSON object from
 server (`local` for the local daemon, otherwise the Desktop server id) to queue
-prefix. In the Tasks tab of an agent, the created root task also saves its
+prefix. In the Work tab of an agent, the created root task also saves its
 queue for that agent in `tasks:new-task-queue-by-agent:v1`, a JSON object from
 server to agent name to queue prefix. When `All queues` is selected there, the
 form preselects the queue of that agent. If that queue no longer exists, the
@@ -1410,8 +1431,8 @@ as soon as the comment contains text.
 
 ### Mailbox
 
-Mail is the only messaging surface. There are two **Mailbox** tabs, and both
-render one component, `pages/mailbox/Mailbox.tsx`. It shows one principal's
+Mail is the only messaging surface. There are two mailbox pages, **Inbox** and
+the agent's **Mailbox**, and both render one component, `pages/mailbox/Mailbox.tsx`. It shows one principal's
 mailbox: a segmented **Inbox** / **Sent** / **Archive** switch, where Inbox
 carries the open letter count from `GET /api/mail/unread`, and **Compose**.
 The list is on the left and the selected letter on the right. Below the
@@ -1471,7 +1492,8 @@ selector; letters of several hosts are not merged into one list. The sidebar's
 **Inbox** item carries the customer's open letter count of every workspace
 host.
 
-**Agent → Mailbox** is the first agent tab, in Simple and Expert mode. It is
+**Agent → Mailbox** (`/agents/:hostId/:agent/mailbox`) is not a tab: the
+agent's **Settings** links to it under **Other views**. It is
 that agent's mailbox, read with `as=agent:<name>`, so the operator replies on
 the agent's behalf. **Compose** writes from the customer to that agent; the
 recipient is fixed. The toolbar shows `batch N · inbox K/M`: N is the agent's
@@ -1479,9 +1501,9 @@ recipient is fixed. The toolbar shows `batch N · inbox K/M`: N is the agent's
 and M its cap (`messages_max_queue`). A letter over the cap is dead on arrival
 and shows in Archive with its tag and **Requeue**. **Clear inbox** opens a
 destructive confirmation; confirming posts `/api/agents/<name>/mail/clear`,
-which deletes the agent's open letters, and reports how many. The tab carries
-the open inbox count as a badge, and the header shows **Inbox full: K / M**
-when the inbox is at its cap. Configuration names the two fields
+which deletes the agent's open letters, and reports how many. The agent header
+shows **Inbox full: K / M** when the inbox is at its cap. Settings names the
+two fields
 **Mail: letters per iteration** and **Mail: maximum open inbox**.
 
 The sidebar mounts one `/api/mail/ws` socket per server. Its frames are
@@ -1518,12 +1540,12 @@ opened and cleared; it leaves the view once read.
 
 A route-independent coordinator watches every configured host. Its source is
 `GET /api/mail/unread` for the customer: the open letters counted by sender and
-kind. The `task.question` rows from an `agent:` sender make the shared
-attention, which puts a count on the agent
-workspace's **Tasks** tab: the number of open questions from that agent, the
-questions waiting for the customer's answer. Reading a question does not lower
-it; the answer recorded on the task closes the letter, and the count drops.
-Customer-authored questions contribute to neither.
+kind. The `task.question` rows from an `agent:` sender are the questions
+waiting for the customer's answer, and the coordinator uses them for native
+notifications. Reading a question does not close it; the answer recorded on
+the task closes the letter. Customer-authored questions do not count. The
+**Work** tab badge does not come from this coordinator: it counts the agent's
+`needs you` items (see [Agent state](#agent-state)).
 
 Each host watcher treats typed HTTP task and mail responses as
 authoritative. The resumable task WebSocket and the mail WebSocket (a
@@ -1565,10 +1587,118 @@ secrets. The UI does not edit a workflow definition, and it does not infer
 phases from title prefixes or assignee. Operator history remains available after completion. See
 [Task workflows](/docs/task-workflows).
 
-Above an agent, the island shows only the agent's own Mailbox, Tasks,
-Terminal, Activity, Configuration, and Advanced tabs; there is no server row.
-There is no Autopilot tab: an old `/autopilot` route is treated as an unknown
-tab. Agent routes include the explicit host id, and a `?host=` on
+### Agent workspace
+
+#### Agent state
+
+The sidebar row, the agent header, and the Terminal banner show one derived
+state. `deriveAgentState` in `ui/src/lib/agentState.ts` computes it in the UI.
+The first state that matches wins:
+
+| State | When |
+| --- | --- |
+| `error` | the agent state is `error` or `failed`, it has a `halt_reason` whose `halt_kind` is not `idle_limit`, it has an `error_reason`, or a budget is exhausted. The state carries the reason. |
+| `needs you · n` | n is more than 0 (see below) |
+| `working` | the agent state is `running`; the elapsed time starts at `current_iteration_started_at` |
+| `off` | the agent is disabled |
+| `idle` | any other case |
+
+n counts the agent's tasks (assignee `agent:<name>`) that `needsYouTask`
+selects, plus the open `task.question` letters from `agent:<name>` about a task
+that is not already counted. One task counts once. A task that waits on a
+script, or that is in the initial customer status (for example `backlog`),
+never counts. An `idle_limit` halt is the loop stopping as configured, so it is
+not an error; the header shows its reason in muted text.
+
+The data comes from the shared "needs you" read (`NeedsYouLive` and
+`useNeedsYou`) that also serves the sidebar counts and Home: each host's active
+tasks and the user's inbox, polled at the sidebar interval. The state adds no
+request per agent and no API change. A host that does not answer gives its
+agents no `needs you` pill.
+
+#### Agent header
+
+The header has three lines on every tab:
+
+1. The state dot, the agent name, and the buttons **[primary]**,
+   **Stop** or **Start**, and `⋯`.
+2. One sentence about the state:
+   - needs you: "Waiting for you: \<status, or 'a question'\> for \<KEY\>
+     (\<age\>)", or "Waiting for you: n things" when n is more than 1;
+   - working: "Working on \<Goal KEY\> since \<HH:MM\> · run \<n\>", or
+     "Working since \<HH:MM\>" without a Goal task;
+   - idle: "Idle. Give it a task.";
+   - off: "Off. Start to let it work on tasks.";
+   - error: the reason, in red.
+3. In muted text: `harness · model · effort` (only the values that the harness
+   reports), the folder, cut from the left so its last names stay readable,
+   and "$x today" when the agent has budget limits or spent money today.
+
+**Inbox full: n / max** and the reason of an `idle_limit` halt show under the
+sentence when they apply.
+
+The primary button depends on the state:
+
+| State | Primary button | Action |
+| --- | --- | --- |
+| needs you | **Answer** | opens `…/work?task=<first KEY>`, which opens that task in the drawer |
+| working, idle | **Give task** | opens `…/work` |
+| off | **Start** | starts the agent; the header then shows no second **Start** button |
+| error | **Restart** | restarts the agent |
+
+The second button is **Stop** when the agent is on and **Start** when it is
+off. The `⋯` menu (**More agent actions**) has these items:
+
+- **Run once…**: the manual iteration dialog (see
+  [Agent terminal](#agent-terminal)). It shows only when the agent is on and
+  its image is not `bare:latest`.
+- **Force-stop current run**: stops the current iteration or session after a
+  confirmation dialog.
+- **Open folder in VS Code**: only for the local host and for SSH hosts whose
+  alias resolves.
+- **Clone**: opens the New agent dialog with this agent as the clone source.
+- **Pin** or **Unpin**: the same pin as the sidebar.
+- **Settings**: opens the agent's Settings tab.
+- **Delete agent**.
+
+The header has no state pill, host label, image chip, Goal link, working
+directory row, or budget line. The full budget limits are in the Budgets block
+of Settings. Below 1200 px the sentence and the muted line wrap, and the
+buttons take a row of their own.
+
+#### Tabs and routes
+
+The agent workspace has four tabs; there is no server row above them:
+
+| Tab | Route | Content |
+| --- | --- | --- |
+| **Work** (default) | `/agents/:hostId/:agent/work` | the agent's task list |
+| **Terminal** | `/agents/:hostId/:agent/console` | the live terminal |
+| **Activity** | `/agents/:hostId/:agent/activity` | see [Activity](#activity) |
+| **Settings** | `/agents/:hostId/:agent/settings` | the agent configuration page (component `AgentConfigurationTab`), headed **Settings** |
+
+The **Work** tab carries a badge with n of the `needs you` state, labeled "n
+waiting for you". Settings has the line **Other views: Open mailbox ·
+Advanced**, which links to `…/mailbox` and `…/advanced`. These two routes keep
+their content, but they are not tabs. There is no Autopilot tab.
+
+These routes redirect:
+
+| Route | Opens |
+| --- | --- |
+| `…/tasks` | `…/work`, with the same query (`?task=`) |
+| `…/configuration` | `…/settings`, with the same query (`?view=`) |
+| an unknown tab, for example `…/autopilot` | `…/work` |
+| `/agents/:hostId/:agent` | `…/work` |
+| `/terminals/:hostId/:agent` | `…/work` |
+| `/agent/:name/settings` | `…/settings` |
+| `/agent/:name` | `…/work` |
+| `/agent/:name/logs`, `/agent/:name/usage` | `…/activity` |
+| any other `/agent/:name/<tail>` | `…/advanced?view=<tail>` |
+
+A legacy `/agent/:name` route opens the agent on the active host.
+
+Agent routes include the explicit host id, and a `?host=` on
 a page names its host; both fail closed rather than silently falling back to
 local.
 
@@ -1623,11 +1753,11 @@ two or more hosts, and an old `?view=all` URL opens `/tasks`.
 Selecting another agent in the sidebar while an agent workspace is open keeps
 the tab that is currently open and shows the new agent in it, so the same view
 answers the same question about the next agent. An unknown tab still falls back
-to Terminal (Tasks in Simple mode), and a selected task in the Tasks query is dropped because it belongs
-to the agent being left. Selecting an agent from anywhere else — a
-team, or a freshly created agent — still opens Terminal, or Tasks in Simple mode.
-Start and Stop live only in the agent header; a stopped agent's Terminal tab says so
-without a Start button of its own.
+to Work, and a selected task in the `?task=` query is dropped because it belongs
+to the agent being left. A sidebar agent selected from any other page opens on
+Work. A freshly created agent opens on Terminal. Start and Stop are in the
+agent header; the Terminal banner of an agent that is off also has a **Start**
+button.
 
 When a known explicit server route temporarily loses its tunnel or its
 authoritative aggregate refresh fails, the Desktop retains its last successful
@@ -1641,7 +1771,7 @@ fails closed rather than falling back to local authority.
 
 A reconnect never remounts a server page. An SSH host loses its endpoint while
 its tunnel reconnects and comes back on a new local port. Neither change is
-part of a page's identity: Tasks, Workflows, Stores, Settings and Configuration
+part of a page's identity: Tasks, Workflows, Stores, the Settings pages and an agent's Settings tab
 keep their loaded data, the open task, filters, scroll position and every
 unsaved draft. The route boundary keeps one tree shape and only dims the page
 and makes it inert under a single status line. A host object keeps its
@@ -1650,7 +1780,7 @@ restart page loads.
 
 While the host has no endpoint, background loads are skipped rather than
 failed. When the new endpoint arrives, each page re-reads once in place:
-the task list, the open task, the agent header, Configuration and Mailbox. A
+the task list, the open task, the agent header, the agent's Settings and Mailbox. A
 background read that cannot reach the host (`host_not_ready`,
 `network_error`) keeps the last data and shows no toast, because the host
 header in the left panel already reports the host as offline with its error.
@@ -1659,7 +1789,7 @@ still reports its failure. Its draft stays in the form, ready to send again
 once the host is back. Drafts live in tab memory only and are not queued for
 later delivery.
 
-Configuration is one column of blocks in a fixed order: **General** (agent
+The agent's Settings tab is one column of blocks in a fixed order: **General** (agent
 image, image digest, working directory and, while the agent is stopped,
 **Create directory if missing**), **Runtime** (harness, model, effort,
 Interactive), **Loop and timeouts** (the scheduling and timeout
@@ -1739,29 +1869,31 @@ positive whole-number `messages_batch` and `messages_max_queue` fields.
 New-agent drafts use a maximum queue of 100, while Clone keeps the source
 agent's configured value.
 
-Configuration also renders the daemon-authoritative per-agent USD budget
+Settings also renders the daemon-authoritative per-agent USD budget
 projection. Its four calendar rows pair each current spend with one editable
 limit (spent beside the limit), label zero as Unlimited, and save in one
 request against the explicit agent-route host. Older daemons that omit the
-projection get no Budgets block. The agent header and sidebar use the same
-projection; they show an explicit Out of budget state and every exhausted
-period rather than recomputing spend in the browser. Older daemons simply omit
-the additive projection.
+projection get no Budgets block. The agent state uses the same projection: an
+exhausted period makes the state `error`, with the reason **Out of budget:**
+and the exhausted periods. The header's "$x today" also comes from it. The
+browser never recomputes spend. Older daemons simply omit the additive
+projection.
 
 The workspace header also consumes daemon-authoritative message status. When
 `messages_queue_full` is true it displays
-**Message queue full: pending / limit** in destructive styling; it never
-recomputes queue state in the browser. The normal three-second status refresh
+**Inbox full: pending / limit** in destructive styling; it never
+recomputes queue state in the browser. The normal status refresh
 removes the indicator after processing or clearing lowers the queue.
 
-When the daemon reports a halt reason for the agent, the workspace header shows
-it under the identity line, so a loop that stopped before any iteration existed
-— a failed image activation, for example — is visible on every tab. It is toned
-as an error for an `error` halt and neutrally for an `idle_limit` one, and falls
-back to `error_reason` when the daemon reports one without a halt. The line is
-not gated on whether the agent is started, because a stop-policy, idle-limit or
-launch-failure reason matters exactly when the loop is off. When there is no reason, nothing
-extra is rendered at all — no empty element and no placeholder.
+When the daemon reports a halt reason for the agent, the header shows it on
+every tab, so a loop that stopped before any iteration existed (a failed image
+activation, for example) is visible. A halt whose `halt_kind` is not
+`idle_limit` makes the state `error`, and the reason is the header sentence in
+red. An `idle_limit` halt is not an error: its reason is a muted line under the
+sentence. Without a halt, an `error_reason` from the daemon is the error
+reason. The reason shows whether or not the agent is started, because a
+stop-policy, idle-limit, or launch-failure reason matters exactly when the loop
+is off.
 
 The common agent list can be hidden and restored throughout the hierarchy. On macOS the
 main Tauri window retains native traffic lights under an overlay titlebar, and
@@ -1799,10 +1931,10 @@ they were.
 
 Other compact rules:
 
-- The agent header wraps instead of overflowing. The image and runtime badges
-  truncate with the full value in their tooltip, and the Exec / Start or Stop /
-  Kill / menu cluster takes a row of its own under the identity, so it never
-  covers it.
+- The agent header wraps instead of overflowing. The folder in the muted line
+  is cut from the left with the full path in its tooltip, and the primary /
+  Start or Stop / `⋯` buttons take a row of their own under the sentence, so
+  they never cover it.
 - The agent tabs and the Settings navigation scroll
   sideways with no visible bar, and the current tab scrolls into view. The
   Settings navigation is a strip above the page instead of a column.
@@ -1833,11 +1965,36 @@ shared files directory and the returned absolute paths are inserted into the
 corresponding draft or reported when no terminal is available. Terminal retains
 its explicit host target.
 
+### Agent terminal
+
 The agent Terminal tab mounts xterm.js and opens
 `GET /api/agents/{name}/terminal`. Binary WebSocket frames carry PTY bytes;
 text frames carry resize messages. A host or agent route change tears down the
 old socket and dials the newly selected target without stopping the tmux
 session.
+
+One banner line above the terminal always has text. It follows the agent
+state and the terminal session:
+
+| Case | Banner |
+| --- | --- |
+| error | "\<tool\> did not start: \<reason\>", with **Retry** and **Open settings** (`…/settings`) |
+| not interactive | "No interactive terminal. Enable it in Settings → Model.", with a link to `…/settings`; the drop target for files and **Send files** stay below |
+| off | "Off.", with a **Start** button |
+| starting | "Starting \<tool\> in \<cwd\>…" |
+| working | "Working on \<KEY\> — this is its live screen." |
+| idle | "Idle. The screen appears when a run starts. Type here to talk to the agent directly; this is not recorded in a task." |
+
+Without a session, the terminal panel says "No terminal session. Start the
+agent, or turn on Interactive terminal in Settings → Model."
+
+The toolbar under the terminal has **Send files**, **Compose**,
+**Scrollback**, a **Keys** toggle, and the `?` help. **Keys** (with
+`aria-expanded`) shows or hides the hotkeys **Esc**, **Enter**, **Ctrl-C**,
+**↑**, and **↓**. Keys starts expanded in the Android build and collapsed in
+other builds. The help text starts with: "Terminal is for working with the
+agent by hand. For work it should carry out on its own, give it a task in
+Work; it runs it when it is on."
 
 In the Terminal tab, explicit `http://` and `https://` text in terminal
 output opens in the operator's default browser on **Command-click** (the `Meta`
@@ -1877,21 +2034,22 @@ lines (tmux's own default is 2,000), so older output is discarded by tmux and
 cannot be recovered from the browser. Nothing about the history is persisted by
 the UI.
 
-The agent header exposes manual **Exec** before Start/Stop, only while the
-agent is enabled and not `bare:latest`, for interactive and non-interactive
-agents alike. It opens a dialog whose optional, memory-only one-shot text is
+The agent header's `⋯` menu has **Run once…**, only while the agent is enabled
+and not `bare:latest`, for interactive and non-interactive agents alike. It
+opens the **Run once** dialog, whose optional, memory-only one-shot text is
 sent to the route-selected host and affects only the newly requested iteration.
-Exec does not start the agent or persist the draft. A successful request closes
+Run once does not start the agent or persist the draft. A successful request closes
 the dialog and, when the Terminal tab shows an interactive terminal, reconnects its
 startup handling; a rejected request keeps the dialog and the draft for retry.
 
 Permanent agent deletion requires confirmation in an in-app dialog that names
 the agent and warns that its durable data is also removed. Confirm sends the
 existing `force=true` and `purge=true` request. While that request is pending,
-the dialog cannot be dismissed or submitted again. The Terminal tab returns home
+the dialog cannot be dismissed or submitted again. The workspace returns home
 only after success; on failure it keeps the dialog open, restores its controls,
-and reports the error so the operator can retry. **Kill session** remains a
-separate action with its existing browser confirmation and does not delete the
+and reports the error so the operator can retry. **Force-stop current run** in
+the `⋯` menu is a separate action. It asks for confirmation in an in-app
+dialog, stops only the current iteration or session, and does not delete the
 agent or its durable data.
 
 An agent's **Retention and cleanup** block edits that agent's override of the

@@ -1,8 +1,28 @@
 import type { ComponentProps } from "react";
 
 import { StatusDot, StatusPill } from "@/components/ui/status";
-import { agentTone } from "@/lib/statusTone";
+import { agentStateTone, type AgentState } from "@/lib/agentState";
 import { cn } from "@/lib/utils";
+import { elapsed } from "@/pages/home/homeModel";
+
+/** The text on the right of a row; an idle agent has none, so a long list
+ *  reads as the few agents to look at. */
+function pillText(state: AgentState, now: Date): string {
+  switch (state.kind) {
+    case "needs":
+      return `needs you · ${state.needs.count}`;
+    case "working": {
+      const time = state.since ? elapsed(state.since, now) : "";
+      return time ? `working · ${time}` : "working";
+    }
+    case "error":
+      return "error";
+    case "off":
+      return "off";
+    default:
+      return "";
+  }
+}
 
 /**
  * One agent in the sidebar. 30px tall, and the selected one is the same
@@ -14,25 +34,24 @@ import { cn } from "@/lib/utils";
  */
 export function AgentRow({
   name,
-  state,
-  outOfBudget = false,
+  agentState,
+  now,
   selected = false,
-  unreadMessages = 0,
   interactive = true,
   className,
   ...props
 }: ComponentProps<"button"> & {
   name: string;
-  state: string;
-  /** Budget exhausted — outranks the state in both the dot and the pill. */
-  outOfBudget?: boolean;
+  /** The derived state: the dot's color and the pill on the right. */
+  agentState: AgentState;
+  /** The clock "working · 12 min" counts from. */
+  now: Date;
   selected?: boolean;
-  /** Unread chat messages from this agent. Zero renders nothing at all. */
-  unreadMessages?: number;
   /** false → the agent has no tty; shown as a quiet marker after the name. */
   interactive?: boolean;
 }) {
-  const tone = agentTone(state, outOfBudget);
+  const tone = agentStateTone(agentState);
+  const pill = pillText(agentState, now);
   return (
     <button
       type="button"
@@ -55,26 +74,14 @@ export function AgentRow({
           non-tty
         </span>
       )}
-      {unreadMessages > 0 && (
-        <span
-          aria-label={`${unreadMessages} unread messages from ${name}`}
-          title={`${unreadMessages} unread messages`}
-          className="shrink-0 rounded-full bg-primary px-1.5 text-micro leading-4 font-medium text-primary-foreground"
-        >
-          {unreadMessages > 99 ? "99+" : unreadMessages}
-        </span>
-      )}
-      {outOfBudget ? (
+      {pill && (
         <StatusPill
-          tone="danger"
+          data-slot="agent-row-pill"
+          tone={tone}
           size="sm"
-          title="Budget exhausted — agent paused until the cap is raised"
+          title={agentState.kind === "error" ? agentState.reason : undefined}
         >
-          no budget
-        </StatusPill>
-      ) : (
-        <StatusPill tone={tone} size="sm" quiet="chip" title={`Status: ${state}`}>
-          {state}
+          {pill}
         </StatusPill>
       )}
     </button>

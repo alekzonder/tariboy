@@ -88,6 +88,24 @@ describe("needsYouCounts", () => {
     ).toEqual({ tasks: 2, inbox: 3 });
   });
 
+  it("counts a task with an open question once, and a question on a task not listed", () => {
+    const question = (id: string, key: string, over: Partial<Letter> = {}) =>
+      letter({ id, kind: "task.question", data: { task_key: key }, ...over });
+    expect(
+      needsYouCounts([
+        host({
+          tasks: [task({ key: "A-1", waiting_on: "customer" })],
+          letters: [
+            question("m-1", "A-1"),
+            question("m-2", "B-1"),
+            question("m-3", "C-1", { answered_at: "2026-10-30T10:00:00Z" }),
+            letter({ id: "m-4", data: { task_key: "D-1" } }),
+          ],
+        }),
+      ]).tasks,
+    ).toBe(2);
+  });
+
   it("has no count when no host answered", () => {
     expect(needsYouCounts([host({ error: "down" })])).toEqual({ tasks: null, inbox: null });
     expect(needsYouCounts([])).toEqual({ tasks: null, inbox: null });

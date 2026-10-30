@@ -1,9 +1,9 @@
 import { AgentControls } from "tariboy-ui";
 
-// AgentControls is the full lifecycle strip for one agent: the RunStateActions
-// trio, the destructive Kill/Remove pair (each behind an AlertDialog), and the
-// one-shot exec prompt pushed to the right. `refresh` re-polls the agent
-// snapshot after an action resolves.
+// AgentControls is the header's action cluster for one agent: the primary
+// action of its derived state, the Stop/Start toggle, and the `⋯` menu (Run
+// once…, Force-stop, VS Code, Clone, Pin, Settings, Delete). `refresh` re-polls
+// the agent snapshot after an action resolves.
 
 export const AgentWorkspace = () => (
   <div style={{ width: 720, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -22,7 +22,9 @@ export const AgentWorkspace = () => (
       name="builder"
       alive
       image="worker:v2"
-      configurationPath="/agents/local/builder/configuration"
+      primary="give"
+      workPath="/agents/local/builder/work"
+      settingsPath="/agents/local/builder/settings"
       refresh={() => {}}
     />
   </div>
@@ -45,20 +47,23 @@ export const StoppedAgent = () => (
       name="docs-bot"
       alive={false}
       image="bare:latest"
-      configurationPath="/agents/local/docs-bot/configuration"
+      primary="start"
+      workPath="/agents/local/docs-bot/work"
+      settingsPath="/agents/local/docs-bot/settings"
       refresh={() => {}}
     />
   </div>
 );
 
-// The strip is `flex-wrap`: in a narrow column (the agent sidebar width) the
-// exec prompt drops onto its own line instead of squeezing the buttons.
-export const NarrowColumn = () => (
+// An agent that waits for the user: Answer is the primary action.
+export const NeedsYou = () => (
   <div style={{ width: 380 }}>
     <AgentControls
       name="packager"
       alive
-      configurationPath="/agents/local/packager/configuration"
+      primary="answer"
+      workPath="/agents/local/packager/work"
+      settingsPath="/agents/local/packager/settings"
       refresh={() => {}}
     />
   </div>

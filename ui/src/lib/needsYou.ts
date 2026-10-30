@@ -58,6 +58,17 @@ export function needsYouRows(hosts: HostNeeds[]): NeedsYouRow[] {
   return [...tasks.sort(newestFirst), ...letters.sort(newestFirst)];
 }
 
+/** The tasks of one host that wait on the user: the agent pills' predicate
+ *  (`needsYouTask`, or an open question about the task), each task once. */
+function needsYouTaskKeys(host: HostNeeds): Set<string> {
+  const keys = new Set(host.tasks.filter(needsYouTask).map((task) => task.key));
+  for (const letter of host.letters) {
+    const key = letterTaskKey(letter);
+    if (key && letter.kind === "task.question" && openLetter(letter)) keys.add(key);
+  }
+  return keys;
+}
+
 /** The sidebar badges. A host that failed adds nothing; with no host
  *  answering there is no count at all, rather than a misleading 0. */
 export function needsYouCounts(hosts: HostNeeds[]): {
@@ -67,7 +78,7 @@ export function needsYouCounts(hosts: HostNeeds[]): {
   const answered = hosts.filter((host) => !host.error);
   if (answered.length === 0) return { tasks: null, inbox: null };
   return {
-    tasks: answered.reduce((sum, host) => sum + host.tasks.filter(needsYouTask).length, 0),
+    tasks: answered.reduce((sum, host) => sum + needsYouTaskKeys(host).size, 0),
     inbox: answered.reduce((sum, host) => sum + host.open, 0),
   };
 }

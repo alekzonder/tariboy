@@ -1,6 +1,8 @@
-import { HelpCircle, Keyboard } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, HelpCircle, Keyboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SendFilesButton } from "@/components/SendFilesButton";
+import { isAndroidShell } from "@/lib/desktop";
 import { HOTKEY_BYTES } from "@/lib/terminalBytes";
 import { cn } from "@/lib/utils";
 import type { TmuxScrollback } from "./useTmuxScrollback";
@@ -18,8 +20,9 @@ const SCROLLBACK_HINT =
   "Live input is paused while you browse history — press q in the terminal or " +
   "use Exit scrollback to return to live output.";
 
-/** Controls under the live terminal: Send files, Compose, hotkeys, the tmux
- * scrollback buttons with their live region, and Help. */
+/** Controls under the live terminal: Send files, Compose, the tmux scrollback
+ * buttons with their live region, the hotkeys behind Keys, and Help. Android,
+ * which has no Esc or arrow keys, shows the hotkeys at once. */
 export function TerminalToolbar({
   workspaceSurface,
   closed,
@@ -40,6 +43,7 @@ export function TerminalToolbar({
   onHelp: () => void;
 }) {
   const { copyModeRequested, exitAnnouncement } = scrollback;
+  const [keysOpen, setKeysOpen] = useState(isAndroidShell);
   return (
     <div
       data-testid="terminal-toolbar"
@@ -53,17 +57,6 @@ export function TerminalToolbar({
         <Keyboard className="size-4" />
         Compose
       </Button>
-      {HOTKEYS.map((h) => (
-        <Button
-          key={h.label}
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => send(h.bytes)}
-        >
-          {h.label}
-        </Button>
-      ))}
       <Button
         type="button"
         variant="outline"
@@ -107,6 +100,28 @@ export function TerminalToolbar({
         )}
         {exitAnnouncement && <span className="sr-only">{exitAnnouncement}</span>}
       </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-expanded={keysOpen}
+        onClick={() => setKeysOpen(!keysOpen)}
+      >
+        Keys
+        <ChevronDown className={cn("size-3.5", keysOpen && "rotate-180")} aria-hidden="true" />
+      </Button>
+      {keysOpen &&
+        HOTKEYS.map((h) => (
+          <Button
+            key={h.label}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => send(h.bytes)}
+          >
+            {h.label}
+          </Button>
+        ))}
       <Button
         type="button"
         variant="outline"

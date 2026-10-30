@@ -2,23 +2,46 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 // One time window shared by every Activity view. The choice lives in the URL
-// (?period=hour|day|week|custom, plus ?since/?until as datetime-local values
-// for custom) so a view can be shared and survives a reload.
+// (?period=hour|day|today|week|month|custom, plus ?since/?until as
+// datetime-local values for custom) so a view can be shared and survives a
+// reload. Every period parses everywhere, so a link from one Activity view
+// opens in another even when that view's bar lists other periods.
 
-export type ActivityPeriod = "hour" | "day" | "week" | "custom";
+export type ActivityPeriod = "hour" | "day" | "today" | "week" | "month" | "custom";
 
-export const ACTIVITY_PERIODS: Array<{ period: ActivityPeriod; label: string }> = [
+type PeriodOption = { period: ActivityPeriod; label: string };
+
+/** The server Activity page's periods. */
+export const ACTIVITY_PERIODS: PeriodOption[] = [
   { period: "hour", label: "Hour" },
   { period: "day", label: "Day" },
   { period: "week", label: "Week" },
   { period: "custom", label: "Custom" },
 ];
 
-const SPAN_MS: Record<Exclude<ActivityPeriod, "custom">, number> = {
+/** The agent Activity tab's periods; its default is today. */
+export const AGENT_ACTIVITY_PERIODS: PeriodOption[] = [
+  { period: "today", label: "Today" },
+  { period: "week", label: "Week" },
+  { period: "month", label: "Month" },
+  { period: "custom", label: "Custom" },
+];
+
+const SPAN_MS: Record<Exclude<ActivityPeriod, "custom" | "today">, number> = {
   hour: 3600e3,
   day: 24 * 3600e3,
   week: 7 * 24 * 3600e3,
+  month: 30 * 24 * 3600e3,
 };
+
+const PERIODS = new Set<string>(["hour", "day", "today", "week", "month", "custom"]);
+
+function periodStart(period: Exclude<ActivityPeriod, "custom">, now: Date): Date {
+  if (period !== "today") return new Date(now.getTime() - SPAN_MS[period]);
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  return midnight;
+}
 
 export interface ActivityWindow {
   period: ActivityPeriod;
@@ -32,16 +55,21 @@ export interface ActivityWindow {
   error: string;
 }
 
-export function activityWindow(search: URLSearchParams, now: Date): ActivityWindow {
-  const raw = search.get("period");
-  const period: ActivityPeriod = raw === "hour" || raw === "week" || raw === "custom" ? raw : "day";
+/** fallback is the period without (or with an unknown) ?period=. */
+export function activityWindow(
+  search: URLSearchParams,
+  now: Date,
+  fallback: ActivityPeriod = "day",
+): ActivityWindow {
+  const raw = search.get("period") ?? "";
+  const period = PERIODS.has(raw) ? (raw as ActivityPeriod) : fallback;
   const customSince = search.get("since") ?? "";
   const customUntil = search.get("until") ?? "";
   const base = { period, customSince, customUntil, error: "" };
   if (period !== "custom") {
     return {
       ...base,
-      since: new Date(now.getTime() - SPAN_MS[period]).toISOString(),
+      since: periodStart(period, now).toISOString(),
       until: now.toISOString(),
     };
   }
@@ -66,7 +94,7 @@ export function closestBucket(spanMs: number): string {
 // views keyed on the window do not reload on each poll.
 const TICK_MS = 60e3;
 
-export function useActivityWindow() {
+export function useActivityWindow(fallback: ActivityPeriod = "day") {
   const [searchParams, setSearchParams] = useSearchParams();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -74,7 +102,10 @@ export function useActivityWindow() {
     return () => window.clearInterval(timer);
   }, []);
   const search = searchParams.toString();
-  const current = useMemo(() => activityWindow(new URLSearchParams(search), now), [search, now]);
+  const current = useMemo(
+    () => activityWindow(new URLSearchParams(search), now, fallback),
+    [search, now, fallback],
+  );
   // A period change replaces the history entry, like the other Activity filters.
   const update = (changes: Record<string, string>) => {
     const next = new URLSearchParams(searchParams);

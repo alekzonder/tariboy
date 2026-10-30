@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import {
   DndContext,
@@ -26,12 +26,16 @@ import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { SidebarSearch } from "./SidebarSearch";
 import type { AgentRowActions } from "./SidebarAgentRow";
 import { filterHosts, hostsLine, sidebarLayout } from "./sidebarModel";
+import { agentNeeds } from "@/lib/agentState";
+import { useNeedsYou } from "../needsYouContext";
 import {
   readAgentsOpen,
-  readPinnedAgents,
+  togglePinnedAgent,
+  usePinnedAgents,
   writeAgentsOpen,
-  writePinnedAgents,
 } from "./sidebarPrefs";
+
+const MINUTE_MS = 60_000;
 
 export interface SidebarActions extends HostActions {
   onSelect: (hostId: string, agent: string) => void;
@@ -83,20 +87,19 @@ export function AgentSidebar({
   const asideRef = useRef<HTMLElement | null>(null);
   const { pathname } = useLocation();
   const [agentsOpen, setAgentsOpen] = useState(readAgentsOpen);
-  const [pinned, setPinned] = useState<ReadonlySet<string>>(readPinnedAgents);
+  const pinned = usePinnedAgents();
+  const { hosts: needsHosts } = useNeedsYou();
+  // "working · 12 min" moves once a minute.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), MINUTE_MS);
+    return () => window.clearInterval(timer);
+  }, []);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor),
   );
 
-  const togglePin = useCallback((key: string) => {
-    setPinned((current) => {
-      const next = new Set(current);
-      if (!next.delete(key)) next.add(key);
-      writePinnedAgents(next);
-      return next;
-    });
-  }, []);
   const toggleAgents = () => {
     setAgentsOpen(!agentsOpen);
     writeAgentsOpen(!agentsOpen);
@@ -120,7 +123,13 @@ export function AgentSidebar({
     pinned,
     onSelect: actions.onSelect,
     onClone: actions.onClone,
-    onTogglePin: togglePin,
+    onTogglePin: togglePinnedAgent,
+    now,
+    needsFor: (hostId, agent) =>
+      agentNeeds(
+        needsHosts.find((host) => host.hostId === hostId),
+        agent,
+      ),
   };
 
   return (

@@ -4,7 +4,7 @@ import { useDaemons } from "@/components/daemonContext";
 import type { HostAgents } from "@/lib/aggregate";
 import { scopedPath } from "@/lib/navRoutes";
 import { hostToParam } from "@/lib/terminalsHost";
-import { defaultAgentTab } from "@/lib/uiMode";
+import { DEFAULT_AGENT_TAB } from "@/pages/agents/agentWorkspaceModel";
 import type { CloneAgentSource } from "./CreateAgentDialog";
 import { AgentSidebar, type SidebarActions } from "./sidebar/AgentSidebar";
 import type { ReorderKind } from "./sidebar/sidebarDnd";
@@ -68,7 +68,7 @@ export function TerminalsSidebar({
     // view answers the same question about the next agent. Any query (a
     // selected task) belongs to the agent being left, so it is dropped.
     onSelect: closing((h: string, a: string) =>
-      navigate(agentPath(h, a, agentName && agentTab ? agentTab : defaultAgentTab())),
+      navigate(agentPath(h, a, agentName && agentTab ? agentTab : DEFAULT_AGENT_TAB)),
     ),
     onSelectTeam: closing((h: string, team: string) => {
       navigate(`/agents/${hostToParam(h)}/teams/${encodeURIComponent(team)}`);

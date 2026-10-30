@@ -158,6 +158,7 @@ describe("TuiScreen", () => {
   it("a hotkey button sends its raw bytes via controller.send", () => {
     const c = ctrl();
     render(<TuiScreen controller={c} />);
+    fireEvent.click(screen.getByRole("button", { name: "Keys" }));
     fireEvent.click(screen.getByRole("button", { name: "Ctrl-C" }));
     expect(c.send).toHaveBeenCalledWith("\x03");
   });
@@ -196,7 +197,7 @@ describe("TuiScreen", () => {
     render(<TuiScreen controller={ctrl({ absent: true })} onStart={onStart} />);
     expect(
       screen.getByText(
-        "No terminal session. Start the agent, or turn on Interactive in Configuration → Runtime.",
+        "No terminal session. Start the agent, or turn on Interactive terminal in Settings → Model.",
       ),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
@@ -631,6 +632,7 @@ describe("TuiScreen", () => {
       const c = ctrl({ status: "closed" });
       render(<TuiScreen controller={c} />);
 
+      fireEvent.click(screen.getByRole("button", { name: "Keys" }));
       fireEvent.click(screen.getByRole("button", { name: "Esc" }));
 
       expect(c.send).toHaveBeenCalledWith("\x1b");

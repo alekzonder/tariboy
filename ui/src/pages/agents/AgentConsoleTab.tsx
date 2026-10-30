@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { FirstVisitHint } from "@/components/onboarding/FirstVisitHint";
 import { SendFilesButton } from "@/components/SendFilesButton";
@@ -10,8 +9,33 @@ import { useTerminalSocket } from "@/hooks/useTerminalSocket";
 import { ApiError, type AgentRow } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
 import { useAgentStatus } from "@/lib/agent";
+import { deriveAgentState } from "@/lib/agentState";
 import { hostToParam } from "@/lib/terminalsHost";
-import { TerminalStatusLine } from "./TerminalStatusLine";
+import { TerminalBanner, type BannerState } from "./TerminalBanner";
+
+// The banner follows the derived agent state; "needs you" does not change
+// what the screen shows, so it is left out here.
+function bannerState({
+  agent,
+  status,
+  interactive,
+  alive,
+  starting,
+}: {
+  agent: AgentRow;
+  status: Parameters<typeof deriveAgentState>[0]["status"];
+  interactive: boolean;
+  alive: boolean;
+  starting: boolean;
+}): BannerState {
+  const state = deriveAgentState({ agent, status, needs: { count: 0 } });
+  if (state.kind === "error") return state;
+  if (!interactive) return { kind: "no-terminal" };
+  if (!alive) return { kind: "off" };
+  if (starting) return { kind: "starting" };
+  if (state.kind === "working") return { kind: "working", taskKey: agent.current_goal_task_key };
+  return { kind: "idle" };
+}
 
 export default function AgentConsoleTab({
   hostId,
@@ -31,8 +55,6 @@ export default function AgentConsoleTab({
   const controller = useTerminalSocket(agent.name, interactive && alive);
   // The workspace polls the status more often than the agent list refreshes.
   const { status } = useAgentStatus();
-  const reasons = status ?? agent;
-  const reason = reasons.halt_reason || reasons.error_reason;
   const absentUpload = useSendFiles({
     onUploaded: (paths) => toast.success(`uploaded: ${paths.join(", ")}`),
   });
@@ -61,17 +83,24 @@ export default function AgentConsoleTab({
     seenExec.current = execCount;
     if (interactive) reconnect();
   }, [execCount, interactive, reconnect]);
-  const configuration = `/agents/${hostToParam(hostId)}/${encodeURIComponent(agent.name)}/configuration`;
+  const settings = `/agents/${hostToParam(hostId)}/${encodeURIComponent(agent.name)}/settings`;
+  const banner = bannerState({
+    agent,
+    status,
+    interactive,
+    alive,
+    starting: controller.status === "connecting" || controller.absent,
+  });
 
   return (
     <div className="flex h-full flex-col gap-2">
-      <TerminalStatusLine
+      <TerminalBanner
+        state={banner}
         harness={agent.image.split(":")[0] === "bare" ? "" : agent.harness}
         cwd={agent.cwd}
-        starting={interactive && alive && (controller.status === "connecting" || controller.absent)}
-        reason={reason}
-        configuration={configuration}
+        settings={settings}
         onRetry={start}
+        onStart={start}
       />
       {interactive && alive && <FirstVisitHint hostId={hostId} agent={agent.name} tab="console" />}
       {!interactive ? (
@@ -83,17 +112,11 @@ export default function AgentConsoleTab({
           onDrop={absentDrop.onDrop}
           className={`flex flex-1 flex-col items-center justify-center gap-2 rounded-md border text-sm text-muted-foreground${absentDrop.dragActive ? " ring-2 ring-primary" : ""}`}
         >
-          <p>This agent has no interactive terminal.</p>
-          <Link className="text-primary underline" to={configuration}>
-            Open Configuration
-          </Link>
           <SendFilesButton onUploaded={(paths) => toast.success(`uploaded: ${paths.join(", ")}`)} />
         </div>
       ) : !alive ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-md border text-sm text-muted-foreground">
-          {/* Start/Stop live only in the agent header. */}
-          <p>Agent is stopped.</p>
-        </div>
+        // The banner says the agent is off; the box only keeps the layout.
+        <div className="flex-1 rounded-md border" />
       ) : (
         <TuiScreen controller={controller} fill onStart={start} />
       )}
