@@ -82,7 +82,7 @@ func (s *WorkflowEngine) advance(ctx context.Context, actor Actor, key string, i
 			"task "+task.Key+" is in status "+task.WorkflowStatus+", not "+in.From).
 			WithData(map[string]any{"status": task.WorkflowStatus})
 	}
-	status, ok := currentStatus(manifest, task.WorkflowStatus)
+	status, ok := taskStatus(manifest, task)
 	if !ok {
 		return TransitionRequest{}, newError(http.StatusConflict, "status_unknown",
 			"task "+task.Key+" is in status "+task.WorkflowStatus+", which its workflow does not declare")
@@ -522,13 +522,17 @@ func requireOpenWorkflow(task Task) error {
 
 // ownsStatusTx reports whether the actor owns the task's current status: the
 // holder of a pool status, the customer of a customer status, and nobody for a
-// script or terminal status.
+// script or terminal status. The customer keeps a customer status that a pool
+// owns in its place.
 func ownsStatusTx(ctx context.Context, q queryer, task Task, manifest workflowimage.Manifest, status workflowfile.Status, actor Actor) (bool, error) {
 	if status.Terminal {
 		return false, nil
 	}
 	switch status.Owner.Kind {
 	case workflowfile.OwnerPool:
+		if task.workflowOwnerPool != "" && actor.IsCustomer {
+			return true, nil
+		}
 		return holdsPoolStatusTx(ctx, q, task, manifest, actor)
 	case workflowfile.OwnerCustomer:
 		return actor.IsCustomer, nil

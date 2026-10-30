@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 
@@ -301,10 +302,12 @@ func requirePoolUnused(ctx context.Context, q queryer, queue, pool string) error
 		if err != nil {
 			return err
 		}
-		for _, used := range manifest.Definition.Pools() {
-			if used == pool {
-				return poolsEmptyError([]string{pool})
-			}
+		used, err := workflowPoolsTx(ctx, q, queue, manifest)
+		if err != nil {
+			return err
+		}
+		if slices.Contains(used, pool) {
+			return poolsEmptyError([]string{pool})
 		}
 	}
 	return nil
@@ -397,7 +400,11 @@ func (s *WorkflowEngine) SetQueueWorkflow(ctx context.Context, actor Actor, queu
 		}
 		return QueueWorkflow{}, err
 	}
-	if missing, err := emptyPools(ctx, tx, queue, manifest.Definition.Pools()); err != nil {
+	pools, err := workflowPoolsTx(ctx, tx, queue, manifest)
+	if err != nil {
+		return QueueWorkflow{}, err
+	}
+	if missing, err := emptyPools(ctx, tx, queue, pools); err != nil {
 		return QueueWorkflow{}, err
 	} else if len(missing) > 0 {
 		return QueueWorkflow{}, poolsEmptyError(missing)
@@ -519,8 +526,12 @@ func (s *WorkflowEngine) followQueueWorkflowTx(ctx context.Context, tx *sql.Tx, 
 	if err != nil {
 		return QueueWorkflow{}, err
 	}
+	pools, err := workflowPoolsTx(ctx, tx, current.Queue, manifest)
+	if err != nil {
+		return QueueWorkflow{}, err
+	}
 	reason, names := "", []string(nil)
-	if missing, err := emptyPools(ctx, tx, current.Queue, manifest.Definition.Pools()); err != nil {
+	if missing, err := emptyPools(ctx, tx, current.Queue, pools); err != nil {
 		return QueueWorkflow{}, err
 	} else if len(missing) > 0 {
 		reason, names = "workflow_pool_empty", missing

@@ -296,7 +296,7 @@ var operatorExamples = map[string]string{
 	"queue.secret.set":     "queue secret set DEV GH_TOKEN --value 'token'\nprintf '%s' \"$TOKEN\" | ttasks queue secret set DEV GH_TOKEN",
 	"queue.secret.ls":      "queue secret ls DEV",
 	"queue.secret.rm":      "queue secret rm DEV GH_TOKEN",
-	"queue.env.set":        "queue env set DEV LOG_LEVEL debug\nqueue env set DEV BASE_URL --value 'https://example.test'",
+	"queue.env.set":        "queue env set DEV LOG_LEVEL debug\nqueue env set DEV BASE_URL --value 'https://example.test'\nqueue env set DEV CUSTOMER_AGENT_POOL approvers",
 	"queue.env.ls":         "queue env ls DEV",
 	"queue.env.rm":         "queue env rm DEV LOG_LEVEL",
 	"queue.source.ls":      "queue source ls DEV",

@@ -71,7 +71,7 @@ func (s *WorkflowEngine) pauseTx(ctx context.Context, tx *sql.Tx, task *Task, ma
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	status, known := currentStatus(manifest, task.WorkflowStatus)
+	status, known := taskStatus(manifest, *task)
 	pool := known && !status.Terminal && status.Owner.Kind == workflowfile.OwnerPool
 	previousCategory := task.Status
 	task.WorkflowPausedReason = reason
@@ -255,7 +255,7 @@ func resumeDecisionStatus(task Task, manifest workflowimage.Manifest, decision s
 	if task.WorkflowPausedReason == "" {
 		return workflowfile.Status{}, false, newError(http.StatusConflict, "workflow_not_paused", "task "+task.Key+" is not paused")
 	}
-	status, ok := currentStatus(manifest, task.WorkflowStatus)
+	status, ok := taskStatus(manifest, task)
 	if !ok || status.Terminal {
 		return workflowfile.Status{}, false, newError(http.StatusConflict, "status_unknown",
 			"task "+task.Key+" is in status "+task.WorkflowStatus+", which its workflow does not declare")

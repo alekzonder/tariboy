@@ -181,7 +181,7 @@ func workflowTaskTx(ctx context.Context, q taskQueryer, actor Actor, key string,
 // holdsPoolStatusTx reports whether the actor is the task's assignee and the
 // recorded, unreleased holder for the pool that owns the task's current status.
 func holdsPoolStatusTx(ctx context.Context, q queryer, task Task, manifest workflowimage.Manifest, actor Actor) (bool, error) {
-	status, ok := currentStatus(manifest, task.WorkflowStatus)
+	status, ok := taskStatus(manifest, task)
 	if !ok || status.Owner.Kind != workflowfile.OwnerPool || task.Assignee != actor.Principal {
 		return false, nil
 	}

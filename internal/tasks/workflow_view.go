@@ -187,7 +187,7 @@ func (s *WorkflowEngine) GetWorkflow(ctx context.Context, actor Actor, key strin
 	// A closed task has no owner and no exit: every advance would be refused
 	// with workflow_closed.
 	closed := task.Status == StatusDone || task.Status == StatusCancelled
-	if status, ok := currentStatus(manifest, task.WorkflowStatus); ok && !closed {
+	if status, ok := taskStatus(manifest, task); ok && !closed {
 		view.Owner = statusOwner(status)
 		if !status.Terminal && status.Owner.Kind == workflowfile.OwnerPool {
 			view.Holder = task.Assignee

@@ -448,6 +448,13 @@ version's initial status in one transaction, with a `workflow.upgraded` event;
 the visits of the earlier version stay as history. See
 [Task workflows](/docs/task-workflows#upgrading-a-task-to-the-queue-version).
 
+Migration `0074` adds `task_status_visits.owner_pool` (default empty): the
+pool that owns a customer status in the customer's place, copied from the
+queue env var `CUSTOMER_AGENT_POOL` when the task enters the status. It
+replaces the owner kind triggers so that `tasks.workflow_owner_kind` is `pool`
+while such a visit is open. See
+[Task workflows](/docs/task-workflows#a-pool-in-place-of-the-customer).
+
 Migration `0063` adds `task_queue_source_runs`, the durable record of every run
 of a workflow source (queue, source, script, image digest, state, verdict, exit
 code, message, number of tasks created, process id, times, and log path), with a

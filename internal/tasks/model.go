@@ -189,6 +189,9 @@ type Task struct {
 	// create response, so the caller can say so instead of leaving the agent to discover it
 	// as a not_found on its own key.
 	Filed bool `json:"filed,omitempty"`
+	// workflowOwnerPool is the pool the open visit recorded in place of the
+	// customer of a customer status; taskStatus reads it.
+	workflowOwnerPool string
 }
 
 const (

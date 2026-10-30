@@ -184,7 +184,7 @@ func (s *WorkflowEngine) dispatchTask(ctx context.Context, id int64, busy map[st
 	if err != nil {
 		return "", err
 	}
-	status, ok := currentStatus(manifest, task.WorkflowStatus)
+	status, ok := taskStatus(manifest, task)
 	if !ok || status.Terminal || status.Owner.Kind != workflowfile.OwnerPool {
 		return "", nil
 	}

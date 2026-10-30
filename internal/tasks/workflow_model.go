@@ -81,7 +81,8 @@ type QueueWorkflow struct {
 //   - the position of the current status in the manifest: its index and the
 //     number of statuses;
 //   - the open visit's counters, its latest transition request, and its
-//     latest finished run, from which WorkflowAttention is derived.
+//     latest finished run, from which WorkflowAttention is derived, and the
+//     pool it recorded in place of the customer.
 //
 // A task has at most one open visit: enterStatusTx closes the current one
 // before it opens the next, and the newest by sequence is taken regardless.
@@ -98,6 +99,7 @@ const TaskWorkflowColumns = `
        CASE WHEN t.workflow_digest IS NOT NULL AND t.status NOT IN ('done', 'cancelled') THEN (
          SELECT json_object(
            'idle', cv.idle_iterations, 'rejected', cv.rejected_requests, 'failures', cv.script_failures,
+           'owner_pool', cv.owner_pool,
            'request', (
              SELECT json_object('id', r.id, 'state', r.state, 'message', substr(r.result_message, 1, 400))
              FROM task_transition_requests r WHERE r.visit_id = cv.id
@@ -136,6 +138,7 @@ func WorkflowScanTargets(t *Task) ([]any, func()) {
 		if visit.Valid {
 			tidy.Log(nil, "workflow visit is not valid JSON", json.Unmarshal([]byte(visit.String), &open), "workflow", t.WorkflowName)
 		}
+		t.workflowOwnerPool = open.OwnerPool
 		t.WorkflowAttention = workflowAttention(t, open)
 	}
 }
@@ -147,10 +150,11 @@ type scannedStep struct {
 }
 
 type scannedVisit struct {
-	Idle     int `json:"idle"`
-	Rejected int `json:"rejected"`
-	Failures int `json:"failures"`
-	Request  *struct {
+	OwnerPool string `json:"owner_pool"`
+	Idle      int    `json:"idle"`
+	Rejected  int    `json:"rejected"`
+	Failures  int    `json:"failures"`
+	Request   *struct {
 		ID      int64        `json:"id"`
 		State   RequestState `json:"state"`
 		Message string       `json:"message"`
