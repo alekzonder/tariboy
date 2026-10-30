@@ -65,9 +65,9 @@ concept, and a Home that says what needs the user.
 ## Constraints
 
 - `AGENTS.md`: typed results, OpenAPI and generated types in step, frontend
-  thresholds, bundle budget, Knip, `make check`. No daemon API change is
-  expected; if one becomes necessary (for example an image "used by" count
-  in the list), it follows the contract rules.
+  thresholds, bundle budget, Knip, `make check`. The only daemon changes are
+  the additive list fields named under Sequencing and in D1 and D3; they
+  follow the contract rules.
 - The tour anchors in `ui/src/lib/onboarding/tour.ts` are updated for every
   moved element; `tour.test.ts` must pass.
 - The responsive Playwright suite (`npm run test:responsive-browser`) covers
@@ -79,6 +79,18 @@ concept, and a Home that says what needs the user.
   `docs/docs/images/index.mdx`, `docs/docs/workflow-images.mdx`, and
   `docs/docs/remote-hosts.mdx` where they name a Desktop location.
 - No version bump.
+
+## Sequencing
+
+This project is planned and built on `main` after project 1 is merged. The
+zero-agent Home at `/`, the Sources rule for the `tariboy` card, the tour
+order and anchors, and the New agent dialog that "Run agent" opens are
+project 1 code and exist by then. Additive fields on list results
+(`AgentRow`, the task list item) are in scope when a decision below needs
+them and follow the API contract rules; project 3 reuses them. No count
+endpoint is required: Home and the badges poll the selected host's active
+task list at the sidebar's interval, and each host's list when there are
+several.
 
 ## Decisions
 
@@ -115,10 +127,14 @@ concept, and a Home that says what needs the user.
   ready", "2 hosts · 1 unreachable"), linking to Settings → Hosts. The
   "Update all (N)" action moves to Settings → Hosts; the footer shows a dot
   when a host is behind.
-- Badges: Tasks shows the number of tasks that need the user (the same
-  predicate project 3 defines for "needs you"; until project 3 lands, tasks
-  in category `wait_customer` or in a customer-owned non-initial workflow
-  status), Inbox shows open letters addressed to the user.
+- Badges: Tasks shows the number of tasks that need the user: tasks with
+  `waiting_on` equal to `customer` whose status is not the workflow's initial
+  status, plus tasks with `waiting_on` equal to `pause`. The task list item
+  gains a field that says whether the task is in its workflow's initial
+  status (an additive list field under the contract rules; project 3 reuses
+  it). Inbox shows open letters addressed to the user.
+- The Agents heading is not a route: it expands and collapses the agent list
+  in place and the list is expanded by default. There is no `/agents` page.
 - The content island keeps its current card styling. The server context bar
   is removed everywhere.
 
@@ -127,19 +143,27 @@ concept, and a Home that says what needs the user.
 | Sidebar item | Route | Content |
 | --- | --- | --- |
 | Home | `/` | D3; the project 1 empty state when the host has no agents |
-| Agents | `/agents` | the list in the sidebar expanded; the island shows Home's "Needs you" filtered to agents, or the last opened agent |
+| Agents | (no route) | the heading expands the list in the sidebar |
 | an agent | `/agents/:hostId/:agent/:tab` | unchanged (project 3 changes the tabs) |
 | a team | `/agents/:hostId/teams/:team` | unchanged |
-| Tasks | `/tasks` | the existing cross-host All tasks workspace with a Host filter shown only with two or more hosts |
-| Inbox | `/inbox` | the existing server Mailbox, cross-host when there are several hosts, with "Needs you" first (see D4) |
+| Tasks | `/tasks` | the existing per-host Tasks workspace for the selected host, with its `?task=` deep link, question marks, queue settings and "Manage queues…", filters and columns kept; a host selector only with two or more hosts (see D4) |
+| Inbox | `/inbox` | the existing server Mailbox for the selected host, with "Needs you" first (see D4) and the same host selector rule |
 | Library | `/library/images`, `/library/images/:name`, `/library/images/:name/:tag/*`, `/library/workflows`, `/library/workflows/:name/:tag`, `/library/sources`, `/library/sources/:name` | D5 |
 | Settings | `/settings/hosts`, `/settings/teams`, `/settings/usage`, `/settings/agent-defaults`, `/settings/integrations/:plugin?`, `/settings/maintenance`, `/app-settings` | D6 |
 
-- Host scope: Library and Settings pages that are per host (Images,
-  Workflows, Sources, Agent defaults, Maintenance, Operations) show a host
-  selector in their page header only when the workspace has two or more
-  hosts. The selected host is remembered in the existing active-daemon
-  storage. With one host nothing about hosts is shown.
+- Host scope: Tasks, Inbox, Library, and the Settings pages that are per
+  host (Agent defaults, Maintenance, Operations) show a host selector in
+  their page header only when the workspace has two or more hosts. The
+  selected host is remembered in the existing active-daemon storage. With
+  one host nothing about hosts is shown.
+- Host in links: every host-scoped route accepts an optional `?host=<id>`.
+  A link the UI builds itself (image links from an agent's configuration,
+  operation toasts, notification links) carries `?host=` when the workspace
+  has two or more hosts. A route with `?host=` naming a host other than the
+  remembered one selects that host through the existing selection path and
+  shows the existing connecting and failed states of the route host
+  boundary while it does. Redirects from the old host-exact URLs translate
+  the path host into `?host=`.
 - Every current route redirects: `/servers/:hostId/mail` → `/inbox`,
   `/servers/:hostId/tasks` → `/tasks`, `/servers/:hostId/activity` → `/`,
   `/servers/:hostId/images/*` → `/library/images/*`,
@@ -182,7 +206,9 @@ tariboy-developer-bob · needs you           sysadmin · idle
   user (the D1 predicate) and open letters addressed to the user. A row opens
   the task drawer or the letter. Empty: "Nothing needs you."
 - "Running now" lists agents in state `running` with the elapsed time of the
-  current iteration (from the existing agent view).
+  current iteration. `AgentRow` gains the start time of the current
+  iteration (an additive list field under the contract rules) so the list
+  needs no per-agent status call.
 - "Today" shows the existing server Activity tiles for the rolling day; the
   link opens the Activity table, which keeps its page at `/activity` reachable
   from Home only.
@@ -193,11 +219,14 @@ tariboy-developer-bob · needs you           sysadmin · idle
 
 ### D4. Tasks and Inbox
 
-- Tasks: the existing All tasks workspace becomes the only task table. Its
-  toolbar is one row at 1024 px: search, segmented Active/Done, a "Filters"
-  menu holding Queue, Assignee ("My tasks", an agent), "Waiting for me", Host
-  (only with several hosts), and Columns; refresh; New task. The queue menu
-  and "Manage queues…" stay in the Filters menu and the New task row.
+- Tasks: the existing per-host Tasks workspace is the only task table; the
+  cross-host All tasks workspace is removed, and its "every host" view is
+  replaced by the host selector. The toolbar is one row at 1024 px: search,
+  segmented Active/Done, a "Filters" menu holding Queue, Assignee ("My
+  tasks", an agent), "Waiting for me", and Columns; refresh; New task. The
+  queue menu and "Manage queues…" (for the selected host) stay in the
+  Filters menu and the New task row. The Tasks Playwright suite moves from
+  `/servers/local/tasks` to `/tasks` and keeps every scenario.
 - Inbox: "Needs you" first (the same rows as Home, full list), then the
   existing Inbox/Sent/Archive letters and Compose. The `batch · inbox N/M`
   counters and "Clear inbox" are not shown here; they belong to the agent's
@@ -255,7 +284,7 @@ Seven flat pages in a left nav, no index page, no "Operator tools" heading:
 | Agent defaults | the existing General page: shell script before each iteration, Codex approvals, backup and data retention; with a host selector when several hosts |
 | Integrations | Telegram and plugin settings, plus the existing Plugins page as its "Installed plugins" section |
 | Maintenance | the existing Ops page (backup and restore) and the Operations log as two sections; an operation detail keeps its own route under `/settings/maintenance/operations/:id` |
-| Application | the existing `/app-settings` page (Help, interface mode until project 3 removes it, Desktop updates, CLI install) reachable without a daemon connection, listed last |
+| Application | the existing standalone `/app-settings` page (Help, interface mode until project 3 removes it, Desktop updates, CLI install), unchanged in layout so it stays reachable without a daemon connection; the Settings nav lists it last as a link, and its "Back" returns to Settings |
 
 CLI and Appearance placeholders are deleted. "Daemons" is deleted (it is
 Hosts). Labels use "host", never "daemon" or "server", except in error text
