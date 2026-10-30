@@ -126,6 +126,12 @@ its iterations, secrets and AI budget) in one transaction, and
 and restore use the rows with a backup position. Iteration retention deletes
 the tables in `store.IterationTables`.
 
+`task_agent_pool_members` references `agents` with `ON DELETE RESTRICT`. The
+tasks service owns pool membership, and agent removal does not change it. A
+purge remove of an agent that is in a task queue agent pool fails before the
+daemon stops the agent. The error names each queue and pool. Remove the agent
+from the pool in the queue settings, then delete the agent.
+
 A new table with an `agent`, `agent_name` or `produced_by_agent` column, or a
 foreign key to a registry table without `ON DELETE CASCADE`, needs a registry
 row or an exemption with a reason in `agentKeyedExempt`. Otherwise the schema

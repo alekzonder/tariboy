@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -1293,6 +1294,12 @@ func (m *Manager) Remove(name string, force, purge bool) error {
 		release()
 		return err
 	}
+	if purge {
+		if err := m.checkNoPoolMemberships(name); err != nil {
+			release()
+			return err
+		}
+	}
 	servers, err := m.runtimes.remove(name, ag.Enabled, force)
 	// Released before the graceful shutdown: an in-flight tools call of this
 	// agent may itself wait for the gate (loop start/stop).
@@ -1332,6 +1339,26 @@ func (m *Manager) Remove(name string, force, purge bool) error {
 		return err
 	}
 	return os.RemoveAll(l.Root)
+}
+
+// checkNoPoolMemberships rejects a purge of an agent that still belongs to a
+// task queue agent pool. The pool members table keeps ON DELETE RESTRICT so a
+// workflow pool never empties silently; checking first keeps the agent running
+// and names what the operator must change.
+func (m *Manager) checkNoPoolMemberships(name string) error {
+	pools, err := m.cfg.Store.PoolMemberships(name)
+	if err != nil {
+		return err
+	}
+	if len(pools) == 0 {
+		return nil
+	}
+	names := make([]string, len(pools))
+	for i, p := range pools {
+		names[i] = fmt.Sprintf("agent pool %s in queue %s", p.Pool, p.Queue)
+	}
+	return fmt.Errorf("agent %s is a member of %s; remove it from the pool in the queue settings, then delete the agent",
+		name, strings.Join(names, ", "))
 }
 
 // Reprovision re-unpacks image into an existing agent's rebuildable tree

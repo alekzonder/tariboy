@@ -641,6 +641,34 @@ func (s *Store) PurgeAgentData(name string) error {
 	return tx.Commit()
 }
 
+// PoolMembership names one task queue agent pool an agent belongs to.
+type PoolMembership struct {
+	Queue string
+	Pool  string
+}
+
+// PoolMemberships lists the task queue agent pools that hold the agent,
+// ordered by queue and pool. task_agent_pool_members references agents with
+// ON DELETE RESTRICT, so a purge Remove checks this before it stops the agent.
+func (s *Store) PoolMemberships(name string) ([]PoolMembership, error) {
+	rows, err := s.db.Query(`SELECT p.queue_prefix, p.name
+		FROM task_agent_pool_members m JOIN task_agent_pools p ON p.id = m.pool_id
+		WHERE m.agent = ? ORDER BY p.queue_prefix, p.name`, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PoolMembership
+	for rows.Next() {
+		var pm PoolMembership
+		if err := rows.Scan(&pm.Queue, &pm.Pool); err != nil {
+			return nil, err
+		}
+		out = append(out, pm)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) Exists(name string) (bool, error) {
 	var n int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM agents WHERE name=?`, name).Scan(&n)
