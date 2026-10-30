@@ -1,4 +1,4 @@
-import { useLocation, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { hostToParam } from "@/lib/terminalsHost";
 import { resolveAgentTab } from "./agentWorkspaceModel";
 
@@ -13,8 +13,7 @@ export function useAgentWorkspaceRoute({
 }) {
   const { tab = "" } = useParams();
   const { search } = useLocation();
-  const [searchParams] = useSearchParams();
   const base = `/agents/${hostToParam(hostId)}/${encodeURIComponent(agentName)}`;
   const resolved = resolveAgentTab({ tab, base, search });
-  return { base, initialTaskKey: searchParams.get("task") ?? undefined, ...resolved };
+  return { base, ...resolved };
 }

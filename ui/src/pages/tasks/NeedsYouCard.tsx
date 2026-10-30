@@ -17,7 +17,7 @@ import { useWorkflowAdvance } from "./useWorkflowAdvance";
 import { CheckingStatus, OutcomeNotice } from "./WorkflowOutcomes";
 import WorkflowPauseBanner from "./WorkflowPauseBanner";
 import { requiredBy, stepArtifacts } from "./workflowGraph";
-import { visibleNotice } from "./workflowShared";
+import { visibleNotice, type Notice } from "./workflowShared";
 
 /** The comment that asks the customer and is still unanswered. The
  *  workflow's own wait is the status, not a question. */
@@ -85,6 +85,7 @@ export default function NeedsYouCard({
     );
   }
   const question = principals ? openQuestion(detailQuery.data, principals.customer) : undefined;
+  const refetchView = () => void viewQuery.refetch();
   return (
     <CardFrame cardRef={ref}>
       <div className="flex min-w-0 items-baseline gap-2">
@@ -102,34 +103,57 @@ export default function NeedsYouCard({
       {viewQuery.error && (
         <div role="alert" className="flex items-center gap-2 text-ui text-destructive">
           {errorText(viewQuery.error)}
-          <Button size="sm" variant="outline" onClick={() => void viewQuery.refetch()}>
+          <Button size="sm" variant="outline" onClick={refetchView}>
             Retry
           </Button>
         </div>
       )}
-      {view?.waiting_on === "pause" && (
-        <WorkflowPauseBanner
-          taskKey={taskKey}
-          reason={view.paused_reason ?? ""}
-          pool={view.owner.startsWith("pool")}
-          onChanged={changed}
-        />
+      {view && (
+        <WorkflowAsk taskKey={taskKey} view={view} assignee={task.assignee} onChanged={changed} />
       )}
-      {view && decides(view) && (
-        <p className="text-body-sm">
-          {task.assignee ? task.assignee.replace(/^agent:/, "") : "The workflow"} waits for your
-          decision in {view.status}.
-        </p>
-      )}
-      {view && decides(view) && <ArtifactViewer view={view} />}
       <CardActions
         taskKey={taskKey}
         view={decides(view) ? view : undefined}
         question={!!question}
         onChanged={changed}
-        onRefresh={() => void viewQuery.refetch()}
+        onRefresh={refetchView}
       />
     </CardFrame>
+  );
+}
+
+/** What a workflow status asks: the pause with its decisions, or the
+ *  customer's decision with the artifacts to review. */
+function WorkflowAsk({
+  taskKey,
+  view,
+  assignee,
+  onChanged,
+}: {
+  taskKey: string;
+  view: WorkflowView;
+  assignee: string;
+  onChanged: () => void;
+}) {
+  if (view.waiting_on === "pause") {
+    return (
+      <WorkflowPauseBanner
+        taskKey={taskKey}
+        reason={view.paused_reason ?? ""}
+        pool={view.owner.startsWith("pool")}
+        onChanged={onChanged}
+      />
+    );
+  }
+  if (!decides(view)) return null;
+  return (
+    <>
+      <p className="text-body-sm">
+        {assignee ? assignee.replace(/^agent:/, "") : "The workflow"} waits for your decision in{" "}
+        {view.status}.
+      </p>
+      <ArtifactViewer view={view} />
+    </>
   );
 }
 
@@ -219,56 +243,118 @@ function CardActions({
         className="min-h-12 rounded-md border-0 bg-muted text-body-sm md:text-body-sm"
       />
       <div className="flex flex-wrap gap-1.5">
-        {view?.outcomes.map((outcome) => (
-          <Button
-            key={outcome.on}
-            type="button"
-            size="sm"
-            className="h-7"
-            disabled={busy || (outcome.missing ?? []).length > 0}
-            title={outcome.missing?.length ? `needs: ${outcome.missing.join(", ")}` : undefined}
-            onClick={() => advance.advance(outcome.on)}
-          >
-            {outcome.on} → {outcome.to}
-          </Button>
-        ))}
+        {view && <OutcomeButtons view={view} busy={busy} onAdvance={advance.advance} />}
         {question && (
-          <>
-            <Button
-              type="button"
-              size="sm"
-              variant={view ? "secondary" : "default"}
-              className="h-7"
-              disabled={busy || !message.trim()}
-              onClick={() => send(message.trim())}
-            >
-              Send answer
-            </Button>
-            {!message.trim() && (
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                className="h-7"
-                disabled={busy}
-                onClick={() => send("Ok")}
-              >
-                Reply Ok to the question
-              </Button>
-            )}
-          </>
+          <AnswerButtons message={message} busy={busy} secondary={!!view} onSend={send} />
         )}
       </div>
+      <ActionStatus
+        checking={checking}
+        pendingElsewhere={pendingElsewhere}
+        notice={shown}
+        error={answer.error}
+        onRefresh={onRefresh}
+      />
+    </div>
+  );
+}
+
+/** A request still checking, how the last one settled, or a failed answer. */
+function ActionStatus({
+  checking,
+  pendingElsewhere,
+  notice,
+  error,
+  onRefresh,
+}: {
+  checking: boolean;
+  pendingElsewhere: boolean;
+  notice: Notice | null;
+  error: string;
+  onRefresh: () => void;
+}) {
+  return (
+    <>
       {(checking || pendingElsewhere) && (
         <CheckingStatus onRefresh={pendingElsewhere ? onRefresh : undefined} />
       )}
-      {shown && <OutcomeNotice notice={shown} onRefresh={onRefresh} />}
-      {answer.error && (
+      {notice && <OutcomeNotice notice={notice} onRefresh={onRefresh} />}
+      {error && (
         <p role="alert" className="text-ui text-destructive">
-          {answer.error}
+          {error}
         </p>
       )}
-    </div>
+    </>
+  );
+}
+
+/** One button per outcome, "<outcome> → <status>"; one that still misses an
+ *  artifact is disabled and names it. */
+function OutcomeButtons({
+  view,
+  busy,
+  onAdvance,
+}: {
+  view: WorkflowView;
+  busy: boolean;
+  onAdvance: (outcome: string) => void;
+}) {
+  return view.outcomes.map((outcome) => {
+    const missing = outcome.missing ?? [];
+    return (
+      <Button
+        key={outcome.on}
+        type="button"
+        size="sm"
+        className="h-7"
+        disabled={busy || missing.length > 0}
+        title={missing.length ? `needs: ${missing.join(", ")}` : undefined}
+        onClick={() => onAdvance(outcome.on)}
+      >
+        {outcome.on} → {outcome.to}
+      </Button>
+    );
+  });
+}
+
+/** Send the message as the answer, or Ok while the box is empty. */
+function AnswerButtons({
+  message,
+  busy,
+  secondary,
+  onSend,
+}: {
+  message: string;
+  busy: boolean;
+  secondary: boolean;
+  onSend: (text: string) => void;
+}) {
+  const text = message.trim();
+  return (
+    <>
+      <Button
+        type="button"
+        size="sm"
+        variant={secondary ? "secondary" : "default"}
+        className="h-7"
+        disabled={busy || !text}
+        onClick={() => onSend(text)}
+      >
+        Send answer
+      </Button>
+      {!text && (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="h-7"
+          disabled={busy}
+          onClick={() => onSend("Ok")}
+        >
+          Reply Ok to the question
+        </Button>
+      )}
+    </>
   );
 }
 

@@ -8,21 +8,21 @@ import type { AgentRow, AgentView } from "@/lib/api";
 import { LazyBoundary } from "@/components/LazyBoundary";
 import { FirstVisitHint } from "@/components/onboarding/FirstVisitHint";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
-import { agentNeeds, deriveAgentState, type AgentState } from "@/lib/agentState";
+import { agentNeeds, deriveAgentState, type AgentNeeds, type AgentState } from "@/lib/agentState";
 import { useNeedsYou } from "@/pages/terminals/needsYouContext";
 import type { AgentTab } from "./agentWorkspaceModel";
 import { AgentWorkspaceHeader } from "./AgentWorkspaceHeader";
 import { useAgentWorkspaceRoute } from "./useAgentWorkspaceRoute";
 import { useAgentWorkspaceStatus } from "./useAgentWorkspaceStatus";
 
-// Each tab loads on first open: the terminal brings xterm, Tasks the rich text
+// Each tab loads on first open: the terminal brings xterm, Work the rich text
 // editor.
 const AgentMailboxTab = lazy(() => import("./AgentMailboxTab"));
 const AgentConsoleTab = lazy(() => import("./AgentConsoleTab"));
 const AgentActivityTab = lazy(() => import("./AgentActivityTab"));
 const AgentConfigurationTab = lazy(() => import("./AgentConfigurationTab"));
 const AgentAdvancedTab = lazy(() => import("./AgentAdvancedTab"));
-const TasksWorkspace = lazy(() => import("@/pages/tasks/TasksWorkspace"));
+const AgentWorkTab = lazy(() => import("./work/AgentWorkTab"));
 
 type AgentWorkspaceProps = {
   hostId: string;
@@ -41,7 +41,7 @@ type TabContext = {
   view: AgentView | null;
   refresh: () => void;
   execCount: number;
-  initialTaskKey?: string;
+  needs: AgentNeeds;
   onNotificationsChanged: () => void;
 };
 
@@ -51,19 +51,17 @@ const TAB_CONTENT: Record<AgentTab, (ctx: TabContext) => ReactNode> = {
     <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} execCount={execCount} />
   ),
   activity: () => <AgentActivityTab />,
-  // Until Work gets its own layout it shows the agent's task list.
-  work: ({ hostId, agent, initialTaskKey, onNotificationsChanged }) => (
-    <div className="flex h-full min-h-0 flex-col">
+  work: ({ hostId, agent, base, needs, refresh, onNotificationsChanged }) => (
+    <>
       <FirstVisitHint hostId={hostId} agent={agent.name} tab="work" className="mx-3 mt-3" />
-      <div className="min-h-0 flex-1">
-        <TasksWorkspace
-          scopeAgent={agent.name}
-          goalTaskKey={agent.current_goal_task_key}
-          initialTaskKey={initialTaskKey}
-          onNotificationsChanged={onNotificationsChanged}
-        />
-      </div>
-    </div>
+      <AgentWorkTab
+        agent={agent}
+        base={base}
+        needs={needs}
+        refresh={refresh}
+        onNotificationsChanged={onNotificationsChanged}
+      />
+    </>
   ),
   settings: ({ refresh, base }) => (
     <>
@@ -142,7 +140,7 @@ function AgentWorkspaceContent({
     view: currentView,
     refresh,
     execCount,
-    initialTaskKey: route.initialTaskKey,
+    needs,
     onNotificationsChanged: () => {
       void refreshHost(hostId);
       needsYou.reload();

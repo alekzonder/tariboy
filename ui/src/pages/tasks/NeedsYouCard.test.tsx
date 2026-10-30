@@ -112,7 +112,9 @@ it("shows an open question and answers it with a customer comment", async () => 
 
 it("shows the pause reason with Continue for a paused task", async () => {
   api.getTask.mockResolvedValue(
-    detail({ task: { ...workflowTask, waiting_on: "pause", workflow_paused_reason: "idle_iterations" } }),
+    detail({
+      task: { ...workflowTask, waiting_on: "pause", workflow_paused_reason: "idle_iterations" },
+    }),
   );
   api.getTaskWorkflow.mockResolvedValue({
     ...customerView,

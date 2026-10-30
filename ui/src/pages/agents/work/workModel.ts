@@ -3,7 +3,7 @@ import { flexibleStatusLabel } from "@/lib/statusTone";
 import { isWorkflowTask, taskStatusLabel } from "@/lib/tasks";
 
 /** The queue every daemon has (`EnsureDefaultQueue`). */
-export const DEFAULT_QUEUE = "TASK";
+const DEFAULT_QUEUE = "TASK";
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** The composer's queue: the one remembered for this agent while it exists,

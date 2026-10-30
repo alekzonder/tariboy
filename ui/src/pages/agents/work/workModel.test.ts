@@ -10,7 +10,8 @@ import {
   workSections,
 } from "./workModel";
 
-const task = (over: Partial<Task>): Task => taskItem({ updated_at: "2026-10-30T10:00:00Z", ...over });
+const task = (over: Partial<Task>): Task =>
+  taskItem({ updated_at: "2026-10-30T10:00:00Z", ...over });
 const NOW = Date.parse("2026-10-30T12:00:00Z");
 
 describe("defaultQueue", () => {
@@ -56,9 +57,15 @@ describe("composerRequest", () => {
 describe("statusWords", () => {
   it.each([
     [{ workflow_digest: "d", status: "backlog", workflow_initial: true }, "Not started"],
-    [{ workflow_digest: "d", status: "approval", waiting_on: "customer" as const }, "Waiting for you"],
+    [
+      { workflow_digest: "d", status: "approval", waiting_on: "customer" as const },
+      "Waiting for you",
+    ],
     [{ workflow_digest: "d", status: "plan", waiting_on: "pause" as const }, "Paused"],
-    [{ workflow_digest: "d", status: "review", waiting_on: "script" as const }, "Waiting on a check"],
+    [
+      { workflow_digest: "d", status: "review", waiting_on: "script" as const },
+      "Waiting on a check",
+    ],
     [{ workflow_digest: "d", status: "in_review" }, "In review"],
     [{ status: "wait_customer" }, "Waiting for you"],
     [{ status: "in_progress" }, "In progress"],
@@ -80,8 +87,9 @@ describe("primaryOutcome", () => {
     expect(outcomeLabel({ on: "approved", to: "implement" })).toBe("approved → implement");
   });
   it("falls back to the first when all end the task, and to none without outcomes", () => {
-    expect(primaryOutcome(task({ workflow_outcomes: [{ on: "drop", to: "x", terminal: true }] })))
-      .toEqual({ on: "drop", to: "x", terminal: true });
+    expect(
+      primaryOutcome(task({ workflow_outcomes: [{ on: "drop", to: "x", terminal: true }] })),
+    ).toEqual({ on: "drop", to: "x", terminal: true });
     expect(primaryOutcome(task({}))).toBeUndefined();
   });
 });
@@ -96,7 +104,12 @@ describe("workSections", () => {
   const closed = [
     task({ key: "D-1", title: "Old", category: "done", completed_at: "2026-10-01T00:00:00Z" }),
     task({ key: "D-2", title: "Readme", category: "done", completed_at: "2026-10-29T00:00:00Z" }),
-    task({ key: "D-3", title: "Lint", category: "cancelled", completed_at: "2026-10-30T00:00:00Z" }),
+    task({
+      key: "D-3",
+      title: "Lint",
+      category: "cancelled",
+      completed_at: "2026-10-30T00:00:00Z",
+    }),
   ];
   const keys = (tasks: Task[]) => tasks.map((item) => item.key);
 
@@ -115,7 +128,14 @@ describe("workSections", () => {
   });
 
   it("shows every closed task with Show all and filters Done by key or title", () => {
-    const all = workSections({ active, closed, needs: new Set(), now: NOW, showAll: true, search: "" });
+    const all = workSections({
+      active,
+      closed,
+      needs: new Set(),
+      now: NOW,
+      showAll: true,
+      search: "",
+    });
     expect(keys(all.done)).toEqual(["D-3", "D-2", "D-1"]);
     const searched = workSections({
       active,
@@ -126,6 +146,11 @@ describe("workSections", () => {
       search: "readme",
     });
     expect(keys(searched.done)).toEqual(["D-2"]);
-    expect(keys(workSections({ active, closed, needs: new Set(), now: NOW, showAll: true, search: "d-1" }).done)).toEqual(["D-1"]);
+    expect(
+      keys(
+        workSections({ active, closed, needs: new Set(), now: NOW, showAll: true, search: "d-1" })
+          .done,
+      ),
+    ).toEqual(["D-1"]);
   });
 });

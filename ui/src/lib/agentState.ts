@@ -8,7 +8,7 @@ import type { StatusTone } from "./statusTone";
 
 /** One thing an agent waits on the user for: a task in a customer status or
  *  paused, or an open question letter about a task. */
-export interface NeedItem {
+interface NeedItem {
   key: string;
   at: string;
   /** The workflow status the task waits in, when it is a task. */
@@ -56,9 +56,7 @@ export function agentNeeds(host: HostNeeds | undefined, agentName: string): Agen
     items.set(key, { key, at: letter.created_at, question: true });
   }
   const sorted = [...items.values()].sort((left, right) => left.at.localeCompare(right.at));
-  return sorted.length
-    ? { count: sorted.length, first: sorted[0], items: sorted }
-    : { count: 0 };
+  return sorted.length ? { count: sorted.length, first: sorted[0], items: sorted } : { count: 0 };
 }
 
 type StateSource = Pick<

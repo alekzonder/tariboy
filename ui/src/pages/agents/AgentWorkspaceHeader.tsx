@@ -115,7 +115,9 @@ function HeaderControls({ props, cwd }: { props: AgentWorkspaceHeaderProps; cwd:
       image={agent.image}
       disabled={props.unavailable}
       primary={primaryAction(agentState)}
-      workPath={answerKey ? `${base}/work?task=${encodeURIComponent(answerKey)}` : `${base}/work`}
+      workPath={
+        answerKey ? `${base}/work?answer=${encodeURIComponent(answerKey)}` : `${base}/work?give=1`
+      }
       settingsPath={`${base}/settings`}
       refresh={props.refresh}
       onExec={props.onExec}
