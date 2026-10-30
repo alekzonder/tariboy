@@ -153,7 +153,7 @@ func (s *Service) run(ctx context.Context) {
 }
 
 func (s *Service) ensureStore(ctx context.Context) (stores.Store, bool) {
-	found, ok, err := s.findDefault(ctx)
+	found, ok, err := s.findDefault(ctx, s.Catalog.List)
 	if err != nil {
 		s.fail(err)
 		return stores.Store{}, false
@@ -200,7 +200,7 @@ func (s *Service) ensureStarter(ctx context.Context, storeName string) {
 // Status reads the current state. It is cheap: config, the Store list, the
 // image list and the harness cache.
 func (s *Service) Status(ctx context.Context, refresh bool) Status {
-	store, found, err := s.findDefault(ctx)
+	store, found, err := s.findDefault(ctx, s.registeredStores)
 	st := Status{DefaultStore: s.storeStatus(store, found, err), Harnesses: s.harnessList(refresh)}
 	st.StarterImage = s.starterStatus(found)
 	return st
@@ -286,17 +286,37 @@ func (s *Service) harnessList(refresh bool) []toolcheck.Harness {
 	return append([]toolcheck.Harness(nil), s.harnesses...)
 }
 
-func (s *Service) findDefault(ctx context.Context) (stores.Store, bool, error) {
-	list, err := s.Catalog.List(ctx)
+func (s *Service) findDefault(ctx context.Context, list func(context.Context) ([]stores.Store, error)) (stores.Store, bool, error) {
+	all, err := list(ctx)
 	if err != nil {
 		return stores.Store{}, false, err
 	}
-	for _, store := range list {
+	for _, store := range all {
 		if IsDefault(store, s.source()) {
 			return store, true, nil
 		}
 	}
 	return stores.Store{}, false, nil
+}
+
+// registeredStores reads the Store registrations without the catalog lock,
+// which a clone or a build holds for minutes. Status needs only name and
+// source.
+func (s *Service) registeredStores(ctx context.Context) ([]stores.Store, error) {
+	rows, err := s.DB.DB.QueryContext(ctx, `SELECT name, source FROM image_stores`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []stores.Store
+	for rows.Next() {
+		var st stores.Store
+		if err := rows.Scan(&st.Name, &st.Source); err != nil {
+			return nil, err
+		}
+		out = append(out, st)
+	}
+	return out, rows.Err()
 }
 
 // DefaultSource is the source the service registers the default Store from.

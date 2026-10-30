@@ -253,6 +253,34 @@ func TestHarnessesAreCachedUntilRefresh(t *testing.T) {
 	}
 }
 
+// A clone or a build holds the catalog lock for minutes; the status the UI
+// polls must not wait for it.
+func TestStatusDoesNotWaitForTheCatalogLock(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	if err := os.WriteFile(filepath.Join(f.source, "images", "basic", "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nprompts: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Catalog.Add(ctx, DefaultStoreName, f.source); err != nil {
+		t.Fatal(err)
+	}
+	_, release, err := f.svc.Catalog.PrepareBuild(DefaultStoreName + "/" + StarterImage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	done := make(chan Status, 1)
+	go func() { done <- f.svc.Status(ctx, false) }()
+	select {
+	case st := <-done:
+		if st.DefaultStore.State != StateRegistered {
+			t.Fatalf("status = %#v", st)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Status waited for the catalog lock")
+	}
+}
+
 func waitFor(t *testing.T, ok func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
