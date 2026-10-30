@@ -1,4 +1,11 @@
-import type { AgentRow, AgentView, ImageSummary, Operation, OperationStarted } from "@/lib/api";
+import type {
+  AgentRow,
+  AgentView,
+  ImageSummary,
+  Operation,
+  OperationStarted,
+  Task,
+} from "@/lib/api";
 
 /** Complete API responses for tests; each test overrides only what it checks. */
 
@@ -85,4 +92,30 @@ export const operation = (over: Partial<Operation> = {}): Operation => ({
 /** What a build POST answers: the operation that now runs the build. */
 export const operationStarted = (over: Partial<Operation> = {}): OperationStarted => ({
   operation: operation(over),
+});
+
+/** A flexible task list item. */
+export const taskItem = (over: Partial<Task> = {}): Task => ({
+  key: "TASK-1",
+  queue: "TASK",
+  parent_key: "",
+  position: 0,
+  priority: "P2",
+  title: "Add a README",
+  description: "",
+  status: "open",
+  category: "open",
+  pull_request: "",
+  author: "user:owner",
+  customer: "user:owner",
+  group: "",
+  assignee: "agent:bob",
+  manual_block_reason: "",
+  blocked: false,
+  revision: 1,
+  created_at: "2026-10-30T09:00:00Z",
+  updated_at: "2026-10-30T09:00:00Z",
+  completed_at: "",
+  started_at: "",
+  ...over,
 });

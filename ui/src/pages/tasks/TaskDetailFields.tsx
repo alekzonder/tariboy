@@ -68,7 +68,7 @@ export function TaskDetailFields({
           >
             <option value="open">Open</option>
             <option value="in_progress">In progress</option>
-            <option value="wait_customer">Wait customer</option>
+            <option value="wait_customer">Waiting for you</option>
             <option value="done">Done</option>
             <option value="cancelled">Cancelled</option>
           </SelectField>

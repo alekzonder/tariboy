@@ -173,7 +173,7 @@ it("keeps a flexible task's status select, fields and sections as they were", as
     within(status)
       .getAllByRole("option")
       .map((option) => option.textContent),
-  ).toEqual(["Open", "In progress", "Wait customer", "Done", "Cancelled"]);
+  ).toEqual(["Open", "In progress", "Waiting for you", "Done", "Cancelled"]);
   expect(status).toHaveValue("in_progress");
   for (const label of ["Title", "Priority", "Assignee", "Pull request", "Manual block reason"]) {
     expect(screen.getByLabelText(label)).toBeInTheDocument();

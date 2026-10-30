@@ -39,6 +39,7 @@ describe("agentNeeds", () => {
     );
     expect(needs.count).toBe(3);
     expect(needs.first).toMatchObject({ key: "A-3", question: true });
+    expect(needs.items.map((item) => item.key)).toEqual(["A-3", "A-2", "A-1"]);
   });
 
   it("does not count a task in the initial status or one that waits on a script", () => {

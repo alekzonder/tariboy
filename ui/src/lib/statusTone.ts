@@ -70,12 +70,12 @@ export const TONE_DOT: Record<StatusTone, string> = {
 const TASK_STATUS_LABELS: Record<string, string> = {
   open: "Open",
   in_progress: "In progress",
-  wait_customer: "Wait customer",
+  wait_customer: "Waiting for you",
   done: "Done",
   cancelled: "Cancelled",
 };
 
-/** `wait_customer` → `Wait customer`; anything unknown is shown as it came. */
+/** `wait_customer` → `Waiting for you`; anything unknown is shown as it came. */
 export function flexibleStatusLabel(status: string): string {
   return TASK_STATUS_LABELS[status] ?? status.replace(/_/g, " ");
 }

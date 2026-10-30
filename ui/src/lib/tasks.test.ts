@@ -23,7 +23,7 @@ describe("workflow task helpers", () => {
 
   it("labels the status of either kind", () => {
     expect(taskStatusLabel(task({ status: "wait_customer", category: "wait_customer" }))).toBe(
-      "Wait customer",
+      "Waiting for you",
     );
     expect(
       taskStatusLabel(

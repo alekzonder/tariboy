@@ -12,9 +12,15 @@ function asRecord(value: unknown): Record<string, unknown> {
 const readAll = () => asRecord(readKey(storageKeys.newTaskQueue));
 const readByAgent = () => asRecord(readKey(storageKeys.newTaskQueueByAgent));
 
+/** The queue last used for this agent on this server, or "". */
+export function readAgentQueue(server: string, agent: string): string {
+  const own = asRecord(readByAgent()[server])[agent];
+  return typeof own === "string" ? own : "";
+}
+
 export function readRememberedQueue(server: string, agent?: string): string {
-  const own = agent ? asRecord(readByAgent()[server])[agent] : undefined;
-  if (typeof own === "string") return own;
+  const own = agent ? readAgentQueue(server, agent) : "";
+  if (own) return own;
   const prefix = readAll()[server];
   return typeof prefix === "string" ? prefix : "";
 }
