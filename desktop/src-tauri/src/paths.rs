@@ -38,6 +38,9 @@ impl Paths {
     pub fn hosts_file(&self) -> PathBuf {
         self.app_data.join("hosts.json")
     }
+    pub fn zoom_file(&self) -> PathBuf {
+        self.app_data.join("zoom.json")
+    }
     pub fn ssh_control_dir(&self) -> PathBuf {
         use std::os::unix::ffi::OsStrExt;
 
@@ -216,6 +219,7 @@ mod tests {
             .unwrap()
             .with_app_data(PathBuf::from("/native/app-data"));
         assert_eq!(p.hosts_file(), PathBuf::from("/native/app-data/hosts.json"));
+        assert_eq!(p.zoom_file(), PathBuf::from("/native/app-data/zoom.json"));
         assert_eq!(p.ssh_control_dir(), PathBuf::from("/home/u/.tariboyd/ssh"));
     }
 

@@ -849,6 +849,14 @@ not enable cross-compilation. A standalone invocation runs `npm ci` when
 SPA. Verification entry points already install Node packages, so their Desktop
 step skips that duplicate work.
 
+On macOS, Desktop sets its own app menu. It is the default Tauri menu with
+three items added to `View`: `Zoom In` (`Cmd+Shift+=`), `Zoom Out`
+(`Cmd+Shift+-`) and `Actual Size` (`Cmd+Shift+0`). Each step changes the zoom
+of the `main` window by 10 percent, from 50 to 200 percent. Desktop writes the
+value to `zoom.json` in the app data directory, next to `hosts.json`, and
+applies it at the next start. If the file is missing or invalid, the zoom is
+100 percent. Linux keeps the default menu and has no zoom keys.
+
 On Darwin arm64:
 
 ```bash
