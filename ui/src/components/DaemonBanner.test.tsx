@@ -7,6 +7,7 @@ import type { DesktopDaemonState } from "@/lib/desktop";
 // lifted above the imports.
 const bridge = vi.hoisted(() => ({
   listeners: [] as ((s: DesktopDaemonState) => void)[],
+  desktop: true,
 }));
 
 // The bridge is mocked wholesale: isDesktop/daemonState are what the banner
@@ -16,7 +17,7 @@ vi.mock("@/lib/desktop", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/desktop")>();
   return {
     ...real,
-    isDesktop: () => true,
+    isDesktop: () => bridge.desktop,
     daemonState: vi.fn(),
     daemonStart: vi.fn().mockResolvedValue(null),
     daemonRestart: vi.fn().mockResolvedValue(null),
@@ -84,10 +85,34 @@ const okResponse = () =>
     text: async () => JSON.stringify({ ok: true, result: {} }),
   }) as unknown as Response;
 
+const HARNESS_TOOL = {
+  name: "claude",
+  purpose: "at least one agent harness",
+  install: "install a harness",
+};
+const TMUX_TOOL = { name: "tmux", purpose: "agent sessions", install: "apt install tmux" };
+
+/** A daemon status that reports the given missing tools. */
+const statusResponse = (tools: (typeof TMUX_TOOL)[]) =>
+  ({
+    ok: true,
+    status: 200,
+    text: async () =>
+      JSON.stringify({
+        ok: true,
+        result: {
+          state: "error",
+          message: `missing required tools: ${tools.map((tool) => tool.name).join(", ")}`,
+          missing_tools: tools,
+        },
+      }),
+  }) as unknown as Response;
+
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   bridge.listeners = [];
+  bridge.desktop = true;
   setLocalBaseURL("");
   fetchMock = vi.fn().mockResolvedValue(okResponse());
   vi.stubGlobal("fetch", fetchMock);
@@ -149,6 +174,29 @@ describe("DaemonBanner in the desktop app", () => {
     await settle();
     await settle(PROBE_MS);
     expect(screen.getByText(/missing required tools: tmux, npx/)).toBeInTheDocument();
+  });
+
+  it("shows no banner when only the coding tool is missing", async () => {
+    fetchMock.mockResolvedValue(statusResponse([HARNESS_TOOL]));
+    vi.useFakeTimers();
+    stubDesktop(base);
+    const { container } = render(<DaemonBanner />);
+    await settle();
+    await settle(PROBE_MS);
+    expect(container.textContent).toBe("");
+  });
+
+  it("names only the other tools when the coding tool and tmux are missing", async () => {
+    fetchMock.mockResolvedValue(statusResponse([HARNESS_TOOL, TMUX_TOOL]));
+    vi.useFakeTimers();
+    stubDesktop(base);
+    const { container } = render(<DaemonBanner />);
+    await settle();
+    await settle(PROBE_MS);
+    expect(container.textContent).toBe(
+      "tariboyd: missing required tools: tmux; install them on the daemon host",
+    );
+    expect(container.querySelector('[data-daemon-banner="error"]')).not.toBeNull();
   });
 
   it("warns when the adopted daemon has no HTTP listener", async () => {
@@ -244,5 +292,39 @@ describe("DaemonBanner state ordering", () => {
 
     expect(screen.queryByText(/starting tariboyd/i)).toBeNull();
     expect(getLocalBaseURL()).toBe("http://127.0.0.1:9971");
+  });
+});
+
+describe("DaemonBanner in a browser", () => {
+  beforeEach(() => {
+    bridge.desktop = false;
+  });
+
+  it("shows no banner when only the coding tool is missing", async () => {
+    fetchMock.mockResolvedValue(statusResponse([HARNESS_TOOL]));
+    const { container } = render(<DaemonBanner />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await act(async () => {});
+    expect(container.textContent).toBe("");
+  });
+
+  it("names only tmux in a red bar when the coding tool and tmux are missing", async () => {
+    fetchMock.mockResolvedValue(statusResponse([HARNESS_TOOL, TMUX_TOOL]));
+    const { container } = render(<DaemonBanner />);
+    expect(
+      await screen.findByText(
+        "tariboyd: missing required tools: tmux; install them on the daemon host",
+      ),
+    ).toHaveAttribute("data-daemon-banner", "error");
+    expect(container.textContent).not.toMatch(/claude/);
+  });
+
+  it("marks the unreachable bar as an error banner", async () => {
+    fetchMock.mockRejectedValue(new Error("connection refused"));
+    render(<DaemonBanner />);
+    expect(await screen.findByText(/daemon unreachable/)).toHaveAttribute(
+      "data-daemon-banner",
+      "error",
+    );
   });
 });
