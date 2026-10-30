@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import { FirstVisitHint } from "@/components/onboarding/FirstVisitHint";
 import { SendFilesButton } from "@/components/SendFilesButton";
 import { TuiScreen } from "@/components/TuiScreen";
 import { useFileDropTarget } from "@/hooks/useFileDropTarget";
@@ -8,7 +9,9 @@ import { useSendFiles } from "@/hooks/useSendFiles";
 import { useTerminalSocket } from "@/hooks/useTerminalSocket";
 import { ApiError, type AgentRow } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
+import { useAgentStatus } from "@/lib/agent";
 import { hostToParam } from "@/lib/terminalsHost";
+import { TerminalStatusLine } from "./TerminalStatusLine";
 
 export default function AgentConsoleTab({
   hostId,
@@ -26,6 +29,10 @@ export default function AgentConsoleTab({
   const interactive = agent.interactive !== false;
   const alive = agent.enabled ?? agent.state !== "stopped";
   const controller = useTerminalSocket(agent.name, interactive && alive);
+  // The workspace polls the status more often than the agent list refreshes.
+  const { status } = useAgentStatus();
+  const reasons = status ?? agent;
+  const reason = reasons.halt_reason || reasons.error_reason;
   const absentUpload = useSendFiles({
     onUploaded: (paths) => toast.success(`uploaded: ${paths.join(", ")}`),
   });
@@ -58,6 +65,15 @@ export default function AgentConsoleTab({
 
   return (
     <div className="flex h-full flex-col gap-2">
+      <TerminalStatusLine
+        harness={agent.image.split(":")[0] === "bare" ? "" : agent.harness}
+        cwd={agent.cwd}
+        starting={interactive && alive && (controller.status === "connecting" || controller.absent)}
+        reason={reason}
+        configuration={configuration}
+        onRetry={start}
+      />
+      {interactive && alive && <FirstVisitHint hostId={hostId} agent={agent.name} tab="console" />}
       {!interactive ? (
         <div
           data-testid="agent-console-absent-drop-target"

@@ -6,6 +6,8 @@ export const TOUR_ANCHORS = {
   serversTab: "servers-tab",
   addHost: "add-host",
   addAgent: "add-agent",
+  /** The home "New agent" and first-run "Start agent" buttons, not the sidebar "+". */
+  newAgent: "new-agent",
   agentRow: "agent-row",
   serverSections: "server-sections",
   sectionTasks: "section-tasks",
@@ -17,6 +19,13 @@ export const TOUR_ANCHORS = {
   queueMenu: "queue-menu",
   helpMenu: "help-menu",
 } as const;
+
+/** The first agent row of the sidebar, or null when it shows no agent. */
+export function firstAgentRow(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(
+    `[data-tour="${TOUR_ANCHORS.agentRow}"]:not(:disabled)`,
+  );
+}
 
 export type TourAnchor = (typeof TOUR_ANCHORS)[keyof typeof TOUR_ANCHORS];
 
@@ -36,6 +45,8 @@ export interface TourStep {
   anchor?: TourAnchor;
   /** A section of the current server to open before the highlight. */
   route?: ServerSection;
+  /** Opens the home screen (`/`) first. */
+  home?: boolean;
   /** Opens the first agent first; the step is skipped when there is none. */
   agent?: boolean;
   /** The anchor is in the sidebar, so a hidden sidebar is shown. */
@@ -53,46 +64,11 @@ export const TOUR_STEPS: readonly TourStep[] = [
     body: "Tariboy runs AI coding agents on your servers and gives them work through tasks. This tour takes two minutes.",
   },
   {
-    id: "servers",
-    title: "Servers",
-    body: "A server is a computer that runs the Tariboy daemon. Your computer is the first one.",
-    anchor: TOUR_ANCHORS.serversTab,
-    sidebar: true,
-  },
-  {
-    id: "add-server",
-    title: "Add a server",
-    body: "Connect another computer over SSH.",
-    anchor: TOUR_ANCHORS.addHost,
-    sidebar: true,
-  },
-  {
-    id: "server-sections",
-    title: "Server sections",
-    body: "Everything a server has is here: mail, tasks, images, stores and settings.",
-    anchor: TOUR_ANCHORS.serverSections,
-    route: "tasks",
-  },
-  {
-    id: "images",
-    title: "Agent images",
-    body: "An image is an agent template: prompt, skills, files and tools. Every agent made from it starts the same way.",
-    anchor: TOUR_ANCHORS.sectionImages,
-    route: "images",
-  },
-  {
-    id: "stores",
-    title: "Store",
-    body: "A store is a shared catalog. Install images and workflows from it, or publish your own.",
-    anchor: TOUR_ANCHORS.sectionStores,
-    route: "stores",
-  },
-  {
     id: "agents",
     title: "Agents",
-    body: "An agent is one AI assistant, such as Claude or Codex, with its own folder and work loop. Create one from an image with this button.",
-    anchor: TOUR_ANCHORS.addAgent,
-    sidebar: true,
+    body: "An agent is one AI assistant, such as Claude or Codex, with its own folder and work loop. Start one with this button.",
+    anchor: TOUR_ANCHORS.newAgent,
+    home: true,
   },
   {
     id: "agent-workspace",
@@ -116,6 +92,34 @@ export const TOUR_STEPS: readonly TourStep[] = [
     route: "tasks",
   },
   {
+    id: "images",
+    title: "Agent images",
+    body: "An image is an agent template: prompt, skills, files and tools. Every agent made from it starts the same way.",
+    anchor: TOUR_ANCHORS.sectionImages,
+    route: "images",
+  },
+  {
+    id: "stores",
+    title: "Store",
+    body: "A store is a shared catalog. Install images and workflows from it, or publish your own.",
+    anchor: TOUR_ANCHORS.sectionStores,
+    route: "stores",
+  },
+  {
+    id: "servers",
+    title: "Servers",
+    body: "A server is a computer that runs the Tariboy daemon. Your computer is the first one.",
+    anchor: TOUR_ANCHORS.serversTab,
+    sidebar: true,
+  },
+  {
+    id: "add-server",
+    title: "Add a server",
+    body: "Connect another computer over SSH.",
+    anchor: TOUR_ANCHORS.addHost,
+    sidebar: true,
+  },
+  {
     id: "queues",
     title: "Queues",
     body: "A queue groups tasks under a key, such as DEV, and picks the agents that take them. Open Manage queues… from this menu.",
@@ -136,6 +140,12 @@ export const TOUR_STEPS: readonly TourStep[] = [
     anchor: TOUR_ANCHORS.helpMenu,
   },
 ];
+
+/** The steps a tour shows: without an agent the agent steps go, so the counter
+ *  counts only what the user sees. */
+export function tourSteps(steps: readonly TourStep[], hasAgents: boolean): TourStep[] {
+  return steps.filter((step) => hasAgents || !step.agent);
+}
 
 /** Compares `MAJOR.MINOR.PATCH` numerically.
  *  shortcut: a pre-release suffix is ignored, compare it if releases ever use one. */
@@ -163,16 +173,15 @@ export function whatsNewSteps(
   );
 }
 
-export type TourMode = "full" | "whats-new";
-
-/** What starts by itself: the full tour on the first run, What's new after an
- *  update that changed a step, otherwise nothing. */
+/** What starts by itself: What's new after an update that changed a step,
+ *  otherwise nothing. The full tour never starts by itself, not even on the
+ *  first run; it opens from Help. */
 export function tourMode(
   saved: string,
   current: string,
   steps: readonly TourStep[],
-): TourMode | "none" {
-  if (saved === "") return "full";
+): "whats-new" | "none" {
+  if (saved === "") return "none";
   return whatsNewSteps(steps, saved, current).length > 0 ? "whats-new" : "none";
 }
 

@@ -145,12 +145,13 @@ describe("product routing", () => {
     expect(screen.getByRole("navigation", { name: "Server workspace" })).toBeInTheDocument();
   });
 
-  it("starts the tour on the first run and marks the elements it explains", async () => {
+  it("starts no tour on the first run and marks the elements the tour explains", async () => {
     localStorage.removeItem("onboarding:state:v1");
     renderAt("/servers/local/tasks");
 
-    expect(await screen.findByRole("dialog", { name: "Welcome to Tariboy" })).toBeInTheDocument();
     await screen.findByLabelText("Search tasks");
+    expect(screen.queryByRole("dialog", { name: "Welcome to Tariboy" })).not.toBeInTheDocument();
+    expect(localStorage.getItem("onboarding:state:v1")).not.toBeNull();
     const anchors = [...document.querySelectorAll("[data-tour]")].map((el) =>
       el.getAttribute("data-tour"),
     );

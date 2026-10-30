@@ -1,8 +1,9 @@
 import { createContext, useContext } from "react";
 
 export interface OnboardingCtx {
-  /** The whole tour, or only the steps of the running release. */
-  startTour: (mode: "full" | "whats-new") => void;
+  /** The whole tour, or only the steps of the running release. False when the
+   *  tour did not open because a daemon error banner is on screen. */
+  startTour: (mode: "full" | "whats-new") => boolean;
   openChangelog: () => void;
 }
 

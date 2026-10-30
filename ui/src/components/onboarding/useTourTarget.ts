@@ -2,7 +2,7 @@ import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, type NavigateFunction } from "react-router-dom";
 import { useOptionalDaemons } from "@/components/daemonContext";
 import { paramToHost, serverPath } from "@/lib/terminalsHost";
-import { TOUR_ANCHORS, type Rect, type TourStep } from "@/lib/onboarding/tour";
+import { firstAgentRow, type Rect, type TourStep } from "@/lib/onboarding/tour";
 import { SidebarStateContext, type SidebarStateValue } from "@/pages/terminals/sidebarStateContext";
 
 const POLL_MS = 100;
@@ -32,15 +32,14 @@ function hostOf(pathname: string, activeId: string): string {
 /** Opens the first agent of the sidebar; false when there is none. */
 function openFirstAgent(pathname: string): boolean {
   if (pathname.startsWith("/agents/") && !pathname.includes("/teams/")) return true;
-  const row = document.querySelector<HTMLElement>(
-    `[data-tour="${TOUR_ANCHORS.agentRow}"]:not(:disabled)`,
-  );
+  const row = firstAgentRow();
   row?.click();
   return Boolean(row);
 }
 
 /** Puts the screen in the state the step talks about. */
 function prepare(step: TourStep, ctx: StepContext) {
+  if (step.home && ctx.pathname !== "/") ctx.navigate("/");
   const onWorkspace = ctx.pathname === "/" || WORKSPACE.test(ctx.pathname);
   // The sidebar exists only on the workspace screens.
   const section = step.route ?? (step.sidebar && !onWorkspace ? "tasks" : undefined);

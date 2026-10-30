@@ -6,6 +6,7 @@ import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
 import { targetFor } from "@/lib/terminalsHost";
 import type { AgentRow, AgentView } from "@/lib/api";
 import { LazyBoundary } from "@/components/LazyBoundary";
+import { FirstVisitHint } from "@/components/onboarding/FirstVisitHint";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
 import type { AgentTab } from "./agentWorkspaceModel";
@@ -47,13 +48,18 @@ const TAB_CONTENT: Record<AgentTab, (ctx: TabContext) => ReactNode> = {
     <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} execCount={execCount} />
   ),
   activity: () => <AgentActivityTab />,
-  tasks: ({ agent, initialTaskKey, onNotificationsChanged }) => (
-    <TasksWorkspace
-      scopeAgent={agent.name}
-      goalTaskKey={agent.current_goal_task_key}
-      initialTaskKey={initialTaskKey}
-      onNotificationsChanged={onNotificationsChanged}
-    />
+  tasks: ({ hostId, agent, initialTaskKey, onNotificationsChanged }) => (
+    <div className="flex h-full min-h-0 flex-col">
+      <FirstVisitHint hostId={hostId} agent={agent.name} tab="tasks" className="mx-3 mt-3" />
+      <div className="min-h-0 flex-1">
+        <TasksWorkspace
+          scopeAgent={agent.name}
+          goalTaskKey={agent.current_goal_task_key}
+          initialTaskKey={initialTaskKey}
+          onNotificationsChanged={onNotificationsChanged}
+        />
+      </div>
+    </div>
   ),
   configuration: ({ refresh }) => <AgentConfigurationTab refresh={refresh} />,
   advanced: () => <AgentAdvancedTab />,

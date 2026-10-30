@@ -10,6 +10,7 @@ import { agentRow } from "@/test/fixtures/apiFixtures";
 import AgentConsoleTab from "./AgentConsoleTab";
 
 const reconnect = vi.fn();
+const socket = vi.hoisted(() => ({ status: "open", absent: false }));
 const navigate = vi.fn();
 
 vi.mock("react-router-dom", async (importOriginal) => {
@@ -19,8 +20,8 @@ vi.mock("react-router-dom", async (importOriginal) => {
 
 vi.mock("@/hooks/useTerminalSocket", () => ({
   useTerminalSocket: vi.fn(() => ({
-    status: "open",
-    absent: false,
+    status: socket.status,
+    absent: socket.absent,
     send: vi.fn(),
     sendResize: vi.fn(),
     attachTerm: vi.fn(),
@@ -69,6 +70,8 @@ beforeEach(() => {
   client = fakeApi({ files: { serverUploadFile }, agents: { startAgent } }, target);
   navigate.mockReset();
   reconnect.mockReset();
+  socket.status = "open";
+  socket.absent = false;
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -147,5 +150,69 @@ describe("AgentConsoleTab and header Exec", () => {
       </MemoryRouter>,
     );
     expect(reconnect).toHaveBeenCalledOnce();
+  });
+});
+
+describe("AgentConsoleTab status line", () => {
+  const live = { interactive: true, enabled: true, state: "running", cwd: "~/code/my-app" };
+
+  it("names the coding tool and folder while the terminal connects", () => {
+    socket.status = "connecting";
+    renderTab(agent({ ...live, harness: "claude" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("Starting Claude Code in ~/code/my-app…");
+  });
+
+  it("keeps the starting line while the daemon reports no session yet", () => {
+    socket.status = "closed";
+    socket.absent = true;
+    renderTab(agent({ ...live, harness: "codex" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("Starting Codex in ~/code/my-app…");
+  });
+
+  it("names the terminal, not a coding tool, for a plain terminal agent", () => {
+    socket.status = "connecting";
+    renderTab(agent({ ...live, image: "bare:latest", harness: "claude" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("Starting the terminal in ~/code/my-app…");
+  });
+
+  it("shows no line once the terminal is open", () => {
+    renderTab(agent({ ...live, harness: "claude" }));
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("shows why the agent did not start, retries the start and links to Configuration", async () => {
+    socket.status = "connecting";
+    startAgent.mockResolvedValue({ name: "worker", action: "start" });
+    const refresh = renderTab(agent({ ...live, harness: "claude", halt_reason: "auth expired" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("Claude Code did not start: auth expired");
+    expect(screen.getByRole("link", { name: "Open settings" })).toHaveAttribute(
+      "href",
+      "/agents/remote/worker/configuration",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(startAgent).toHaveBeenCalledWith("worker"));
+    expect(reconnect).toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("shows an error reason of a stopped agent", () => {
+    socket.status = "closed";
+    renderTab(
+      agent({
+        ...live,
+        enabled: false,
+        state: "stopped",
+        harness: "opencode",
+        error_reason: "boom",
+      }),
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("OpenCode did not start: boom");
   });
 });
