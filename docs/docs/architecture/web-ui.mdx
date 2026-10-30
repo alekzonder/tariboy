@@ -1127,9 +1127,11 @@ archived with its note, dead), a line naming the letter it replies to (read
 with `mail.show`), and the body as Markdown through the task pipeline, with no
 raw HTML. Sent and Archive load more pages with **Load more**.
 
-Opening an unread Inbox letter marks it read. The daemon closes a read notice,
-so it moves to Archive and stays open in the right pane; a request stays in the
-Inbox until **Reply** or **Archive**. A letter with a string `data.task_key`
+Opening an unread Inbox letter marks it read. In the customer's mailbox a read
+notice, like a request, stays in the Inbox until **Reply** or **Archive**. In
+an agent's mailbox the daemon closes a read notice, so it moves to Archive and
+stays open in the right pane; a request stays in the Inbox until **Reply** or
+**Archive**. A letter with a string `data.task_key`
 shows a **Task** field: the key, the title and the status, for example
 `DEV-1 · Ship the release · review`. The field reads the task with the task
 drawer's detail query (`taskQueries.detail`), so the title and the status are

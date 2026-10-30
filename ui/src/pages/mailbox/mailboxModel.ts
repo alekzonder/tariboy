@@ -60,7 +60,8 @@ export function letterActions(letter: Letter, box: MailBox, mode: MailboxMode): 
   };
 }
 
-/** Opening an unread received letter reads it; the daemon closes a read notice. */
+/** Opening an unread received letter reads it; the daemon closes a read notice
+ *  to an agent, and a customer's notice stays in Inbox until Archive. */
 export function marksReadOnOpen(letter: Letter, box: MailBox): boolean {
   return box === "inbox" && !letter.read_at;
 }

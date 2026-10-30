@@ -120,7 +120,7 @@ func mailCommands() []registry.Command {
 				}
 				return mail.MailCloseResult{Letter: l}, nil
 			})),
-		registry.WithResult[mail.MailReadResult](mailCommand("mail.read", "Mark letters read; a read notice closes", "POST", "/api/mail/read",
+		registry.WithResult[mail.MailReadResult](mailCommand("mail.read", "Mark letters read; a read notice to an agent closes", "POST", "/api/mail/read",
 			[]registry.Arg{{Name: "ids", Flag: "id", Type: registry.String, Repeatable: true, Required: true, Help: "letter ids"}},
 			func(m *mail.Mail, as string, p registry.Request) (any, error) {
 				closed, read, err := m.MarkRead(as, p.Strings("ids"))

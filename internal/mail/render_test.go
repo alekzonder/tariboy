@@ -367,8 +367,10 @@ func TestListPagingKeepsRowsSharingCreatedAt(t *testing.T) {
 		}
 		letters = append(letters, l[0].ID)
 	}
-	if _, _, err := m.MarkRead("user:customer", letters); err != nil {
-		t.Fatal(err)
+	for _, id := range letters {
+		if _, err := m.Close("user:customer", id, ""); err != nil {
+			t.Fatal(err)
+		}
 	}
 	want := []string{letters[2], letters[1], letters[0]}
 	for _, box := range []string{mail.BoxArchive, mail.BoxAll} {

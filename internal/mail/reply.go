@@ -134,9 +134,11 @@ func recipientLetter(x dbtx, as, id string) (Letter, error) {
 	return l, nil
 }
 
-// MarkRead marks letters of as read and closes the open notices among them
-// with close note read. read counts the letters read for the first time.
+// MarkRead marks letters of as read. For an agent it also closes the open
+// notices among them with close note read; a customer's notice stays in the
+// inbox until it is archived. read counts the letters read for the first time.
 func (m *Mail) MarkRead(as string, ids []string) (closedNotices, read int, err error) {
+	closesNotices := strings.HasPrefix(as, "agent:")
 	now := formatNow(m.now())
 	tx, err := m.db.Begin()
 	if err != nil {
@@ -154,7 +156,7 @@ func (m *Mail) MarkRead(as string, ids []string) (closedNotices, read int, err e
 			}
 			read++
 		}
-		if !l.NeedsReply && l.Open() {
+		if closesNotices && !l.NeedsReply && l.Open() {
 			if _, err := tx.Exec(`UPDATE mail SET answered_at = ?, close_note = ? WHERE id = ?`, now, CloseNoteRead, id); err != nil {
 				return 0, 0, err
 			}

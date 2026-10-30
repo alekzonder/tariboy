@@ -1777,7 +1777,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Mark letters read; a read notice closes */
+    /** Mark letters read; a read notice to an agent closes */
     post: operations["mail.read"];
     delete?: never;
     options?: never;
