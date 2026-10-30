@@ -93,7 +93,14 @@ const TaskWorkflowColumns = `
        COALESCE(wi.name, ''), COALESCE(wi.version, ''), t.workflow_owner_kind,
        CASE WHEN t.workflow_digest IS NOT NULL AND t.status NOT IN ('done', 'cancelled') THEN (
          SELECT json_object('index', s.key, 'total', json_array_length(wi.manifest, '$.definition.statuses'),
-                            'initial', json_extract(wi.manifest, '$.definition.initial_status') = t.workflow_status)
+                            'initial', json_extract(wi.manifest, '$.definition.initial_status') = t.workflow_status,
+                            'outcomes', CASE WHEN t.workflow_owner_kind = 'customer' THEN (
+                              SELECT json_group_array(json_object(
+                                'on', json_extract(tr.value, '$.on'), 'to', json_extract(tr.value, '$.to'),
+                                'terminal', (SELECT COALESCE(json_extract(ts.value, '$.terminal'), 0)
+                                             FROM json_each(wi.manifest, '$.definition.statuses') ts
+                                             WHERE json_extract(ts.value, '$.id') = json_extract(tr.value, '$.to'))))
+                              FROM json_each(s.value, '$.transitions') tr) END)
          FROM json_each(wi.manifest, '$.definition.statuses') s
          WHERE json_extract(s.value, '$.id') = t.workflow_status
        ) END,
@@ -136,6 +143,10 @@ func WorkflowScanTargets(t *Task) ([]any, func()) {
 			t.WorkflowStep = &WorkflowStep{Index: step.Index + 1, Total: step.Total}
 		}
 		t.WorkflowInitial = position.Valid && step.Initial != 0
+		t.WorkflowOutcomes = nil
+		for _, outcome := range step.Outcomes {
+			t.WorkflowOutcomes = append(t.WorkflowOutcomes, WorkflowOutcomeRef{On: outcome.On, To: outcome.To, Terminal: outcome.Terminal != 0})
+		}
 		var open scannedVisit
 		if visit.Valid {
 			tidy.Log(nil, "workflow visit is not valid JSON", json.Unmarshal([]byte(visit.String), &open), "workflow", t.WorkflowName)
@@ -151,6 +162,13 @@ type scannedStep struct {
 	Total int `json:"total"`
 	// Initial is SQLite's 1 or 0 for the comparison with the initial status.
 	Initial int `json:"initial"`
+	// Outcomes are the transitions of a customer status, else null; Terminal
+	// is SQLite's 1 or 0 for whether the target status is terminal.
+	Outcomes []struct {
+		On       string `json:"on"`
+		To       string `json:"to"`
+		Terminal int    `json:"terminal"`
+	} `json:"outcomes"`
 }
 
 type scannedVisit struct {
@@ -189,6 +207,7 @@ func settleWorkflowSummary(t *Task) {
 	}
 	if t.Status == StatusDone || t.Status == StatusCancelled {
 		t.WorkflowAttention, t.WorkflowStep, t.WorkflowInitial = nil, nil, false
+		t.WorkflowOutcomes = nil
 		return
 	}
 	if t.WorkflowPausedReason != "" && (t.WorkflowAttention == nil || t.WorkflowAttention.Kind != AttentionPaused) {
@@ -228,6 +247,15 @@ type WorkflowAttention struct {
 type WorkflowStep struct {
 	Index int `json:"index" jsonschema:"description=The position of the current status in the manifest\\, from 1"`
 	Total int `json:"total" jsonschema:"description=The number of statuses the manifest declares"`
+}
+
+// WorkflowOutcomeRef is one outcome of a status: its name and the status it
+// leads to.
+type WorkflowOutcomeRef struct {
+	On string `json:"on" jsonschema:"description=The outcome name"`
+	To string `json:"to" jsonschema:"description=The status the outcome leads to"`
+	// Terminal marks an outcome whose target status is terminal.
+	Terminal bool `json:"terminal,omitempty" jsonschema:"description=True when the target status is terminal"`
 }
 
 // workflowAttention derives the attention summary of an open workflow task

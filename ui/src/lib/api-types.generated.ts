@@ -4438,6 +4438,8 @@ export interface components {
       /** @description True when an open workflow task is in its workflow's initial status */
       workflow_initial?: boolean;
       workflow_name?: string;
+      /** @description The outcomes of the current status when the customer owns it and the task is open */
+      workflow_outcomes?: components["schemas"]["WorkflowOutcomeRef"][];
       workflow_paused_reason?: string;
       workflow_step?: components["schemas"]["WorkflowStep"];
       workflow_version?: string;
@@ -4904,6 +4906,14 @@ export interface components {
       script: string;
       timeout?: string;
     };
+    WorkflowOutcomeRef: {
+      /** @description The outcome name */
+      on: string;
+      /** @description True when the target status is terminal */
+      terminal?: boolean;
+      /** @description The status the outcome leads to */
+      to: string;
+    };
     WorkflowStep: {
       /** @description The position of the current status in the manifest, from 1 */
       index: number;
@@ -5211,6 +5221,7 @@ export type WorkflowImageTransition = components["schemas"]["WorkflowImageTransi
 export type WorkflowImageValidation = components["schemas"]["WorkflowImageValidation"];
 export type WorkflowImageValidationError = components["schemas"]["WorkflowImageValidationError"];
 export type WorkflowImageWatch = components["schemas"]["WorkflowImageWatch"];
+export type WorkflowOutcomeRef = components["schemas"]["WorkflowOutcomeRef"];
 export type WorkflowStep = components["schemas"]["WorkflowStep"];
 export type WorkflowView = components["schemas"]["WorkflowView"];
 export type $defs = Record<string, never>;
