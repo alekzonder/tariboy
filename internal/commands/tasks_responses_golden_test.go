@@ -179,6 +179,8 @@ func TestTasksResponsesMatchGolden(t *testing.T) {
 		tasksGoldenCall{"tasks.queue.pool.set", "tasks.queue.pool.set", registry.Params{"queue": "GLD", "pool": "developers", "agents": []any{"dev-a"}, "revision": float64(0), "idempotency_key": "pool"}},
 		tasksGoldenCall{"tasks.queue.pool.get", "tasks.queue.pool.get", registry.Params{"queue": "GLD", "pool": "developers"}},
 		tasksGoldenCall{"tasks.queue.pool.list", "tasks.queue.pool.list", registry.Params{"queue": "GLD"}},
+		tasksGoldenCall{"tasks.queue.pool.set unused", "tasks.queue.pool.set", registry.Params{"queue": "GLD", "pool": "unused", "agents": []any{"dev-a"}, "revision": float64(0), "idempotency_key": "unused"}},
+		tasksGoldenCall{"tasks.queue.pool.delete", "tasks.queue.pool.delete", registry.Params{"queue": "GLD", "pool": "unused", "revision": float64(1), "idempotency_key": "del-unused"}},
 		tasksGoldenCall{"tasks.queue.pool.list empty", "tasks.queue.pool.list", registry.Params{"queue": "EMP"}},
 		tasksGoldenCall{"tasks.queue.trigger.list empty", "tasks.queue.trigger.list", registry.Params{"queue": "GLD"}},
 		tasksGoldenCall{"tasks.queue.trigger.create", "tasks.queue.trigger.create", registry.Params{"queue": "GLD", "pattern": "plugin:*", "action": "create_task"}},

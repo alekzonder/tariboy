@@ -131,6 +131,7 @@ type TaskControl interface {
 	Principals(context.Context, tasks.Actor) (tasks.PrincipalInfo, error)
 	AgentAction(context.Context, tasks.Actor, string, map[string]any) (any, error)
 	RebindAgentPool(context.Context, tasks.Actor, string, string, []string, int64, string) (tasks.AgentPool, error)
+	DeleteAgentPool(context.Context, tasks.Actor, string, string, int64, string) (tasks.AgentPoolDeleted, error)
 	GetAgentPool(context.Context, tasks.Actor, string, string) (tasks.AgentPool, error)
 	ListAgentPools(context.Context, tasks.Actor, string) ([]tasks.AgentPool, error)
 	CreateQueueWorkflowTrigger(context.Context, tasks.Actor, string, tasks.CreateQueueWorkflowTriggerInput) (tasks.QueueWorkflowTrigger, error)

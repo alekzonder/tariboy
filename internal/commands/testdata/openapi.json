@@ -5668,6 +5668,26 @@
         ],
         "type": "object"
       },
+      "TaskAgentPoolDeleted": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "queue": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted",
+          "queue",
+          "name"
+        ],
+        "type": "object"
+      },
       "TaskAgentPoolList": {
         "additionalProperties": false,
         "properties": {
@@ -22712,6 +22732,110 @@
       }
     },
     "/api/task-queues/{queue}/pools/{pool}": {
+      "delete": {
+        "operationId": "tasks.queue.pool.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "queue",
+            "required": true,
+            "schema": {
+              "description": "Resource queue",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "pool",
+            "required": true,
+            "schema": {
+              "description": "Resource pool",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "description": "Expected current revision",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "idempotency_key",
+            "required": true,
+            "schema": {
+              "description": "Stable retry key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/TaskAgentPoolDeleted"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Delete a logical workflow pool the queue no longer uses"
+      },
       "get": {
         "operationId": "tasks.queue.pool.get",
         "parameters": [

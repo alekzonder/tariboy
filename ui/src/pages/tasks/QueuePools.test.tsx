@@ -6,10 +6,13 @@ import QueuePools from "./QueuePools";
 import { agentPool, remoteTarget } from "@/test/fixtures/workflowFixtures";
 import { fakeApi } from "@/test/api";
 
-const api = vi.hoisted(() => ({ rebindAgentPool: vi.fn() }));
+const api = vi.hoisted(() => ({ rebindAgentPool: vi.fn(), deleteAgentPool: vi.fn() }));
 // The mocks are methods of a client bound to the remote host, so each call
 // they record went to that host.
-const remoteApi = fakeApi({ tasks: { rebindAgentPool: api.rebindAgentPool } }, remoteTarget);
+const remoteApi = fakeApi(
+  { tasks: { rebindAgentPool: api.rebindAgentPool, deleteAgentPool: api.deleteAgentPool } },
+  remoteTarget,
+);
 const render = (ui: ReactElement) => renderWith(ui, { api: remoteApi });
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -135,4 +138,45 @@ it("suggests the server's agents", () => {
     "dev-b",
     "rev-a",
   ]);
+});
+
+it("offers delete only for an existing pool the workflow does not use", () => {
+  renderIt({ pools: [agentPool("developers", ["dev-a"], 4), agentPool("old", ["dev-b"], 2)] });
+  expect(screen.getByRole("button", { name: "Delete pool old" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Delete pool developers" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Delete pool reviewers" })).not.toBeInTheDocument();
+});
+
+it("deletes a pool after confirmation and reloads the pools", async () => {
+  api.deleteAgentPool.mockResolvedValue({ deleted: true, queue: "DEV", name: "old" });
+  const { onReload } = renderIt({ pools: [agentPool("old", ["dev-b"], 2)] });
+  fireEvent.click(screen.getByRole("button", { name: "Delete pool old" }));
+  expect(api.deleteAgentPool).not.toHaveBeenCalled();
+  fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+  await waitFor(() =>
+    expect(api.deleteAgentPool).toHaveBeenCalledWith("DEV", "old", 2, expect.any(String)),
+  );
+  await waitFor(() => expect(onReload).toHaveBeenCalled());
+});
+
+it("reloads and says so when a deleted pool changed elsewhere", async () => {
+  api.deleteAgentPool.mockRejectedValue(
+    new ApiError(409, "revision_conflict", "revision conflict"),
+  );
+  const { onReload } = renderIt({ pools: [agentPool("old", ["dev-b"], 2)] });
+  fireEvent.click(screen.getByRole("button", { name: "Delete pool old" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+  expect(await screen.findByText(/changed elsewhere/)).toBeInTheDocument();
+  expect(onReload).toHaveBeenCalled();
+});
+
+it("shows a refused delete on its row", async () => {
+  api.deleteAgentPool.mockRejectedValue(
+    new ApiError(409, "workflow_pool_empty", "pool old is used by an open task"),
+  );
+  renderIt({ pools: [agentPool("old", ["dev-b"], 2)] });
+  fireEvent.click(screen.getByRole("button", { name: "Delete pool old" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+  const old = screen.getByRole("group", { name: "Pool old" });
+  expect(await within(old).findByRole("alert")).toHaveTextContent("used by an open task");
 });

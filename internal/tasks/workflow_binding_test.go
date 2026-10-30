@@ -331,3 +331,87 @@ func TestSetQueueWorkflowRetryOfTheSameDigestIsANoOp(t *testing.T) {
 		t.Fatalf("bound events = %d", n)
 	}
 }
+
+func TestDeleteAgentPoolIsRevisionedAuditedAndIdempotent(t *testing.T) {
+	ctx := context.Background()
+	svc, actor := workflowFixture(t)
+	other := mustRebindPool(t, svc, actor, "other", []string{"dev-1", "dev-2"}, 0)
+	if _, err := svc.DeleteAgentPool(ctx, AgentActor("dev-1"), "DEV", "other", other.Revision, "agent-delete"); ErrorCode(err) != "forbidden" {
+		t.Fatalf("agent delete error = %v; want forbidden", err)
+	}
+	if _, err := svc.DeleteAgentPool(ctx, actor, "DEV", "missing", 1, "missing-delete"); ErrorCode(err) != "workflow_pool_not_found" {
+		t.Fatalf("unknown pool error = %v; want workflow_pool_not_found", err)
+	}
+	_, err := svc.DeleteAgentPool(ctx, actor, "DEV", "other", other.Revision+1, "stale-delete")
+	conflict, ok := err.(*Error)
+	if !ok || conflict.Code != "revision_conflict" || conflict.Data["current_revision"] != other.Revision {
+		t.Fatalf("stale delete error = %#v; want revision_conflict", err)
+	}
+	// A holder of the pool on a closed task is released: a new pool of the
+	// same name does not inherit it.
+	closed := insertPinnedTask(t, svc, seedBindingImage(t, svc, "flow", "1", "other"), "in-other")
+	forceTask(t, svc, closed, `status = 'done'`)
+	if _, err := svc.db.Exec(`INSERT INTO task_workflow_holders(task_id, pool, agent, dispatched_at) VALUES (?, 'other', 'dev-1', 'n')`, closed.ID); err != nil {
+		t.Fatal(err)
+	}
+	deleted, err := svc.DeleteAgentPool(ctx, actor, "dev", " other ", other.Revision, "delete-other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (AgentPoolDeleted{Deleted: true, Queue: "DEV", Name: "other"}); deleted != want {
+		t.Fatalf("deleted = %#v; want %#v", deleted, want)
+	}
+	if _, err := svc.GetAgentPool(ctx, actor, "DEV", "other"); ErrorCode(err) != "workflow_pool_not_found" {
+		t.Fatalf("deleted pool lookup = %v; want workflow_pool_not_found", err)
+	}
+	if n := countRows(t, svc, `SELECT COUNT(*) FROM task_agent_pool_members`); n != 0 {
+		t.Fatalf("pool members left = %d", n)
+	}
+	if n := countRows(t, svc, `SELECT COUNT(*) FROM task_workflow_holders WHERE pool = 'other' AND released = 0`); n != 0 {
+		t.Fatalf("unreleased holders of the deleted pool = %d", n)
+	}
+	replayed, err := svc.DeleteAgentPool(ctx, actor, "DEV", "other", 999, "delete-other")
+	if err != nil || replayed != deleted {
+		t.Fatalf("replayed delete = %#v, %v; want %#v", replayed, err, deleted)
+	}
+	if events := queueEvents(t, svc, "DEV", "task.agent_pool_deleted"); len(events) != 1 {
+		t.Fatalf("task.agent_pool_deleted events = %d; want 1", len(events))
+	}
+	recreated, err := svc.RebindAgentPool(ctx, actor, "DEV", "other", []string{"dev-1"}, 0, "recreate-other")
+	if err != nil || recreated.Revision != 1 || recreated.ID == other.ID {
+		t.Fatalf("recreated pool = %#v, %v", recreated, err)
+	}
+}
+
+func TestDeleteAgentPoolRefusesAPoolInUse(t *testing.T) {
+	ctx := context.Background()
+	svc, actor, task := requestFixture(t)
+	refused := func(pool string) {
+		t.Helper()
+		current, err := svc.GetAgentPool(ctx, actor, "DEV", pool)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = svc.DeleteAgentPool(ctx, actor, "DEV", pool, current.Revision, "delete-"+pool)
+		var domain *Error
+		if !errors.As(err, &domain) || domain.Code != "workflow_pool_empty" || domain.Status != http.StatusConflict ||
+			!reflect.DeepEqual(domain.Data["pools"], []string{pool}) {
+			t.Fatalf("delete of pool %s in use = %#v", pool, err)
+		}
+		if got, err := svc.GetAgentPool(ctx, actor, "DEV", pool); err != nil || !reflect.DeepEqual(got, current) {
+			t.Fatalf("pool %s after refused delete = %#v, %v", pool, got, err)
+		}
+	}
+	refused("developers")
+	mustRebindPool(t, svc, actor, "approvers", []string{"dev-2"}, 0)
+	if _, err := svc.SetQueueEnvInfo(ctx, actor, "DEV", CustomerAgentPoolEnv, "approvers"); err != nil {
+		t.Fatal(err)
+	}
+	refused("approvers")
+	// The open visit keeps the pool it entered with after the env var goes.
+	enter(t, svc, task.Key, "approval", "ask")
+	if err := svc.RemoveQueueEnv(ctx, actor, "DEV", CustomerAgentPoolEnv); err != nil {
+		t.Fatal(err)
+	}
+	refused("approvers")
+}

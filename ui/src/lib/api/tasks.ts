@@ -5,6 +5,7 @@ import type {
   Queue,
   Relation,
   Task,
+  TaskAgentPoolDeleted,
   TaskAgentPoolList,
   TaskCommentList,
   TaskDetail,
@@ -147,6 +148,13 @@ export function tasksApi(t: Transport) {
         revision,
         idempotency_key: idempotencyKey,
       }),
+    deleteAgentPool: (queue: string, pool: string, revision: number, idempotencyKey: string) =>
+      t.delete<TaskAgentPoolDeleted>(
+        queryPath(`${queuePath(queue)}/pools/${encodeURIComponent(pool)}`, {
+          revision,
+          idempotency_key: idempotencyKey,
+        }),
+      ),
     listTasks: (filters: TaskFilters = {}, signal?: AbortSignal) =>
       t.request<TaskPage>("GET", queryPath("/api/tasks", filters), undefined, signal),
     getTask: (key: string, signal?: AbortSignal) =>

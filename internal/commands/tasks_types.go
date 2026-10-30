@@ -36,6 +36,13 @@ type TaskEventList struct {
 	Events []tasks.Event `json:"events"`
 }
 
+// TaskAgentPoolDeleted reports a deleted queue pool (tasks.queue.pool.delete).
+type TaskAgentPoolDeleted struct {
+	Deleted bool   `json:"deleted"`
+	Queue   string `json:"queue"`
+	Name    string `json:"name"`
+}
+
 // TaskAgentPoolList is the logical workflow pools of a queue
 // (tasks.queue.pool.list).
 type TaskAgentPoolList struct {

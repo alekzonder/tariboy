@@ -923,6 +923,11 @@
     "count": 0,
     "queues": []
   },
+  "tasks.queue.pool.delete": {
+    "deleted": true,
+    "name": "unused",
+    "queue": "GLD"
+  },
   "tasks.queue.pool.get": {
     "agents": [
       "dev-a"
@@ -961,6 +966,17 @@
     "created_at": "2026-07-14T10:00:00.000000000Z",
     "id": 1,
     "name": "developers",
+    "queue": "GLD",
+    "revision": 1,
+    "updated_at": "2026-07-14T10:00:00.000000000Z"
+  },
+  "tasks.queue.pool.set unused": {
+    "agents": [
+      "dev-a"
+    ],
+    "created_at": "2026-07-14T10:00:00.000000000Z",
+    "id": 2,
+    "name": "unused",
     "queue": "GLD",
     "revision": 1,
     "updated_at": "2026-07-14T10:00:00.000000000Z"

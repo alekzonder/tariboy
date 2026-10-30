@@ -329,6 +329,29 @@ delete the agent, remove it from the pool in the queue settings first. If the
 agent is the last member of a pool that the bound image uses, the pool change
 fails with `workflow_pool_empty`. Add another agent to the pool first.
 
+To delete a pool that the queue does not use, run `queue pool delete` with the
+current revision of the pool. Queue settings show a **Delete** button on each
+pool that the bound workflow does not use.
+
+```bash
+ttasks queue pool get DEV old-pool
+ttasks queue pool delete DEV old-pool --revision 3 --idempotency-key pool-del-1
+```
+
+The delete removes the pool and its member list. The agents stay and continue
+to run. The delete fails with `workflow_pool_empty` and changes nothing when one
+of these needs the pool:
+
+- The workflow that is bound to the queue.
+- The pinned workflow version of an unfinished task in the queue.
+- The queue's [`CUSTOMER_AGENT_POOL`](#a-pool-in-place-of-the-customer).
+- The open status visit of a task in the queue.
+
+A stale revision fails with `revision_conflict`. The delete also releases the
+holders of the pool. A new pool with the same name does not get the old
+holders. If a compose file declares the pool, the next compose apply creates it
+again.
+
 The reference is `NAME`, `NAME:TAG`, or `NAME:<digest>`; `NAME` means
 `latest`. The binding stores the digest the reference names now and the tag it
 was made by, shown as `tag` by `queue workflow get`:

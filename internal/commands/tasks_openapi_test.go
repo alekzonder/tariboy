@@ -55,6 +55,10 @@ func tasksTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	doomed, err := svc.RebindAgentPool(ctx, customer, "TYP", "doomed", []string{"dev-a"}, 0, "doomed")
+	if err != nil {
+		t.Fatal(err)
+	}
 	// The imported bundle comes from a second daemon with the same queue.
 	_, source := tasksFixture(t)
 	if _, err := source.CreateQueue(ctx, customer, tasks.CreateQueueInput{Prefix: "TYP", Name: "Typed"}); err != nil {
@@ -100,6 +104,7 @@ func tasksTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 		{"GET", "/api/tasks/{key}/events", "/api/tasks/" + target + "/events?after=1000", nil},
 		{"GET", "/api/task-principals", "/api/task-principals", nil},
 		{"DELETE", "/api/task-queues/{queue}/workflow-triggers/{id}", fmt.Sprintf("/api/task-queues/TYP/workflow-triggers/%d", trigger.ID), nil},
+		{"DELETE", "/api/task-queues/{queue}/pools/{pool}", fmt.Sprintf("/api/task-queues/TYP/pools/doomed?revision=%d&idempotency_key=del-pool", doomed.Revision), nil},
 		{"POST", "/api/tasks/{key}/workflow/upgrade", "/api/tasks/DEV-1/workflow/upgrade", map[string]any{"reason": "new rules"}},
 		{"POST", "/api/tasks/{key}/workflow/reassign", "/api/tasks/DEV-1/workflow/reassign", map[string]any{"agent": "dev-2"}},
 		{"GET", "/api/task-activity", "/api/task-activity?" + window.Encode(), nil},
