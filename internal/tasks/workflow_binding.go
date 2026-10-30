@@ -144,6 +144,90 @@ func (s *WorkflowEngine) RebindAgentPool(
 	return pool, nil
 }
 
+// AgentPoolDeleted is the result of DeleteAgentPool.
+type AgentPoolDeleted struct {
+	Deleted bool   `json:"deleted"`
+	Queue   string `json:"queue"`
+	Name    string `json:"name"`
+}
+
+// DeleteAgentPool deletes a pool of queue at revision. It refuses a pool that
+// the bound workflow, the version of an unfinished task, CUSTOMER_AGENT_POOL
+// or an open visit of the queue still needs.
+func (s *WorkflowEngine) DeleteAgentPool(
+	ctx context.Context,
+	actor Actor,
+	queue string,
+	poolName string,
+	revision int64,
+	idempotencyKey string,
+) (AgentPoolDeleted, error) {
+	if err := s.requireWorkflowAdmin(actor); err != nil {
+		return AgentPoolDeleted{}, err
+	}
+	queue = strings.ToUpper(strings.TrimSpace(queue))
+	poolName = strings.TrimSpace(poolName)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return AgentPoolDeleted{}, err
+	}
+	defer tx.Rollback()
+	if replayed, ok, err := readTaskIdempotency[AgentPoolDeleted](
+		ctx, tx, actor.Principal, "delete_agent_pool", idempotencyKey,
+	); err != nil || ok {
+		return replayed, err
+	}
+	current, found, err := agentPoolByName(ctx, tx, queue, poolName)
+	if err != nil {
+		return AgentPoolDeleted{}, err
+	}
+	if !found {
+		return AgentPoolDeleted{}, notFound("workflow_pool_not_found", "workflow agent pool not found")
+	}
+	if revision != current.Revision {
+		return AgentPoolDeleted{}, poolRevisionConflict(current)
+	}
+	if err := requirePoolUnused(ctx, tx, queue, poolName); err != nil {
+		return AgentPoolDeleted{}, err
+	}
+	var visits int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM task_status_visits v JOIN tasks t ON t.id = v.task_id
+		WHERE t.queue_prefix = ? AND v.left_at = '' AND v.owner_pool = ?`, queue, poolName).Scan(&visits); err != nil {
+		return AgentPoolDeleted{}, err
+	}
+	if visits > 0 {
+		return AgentPoolDeleted{}, poolsEmptyError([]string{poolName})
+	}
+	if err := rebindPoolMembersTx(ctx, tx, current.ID, nil); err != nil {
+		return AgentPoolDeleted{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM task_agent_pools WHERE id = ?`, current.ID); err != nil {
+		return AgentPoolDeleted{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE task_workflow_holders SET released = 1
+		WHERE pool = ? AND task_id IN (SELECT id FROM tasks WHERE queue_prefix = ?)`, poolName, queue); err != nil {
+		return AgentPoolDeleted{}, err
+	}
+	now := s.now()
+	if _, err := appendQueueEventTx(ctx, tx, Queue{Prefix: queue, Revision: current.Revision},
+		"task.agent_pool_deleted", actor, map[string]any{"pool": poolName}, now); err != nil {
+		return AgentPoolDeleted{}, err
+	}
+	result := AgentPoolDeleted{Deleted: true, Queue: queue, Name: poolName}
+	if err := writeTaskIdempotency(
+		ctx, tx, actor.Principal, "delete_agent_pool", idempotencyKey, result, now,
+	); err != nil {
+		return AgentPoolDeleted{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return AgentPoolDeleted{}, err
+	}
+	s.signal()
+	return result, nil
+}
+
 // rebindPoolMembersTx replaces the members of pool poolID with agents, in
 // order.
 func rebindPoolMembersTx(ctx context.Context, tx *sql.Tx, poolID int64, agents []string) error {

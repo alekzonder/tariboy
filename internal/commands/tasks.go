@@ -147,6 +147,11 @@ func TaskOperatorCommands() []registry.Command {
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				return control.RebindAgentPool(ctx, actor, p.Trimmed("queue"), p.Trimmed("pool"), p.Strings("agents"), p.Int64("revision"), p.Trimmed("idempotency_key"))
 			}),
+		taskRoute("tasks.queue.pool.delete", "DELETE", "/api/task-queues/{queue}/pools/{pool}", "Delete a logical workflow pool the queue no longer uses",
+			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
+				deleted, err := control.DeleteAgentPool(ctx, actor, p.Trimmed("queue"), p.Trimmed("pool"), p.Int64("revision"), p.Trimmed("idempotency_key"))
+				return TaskAgentPoolDeleted(deleted), err
+			}),
 		taskRoute("tasks.queue.pool.list", "GET", "/api/task-queues/{queue}/pools", "List logical workflow pools",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				items, err := control.ListAgentPools(ctx, actor, p.Trimmed("queue"))
@@ -439,6 +444,7 @@ var taskResultTypes = map[string]func(registry.Command) registry.Command{
 	"tasks.events":                  registry.WithResult[TaskEventList],
 	"tasks.principals":              registry.WithResult[tasks.PrincipalInfo],
 	"tasks.queue.pool.set":          registry.WithResult[tasks.AgentPool],
+	"tasks.queue.pool.delete":       registry.WithResult[TaskAgentPoolDeleted],
 	"tasks.queue.pool.list":         registry.WithResult[TaskAgentPoolList],
 	"tasks.queue.pool.get":          registry.WithResult[tasks.AgentPool],
 	"tasks.queue.trigger.list":      registry.WithResult[TaskTriggerList],
@@ -535,6 +541,8 @@ func taskHTTPArgs(path string) []registry.Arg {
 			Schema: map[string]any{"type": "object"}}}
 	case "tasks.queue.pool.set":
 		return poolMutationArgs(registry.Arg{Name: "agents", Required: true, Help: "Explicit agent names", Schema: map[string]any{"type": "array", "items": map[string]any{"type": "string"}}})
+	case "tasks.queue.pool.delete":
+		return []registry.Arg{{Name: "revision", Type: registry.Int, Required: true, Help: "Expected current revision"}, {Name: "idempotency_key", Required: true, Help: "Stable retry key"}}
 	case "tasks.queue.trigger.create":
 		return []registry.Arg{{Name: "pattern", Required: true, Help: "Sender glob a letter to the queue must match, such as plugin:* or plugin:telegram"}, {Name: "correlation_key", Help: "Value the letter's data.correlation_key must equal"}, {Name: "action", Required: true, Help: "Declared workflow trigger action"}}
 	case "tasks.queue.trigger.delete":

@@ -101,6 +101,14 @@ describe("task client", () => {
     });
   });
 
+  it("deletes a pool at its revision", async () => {
+    await createApi(undefined).tasks.deleteAgentPool("DEV", "old pool", 3, "pool-del-3");
+    expect(last()).toMatchObject({
+      url: "/api/task-queues/DEV/pools/old%20pool?revision=3&idempotency_key=pool-del-3",
+      method: "DELETE",
+    });
+  });
+
   it("lists the agent pools of a queue", async () => {
     await createApi(null).tasks.listAgentPools("DEV");
     expect(sent.map(({ method, url }) => [method, url])).toEqual([

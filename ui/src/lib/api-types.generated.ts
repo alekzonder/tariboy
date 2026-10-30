@@ -2297,7 +2297,8 @@ export interface paths {
     get: operations["tasks.queue.pool.get"];
     put?: never;
     post?: never;
-    delete?: never;
+    /** Delete a logical workflow pool the queue no longer uses */
+    delete: operations["tasks.queue.pool.delete"];
     options?: never;
     head?: never;
     /** Bind agents to a logical workflow pool */
@@ -4425,6 +4426,11 @@ export interface components {
       tokens: number;
       transitions: number;
     };
+    TaskAgentPoolDeleted: {
+      deleted: boolean;
+      name: string;
+      queue: string;
+    };
     TaskAgentPoolList: {
       count: number;
       items: components["schemas"]["AgentPool"][];
@@ -5078,6 +5084,7 @@ export type TaskActivityAgent = components["schemas"]["TaskActivityAgent"];
 export type TaskActivityReport = components["schemas"]["TaskActivityReport"];
 export type TaskActivityRow = components["schemas"]["TaskActivityRow"];
 export type TaskActivityTotals = components["schemas"]["TaskActivityTotals"];
+export type TaskAgentPoolDeleted = components["schemas"]["TaskAgentPoolDeleted"];
 export type TaskAgentPoolList = components["schemas"]["TaskAgentPoolList"];
 export type TaskArtifactHistory = components["schemas"]["TaskArtifactHistory"];
 export type TaskArtifactList = components["schemas"]["TaskArtifactList"];
@@ -12970,6 +12977,52 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["AgentPool"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "tasks.queue.pool.delete": {
+    parameters: {
+      query: {
+        revision: number;
+        idempotency_key: string;
+      };
+      header?: never;
+      path: {
+        queue: string;
+        pool: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["TaskAgentPoolDeleted"];
           };
         };
       };

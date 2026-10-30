@@ -89,7 +89,7 @@ var sharedHelp = map[string]commandHelp{
 
 var helpGroups = map[string]string{
 	"queue":          "Manage task queues, owners, and agent pools (operator-only)",
-	"queue.pool":     "Bind existing agents to named queue pools (operator-only)",
+	"queue.pool":     "Bind existing agents to named queue pools, or delete a pool (operator-only)",
 	"queue.trigger":  "Manage external events that create tasks (operator-only)",
 	"queue.workflow": "Bind a workflow image to a queue (operator-only)",
 	"queue.secret":   "Store secrets that workflow scripts of a queue receive (operator-only)",
@@ -285,6 +285,7 @@ var operatorExamples = map[string]string{
 	"queue.get":            "queue get DEV",
 	"queue.update":         "queue update DEV --name Development --revision 2",
 	"queue.pool.set":       "queue pool set DEV developers --agents worker,reviewer --revision 0 --idempotency-key pool-1",
+	"queue.pool.delete":    "queue pool delete DEV developers --revision 3 --idempotency-key pool-del-1",
 	"queue.pool.list":      "queue pool list DEV",
 	"queue.pool.get":       "queue pool get DEV developers",
 	"queue.trigger.list":   "queue trigger list DEV",
@@ -312,6 +313,7 @@ var operatorHelp = map[string]string{
 	"queue.get":            "Reads the queue's configuration and current revision before an update.",
 	"queue.update":         "Changes only supplied queue fields. Pass the current revision from queue get; stale writes are rejected.",
 	"queue.pool.set":       "Replaces pool membership with comma-separated existing agent names. Use revision 0 for a new pool.",
+	"queue.pool.delete":    "Deletes a pool and its memberships; the agents stay. Refused with workflow_pool_empty while the queue's workflow, an unfinished task's workflow version, CUSTOMER_AGENT_POOL, or an open status visit uses the pool.",
 	"queue.pool.list":      "Lists the queue's pools and explicit memberships.",
 	"queue.pool.get":       "Reads a pool's membership and current revision before rebinding it.",
 	"queue.trigger.list":   "Lists external channel triggers configured to create work in this queue.",
