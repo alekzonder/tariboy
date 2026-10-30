@@ -26,7 +26,7 @@ function TasksWorkspaceController({
   const state = useTasksWorkspaceView();
   const layout = useTasksWorkspaceLayout();
   const data = useTasksWorkspaceData(scopeAgent, state, onNotificationsChanged);
-  const actions = useTasksWorkspaceActions(server, state, data);
+  const actions = useTasksWorkspaceActions(server, state, data, scopeAgent);
   const { loadDetail } = state;
   const openedInitialKeyRef = useRef("");
   useEffect(() => {
