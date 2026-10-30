@@ -67,8 +67,8 @@ function AgentFacts({
             dir="rtl"
             className="max-w-full min-w-0 truncate text-left font-mono text-meta"
           >
-            {/* dir=rtl cuts the start; the LRM keeps a leading "/" in place. */}
-            {`‎${cwd}‎`}
+            {/* dir=rtl cuts the start; bdi keeps the path itself left to right. */}
+            <bdi>{cwd}</bdi>
           </span>
         </>
       )}

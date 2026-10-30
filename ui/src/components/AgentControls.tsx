@@ -282,6 +282,7 @@ function OverflowMenu({
         </DropdownMenuItem>
         {props.onOpenFolder && (
           <DropdownMenuItem
+            data-testid="open-agent-cwd-vscode"
             className={MENU_ITEM}
             disabled={props.disabled}
             onSelect={props.onOpenFolder}

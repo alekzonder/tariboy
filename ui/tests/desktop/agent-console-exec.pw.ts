@@ -13,18 +13,21 @@ async function openConsole(desktop: W3CClient, name: string): Promise<void> {
 }
 
 async function execPrompt(desktop: W3CClient, prompt: string): Promise<void> {
-  // Exec lives in the agent header and opens a modal with the optional prompt.
-  const open = await expect
+  // Run once… is an item of the header's ⋯ menu and opens a modal with the
+  // optional prompt.
+  const menu = "//header//button[@aria-label='More agent actions']";
+  const item = "//*[@role='menuitem'][normalize-space(.)='Run once…']";
+  await expect
     .poll(async () => {
       try {
-        return await desktop.findElement("xpath", "//header//button[normalize-space(.)='Exec']");
+        await desktop.elementClick(await desktop.findElement("xpath", menu));
+        return await desktop.findElement("xpath", item);
       } catch {
         return null;
       }
     })
-    .not.toBeNull()
-    .then(() => desktop.findElement("xpath", "//header//button[normalize-space(.)='Exec']"));
-  await desktop.elementClick(open);
+    .not.toBeNull();
+  await desktop.elementClick(await desktop.findElement("xpath", item));
   const input = await expect
     .poll(async () => {
       try {
@@ -41,12 +44,12 @@ async function execPrompt(desktop: W3CClient, prompt: string): Promise<void> {
   await desktop.elementSendKeys(input, prompt);
   const button = await desktop.findElement(
     "xpath",
-    "//*[@role='dialog']//button[normalize-space(.)='Exec']",
+    "//*[@role='dialog']//button[normalize-space(.)='Run once']",
   );
   await desktop.elementClick(button);
 }
 
-test("manual Exec reaches the isolated daemon for interactive and non-interactive agents", async ({
+test("manual Run once reaches the isolated daemon for interactive and non-interactive agents", async ({
   desktop,
 }) => {
   await waitForMainWindow(desktop);
@@ -75,7 +78,7 @@ test("manual Exec reaches the isolated daemon for interactive and non-interactiv
           image: "basic:latest", name: "exec-batch-e2e", harness: "stub",
           interactive: false,
         });
-        // The header offers Exec only for an enabled agent.
+        // The header offers Run once… only for an enabled agent.
         await call("POST", "/api/agents/exec-interactive-e2e/start", {});
         await call("POST", "/api/agents/exec-batch-e2e/start", {});
         const originalFetch = window.fetch.bind(window);
@@ -106,7 +109,7 @@ test("manual Exec reaches the isolated daemon for interactive and non-interactiv
   await openConsole(desktop, "exec-batch-e2e");
   await expect
     .poll(() => desktop.execute<string>("return document.body.innerText;"))
-    .toContain("This agent has no interactive terminal.");
+    .toContain("No interactive terminal.");
   await execPrompt(desktop, "batch one-shot prompt");
   await expect
     .poll(() => desktop.execute<number>("return window.__consoleExecCalls.length;"), {

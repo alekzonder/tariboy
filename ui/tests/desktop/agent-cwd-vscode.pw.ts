@@ -58,6 +58,10 @@ test("shows the effective agent cwd and its VS Code action", async ({ desktop })
     .then(async () => desktop.findElement("css selector", '[data-testid="agent-cwd"]'));
   await expect(desktop.elementText(cwd)).resolves.toBe(setup.cwd);
 
+  // The VS Code action is an item of the header's ⋯ menu.
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//header//button[@aria-label='More agent actions']"),
+  );
   const action = await expect
     .poll(async () => {
       try {
@@ -68,5 +72,5 @@ test("shows the effective agent cwd and its VS Code action", async ({ desktop })
     })
     .not.toBeNull()
     .then(() => desktop.findElement("css selector", '[data-testid="open-agent-cwd-vscode"]'));
-  await expect(desktop.elementText(action)).resolves.toBe("Open in VS Code");
+  await expect(desktop.elementText(action)).resolves.toBe("Open folder in VS Code");
 });
