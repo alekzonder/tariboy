@@ -7,6 +7,7 @@ ORIGINAL_PATH="$PATH"
 SMOKE_ROOT="$(mktemp -d)"
 export TARIBOY_BASE_DIR="$SMOKE_ROOT/base"
 export TARIBOY_RUNTIME_DIR="$SMOKE_ROOT/runtime"
+export TARIBOY_ONBOARDING=off
 export TARIBOY_HTTP_ADDR="127.0.0.1:0"
 export HOME="$SMOKE_ROOT/home"
 FIXTURE_CWD="$HOME/project"

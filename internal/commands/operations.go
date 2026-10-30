@@ -32,7 +32,7 @@ var errOperationsUnavailable = api.UserError{Code: "operations_unavailable", Msg
 func operationStartArgs() []registry.Arg {
 	return []registry.Arg{
 		{Name: "wait", Flag: "wait", Type: registry.Bool, Help: "answer only when the operation ends; a failed build answers with its error"},
-		{Name: "initiator", Flag: "initiator", Type: registry.String, Help: "who started the operation, as the operations list shows it: ui, cli, compose or auto"},
+		{Name: "initiator", Flag: "initiator", Type: registry.String, Help: "who started the operation, as the operations list shows it: ui, cli, compose, auto or onboarding"},
 		{Name: "detach", Flag: "detach", Type: registry.Bool, Help: "CLI: print only the operation id and do not follow its log"},
 	}
 }

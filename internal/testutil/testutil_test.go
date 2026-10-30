@@ -23,9 +23,12 @@ func TestIsolateEnvDropsTariboyVariablesAndMovesHome(t *testing.T) {
 	}
 	home := os.Getenv("HOME")
 	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, "TARIBOY_") {
+		if strings.HasPrefix(kv, "TARIBOY_") && kv != "TARIBOY_ONBOARDING=off" {
 			t.Errorf("%s survived isolation", kv)
 		}
+	}
+	if got := os.Getenv("TARIBOY_ONBOARDING"); got != "off" {
+		t.Fatalf("TARIBOY_ONBOARDING = %q, want off", got)
 	}
 	if home == "/live/home" {
 		t.Fatal("HOME still points at the live home")

@@ -51,4 +51,4 @@ for argument in "$@"; do
   previous=$argument
 done
 
-exec env TARIBOY_SHELL_ENV=1 "$TARIBOY_REAL_DAEMON_BIN" "$@"
+exec env TARIBOY_SHELL_ENV=1 TARIBOY_ONBOARDING=off "$TARIBOY_REAL_DAEMON_BIN" "$@"

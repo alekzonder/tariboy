@@ -9,6 +9,7 @@ RUNTIME="$(mktemp -d)"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export TARIBOY_BASE_DIR="$BASE"
 export TARIBOY_RUNTIME_DIR="$RUNTIME"
+export TARIBOY_ONBOARDING=off
 trap 'kill "$DPID" 2>/dev/null || true; kill "${FAKE_PID:-}" 2>/dev/null || true; kill "${OTLP_PID:-}" 2>/dev/null || true; kill "${STORE_PID:-}" 2>/dev/null || true; rm -rf "${STORE_PULL_BASE:-}" "$BASE" "$RUNTIME"' EXIT
 
 export TARIBOY_SHIM_BIN="$BIN/tariboy-shim"

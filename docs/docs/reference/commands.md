@@ -162,6 +162,8 @@ tariboy has four command surfaces:
 | `tariboy maintenance get` | Show database maintenance settings and the last run |
 | `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
 | `tariboy maintenance set` | Change database maintenance settings; unset flags keep their value |
+| `tariboy onboarding retry` | Register the default Store and build the starter image again when they are missing |
+| `tariboy onboarding status` | Report the first-run state: default Store, starter image, harness CLIs and agent count |
 | `tariboy operation log ID` | Read the log of a background operation |
 | `tariboy operation ls` | List background operations, newest first |
 | `tariboy operation show ID` | Show a background operation |

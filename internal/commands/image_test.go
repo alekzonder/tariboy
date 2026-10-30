@@ -635,7 +635,7 @@ func TestImageBuildRejectsDuplicateAndReservedTagsBeforePublishing(t *testing.T)
 		tags []string
 	}{
 		{name: "reviewer", tags: []string{"latest", "latest"}},
-		{name: "basic", tags: []string{"latest", "v2"}},
+		{name: "bare", tags: []string{"latest", "v2"}},
 	} {
 		t.Run(test.name+"-"+strings.Join(test.tags, "-"), func(t *testing.T) {
 			c := localCtx(t)
@@ -1154,11 +1154,11 @@ func TestImageValidateV2ReturnsSkillMetadataAndDuplicateWarnings(t *testing.T) {
 	}
 }
 
-func TestImageCommandsRejectReservedBasicRef(t *testing.T) {
+func TestImageCommandsRejectReservedBareRef(t *testing.T) {
 	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
-	_, err := cmdHandler(t, "image.build")(c, registry.Params{"tag": "basic:latest", "path": src})
+	_, err := cmdHandler(t, "image.build")(c, registry.Params{"tag": "bare:latest", "path": src})
 	var userErr api.UserError
 	if !errors.As(err, &userErr) || userErr.Code != "reserved_image" {
 		t.Fatalf("reserved build error = %#v, want reserved_image", err)
@@ -1168,13 +1168,34 @@ func TestImageCommandsRejectReservedBasicRef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ref := image.Ref{Name: "basic", Tag: "latest"}
+	ref := image.Ref{Name: "bare", Tag: "latest"}
 	if _, err := image.BuildV2(imgFile, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil); err != nil {
 		t.Fatal(err)
 	}
 	_, err = cmdHandler(t, "image.rm")(c, registry.Params{"ref": ref.String()})
 	if !errors.As(err, &userErr) || userErr.Code != "reserved_image" {
 		t.Fatalf("reserved remove error = %#v, want reserved_image", err)
+	}
+}
+
+// basic is the Store's starter image: building, listing as exportable and
+// removing basic:latest are ordinary operations.
+func TestImageCommandsTreatBasicLatestAsOrdinary(t *testing.T) {
+	t.Parallel()
+	c := localCtx(t)
+	if _, err := cmdHandler(t, "image.build")(c, registry.Params{"tag": "basic:latest", "path": writeExample(t)}); err != nil {
+		t.Fatalf("build basic:latest: %v", err)
+	}
+	out, err := cmdHandler(t, "image.ls")(c, registry.Params{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := out.(ImageListResult).Images
+	if len(items) != 1 || items[0].Name != "basic" || !items[0].Exportable {
+		t.Fatalf("image.ls = %#v, want exportable basic", items)
+	}
+	if _, err := cmdHandler(t, "image.rm")(c, registry.Params{"ref": "basic:latest"}); err != nil {
+		t.Fatalf("remove basic:latest: %v", err)
 	}
 }
 

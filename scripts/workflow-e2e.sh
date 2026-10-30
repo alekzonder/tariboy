@@ -18,6 +18,7 @@ RUNTIME="$SANDBOX/runtime"
 mkdir -p "$BASE" "$RUNTIME" "$SANDBOX/builder-work"
 export TARIBOY_BASE_DIR="$BASE"
 export TARIBOY_RUNTIME_DIR="$RUNTIME"
+export TARIBOY_ONBOARDING=off
 export TARIBOY_SHIM_BIN="$BIN/tariboy-shim"
 export TARIBOY_STUB_HARNESS="$ROOT/scripts/stub-harness.sh"
 unset TARIBOY_TOOLS_SOCKET TARIBOY_DAEMON_SOCKET E2E_TOKEN

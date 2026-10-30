@@ -60,3 +60,18 @@ func TestParseFlagsRejectsUnknownFlag(t *testing.T) {
 		t.Fatalf("parseFlags(--nope) err = %v, want a non-help error", err)
 	}
 }
+
+func TestParseFlagsOnboarding(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{{nil, ""}, {[]string{"--onboarding", "off"}, "off"}, {[]string{"--onboarding=on"}, "on"}} {
+		got, _, err := parseFlags(tc.args)
+		if err != nil || got.Onboarding != tc.want {
+			t.Fatalf("parseFlags(%v) = %q, %v; want %q", tc.args, got.Onboarding, err, tc.want)
+		}
+	}
+	if _, _, err := parseFlags([]string{"--onboarding", "maybe"}); err == nil {
+		t.Fatal("parseFlags accepted --onboarding maybe")
+	}
+}

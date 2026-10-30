@@ -40,9 +40,10 @@ func ParseRef(s string) (Ref, error) {
 func (r Ref) String() string { return r.Name + ":" + r.Tag }
 
 // IsReserved reports refs owned by daemon startup rather than public image
-// authoring. Every other ref is ordinary and can be rebuilt at any time.
+// authoring. Every other ref is ordinary and can be rebuilt at any time; basic
+// is a Store image the daemon builds on first run, not a seeded one.
 func IsReserved(r Ref) bool {
-	return r.Tag == "latest" && (r.Name == "bare" || r.Name == "basic")
+	return r.Name == "bare" && r.Tag == "latest"
 }
 
 // ErrDuplicateTag and ErrTagReserved classify BuildRefs input so callers can

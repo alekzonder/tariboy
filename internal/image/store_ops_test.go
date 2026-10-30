@@ -143,7 +143,7 @@ func TestBuildMovesAnExistingRef(t *testing.T) {
 }
 
 func TestReservedDefaultRefsCannotBeRemoved(t *testing.T) {
-	for _, ref := range []Ref{{Name: "bare", Tag: "latest"}, {Name: "basic", Tag: "latest"}} {
+	for _, ref := range []Ref{{Name: "bare", Tag: "latest"}} {
 		st := &Store{Dir: t.TempDir()}
 		plantRawRef(t, st, ref, "managed")
 		if err := st.Remove(ref); !errors.Is(err, ErrReserved) {
@@ -154,11 +154,12 @@ func TestReservedDefaultRefsCannotBeRemoved(t *testing.T) {
 		}
 	}
 
-	ordinary := Ref{Name: "basic", Tag: "custom"}
-	st := &Store{Dir: t.TempDir()}
-	plantRawRef(t, st, ordinary, "ordinary")
-	if err := st.Remove(ordinary); err != nil {
-		t.Fatalf("Remove(%s): %v", ordinary, err)
+	for _, ordinary := range []Ref{{Name: "basic", Tag: "custom"}, {Name: "basic", Tag: "latest"}} {
+		st := &Store{Dir: t.TempDir()}
+		plantRawRef(t, st, ordinary, "ordinary")
+		if err := st.Remove(ordinary); err != nil {
+			t.Fatalf("Remove(%s): %v", ordinary, err)
+		}
 	}
 }
 

@@ -1905,6 +1905,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/onboarding": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Report the first-run state: default Store, starter image, harness CLIs and agent count */
+    get: operations["onboarding.status"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/onboarding/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Register the default Store and build the starter image again when they are missing */
+    post: operations["onboarding.retry"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/operations": {
     parameters: {
       query?: never;
@@ -3971,6 +4005,28 @@ export interface components {
       last_run: components["schemas"]["MaintenanceLastRun"];
       settings: components["schemas"]["MaintenanceSettings"];
     };
+    OnboardingDefaultStore: {
+      error?: string;
+      name: string;
+      source: string;
+      state: string;
+    };
+    OnboardingHarness: {
+      found: boolean;
+      install: string;
+      type: string;
+    };
+    OnboardingStarterImage: {
+      error?: string;
+      ref?: string;
+      state: string;
+    };
+    OnboardingStatus: {
+      agents: number;
+      default_store: components["schemas"]["OnboardingDefaultStore"];
+      harnesses: components["schemas"]["OnboardingHarness"][];
+      starter_image: components["schemas"]["OnboardingStarterImage"];
+    };
     Operation: {
       created_at: string;
       error_code?: string;
@@ -5025,6 +5081,10 @@ export type MaintenanceLastRun = components["schemas"]["MaintenanceLastRun"];
 export type MaintenanceRun = components["schemas"]["MaintenanceRun"];
 export type MaintenanceSettings = components["schemas"]["MaintenanceSettings"];
 export type MaintenanceView = components["schemas"]["MaintenanceView"];
+export type OnboardingDefaultStore = components["schemas"]["OnboardingDefaultStore"];
+export type OnboardingHarness = components["schemas"]["OnboardingHarness"];
+export type OnboardingStarterImage = components["schemas"]["OnboardingStarterImage"];
+export type OnboardingStatus = components["schemas"]["OnboardingStatus"];
 export type Operation = components["schemas"]["Operation"];
 export type OperationList = components["schemas"]["OperationList"];
 export type OperationLog = components["schemas"]["OperationLog"];
@@ -10712,7 +10772,7 @@ export interface operations {
           detach?: boolean;
           /** @description source Git commit */
           "git-commit"?: string;
-          /** @description who started the operation, as the operations list shows it: ui, cli, compose or auto */
+          /** @description who started the operation, as the operations list shows it: ui, cli, compose, auto or onboarding */
           initiator?: string;
           /** @description target image name */
           name?: string;
@@ -11634,6 +11694,92 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["MaintenanceRun"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "onboarding.status": {
+    parameters: {
+      query?: {
+        refresh?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["OnboardingStatus"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "onboarding.retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": Record<string, unknown>;
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["OnboardingStatus"];
           };
         };
       };
@@ -15360,7 +15506,7 @@ export interface operations {
         "application/json": {
           /** @description CLI: print only the operation id and do not follow its log */
           detach?: boolean;
-          /** @description who started the operation, as the operations list shows it: ui, cli, compose or auto */
+          /** @description who started the operation, as the operations list shows it: ui, cli, compose, auto or onboarding */
           initiator?: string;
           /** @description Workflowfile.yaml or its directory */
           path?: string;

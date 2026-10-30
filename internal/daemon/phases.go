@@ -29,6 +29,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/mail/storedir"
 	"github.com/alekzonder/tariboy/internal/maintenance"
+	"github.com/alekzonder/tariboy/internal/onboarding"
 	"github.com/alekzonder/tariboy/internal/operations"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugins"
@@ -619,10 +620,39 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 		WorkflowImages: tk.workflowImages.Store,
 		Operations:     operationRunner,
 	}
+	reg := commands.BuildRegistry()
+	cctx.Onboarding = &onboarding.Service{
+		DB: st, Catalog: stores.New(st, p.Base), Images: &image.Store{Dir: p.ImagesDir()},
+		Source: o.onboardingSource, Off: onboardingOff(o), Log: log,
+		// The starter image is built by the operator build path, so it shows in
+		// Settings → Operations like `tariboy image build tariboy/basic`.
+		Build: func(ctx context.Context, selector string) error {
+			return callImageBuild(ctx, reg, cctx, selector, "onboarding")
+		},
+	}
 	return &managerParts{
 		manager: manager, schedules: schedStore, scriptPublisher: scriptPublisher,
-		maint: maint, reg: commands.BuildRegistry(), cctx: cctx,
+		maint: maint, reg: reg, cctx: cctx,
 	}
+}
+
+// onboardingOff reports whether the first-run routine is off: the option wins,
+// then $TARIBOY_ONBOARDING.
+func onboardingOff(o Options) bool {
+	if o.Onboarding != "" {
+		return o.Onboarding == "off"
+	}
+	return os.Getenv("TARIBOY_ONBOARDING") == "off"
+}
+
+// callImageBuild runs image.build for a Store selector and waits for it.
+func callImageBuild(ctx context.Context, reg *registry.Registry, cctx *registry.Ctx, selector, initiator string) error {
+	command, ok := reg.Get("image.build")
+	if !ok {
+		return errors.New("image.build command is unavailable")
+	}
+	_, err := registry.Call(cctx, ctx, command, map[string]any{"source": selector, "wait": true, "initiator": initiator})
+	return err
 }
 
 // startRuntime reattaches the agent loops and starts the enabled plugins.
@@ -701,14 +731,12 @@ func startWorkers(ctx context.Context, o Options, proc *process, c *coreParts, t
 	// latest).
 	wg.Go(func() {
 		stores.New(c.st, proc.paths.Base).RunAuto(gctx, func(ctx context.Context, selector string) error {
-			command, ok := mg.reg.Get("image.build")
-			if !ok {
-				return errors.New("image.build command is unavailable")
-			}
-			_, err := registry.Call(mg.cctx, ctx, command, map[string]any{"source": selector, "wait": true, "initiator": "auto"})
-			return err
+			return callImageBuild(ctx, mg.reg, mg.cctx, selector, "auto")
 		}, log)
 	})
+	// The first-run routine registers the default Store and builds basic in
+	// the background, so a slow network never delays readiness.
+	wg.Go(func() { mg.cctx.Onboarding.Start(gctx) })
 	// The workflow script worker executes check and watch runs. Before it
 	// starts any, it terminates the scripts a previous daemon left running and
 	// records their runs as interrupted. On cancel it kills its scripts; their

@@ -79,9 +79,12 @@ handoff; legacy daemons fail closed when active work cannot be preserved.
 
 Open **Images**:
 
-- on **Stores**, click **Add tariboy Store**, which registers
-  `https://github.com/alekzonder/tariboy-store.git` as the Store `tariboy`,
-  then build `tariboy/basic` from its detail (or run
+- use `basic:latest`: at its first start the daemon registers
+  `https://github.com/alekzonder/tariboy-store.git` as the Store `tariboy`
+  and builds `tariboy/basic` in the background. The build is in
+  **Settings → Operations**. If you removed the Store, click
+  **Add tariboy Store** on **Stores**, then build `tariboy/basic` from its
+  detail (or run
   `tariboy store add tariboy https://github.com/alekzonder/tariboy-store.git`
   and `tariboy image build tariboy/basic`); or
 - choose an existing built image; or

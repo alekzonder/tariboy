@@ -25,6 +25,8 @@ func IsolateEnv() (cleanup func(), err error) {
 			os.Unsetenv(name)
 		}
 	}
+	// Test daemons never clone the default Store from the network.
+	os.Setenv("TARIBOY_ONBOARDING", "off")
 	home, err := os.MkdirTemp("", "tariboy-test-home-")
 	if err != nil {
 		return nil, err

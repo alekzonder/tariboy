@@ -84,9 +84,9 @@ reachable through your existing SSH configuration.
 1. **Install Tariboy.** Verify the checksum, move the app to Applications, and
    open it. Follow the [quickstart](https://alekzonder.github.io/tariboy/quickstart) for the alpha
    signing instructions.
-2. **Choose a host and image.** Keep the local host or add an SSH host, then
-   click **Add tariboy Store** on the **Stores** page and build `tariboy/basic`
-   (or another Store image).
+2. **Choose a host and image.** Keep the local host or add an SSH host. At its
+   first start, the daemon registers the `tariboy` Store and builds
+   `tariboy/basic` for you. You can also build another Store image.
 3. **Create an agent.** Pick its harness and model, enable Interactive, and open
    Terminal. Set its loop interval when you are ready, then grow into a team.
 
