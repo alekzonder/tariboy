@@ -53,7 +53,7 @@ export function buildCreateAgentSpec(
 
   const spec: CreateAgentSpec = {
     image: draft.image,
-    cwd: draft.cwd.trim(),
+    cwd: draft.managedFolder ? "" : draft.cwd.trim(),
     harness: draft.harness.trim(),
     model: draft.model.trim(),
     effort: draft.effort.trim(),

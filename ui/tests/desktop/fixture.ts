@@ -96,7 +96,7 @@ export async function waitForMainWindow(desktop: W3CClient): Promise<void> {
     .poll(() =>
       desktop.execute<boolean>(
         `return typeof window.__TAURI_INTERNALS__ === "object"
-      && document.body?.innerText.includes("New agent") === true`,
+      && /New agent|Run your first agent/.test(document.body?.innerText ?? "")`,
       ),
     )
     .toBe(true);

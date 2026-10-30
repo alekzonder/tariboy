@@ -197,12 +197,14 @@ before they finish. The build is an ordinary operation in
 - If `TARIBOY_ONBOARDING=off` is set or the daemon starts with
   `--onboarding=off`, the daemon registers and builds nothing at start.
 
-The Stores page offers the public Tariboy Store as one button. **Add tariboy
-Store** registers `https://github.com/alekzonder/tariboy-store.git` under the
-name `tariboy` on the selected server and opens its detail; it is the same
-request as `tariboy store add tariboy
-https://github.com/alekzonder/tariboy-store.git`. The button is hidden when the
-server already has a Store named `tariboy` or a Store with that source. The
+If you removed the default Store, the Stores page offers it again as one
+button. **Add tariboy Store** registers
+`https://github.com/alekzonder/tariboy-store.git` under the name `tariboy` on
+the selected server and opens its detail; it is the same request as
+`tariboy store add tariboy https://github.com/alekzonder/tariboy-store.git`.
+The button is hidden when the server already has a Store named `tariboy` or a
+Store with that source, and while the daemon still connects the catalog. The
+form for another Store is under **Add another catalog**. The
 server needs HTTPS access to github.com; a failed clone registers nothing and
 shows the daemon error.
 A local source such as `/srv/company-images` is used in place, without a copy.

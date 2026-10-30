@@ -65,17 +65,52 @@ header — Start/Stop and Exec included — are the same in both modes. Expert i
 the complete workspace described below. The mode hides interface only; it is
 not an access control, and the API and CLI are unchanged.
 
-The primary agent dialog has **Target**, **Identity**, **Runtime**,
-**Loop**, and **Lifecycle** sections. Ordinary creation starts with the
-documented defaults and submits one complete create request; the daemon writes
-one complete stopped agent row. Environment is a string-valued JSON object,
-schema-v1 plugins remain editable, and schema-v2 plugins are image-owned and
-read-only. Bare images force Interactive on. The Loop section holds interval
-and timeouts; there is no separate loop switch, and **Start now** in Lifecycle
-decides whether the new agent starts. Interactive
-starts on for every new agent and selecting an image does not change it; the
-manifest's `harness.interactive` is not applied. Clone mode copies the source
-agent's value.
+The **New agent** dialog shows five fields in this order: **Run on** (only when
+the workspace has more than one host), **Folder**, **Image**, **Coding tool**,
+and **Name**. One **Advanced** disclosure holds every other field. The dialog
+and the first-run card on the home screen (see [First run](#first-run)) are one
+component, `ui/src/pages/terminals/create-agent/NewAgentForm.tsx`, driven by
+`useCreateAgentForm`. Ordinary creation starts with the documented defaults and
+submits one complete create request; the daemon writes one complete stopped
+agent row. A new agent opens on its **Terminal** tab in both interface modes.
+
+- **Folder** is the agent's working directory on the selected host, with path
+  autocomplete. It is required. **Advanced → Folder → Use a managed folder**
+  clears it and sends an empty `cwd`, so the daemon makes a managed workdir.
+- **Image** lists one row per image name, with the newest built tag selected.
+  Each row shows the name, the newest `image_version`, and the source when the
+  daemon knows it. Typing filters by name. `basic` is first and selected by
+  default, the other names follow in A–Z order, and `bare` is last as **Plain
+  terminal (bare)**. **Advanced → Image → version** picks another tag. When the
+  host has no built image except `bare`, the host's checklist rows are shown
+  above the field.
+- **Coding tool** is a radio group from the host's harness detection
+  (`GET /api/onboarding`), labeled with the harness ID, for example **Claude
+  Code · claude**. `stub` is never offered. The form selects the image's
+  default harness when it is found on the host, else the first found tool in
+  the order Claude Code, Codex, OpenCode, Cursor. When the image declares no
+  harness, the request carries that detected harness instead of an empty value.
+  A tool that is not found stays selectable, shows its install hint, and blocks
+  **Start agent**. A daemon without the onboarding route shows all four tools
+  without found marks and blocks nothing. The field is hidden for a bare image.
+- **Name** is suggested as `<folder basename>-<image name>`, or `<image name>`
+  for a managed folder, made unique against the host's agents with `-2`, `-3`,
+  and so on. The suggestion follows the folder and the image until you type a
+  name.
+
+**Advanced** has these groups: **Identity** (alias, team, color, notes),
+**Image** (version, plugins), **Folder** (managed folder, environment),
+**Coding tool** (**Headless (no terminal)**, off by default), **Autopilot**
+(interval, soft and hard timeouts, timeout and error policies, idle limit, AI
+inactivity timeout, message batch and queue limits, standing prompt), and
+**Tasks** (the Goal settings), then **Create without starting**. Environment is
+a string-valued JSON object, schema-v1 plugins remain editable, and schema-v2
+plugins are image-owned and read-only. Bare images are always interactive.
+There is no separate loop switch: **Create without starting** decides whether
+the new agent starts, and the footer button reads **Start agent** or **Create
+agent**. Interactive starts on for every new agent and selecting an image does
+not change it; the manifest's `harness.interactive` is not applied. Clone mode
+copies the source agent's value.
 
 Ordinary creation defaults the soft iteration timeout to 7,200 seconds (2
 hours) and the hard timeout to 10,800 seconds (3 hours). Clone mode continues
@@ -92,30 +127,37 @@ The former server-global policy screen is not part of Settings.
 
 Right-clicking any grouped or individual sidebar agent exposes **Clone**.
 Clone loads the source inspect projection from that agent's explicit host,
-leaves the unique name blank, and prefills every persisted agent-row
-configuration field, including raw configured CWD and message limits. It does
+suggests a free name, and prefills every persisted agent-row configuration
+field, including raw configured CWD and message limits. Clone mode uses the
+same layout with **Advanced** open, so every copied field is visible. It does
 not copy secrets, history, runtime evidence, messages, subscriptions, scripts,
 workdir contents, retention, or budgets. The target host
 and image remain editable, and every follow-up request stays pinned to that
 explicit target. Older daemons that do not expose the complete clone projection
-must be updated. **Start now** remains a separate retryable lifecycle request
-after creation.
+must be updated. Starting the agent remains a separate retryable lifecycle
+request after creation.
 
-The daemon rejects a **cwd** that does not exist with `bad_cwd`, so a typo
-never creates a stray directory. Under the field, **Create directory if
-missing** is off by default and is enabled only when **cwd** is not empty. When
-it is on, the create request sends `create_cwd: true` and the daemon makes the
-directory and its parents (mode `0755`, owned by the daemon user) before it
-validates the path. A path that exists as a file still fails. A clone always
-starts with the switch off.
+The daemon rejects a folder that does not exist with `bad_cwd`, so a typo never
+creates a stray directory. 300 ms after you stop typing, the form lists the
+parent folder on the selected host with `GET /api/fs/list`. If the last part of
+the path is not in that listing, the field shows **This folder does not exist.
+Create it**. The link makes the create request send `create_cwd: true`, and the
+daemon makes the directory and its parents (mode `0755`, owned by the daemon
+user) before it validates the path. A path that exists as a file still fails.
+If the parent cannot be listed, the form shows no link. A clone always starts
+without `create_cwd`.
 
-While **Create agent** is disabled, the dialog footer names the first unmet
-condition next to it: the source configuration, the target host's image list,
-an unselected or unbuilt image, or the image manifest still loading. A failed
-manifest load stays visible until the host or image changes, and **Retry image**
-loads it again.
+While **Start agent** is disabled, the footer names the first unmet condition
+next to it: the source configuration, the target host's image list, an
+unselected or unbuilt image, the starter image that the daemon still makes, the
+image manifest still loading, an empty folder, or a coding tool that is not
+installed on the host. A failed manifest load stays visible until the host or
+image changes, and **Retry image** loads it again. While the daemon still
+connects the catalog or builds `basic`, only `basic` waits: the image list shows
+it with the waiting reason, and **Plain terminal (bare)** starts at once.
 
-Harness is selected from the supported Tariboy harnesses. Model and effort are
+Model and effort are shown as one line under the coding tool, for example
+**Model: opus · Effort: medium**. **change** opens the two fields. They are
 editable preset fields: they start from explicit runtime defaults for schema-v2
 images and accept arbitrary values. Their suggestions come in two labeled
 groups. **From harness** holds the catalog the selected host returns from
@@ -174,23 +216,74 @@ compose clipboard transfer, and portable archive
 import/export. All requests retain the active explicit host, including raw
 archive uploads and downloads.
 
+## First run
+
+While every host of the workspace has zero agents, `/` shows the first-run
+home (`ui/src/pages/terminals/FirstRunHome.tsx`) instead of **Pick an agent on
+the left, or create one.** It has a welcome line, the **Getting ready**
+checklist, the inline **Run your first agent** card, and the line **Later:
+connect another computer over SSH in Settings.** As soon as any host has an
+agent, `/` behaves as before. A dead agent route, an empty workspace other than
+the default one, and a workspace with no host keep their own empty states.
+
+The checklist shows the host selected in the card's **Run on**, which is the
+first host by default. It reads `GET /api/onboarding` through
+`useOnboardingStatus` and has three rows:
+
+- the Tariboy catalog: connected, connecting, could not connect, or removed
+  (add it again on the Stores page);
+- the starter image `basic`: ready (also when an image named `basic` already
+  existed), building, or could not build;
+- the coding tool: which harnesses the host found and which it did not, with
+  their install hints. When no tool is found, the row is a warning.
+
+The hook polls every 5 seconds while a row can still change by itself (the
+catalog is pending, or the starter image is pending or building) and stops when
+every row is final. A failed row shows one sentence, a **Details** disclosure
+with the raw daemon error, and **Retry**, which calls
+`POST /api/onboarding/retry` and starts polling again. A daemon without the
+onboarding route (older than this release) gives no status, so the checklist is
+hidden. The rules are pure functions in `ui/src/lib/onboarding/firstRun.ts`.
+
+A missing coding tool is never a red banner. The daemon still counts "at least
+one agent harness" among its missing tools, but the daemon banner removes that
+entry: when it is the only missing tool there is no banner, and when other tools
+are missing the banner names only those. A host added later shows its checklist
+inside the New agent dialog, when it has no built image except `bare`, and on
+its **Stores** page.
+
+After create, the agent opens on **Terminal**. Above the terminal, a status line
+says **Starting Claude Code in ~/code/my-app…** while the agent is enabled and
+interactive and the terminal socket is still connecting or reports no session.
+When the agent has a `halt_reason` or `error_reason`, the line says **Claude
+Code did not start:** and the reason, with **Retry** (start the agent and
+reconnect the terminal) and **Open settings**. When the socket is open, the line
+is gone. Without a session, the terminal says **No terminal session. Start the
+agent, or turn on Interactive in Configuration → Runtime.** Below 1200 px, the
+agent header puts its Exec, Stop, and Kill buttons on their own row under the
+chips.
+
 ## Onboarding
 
 The onboarding tour explains the work process on the screen itself. Each step
 dims the window, puts a ring around one element, and shows a card with a short
-English text, a counter such as **4 of 13**, and **Skip tour**, **Back**, and
+English text, a counter such as **4 of 12**, and **Skip tour**, **Back**, and
 **Next** (**Done** on the last step). The arrow keys move between steps, and
 Esc closes the tour. While the tour is open, clicks on the dimmed interface do
 not pass. The tour shows where an action is, but it does not open dialogs or
 create objects.
 
-The steps go through the screen in this order: the **Servers** tab, **Add
-host**, the server section bar, **Images**, **Stores**, **Add agent**, the tabs
-of the first agent and its **Configuration** tab, **Tasks**, the queue menu,
-**Workflow images**, and the **?** (Help) button. A step with a server section
-opens that section of the server on screen, or of the selected server. The
-agent steps open the first agent of the sidebar. If the sidebar has no agent,
-the tour skips the agent steps. If the sidebar is hidden on a wide window, a
+The steps go through the screen in this order: Welcome, **Agents**, the agent
+workspace, the agent's **Configuration**, **Tasks**, **Images**, **Stores**,
+the **Servers** tab, **Add host**, the queue menu, **Workflow images**, and the
+**?** (Help) button. The **Agents** step goes to `/` and highlights the **New
+agent** button, or **Start agent** on the first-run card; it never highlights
+the sidebar **+**. A step with a server section opens that section of the
+server on screen, or of the selected server. The agent steps open the first
+agent of the sidebar. If the sidebar has no agent row when the tour starts, the
+tour leaves out the agent steps, and the counter counts only the steps it shows
+(**1 of 10**). Done, **Skip tour**, and Esc go back to the route where the tour
+started. If the sidebar is hidden on a wide window, a
 sidebar step shows it. On a phone width, the sidebar is a modal drawer that
 takes focus from the card, so the tour closes the drawer, and the sidebar steps
 show their card in the center. A step whose element is not on the screen, or
@@ -206,9 +299,10 @@ cannot name an anchor that does not exist. The version of the UI comes from
 time.
 
 `onboarding:state:v1` stores the version whose tour the user finished or
-skipped. The tour starts by itself in these cases:
+skipped. The full tour never starts by itself. These rules apply at start:
 
-- No version is stored: the full tour starts.
+- No version is stored: the UI stores the UI version, as if the tour were
+  done, and nothing starts.
 - The stored version is older than the UI version, and a step has a `since`
   value after the stored version, up to the UI version: **What's new** starts.
   It shows only those steps, with a **New** mark, or **Updated** for a step
@@ -216,8 +310,21 @@ skipped. The tour starts by itself in these cases:
 - Otherwise, the tour does not start, and the stored version moves to the UI
   version.
 
-**Skip tour**, Esc, and **Done** store the UI version. If the storage is
-blocked, the tour starts again after each reload.
+**Skip tour**, Esc, and **Done** store the UI version. **Take the tour** does
+nothing while a red daemon banner (`data-daemon-banner="error"`) is on the
+screen, and a toast says **The tour opens after the daemon error is fixed.**
+
+Three one-line hints replace the automatic tour. Each is shown once per agent
+until you dismiss it:
+
+- **Terminal**: "Type what you want done. To hand work over and let the agent
+  run on its own, give it a task."
+- **Tasks**: "Tasks you create here are given to this agent."
+- **Configuration**: "Autopilot: set a schedule here to let the agent keep
+  working without you. Everything else is optional."
+
+A dismissal is stored under `onboarding:hint:v1:<host>:<agent>:<tab>`. If the
+storage is blocked, a dismissed hint comes back after a reload.
 
 The **?** menu in the titlebar, and the **Help** card in Application settings,
 have **Take the tour**, **What's new**, and **Changelog**. **What's new** from
@@ -388,10 +495,18 @@ until the one download completes, after which cancellation only skips
 unstarted destinations.
 
 The **Stores** workspace registers Git URLs or local absolute source directories
-on the route-selected daemon. Above the form, **Add tariboy Store** registers
-`https://github.com/alekzonder/tariboy-store.git` as the Store `tariboy` with
-the same add request and opens its detail; the block is hidden once the daemon
-lists a Store with that name or source. Its detail shows the current disk-backed image
+on the route-selected daemon. The daemon registers the default Store `tariboy`
+by itself, so the page reads its name and source from `GET /api/onboarding`.
+**Add tariboy Store** registers it with the same add request and opens its
+detail. The card is shown only when no Store has that name or source, for
+example after you removed it (`default_store.state` is `removed`). It is hidden
+while the daemon still connects the catalog and on a daemon without the
+onboarding route. The add form is folded under **Add another catalog**. When the
+host's catalog or starter-image checklist row is not done, the page shows those
+rows above the list, with **Details** and **Retry**. A Store build that fails
+shows **Build failed:** and the operation's error in that image's row, with
+**Open operation**. A new build of the image, or a reload, clears it. Its detail
+shows the current disk-backed image
 inventory, each source `image_version`, and the `image_version` read directly
 from that image's `latest` manifest. It distinguishes missing latest,
 unversioned source or latest, source validation errors, and latest inspection
@@ -777,7 +892,8 @@ stays in the registry only so it can be read once, like `terminals:workspace:v1`
 | `app:workspaces:v2` | local | host workspaces | JSON workspaces with their host lists, active workspace | Default only |
 | `app:workspaces:v1` | local | host workspaces (legacy, read once) | JSON workspaces, host map, active workspace | none |
 | `desktop:updates:auto-download:v1` | local | Desktop updates | `true` or `false` | `true` |
-| `onboarding:state:v1` | local | onboarding tour | release version whose tour was finished or skipped | empty: first run |
+| `onboarding:state:v1` | local | onboarding tour | release version whose tour was finished or skipped | empty: first run, stores the UI version |
+| `onboarding:hint:v1:<host>:<agent>:<tab>` | local | first-visit hints | `dismissed` | empty: the hint shows |
 | `tariboy:runtime-presets:v1` | local | create-agent presets | JSON saved models and efforts per harness | none |
 | `tariboy_daemons` | local | browser host registry | JSON host metadata list | empty |
 | `tariboy_active_daemon` | local | host registry | selected host ID | none |

@@ -18,6 +18,7 @@ import {
   registerProd,
   serversTab,
 } from "@/test/terminals/terminalsPage";
+import { chooseManagedFolder } from "@/test/terminals/createAgentDialog";
 import { agentRow } from "@/test/fixtures/apiFixtures";
 
 vi.mock("@/lib/aggregate", () => ({
@@ -335,9 +336,11 @@ describe("TerminalsPage empty state and create", () => {
     const callsBefore = vi.mocked(fetchAllAgents).mock.calls.length;
 
     fireEvent.click(screen.getByRole("button", { name: "New agent" }));
-    fireEvent.focus(await screen.findByLabelText("image"));
-    fireEvent.click(await screen.findByRole("option", { name: "worker:v1" }));
-    const create = screen.getByRole("button", { name: "Create agent" });
+    // The form picks the only built image by itself.
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(within(dialog).getByLabelText("image")).toHaveValue("worker"));
+    await chooseManagedFolder();
+    const create = within(dialog).getByRole("button", { name: "Start agent" });
     await waitFor(() => expect(create).toBeEnabled());
     fireEvent.click(create);
 
@@ -347,13 +350,40 @@ describe("TerminalsPage empty state and create", () => {
     );
   });
 
+  it("opens a new agent on its Terminal in Simple mode, where a sidebar agent opens on Tasks", async () => {
+    localStorage.setItem(UI_MODE_KEY, "simple");
+    serversTab();
+    createAgent.mockResolvedValue({
+      name: "new-agent",
+      state: "running",
+      goal_enabled: false,
+      goal_wait_customer_timeout_s: 0,
+      goal_delivery_cooldown_s: 0,
+    });
+    renderAt("/terminals");
+    await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "New agent" }));
+    // The form picks the only built image by itself.
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(within(dialog).getByLabelText("image")).toHaveValue("worker"));
+    await chooseManagedFolder();
+    const create = within(dialog).getByRole("button", { name: "Start agent" });
+    await waitFor(() => expect(create).toBeEnabled());
+    fireEvent.click(create);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/new-agent/console"),
+    );
+  });
+
   it("opens Run Agent with both host and image preselected", async () => {
     const id = await registerProd();
     renderAt(`/terminals?new=1&host=${id}&image=worker%3Av1`);
 
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Host" })).toHaveTextContent("prod");
-    expect(screen.getByLabelText("image")).toHaveValue("worker:v1");
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("combobox", { name: "Run on" })).toHaveTextContent("prod");
+    await waitFor(() => expect(within(dialog).getByLabelText("image")).toHaveValue("worker"));
     await waitFor(() => expect(listImages).toHaveBeenCalledWith(expect.objectContaining({ id })));
     expect(imageManifestGet).toHaveBeenCalledWith("worker:v1", expect.objectContaining({ id }));
   });

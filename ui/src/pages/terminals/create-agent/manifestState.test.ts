@@ -28,6 +28,7 @@ describe("manifestState", () => {
       loadingManifest: false,
       bare: false,
       schemaV2: false,
+      defaultHarness: "codex",
       defaultModel: "gpt",
       defaultEffort: "high",
       displayedPlugins: ["context"],

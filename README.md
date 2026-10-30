@@ -28,8 +28,9 @@ Package plugins, Agent Skills, and an ordered prompt template into a reusable
 image. Build from a directory containing `Tariboyfile.yaml`, inspect exactly
 what the agent will receive, and export runnable images to another host.
 
-Add the `tariboy` Store with one click and build `tariboy/basic`, or build a
-role-specific image. Harness, model, and effort are configured on the agent.
+The daemon registers the `tariboy` Store and builds `tariboy/basic` by itself,
+or you build a role-specific image. Harness, model, and effort are configured
+on the agent.
 
 [Explore images →](https://alekzonder.github.io/tariboy/images)
 
@@ -87,8 +88,10 @@ reachable through your existing SSH configuration.
 2. **Choose a host and image.** Keep the local host or add an SSH host. At its
    first start, the daemon registers the `tariboy` Store and builds
    `tariboy/basic` for you. You can also build another Store image.
-3. **Create an agent.** Pick its harness and model, enable Interactive, and open
-   Terminal. Set its loop interval when you are ready, then grow into a team.
+3. **Create an agent.** On the home screen, type the folder of your repository
+   and click **Start agent**. The detected coding tool is selected, and the
+   agent opens on Terminal. Set its loop interval when you are ready, then grow
+   into a team.
 
 [Follow the ten-minute quickstart →](https://alekzonder.github.io/tariboy/quickstart)
 

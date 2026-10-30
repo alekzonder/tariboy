@@ -66,6 +66,8 @@ describe("checklistRows", () => {
     const rows = checklistRows(
       status("failed", "pending", ["claude"], { store: "git clone: network down" }),
     );
+    // The starter image waits for the catalog, so only the catalog row explains it.
+    expect(rows.map((row) => row.key)).toEqual(["catalog", "tool"]);
     expect(rows[0]).toEqual({
       key: "catalog",
       state: "failed",
@@ -91,7 +93,9 @@ describe("checklistRows", () => {
   it("warns when no coding tool is installed", () => {
     const tool = checklistRows(status("registered", "ready", []))[2];
     expect(tool.state).toBe("warn");
-    expect(tool.text).toBe("Coding tool: none found. Install Claude Code, Codex, OpenCode, Cursor.");
+    expect(tool.text).toBe(
+      "Coding tool: none found. Install Claude Code, Codex, OpenCode, Cursor.",
+    );
     expect(tool.install).toHaveLength(4);
   });
 });

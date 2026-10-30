@@ -2,7 +2,7 @@
 // tool choices of the New agent form, and the daemon banner filter.
 import type { DaemonStatus, ImageSummary, OnboardingHarness, OnboardingStatus } from "@/lib/api";
 
-export const HARNESS_LABELS: Record<string, string> = {
+const HARNESS_LABELS: Record<string, string> = {
   claude: "Claude Code",
   codex: "Codex",
   opencode: "OpenCode",
@@ -14,10 +14,10 @@ export const DESKTOP_HARNESSES = Object.keys(HARNESS_LABELS);
 
 export const harnessLabel = (type: string) => HARNESS_LABELS[type] ?? type;
 
-export const STARTER_IMAGE = "basic";
+const STARTER_IMAGE = "basic";
 const PLAIN_TERMINAL = "bare";
 
-export type ChecklistState = "done" | "working" | "failed" | "warn";
+type ChecklistState = "done" | "working" | "failed" | "warn";
 
 export interface ChecklistRow {
   key: "catalog" | "starter" | "tool";
@@ -90,11 +90,11 @@ function toolRow({ harnesses }: OnboardingStatus): ChecklistRow {
 
 /** The three "Getting ready" rows of one host. */
 export function checklistRows(status: OnboardingStatus): ChecklistRow[] {
-  // A removed catalog builds nothing, so the starter row would wait forever.
+  // A removed or failed catalog builds nothing, so the starter row would wait
+  // forever; the catalog row already says why.
+  const catalogStopped = ["removed", "failed"].includes(status.default_store.state);
   const starter =
-    status.default_store.state === "removed" && status.starter_image.state === "pending"
-      ? null
-      : starterRow(status);
+    catalogStopped && status.starter_image.state === "pending" ? null : starterRow(status);
   return [catalogRow(status), ...(starter ? [starter] : []), toolRow(status)];
 }
 
@@ -135,8 +135,7 @@ export interface ImageChoice {
 const newest = (a: ImageSummary, b: ImageSummary) =>
   b.built_at.localeCompare(a.built_at) || b.tag.localeCompare(a.tag);
 
-const choiceRank = (name: string) =>
-  name === STARTER_IMAGE ? 0 : name === PLAIN_TERMINAL ? 2 : 1;
+const choiceRank = (name: string) => (name === STARTER_IMAGE ? 0 : name === PLAIN_TERMINAL ? 2 : 1);
 
 /** One choice per image name: `basic` first, others A–Z, `bare` last. */
 export function imageChoices(images: ImageSummary[], waiting: string | null = null): ImageChoice[] {
@@ -186,7 +185,11 @@ const slug = (value: string) =>
 
 /** `<folder basename>-<image name>`, unique among the host's agents. */
 export function suggestAgentName(folder: string, imageName: string, taken: string[]): string {
-  const base = folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
+  const base =
+    folder
+      .replace(/[\\/]+$/, "")
+      .split(/[\\/]/)
+      .pop() ?? "";
   const stem = slug([base, imageName].filter(Boolean).join("-")) || "agent";
   const used = new Set(taken);
   if (!used.has(stem)) return stem;

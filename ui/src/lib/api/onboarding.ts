@@ -4,7 +4,6 @@ import type { Transport } from "./client";
 export type {
   OnboardingDefaultStore,
   OnboardingHarness,
-  OnboardingStarterImage,
   OnboardingStatus,
 } from "../api-types.generated";
 

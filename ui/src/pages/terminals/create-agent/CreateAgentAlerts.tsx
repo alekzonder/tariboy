@@ -46,7 +46,17 @@ export function StartAlerts({ form }: { form: CreateAgentForm }) {
 }
 
 /** What still blocks the create, and the create button itself. */
-export function CreateAgentFooter({ form }: { form: CreateAgentForm }) {
+export function CreateAgentFooter({
+  form,
+  tourAnchor,
+  onCancel,
+}: {
+  form: CreateAgentForm;
+  /** The tour's anchor on the first-run card's Start button. */
+  tourAnchor?: string;
+  /** Shown in the dialog; the inline card has nothing to cancel. */
+  onCancel?: () => void;
+}) {
   const { created, blocker, retryImage, busy, targetIsUsable, submit } = form;
   return (
     <>
@@ -66,13 +76,19 @@ export function CreateAgentFooter({ form }: { form: CreateAgentForm }) {
           )}
         </div>
       )}
+      {onCancel && (
+        <Button variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      )}
       {!created && (
         <Button
           disabled={busy || blocker !== null || !targetIsUsable}
           aria-describedby={blocker ? "create-agent-blocker" : undefined}
+          data-tour={tourAnchor}
           onClick={() => void submit()}
         >
-          {busy ? "Creating…" : "Create agent"}
+          {busy ? "Creating…" : form.draft.startNow ? "Start agent" : "Create agent"}
         </Button>
       )}
     </>

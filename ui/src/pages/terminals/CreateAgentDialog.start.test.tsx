@@ -6,6 +6,7 @@ import type {
   AgentRunResult,
   AgentView,
   CreateAgentSpec,
+  FsListing,
   HarnessModelCatalog,
   ImageManifest,
   ImageSummary,
@@ -19,8 +20,12 @@ import {
   setupCreateAgentDialog,
   manifest,
   completeOrdinarySpec,
+  chooseManagedFolder,
+  createButton,
+  openAdvanced,
   renderDialog,
   setSwitch,
+  showRuntimeFields,
 } from "@/test/terminals/createAgentDialog";
 
 // The dialog's requests, each recorded with the host of the client that sent
@@ -34,8 +39,9 @@ const calls = vi.hoisted(() => ({
   listImages:
     vi.fn<(target: Daemon | null) => Promise<{ images: ImageSummary[]; count: number }>>(),
   startAgent: vi.fn<(name: string, target: Daemon | null) => Promise<AgentActionResult>>(),
+  fsList: vi.fn<(path: string) => Promise<FsListing>>(),
 }));
-const { createAgent, imageManifestGet, startAgent } = calls;
+const { createAgent, imageManifestGet, listImages, startAgent, fsList } = calls;
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -50,6 +56,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
         createAgent: (spec: CreateAgentSpec) => calls.createAgent(spec, host),
         startAgent: (name: string) => calls.startAgent(name, host),
       },
+      files: { ...client.files, fsList: (path: string) => calls.fsList(path) },
       harnesses: {
         ...client.harnesses,
         getHarnessModels: (harness: string) => calls.getHarnessModelsOn(host, harness),
@@ -95,7 +102,10 @@ vi.mock("@/components/PathAutocomplete", () => ({
   },
 }));
 
-beforeEach(() => setupCreateAgentDialog(calls));
+beforeEach(() => {
+  setupCreateAgentDialog(calls);
+  fsList.mockResolvedValue({ path: "/work", parent: "/", entries: [{ name: "app", dir: true }] });
+});
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -114,18 +124,27 @@ describe.each([{ startNow: false }, { startNow: true }])(
       renderDialog({ imageRef: "bare:latest" });
 
       expect(await screen.findByText("Terminal only")).toBeInTheDocument();
-      expect(screen.getByLabelText("image")).toHaveValue("bare:latest");
-      expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
-      expect(screen.getByRole("switch", { name: "Interactive" })).toBeDisabled();
+      expect(screen.getByLabelText("image")).toHaveValue("Plain terminal (bare)");
+      expect(screen.queryByRole("radiogroup", { name: "Coding tool" })).not.toBeInTheDocument();
+      openAdvanced();
+      const headless = screen.getByRole("switch", { name: "Headless (no terminal)" });
+      expect(headless).not.toBeChecked();
+      expect(headless).toBeDisabled();
       expect(screen.queryByRole("switch", { name: "Autopilot" })).not.toBeInTheDocument();
-      expect(screen.getByText(/does not contain agent instructions or tools/i)).toBeInTheDocument();
-      await setSwitch("Start now", startNow);
+      expect(screen.getByText("A plain terminal always has a terminal.")).toBeInTheDocument();
+      await setSwitch("Create without starting", !startNow);
+      await chooseManagedFolder();
 
-      fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+      const create = screen.getByRole("button", {
+        name: startNow ? "Start agent" : "Create agent",
+      });
+      await waitFor(() => expect(create).toBeEnabled());
+      fireEvent.click(create);
       await waitFor(() => expect(createAgent).toHaveBeenCalled());
       expect(createAgent).toHaveBeenCalledWith(
         completeOrdinarySpec({
           image: "bare:latest",
+          name: "bare",
           harness: "claude",
           model: "",
           effort: "",
@@ -134,6 +153,7 @@ describe.each([{ startNow: false }, { startNow: true }])(
         targetFor("d1"),
       );
       if (startNow) {
+        await waitFor(() => expect(startAgent).toHaveBeenCalled());
         expect(startAgent).toHaveBeenCalledWith("created", targetFor("d1"));
       } else {
         expect(startAgent).not.toHaveBeenCalled();
@@ -147,12 +167,13 @@ it("keeps the created stopped agent and retries only start after a start failure
     .mockRejectedValueOnce(new Error("daemon unavailable"))
     .mockResolvedValueOnce({ name: "created", action: "start" });
   const { onCreated, onOpenChange } = renderDialog();
-  await screen.findByDisplayValue("o3");
+  await showRuntimeFields();
   fireEvent.change(screen.getByLabelText("model"), {
     target: { value: "private-model" },
   });
+  await chooseManagedFolder();
 
-  const create = screen.getByRole("button", { name: "Create agent" });
+  const create = createButton();
   await waitFor(() => expect(create).toBeEnabled());
   fireEvent.click(create);
 
@@ -216,33 +237,34 @@ describe("Create agent blocker", () => {
   });
 
   it("asks for an image when none is selected", async () => {
+    // Without an image ref the form picks the first built image, so offer none.
+    listImages.mockResolvedValue({ images: [], count: 0 });
     renderDialog({ imageRef: "" });
 
     expect(await screen.findByText("Choose an image")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
+    expect(createButton()).toBeDisabled();
   });
 });
 
-it("sends create_cwd only when the create directory switch is on", async () => {
+it("sends create_cwd only after Create it is chosen for a missing folder", async () => {
   renderDialog();
-  await screen.findByDisplayValue("o3");
-  const createCwd = screen.getByRole("switch", {
-    name: "Create directory if missing",
-  });
-  expect(createCwd).not.toBeChecked();
-  expect(createCwd).toBeDisabled();
+  await showRuntimeFields();
+  expect(screen.queryByRole("button", { name: "Create it" })).not.toBeInTheDocument();
 
-  fireEvent.change(screen.getByLabelText("cwd"), {
-    target: { value: "/work/new" },
-  });
-  expect(createCwd).toBeEnabled();
-  fireEvent.click(createCwd);
-  expect(createCwd).toBeChecked();
-  fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+  // An existing folder offers nothing to create.
+  fireEvent.change(screen.getByLabelText("folder"), { target: { value: "/work/app" } });
+  await waitFor(() => expect(fsList).toHaveBeenCalledWith("/work/"));
+  await waitFor(() => expect(createButton()).toBeEnabled());
+  expect(screen.queryByRole("button", { name: "Create it" })).not.toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText("folder"), { target: { value: "/work/new" } });
+  fireEvent.click(await screen.findByRole("button", { name: "Create it" }));
+  expect(screen.getByText("The folder will be created.")).toBeInTheDocument();
+  fireEvent.click(createButton());
 
   await waitFor(() => expect(createAgent).toHaveBeenCalled());
   expect(createAgent).toHaveBeenCalledWith(
-    completeOrdinarySpec({ cwd: "/work/new", create_cwd: true }),
+    completeOrdinarySpec({ name: "new-worker", cwd: "/work/new", create_cwd: true }),
     targetFor("d1"),
   );
 });

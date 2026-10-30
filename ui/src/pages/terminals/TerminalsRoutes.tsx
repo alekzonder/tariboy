@@ -10,7 +10,9 @@ import { inWorkspace, useWorkspaces } from "@/lib/workspaces";
 import AgentWorkspace from "@/pages/agents/AgentWorkspace";
 import { RouteHostBoundary } from "./RouteHostBoundary";
 import type { ServerView } from "./TerminalsPage";
-import { agentPath } from "./terminalsHosts";
+import { agentPath, type CreateHost } from "./terminalsHosts";
+import { FirstRunHome } from "./FirstRunHome";
+import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
 
 // Server pages load on first open, so the initial bundle carries only the
 // shell, the agent list and the agent workspace.
@@ -183,6 +185,8 @@ export function TerminalsRoutes({
 export function TerminalsEmptyState({
   hosts,
   firstHostId,
+  createHosts,
+  onCreated,
   onManage,
   onAddServer,
   onNewAgent,
@@ -191,6 +195,9 @@ export function TerminalsEmptyState({
   hosts: HostAgents[];
   /** The first host an agent can be created on, if any. */
   firstHostId?: string;
+  /** Every host an agent can be created on, for the first-run card. */
+  createHosts: CreateHost[];
+  onCreated: (hostId: string, name: string) => void;
   onManage: () => void;
   onAddServer: () => void;
   onNewAgent: (hostId: string) => void;
@@ -225,10 +232,15 @@ export function TerminalsEmptyState({
       </div>
     );
   }
+  if (workspaceEmpty) {
+    return <FirstRunHome hostId={firstHostId} hosts={createHosts} onCreated={onCreated} />;
+  }
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
       <p>Pick an agent on the left, or create one.</p>
-      <Button onClick={() => onNewAgent(firstHostId)}>New agent</Button>
+      <Button data-tour={TOUR_ANCHORS.newAgent} onClick={() => onNewAgent(firstHostId)}>
+        New agent
+      </Button>
     </div>
   );
 }

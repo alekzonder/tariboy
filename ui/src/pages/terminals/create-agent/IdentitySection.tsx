@@ -9,22 +9,8 @@ export function IdentitySection({
   formDisabled,
 }: Pick<CreateAgentForm, "draft" | "updateDraft" | "formDisabled">) {
   return (
-    <section aria-labelledby="create-agent-identity" className="space-y-3 rounded border p-3">
-      <h3 id="create-agent-identity" className="font-medium">
-        Identity
-      </h3>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="name" id="create-agent-name">
-          <Input
-            id="create-agent-name"
-            aria-label="name"
-            value={draft.name}
-            onChange={(event) => updateDraft("name", event.target.value)}
-            placeholder="empty = generated"
-            disabled={formDisabled}
-            className="h-8"
-          />
-        </Field>
+    <>
+      <div className="grid gap-3 sm:grid-cols-3">
         <Field label="alias" id="create-agent-alias">
           <Input
             id="create-agent-alias"
@@ -35,10 +21,10 @@ export function IdentitySection({
             className="h-8"
           />
         </Field>
-        <Field label="group" id="create-agent-group">
+        <Field label="team" id="create-agent-group">
           <Input
             id="create-agent-group"
-            aria-label="group"
+            aria-label="team"
             value={draft.group}
             onChange={(event) => updateDraft("group", event.target.value)}
             disabled={formDisabled}
@@ -66,6 +52,6 @@ export function IdentitySection({
           disabled={formDisabled}
         />
       </Field>
-    </section>
+    </>
   );
 }

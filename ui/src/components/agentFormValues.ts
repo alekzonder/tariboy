@@ -1,7 +1,5 @@
 // Values shared by the agent-create surfaces (single-agent form and group wizard).
 
-export const HARNESSES = ["claude", "codex", "opencode", "cursor", "stub"];
-
 export interface EnvRow {
   key: string;
   value: string;

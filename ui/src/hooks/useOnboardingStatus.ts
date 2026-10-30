@@ -18,12 +18,7 @@ export function useOnboardingStatus(api: ApiClient | null) {
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const tick = async () => {
-      let next: OnboardingStatus | null = null;
-      try {
-        next = await api.onboarding.getStatus();
-      } catch {
-        next = null;
-      }
+      const next = await api.onboarding.getStatus().catch(() => null);
       if (!alive) return;
       setStatus(next);
       setLoaded(true);
