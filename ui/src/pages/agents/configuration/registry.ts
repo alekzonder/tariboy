@@ -33,6 +33,7 @@ export interface ConfigField {
 export interface ConfigSection {
   id: string;
   title: string;
+  description?: string;
   // An advanced section renders inside the collapsed Advanced disclosure.
   advanced: boolean;
   fields: readonly ConfigField[];
@@ -91,8 +92,9 @@ export const SECTIONS: readonly ConfigSection[] = [
     title: "Spending limit",
     advanced: false,
     fields: [
-      { key: "budget-day", label: "Per day", kind: "number", minimum: 0, helper: "" },
-      { key: "budget-month", label: "Per month", kind: "number", minimum: 0, helper: "" },
+      { key: "budget-day", label: "Day", kind: "number", minimum: 0, helper: "" },
+      { key: "budget-week", label: "Week", kind: "number", minimum: 0, helper: "" },
+      { key: "budget-month", label: "Month", kind: "number", minimum: 0, helper: "" },
     ],
   },
   {
@@ -214,12 +216,9 @@ export const SECTIONS: readonly ConfigSection[] = [
   },
   {
     id: "budgets",
-    title: "Hour and week budgets (USD)",
+    title: "Hour budget (USD)",
     advanced: true,
-    fields: [
-      { key: "budget-hour", label: "Hour budget", kind: "number", minimum: 0, helper: "" },
-      { key: "budget-week", label: "Week budget", kind: "number", minimum: 0, helper: "" },
-    ],
+    fields: [{ key: "budget-hour", label: "Hour budget", kind: "number", minimum: 0, helper: "" }],
   },
   {
     id: "environment",
@@ -257,7 +256,45 @@ export const SECTIONS: readonly ConfigSection[] = [
       { key: "keep-days", label: "Keep days", kind: "number", minimum: 0, helper: "" },
     ],
   },
+  {
+    id: "views",
+    title: "Other views",
+    description:
+      "Open mailbox Prompt preview Context Files Scripts Full audit Raw usage Raw settings",
+    advanced: true,
+    fields: [],
+  },
+  {
+    id: "about",
+    title: "About",
+    description: "Image Library host",
+    advanced: false,
+    fields: [],
+  },
+  {
+    id: "danger",
+    title: "Danger",
+    description: "Delete agent",
+    advanced: false,
+    fields: [],
+  },
 ];
+
+// Every word must match static text in one section; draft values never enter search.
+export function filterSections(query: string, sections: readonly ConfigSection[]): ConfigSection[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return sections.filter((section) => {
+    const text = [
+      section.title,
+      section.description,
+      section.advanced ? "Advanced" : "",
+      ...section.fields.flatMap((field) => [field.key, field.label, field.helper]),
+    ]
+      .join(" ")
+      .toLowerCase();
+    return words.every((word) => text.includes(word));
+  });
+}
 
 const FIELDS = new Map(
   SECTIONS.flatMap((section) =>

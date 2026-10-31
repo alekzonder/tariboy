@@ -5,12 +5,13 @@ import { useAgentName, useAgentStatus } from "@/lib/agent";
 import { useApi } from "@/components/apiContext";
 import type { AgentStatus, AgentView } from "@/lib/api";
 import { useMultiHost } from "@/lib/navRoutes";
-import { sectionOfKey } from "./configuration/registry";
+import { SECTIONS, filterSections, sectionOfKey } from "./configuration/registry";
 import { countDirtyByGroup, groupOfKey, isStopped } from "./configuration/configurationPageModel";
 import { useConfigDraft } from "./configuration/useConfigDraft";
 import { useConfigSources } from "./configuration/useConfigSources";
 import { buildUnits, readBaseline } from "./configuration/commits";
-import { ConfigSaveRow, SettingsSection } from "./configuration/ConfigControls";
+import { ConfigSaveRow, ConfigSearch, SettingsSection } from "./configuration/ConfigControls";
+import { SettingsFilterContext } from "./configuration/settingsFilterContext";
 import { SettingsGroups } from "./configuration/SettingsGroups";
 import { AdvancedSettings } from "./configuration/AdvancedSettings";
 import { imageHref } from "./configuration/generalImageModel";
@@ -100,14 +101,26 @@ function ConfigurationPage({
   const units = useMemo(() => buildUnits(api, name), [api, name]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState(false);
+  const [query, setQuery] = useState("");
+  const searching = query.trim() !== "";
+  const sections = SECTIONS.filter(
+    (section) => view?.budget || !["spending", "budgets"].includes(section.id),
+  );
+  const matches = filterSections(query, sections);
+  const visible = new Set(matches.map((section) => section.id));
+  const matchingAdvanced = matches.some((section) => section.advanced);
 
   // A save that stops on a field shows that field: its Advanced disclosure or
   // the folder editor opens first, and focus moves once it has rendered.
   const onFocus = useCallback((key: string) => {
+    setQuery("");
     if (sectionOfKey(key)?.advanced) setAdvancedOpen(true);
     if (sectionOfKey(key)?.id === "folder") setEditingFolder(true);
     window.setTimeout(() => {
-      const element = document.getElementById(key);
+      // cmdk assigns the folder input its own id.
+      const element =
+        document.getElementById(key) ??
+        document.querySelector<HTMLElement>(`[data-field="${key}"] input`);
       element?.scrollIntoView?.({ block: "center" });
       element?.focus();
     }, 0);
@@ -128,24 +141,30 @@ function ConfigurationPage({
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <>
-          <SettingsGroups
-            {...section}
-            editingFolder={editingFolder}
-            onEditFolder={() => setEditingFolder(true)}
-          />
-          <AdvancedSettings
-            {...section}
-            base={base}
-            open={advancedOpen}
-            onOpenChange={setAdvancedOpen}
-            dirty={draft.dirtyKeys.filter((key) => groupOfKey(key) === "Advanced").length}
-          />
-          <About view={view} />
-          <SettingsSection id="danger" title="Danger">
-            <div>
-              <DeleteAgentButton name={name} refresh={refresh} onDeleted={() => navigate("/")} />
-            </div>
-          </SettingsSection>
+          <ConfigSearch query={query} onQuery={setQuery} empty={matches.length === 0} />
+          <SettingsFilterContext.Provider value={visible}>
+            <SettingsGroups
+              {...section}
+              editingFolder={editingFolder || (searching && visible.has("folder"))}
+              onEditFolder={() => setEditingFolder(true)}
+            />
+            <AdvancedSettings
+              {...section}
+              base={base}
+              open={searching ? matchingAdvanced : advancedOpen}
+              onOpenChange={(open) => {
+                if (!searching) setAdvancedOpen(open);
+              }}
+              hidden={searching && !matchingAdvanced}
+              dirty={draft.dirtyKeys.filter((key) => groupOfKey(key) === "Advanced").length}
+            />
+            <About view={view} />
+            <SettingsSection id="danger" title="Danger">
+              <div>
+                <DeleteAgentButton name={name} refresh={refresh} onDeleted={() => navigate("/")} />
+              </div>
+            </SettingsSection>
+          </SettingsFilterContext.Provider>
         </>
       )}
     </TabPage>

@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { useContext, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { SearchInput } from "@/components/ui/search-input";
 import { cn } from "@/lib/utils";
 import type { PresetGroup } from "@/lib/runtimePresets";
 import { DraftControl } from "./DraftControls";
@@ -9,6 +10,41 @@ import { describedBy, unsaved } from "./draftFieldModel";
 import { fieldOfKey, type ConfigField } from "./registry";
 import type { ConfigDraft } from "./useConfigDraft";
 import type { ConfigSources } from "./useConfigSources";
+import { SettingsFilterContext } from "./settingsFilterContext";
+
+export function ConfigSearch({
+  query,
+  onQuery,
+  empty,
+}: {
+  query: string;
+  onQuery: (value: string) => void;
+  empty: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <SearchInput
+          aria-label="Search settings"
+          placeholder="Search settings…"
+          value={query}
+          onChange={(event) => onQuery(event.target.value)}
+          className="h-8 min-w-0 flex-1"
+        />
+        {query.trim() && (
+          <Button variant="ghost" size="sm" className="h-8" onClick={() => onQuery("")}>
+            Clear search
+          </Button>
+        )}
+      </div>
+      {empty && (
+        <p role="status" className="text-sm text-muted-foreground">
+          No settings match your search.
+        </p>
+      )}
+    </div>
+  );
+}
 
 // SectionProps is what every group and Advanced subsection receives.
 export interface SectionProps {
@@ -34,15 +70,22 @@ export function SettingsSection({
   action?: ReactNode;
   children: ReactNode;
 }) {
+  const visible = useContext(SettingsFilterContext);
+  const hidden = visible !== null && !visible.has(id);
   const Heading = level === 3 ? "h3" : "h4";
   return (
     <section
       id={`settings-section-${id}`}
+      hidden={hidden}
       aria-labelledby={`settings-section-${id}-title`}
-      className={cn(
-        "scroll-mt-24 border-t pt-3",
-        level === 3 && "grid gap-x-6 gap-y-2 sm:grid-cols-[9rem_minmax(0,1fr)]",
-      )}
+      className={
+        hidden
+          ? "hidden"
+          : cn(
+              "scroll-mt-24 border-t pt-3",
+              level === 3 && "grid gap-x-6 gap-y-2 sm:grid-cols-[9rem_minmax(0,1fr)]",
+            )
+      }
     >
       <div className={cn("flex items-center gap-2", level === 4 && "mb-3")}>
         <Heading

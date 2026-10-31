@@ -1,7 +1,13 @@
 import { lazy, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { LazyBoundary } from "@/components/LazyBoundary";
-import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SearchInput } from "@/components/ui/search-input";
 import type { AgentRow } from "@/lib/api";
 import type { AgentNeeds } from "@/lib/agentState";
@@ -104,30 +110,38 @@ export default function AgentWorkTab({
         </ul>
       </WorkSection>
       <WorkSection
-        title={showAll ? "Done" : "Done · last 7 days"}
+        title="Done"
         count={sections.done.length}
         aside={
           <>
             <SearchInput
               aria-label="Search done tasks"
-              placeholder="Search"
+              placeholder="Search completed tasks…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="h-6 w-40 max-w-full"
+              className="h-8 min-w-0 flex-1 text-sm"
             />
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-6 px-2 text-ui"
-              aria-pressed={showAll}
-              onClick={() => setShowAll((all) => !all)}
+            <Select
+              value={showAll ? "all" : "week"}
+              onValueChange={(value) => setShowAll(value === "all")}
             >
-              {showAll ? "Last 7 days" : "Show all"}
-            </Button>
+              <SelectTrigger aria-label="Done period" className="shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="week">Last 7 days</SelectItem>
+                <SelectItem value="all">All time</SelectItem>
+              </SelectContent>
+            </Select>
           </>
         }
       >
+        {work.closedReady && sections.done.length === 0 && (
+          <p className="py-2 text-sm text-muted-foreground">
+            No completed tasks{search.trim() ? " match your search" : ""}{" "}
+            {showAll ? "for All time" : "in the last 7 days"}.
+          </p>
+        )}
         <ul className="flex min-w-0 flex-col">
           {sections.done.map((task) => (
             <WorkRow

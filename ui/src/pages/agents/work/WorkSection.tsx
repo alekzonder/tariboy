@@ -28,7 +28,9 @@ export function WorkSection({
         >
           {title} ({count})
         </h2>
-        {aside && <div className="ml-auto flex min-w-0 items-center gap-1.5">{aside}</div>}
+        {aside && (
+          <div className="ml-auto flex w-96 max-w-full min-w-0 items-center gap-1.5">{aside}</div>
+        )}
       </div>
       {children}
     </section>
