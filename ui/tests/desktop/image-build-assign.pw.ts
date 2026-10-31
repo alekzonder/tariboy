@@ -154,13 +154,17 @@ test("builds a transparent image from its original directory and assigns it to a
   await expect.poll(() => bodyText(desktop)).toContain("./skills/loop/finish.md");
 
   await desktop.execute(`window.location.hash = "#/agents/local/image-select-e2e/configuration";`);
-  await expect.poll(() => bodyText(desktop)).toContain("Agent image");
+  await expect.poll(() => bodyText(desktop)).toContain("About");
   await expect
     .poll(() =>
       desktop.execute<string>(`return [...document.querySelectorAll("a")]
     .find((candidate) => candidate.textContent?.trim() === "basic:latest")?.getAttribute("href") || "";`),
     )
     .toBe("#/servers/local/images/basic/latest");
+  await desktop.elementClick(
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Advanced']"),
+  );
+  await expect.poll(() => bodyText(desktop)).toContain("Agent image");
   const selector = await desktop.findElement("css selector", 'button[aria-label="Agent image"]');
   await desktop.elementClick(selector);
   const option = await expect
@@ -183,7 +187,7 @@ test("builds a transparent image from its original directory and assigns it to a
     );
   await desktop.elementClick(option);
   await desktop.elementClick(
-    await desktop.findElement("xpath", "//button[normalize-space(.)='Save']"),
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Save changes']"),
   );
   await expect.poll(() => bodyText(desktop)).toContain("Pending: transparent-e2e:latest");
 

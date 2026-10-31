@@ -57,7 +57,7 @@ export function TerminalBanner({
           <span>
             No interactive terminal. Enable it in{" "}
             <Link className="text-primary underline" to={settings}>
-              Settings → Model
+              Settings → Autopilot
             </Link>
             .
           </span>

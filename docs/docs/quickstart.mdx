@@ -162,7 +162,7 @@ The line above the terminal always says what the screen shows:
 - **Off.** with a **Start** button when the agent is off.
 - **Claude Code did not start:** and the reason, with **Retry** and **Open
   settings**.
-- **No interactive terminal. Enable it in Settings → Model.** for an agent
+- **No interactive terminal. Enable it in Settings → Autopilot.** for an agent
   without a terminal.
 
 The toolbar under the terminal has **Send files**, **Compose**,
@@ -175,9 +175,17 @@ iterations.
 
 ## 6. Let Autopilot run
 
-Open **Settings → Loop and timeouts**. Set a conservative interval and
-timeout, then save. While the agent is started, a letter to it stays open in
-its inbox and nudges the loop; a timer can also trigger it.
+1. Open the agent's **Settings** tab.
+2. Under **Autopilot**, select **Also every** and enter the interval in minutes.
+3. Set **Stop a run after** to a soft timeout in minutes.
+4. Under **Spending limit**, set daily and monthly limits in USD.
+5. Click **Save changes** at the top.
+
+To run only for tasks or messages, select **Only when given tasks or messages**.
+A separate schedule can still start runs. Open **Advanced → Schedule and
+timeouts** to edit that schedule, the hard timeout in seconds, and timeout
+and error policies. While the agent is started, a letter stays open in its
+inbox and nudges the loop.
 
 To give the agent work, open **Work**. Type a title in the **Give \<agent\> a
 task…** field and press Enter. If the agent is off, the button reads **Start &

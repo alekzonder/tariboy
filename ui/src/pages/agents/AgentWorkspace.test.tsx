@@ -391,13 +391,15 @@ describe("AgentWorkspace tabs", () => {
         "",
       ]),
     );
-    expect(await screen.findByRole("link", { name: "Open mailbox" })).toHaveAttribute(
+    // The other views moved from a line above the page into Settings → Advanced.
+    fireEvent.click(await screen.findByRole("button", { name: /^Advanced/ }));
+    expect(screen.getByRole("link", { name: "Open mailbox" })).toHaveAttribute(
       "href",
       `/agents/${host.id}/worker/mailbox`,
     );
-    expect(screen.getByRole("link", { name: "Advanced" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Raw settings" })).toHaveAttribute(
       "href",
-      `/agents/${host.id}/worker/advanced`,
+      `/agents/${host.id}/worker/advanced?view=raw`,
     );
   });
 

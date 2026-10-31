@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { AgentStatus, AgentView } from "@/lib/api";
-import { countDirtyByBlock, isStopped } from "./configurationPageModel";
+import { countDirtyByGroup, isStopped } from "./configurationPageModel";
 
-describe("countDirtyByBlock", () => {
-  it("counts dirty keys per owning block", () => {
-    const counts = countDirtyByBlock(["interval", "timeout", "budget-hour"]);
-    expect(Object.fromEntries(counts)).toEqual({ loop: 2, budgets: 1 });
+describe("countDirtyByGroup", () => {
+  it("counts the four groups by name and every other section as Advanced", () => {
+    const counts = countDirtyByGroup(["image", "model", "interval", "timeout", "budget-hour"]);
+    expect([...counts]).toEqual([
+      ["Model", 1],
+      ["Autopilot", 2],
+      ["Advanced", 2],
+    ]);
   });
 
   it("is empty without dirty keys", () => {
-    expect(countDirtyByBlock([]).size).toBe(0);
+    expect(countDirtyByGroup([]).size).toBe(0);
   });
 });
 

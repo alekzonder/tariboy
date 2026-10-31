@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+// The query client is for Clear inbox under Advanced → Mail.
+import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import type { Daemon } from "@/lib/daemons";
 import type { AgentImageStatus, AgentStatus, AgentView } from "@/lib/api";
@@ -263,6 +264,12 @@ function fakeServer(
   return { state, calls, writes, fetchMock };
 }
 
+const BASE = "/agents/remote-1/worker";
+
+function Location() {
+  return <span data-testid="location">{useLocation().pathname}</span>;
+}
+
 function tree(
   target: Daemon | null = remote,
   name = "worker",
@@ -270,12 +277,13 @@ function tree(
   refresh = vi.fn(),
 ) {
   return (
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[`${BASE}/settings`]}>
       {/* The agent workspace is the boundary that names the host. */}
       <ApiProvider target={target}>
         <AgentNameContext.Provider value={name}>
           <AgentStatusContext.Provider value={{ status, refresh: async () => {} }}>
-            <AgentConfigurationTab refresh={refresh} />
+            <AgentConfigurationTab base={BASE} refresh={refresh} />
+            <Location />
           </AgentStatusContext.Provider>
         </AgentNameContext.Provider>
       </ApiProvider>
@@ -283,65 +291,86 @@ function tree(
   );
 }
 
-const block = (title: string) => screen.getByRole("region", { name: title });
-const queryBlock = (title: string) => screen.queryByRole("region", { name: title });
-const search = (text: string) =>
-  fireEvent.change(screen.getByRole("searchbox", { name: "Search settings" }), {
-    target: { value: text },
-  });
-const saveBar = () => screen.getByRole("region", { name: "Unsaved changes" });
-const save = () => fireEvent.click(within(saveBar()).getByRole("button", { name: "Save" }));
-const ready = () => screen.findByLabelText("Interval");
+const section = (title: string) => screen.getByRole("region", { name: title });
+const querySection = (title: string) => screen.queryByRole("region", { name: title });
+const saveRow = () => screen.getByRole("region", { name: "Save settings" });
+const save = () => fireEvent.click(within(saveRow()).getByRole("button", { name: "Save changes" }));
+const ready = () => screen.findByLabelText("Minutes between runs");
+const advancedTrigger = () => screen.getByRole("button", { name: /^Advanced/ });
+const openAdvanced = async () => {
+  const trigger = await screen.findByRole("button", { name: /^Advanced/ });
+  if (trigger.getAttribute("aria-expanded") !== "true") fireEvent.click(trigger);
+};
+const changeFolder = async () => {
+  fireEvent.click(await screen.findByRole("button", { name: "Change…" }));
+  return screen.getByLabelText("Working directory");
+};
+// A group is labelled by its heading, so "Model" names the group and its field.
+const control = (label: string) =>
+  screen.getAllByLabelText(label).find((element) => element.tagName !== "SECTION")!;
+const type = (label: string, value: string) =>
+  fireEvent.change(control(label), { target: { value } });
 
-// --- The task scenario and the shared save mechanic --------------------------
+// --- The acceptance scenario and the shared save mechanic --------------------
 
-it("finds one setting, changes it, finds another, changes it, and saves both with one Save", async () => {
-  const server = fakeServer();
+it("saves a model, an interval and a day budget with the same requests as before", async () => {
+  const server = fakeServer({ view: { interval_s: 0 } });
   render(tree());
   await ready();
-  expect(screen.queryByRole("region", { name: "Unsaved changes" })).not.toBeInTheDocument();
-
-  search("interval");
-  fireEvent.change(within(block("Loop and timeouts")).getByLabelText("Interval"), {
-    target: { value: "45" },
-  });
-  expect(saveBar()).toHaveTextContent("1 unsaved change in Loop and timeouts");
-
-  search("budget");
-  expect(queryBlock("Loop and timeouts")).not.toBeInTheDocument();
-  fireEvent.change(within(block("Budgets (USD)")).getByLabelText("Day budget"), {
-    target: { value: "5" },
-  });
-  expect(saveBar()).toHaveTextContent("2 unsaved changes in Loop and timeouts, Budgets (USD)");
+  type("Model", "opus");
+  fireEvent.click(screen.getByRole("radio", { name: "Also every" }));
+  type("Minutes between runs", "5");
+  type("Per day", "3");
+  expect(saveRow()).toHaveTextContent("3 unsaved changes in Model, Autopilot, Spending limit");
 
   save();
-  await waitFor(() => expect(saveBar()).toHaveTextContent("All changes saved"));
-  expect(server.writes()).toEqual(["POST loop/interval", "POST budget"]);
-  expect(server.calls.find((c) => c.path.endsWith("/budget"))?.body).toEqual({
-    hour_usd: "1",
-    day_usd: "5",
-    week_usd: "0",
-    month_usd: "0",
-  });
+  await waitFor(() => expect(saveRow()).toHaveTextContent("All changes saved"));
+  expect(server.writes()).toEqual(["POST model", "POST loop/interval", "POST budget"]);
+  const body = (path: string) => server.calls.find((c) => c.path.endsWith(path))?.body;
+  expect(body("/model")).toEqual({ value: "opus" });
+  expect(body("/loop/interval")).toEqual({ value: 300 });
+  expect(body("/budget")).toEqual({ hour_usd: "1", day_usd: "3", week_usd: "0", month_usd: "0" });
   expect(server.calls.every((c) => c.url.startsWith("https://remote.example/"))).toBe(true);
-  expect(within(saveBar()).queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
-  search("");
-  expect(screen.getByLabelText("Interval")).toHaveValue("45");
+  expect(within(saveRow()).queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Minutes between runs")).toHaveValue("5");
 });
 
-it("lays out in the shared narrow tab page", async () => {
+it("shows four groups, then Advanced closed, About and Danger, in the narrow tab page", async () => {
   fakeServer();
   render(tree());
   await ready();
   const page = screen.getByTestId("tab-page");
-  expect(page).toContainElement(screen.getByRole("searchbox", { name: "Search settings" }));
   expect(page).toHaveClass("max-w-5xl");
+  expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
+    "Model",
+    "Working folder",
+    "Autopilot",
+    "Spending limit",
+    "About",
+    "Danger",
+  ]);
+  expect(advancedTrigger()).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByLabelText("Hard timeout")).not.toBeInTheDocument();
+});
+
+it("has no master switch, run actions, search, Changed only or section chips", async () => {
+  fakeServer();
+  render(tree());
+  await ready();
+  expect(screen.queryByText(/Master switch/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Changed only/ })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("navigation", { name: "Configuration blocks" }),
+  ).not.toBeInTheDocument();
+  for (const name of ["Start", "Stop", "Restart"])
+    expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
 });
 
 it("shows the autopilot hint once per agent of the host", async () => {
   fakeServer();
   const text =
-    "Autopilot: set a schedule here to let the agent keep working without you. Everything else is optional.";
+    "Autopilot: choose whether the agent also runs every few minutes on its own. Everything else is optional.";
   const view = render(tree());
   await ready();
   expect(screen.getByText(text)).toBeInTheDocument();
@@ -354,51 +383,42 @@ it("shows the autopilot hint once per agent of the host", async () => {
   expect(screen.queryByText(text)).not.toBeInTheDocument();
 });
 
-it("has no save buttons inside the blocks", async () => {
+it("has no save buttons inside the sections", async () => {
   fakeServer();
   render(tree());
   await ready();
-  for (const region of screen.getAllByRole("region")) {
+  await openAdvanced();
+  const sections = screen.getAllByRole("region").filter((r) => r !== saveRow());
+  expect(sections.length).toBeGreaterThan(10);
+  for (const region of sections) {
     expect(within(region).queryByRole("button", { name: /^save/i })).not.toBeInTheDocument();
   }
 });
 
-it("lets pop-up lists such as Model, Effort and Working directory overflow every block", async () => {
+it("counts unsaved changes inside Advanced and keeps them while it is closed", async () => {
   fakeServer();
   render(tree());
   await ready();
-  const blocks = document.querySelectorAll('[id^="config-block-"][role="region"]');
-  expect(blocks.length).toBeGreaterThan(1);
-  // The shared Card clips with overflow-hidden; jsdom has no layout, so check the class.
-  for (const card of blocks) {
-    expect(card).toHaveClass("overflow-visible");
-    expect(card).not.toHaveClass("overflow-hidden");
-  }
+  await openAdvanced();
+  type("Hard timeout", "300");
+  expect(within(section("Schedule and timeouts")).getByText("Changed")).toBeInTheDocument();
+  expect(advancedTrigger()).toHaveTextContent("1 unsaved change");
+  fireEvent.click(advancedTrigger());
+  expect(screen.queryByLabelText("Hard timeout")).not.toBeInTheDocument();
+  expect(saveRow()).toHaveTextContent("1 unsaved change in Advanced");
+  await openAdvanced();
+  expect(screen.getByLabelText("Hard timeout")).toHaveValue("300");
 });
 
-it("marks the changed field and counts changes on its block", async () => {
-  fakeServer();
-  render(tree());
-  await ready();
-  fireEvent.change(screen.getByLabelText("Timeout"), { target: { value: "90" } });
-  const loop = block("Loop and timeouts");
-  expect(within(loop).getByText("1 unsaved change")).toBeInTheDocument();
-  expect(within(loop).getByText("Changed")).toBeInTheDocument();
-  expect(
-    within(screen.getByRole("navigation", { name: "Configuration blocks" })).getByRole("button", {
-      name: /Loop and timeouts\s*1/,
-    }),
-  ).toBeInTheDocument();
-});
-
-it("resets every change on every block without writing", async () => {
+it("resets every change on every section without writing", async () => {
   const server = fakeServer();
   render(tree());
   await ready();
-  fireEvent.change(screen.getByLabelText("Interval"), { target: { value: "45" } });
-  fireEvent.change(screen.getByLabelText("Hour budget"), { target: { value: "9" } });
-  fireEvent.click(within(saveBar()).getByRole("button", { name: "Reset" }));
-  expect(screen.getByLabelText("Interval")).toHaveValue("30");
+  type("Stop a run after (minutes)", "3");
+  await openAdvanced();
+  type("Hour budget", "9");
+  fireEvent.click(within(saveRow()).getByRole("button", { name: "Reset" }));
+  expect(screen.getByLabelText("Stop a run after (minutes)")).toHaveValue("1");
   expect(screen.getByLabelText("Hour budget")).toHaveValue(1);
   expect(server.writes()).toEqual([]);
 });
@@ -407,122 +427,61 @@ it("stops at a failed write, reports it at the field, and keeps the unsent chang
   const server = fakeServer({ fail: { "POST cwd": "directory does not exist" } });
   render(tree());
   await ready();
-  fireEvent.change(screen.getByLabelText("Working directory"), {
-    target: { value: "/srv/missing" },
-  });
-  fireEvent.change(screen.getByLabelText("Interval"), { target: { value: "45" } });
+  fireEvent.change(await changeFolder(), { target: { value: "/srv/missing" } });
+  type("Minutes between runs", "2");
   save();
-  expect(await within(saveBar()).findByText(/Some changes were not saved/)).toBeInTheDocument();
+  expect(await within(saveRow()).findByText(/Some changes were not saved/)).toBeInTheDocument();
   expect(server.writes()).toEqual(["POST cwd"]);
-  const general = block("General");
-  expect(within(general).getByRole("alert")).toHaveTextContent("directory does not exist");
+  expect(within(section("Working folder")).getByRole("alert")).toHaveTextContent(
+    "directory does not exist",
+  );
   expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/missing");
-  expect(saveBar()).toHaveTextContent("2 unsaved changes in General, Loop and timeouts");
+  expect(saveRow()).toHaveTextContent("2 unsaved changes in Working folder, Autopilot");
 });
 
-it("sends nothing while a change is invalid and shows the field even if search hid it", async () => {
+it("opens Advanced at a field whose write failed and keeps the unsent drafts", async () => {
+  const server = fakeServer({ fail: { "POST loop/hard-timeout": "hard timeout too short" } });
+  render(tree());
+  await ready();
+  await openAdvanced();
+  type("Hard timeout", "5");
+  type("Mail: letters per iteration", "20");
+  fireEvent.click(advancedTrigger());
+  save();
+  const field = await screen.findByLabelText("Hard timeout");
+  expect(server.writes()).toEqual(["POST loop/hard-timeout"]);
+  expect(within(section("Schedule and timeouts")).getByRole("alert")).toHaveTextContent(
+    "hard timeout too short",
+  );
+  await waitFor(() => expect(field).toHaveFocus());
+  expect(screen.getByLabelText("Mail: letters per iteration")).toHaveValue(20);
+  expect(saveRow()).toHaveTextContent("2 unsaved changes in Advanced");
+});
+
+it("sends nothing while a change is invalid and focuses it inside an opened Advanced", async () => {
   const server = fakeServer();
   render(tree());
   await ready();
-  fireEvent.change(screen.getByLabelText("Goal delivery cooldown seconds"), {
-    target: { value: "0" },
-  });
-  search("interval");
-  fireEvent.change(screen.getByLabelText("Interval"), { target: { value: "45" } });
+  await openAdvanced();
+  type("Mail: letters per iteration", "0");
+  fireEvent.click(advancedTrigger());
+  type("Minutes between runs", "2");
   save();
-  const field = await screen.findByLabelText("Goal delivery cooldown seconds");
-  expect(screen.getByRole("searchbox", { name: "Search settings" })).toHaveValue("");
+  const field = await screen.findByLabelText("Mail: letters per iteration");
   await waitFor(() => expect(field).toHaveFocus());
-  expect(within(block("Goal")).getByRole("alert")).toHaveTextContent(/positive whole number/);
+  expect(within(section("Mail")).getByRole("alert")).toHaveTextContent(/positive whole number/);
   expect(server.writes()).toEqual([]);
 });
 
-// --- Search ------------------------------------------------------------------
+// --- Model -------------------------------------------------------------------
 
-it("shows the whole block for a single matching setting and highlights that setting", async () => {
-  fakeServer();
-  render(tree());
-  await ready();
-  search("hard timeout");
-  const loop = block("Loop and timeouts");
-  expect(within(loop).getByLabelText("Interval")).toBeInTheDocument();
-  expect(loop.querySelector('[data-field="hard-timeout"]')).toHaveAttribute("data-matched", "true");
-  expect(loop.querySelector('[data-field="interval"]')).not.toHaveAttribute("data-matched");
-  expect(queryBlock("Budgets (USD)")).not.toBeInTheDocument();
-  expect(screen.getByText("1 of 8 blocks match")).toBeInTheDocument();
-});
-
-it("reports no matches and clears the search", async () => {
-  fakeServer();
-  render(tree());
-  await ready();
-  search("zzz");
-  expect(screen.getByText("No settings match “zzz”")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
-  expect(block("Runtime")).toBeInTheDocument();
-});
-
-it("shows only blocks with unsaved changes when Changed only is on", async () => {
-  fakeServer();
-  render(tree());
-  await ready();
-  fireEvent.change(screen.getByLabelText("Mail: letters per iteration"), {
-    target: { value: "20" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Changed only (1)" }));
-  expect(block("Mail")).toBeInTheDocument();
-  expect(queryBlock("Runtime")).not.toBeInTheDocument();
-});
-
-// Layout classes are the only signal jsdom has for the page's padding and the
-// search bar matching the white workspace panel, as in the reported screenshot.
-it("pads the page and keeps the search bar flush with the cards on the panel color", async () => {
-  fakeServer();
-  const { container } = render(tree());
-  await ready();
-  expect(container.firstElementChild).toHaveClass("px-4", "pt-4", "pb-6");
-  const bar = screen.getByRole("navigation", { name: "Configuration blocks" }).parentElement!;
-  expect(bar).toHaveClass("bg-card/95");
-  expect(bar).not.toHaveClass("bg-background/95", "-mx-1");
-  const result = within(bar).getByRole("status");
-  expect(result).toHaveClass("sr-only");
-  search("interval");
-  expect(result).not.toHaveClass("sr-only");
-  expect(result).toHaveTextContent(/blocks match/);
-});
-
-// --- Run actions -------------------------------------------------------------
-
-it("keeps Start, Stop and Restart as immediate actions in the page header", async () => {
-  fakeServer({ view: { enabled: false } });
-  render(tree());
-  await ready();
-  expect(screen.getByTestId("master-switch-state")).toHaveTextContent("Disabled");
-  expect(screen.getByText("Run actions apply immediately.")).toBeInTheDocument();
-  for (const name of ["Start", "Stop", "Restart"])
-    expect(screen.getByRole("button", { name })).toBeInTheDocument();
-  for (const name of ["Kill", "Remove", "Exec"])
-    expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
-});
-
-it("has no Loop on/off switch: Start and Stop are the only switch", async () => {
-  fakeServer();
-  render(tree());
-  await ready();
-  const loop = block("Loop and timeouts");
-  expect(within(loop).getByLabelText("Interval")).toBeInTheDocument();
-  expect(screen.queryByRole("switch", { name: "Loop" })).not.toBeInTheDocument();
-});
-
-// --- Runtime -----------------------------------------------------------------
-
-it("saves harness before model and remembers the model for that harness", async () => {
+it("saves the coding tool before the model and remembers the model for it", async () => {
   const server = fakeServer();
   render(tree());
   await ready();
-  fireEvent.change(screen.getByLabelText("Model"), { target: { value: "opus" } });
-  fireEvent.change(screen.getByLabelText("Harness"), { target: { value: "claude" } });
-  fireEvent.click(screen.getByRole("switch", { name: "Interactive (tmux TUI)" }));
+  type("Model", "opus");
+  type("Coding tool", "claude");
+  fireEvent.click(screen.getByRole("switch", { name: "Interactive terminal" }));
   expect(server.writes()).toEqual([]);
   save();
   await waitFor(() =>
@@ -532,21 +491,128 @@ it("saves harness before model and remembers the model for that harness", async 
   await waitFor(() => expect(localStorage.getItem(RUNTIME_PRESETS_STORAGE_KEY)).toContain("opus"));
 });
 
-it("offers the operator harnesses and keeps an agent's out-of-list harness", async () => {
+it("offers the operator coding tools and keeps an agent's out-of-list harness", async () => {
   fakeServer({ view: { harness: "stub" } });
   render(tree());
   await ready();
-  const options = within(screen.getByLabelText("Harness"))
+  const options = within(screen.getByLabelText("Coding tool"))
     .getAllByRole("option")
     .map((o) => o.textContent);
   expect(options).toEqual(["claude", "codex", "opencode", "cursor", "stub"]);
+  expect(within(section("Model")).getByText("Takes effect on the next run.")).toBeInTheDocument();
 });
 
-// --- General: image, digest, working directory --------------------------------
+// --- Autopilot ---------------------------------------------------------------
+
+it("shows a positive interval as Also every N minutes and the timeout in minutes", async () => {
+  fakeServer({ view: { interval_s: 1800, timeout_s: 7200 } });
+  render(tree());
+  await ready();
+  expect(screen.getByRole("radio", { name: "Also every" })).toBeChecked();
+  expect(screen.getByLabelText("Minutes between runs")).toHaveValue("30");
+  expect(screen.getByLabelText("Minutes between runs")).toBeEnabled();
+  expect(screen.getByLabelText("Stop a run after (minutes)")).toHaveValue("120");
+});
+
+it("runs only on demand with interval 0 and remembers 30 minutes for the second radio", async () => {
+  const server = fakeServer({ view: { interval_s: 0 } });
+  render(tree());
+  await ready();
+  expect(screen.getByRole("radio", { name: "Only when given tasks or messages" })).toBeChecked();
+  expect(screen.getByLabelText("Minutes between runs")).toBeDisabled();
+  expect(screen.getByLabelText("Minutes between runs")).toHaveValue("30");
+  fireEvent.click(screen.getByRole("radio", { name: "Also every" }));
+  save();
+  await waitFor(() => expect(server.writes()).toEqual(["POST loop/interval"]));
+  expect(server.calls.find((c) => c.path.endsWith("/loop/interval"))?.body).toEqual({
+    value: 1800,
+  });
+});
+
+it("turns Autopilot off with the first radio and sends interval 0", async () => {
+  const server = fakeServer({ view: { interval_s: 600 } });
+  render(tree());
+  await ready();
+  fireEvent.click(screen.getByRole("radio", { name: "Only when given tasks or messages" }));
+  expect(screen.getByLabelText("Minutes between runs")).toBeDisabled();
+  expect(screen.getByLabelText("Minutes between runs")).toHaveValue("10");
+  save();
+  await waitFor(() => expect(server.writes()).toEqual(["POST loop/interval"]));
+  expect(server.calls.find((c) => c.path.endsWith("/loop/interval"))?.body).toEqual({ value: 0 });
+});
+
+it("sends Stop a run after N minutes as seconds", async () => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  type("Stop a run after (minutes)", "2");
+  save();
+  await waitFor(() => expect(server.writes()).toEqual(["POST loop/timeout"]));
+  expect(server.calls.find((c) => c.path.endsWith("/loop/timeout"))?.body).toEqual({ value: 120 });
+});
+
+it("keeps an emptied minutes box and blocks Save with its reason", async () => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  type("Minutes between runs", "");
+  expect(screen.getByRole("radio", { name: "Also every" })).toBeChecked();
+  expect(screen.getByLabelText("Minutes between runs")).toHaveValue("");
+  save();
+  expect(await screen.findByText("Enter the minutes between runs.")).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByLabelText("Minutes between runs")).toHaveFocus());
+  expect(server.writes()).toEqual([]);
+});
+
+it("can enable timed runs again after typing a zero interval", async () => {
+  fakeServer({ view: { interval_s: 600 } });
+  render(tree());
+  await ready();
+  type("Minutes between runs", "0");
+  fireEvent.click(screen.getByRole("radio", { name: "Also every" }));
+  expect(screen.getByRole("radio", { name: "Also every" })).toBeChecked();
+  expect(screen.getByLabelText("Minutes between runs")).toBeEnabled();
+  expect(screen.getByLabelText("Minutes between runs")).toHaveValue("30");
+});
+
+it.each([
+  ["Minutes between runs", "Enter the minutes between runs."],
+  ["Stop a run after (minutes)", "Enter the minutes, or 0 for no limit."],
+])("rejects negative fractional minutes in %s", async (label, error) => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  type(label, "-0.5");
+  save();
+  expect(await screen.findByText(error)).toBeInTheDocument();
+  expect(screen.getByLabelText(label)).toHaveValue("-0.5");
+  expect(server.writes()).toEqual([]);
+});
+
+it("says a saved schedule also starts runs", async () => {
+  fakeServer({ view: { schedule: "RRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=0;BYSECOND=0" } });
+  render(tree());
+  await ready();
+  expect(
+    within(section("Autopilot")).getByText(
+      "A schedule also starts runs: see Advanced → Schedule and timeouts.",
+    ),
+  ).toBeInTheDocument();
+});
+
+it("has no schedule note without a schedule", async () => {
+  fakeServer();
+  render(tree());
+  await ready();
+  expect(screen.queryByText(/A schedule also starts runs/)).not.toBeInTheDocument();
+});
+
+// --- Advanced → Image ----------------------------------------------------------
 
 it("selects a built image and applies it with Save", async () => {
   const server = fakeServer({ image: undefined });
   render(tree());
+  await openAdvanced();
   fireEvent.click(await screen.findByRole("combobox", { name: "Agent image" }));
   fireEvent.click(await screen.findByRole("option", { name: "reviewer:v2" }));
   expect(server.writes()).toEqual([]);
@@ -564,13 +630,6 @@ it("cancels an explicit pending image at once, outside Save", async () => {
   let state: AgentImageStatus = {
     ...projection,
     pending: { ref: "explicit:v2", digest: "explicit-digest", error: "" },
-    next: {
-      ref: "explicit:v2",
-      digest: "explicit-digest",
-      image_version: "2.0.0",
-      reason: "pending",
-      error: "",
-    },
   };
   const server = fakeServer({ image: () => state });
   const original = server.fetchMock.getMockImplementation()!;
@@ -579,51 +638,35 @@ it("cancels an explicit pending image at once, outside Save", async () => {
     return original(url, init);
   });
   render(tree());
+  await openAdvanced();
   fireEvent.click(await screen.findByRole("button", { name: "Cancel pending" }));
-  expect(await screen.findByText("1.1.0")).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByText("Pending:")).not.toBeInTheDocument());
   expect(screen.queryByRole("button", { name: "Cancel pending" })).not.toBeInTheDocument();
   expect(server.writes()).toEqual(["DELETE image"]);
 });
 
-it("shows pinned Activated version and next digest even when source versions match", async () => {
-  fakeServer({
-    image: () => ({ ...projection, next: { ...projection.next, image_version: "1.0.0" } }),
-  });
+it("shows no Current or Next iteration preview, and the digest once", async () => {
+  fakeServer();
   render(tree());
-  const current = await screen.findByRole("group", { name: "Activated version" });
-  const next = screen.getByRole("group", { name: "Next iteration" });
-  expect(current).toHaveTextContent("old-digest");
-  expect(next).toHaveTextContent("new-digest");
-  expect(within(next).getByRole("link", { name: "worker:latest" })).toHaveAttribute(
-    "href",
-    "/library/images/worker/latest",
-  );
-  expect(screen.getByText("Update on next iteration")).toBeInTheDocument();
-  expect(screen.getByText(/preview.*not a reservation/i)).toBeInTheDocument();
+  await openAdvanced();
+  await screen.findByTestId("image-digest");
+  expect(screen.queryByRole("group", { name: "Next iteration" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("group", { name: "Activated version" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Update on next iteration")).not.toBeInTheDocument();
+  expect(screen.getAllByTestId("image-digest")).toHaveLength(1);
 });
 
-it("shows inspection and activation failures without a pending ref", async () => {
+it("shows an activation failure with Retry", async () => {
   fakeServer({
     image: () => ({
       ...projection,
-      current: { ...projection.current, image_version: undefined },
-      next: {
-        ref: "worker:latest",
-        digest: "",
-        reason: "ref_moved",
-        error: "latest is unreadable",
-      },
-      pending: { ref: "", digest: "", error: "bridge preparation failed" },
+      pending: { ref: "worker:v2", digest: "", error: "bridge preparation failed" },
     }),
   });
   render(tree());
-  expect(await screen.findByText("latest is unreadable")).toBeInTheDocument();
-  expect(screen.getByText("bridge preparation failed")).toBeInTheDocument();
-  expect(
-    within(screen.getByRole("group", { name: "Activated version" })).getByText(
-      "Version not specified",
-    ),
-  ).toBeInTheDocument();
+  await openAdvanced();
+  expect(await screen.findByText("bridge preparation failed")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
 });
 
 it("reports an unavailable image endpoint and disables the image choice", async () => {
@@ -635,10 +678,11 @@ it("reports an unavailable image endpoint and disables the image choice", async 
       : original(url, init),
   );
   render(tree());
+  await openAdvanced();
   expect(
     await screen.findByText(/Image status unavailable:.*image request failed/),
   ).toBeInTheDocument();
-  expect(screen.queryByRole("group", { name: "Next iteration" })).not.toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Agent image" })).toBeDisabled();
 });
 
 it("disables the image choice while the inventory failed", async () => {
@@ -646,6 +690,7 @@ it("disables the image choice while the inventory failed", async () => {
     images: () => response({ code: "internal", message: "archive is corrupt" }, false, 500),
   });
   render(tree());
+  await openAdvanced();
   expect(await screen.findByText(/Image inventory unavailable:/)).toHaveTextContent(
     "archive is corrupt",
   );
@@ -657,7 +702,7 @@ it.each(["host", "agent", "refresh"])(
   async (change) => {
     let finish!: (value: Response) => void;
     let count = 0;
-    const fresh = { ...projection, next: { ...projection.next, image_version: "2.0.0" } };
+    const fresh = { ...projection, pending: { ref: "fresh:v2", digest: "d", error: "" } };
     const server = fakeServer({ image: () => fresh });
     const original = server.fetchMock.getMockImplementation()!;
     server.fetchMock.mockImplementation((url: string, init?: RequestInit) => {
@@ -679,10 +724,10 @@ it.each(["host", "agent", "refresh"])(
           change === "agent" ? "other" : "worker",
         ),
       );
-    expect(await screen.findByText("2.0.0")).toBeInTheDocument();
+    await openAdvanced();
+    expect(await screen.findByRole("link", { name: "fresh:v2" })).toBeInTheDocument();
     await act(async () => finish(await response(projection)));
-    expect(screen.getByText("2.0.0")).toBeInTheDocument();
-    expect(screen.queryByText("1.1.0")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "fresh:v2" })).toBeInTheDocument();
   },
 );
 
@@ -692,6 +737,7 @@ it("truncates the image digest while exposing the complete value, and copies it"
   Object.assign(navigator, { clipboard: { writeText } });
   fakeServer({ view: { digest } });
   render(tree());
+  await openAdvanced();
   const shown = await screen.findByTestId("image-digest");
   expect(shown.textContent).toContain("sha256:0123");
   expect(shown).toHaveAttribute("aria-hidden", "true");
@@ -701,11 +747,34 @@ it("truncates the image digest while exposing the complete value, and copies it"
   expect(await screen.findByText("Digest copied")).toBeInTheDocument();
 });
 
-it("edits a stopped agent's working directory with suggestions from its route host", async () => {
+it("refreshes the image projection on status and build events without replacing drafts", async () => {
+  const pending = (ref: string) => ({ ...projection, pending: { ref, digest: "", error: "" } });
+  let state: AgentImageStatus = pending("a:1");
+  fakeServer({ image: () => state });
+  const { rerender } = render(tree());
+  await ready();
+  fireEvent.change(await changeFolder(), { target: { value: "/srv/draft" } });
+  await openAdvanced();
+  await screen.findByRole("link", { name: "a:1" });
+  state = pending("b:2");
+  rerender(tree(remote, "worker", { name: "worker", state: "stopped" } as AgentStatus));
+  expect(await screen.findByRole("link", { name: "b:2" })).toBeInTheDocument();
+  state = pending("c:3");
+  act(() => notifyImagesChanged());
+  expect(await screen.findByRole("link", { name: "c:3" })).toBeInTheDocument();
+  expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/draft");
+});
+
+// --- Working folder -------------------------------------------------------------
+
+it("edits a stopped agent's working folder in place with suggestions from its route host", async () => {
   const refresh = vi.fn();
   const server = fakeServer();
   render(tree(remote, "worker", null, refresh));
-  const input = await screen.findByLabelText("Working directory");
+  await ready();
+  expect(within(section("Working folder")).getByText("/srv/old")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Working directory")).not.toBeInTheDocument();
+  const input = await changeFolder();
   expect(input).toHaveValue("/srv/old");
   fireEvent.change(input, { target: { value: "/srv/new" } });
   expect(await screen.findByRole("option", { name: "new" })).toBeInTheDocument();
@@ -718,28 +787,32 @@ it("edits a stopped agent's working directory with suggestions from its route ho
   await waitFor(() => expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/new"));
 });
 
-it("keeps the working directory read-only while the agent is active", async () => {
+it("keeps the working folder read-only while the agent is active", async () => {
   fakeServer({ view: { state: "running", enabled: true } });
   render(tree());
   expect(await screen.findByText("/srv/old")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Change…" })).toBeDisabled();
   expect(screen.queryByLabelText("Working directory")).not.toBeInTheDocument();
   expect(
     screen.getByText("Stop the agent before changing its working directory."),
   ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("switch", { name: "Create directory if missing" }),
+  ).not.toBeInTheDocument();
 });
 
 it("switches to read-only when live status reports that the agent started", async () => {
   fakeServer();
   render(tree(remote, "worker", { name: "worker", state: "running" } as AgentStatus));
   expect(await screen.findByText("/srv/old")).toBeInTheDocument();
-  expect(screen.queryByLabelText("Working directory")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Change…" })).toBeDisabled();
 });
 
 it("keeps drafts when the route host is re-rendered or a reconnect fails", async () => {
   const server = fakeServer();
   const { rerender } = render(tree());
-  const input = await screen.findByLabelText("Working directory");
-  fireEvent.change(input, { target: { value: "/srv/new" } });
+  await ready();
+  fireEvent.change(await changeFolder(), { target: { value: "/srv/new" } });
   rerender(tree({ ...remote }));
   await act(async () => {});
   expect(
@@ -755,28 +828,12 @@ it("keeps drafts when the route host is re-rendered or a reconnect fails", async
   expect(screen.getByText("worker:v1")).toBeInTheDocument();
 });
 
-it("refreshes the image projection on status and build events without replacing drafts", async () => {
-  let state: AgentImageStatus = projection;
-  fakeServer({ image: () => state });
-  const { rerender } = render(tree());
-  await screen.findByRole("group", { name: "Next iteration" });
-  fireEvent.change(await screen.findByLabelText("Working directory"), {
-    target: { value: "/srv/draft" },
-  });
-  state = { ...projection, next: { ...projection.next, image_version: "1.2.0" } };
-  rerender(tree(remote, "worker", { name: "worker", state: "stopped" } as AgentStatus));
-  expect(await screen.findByText("1.2.0")).toBeInTheDocument();
-  state = { ...projection, next: { ...projection.next, image_version: "1.3.0" } };
-  act(() => notifyImagesChanged());
-  expect(await screen.findByText("1.3.0")).toBeInTheDocument();
-  expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/draft");
-});
-
 it("creates a missing working directory only when its switch is on", async () => {
   const refresh = vi.fn();
   const server = fakeServer();
   render(tree(remote, "worker", null, refresh));
-  const input = await screen.findByLabelText("Working directory");
+  await ready();
+  const input = await changeFolder();
   const create = screen.getByRole("switch", { name: "Create directory if missing" });
   expect(create).not.toBeChecked();
   fireEvent.change(input, { target: { value: "/srv/new" } });
@@ -790,32 +847,35 @@ it("creates a missing working directory only when its switch is on", async () =>
   );
 });
 
-it("hides the create directory switch while the agent is active", async () => {
-  fakeServer({ view: { state: "running", enabled: true } });
-  render(tree());
-  expect(await screen.findByText("/srv/old")).toBeInTheDocument();
-  expect(
-    screen.queryByRole("switch", { name: "Create directory if missing" }),
-  ).not.toBeInTheDocument();
-});
+// --- Spending limit and budgets ------------------------------------------------
 
-// --- Goal, budgets -----------------------------------------------------------
-
-it("renders the current Goal task read-only with its help", async () => {
-  fakeServer({ view: { current_goal_task_key: "DEV-7" } });
-  render(tree());
-  expect(await screen.findByLabelText("Current goal task")).toHaveValue("DEV-7");
-  expect(screen.getByLabelText("Current goal task")).toBeDisabled();
-});
-
-it("shows spend beside each budget and exhausted periods", async () => {
-  fakeServer({ view: { budget: { ...stopped.budget!, exhausted: ["day"] } } });
+it("shows day and month spend in Spending limit and exhausted periods", async () => {
+  fakeServer({ view: { budget: { ...stopped.budget!, day_spent_usd: 8.56, exhausted: ["day"] } } });
   render(tree());
   await ready();
-  const budgets = block("Budgets (USD)");
+  const spending = section("Spending limit");
+  expect(within(spending).getByText("USD (0 = none) · spent $8.56 today")).toBeInTheDocument();
+  expect(within(spending).getByText("USD (0 = none) · spent $0.25 this month")).toBeInTheDocument();
+  expect(within(spending).getByText("Out of budget: day")).toBeInTheDocument();
+  expect(within(spending).queryByLabelText("Hour budget")).not.toBeInTheDocument();
+});
+
+it("keeps hour and week budgets with their spend under Advanced", async () => {
+  const server = fakeServer();
+  render(tree());
+  await openAdvanced();
+  const budgets = section("Hour and week budgets (USD)");
   expect(within(budgets).getByText(/Spent 0.25 of 1.00/)).toBeInTheDocument();
-  expect(within(budgets).getAllByText(/Unlimited/).length).toBeGreaterThan(0);
-  expect(within(budgets).getByText("Out of budget: day")).toBeInTheDocument();
+  expect(within(budgets).getByText(/Unlimited/)).toBeInTheDocument();
+  type("Week budget", "7");
+  save();
+  await waitFor(() => expect(server.writes()).toEqual(["POST budget"]));
+  expect(server.calls.find((c) => c.path.endsWith("/budget"))?.body).toEqual({
+    hour_usd: "1",
+    day_usd: "0",
+    week_usd: "7",
+    month_usd: "0",
+  });
 });
 
 it("renders a budget projection from an older daemon without exhausted periods", async () => {
@@ -823,23 +883,63 @@ it("renders a budget projection from an older daemon without exhausted periods",
   fakeServer({ view: { budget: legacy as AgentView["budget"] } });
   render(tree());
   await ready();
-  expect(within(block("Budgets (USD)")).queryByText(/Out of budget/)).not.toBeInTheDocument();
+  expect(within(section("Spending limit")).queryByText(/Out of budget/)).not.toBeInTheDocument();
 });
 
-it("leaves out the budget block when the daemon has no budget projection", async () => {
+it("leaves out every budget field when the daemon has no budget projection", async () => {
   fakeServer({ view: { budget: undefined } });
   render(tree());
   await ready();
-  expect(queryBlock("Budgets (USD)")).not.toBeInTheDocument();
-  search("x-no-match");
-  expect(screen.getByText("0 of 7 blocks match")).toBeInTheDocument();
+  expect(querySection("Spending limit")).not.toBeInTheDocument();
+  await openAdvanced();
+  expect(querySection("Hour and week budgets (USD)")).not.toBeInTheDocument();
 });
 
-// --- Environment ---------------------------------------------------------------
+// --- Advanced → Goal, Mail -------------------------------------------------------
+
+it("renders the current Goal task read-only with its help", async () => {
+  fakeServer({ view: { current_goal_task_key: "DEV-7" } });
+  render(tree());
+  await openAdvanced();
+  expect(await screen.findByLabelText("Current goal task")).toHaveValue("DEV-7");
+  expect(screen.getByLabelText("Current goal task")).toBeDisabled();
+});
+
+it("saves the mail limits with Save", async () => {
+  const server = fakeServer();
+  render(tree());
+  await openAdvanced();
+  type("Mail: letters per iteration", "20");
+  type("Mail: maximum open inbox", "200");
+  save();
+  await waitFor(() =>
+    expect(server.writes()).toEqual(["POST messages/batch", "POST messages/max-queue"]),
+  );
+});
+
+it("offers Clear inbox under Mail only while letters are open", async () => {
+  fakeServer();
+  const { rerender } = render(tree());
+  await openAdvanced();
+  const mail = section("Mail");
+  expect(within(mail).getByRole("button", { name: "Clear inbox" })).toBeDisabled();
+  rerender(
+    tree(remote, "worker", {
+      name: "worker",
+      state: "stopped",
+      messages_pending: 3,
+    } as AgentStatus),
+  );
+  fireEvent.click(within(section("Mail")).getByRole("button", { name: "Clear inbox" }));
+  expect(await screen.findByRole("dialog", { name: "Clear inbox" })).toBeInTheDocument();
+});
+
+// --- Advanced → Environment --------------------------------------------------------
 
 it("saves the agent shell script with Save", async () => {
   const server = fakeServer();
   render(tree());
+  await openAdvanced();
   const script = await screen.findByLabelText("Agent shell script");
   await waitFor(() => expect(script).toHaveValue("echo hi\n"));
   fireEvent.change(script, { target: { value: "export A=1\n" } });
@@ -851,6 +951,7 @@ it("saves the agent shell script with Save", async () => {
 it("adds and removes secrets on Save, never shows a value, and clears it after saving", async () => {
   const server = fakeServer();
   render(tree());
+  await openAdvanced();
   const env = await screen.findByRole("region", { name: "Environment" });
   await within(env).findByText("API_KEY");
   fireEvent.click(within(env).getByRole("button", { name: "Remove API_KEY" }));
@@ -875,6 +976,7 @@ it("adds and removes secrets on Save, never shows a value, and clears it after s
 it("requires a secret key when a value is entered", async () => {
   const server = fakeServer();
   render(tree());
+  await openAdvanced();
   const env = await screen.findByRole("region", { name: "Environment" });
   await within(env).findByText("API_KEY");
   fireEvent.change(within(env).getByLabelText("Secret value"), { target: { value: "s3cr3t" } });
@@ -883,11 +985,12 @@ it("requires a secret key when a value is entered", async () => {
   expect(server.writes()).toEqual([]);
 });
 
-// --- Retention -------------------------------------------------------------------
+// --- Advanced → Retention -------------------------------------------------------
 
 it("saves the retention override with Save and shows the server defaults", async () => {
   const server = fakeServer();
   render(tree());
+  await openAdvanced();
   const retention = await screen.findByRole("region", { name: "Retention and cleanup" });
   const days = await within(retention).findByLabelText("Keep days");
   expect(within(retention).getByText(/0 = server default \(7\)/)).toBeInTheDocument();
@@ -902,6 +1005,7 @@ it("saves the retention override with Save and shows the server defaults", async
 it("keeps prune and preview as confirmed, immediate actions outside Save", async () => {
   const server = fakeServer();
   render(tree());
+  await openAdvanced();
   const retention = await screen.findByRole("region", { name: "Retention and cleanup" });
   await within(retention).findByLabelText("Keep days");
   fireEvent.click(within(retention).getByRole("button", { name: "Preview cleanup" }));
@@ -914,12 +1018,13 @@ it("keeps prune and preview as confirmed, immediate actions outside Save", async
   expect(server.calls.filter((c) => c.method === "POST").at(-1)?.body).toEqual({
     "dry-run": false,
   });
-  expect(screen.queryByRole("region", { name: "Unsaved changes" })).not.toBeInTheDocument();
+  expect(within(saveRow()).queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
 });
 
 it("cancelling the prune confirmation writes nothing", async () => {
   const server = fakeServer();
   render(tree());
+  await openAdvanced();
   const retention = await screen.findByRole("region", { name: "Retention and cleanup" });
   fireEvent.click(within(retention).getByRole("button", { name: "Prune now" }));
   fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
@@ -932,6 +1037,7 @@ it("cancelling the prune confirmation writes nothing", async () => {
 it("reports the server's reason for a failed prune beside the action", async () => {
   fakeServer({ fail: { "POST prune": "prune is not permitted while the agent runs" } });
   render(tree());
+  await openAdvanced();
   const retention = await screen.findByRole("region", { name: "Retention and cleanup" });
   fireEvent.click(within(retention).getByRole("button", { name: "Prune now" }));
   fireEvent.click(await screen.findByRole("button", { name: "Prune retained data" }));
@@ -941,23 +1047,24 @@ it("reports the server's reason for a failed prune beside the action", async () 
   expect(within(retention).getByRole("button", { name: "Prune now" })).toBeEnabled();
 });
 
-it("mounts no prune dialog buttons while its confirmation is closed", async () => {
+it("mounts no dialog buttons while the confirmations are closed", async () => {
   fakeServer();
   render(tree());
+  await openAdvanced();
   await ready();
   expect(screen.queryByRole("button", { name: "Prune retained data" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
 });
 
-// --- Schedule ----------------------------------------------------------------
+// --- Advanced → Schedule and timeouts ------------------------------------------
 
 it("opens a saved rule in its builder mode and leaves it unchanged", async () => {
   const rule = "DTSTART:20261018T000000\nRRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=0";
   const nextAt = "2026-10-19T09:30:00+03:00";
   fakeServer({ view: { schedule: rule, schedule_next_at: nextAt } });
   render(tree());
-  await ready();
-  const loop = block("Loop and timeouts");
+  await openAdvanced();
+  const loop = section("Schedule and timeouts");
   expect(within(loop).getByLabelText("Schedule")).toHaveValue("daily");
   expect(within(loop).getByLabelText("Time")).toHaveValue("09:30");
   expect(within(loop).getByTestId("schedule-summary")).toHaveTextContent("Every day at 09:30");
@@ -972,8 +1079,8 @@ it("keeps a rule no builder mode fits in Custom RRULE, unchanged", async () => {
   const rule = "DTSTART:20261018T000000\nRRULE:FREQ=DAILY;BYHOUR=9,18;BYMINUTE=0;BYSECOND=0";
   fakeServer({ view: { schedule: rule } });
   render(tree());
-  await ready();
-  const loop = block("Loop and timeouts");
+  await openAdvanced();
+  const loop = section("Schedule and timeouts");
   expect(within(loop).getByLabelText("Schedule")).toHaveValue("custom");
   expect(within(loop).getByLabelText("Custom RRULE")).toHaveValue(rule);
   expect(within(loop).queryByText("Changed")).not.toBeInTheDocument();
@@ -983,14 +1090,14 @@ it("builds and saves a weekly schedule, then clears it with None", async () => {
   const rule = "DTSTART:20261018T000000\nRRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=0";
   const server = fakeServer({ view: { schedule: rule, schedule_next_at: "2026-10-19T09:30:00Z" } });
   render(tree());
-  await ready();
-  const loop = block("Loop and timeouts");
+  await openAdvanced();
+  const loop = section("Schedule and timeouts");
   fireEvent.change(within(loop).getByLabelText("Schedule"), { target: { value: "weekly" } });
   expect(within(loop).getByRole("button", { name: "Mon" })).toHaveAttribute("aria-pressed", "true");
   fireEvent.change(within(loop).getByLabelText("Time"), { target: { value: "08:00" } });
   expect(within(loop).getByText("Changed")).toBeInTheDocument();
   save();
-  await waitFor(() => expect(saveBar()).toHaveTextContent("All changes saved"));
+  await waitFor(() => expect(saveRow()).toHaveTextContent("All changes saved"));
   expect(server.calls.find((c) => c.path.endsWith("/loop/schedule"))?.body).toEqual({
     value: "RRULE:FREQ=WEEKLY;BYDAY=MO;BYHOUR=8;BYMINUTE=0;BYSECOND=0",
   });
@@ -1005,5 +1112,73 @@ it("builds and saves a weekly schedule, then clears it with None", async () => {
   });
   await waitFor(() =>
     expect(screen.getByTestId("schedule-next-run")).toHaveTextContent("No scheduled run"),
+  );
+});
+
+it("saves the hard timeout and the policies from Advanced", async () => {
+  const server = fakeServer();
+  render(tree());
+  await openAdvanced();
+  type("Hard timeout", "300");
+  type("On timeout", "stop");
+  type("On error", "stop");
+  type("Maximum idle iterations", "3");
+  type("AI inactivity timeout", "600");
+  save();
+  await waitFor(() =>
+    expect(server.writes()).toEqual([
+      "POST loop/hard-timeout",
+      "POST loop/on-timeout",
+      "POST loop/on-error",
+      "POST loop/max-idle",
+      "POST loop/ai-stall-timeout",
+    ]),
+  );
+});
+
+// --- Advanced → Other views, About, Danger ---------------------------------------
+
+it("links the mailbox and the raw views under Advanced", async () => {
+  fakeServer();
+  render(tree());
+  await openAdvanced();
+  const links = within(screen.getByRole("navigation", { name: "Other views" }))
+    .getAllByRole("link")
+    .map((link) => [link.textContent, link.getAttribute("href")]);
+  expect(links).toEqual([
+    ["Open mailbox", `${BASE}/mailbox`],
+    ["Prompt preview", `${BASE}/advanced?view=prompt`],
+    ["Context", `${BASE}/advanced?view=context`],
+    ["Files", `${BASE}/advanced?view=files`],
+    ["Scripts", `${BASE}/advanced?view=scripts`],
+    ["Full audit", `${BASE}/advanced?view=audit`],
+    ["Raw usage", `${BASE}/advanced?view=usage`],
+    ["Raw settings", `${BASE}/advanced?view=raw`],
+  ]);
+});
+
+it("names the image with its Library link and the host in About", async () => {
+  fakeServer();
+  render(tree());
+  await ready();
+  const about = section("About");
+  expect(within(about).getByRole("link", { name: "worker:v1" })).toHaveAttribute(
+    "href",
+    "/library/images/worker/v1",
+  );
+  expect(about).toHaveTextContent("host Remote");
+});
+
+it("deletes the agent from Danger after the confirmation and leaves the route", async () => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  fireEvent.click(within(section("Danger")).getByRole("button", { name: "Delete agent" }));
+  const dialog = await screen.findByRole("alertdialog");
+  expect(server.writes()).toEqual([]);
+  fireEvent.click(within(dialog).getByRole("button", { name: "Delete agent" }));
+  await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/));
+  expect(server.calls.find((c) => c.method === "DELETE")?.path).toMatch(
+    /\/api\/agents\/worker\/?\?force=true&purge=true$/,
   );
 });

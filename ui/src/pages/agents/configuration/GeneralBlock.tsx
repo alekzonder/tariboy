@@ -5,23 +5,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PathAutocomplete } from "@/components/PathAutocomplete";
-import { DraftField, FieldFrame, ReadOnly } from "./ConfigControls";
-import { ImageActions, ImageIdentity } from "./GeneralImage";
+import { FieldFrame, ReadOnly, type SectionProps } from "./ConfigControls";
+import { ImageActions, PendingImage } from "./GeneralImage";
 import { shortDigest } from "./generalImageModel";
 import { fieldOfKey, type ConfigField } from "./registry";
-import type { BlockProps } from "./ConfigurationBlocks";
 
 const field = (key: string) => fieldOfKey(key) as ConfigField;
 
-function ImageSelect({
-  draft,
-  matched,
-  sources,
-}: Pick<BlockProps, "draft" | "matched" | "sources">) {
+function ImageSelect({ draft, sources }: Pick<SectionProps, "draft" | "sources">) {
   const { imageStatus, images, inventoryLoading, inventoryError } = sources;
   return (
-    <FieldFrame field={field("image")} draft={draft} matched={matched.has("image")}>
+    <FieldFrame field={field("image")} draft={draft}>
       <Select
         disabled={!imageStatus || inventoryLoading || !!inventoryError}
         value={draft.values.image ?? ""}
@@ -50,13 +44,9 @@ function ImageSelect({
   );
 }
 
-function ImageDigest({
-  draft,
-  matched,
-  digest,
-}: Pick<BlockProps, "draft" | "matched"> & { digest?: string }) {
+function ImageDigest({ draft, digest }: Pick<SectionProps, "draft"> & { digest?: string }) {
   return (
-    <ReadOnly draft={draft} matched={matched} fieldKey="image-digest">
+    <ReadOnly draft={draft} fieldKey="image-digest">
       <div className="flex min-h-9 flex-wrap items-center gap-2 text-sm">
         {digest ? (
           <>
@@ -78,46 +68,9 @@ function ImageDigest({
   );
 }
 
-// The working directory can change only while the agent is stopped.
-function CwdSetting({
-  draft,
-  matched,
-  stopped,
-  cwd,
-}: Pick<BlockProps, "draft" | "matched" | "stopped"> & { cwd?: string }) {
-  const cwdError = draft.fieldErrors.cwd ?? "";
-  if (stopped) {
-    return (
-      <>
-        <FieldFrame field={field("cwd")} draft={draft} matched={matched.has("cwd")}>
-          <PathAutocomplete
-            id="cwd"
-            value={draft.values.cwd ?? ""}
-            onChange={(value) => draft.setField("cwd", value)}
-            aria-label="Working directory"
-          />
-        </FieldFrame>
-        <DraftField field={field("cwd-create")} draft={draft} matched={matched.has("cwd-create")} />
-      </>
-    );
-  }
-  return (
-    <div data-field="cwd" className="space-y-1 text-sm">
-      <div className="font-medium">Working directory</div>
-      <p className="break-all">{cwd || "—"}</p>
-      {cwdError && (
-        <p role="alert" className="text-xs text-destructive">
-          {cwdError}
-        </p>
-      )}
-      <p className="text-xs text-muted-foreground">
-        Stop the agent before changing its working directory.
-      </p>
-    </div>
-  );
-}
-
-export function GeneralBlock({ draft, matched, sources, name, stopped, refresh }: BlockProps) {
+// GeneralBlock is Advanced → Image: the image choice, the digest once, a
+// pending assignment and the image actions.
+export function GeneralBlock({ draft, sources, name, refresh }: SectionProps) {
   const { view, imageStatus, imageError, inventoryError } = sources;
   return (
     <>
@@ -131,16 +84,11 @@ export function GeneralBlock({ draft, matched, sources, name, stopped, refresh }
           Image inventory unavailable: {inventoryError}
         </p>
       )}
-      {imageStatus && <ImageIdentity imageStatus={imageStatus} stopped={stopped} />}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <ImageSelect draft={draft} matched={matched} sources={sources} />
-        <ImageDigest draft={draft} matched={matched} digest={view?.digest} />
+        <ImageSelect draft={draft} sources={sources} />
+        <ImageDigest draft={draft} digest={view?.digest} />
       </div>
-      <div className="text-sm">
-        <span className="text-muted-foreground">Image</span>{" "}
-        <span className="break-all">{view?.image}</span>
-      </div>
-      <CwdSetting draft={draft} matched={matched} stopped={stopped} cwd={view?.cwd} />
+      {imageStatus && <PendingImage imageStatus={imageStatus} />}
       <ImageActions
         view={view}
         imageStatus={imageStatus}

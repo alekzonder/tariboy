@@ -1,20 +1,30 @@
 import { useCallback, useMemo, useState } from "react";
-import { RunStateActions } from "@/components/AgentControls";
+import { Link, useNavigate } from "react-router-dom";
+import { DeleteAgentButton } from "@/components/AgentControls";
 import { useAgentName, useAgentStatus } from "@/lib/agent";
 import { useApi } from "@/components/apiContext";
-import type { AgentStatus } from "@/lib/api";
-import { BLOCKS, filterBlocks } from "./configuration/registry";
-import { countDirtyByBlock, isStopped } from "./configuration/configurationPageModel";
-import { ConfigEmptyState } from "./configuration/ConfigEmptyState";
+import type { AgentStatus, AgentView } from "@/lib/api";
+import { useMultiHost } from "@/lib/navRoutes";
+import { sectionOfKey } from "./configuration/registry";
+import { countDirtyByGroup, groupOfKey, isStopped } from "./configuration/configurationPageModel";
 import { useConfigDraft } from "./configuration/useConfigDraft";
 import { useConfigSources } from "./configuration/useConfigSources";
 import { buildUnits, readBaseline } from "./configuration/commits";
-import { ConfigSaveBar, ConfigSearch } from "./configuration/ConfigControls";
-import { ConfigurationBlocks } from "./configuration/ConfigurationBlocks";
+import { ConfigSaveRow, SettingsSection } from "./configuration/ConfigControls";
+import { SettingsGroups } from "./configuration/SettingsGroups";
+import { AdvancedSettings } from "./configuration/AdvancedSettings";
+import { imageHref } from "./configuration/generalImageModel";
 import TabPage from "@/components/TabPage";
 import { FirstVisitHint } from "@/components/onboarding/FirstVisitHint";
 
-export default function AgentConfigurationTab({ refresh }: { refresh: () => void }) {
+export default function AgentConfigurationTab({
+  base,
+  refresh,
+}: {
+  /** The agent workspace route, for the links under Advanced → Other views. */
+  base: string;
+  refresh: () => void;
+}) {
   const name = useAgentName();
   const { status } = useAgentStatus();
   // The host is the surrounding ApiProvider's. Its client keeps its identity
@@ -29,8 +39,33 @@ export default function AgentConfigurationTab({ refresh }: { refresh: () => void
       hostId={targetId ?? ""}
       name={name}
       status={status}
+      base={base}
       refresh={refresh}
     />
+  );
+}
+
+// About names what the agent runs and where; the image links to the Library.
+function About({ view }: { view: AgentView }) {
+  const target = useApi().target;
+  const multiHost = useMultiHost();
+  return (
+    <SettingsSection id="about" title="About">
+      <p className="text-sm">
+        <span className="text-muted-foreground">image</span>{" "}
+        {view.image ? (
+          <Link
+            className="font-mono text-primary hover:underline"
+            to={imageHref(target?.id ?? "", view.image, multiHost)}
+          >
+            {view.image}
+          </Link>
+        ) : (
+          "—"
+        )}
+        <span className="text-muted-foreground"> · host</span> {target?.label || "Local"}
+      </p>
+    </SettingsSection>
   );
 }
 
@@ -38,14 +73,17 @@ function ConfigurationPage({
   hostId,
   name,
   status,
+  base,
   refresh,
 }: {
   hostId: string;
   name: string;
   status: AgentStatus | null;
+  base: string;
   refresh: () => void;
 }) {
   const api = useApi();
+  const navigate = useNavigate();
   const sources = useConfigSources(name, status);
   const { view, imageStatus } = sources;
   const baseline = useMemo(
@@ -60,21 +98,14 @@ function ConfigurationPage({
     [view, imageStatus, sources.script.value, sources.retention.value, sources.secrets.value],
   );
   const units = useMemo(() => buildUnits(api, name), [api, name]);
-  const [query, setQuery] = useState("");
-  const [changedOnly, setChangedOnly] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [editingFolder, setEditingFolder] = useState(false);
 
-  // Older daemons omit the budget projection; then the block does not exist.
-  const available = useMemo(
-    () => BLOCKS.filter((block) => block.id !== "budgets" || !view || view.budget),
-    [view],
-  );
-  // A save that stops on a field shows that field: search is cleared when it
-  // hides the field's block, and focus moves once the block has rendered.
+  // A save that stops on a field shows that field: its Advanced disclosure or
+  // the folder editor opens first, and focus moves once it has rendered.
   const onFocus = useCallback((key: string) => {
-    if (!document.getElementById(key)) {
-      setQuery("");
-      setChangedOnly(false);
-    }
+    if (sectionOfKey(key)?.advanced) setAdvancedOpen(true);
+    if (sectionOfKey(key)?.id === "folder") setEditingFolder(true);
     window.setTimeout(() => {
       const element = document.getElementById(key);
       element?.scrollIntoView?.({ block: "center" });
@@ -86,78 +117,37 @@ function ConfigurationPage({
     refresh();
   }, [sources, refresh]);
   const draft = useConfigDraft({ baseline, units, reload, onFocus });
-
-  const dirtyByBlock = countDirtyByBlock(draft.dirtyKeys);
-  const filtered = filterBlocks(query, available);
-  const visible = filtered.blocks.filter((block) => !changedOnly || dirtyByBlock.has(block.id));
-  const filtering = query.trim() !== "" || changedOnly;
-
-  const stopped = isStopped(status, view);
+  const dirtyByGroup = countDirtyByGroup(draft.dirtyKeys);
+  const section = { draft, sources, name, stopped: isStopped(status, view), refresh };
 
   return (
     <TabPage narrow>
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h2 className="font-semibold">Settings</h2>
-          {view && (
-            <p className="text-sm">
-              <span className="text-muted-foreground">Master switch</span>{" "}
-              <span data-testid="master-switch-state" className="font-medium">
-                {view.enabled === false ? "Disabled" : "Enabled"}
-              </span>
-            </p>
-          )}
-        </div>
-        <div className="space-y-1">
-          <RunStateActions name={name} refresh={() => void reload()} />
-          <p className="text-xs text-muted-foreground">Run actions apply immediately.</p>
-        </div>
-      </header>
+      <ConfigSaveRow draft={draft} groups={[...dirtyByGroup.keys()]} />
       <FirstVisitHint hostId={hostId} agent={name} tab="settings" />
-      <ConfigSearch
-        query={query}
-        onQuery={setQuery}
-        changedOnly={changedOnly}
-        onChangedOnly={setChangedOnly}
-        dirtyCount={draft.dirtyKeys.length}
-        chips={available.map((block) => ({
-          id: block.id,
-          title: block.title,
-          dirty: dirtyByBlock.get(block.id) ?? 0,
-        }))}
-        resultText={filtering ? `${visible.length} of ${available.length} blocks match` : ""}
-      />
       {!view ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : visible.length === 0 ? (
-        <ConfigEmptyState
-          query={query}
-          onClear={() => {
-            setQuery("");
-            setChangedOnly(false);
-          }}
-        />
       ) : (
-        visible.map((block) => (
-          <ConfigurationBlocks
-            key={block.id}
-            block={block}
-            draft={draft}
-            matched={filtered.matched}
-            dirty={dirtyByBlock.get(block.id) ?? 0}
-            sources={sources}
-            name={name}
-            stopped={stopped}
-            refresh={refresh}
+        <>
+          <SettingsGroups
+            {...section}
+            editingFolder={editingFolder}
+            onEditFolder={() => setEditingFolder(true)}
           />
-        ))
+          <AdvancedSettings
+            {...section}
+            base={base}
+            open={advancedOpen}
+            onOpenChange={setAdvancedOpen}
+            dirty={draft.dirtyKeys.filter((key) => groupOfKey(key) === "Advanced").length}
+          />
+          <About view={view} />
+          <SettingsSection id="danger" title="Danger">
+            <div>
+              <DeleteAgentButton name={name} refresh={refresh} onDeleted={() => navigate("/")} />
+            </div>
+          </SettingsSection>
+        </>
       )}
-      <ConfigSaveBar
-        draft={draft}
-        blockTitles={available
-          .filter((block) => dirtyByBlock.has(block.id))
-          .map((block) => block.title)}
-      />
     </TabPage>
   );
 }

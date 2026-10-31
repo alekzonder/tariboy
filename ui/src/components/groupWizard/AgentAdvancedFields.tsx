@@ -204,7 +204,7 @@ export function AgentAdvancedFields({
             checked={a.interactive}
             onCheckedChange={(v) => patch({ interactive: v })}
           />
-          <Label htmlFor={`interactive-${a.id}`}>interactive (tmux TUI)</Label>
+          <Label htmlFor={`interactive-${a.id}`}>interactive terminal</Label>
         </div>
 
         <AgentEnvRows agent={a} index={i} onPatch={patch} />

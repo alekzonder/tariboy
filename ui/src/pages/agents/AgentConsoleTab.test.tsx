@@ -82,9 +82,9 @@ describe("AgentConsoleTab non-interactive uploads", () => {
 
     expect(screen.getByTestId("send-files")).toHaveAttribute("data-daemon-id", "remote");
     expect(screen.getByRole("status")).toHaveTextContent(
-      "No interactive terminal. Enable it in Settings → Model.",
+      "No interactive terminal. Enable it in Settings → Autopilot.",
     );
-    expect(screen.getByRole("link", { name: "Settings → Model" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Settings → Autopilot" })).toHaveAttribute(
       "href",
       "/agents/remote/worker/settings",
     );

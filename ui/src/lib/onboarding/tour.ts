@@ -80,7 +80,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "agent-settings",
     title: "Agent settings",
-    body: "Settings sets the harness, model, schedule, environment and budget of the agent.",
+    body: "Settings sets the coding tool, model, working folder, Autopilot and spending limit. Everything else is under Advanced.",
     anchor: TOUR_ANCHORS.agentConfiguration,
     agent: true,
   },

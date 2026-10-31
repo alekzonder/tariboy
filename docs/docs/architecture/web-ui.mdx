@@ -118,7 +118,8 @@ settings: an enabled-by-default switch, a positive whole-second customer-wait
 timeout (300 by default), and a positive Goal delivery cooldown (60 seconds by
 default). Settings shows the daemon-selected goal key read-only. While the
 agent works, the header sentence names that key. A question-mark action in the
-Settings Goal block explains the sticky selection and release rules.
+Settings **Advanced → Goal** section explains the sticky selection and
+release rules.
 The former server-global policy screen is not part of Settings.
 
 Right-clicking any grouped or individual sidebar agent exposes **Clone**.
@@ -165,7 +166,7 @@ models instead of failing. When the chosen model carries its own efforts
 **Saved** holds the values the operator entered earlier for that harness, the
 current value, and the image default, minus anything already listed under the
 harness. Schema-v1 image defaults remain readable for compatibility. Successful
-creates and successful Settings Runtime saves remember the model and effort
+creates and successful Settings Model saves remember the model and effort
 in the Desktop WebView by harness; failed ones do not add values. Neither group
 validates a value: an unsupported model still fails at the harness.
 
@@ -397,7 +398,7 @@ for example **Starting Claude Code in ~/code/my-app…** while the coding tool
 starts, or **Claude Code did not start:** and the reason, with **Retry** (start
 the agent and reconnect the terminal) and **Open settings**. Without a session,
 the terminal says **No terminal session. Start the agent, or turn on
-Interactive terminal in Settings → Model.** Below 1200 px, the agent header
+Interactive terminal in Settings → Autopilot.** Below 1200 px, the agent header
 puts its buttons on their own row under the sentence.
 
 ## Onboarding
@@ -434,9 +435,9 @@ for the element every 100 ms, so the ring follows the element after a route
 change, a resize, or a scroll.
 
 The agent workspace step says "Work, Terminal, Activity and Settings of one
-agent: …". The agent settings step says "Settings sets the harness, model,
-schedule, environment and budget of the agent." Its ring is on the **Settings**
-tab link.
+agent: …". The agent settings step says "Settings sets the coding tool, model,
+working folder, Autopilot and spending limit. Everything else is under
+Advanced." Its ring is on the **Settings** tab link.
 
 `ui/src/lib/onboarding/tour.ts` holds the steps and `TOUR_ANCHORS`, the
 `data-tour` values. A component marks an element with
@@ -470,8 +471,8 @@ until you dismiss it:
 - **Terminal**: "Type what you want done. To hand work over and let the agent
   run on its own, give it a task."
 - **Work**: "Tasks you create here are given to this agent."
-- **Settings**: "Autopilot: set a schedule here to let the agent keep
-  working without you. Everything else is optional."
+- **Settings**: "Autopilot: choose whether the agent also runs every few
+  minutes on its own. Everything else is optional."
 
 A dismissal is stored under `onboarding:hint:v1:<host>:<agent>:<tab>`, where
 `<tab>` is `console`, `work`, or `settings`. Dismissals that an older release
@@ -637,17 +638,14 @@ Manifest, provenance, template, and file reads carry the same expected digest;
 a changed mutable ref clears the old view and reloads once, then offers manual
 refresh if it changes again. Directory builds and all detail requests capture
 the explicit route target. An agent's **Settings** only selects an already built
-image and links back to image detail. It shows the pinned **Current** (or
-**Activated version** when stopped) and the daemon's **Next iteration** preview,
-each with ref, manifest version, and digest. The next selection explains its
-pending, mutable-ref, or current-pinned origin; a digest difference signals an
-update even at equal versions. Inspection and activation failures remain visible
-without a pending ref. The preview is explicitly not a reservation. Ordinary
-agent status refreshes and image-build notifications (see
-[Image change notifications](#image-change-notifications)) reload it without overwriting
-runtime drafts, and responses from an older host, agent, or refresh are ignored.
-Selection becomes active at the next iteration boundary; cancelling pending
-keeps automatic mutable-ref following enabled.
+image under **Advanced → Image** and links back to image detail. It shows the
+image digest, a pending assignment, and any pending activation error.
+**Copy digest**, **Cancel pending**, and **Retry** act immediately.
+Ordinary agent status refreshes and image-build notifications (see
+[Image change notifications](#image-change-notifications)) reload image data
+without overwriting drafts. Responses from an older host, agent, or refresh
+are ignored. Selection becomes active at the next iteration boundary.
+Cancelling pending keeps automatic mutable-ref following enabled.
 Runnable import previews expose the target name and tag. Keeping the artifact
 ref is idempotent for the same digest and advances that tag for a different
 digest; operators can still choose another target. The source archive remains
@@ -744,8 +742,8 @@ projection selected by the plugin contract.
 
 **Settings → Agent defaults** edits the selected host's **Global Agent Shell Script**;
 an agent's **Settings** tab edits its **Agent Shell Script** in the
-Environment block. Both controls use the route's explicit host target, retain
-an invalid draft and accessible Bash error after rejection, and keep drafts
+**Advanced → Environment** section. Both controls use the route's explicit
+host target, retain an invalid draft and accessible Bash error after rejection, and keep drafts
 only in React memory. The global editor keeps its own Save and Discard, which
 stay unavailable until loading succeeds and while a save is pending, so saves
 cannot overlap; the agent script is saved with the agent Settings page's single
@@ -1510,7 +1508,7 @@ selector; letters of several hosts are not merged into one list. The sidebar's
 host.
 
 **Agent → Mailbox** (`/agents/:hostId/:agent/mailbox`) is not a tab: the
-agent's **Settings** links to it under **Other views**. It is
+agent's **Settings** links to it under **Advanced → Other views**. It is
 that agent's mailbox, read with `as=agent:<name>`, so the operator replies on
 the agent's behalf. **Compose** writes from the customer to that agent; the
 recipient is fixed. The toolbar shows `batch N · inbox K/M`: N is the agent's
@@ -1518,7 +1516,8 @@ recipient is fixed. The toolbar shows `batch N · inbox K/M`: N is the agent's
 and M its cap (`messages_max_queue`). A letter over the cap is dead on arrival
 and shows in Archive with its tag and **Requeue**. **Clear inbox** opens a
 destructive confirmation; confirming posts `/api/agents/<name>/mail/clear`,
-which deletes the agent's open letters, and reports how many. The agent header
+which deletes the agent's open letters, and reports how many.
+The same action is in **Settings → Advanced → Mail**. The agent header
 shows **Inbox full: K / M** when the inbox is at its cap. Settings names the
 two fields
 **Mail: letters per iteration** and **Mail: maximum open inbox**.
@@ -1676,12 +1675,12 @@ off. The `⋯` menu (**More agent actions**) has these items:
 - **Clone**: opens the New agent dialog with this agent as the clone source.
 - **Pin** or **Unpin**: the same pin as the sidebar.
 - **Settings**: opens the agent's Settings tab.
-- **Delete agent**.
 
 The header has no state pill, host label, image chip, Goal link, working
-directory row, or budget line. The full budget limits are in the Budgets block
-of Settings. Below 1200 px the sentence and the muted line wrap, and the
-buttons take a row of their own.
+directory row, or budget line. Daily and monthly limits are in **Settings →
+Spending limit**. Hourly and weekly limits are under **Advanced**.
+Below 1200 px the sentence and the muted line wrap, and the buttons take a row
+of their own.
 
 #### Tabs and routes
 
@@ -1695,9 +1694,10 @@ The agent workspace has four tabs; there is no server row above them:
 | **Settings** | `/agents/:hostId/:agent/settings` | the agent configuration page (component `AgentConfigurationTab`), headed **Settings** |
 
 The **Work** tab carries a badge with n of the `needs you` state, labeled "n
-waiting for you". Settings has the line **Other views: Open mailbox ·
-Advanced**, which links to `…/mailbox` and `…/advanced`. These two routes keep
-their content, but they are not tabs. There is no Autopilot tab.
+waiting for you". **Settings → Advanced → Other views** links to **Open
+mailbox**, **Prompt preview**, **Context**, **Files**, **Scripts**, **Full
+audit**, **Raw usage**, and **Raw settings**. These open `…/mailbox` or
+`…/advanced?view=…`. These routes are not tabs. There is no Autopilot tab.
 
 These routes redirect:
 
@@ -1901,15 +1901,28 @@ still reports its failure. Its draft stays in the form, ready to send again
 once the host is back. Drafts live in tab memory only and are not queued for
 later delivery.
 
-The agent's Settings tab is one column of blocks in a fixed order: **General** (agent
-image, image digest, working directory and, while the agent is stopped,
-**Create directory if missing**), **Runtime** (harness, model, effort,
-Interactive), **Loop and timeouts** (the scheduling and timeout
-fields, including **Schedule** with the daemon's next scheduled start under it,
-which follows Save; there is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
-shell script and secrets), and **Retention and cleanup**. Start, Stop and
-Restart are actions, not settings: they sit in the page header next to the
-master-switch state and apply immediately.
+The agent's Settings tab has four groups in order:
+
+- **Model**: coding tool, model, and effort.
+- **Working folder**: the current path and **Change…**, available while the
+  agent is stopped. The editor includes **Create directory if missing**.
+- **Autopilot**: **Only when given tasks or messages**, or **Also every** with
+  an interval in minutes. **Stop a run after** sets the soft timeout in
+  minutes, with `0` for no limit. **Interactive terminal** is here too.
+- **Spending limit**: daily and monthly USD limits, with the daemon's current
+  spend beside each. `0` means no limit.
+
+**Advanced** starts collapsed. It contains **Image**, **Schedule and
+timeouts**, **Goal**, **Mail**, **Hour and week budgets (USD)**,
+**Environment**, **Retention and cleanup**, and **Other views**.
+Schedule and timeouts holds the schedule builder, hard timeout in seconds,
+timeout and error policies, idle limit, and AI inactivity timeout.
+Its next scheduled start comes from the daemon and follows Save changes.
+A saved schedule can start runs even when Autopilot has no timer interval.
+
+Below Advanced, **About** names the image and host. The image links to the
+Library. **Danger** contains **Delete agent**. Start, Stop, and Restart stay
+in the agent header and apply immediately.
 
 **Schedule** is a builder for the agent's `RRULE` (see
 [Schedule](/docs/architecture/iteration-loop#schedule)). You select a mode and fill
@@ -1925,17 +1938,18 @@ do not edit is not marked **Changed**. When you select another mode, the
 builder drops the saved `DTSTART`, and the daemon starts the new rule at the
 current minute.
 
-Every editable field of every block belongs to one page-wide draft with one
-save mechanic. A field is dirty when its normalized draft differs from the
-value last loaded; the field shows **Changed**, its block counts its unsaved
-changes, and a sticky bar at the bottom of the page lists the count and the
-blocks and offers **Reset** and **Save**. No block has its own save button.
-**Reset** drops every draft. **Save** first validates every changed field in
-the browser and sends nothing while any is invalid: it shows the field (clearing
-a search that hid it) and focuses it. Then it sends only the changed fields,
-serially in page order (harness before model and effort), using the existing
-per-field endpoints; the four budget limits and the two retention limits are
-sent as one request each, as before. It stops at the first failure without
+Every editable field belongs to one page-wide draft. A field is dirty when
+its normalized draft differs from the value last loaded. The field shows
+**Changed**. A sticky header at the top lists the unsaved count and groups,
+with **Reset** and **Save changes** while edits exist. The Advanced disclosure
+also counts its unsaved edits. Closing it keeps those drafts.
+**Reset** drops every draft. **Save changes** first validates every changed
+field in the browser and sends nothing while any is invalid. It opens
+Advanced or the folder editor when needed and focuses the field.
+Then it sends only changed fields through the existing per-field endpoints.
+Requests run serially in the existing order, with harness before model and effort.
+The four budget limits and the two retention limits each save as one request.
+It stops at the first failure without
 sending the fields after it: acknowledged fields adopt the daemon's canonical
 values after a reload, while the failed field (with the server's reason beside
 it) and the ones never attempted stay dirty drafts, so the next Save sends only
@@ -1946,13 +1960,6 @@ missing** is saved with the working directory as one request: when it is on,
 Save sends the path with `create: true`, and the daemon makes a missing
 directory before it validates the path. After a successful Save the switch is
 off again.
-
-A search box above the blocks filters by block: a case-insensitive match of
-every query word against a block's title, description, field labels, helpers
-and keywords (for example `cwd`, `tmux`, `dlq`, `usd`) shows that whole block
-and highlights the matching fields. **Changed only** shows just the blocks with
-unsaved changes. Block chips jump to a block and show its change count. Search
-only hides blocks; drafts in hidden blocks are kept and are still saved.
 
 For a stopped agent, the working directory is edited with the selected host's
 directory autocomplete. Saving changes the CWD used by the next launch; it does
@@ -1968,7 +1975,8 @@ immediate actions in an actions row that says they are not part of Save.
 Model and effort use the same grouped suggestions as agent creation, for the
 agent's host and the selected harness.
 
-The Loop section also exposes the positive **AI inactivity timeout** in seconds,
+**Advanced → Schedule and timeouts** exposes the positive **AI inactivity
+timeout** in seconds,
 defaulting to 1800 (30 minutes) per agent. When a running iteration exceeds it without an
 attributed AI-proxy request, the daemon reports `state=error`, which the agent header
 shows. The controls remain enabled because this
@@ -1976,16 +1984,18 @@ signal does not stop the loop or iteration; the next request restores
 `state=running`. Ordinary creation starts at 1800 seconds, while Clone preserves
 the source agent's configured value.
 
-The **Messages** block uses that same draft contract for the
+The **Advanced → Mail** section uses that same draft contract for the
 positive whole-number `messages_batch` and `messages_max_queue` fields.
 New-agent drafts use a maximum queue of 100, while Clone keeps the source
 agent's configured value.
 
 Settings also renders the daemon-authoritative per-agent USD budget
-projection. Its four calendar rows pair each current spend with one editable
-limit (spent beside the limit), label zero as Unlimited, and save in one
-request against the explicit agent-route host. Older daemons that omit the
-projection get no Budgets block. The agent state uses the same projection: an
+projection. The daily and monthly fields are in **Spending limit**. Hourly
+and weekly fields are under **Advanced → Hour and week budgets (USD)**.
+Each pairs current spend with an editable limit, where zero means unlimited.
+All four limits save in one request against the explicit agent-route host.
+Older daemons that omit the projection show neither budget section.
+The agent state uses the same projection: an
 exhausted period makes the state `error`, with the reason **Out of budget:**
 and the exhausted periods. The header's "$x today" also comes from it. The
 browser never recomputes spend. Older daemons simply omit the additive
@@ -2091,14 +2101,14 @@ state and the terminal session:
 | Case | Banner |
 | --- | --- |
 | error | "\<tool\> did not start: \<reason\>", with **Retry** and **Open settings** (`…/settings`) |
-| not interactive | "No interactive terminal. Enable it in Settings → Model.", with a link to `…/settings`; the drop target for files and **Send files** stay below |
+| not interactive | "No interactive terminal. Enable it in Settings → Autopilot.", with a link to `…/settings`; the drop target for files and **Send files** stay below |
 | off | "Off.", with a **Start** button |
 | starting | "Starting \<tool\> in \<cwd\>…" |
 | working | "Working on \<KEY\> — this is its live screen." |
 | idle | "Idle. The screen appears when a run starts. Type here to talk to the agent directly; this is not recorded in a task." |
 
 Without a session, the terminal panel says "No terminal session. Start the
-agent, or turn on Interactive terminal in Settings → Model."
+agent, or turn on Interactive terminal in Settings → Autopilot."
 
 The toolbar under the terminal has **Send files**, **Compose**,
 **Scrollback**, a **Keys** toggle, and the `?` help. **Keys** (with
@@ -2154,8 +2164,8 @@ Run once does not start the agent or persist the draft. A successful request clo
 the dialog and, when the Terminal tab shows an interactive terminal, reconnects its
 startup handling; a rejected request keeps the dialog and the draft for retry.
 
-Permanent agent deletion requires confirmation in an in-app dialog that names
-the agent and warns that its durable data is also removed. Confirm sends the
+**Settings → Danger → Delete agent** opens an in-app confirmation dialog.
+It names the agent and warns that its durable data is also removed. Confirm sends the
 existing `force=true` and `purge=true` request. While that request is pending,
 the dialog cannot be dismissed or submitted again. The workspace returns home
 only after success; on failure it keeps the dialog open, restores its controls,
@@ -2164,12 +2174,12 @@ the `⋯` menu is a separate action. It asks for confirmation in an in-app
 dialog, stops only the current iteration or session, and does not delete the
 agent or its durable data.
 
-An agent's **Retention and cleanup** block edits that agent's override of the
-server-wide iteration defaults with the page Save: each field shows
+An agent's **Advanced → Retention and cleanup** section edits its override of
+the server-wide iteration defaults with the page Save: each field shows
 `0 = server default (N)`, and the block lists the effective limits and that
 pruned iterations are archived with their database rows first.
 
-Secrets in the Environment block are write-only. The block lists key names
+Secrets in **Advanced → Environment** are write-only. The section lists key names
 only. Removing a key and adding a key and value are page drafts applied by
 Save: a removal is shown as **Will be removed** until then, and a new value
 lives only in tab memory, is sent in a POST body and never in a URL, is never
