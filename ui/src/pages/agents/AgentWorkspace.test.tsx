@@ -159,8 +159,10 @@ describe("AgentWorkspace header", () => {
       "Waiting for you: approval for DEV-1",
     );
     await userEvent.click(screen.getByRole("link", { name: "Answer" }));
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      "/agents/local/worker/work?answer=DEV-1",
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/agents/local/worker/work?answer=DEV-1",
+      ),
     );
     const nav = screen.getByRole("navigation", { name: "Agent workspace" });
     expect(within(nav).getByRole("link", { name: /Work/ })).toContainElement(
@@ -367,8 +369,10 @@ describe("AgentWorkspace tabs", () => {
       const diagnostics = await screen.findByRole("menuitem", { name: "Diagnostics" });
       expect(diagnostics).toHaveAttribute("href", `/agents/${host.id}/worker/advanced`);
       await userEvent.click(diagnostics);
-      expect(screen.getByTestId("location")).toHaveTextContent(
-        `/agents/${host.id}/worker/advanced`,
+      await waitFor(() =>
+        expect(screen.getByTestId("location")).toHaveTextContent(
+          `/agents/${host.id}/worker/advanced`,
+        ),
       );
       expect(await screen.findByRole("heading", { name: "Diagnostics" })).toBeVisible();
       expect(screen.getByRole("button", { name: "Prompt" })).toHaveAttribute(
