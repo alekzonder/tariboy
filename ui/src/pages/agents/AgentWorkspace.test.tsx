@@ -352,6 +352,41 @@ describe("AgentWorkspace header", () => {
 });
 
 describe("AgentWorkspace tabs", () => {
+  it.each(["work", "console", "activity", "settings"])(
+    "opens Diagnostics from %s on the route host without writing",
+    async (tab) => {
+      const host = await addDaemon({
+        label: "Remote",
+        baseURL: "https://remote.example",
+        token: "secret",
+      });
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("offline"));
+      renderAt(`/agents/${host.id}/worker/${tab}`, { hostId: host.id });
+      await screen.findByRole("navigation", { name: "Agent workspace" });
+      openMenu();
+      const diagnostics = await screen.findByRole("menuitem", { name: "Diagnostics" });
+      expect(diagnostics).toHaveAttribute("href", `/agents/${host.id}/worker/advanced`);
+      await userEvent.click(diagnostics);
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        `/agents/${host.id}/worker/advanced`,
+      );
+      expect(await screen.findByRole("heading", { name: "Diagnostics" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "Prompt" })).toHaveAttribute(
+        "data-variant",
+        "default",
+      );
+      await waitFor(() =>
+        expect(fetchSpy).toHaveBeenCalledWith(
+          "https://remote.example/api/agents/worker/prompt",
+          expect.objectContaining({ method: "GET" }),
+        ),
+      );
+      expect(fetchSpy.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(
+        true,
+      );
+    },
+  );
+
   it("keeps the terminal mounted across a failed status read and recovery", async () => {
     const status = {
       ...runningStatus,

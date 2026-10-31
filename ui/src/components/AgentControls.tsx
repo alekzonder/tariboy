@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Copy, Code2, MoreHorizontal, Pin, Play, Settings2, Square, Trash2 } from "lucide-react";
+import {
+  Copy,
+  Code2,
+  MoreHorizontal,
+  Pin,
+  Play,
+  Settings2,
+  Square,
+  Trash2,
+  Wrench,
+} from "lucide-react";
 import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
@@ -222,6 +232,7 @@ type AgentControlsProps = {
   workPath: string;
   /** Route of this agent's Settings tab, for the menu's Settings item. */
   settingsPath: string;
+  diagnosticsPath: string;
   refresh?: () => void;
   /** Called after Start, Restart or Run once succeeds, to check for a new session. */
   onExec?: () => void;
@@ -308,6 +319,12 @@ function OverflowMenu({
             Settings
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuItem asChild className={MENU_ITEM}>
+          <Link to={props.diagnosticsPath}>
+            <Wrench aria-hidden="true" />
+            Diagnostics
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator className="mx-0.75 my-1" />
         <DropdownMenuItem
           className={`${MENU_ITEM} text-destructive focus:bg-destructive/10 focus:text-destructive`}
@@ -325,7 +342,7 @@ function OverflowMenu({
  * The action cluster on the right of the agent header: the one primary action
  * of the derived state, the on/off toggle, and a `⋯` menu for everything that
  * is not a per-second decision (Run once…, Force-stop, VS Code, Clone, Pin,
- * Settings, Delete). It rides in the header rather than in a tab, so the
+ * Settings, Diagnostics, Delete). It rides in the header rather than in a tab, so the
  * lifecycle of the agent is reachable from every tab.
  *
  * Every call goes through the client of the nearest ApiProvider: the workspace

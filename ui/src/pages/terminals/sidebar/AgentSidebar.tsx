@@ -21,7 +21,7 @@ import {
 } from "./sidebarDnd";
 import { AgentList, type HostActions } from "./AgentList";
 import { SidebarFooter } from "./SidebarFooter";
-import { AgentsHeading, SectionsNav, SidebarNavItem } from "./SidebarNav";
+import { AgentsHeading, SectionsNav, SidebarNavItem, SidebarUtilityNav } from "./SidebarNav";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { SidebarSearch } from "./SidebarSearch";
 import type { AgentRowActions } from "./SidebarAgentRow";
@@ -47,7 +47,7 @@ export interface SidebarActions extends HostActions {
 }
 
 /**
- * The left column of the console: Home, the Agents list, Tasks, Inbox,
+ * The left column of the console: Home, Tasks, Inbox, the Agents list,
  * Library, Settings, and the hosts line. It is chrome, not a panel — it sits
  * straight on `--background` with no border and no surface of its own, and
  * only the agent list scrolls.
@@ -161,6 +161,7 @@ export function AgentSidebar({
             active={activeNav(pathname) === "home"}
             onNavigate={actions.onNavigate}
           />
+          <SectionsNav pageHostId={pageHostId} counts={counts} onNavigate={actions.onNavigate} />
           <AgentsHeading open={agentsOpen || filtering} onToggle={toggleAgents} />
         </nav>
         {(agentsOpen || filtering) && (
@@ -184,8 +185,8 @@ export function AgentSidebar({
             />
           </div>
         )}
-        <SectionsNav pageHostId={pageHostId} counts={counts} onNavigate={actions.onNavigate} />
         <div className="min-h-0 flex-1" />
+        <SidebarUtilityNav pageHostId={pageHostId} onNavigate={actions.onNavigate} />
         <SidebarFooter
           line={hostsLine(hosts)}
           healthy={hosts.every((host) => !host.error)}

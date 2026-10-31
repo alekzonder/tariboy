@@ -25,6 +25,7 @@ export const AgentWorkspace = () => (
       primary="give"
       workPath="/agents/local/builder/work"
       settingsPath="/agents/local/builder/settings"
+      diagnosticsPath="/agents/local/builder/advanced"
       refresh={() => {}}
     />
   </div>
@@ -50,6 +51,7 @@ export const StoppedAgent = () => (
       primary="start"
       workPath="/agents/local/docs-bot/work"
       settingsPath="/agents/local/docs-bot/settings"
+      diagnosticsPath="/agents/local/docs-bot/advanced"
       refresh={() => {}}
     />
   </div>
@@ -64,6 +66,7 @@ export const NeedsYou = () => (
       primary="answer"
       workPath="/agents/local/packager/work"
       settingsPath="/agents/local/packager/settings"
+      diagnosticsPath="/agents/local/packager/advanced"
       refresh={() => {}}
     />
   </div>

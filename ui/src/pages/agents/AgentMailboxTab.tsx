@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { useAgentStatus } from "@/lib/agent";
 import Mailbox from "@/pages/mailbox/Mailbox";
 import { ClearInbox } from "./ClearInbox";
@@ -7,8 +9,10 @@ import { ClearInbox } from "./ClearInbox";
 export default function AgentMailboxTab({
   name,
   batch,
+  base,
 }: {
   name: string;
+  base: string;
   /** messages_batch from the agent view, once loaded. */
   batch?: number;
 }) {
@@ -17,18 +21,30 @@ export default function AgentMailboxTab({
   const max = status?.messages_max_queue ?? 0;
   const principal = `agent:${name}`;
   return (
-    <Mailbox
-      as={principal}
-      mode="agent"
-      fixedTo={principal}
-      toolbar={
-        <>
-          <span className="text-meta text-muted-foreground tabular-nums">
-            batch {batch ?? "—"} · inbox {pending}/{max || "—"}
-          </span>
-          <ClearInbox name={name} disabled={pending === 0} />
-        </>
-      }
-    />
+    <div className="flex h-full min-h-0 flex-col">
+      <nav aria-label="Mailbox navigation" className="flex shrink-0 flex-wrap gap-2 px-4 pt-3 pb-4">
+        <Button asChild size="sm" variant="outline">
+          <Link to={`${base}/advanced`}>Diagnostics</Link>
+        </Button>
+        <Button asChild size="sm" variant="outline">
+          <Link to={`${base}/work`}>Back to Work</Link>
+        </Button>
+      </nav>
+      <div className="min-h-0 flex-1">
+        <Mailbox
+          as={principal}
+          mode="agent"
+          fixedTo={principal}
+          toolbar={
+            <>
+              <span className="text-meta text-muted-foreground tabular-nums">
+                batch {batch ?? "—"} · inbox {pending}/{max || "—"}
+              </span>
+              <ClearInbox name={name} disabled={pending === 0} />
+            </>
+          }
+        />
+      </div>
+    </div>
   );
 }
