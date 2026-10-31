@@ -71,7 +71,7 @@ func TestOpenCodeRealProxy(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			config := fmt.Sprintf(`{"model":"kimi-code-plan-global/k3","small_model":"kimi-code-plan-global/k3-256k","provider":{"kimi-code-plan-global":{"options":{"baseURL":%q,"apiKey":"fake-local-key"}}},"permission":"deny","autoupdate":false}`, up.URL+"/coding/v1")
+			config := `{"model":"kimi-code-plan-global/k3","small_model":"kimi-code-plan-global/k3-256k","provider":{"kimi-code-plan-global":{"options":{"baseURL":"${TARIBOY_TEST_UPSTREAM}/coding/v1","apiKey":"fake-local-key"}}},"permission":"deny","autoupdate":false}`
 			bridge := filepath.Join(root, "bridge")
 			if err := os.MkdirAll(filepath.Join(bridge, "skills"), 0700); err != nil {
 				t.Fatal(err)
@@ -80,7 +80,7 @@ func TestOpenCodeRealProxy(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(bridge, "opencode.json"), skillConfig, 0600); err != nil {
 				t.Fatal(err)
 			}
-			env := []string{"PATH=" + filepath.Dir(executable) + ":" + os.Getenv("PATH"), "HOME=" + root, "XDG_DATA_HOME=" + filepath.Join(root, "data"), "XDG_CONFIG_HOME=" + filepath.Join(root, "config"), "XDG_CACHE_HOME=" + filepath.Join(root, "cache"), "XDG_STATE_HOME=" + filepath.Join(root, "state"), "TARIBOY_BASE_DIR=" + filepath.Join(root, "base"), "TARIBOY_RUNTIME_DIR=" + filepath.Join(root, "runtime"), "OPENCODE_DISABLE_MODELS_FETCH=true", "OPENCODE_CONFIG_CONTENT=" + config, "OPENCODE_CONFIG_DIR=" + bridge}
+			env := []string{"PATH=" + filepath.Dir(executable) + ":" + os.Getenv("PATH"), "HOME=" + root, "XDG_DATA_HOME=" + filepath.Join(root, "data"), "XDG_CONFIG_HOME=" + filepath.Join(root, "config"), "XDG_CACHE_HOME=" + filepath.Join(root, "cache"), "XDG_STATE_HOME=" + filepath.Join(root, "state"), "TARIBOY_BASE_DIR=" + filepath.Join(root, "base"), "TARIBOY_RUNTIME_DIR=" + filepath.Join(root, "runtime"), "TARIBOY_TEST_UPSTREAM=" + up.URL, "OPENCODE_DISABLE_MODELS_FETCH=true", "OPENCODE_CONFIG_CONTENT=" + config, "OPENCODE_CONFIG_DIR=" + bridge}
 			if interactive {
 				configPath := filepath.Join(root, "user.jsonc")
 				if err := os.WriteFile(configPath, []byte("// native JSONC credential source\n"+config), 0600); err != nil {

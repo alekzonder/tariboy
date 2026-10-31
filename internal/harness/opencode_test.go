@@ -221,3 +221,44 @@ func TestOpenCodeAnthropicOfficialRootNormalization(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenCodeRoutesResolveURLVariablesFromLaunchEnvironment(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, base, want string
+		fail             bool
+	}{
+		{"host and path", "http://${API_HOST}/${API_PATH}", "http://127.0.0.1:1234/coding/v1", false},
+		{"repeated", "https://example.com/${API_PATH}/${API_PATH}", "https://example.com/coding/v1/coding/v1", false},
+		{"literal dollar", "https://example.com/$API_PATH", "https://example.com/$API_PATH", false},
+		{"empty value", "https://example.com/${EMPTY}v1", "https://example.com/v1", false},
+		{"missing host", "http://${MISSING_HOST}/v1", "", true},
+		{"missing path", "https://example.com/${MISSING_PATH}", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, configured := range []bool{false, true} {
+				cfg := map[string]any{}
+				model := openCodeModelMetadata{ID: "model", ProviderID: "custom"}
+				model.API.NPM = "@ai-sdk/openai-compatible"
+				model.API.URL = tc.base
+				if configured {
+					cfg["provider"] = map[string]any{"custom": map[string]any{"options": map[string]any{"baseURL": tc.base}}}
+				}
+				env := []string{"HOME=" + t.TempDir(), "API_HOST=wrong.example", "API_HOST=127.0.0.1:1234", "API_PATH=coding/v1", "EMPTY="}
+				routes, err := openCodeRoutes(cfg, map[string][]string{"custom": {"model"}}, map[string]openCodeModelMetadata{"custom/model": model}, env)
+				if tc.fail {
+					if err == nil {
+						t.Fatal("unresolved URL template accepted")
+					}
+					continue
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := routes["custom"].BaseURL; got != tc.want {
+					t.Fatalf("baseURL=%q, want %q", got, tc.want)
+				}
+			}
+		})
+	}
+}

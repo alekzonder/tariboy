@@ -171,6 +171,8 @@ and explicitly configured agent models. The main model must be an explicit
 When no small model is configured, it uses the main model.
 
 Each selected provider's original address is bound to the iteration lease.
+Address templates such as `${API_HOST}` use the final launch environment.
+An unresolved template fails preparation before the harness starts.
 An in-memory `OPENCODE_CONFIG_CONTENT` overlay replaces its `options.baseURL`
 with a tokenized local route, limits enabled providers and their model lists,
 and is checked again with `debug config`. Image skills keep their existing

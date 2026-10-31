@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -20,6 +21,8 @@ import (
 )
 
 const openCodeOutputLimit = 4 << 20
+
+var openCodeURLVariable = regexp.MustCompile(`\$\{([^}]+)\}`)
 
 // PrepareOpenCodeProxy keeps OpenCode's own credential sources and overlays only
 // iteration routing. Resolved debug output is never copied: it masks API keys.
@@ -266,6 +269,16 @@ func openCodeRoutes(cfg map[string]any, selected map[string][]string, metadata m
 			}
 			if base == "" {
 				return nil, errors.New("OpenCode selected provider has no resolved upstream URL")
+			}
+			base = openCodeURLVariable.ReplaceAllStringFunc(base, func(field string) string {
+				key := field[2 : len(field)-1]
+				if value := openCodeEnv(env, key); value != "" || slices.Contains(env, key+"=") {
+					return value
+				}
+				return field
+			})
+			if openCodeURLVariable.MatchString(base) {
+				return nil, errors.New("OpenCode upstream URL contains unresolved environment variables")
 			}
 			// OpenCode normalizes the official Anthropic root before creating its SDK.
 			if family == "anthropic" && strings.TrimRight(base, "/") == "https://api.anthropic.com" {
