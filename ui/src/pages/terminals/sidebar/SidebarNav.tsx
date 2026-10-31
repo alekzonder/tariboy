@@ -67,8 +67,7 @@ export function SidebarNavItem({
   );
 }
 
-/** Tasks, Inbox, Library and Settings below the agent list, with the counts
- *  of what waits for the user. */
+/** Tasks and Inbox in the main navigation, with what waits for the user. */
 export function SectionsNav({
   pageHostId,
   counts,
@@ -87,7 +86,7 @@ export function SectionsNav({
     onNavigate,
   });
   return (
-    <nav aria-label="Sections" className="flex shrink-0 flex-col gap-0.5 px-1.5 pt-1.5">
+    <>
       <SidebarNavItem
         {...item("tasks", "Tasks", ListChecks)}
         active={active === "tasks"}
@@ -99,12 +98,36 @@ export function SectionsNav({
         active={active === "inbox"}
         badge={{ count: counts.inbox, label: `${counts.inbox} open letters` }}
       />
+    </>
+  );
+}
+
+/** Library and Settings stay at the foot of the sidebar. */
+export function SidebarUtilityNav({
+  pageHostId,
+  onNavigate,
+}: {
+  pageHostId: string;
+  onNavigate?: () => void;
+}) {
+  const active = activeNav(useLocation().pathname);
+  return (
+    <nav aria-label="Sections" className="flex shrink-0 flex-col gap-0.5 px-1.5 pt-1.5">
       <SidebarNavItem
-        {...item("library-images", "Library", Library)}
+        to={navPath("library-images", pageHostId)}
+        label="Library"
+        icon={Library}
         active={active === "library"}
         tour={TOUR_ANCHORS.sectionImages}
+        onNavigate={onNavigate}
       />
-      <SidebarNavItem {...item("settings", "Settings", Settings)} active={active === "settings"} />
+      <SidebarNavItem
+        to={navPath("settings", pageHostId)}
+        label="Settings"
+        icon={Settings}
+        active={active === "settings"}
+        onNavigate={onNavigate}
+      />
     </nav>
   );
 }

@@ -57,8 +57,9 @@ action and reports installation failures for retry.
 
 There is no interface mode. Every user gets the same agent workspace, and it
 uses progressive disclosure: the everyday views are tabs, and the rarer views
-are one step away. **Mailbox** and **Advanced** are routes that the agent's
-**Settings** links to, the terminal hotkeys are behind **Keys**, and the
+are one step away. The agent header's **⋯ → Diagnostics** opens the existing
+diagnostic views, including **Mailbox**. **Settings → Advanced → Other views**
+keeps its links to the same routes. The terminal hotkeys are behind **Keys**, and the
 header's rarer actions are in its `⋯` menu. A value that an older release
 stored under `app:ui-mode:v1` is ignored.
 
@@ -190,11 +191,14 @@ The sidebar has six items:
 | Item | Opens |
 | --- | --- |
 | **Home** | `/` (see [Home](#home)) |
-| **Agents** | nothing: it opens and closes the agent list in place |
 | **Tasks** | `/tasks` |
 | **Inbox** | `/inbox` |
+| **Agents** | nothing: it opens and closes the agent list in place |
 | **Library** | `/library/images`, with **Images**, **Workflows**, and **Sources** tabs |
 | **Settings** | `/settings/hosts`, the first of the Settings pages |
+
+Home, Tasks, and Inbox stay above Agents in visual and keyboard order.
+Only the agent list scrolls. Library, Settings, and the hosts line stay at the bottom.
 
 Settings has one flat list of seven pages. There is no index page:
 
@@ -288,7 +292,10 @@ other than Hosts show one host. They take an optional
 remembered active host. A `?host=` that names another host selects it through
 the route host boundary, which shows **Connecting to host…** or **Host
 unavailable.** while it does. With two or more hosts in the workspace, the
-page has a host selector, and a pick replaces `?host=`. Settings → Hosts and
+page has a host selector, and a pick replaces `?host=`. In Tasks and Library,
+the selector comes first in the top content row, before filters or tabs.
+Both use `HostScopeSelect`, labeled **Host**, with a 28 px height,
+16 px left padding, and 6 px between controls. Settings → Hosts and
 Settings → Application have no selector. With one
 host nothing about hosts is shown, and links that the UI builds carry
 `?host=` only with two or more hosts. A desktop notification always names its
@@ -537,7 +544,7 @@ The agent tab is one view for every user. Under the cards it shows:
 - the cost chart for the period, from `getAgentUsage`;
 - a **More** segment with three views:
   - **Runs log** (default): the iteration audit view, the same component as
-    **Advanced → Full audit**, limited to runs that started in the period, with
+    **Diagnostics → Full audit**, limited to runs that started in the period, with
     the tag filter below;
   - **Usage**: the agent's AI usage over the period; task and epic keys open
     the task panel in place;
@@ -551,7 +558,7 @@ the task panel in place on that server, and an **Agents** view, whose names open
 that agent's Activity tab with the same period. All its requests go to the
 selected host.
 
-The agent's Settings, Activity, and Advanced pages and the server Activity
+The agent's Settings, Activity, and Diagnostics pages and the server Activity
 page share one frame, `TabPage`: 16 px side and top padding, 24 px bottom
 padding, and 16 px between blocks. Settings is a centered column of at
 most `max-w-5xl`; the others use the full width. Mailbox, Work, and Terminal fill
@@ -562,9 +569,9 @@ the page without a frame.
 The Runs log filters its iteration list by tag. The tag filter and the
 selected iteration live in the URL query beside the period, and a filter change
 replaces the history entry instead of adding one per keystroke. Matching is the
-daemon's: an iteration matches any of the listed tags. Under **Advanced → Full
+daemon's: an iteration matches any of the listed tags. Under **Diagnostics → Full
 audit** the same list keeps its own started-at date filters, where both date
-bounds are inclusive, and **Advanced → Raw usage** keeps its own window presets.
+bounds are inclusive, and **Diagnostics → Raw usage** keeps its own window presets.
 
 Each row shows its tags beside its status. The selected iteration has a tag
 editor above its log that adds one tag or removes one, each saved as a complete
@@ -1497,8 +1504,9 @@ selector; letters of several hosts are not merged into one list. The sidebar's
 **Inbox** item carries the customer's open letter count of every workspace
 host.
 
-**Agent → Mailbox** (`/agents/:hostId/:agent/mailbox`) is not a tab: the
-agent's **Settings** links to it under **Advanced → Other views**. It is
+**Agent → Mailbox** (`/agents/:hostId/:agent/mailbox`) is not a tab.
+**Diagnostics** and **Settings → Advanced → Other views** link to it.
+It has links to **Diagnostics** and **Back to Work** for the same host and agent. It is
 that agent's mailbox, read with `as=agent:<name>`, so the operator replies on
 the agent's behalf. **Compose** writes from the customer to that agent; the
 recipient is fixed. The toolbar shows `batch N · inbox K/M`: N is the agent's
@@ -1665,6 +1673,7 @@ off. The `⋯` menu (**More agent actions**) has these items:
 - **Clone**: opens the New agent dialog with this agent as the clone source.
 - **Pin** or **Unpin**: the same pin as the sidebar.
 - **Settings**: opens the agent's Settings tab.
+- **Diagnostics**: opens `…/advanced`, starting with **Prompt**.
 
 The header has no state pill, host label, image chip, Goal link, working
 directory row, or budget line. Daily and monthly limits are in **Settings →
@@ -1688,6 +1697,14 @@ waiting for you". **Settings → Advanced → Other views** links to **Open
 mailbox**, **Prompt preview**, **Context**, **Files**, **Scripts**, **Full
 audit**, **Raw usage**, and **Raw settings**. These open `…/mailbox` or
 `…/advanced?view=…`. These routes are not tabs. There is no Autopilot tab.
+
+**⋯ → Diagnostics** opens the same `…/advanced` route from every agent tab.
+The page has the title **Diagnostics** and offers **Prompt**, **Context**,
+**Files**, **Scripts**, **Full audit**, **Raw usage**, **Raw settings**, and **Mailbox**.
+**Mailbox** opens the existing `…/mailbox` route. **Back to Work** returns to
+`…/work` for the same host and agent, including when a direct link opened the page.
+Existing `…/advanced?view=…` links keep their selected view.
+Opening Diagnostics or Mailbox does not run a script, send a letter, or clear an inbox.
 
 These routes redirect:
 

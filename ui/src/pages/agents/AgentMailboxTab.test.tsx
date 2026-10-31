@@ -23,6 +23,7 @@ const mail = {
   unread: vi.fn(async () => ({ as: "agent:dev", open: 1, unread: 1, by_sender: [] })),
   read: vi.fn(async () => ({ read: 1, closed_notices: 0 })),
   reply: vi.fn(async () => ({ closed: true, letter: letter() })),
+  send: vi.fn(),
   clear: vi.fn(async () => ({ deleted: 3 })),
 };
 const refreshStatus = vi.fn(async () => {});
@@ -32,7 +33,7 @@ function renderTab() {
   render(
     <MemoryRouter>
       <AgentStatusContext.Provider value={{ status, refresh: refreshStatus }}>
-        <AgentMailboxTab name="dev" batch={5} />
+        <AgentMailboxTab name="dev" batch={5} base="/agents/remote/dev" />
       </AgentStatusContext.Provider>
     </MemoryRouter>,
     { api: fakeApi({ mail }) },
@@ -42,6 +43,23 @@ function renderTab() {
 beforeEach(() => vi.clearAllMocks());
 
 describe("AgentMailboxTab", () => {
+  it("links back to Diagnostics and Work without sending or clearing mail", async () => {
+    renderTab();
+    expect(await screen.findByRole("link", { name: "Diagnostics" })).toHaveAttribute(
+      "href",
+      "/agents/remote/dev/advanced",
+    );
+    expect(screen.getByRole("link", { name: "Back to Work" })).toHaveAttribute(
+      "href",
+      "/agents/remote/dev/work",
+    );
+    await userEvent.click(screen.getByRole("link", { name: "Diagnostics" }));
+    await userEvent.click(screen.getByRole("link", { name: "Back to Work" }));
+    expect(mail.clear).not.toHaveBeenCalled();
+    expect(mail.reply).not.toHaveBeenCalled();
+    expect(mail.send).not.toHaveBeenCalled();
+  });
+
   it("shows the batch and the inbox against its cap", async () => {
     renderTab();
     expect(await screen.findByText("batch 5 · inbox 3/100")).toBeVisible();

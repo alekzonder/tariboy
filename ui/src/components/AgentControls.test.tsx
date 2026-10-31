@@ -24,6 +24,7 @@ afterEach(() => {
 const paths = {
   settingsPath: "/agents/local/alpha/settings",
   workPath: "/agents/local/alpha/work",
+  diagnosticsPath: "/agents/local/alpha/advanced",
 };
 
 function renderControls(alive: boolean, primary: PrimaryAction = alive ? "give" : "start") {
@@ -139,7 +140,7 @@ it("force-stops the current run only after the confirmation dialog", async () =>
   await waitFor(() => expect(agentPost).toHaveBeenCalledWith("alpha", "kill"));
 });
 
-it("offers Run once, VS Code, Clone, Pin, Settings and Delete in the menu", async () => {
+it("offers Run once, VS Code, Clone, Pin, Settings, Diagnostics and Delete in the menu", async () => {
   const onClone = vi.fn();
   const onTogglePin = vi.fn();
   const onOpenFolder = vi.fn();
@@ -167,11 +168,16 @@ it("offers Run once, VS Code, Clone, Pin, Settings and Delete in the menu", asyn
     "Clone",
     "Pin",
     "Settings",
+    "Diagnostics",
     "Delete agent",
   ]);
   expect(screen.getByRole("menuitem", { name: "Settings" })).toHaveAttribute(
     "href",
     "/agents/local/alpha/settings",
+  );
+  expect(screen.getByRole("menuitem", { name: "Diagnostics" })).toHaveAttribute(
+    "href",
+    "/agents/local/alpha/advanced",
   );
   fireEvent.click(screen.getByRole("menuitem", { name: "Pin" }));
   expect(onTogglePin).toHaveBeenCalledOnce();

@@ -119,6 +119,7 @@ function HeaderControls({ props, cwd }: { props: AgentWorkspaceHeaderProps; cwd:
         answerKey ? `${base}/work?answer=${encodeURIComponent(answerKey)}` : `${base}/work?give=1`
       }
       settingsPath={`${base}/settings`}
+      diagnosticsPath={`${base}/advanced`}
       refresh={props.refresh}
       onExec={props.onExec}
       onDeleted={() => navigate("/")}

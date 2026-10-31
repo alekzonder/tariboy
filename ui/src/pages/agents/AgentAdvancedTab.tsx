@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import AgentPrompt from "@/pages/AgentPrompt";
 import AgentContext from "@/pages/AgentContext";
 import AgentFiles from "@/pages/AgentFiles";
@@ -42,7 +42,7 @@ function RawSnapshot() {
   );
 }
 
-export default function AgentAdvancedTab() {
+export default function AgentAdvancedTab({ base }: { base: string }) {
   const [params, setParams] = useSearchParams();
   const requested = params.get("view");
   const view: View = isView(requested) ? requested : "prompt";
@@ -64,6 +64,12 @@ export default function AgentAdvancedTab() {
     );
   return (
     <TabPage>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">Diagnostics</h2>
+        <Button asChild size="sm" variant="outline">
+          <Link to={`${base}/work`}>Back to Work</Link>
+        </Button>
+      </div>
       <div className="flex flex-wrap gap-2">
         {VIEWS.map(([key, label]) => (
           <Button
@@ -75,6 +81,9 @@ export default function AgentAdvancedTab() {
             {label}
           </Button>
         ))}
+        <Button asChild size="sm" variant="outline">
+          <Link to={`${base}/mailbox`}>Mailbox</Link>
+        </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">{content}</div>
     </TabPage>

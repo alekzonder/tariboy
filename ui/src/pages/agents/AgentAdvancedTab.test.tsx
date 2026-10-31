@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { render, screen } from "@/test/queryRender";
+import { fireEvent, render, screen } from "@/test/queryRender";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import AgentAdvancedTab from "./AgentAdvancedTab";
 import { AgentNameContext } from "@/lib/agent";
@@ -24,7 +24,11 @@ function renderAdvanced(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <AgentNameContext.Provider value="worker">
         <Routes>
-          <Route path="/agents/:hostId/:agent/advanced/*" element={<AgentAdvancedTab />} />
+          <Route
+            path="/agents/:hostId/:agent/advanced/*"
+            element={<AgentAdvancedTab base={path.split("/advanced")[0]} />}
+          />
+          <Route path="/agents/:hostId/:agent/mailbox" element={<div>Mailbox</div>} />
         </Routes>
       </AgentNameContext.Provider>
     </MemoryRouter>,
@@ -46,4 +50,32 @@ it("opens an old Channels or Messages link on the default view", async () => {
   renderAdvanced("/agents/local/worker/advanced?view=channels");
 
   expect(await screen.findByTestId("prompt-view")).toBeInTheDocument();
+});
+
+it("links Diagnostics to the same agent's Mailbox and Work without writes", async () => {
+  renderAdvanced("/agents/remote/worker/advanced");
+
+  expect(await screen.findByRole("heading", { name: "Diagnostics" })).toBeVisible();
+  expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+    "Prompt",
+    "Context",
+    "Files",
+    "Scripts",
+    "Full audit",
+    "Raw usage",
+    "Raw settings",
+  ]);
+  expect(screen.getByRole("link", { name: "Mailbox" })).toHaveAttribute(
+    "href",
+    "/agents/remote/worker/mailbox",
+  );
+  expect(screen.getByRole("link", { name: "Back to Work" })).toHaveAttribute(
+    "href",
+    "/agents/remote/worker/work",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Scripts" }));
+  fireEvent.click(screen.getByRole("link", { name: "Mailbox" }));
+  expect(
+    vi.mocked(fetch).mock.calls.every(([, init]) => !init?.method || init.method === "GET"),
+  ).toBe(true);
 });

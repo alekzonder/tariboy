@@ -23,24 +23,26 @@ export function LibraryHeader({
     <nav
       aria-label="Library"
       data-toolbar
-      className="flex shrink-0 flex-nowrap items-center gap-0.5 border-b px-3"
+      className="flex shrink-0 flex-nowrap items-center gap-1.5 border-b px-4 py-2"
     >
-      {TABS.map(({ item, label, tour }) => (
-        <NavLink
-          key={item}
-          to={navPath(item, hostId)}
-          data-tour={tour}
-          className={({ isActive }) =>
-            cn(
-              "flex h-8.5 shrink-0 items-center border-b-2 border-transparent px-2.5 text-body whitespace-nowrap text-muted-foreground hover:text-foreground",
-              isActive && "border-primary font-medium text-foreground",
-            )
-          }
-        >
-          {label}
-        </NavLink>
-      ))}
-      {hostControl && <div className="ml-auto py-1">{hostControl}</div>}
+      {hostControl && <div className="flex h-7 shrink-0 items-center">{hostControl}</div>}
+      <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
+        {TABS.map(({ item, label, tour }) => (
+          <NavLink
+            key={item}
+            to={navPath(item, hostId)}
+            data-tour={tour}
+            className={({ isActive }) =>
+              cn(
+                "flex h-8.5 shrink-0 items-center border-b-2 border-transparent px-2.5 text-body whitespace-nowrap text-muted-foreground hover:text-foreground",
+                isActive && "border-primary font-medium text-foreground",
+              )
+            }
+          >
+            {label}
+          </NavLink>
+        ))}
+      </div>
     </nav>
   );
 }

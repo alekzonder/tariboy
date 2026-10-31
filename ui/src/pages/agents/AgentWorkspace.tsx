@@ -49,7 +49,9 @@ type TabContext = {
 };
 
 const TAB_CONTENT: Record<AgentTab, (ctx: TabContext) => ReactNode> = {
-  mailbox: ({ agent, view }) => <AgentMailboxTab name={agent.name} batch={view?.messages_batch} />,
+  mailbox: ({ agent, view, base }) => (
+    <AgentMailboxTab name={agent.name} batch={view?.messages_batch} base={base} />
+  ),
   console: ({ hostId, agent, refresh, execCount, terminalKey, knownAbsent, onAbsent }) => (
     <AgentConsoleTab
       key={terminalKey}
@@ -75,7 +77,7 @@ const TAB_CONTENT: Record<AgentTab, (ctx: TabContext) => ReactNode> = {
     </>
   ),
   settings: ({ refresh, base }) => <AgentConfigurationTab base={base} refresh={refresh} />,
-  advanced: () => <AgentAdvancedTab />,
+  advanced: ({ base }) => <AgentAdvancedTab base={base} />,
 };
 
 // The workspace is a server-selection boundary: the agent lives on the host the
