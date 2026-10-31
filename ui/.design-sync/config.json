@@ -43,7 +43,6 @@
     "PathAutocomplete": "src/components/PathAutocomplete.tsx",
     "PriorityTag": "src/components/ui/status.tsx",
     "ProxyCallRow": "src/components/ProxyCallRow.tsx",
-    "RunStateActions": "src/components/AgentControls.tsx",
     "ScrollArea": "src/components/ui/scroll-area.tsx",
     "Segmented": "src/components/ui/segmented.tsx",
     "Select": "src/components/ui/select.tsx",
@@ -141,9 +140,6 @@
       "cardMode": "column"
     },
     "PriorityTag": {
-      "cardMode": "column"
-    },
-    "RunStateActions": {
       "cardMode": "column"
     },
     "ScrollArea": {
