@@ -267,6 +267,10 @@ func openCodeRoutes(cfg map[string]any, selected map[string][]string, metadata m
 			if base == "" {
 				return nil, errors.New("OpenCode selected provider has no resolved upstream URL")
 			}
+			// OpenCode normalizes the official Anthropic root before creating its SDK.
+			if family == "anthropic" && strings.TrimRight(base, "/") == "https://api.anthropic.com" {
+				base = "https://api.anthropic.com/v1"
+			}
 			route := aiproxy.ProviderRoute{BaseURL: base, Provider: family}
 			if prior, ok := routes[id]; ok && prior != route {
 				return nil, errors.New("OpenCode provider uses incompatible model transports")

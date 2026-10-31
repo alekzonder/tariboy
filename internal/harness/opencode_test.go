@@ -186,3 +186,38 @@ func TestOpenCodeAuthRequiresUnambiguousDataDirectory(t *testing.T) {
 		t.Fatal("missing HOME could select unchecked account credentials")
 	}
 }
+
+func TestOpenCodeAnthropicOfficialRootNormalization(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, id, sdk, source, base, want string }{
+		{"config root", "anthropic", "@ai-sdk/anthropic", "config", "https://api.anthropic.com", "https://api.anthropic.com/v1"},
+		{"config trailing slash", "anthropic", "@ai-sdk/anthropic", "config", "https://api.anthropic.com/", "https://api.anthropic.com/v1"},
+		{"environment root", "anthropic", "@ai-sdk/anthropic", "env", "https://api.anthropic.com", "https://api.anthropic.com/v1"},
+		{"environment trailing slash", "anthropic", "@ai-sdk/anthropic", "env", "https://api.anthropic.com/", "https://api.anthropic.com/v1"},
+		{"already versioned", "anthropic", "@ai-sdk/anthropic", "config", "https://api.anthropic.com/v1", "https://api.anthropic.com/v1"},
+		{"custom SDK provider", "custom", "@ai-sdk/anthropic", "config", "https://api.anthropic.com", "https://api.anthropic.com/v1"},
+		{"custom root", "anthropic", "@ai-sdk/anthropic", "config", "https://custom.example", "https://custom.example"},
+		{"custom path", "anthropic", "@ai-sdk/anthropic", "env", "https://custom.example/coding/v2", "https://custom.example/coding/v2"},
+		{"official custom path", "anthropic", "@ai-sdk/anthropic", "config", "https://api.anthropic.com/custom", "https://api.anthropic.com/custom"},
+		{"other SDK unchanged", "custom", "@ai-sdk/openai-compatible", "config", "https://api.anthropic.com", "https://api.anthropic.com"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := map[string]any{}
+			env := []string{"HOME=" + t.TempDir()}
+			if tc.source == "config" {
+				cfg["provider"] = map[string]any{tc.id: map[string]any{"options": map[string]any{"baseURL": tc.base}}}
+			} else {
+				env = append(env, "ANTHROPIC_BASE_URL="+tc.base)
+			}
+			model := openCodeModelMetadata{ID: "model", ProviderID: tc.id}
+			model.API.NPM = tc.sdk
+			routes, err := openCodeRoutes(cfg, map[string][]string{tc.id: {"model"}}, map[string]openCodeModelMetadata{tc.id + "/model": model}, env)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := routes[tc.id].BaseURL; got != tc.want {
+				t.Fatalf("baseURL=%q, want %q", got, tc.want)
+			}
+		})
+	}
+}
