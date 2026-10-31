@@ -325,9 +325,8 @@ type ManagedShim struct {
 // exited without writing result.json.
 const shimExitedReason = "shim exited before writing result (see shim.log)"
 
-// ProxyBinder is the slice of the AI proxy the runner needs. Defined here (plain
-// strings, no aiproxy import) so loop stays free of an import cycle; satisfied by
-// *aiproxy.Proxy via thin wrapper methods (Task 12).
+// ProxyBinder is the slice of the AI proxy every harness runner needs.
+// OpenCode additionally requires provider-route registration during preparation.
 type ProxyBinder interface {
 	ProxyBaseURL() string
 	MintToken(agent, iteration, imageName, imageTag, imageDigest string) (string, error)
@@ -890,7 +889,7 @@ func (r *ShimRunner) prepareSteps(ctx context.Context, ag agent.Agent, l agentdi
 		return preparedRun{}, err
 	}
 
-	prep, err := r.buildLaunch(ag, l, iterationID, in, adapter, cwd, secrets, proxyURL, proxyToken)
+	prep, err := r.buildLaunch(ctx, ag, l, iterationID, in, adapter, cwd, secrets, proxyURL, proxyToken)
 	if err != nil {
 		return preparedRun{}, err
 	}
@@ -1138,7 +1137,7 @@ func (r *ShimRunner) mintProxyToken(ctx context.Context, ag agent.Agent, iterati
 // buildLaunch builds the harness argv and environment, preflights the
 // executables the iteration needs, and composes the shim command with its
 // masked audit copy.
-func (r *ShimRunner) buildLaunch(ag agent.Agent, l agentdir.Layout, iterationID string, in prepareInputs, adapter harness.Adapter, cwd string, secrets map[string]string, proxyURL, proxyToken string) (preparedRun, error) {
+func (r *ShimRunner) buildLaunch(ctx context.Context, ag agent.Agent, l agentdir.Layout, iterationID string, in prepareInputs, adapter harness.Adapter, cwd string, secrets map[string]string, proxyURL, proxyToken string) (preparedRun, error) {
 	codexApproval := ""
 	if r.cfg.CodexApproval != nil {
 		codexApproval = r.cfg.CodexApproval()
@@ -1155,16 +1154,31 @@ func (r *ShimRunner) buildLaunch(ag agent.Agent, l agentdir.Layout, iterationID 
 	if in.bare {
 		binDir = ""
 	}
-	env := BuildEnv(base, binDir, ag.Name, iterationID, l.Sock(), r.cfg.Proxy != nil, proxyURL, proxyToken, ag.Env, secrets)
+	envProxyURL := proxyURL
+	if adapter.Type() == "opencode" {
+		envProxyURL = "" // Preserve original provider addresses for discovery.
+	}
+	env := BuildEnv(base, binDir, ag.Name, iterationID, l.Sock(), r.cfg.Proxy != nil, envProxyURL, proxyToken, ag.Env, secrets)
 	env, err = mergeSkillLaunchEnv(env, in.activated.Skills.Env)
 	if err != nil {
 		return preparedRun{}, err
+	}
+	mask := ""
+	if adapter.Type() == "opencode" {
+		env, cwd, mask, err = r.prepareOpenCode(ctx, l, cwd, env, in.activated.Skills.Env, ag.Model, proxyURL, proxyToken)
+		if err != nil {
+			return preparedRun{}, err
+		}
 	}
 	env, bash, err := preflightExecutables(adapter, env, cwd, in.bare)
 	if err != nil {
 		return preparedRun{}, err
 	}
-	hargv = agentShellCommand(bash, filepath.Dir(r.cfg.AgentsDir), l, hargv)
+	if adapter.Type() == "opencode" {
+		hargv = append([]string{"/bin/sh", "-c", `umask "$1"; shift; exec "$@"`, "tariboy-opencode", mask}, hargv...)
+	} else {
+		hargv = agentShellCommand(bash, filepath.Dir(r.cfg.AgentsDir), l, hargv)
+	}
 
 	// Compose the shim command.
 	tmuxSession := ""

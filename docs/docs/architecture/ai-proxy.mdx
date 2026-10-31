@@ -161,6 +161,46 @@ retained iterations. Its explicit ZIP export contains `audit.md` for human
 review and lossless `audit.jsonl` records for downstream analysis. The JSONL
 records preserve the raw proxied request and response bodies.
 
+## OpenCode harness
+
+Both OpenCode launch modes prepare provider routes before starting the shim.
+After the global and agent shell scripts run, bounded `opencode debug config`
+and `opencode models --verbose` probes resolve the main model, `small_model`,
+and explicitly configured agent models. The main model must be an explicit
+`provider/model` selection in the agent settings or OpenCode configuration.
+When no small model is configured, it uses the main model.
+
+Each selected provider's original address is bound to the iteration lease.
+Address templates such as `${API_HOST}` use the final launch environment.
+An unresolved template fails preparation before the harness starts.
+An in-memory `OPENCODE_CONFIG_CONTENT` overlay replaces its `options.baseURL`
+with a tokenized local route, limits enabled providers and their model lists,
+and is checked again with `debug config`. Image skills keep their existing
+`OPENCODE_CONFIG_DIR`. Original configuration and authentication files are not
+rewritten, and API keys remain OpenCode's responsibility. The proxy forwards
+provider authentication only to the bound upstream and removes its own token.
+For example, `kimi-code-plan-global/k3` keeps Kimi's coding endpoint rather
+than selecting OpenAI from the model name.
+
+Supported transports are `@ai-sdk/openai`, `@ai-sdk/openai-compatible`, and
+`@ai-sdk/anthropic` with API-key authentication. Missing proxy service, failed
+probes, unresolved models, external OpenCode plugins, OAuth credentials, model
+transport overrides, and incompatible transports fail preparation. Inline
+`OPENCODE_CONFIG_CONTENT` must be a JSON object; JSONC configuration files
+remain supported by OpenCode. No direct-provider fallback is installed.
+
+Requests use the ordinary usage, budget, attribution, and full transcript path.
+OpenAI-compatible streams request final usage. Provider routes survive daemon
+handoff with the lease and disappear when it is revoked. This accounts for new
+iterations; previous direct requests have no proxy transcript to recover.
+
+Pricing uses the exact returned or requested model identifier, including `k3`,
+without substituting a similar model. Unknown prices retain token counts and
+zero cost with a bounded warning. OpenCode's zero Kimi catalog price does not
+establish a per-token subscription price: a reliable manual or catalog price
+is needed for nonzero USD accounting. Unknown prices also mean USD budgets
+cannot cap actual provider spend.
+
 ## Cursor harness
 
 The Cursor CLI speaks Connect RPC over HTTP/2, so the proxy listener also

@@ -127,6 +127,17 @@ func (a *SSEAccumulator) FeedData(jsonLine []byte) {
 	if json.Unmarshal(jsonLine, &ev) != nil {
 		return
 	}
+	if ev.Type == "" {
+		var completion openAIUsageResponse
+		if json.Unmarshal(jsonLine, &completion) == nil {
+			if completion.Model != "" {
+				a.model = completion.Model
+			}
+			if completion.Usage != nil {
+				a.u = completion.parsedUsage()
+			}
+		}
+	}
 	switch ev.Type {
 	case "message_start":
 		if ev.Message != nil {

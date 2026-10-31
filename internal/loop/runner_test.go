@@ -1183,6 +1183,23 @@ func TestRunnerSchemaV2AttachesImageSkillBridgeWithoutChangingCWDOrHome(t *testi
 				AgentsDir: agentsDir, Store: as, ShimBin: "/opt/tariboy-shim",
 				Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 			})
+			if tc.harnessType == "opencode" {
+				installOpenCodeProbe(t, binDir)
+				for _, name := range []string{"python3", "bash"} {
+					executable, err := exec.LookPath(name)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Remove(filepath.Join(binDir, name)); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Symlink(executable, filepath.Join(binDir, name)); err != nil {
+						t.Fatal(err)
+					}
+				}
+				ag.Model = "kimi-code-plan-global/k3"
+				r.cfg.Proxy = &openCodeBinder{fakeBinder: fakeBinder{base: "http://127.0.0.1:1234"}}
+			}
 			ctx := context.WithValue(context.Background(), activatedImageContextKey{}, activatedImage{Skills: bridge.Launch})
 			prepared, err := r.prepare(ctx, otel.Tracer("test"), ag, l, iterID, "")
 			if err != nil {

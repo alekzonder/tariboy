@@ -35,6 +35,11 @@ func OpenTokenRegistry(path string, r io.Reader) (*TokenRegistry, error) {
 	if state.Tokens == nil {
 		state.Tokens = map[string]Attribution{}
 	}
+	for _, attr := range state.Tokens {
+		if !validProviderRoutes(attr.Routes) {
+			return nil, fmt.Errorf("invalid AI proxy handoff routes")
+		}
+	}
 	reg.listenAddr = state.ListenAddr
 	reg.tokens = state.Tokens
 	return reg, nil

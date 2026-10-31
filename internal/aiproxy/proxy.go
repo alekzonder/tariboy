@@ -41,6 +41,8 @@ type Exchange struct {
 	Status         string // ok | budget_block | auth_error | upstream_error | rate_limited | quota_probe | client_closed
 	Start          time.Time
 	LatencyMs      int
+	Route          *ProviderRoute
+	InvalidRoute   bool
 }
 
 type Handler func(*Exchange) error
@@ -124,7 +126,7 @@ func (p *Proxy) middlewares() []Middleware {
 func (p *Proxy) upstreamRouteGuard(next Handler) Handler {
 	return func(ex *Exchange) error {
 		routeSafe := ex.EscapedPathOK && isSafeEscapedRoutePath(ex.Path, ex.EscapedPath)
-		if routeSafe && (!isChatGPTRequest(ex.R.Header) || isCodexRoute(ex.Path)) {
+		if routeSafe && !ex.InvalidRoute && (len(ex.Attr.Routes) == 0 || ex.Route != nil) && (!isChatGPTRequest(ex.R.Header) || (ex.Route == nil && isCodexRoute(ex.Path))) {
 			return next(ex)
 		}
 		ex.Status = "auth_error"
@@ -276,7 +278,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ex := &Exchange{R: r, W: w, Path: r.URL.Path, Start: p.cfg.Clock()}
 	p.resolvePathToken(ex)
 	p.recordActivity(ex)
-	ex.Provider = providerFor(r.URL.Path)
+	ex.Provider = providerFor(ex.Path)
+	if ex.Route != nil {
+		ex.Provider = ex.Route.Provider
+	}
 	if !Provider(ex.Provider).spec().passthrough {
 		body, err := io.ReadAll(io.LimitReader(r.Body, 32<<20))
 		tidy.Close(nil, r.Body)
@@ -333,6 +338,24 @@ func (p *Proxy) resolvePathToken(ex *Exchange) {
 	ex.EscapedPath, ex.EscapedPathOK = tokenPathSuffix(escapedPath, tok, ex.Path)
 	ex.EscapedPathOK = ex.EscapedPathOK && escapedOK
 	ex.R.URL.RawPath = ""
+	const routePrefix = "/_opencode/"
+	if strings.HasPrefix(ex.Path, routePrefix) {
+		ex.InvalidRoute = true
+		if !ex.EscapedPathOK || !isSafeEscapedRoutePath(ex.Path, ex.EscapedPath) {
+			return
+		}
+		rest := strings.TrimPrefix(ex.Path, routePrefix)
+		id, suffix, found := strings.Cut(rest, "/")
+		route, ok := attr.Routes[id]
+		if !found || !ok {
+			return
+		}
+		ex.Path = "/" + suffix
+		ex.R.URL.Path = ex.Path
+		ex.EscapedPath = ex.Path
+		ex.Route = &route
+		ex.InvalidRoute = false
+	}
 }
 
 func validatedEscapedPath(u *url.URL) (string, bool) {
@@ -528,6 +551,10 @@ func (p *Proxy) MintToken(agent, iteration, imageName, imageTag, imageDigest str
 
 func (p *Proxy) RevokeToken(token string) { p.Revoke(token) }
 
+func (p *Proxy) RegisterProviderRoutes(token string, routes map[string]ProviderRoute) error {
+	return p.cfg.Tokens.RegisterProviderRoutes(token, routes)
+}
+
 func (p *Proxy) RevokeIteration(iteration string) {
 	if err := p.cfg.Tokens.RevokeIteration(iteration); err != nil {
 		p.cfg.Log.Error("revoke iteration tokens: removal not persisted, tokens may return after restart",
@@ -621,7 +648,12 @@ func (p *Proxy) BaseURL() string { return "http://" + p.Addr() }
 // doForward proxies to the resolved upstream and parses usage/model/cost.
 // Provider credentials are forwarded as the harness sent them.
 func (p *Proxy) doForward(ex *Exchange) error {
-	if Provider(ex.Provider).spec().requireAuthorization && ex.R.Header.Get("Authorization") == "" {
+	if ex.Route != nil && headerContainsToken(ex.R.Header, ex.Token) {
+		ex.Status = "auth_error"
+		ex.W.WriteHeader(http.StatusUnauthorized)
+		return nil
+	}
+	if ex.Route == nil && Provider(ex.Provider).spec().requireAuthorization && ex.R.Header.Get("Authorization") == "" {
 		ex.Status = "auth_error"
 		ex.W.Header().Set("Content-Type", "application/json")
 		ex.W.WriteHeader(http.StatusUnauthorized)
@@ -638,7 +670,11 @@ func (p *Proxy) doForward(ex *Exchange) error {
 	}
 	target.RawQuery = ex.R.URL.RawQuery
 
-	reqBody := io.Reader(bytes.NewReader(ex.ReqBody))
+	forwardBody := ex.ReqBody
+	if ex.Route != nil && ex.Provider == string(ProviderOpenAI) && (ex.Path == "/chat/completions" || ex.Path == "/v1/chat/completions") {
+		forwardBody = includeStreamUsage(forwardBody)
+	}
+	reqBody := io.Reader(bytes.NewReader(forwardBody))
 	if Provider(ex.Provider).spec().passthrough {
 		reqBody = ex.R.Body
 	}
@@ -694,7 +730,9 @@ func (p *Proxy) doForward(ex *Exchange) error {
 		}
 	} else if strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
 		ex.Streamed = true
-		p.streamThrough(ex, resp.Body)
+		if err := p.streamThrough(ex, resp.Body); err != nil {
+			ex.Status = "upstream_error"
+		}
 	} else {
 		body, rerr := io.ReadAll(resp.Body)
 		// Pass through whatever bytes we received (byte-identical); a read error
@@ -714,6 +752,20 @@ func (p *Proxy) doForward(ex *Exchange) error {
 		ex.Status = "ok"
 	}
 	return nil
+}
+
+func headerContainsToken(h http.Header, token string) bool {
+	if token == "" {
+		return false
+	}
+	for _, values := range h {
+		for _, value := range values {
+			if strings.Contains(value, token) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // failureStatus names a failed exchange. A client that went away first (the
@@ -768,6 +820,9 @@ func isChatGPTRequest(h http.Header) bool {
 }
 
 func (p *Proxy) upstreamFor(ex *Exchange) Upstream {
+	if ex.Route != nil {
+		return Upstream{BaseURL: ex.Route.BaseURL}
+	}
 	provider := Provider(ex.Provider)
 	if provider == ProviderOpenAI && isChatGPTRequest(ex.R.Header) {
 		return p.cfg.Router.ResolveDefault(providerChatGPT)
@@ -776,6 +831,27 @@ func (p *Proxy) upstreamFor(ex *Exchange) Upstream {
 		return p.cfg.Router.ResolveDefault(string(provider))
 	}
 	return p.cfg.Router.Resolve(string(provider), modelFromBody(ex.ReqBody))
+}
+
+func includeStreamUsage(body []byte) []byte {
+	var request map[string]json.RawMessage
+	if json.Unmarshal(body, &request) != nil || string(request["stream"]) != "true" {
+		return body
+	}
+	var options map[string]json.RawMessage
+	if len(request["stream_options"]) != 0 && json.Unmarshal(request["stream_options"], &options) != nil {
+		return body
+	}
+	if options == nil {
+		options = make(map[string]json.RawMessage)
+	}
+	options["include_usage"] = json.RawMessage("true")
+	request["stream_options"], _ = json.Marshal(options)
+	updated, err := json.Marshal(request)
+	if err != nil {
+		return body
+	}
+	return updated
 }
 
 var errCrossOriginRedirect = errors.New("cross-origin redirect blocked")
@@ -803,7 +879,14 @@ func requestUsesAttributionToken(h http.Header, token string) bool {
 	if token == "" {
 		return false
 	}
-	return h.Get("x-api-key") == token || h.Get("Authorization") == "Bearer "+token
+	for _, key := range []string{"x-api-key", "Authorization"} {
+		for _, value := range h.Values(key) {
+			if value == token || value == "Bearer "+token {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // respBodyCap bounds the copy of a streamed response body kept for the
@@ -819,18 +902,19 @@ const respBodyCap = 8 << 20 // 8 MiB
 // the streamed response (spec §9 gap). The tee is a copy: the client output is
 // unchanged and stays byte-identical to the upstream stream even after the cap
 // is hit — only the captured copy stops growing (a truncation marker is added).
-func (p *Proxy) streamThrough(ex *Exchange, body io.Reader) {
+func (p *Proxy) streamThrough(ex *Exchange, body io.Reader) error {
 	acc := &SSEAccumulator{}
 	flusher, _ := ex.W.(http.Flusher)
 	br := bufio.NewReaderSize(body, 64*1024)
 	var capture bytes.Buffer
 	truncated := false
+	var streamErr error
 	for {
 		line, err := br.ReadBytes('\n')
 		if len(line) > 0 {
 			// Pass through unmodified so the client stream is byte-identical.
-			ex.W.Write(line)
-			if flusher != nil {
+			_, writeErr := ex.W.Write(line)
+			if writeErr == nil && flusher != nil {
 				flusher.Flush()
 			}
 			// Tee a capped copy for the transcript (never touches client output).
@@ -852,8 +936,15 @@ func (p *Proxy) streamThrough(ex *Exchange, body io.Reader) {
 					acc.FeedData(payload)
 				}
 			}
+			if writeErr != nil {
+				streamErr = writeErr
+				break
+			}
 		}
 		if err != nil {
+			if err != io.EOF {
+				streamErr = err
+			}
 			break
 		}
 	}
@@ -862,7 +953,11 @@ func (p *Proxy) streamThrough(ex *Exchange, body io.Reader) {
 	}
 	ex.RespBody = capture.Bytes()
 	ex.Usage, ex.Model = acc.Result()
+	if ex.Model == "" {
+		ex.Model = modelFromBody(ex.ReqBody)
+	}
 	p.setUsageCost(ex)
+	return streamErr
 }
 
 func copyFlush(dst http.ResponseWriter, src io.Reader) error {

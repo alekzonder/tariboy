@@ -85,7 +85,7 @@ func maskLaunch(argv, env []string, secrets map[string]string, extraValues ...st
 		// whole login-shell environment, so anything an rc file exports arrives
 		// here. They remain available to the child, but their values must never
 		// enter logs or audit records.
-		if val != "" && isCredentialShapedKey(key) {
+		if val != "" && (isCredentialShapedKey(key) || key == "OPENCODE_CONFIG_CONTENT") {
 			maskedEnv[i] = key + "=" + secretPlaceholder
 			continue
 		}
