@@ -1,3 +1,31 @@
+## [0.101.0] - 2026-10-31
+
+### Added
+
+- The daemon registers the default Tariboy Store and builds `basic` in the background when they are missing. `onboarding.status` reports progress, and `onboarding.retry` retries setup. Use `TARIBOY_ONBOARDING=off` or `--onboarding=off` to disable automatic setup.
+- The first-run screen shows setup progress and a smaller New agent form with detected coding tools and folder creation.
+- Home shows work that needs you, running agents, daily totals, and recent agents. Global search finds agents and tasks.
+- The agent Work tab creates tasks and shows Needs you cards for answers and workflow decisions.
+- `ttasks queue pool delete` and queue settings delete unused pools. Pools needed by workflows or open status visits remain protected.
+- The macOS View menu adds Zoom In, Zoom Out, and Actual Size. Zoom persists across restarts within 50–200 percent.
+
+### Changed
+
+- The sidebar groups Home, Agents, Tasks, Inbox, Library, and Settings. Library groups images, workflows, and sources. Settings uses seven flat pages. Old routes redirect to the new pages.
+- The agent workspace uses Terminal, Work, Activity, and Settings tabs. The header shows the agent state and its next action. Activity groups run history, usage, and status history under More.
+- Agent Settings groups coding tool, Autopilot, spending limits, and image controls, with other controls under Advanced. The interval and soft timeout use minutes in the UI. The API continues to use seconds.
+- Task details pin the Needs you card, collapse secondary details, and use an assignee list. Task filters and columns use a smaller layout.
+- `basic` is an ordinary Store image that can be rebuilt or removed. Only `bare:latest` remains reserved.
+
+### Fixed
+
+- Read customer notices stay in the inbox until archived.
+- Text fields disable unwanted autocorrect and capitalization across Desktop and Store UI.
+- New tasks remember the selected queue per agent and host.
+- Store rows show failed builds and their operation links. A destroyed Markdown editor no longer receives a state update.
+
+[0.101.0]: https://github.com/alekzonder/tariboy/compare/v0.100.0...v0.101.0
+
 ## [0.100.0] - 2026-10-30
 
 ### Added
