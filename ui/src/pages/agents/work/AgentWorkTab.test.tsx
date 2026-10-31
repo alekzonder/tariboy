@@ -9,9 +9,19 @@ import AgentWorkTab from "./AgentWorkTab";
 
 vi.mock("@/pages/tasks/useTaskQueryEvents", () => ({ useTaskQueryEvents: vi.fn() }));
 vi.mock("@/pages/tasks/NeedsYouCard", () => ({
-  default: ({ taskKey, focus }: { taskKey: string; focus?: boolean }) => (
+  default: ({
+    taskKey,
+    focus,
+    onOpen,
+  }: {
+    taskKey: string;
+    focus?: boolean;
+    onOpen?: () => void;
+  }) => (
     <div data-testid="needs-card">
-      {taskKey}
+      <button type="button" onClick={onOpen}>
+        {taskKey}
+      </button>
       {focus ? " focused" : ""}
     </div>
   ),
@@ -281,4 +291,18 @@ it("opens the drawer for ?task=", () => {
     "/agents/local/bob/work?task=TASK-3",
   );
   expect(screen.getByRole("dialog")).toHaveTextContent("drawer TASK-3");
+});
+
+it("opens a Needs you task in the existing Work drawer", async () => {
+  render(
+    <AgentWorkTab
+      base="/agents/local/bob"
+      agent={bob}
+      needs={{ count: 1, items: [{ key: "DEV-4", at: "", question: false }] }}
+      refresh={vi.fn()}
+    />,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "DEV-4" }));
+  expect(screen.getByRole("dialog")).toHaveTextContent("drawer DEV-4");
+  expect(api.advanceTask).not.toHaveBeenCalled();
 });

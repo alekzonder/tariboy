@@ -2,10 +2,9 @@ import { useState, type ComponentProps } from "react";
 import { DaemonProvider, TaskDetail, QueryClientProvider, createQueryClient } from "tariboy-ui";
 
 // TaskDetail is the task panel TasksWorkspace docks on the right when a row is
-// selected: sticky header (Back · key · title · Save task · close), the metadata
-// strip, the editable title/description/properties fieldset, dependencies,
-// comments and the event history. It is fully prop-driven — no fetching of its
-// own — so unlike the other page surfaces it renders with REAL data here.
+// selected: sticky header with an editable title, workflow decisions when
+// applicable, description, properties, dependencies, comments and history.
+// Workflow details load through the surrounding API provider.
 //
 // One structural note for anyone reusing this preview: the panel is a Radix
 // Dialog, so its content portals to document.body and is `position: fixed`,

@@ -220,6 +220,7 @@ test("Tasks production workspace opens, closes, resizes, and restores the detail
   await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 10, y: 10 } });
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByTestId(`task-row-${resizeKey}`).locator(".task-row-main").click();
+  await page.getByRole("dialog").getByRole("button", { name: "Edit title" }).click();
   await page.getByRole("dialog").getByLabel("Title").fill("Unsaved resize detail");
   await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 10, y: 10 } });
   await expect(
@@ -345,6 +346,7 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await page.getByTestId(`task-row-${rootKey}`).locator(".task-row-main").click();
   const detail = page.locator(".task-detail-panel");
   await expect(detail.getByRole("heading", { name: rootKey })).toBeVisible();
+  await detail.getByRole("button", { name: "Edit title" }).click();
   await detail.getByLabel("Title").fill("Root task updated");
   await detail
     .getByRole("textbox", { name: "Description" })
@@ -406,22 +408,19 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
     pull_request: "",
   });
 
-  // A question to the customer pins the Needs you card above the fields.
+  // A customer question is answered through the ordinary comment form.
   await detail.getByLabel("Ask an agent", { exact: true }).selectOption("user:customer");
   await detail.getByLabel("Comment", { exact: true }).fill("Please confirm the browser workflow");
   await detail.getByRole("button", { name: "Send comment" }).click();
-  const card = detail.getByRole("region", { name: "Needs you" });
-  await expect(card.getByText("Please confirm the browser workflow")).toBeVisible();
-  await expect(card.getByRole("button", { name: "Reply Ok to the question" })).toBeVisible();
+  await expect(detail.getByText("Please confirm the browser workflow")).toBeVisible();
 
   await page.reload();
   await expect(page.getByLabel("Search tasks")).toBeVisible();
   await toggleWaitingForMe(page);
   await expect(page.getByTestId(`task-row-${rootKey}`)).toBeVisible();
   await page.getByTestId(`task-row-${rootKey}`).locator(".task-row-main").click();
-  await card.getByLabel("Message").fill("Confirmed from the customer");
-  await card.getByRole("button", { name: "Send answer" }).click();
-  await expect(card).toHaveCount(0);
+  await detail.getByLabel("Comment", { exact: true }).fill("Confirmed from the customer");
+  await detail.getByRole("button", { name: "Send comment" }).click();
   await expect(detail.getByText("Confirmed from the customer")).toBeVisible();
 
   await detail.getByRole("button", { name: "Close task detail" }).click();
@@ -641,7 +640,7 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   await expandSection(detail, "Workflow");
   await expect(detail.getByText("wfui@0.1.0"), "step 4: the panel header").toBeVisible();
   await expect(detail.getByText("status approval")).toBeVisible();
-  await expect(detail.getByRole("button", { name: "approved", exact: true })).toBeEnabled();
+  await expect(detail.getByRole("button", { name: "approved → done" })).toBeEnabled();
   await expect(
     detail.getByRole("combobox", { name: "Status", exact: true }),
     "step 4: no status select",
@@ -653,7 +652,7 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   step("4 drawer panel");
 
   // Step 5: approve; the task closes.
-  await detail.getByRole("button", { name: "approved", exact: true }).click();
+  await detail.getByRole("button", { name: "approved → done" }).click();
   await expect(
     detail.getByText("status done"),
     "step 5: the panel shows the terminal status",
@@ -1158,16 +1157,18 @@ test("Agent Work tab dispatches a bound-queue task to its workflow and approves 
   // the drawer, not under Needs you.
   await readyForApproval(request, key);
   await page.goto(workPage(`?task=${key}`));
-  const card = page.getByRole("dialog", { name: key }).getByRole("region", { name: "Needs you" });
-  await expect(card).toContainText("The workflow waits for your decision in approval.");
-  const plan = detailsSection(card, "plan");
+  const drawer = page.getByRole("dialog", { name: key });
+  const card = drawer.getByRole("region", { name: "Workflow decision" });
+  await expect(card).toContainText("Waiting for your decision");
+  await card.getByRole("button", { name: "View plan" }).click();
+  const plan = detailsSection(drawer, "plan");
   await expect(plan).toHaveAttribute("open", "");
   await expect(plan.getByRole("heading", { name: "Plan" })).toBeVisible();
   await expect(plan.getByText("Publish the notes")).toBeVisible();
   await expect(card.getByRole("button", { name: "rework → draft" })).toBeEnabled();
 
   // Step 4: approve with a message; the task moves on.
-  await card.getByLabel("Message").fill("Go ahead");
+  await card.getByLabel("Outcome message").fill("Go ahead");
   await card.getByRole("button", { name: "approved → build" }).click();
   await expect.poll(async () => (await taskFromAPI(request, key)).status).toBe("build");
   const view = (await (await request.get(`${daemonURL}/api/tasks/${key}/workflow`)).json())
@@ -1176,5 +1177,5 @@ test("Agent Work tab dispatches a bound-queue task to its workflow and approves 
     view.visits.find((visit) => visit.status === "approval" && visit.left_at)?.message,
     "step 4: the message is the transition message",
   ).toBe("Go ahead");
-  await expect(card).toHaveCount(0);
+  await expect(card).toContainText("The agent continues");
 });

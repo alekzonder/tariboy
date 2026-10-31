@@ -56,6 +56,7 @@ export default function NeedsYouCard({
   principals: knownPrincipals,
   onChanged,
   focus = false,
+  onOpen,
 }: {
   taskKey: string;
   /** The task as its owner already holds it; the card reads it otherwise. */
@@ -65,6 +66,7 @@ export default function NeedsYouCard({
   onChanged?: () => void;
   /** Scroll the card into view and focus its first button once it loads. */
   focus?: boolean;
+  onOpen?: () => void;
 }) {
   const api = useApi();
   const client = useQueryClient();
@@ -95,8 +97,23 @@ export default function NeedsYouCard({
   return (
     <CardFrame cardRef={ref}>
       <div className="flex min-w-0 items-baseline gap-2">
-        <span className={MONO}>{task.key}</span>
-        <span className="min-w-0 flex-1 truncate text-body-sm font-medium">{task.title}</span>
+        {onOpen ? (
+          <button
+            type="button"
+            data-card-open
+            aria-label={`${task.key} ${task.title}`}
+            onClick={onOpen}
+            className="flex min-w-0 flex-1 items-baseline gap-2 text-left hover:underline"
+          >
+            <span className={MONO}>{task.key}</span>
+            <span className="min-w-0 truncate text-body-sm font-medium">{task.title}</span>
+          </button>
+        ) : (
+          <>
+            <span className={MONO}>{task.key}</span>
+            <span className="min-w-0 flex-1 truncate text-body-sm font-medium">{task.title}</span>
+          </>
+        )}
         <span className="shrink-0 text-caption text-muted-foreground">
           {statusWords(task)} · {formatTaskTime(task.updated_at)}
         </span>
@@ -213,7 +230,9 @@ function useFocusOnLoad(ready: boolean) {
     if (!ready || done.current || !ref.current) return;
     done.current = true;
     ref.current.scrollIntoView?.({ block: "nearest" });
-    ref.current.querySelector<HTMLElement>("button:not(:disabled), textarea")?.focus();
+    ref.current
+      .querySelector<HTMLElement>("button:not(:disabled):not([data-card-open]), textarea")
+      ?.focus();
   }, [ready]);
   return ref;
 }

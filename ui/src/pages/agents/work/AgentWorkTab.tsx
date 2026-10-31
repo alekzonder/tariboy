@@ -81,6 +81,7 @@ export default function AgentWorkTab({
                   key={item.key}
                   taskKey={item.key}
                   focus={item.key === answer}
+                  onOpen={() => setOpenKey(item.key)}
                   onChanged={changed}
                 />
               ))}
