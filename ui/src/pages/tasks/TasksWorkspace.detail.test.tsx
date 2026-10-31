@@ -244,16 +244,17 @@ describe("TasksWorkspace", () => {
     await userEvent.click(row);
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close task detail" })).toHaveFocus();
+    await userEvent.click(screen.getByRole("button", { name: "Edit title" }));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Unsaved title" } });
     await userEvent.click(document.querySelector('[data-slot="dialog-overlay"]') as HTMLElement);
-    expect(screen.getByDisplayValue("Unsaved title")).toBeInTheDocument();
+    expect(screen.getByText("Unsaved title")).toBeInTheDocument();
     expect(
       screen.getByText(
         "Are you sure you want to close this task? Unsaved changes will be discarded.",
       ),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Keep editing" }));
-    expect(screen.getByDisplayValue("Unsaved title")).toBeInTheDocument();
+    expect(screen.getByText("Unsaved title")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
     await userEvent.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -269,8 +270,8 @@ describe("TasksWorkspace", () => {
     const dialog = await screen.findByRole("dialog", { name: "TEST-1" });
     expect(within(dialog).getByText("Loading task…")).toBeInTheDocument();
     pending.resolve(detail);
-    expect(await screen.findByLabelText("Title")).toHaveValue("Ship native tasks");
-    expect(screen.queryByText("Loading task…")).not.toBeInTheDocument();
+    expect(await screen.findByText("Ship native tasks", { selector: "span" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Loading task…")).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Close task detail" })).toHaveFocus();
     await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
     expect(row).toHaveFocus();
@@ -296,7 +297,7 @@ describe("TasksWorkspace", () => {
     api.getTask.mockReturnValue(refresh.promise);
     await act(async () => taskSocket.options?.onHint?.({ sequence: 11 }));
     expect(screen.queryByText("Loading task…")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Title")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit title" })).toBeInTheDocument();
     await act(async () => refresh.resolve(detail));
     const next = deferred<TaskDetail>();
     api.getTask.mockReturnValue(next.promise);
@@ -307,7 +308,7 @@ describe("TasksWorkspace", () => {
       "Loading task…",
     );
     next.resolve({ ...detail, task: child });
-    expect(await screen.findByLabelText("Title")).toHaveValue(child.title);
+    expect(await screen.findByText(child.title, { selector: "span" })).toBeInTheDocument();
   });
 
   it("closes a clean task when the backdrop is clicked", async () => {
@@ -324,6 +325,7 @@ describe("TasksWorkspace", () => {
   it("keeps a newer authoritative revision after saving an older mutation result", async () => {
     const mounted = render(<TasksWorkspace />);
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit title" }));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Saved" } });
     api.updateTask.mockResolvedValue({ ...root, title: "Saved", revision: 3 });
     api.getTask.mockResolvedValue({ ...detail, task: { ...root, title: "Newer", revision: 4 } });
@@ -340,6 +342,7 @@ describe("TasksWorkspace", () => {
       queryKey: [...taskKeys.server(null), "list"],
     });
     expect(lists[0][1]?.tasks[0].revision).toBe(4);
+    await userEvent.click(screen.getByRole("button", { name: "Edit title" }));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Next edit" } });
     await userEvent.click(screen.getByRole("button", { name: "Save task" }));
     expect(api.updateTask).toHaveBeenLastCalledWith(
@@ -352,6 +355,7 @@ describe("TasksWorkspace", () => {
   it("keeps unsaved fields through a remote revision and failed save", async () => {
     render(<TasksWorkspace />);
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit title" }));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "My draft" } });
     api.getTask.mockResolvedValue({
       ...detail,
@@ -363,12 +367,13 @@ describe("TasksWorkspace", () => {
     api.updateTask.mockRejectedValue(new Error("Save failed"));
     await userEvent.click(screen.getByRole("button", { name: "Save task" }));
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Save failed"));
-    expect(screen.getByDisplayValue("My draft")).toBeInTheDocument();
+    expect(screen.getByText("My draft")).toBeInTheDocument();
   });
 
   it("retains a draft when background detail refresh fails", async () => {
     render(<TasksWorkspace />);
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit title" }));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Keep this draft" } });
     api.getTask.mockRejectedValueOnce(new Error("Refresh failed"));
     await act(async () => taskSocket.options?.onHint?.({ sequence: 12 }));
@@ -379,6 +384,7 @@ describe("TasksWorkspace", () => {
   it("recovers a conflict explicitly while preserving draft and unrelated remote fields", async () => {
     render(<TasksWorkspace />);
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit title" }));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "My title" } });
     api.getTask.mockResolvedValue({
       ...detail,

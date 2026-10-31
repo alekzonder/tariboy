@@ -23,13 +23,9 @@ export function TaskDetailFields({
   setDescriptionMode: (mode: MarkdownMode) => void;
   setUploadingDescription: Dispatch<SetStateAction<boolean>>;
 }) {
-  const { saving, title, setTitle, description, setDescription } = draft;
+  const { saving, description, setDescription } = draft;
   return (
     <fieldset className="contents" disabled={saving}>
-      <label className="flex min-w-0 flex-col gap-1.5">
-        <span className={LABEL}>Title</span>
-        <Input className={FIELD} value={title} onChange={(event) => setTitle(event.target.value)} />
-      </label>
       <TaskDescriptionField
         saving={saving}
         description={description}

@@ -181,12 +181,12 @@ it("keeps a flexible task's status select, fields and sections as they were", as
       .map((option) => option.textContent),
   ).toEqual(["Open", "In progress", "Waiting for you", "Done", "Cancelled"]);
   expect(status).toHaveValue("in_progress");
-  for (const label of ["Title", "Priority", "Assignee", "Pull request", "Manual block reason"]) {
+  for (const label of ["Priority", "Assignee", "Pull request", "Manual block reason"]) {
     expect(screen.getByLabelText(label)).toBeInTheDocument();
   }
   expect(screen.getByText("Dependencies")).toBeInTheDocument();
   expect(screen.getByText("History")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Save task" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Save task" })).not.toBeInTheDocument();
   expect(screen.queryByText("release@1.2.0")).not.toBeInTheDocument();
   expect(api.getTaskWorkflow).not.toHaveBeenCalled();
   await userEvent.selectOptions(status, "done");
@@ -208,7 +208,7 @@ it("replaces the status select with the workflow panel for a workflow task", asy
   expect(await screen.findByText("release@1.2.0")).toBeInTheDocument();
   expect(screen.queryByLabelText("Status")).not.toBeInTheDocument();
   expect(screen.queryByText(/unmanaged/)).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Title")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Edit title" }));
   expect(screen.getByLabelText("Priority")).toBeInTheDocument();
   expect(screen.getByLabelText("Pull request")).toBeInTheDocument();
   expect(screen.getByText("Dependencies")).toBeInTheDocument();
@@ -375,15 +375,15 @@ it("keeps the assignee as text on a paused task in a pool status", async () => {
 
 const people: PrincipalInfo = { customer: "user:owner", agents: ["writer", "editor"], groups: [] };
 
-it("pins the Needs you card on top of a task that waits for the customer", async () => {
+it("pins the workflow decision above the task fields", async () => {
   renderDetail(workflowTask, [], [], people);
-  const card = await screen.findByRole("region", { name: "Needs you" });
+  const card = await screen.findByRole("region", { name: "Workflow decision" });
   expect(
     await within(card).findByRole("button", { name: "approve → publish" }),
   ).toBeInTheDocument();
   // The card holds the decision, so the workflow section does not repeat it.
   expect(screen.queryByRole("button", { name: "approve" })).not.toBeInTheDocument();
-  const title = screen.getByLabelText("Title");
+  const title = screen.getByText("Description", { selector: "label" });
   expect(card.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 

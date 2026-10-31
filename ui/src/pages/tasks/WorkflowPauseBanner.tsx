@@ -29,11 +29,13 @@ export default function WorkflowPauseBanner({
   reason,
   pool,
   onChanged,
+  onBusyChange,
 }: {
   taskKey: string;
   reason: string;
   pool: boolean;
   onChanged: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const api = useApi();
   const [busy, setBusy] = useState(false);
@@ -41,11 +43,15 @@ export default function WorkflowPauseBanner({
   const { confirm, dialog } = useWorkflowConfirm();
   const decide = (run: () => Promise<unknown>) => {
     setBusy(true);
+    onBusyChange?.(true);
     setError("");
     run()
       .then(() => onChanged())
       .catch((failure) => setError(errorText(failure)))
-      .finally(() => setBusy(false));
+      .finally(() => {
+        setBusy(false);
+        onBusyChange?.(false);
+      });
   };
   return (
     <div className={cn("flex flex-col gap-2 rounded-md px-2.5 py-2", DANGER_FILL)}>

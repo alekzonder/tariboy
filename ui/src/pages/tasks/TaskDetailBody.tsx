@@ -1,11 +1,8 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { HelpCircle } from "lucide-react";
-import type { Task, WaitingFor } from "@/lib/api";
-import { needsYouTask } from "@/lib/needsYou";
 import { isWorkflowTask } from "@/lib/tasks";
 import { taskCommentWaits, taskEventSequence } from "@/lib/taskDetail";
 import TaskComments from "./TaskComments";
-import NeedsYouCard from "./NeedsYouCard";
 import { WorkflowPanel } from "./WorkflowPanel";
 import { MarkdownContent, type MarkdownMode } from "./TaskMarkdown";
 import { Banner, Meta } from "./TaskDetailControls";
@@ -21,28 +18,22 @@ import type { TaskDetailProps } from "./TaskDetailTypes";
 function Collapsed({
   label,
   open,
+  id,
   children,
 }: {
   label: string;
   open?: boolean;
+  id?: string;
   children: ReactNode;
 }) {
   // Only the first value counts: a later change must not close a section the
   // user opened, or open one they closed.
   const [initial] = useState(open);
   return (
-    <details open={initial} className="group min-w-0">
+    <details id={id} open={initial} className="group min-w-0">
       <summary className={`${LABEL} cursor-pointer select-none py-1`}>{label}</summary>
       <div className="flex min-w-0 flex-col gap-4.5 pt-2.5">{children}</div>
     </details>
-  );
-}
-
-/** The task waits for the customer: a workflow decision, a pause, or an open
- *  question addressed to them. */
-function waitsOnCustomer(task: Task, waits: WaitingFor[], customer: string | undefined): boolean {
-  return (
-    needsYouTask(task) || (!!customer && waits.some((wait) => wait.expected_principal === customer))
   );
 }
 
@@ -94,21 +85,10 @@ export function TaskDetailBody({
   const openWaits = commentWaits.filter((wait) => !wait.resolved_at);
   const eventSequence = taskEventSequence(events, liveSequence);
   const editable = task.access !== "respond";
-  const pinned = editable && waitsOnCustomer(task, openWaits, principals?.customer);
 
   return (
     <>
-      {/* The decision first: when the task waits on the user, the card that
-        answers it sits above everything else. */}
-      {pinned && (
-        <NeedsYouCard
-          taskKey={task.key}
-          detail={detail}
-          principals={principals}
-          onChanged={onTaskChanged}
-        />
-      )}
-      {!pinned && openWaits.length > 0 && (
+      {openWaits.length > 0 && (
         <Banner
           tone="primary"
           icon={<HelpCircle className="mt-0.5 size-3.5 [stroke-width:1.4]" />}
@@ -169,12 +149,12 @@ export function TaskDetailBody({
       </Collapsed>
       {/* In place of the status select: the workflow changes the status. */}
       {editable && workflow && (
-        <Collapsed label="Workflow" open={!!task.workflow_attention}>
+        <Collapsed id="task-workflow-details" label="Workflow" open={!!task.workflow_attention}>
           <WorkflowPanel
             task={task}
             eventSequence={eventSequence}
             onTaskChanged={onTaskChanged}
-            decisionsElsewhere={pinned}
+            decisionsElsewhere
           />
         </Collapsed>
       )}

@@ -924,8 +924,8 @@ Everything else loads with `React.lazy` when it first renders:
 - `NeedsYouLive`, which reads the counts and rows of "needs you", the task
   lookup of the search field, and the workspace manager dialog;
 - every agent workspace tab and the Goal task drawer in `AgentWorkspace`;
-- the Needs you card (`tasks/NeedsYouCard.tsx`) in the Work tab and in the
-  Home list, because it brings the Markdown renderer;
+- the Needs you card (`tasks/NeedsYouCard.tsx`) in the Work tab and the
+  Home and Inbox lists, because it brings the Markdown renderer;
 - the TipTap editor (`tasks/TaskMarkdownEditor.tsx`): `MarkdownEditor` in
   `TaskMarkdown.tsx` is a lazy wrapper, so `MarkdownContent` never loads TipTap;
 - the file viewer of `FileBrowser`, with CodeMirror, its languages, and the
@@ -1207,26 +1207,33 @@ Task Detail also offers the `wait_customer` status, labeled "Waiting for you"
 (`flexibleStatusLabel` gives this label everywhere), and an editable `Pull
 request` field. Both use the existing optimistic revision and explicit-host
 request path.
-The sheet is one `--card` island with its own scroll and a sticky identity
-header carrying the task key, title, status and assignee. `TaskDetailBody`
-then renders these parts, top down:
+The sheet is one `--card` island with its own scroll. One sticky block holds
+the identity header and, for a workflow task, `TaskDecisionPanel` immediately
+below it. The header shows the key, one title, status, and assignee. The pencil
+edits the title in that same place. Save task appears only while task fields
+are dirty and saves them explicitly. The sticky block has a height limit and
+its own vertical scroll on short screens. It needs no fixed header offset.
 
-1. The Needs you card (`NeedsYouCard`, see [Needs you card](#needs-you-card)),
-   pinned when the viewer can edit the task and the task waits on the
-   customer: `needsYouTask(task)` selects it, or an open comment wait
-   addresses the customer. While the card is pinned, the sheet does not show
-   the "Waiting for an answer" banner. Otherwise an open comment wait shows
-   that banner.
-2. The title and the description (`TaskDetailFields`).
-3. The comments.
-4. **Details**, collapsed: author, customer, queue, group, blocked, parent,
-   then `TaskDetailProperties` (the status of a flexible task, priority,
-   assignee, pull request, manual block reason) and the dependencies.
-5. **Workflow**, collapsed, for a workflow task only: the `WorkflowPanel`. The
-   section is open when the task has a `workflow_attention`. While the card is
-   pinned, the panel hides its Outcomes block and its pause banner, because
-   the card offers both.
-6. **History**, collapsed by default.
+`TaskDecisionPanel` shows the current stage, owner, wait reason, and actual
+outcomes from the shared workflow view. An initial customer status offers its
+start outcome. A completed task offers no transitions, and a flexible task has
+no workflow panel. Outcome message is separate from the existing comment form,
+which still answers questions and posts comments. The panel reuses the existing
+advance, request polling, pause, retry, and confirmation operations.
+
+`TaskDetailBody` renders these parts below the sticky block:
+
+1. Decision materials for a workflow task, outside the sticky block. View plan
+   and named material links expand, scroll to, and focus the matching artifact.
+   Dependencies come from the `requires` of transitions into and out of the
+   current status. Missing values stay visible.
+2. The description (`TaskDetailFields`).
+3. The comments and their existing answer controls.
+4. Details, collapsed: author, customer, queue, group, blocked, parent, then
+   `TaskDetailProperties` and dependencies.
+5. Workflow, collapsed: the status graph, artifact editing and history, runs,
+   logs, visits, and operator actions. Destructive confirmations still apply.
+6. History, collapsed by default.
 
 The assignee of a flexible task is a select of "Unassigned", "me" (the
 customer principal), and each agent as `agent:<name>`. A current assignee
@@ -1270,36 +1277,19 @@ query it is a select of that pool's members (`listAgentPools` through
 `onTaskChanged`; otherwise it is text. `TaskDetail` hides **Move to
 another server…** for one, and neither its banner nor a comment chip asks for
 a comment on the workflow's own (`system:workflow`) wait. In place of the status
-select it renders `WorkflowPanel` in its **Workflow** section. The panel reads
-the shared workflow query. A task revision, an event sequence, or
-a completed write marks that query stale, so a workflow event refreshes the
-panel even when the task revision stays the same. It composes, top down,
-`WorkflowPauseBanner` (`resumeTaskWorkflow`, `cancelWorkflowTask`),
-`WorkflowProblem` (the one problem `explainProblem` in `explainWorkflowProblem.ts`
-picks from the view, with `retryTransitionRequest` behind **Retry** and the
-run's log through `RunRow` with `autoLoad`), `WorkflowStepper` (the view's
-`statuses` as steps, marked by `stepMarks` in `workflowGraph.ts`; the panel
-owns the selected step, which starts at the current status and follows it
-until the customer picks a step), the header with `stepOf`,
-`WorkflowOutcomes` (`advanceTask` with `from`, through the `useWorkflowAdvance`
-hook that the Needs you card shares), `WorkflowArtifacts`
-(`setTaskArtifact`, `getTaskArtifactHistory`; for the selected step only the
-artifacts `stepArtifacts` finds in the `requires` of a transition into it,
-then out of it, each naming its transition; **Show all artifacts**, or a
-second click on the step, clears the selection and lists every entry of the
-view's `declared_artifacts` in one list, those `requiredBy` names for the
-current status first), `WorkflowRuns`
-(`getTaskScriptRunLog`; `runTone` gives each row its tone), the visit list,
-and the header's labeled **Run watch now**, **Return to agent…**, **Upgrade to
-NAME@VERSION…**, **Move to status…**, and **Cancel task** buttons: **Run watch
-now** appears when `canRunWatch` finds an open, unpaused script status with a
-watch, is disabled while `hasActiveRun` finds a pending or running run, and
-sends `runTaskWatch`, then refetches the view; `ReturnToAgent` picks its
-targets with `returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the
-upgrade form appears when `canUpgrade` finds the view's `queue_digest` differs
-from its `digest` and sends `upgradeTaskWorkflow`, the move form uses
-`moveTaskWorkflow` (targets from the view's `statuses`), and cancel uses
-`cancelWorkflowTask`. The move and upgrade forms live in
+select it renders `WorkflowPanel` in its **Workflow** section. The decision panel, materials, and lower workflow disclosure read the shared
+workflow query. A task revision, an event sequence, or a completed write marks
+that query stale. A workflow event therefore refreshes the view even when the
+task revision stays the same. `useWorkflowAdvance` and `useFollowRequest`
+continue to submit and follow outcomes. `WorkflowProblem` supplies retry and
+run logs, and the existing pause controls supply resume and cancel.
+
+The lower disclosure retains `WorkflowStepper`, `WorkflowArtifacts`,
+`WorkflowRuns`, visits, and the operator actions. The stepper uses `stepMarks`
+in `workflowGraph.ts` and the statuses from the workflow view. Artifact reads,
+writes, history, and logs keep their existing API methods. Run watch now,
+Return to agent, Upgrade, Move to status, and Cancel task keep their existing
+eligibility rules and request paths. The move and upgrade forms live in
 `WorkflowMoveForms.tsx`. `stepMarks`, `returnTargets`, and `defaultReturnTarget`
 read `runVisits`, the visits of the task's current workflow digest. Outcomes, the problem block, and the return form follow
 a transition request through `useFollowRequest` in `workflowShared.ts`
@@ -1731,6 +1721,7 @@ columns. Top down, it shows:
    \<agent\> a task…", a **Give** button, and **Details**.
 2. **Needs you (n)**: one Needs you card for each item of the agent's
    `needs you` state, the same items that the tab badge and the header count.
+   Each button opens the existing task drawer on the agent's explicit host.
 3. **In progress (n)**.
 4. **Queued (n)**.
 5. **Done · last 7 days (n)**, with a search box and **Show all**.
@@ -1761,7 +1752,7 @@ The composer works like this:
 The rows come from `listTasks` with `assignee=agent:<name>`, one read with
 `status_view=active` and one with `status_view=closed`, through the shared task
 queries (`useAgentWork.ts`). The task event stream keeps them fresh. A task
-that a Needs you card shows is not repeated in the other sections. Queued
+listed in Needs you is not repeated in the other sections. Queued
 holds the active tasks in the `open` category and the tasks in their
 workflow's initial status (`workflow_initial`). In progress holds the other
 active tasks. Done holds the closed tasks of the last seven days. **Show all**
@@ -1779,7 +1770,11 @@ first, as the primary button. An outcome named `start` reads **Start**, and
 the others read "\<outcome\> → \<status\>". A button sends the advance
 through `useWorkflowAdvance`.
 
-A row click opens the task drawer. The tab reads these query parameters:
+A row click opens the task drawer. The key and title of a Needs you card form
+one button that opens the same drawer. The card's answer fields, outcomes, and
+links work independently. Opening the drawer sends no answer or outcome.
+Closing it restores focus to the opening button and keeps the card's draft.
+The tab reads these query parameters:
 
 | Query | Effect |
 | --- | --- |
@@ -1789,10 +1784,11 @@ A row click opens the task drawer. The tab reads these query parameters:
 
 #### Needs you card
 
-`NeedsYouCard` (`ui/src/pages/tasks/NeedsYouCard.tsx`) is one component for
-three places: the Work tab, the top of the task drawer, and the Needs you list
-on Home and Inbox when a task row is expanded. The Work tab and the list load
-it lazily. The card shows:
+`NeedsYouCard` (`ui/src/pages/tasks/NeedsYouCard.tsx`) serves the Work tab and
+the Needs you lists on Home and Inbox when a task row is expanded. They load
+it lazily. Work supplies the optional action that opens the drawer from the
+key and title. The drawer uses
+`TaskDecisionPanel` plus the existing comment form. The card shows:
 
 - the key, the title, the status in words, and the age;
 - the open question, as Markdown: an unresolved wait that addresses the

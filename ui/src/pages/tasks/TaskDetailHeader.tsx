@@ -1,5 +1,6 @@
-import type { Ref } from "react";
-import { MoreHorizontal, X } from "lucide-react";
+import { useState, type Ref } from "react";
+import { MoreHorizontal, Pencil, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import type { Task } from "@/lib/api";
 import { isWorkflowTask, taskStatusLabel } from "@/lib/tasks";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,8 @@ export function TaskDetailHeader({
   task,
   pending,
   title,
+  setTitle,
+  dirty,
   save,
   close,
   initialFocusRef,
@@ -28,6 +31,8 @@ export function TaskDetailHeader({
   task: Task;
   pending: boolean;
   title: string;
+  setTitle: (title: string) => void;
+  dirty: boolean;
   save: () => Promise<void>;
   close: () => void;
   initialFocusRef: Ref<HTMLButtonElement>;
@@ -35,10 +40,11 @@ export function TaskDetailHeader({
   onTransfer: () => void;
 }) {
   const editable = task.access !== "context" && task.access !== "respond";
+  const [editing, setEditing] = useState(false);
   const workflow = isWorkflowTask(task);
   const closed = task.category === "done" || task.category === "cancelled";
   return (
-    <header className="sticky top-0 z-[3] flex items-start gap-2.5 bg-card px-3.5 pt-2.75 pb-2.5 shadow-[var(--raise)]">
+    <header className="flex items-start gap-2.5 bg-card px-3.5 pt-2.75 pb-2.5">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex min-w-0 items-center gap-2.25">
           <DialogTitle asChild>
@@ -47,9 +53,33 @@ export function TaskDetailHeader({
             </h2>
           </DialogTitle>
           {/* The only 600 in the panel. */}
-          <span className="min-w-0 truncate text-title font-semibold tracking-[-.01em]">
-            {task.title}
-          </span>
+          {editing ? (
+            <Input
+              autoFocus
+              aria-label="Title"
+              value={title}
+              disabled={pending}
+              onChange={(event) => setTitle(event.target.value)}
+              onBlur={() => setEditing(false)}
+            />
+          ) : (
+            <span className="min-w-0 truncate text-title font-semibold tracking-[-.01em]">
+              {title}
+            </span>
+          )}
+          {editable && !editing && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Edit title"
+              disabled={pending}
+              onClick={() => setEditing(true)}
+              className="size-7 shrink-0"
+            >
+              <Pencil className="size-3.5" />
+            </Button>
+          )}
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2 text-ui">
           <StatusPill tone={taskTone(task.category)}>{taskStatusLabel(task)}</StatusPill>
@@ -58,7 +88,7 @@ export function TaskDetailHeader({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        {editable && (
+        {editable && dirty && (
           <Button
             size="sm"
             className="h-7"

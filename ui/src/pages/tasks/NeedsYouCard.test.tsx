@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@/test/queryRender";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { TaskDetail, TransitionRequest } from "@/lib/api";
 import { fakeApi } from "@/test/api";
@@ -125,4 +126,40 @@ it("shows the pause reason with Continue for a paused task", async () => {
   await waitFor(() => expect(screen.getByRole("button", { name: "Continue" })).toBeInTheDocument());
   expect(screen.getByText(/several iterations in a row/)).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "approve → publish" })).not.toBeInTheDocument();
+});
+
+it("opens from the key and title without sending the inline response", async () => {
+  api.getTask.mockResolvedValue(detail({}));
+  api.getTaskWorkflow.mockResolvedValue(customerView);
+  const onOpen = vi.fn();
+  render(<NeedsYouCard taskKey="REL-1" onOpen={onOpen} />, { api: client });
+  const message = await screen.findByRole("textbox", { name: "Message" });
+  fireEvent.change(message, { target: { value: "My unfinished response" } });
+  const header = screen.getByRole("button", { name: "REL-1 Release notes" });
+  expect(header).toHaveAttribute("type", "button");
+  fireEvent.click(message);
+  expect(onOpen).not.toHaveBeenCalled();
+  fireEvent.click(header);
+  expect(onOpen).toHaveBeenCalledOnce();
+  header.focus();
+  await userEvent.keyboard("{Enter} ");
+  expect(onOpen).toHaveBeenCalledTimes(3);
+  expect(message).toHaveValue("My unfinished response");
+  expect(api.advanceTask).not.toHaveBeenCalled();
+  expect(api.addTaskComment).not.toHaveBeenCalled();
+});
+
+it("keeps the header as text when no open action is provided", async () => {
+  api.getTask.mockResolvedValue(detail({}));
+  api.getTaskWorkflow.mockResolvedValue(customerView);
+  render(<NeedsYouCard taskKey="REL-1" />, { api: client });
+  expect(await screen.findByText("Release notes")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "REL-1 Release notes" })).not.toBeInTheDocument();
+});
+
+it("focuses the response rather than the open button for an answer link", async () => {
+  api.getTask.mockResolvedValue(detail({}));
+  api.getTaskWorkflow.mockResolvedValue(customerView);
+  render(<NeedsYouCard taskKey="REL-1" onOpen={vi.fn()} focus />, { api: client });
+  expect(await screen.findByRole("textbox", { name: "Message" })).toHaveFocus();
 });

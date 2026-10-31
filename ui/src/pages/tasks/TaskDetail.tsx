@@ -3,6 +3,7 @@ import { isWorkflowTask } from "@/lib/tasks";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import type { MarkdownMode } from "./TaskMarkdown";
 import { TaskDetailHeader } from "./TaskDetailHeader";
+import { TaskDecisionPanel } from "./TaskDecisionPanel";
 import { TaskDetailBody } from "./TaskDetailBody";
 import { TaskDetailDialogs, TaskDetailDraftAlerts } from "./TaskDetailDialogs";
 import { useTaskDetailDraft } from "./useTaskDetailDraft";
@@ -34,6 +35,8 @@ export default function TaskDetail({
   const draft = useTaskDetailDraft(task, onSave);
   const relations = useTaskDetailRelations(onAddRelation, onDeleteRelation);
   const [commentDirty, setCommentDirty] = useState(false);
+  const [decisionDirty, setDecisionDirty] = useState(false);
+  const [decisionPending, setDecisionPending] = useState(false);
   const [descriptionMode, setDescriptionMode] = useState<MarkdownMode>("rich");
   const [uploadingDescription, setUploadingDescription] = useState(false);
   const [uploadingComment, setUploadingComment] = useState(false);
@@ -41,12 +44,27 @@ export default function TaskDetail({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [requeueOpen, setRequeueOpen] = useState(false);
-  const pending = draft.saving || uploadingDescription || uploadingComment;
-  const hasDraft = draft.dirty || commentDirty || Boolean(relations.relationTarget.trim());
+  const pending = draft.saving || uploadingDescription || uploadingComment || decisionPending;
+  const hasDraft =
+    draft.dirty || commentDirty || decisionDirty || Boolean(relations.relationTarget.trim());
   const { returnFocus, initialFocusRef, confirmClose, setConfirmClose, close } = useTaskDetailClose(
     hasDraft,
     pending,
     onClose,
+  );
+  const header = (
+    <TaskDetailHeader
+      task={task}
+      pending={pending}
+      title={draft.title}
+      setTitle={draft.setTitle}
+      dirty={draft.dirty}
+      save={draft.save}
+      close={close}
+      initialFocusRef={initialFocusRef}
+      onRequeue={() => setRequeueOpen(true)}
+      onTransfer={() => setTransferOpen(true)}
+    />
   );
 
   return (
@@ -90,16 +108,18 @@ export default function TaskDetail({
           {/* Sticky: whatever the panel is scrolled to, the key, the title and the
           status stay in view. The one shadow here is the same rule the selected
           row and the active segment carry. */}
-          <TaskDetailHeader
-            task={task}
-            pending={pending}
-            title={draft.title}
-            save={draft.save}
-            close={close}
-            initialFocusRef={initialFocusRef}
-            onRequeue={() => setRequeueOpen(true)}
-            onTransfer={() => setTransferOpen(true)}
-          />
+          {workflow && task.access !== "context" && task.access !== "respond" ? (
+            <TaskDecisionPanel
+              task={task}
+              onTaskChanged={onTaskChanged}
+              onDraftChange={setDecisionDirty}
+              onPendingChange={setDecisionPending}
+            >
+              {header}
+            </TaskDecisionPanel>
+          ) : (
+            <div className="sticky top-0 z-[3] bg-card shadow-[var(--raise)]">{header}</div>
+          )}
           <div className="flex min-w-0 flex-col gap-4.5 px-4 pt-3.5 pb-7">
             <TaskDetailDraftAlerts
               task={task}
@@ -107,6 +127,7 @@ export default function TaskDetail({
               confirmClose={confirmClose}
               setConfirmClose={setConfirmClose}
               onClose={onClose}
+              pending={pending}
             />
             {task.access === "context" ? (
               <div className="px-5 py-10 text-center text-body text-muted-foreground">

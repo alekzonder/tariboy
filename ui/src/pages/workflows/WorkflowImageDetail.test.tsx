@@ -196,7 +196,7 @@ it("shows a load failure", async () => {
 it("lists the versions of the name with their bindings and an upload each", async () => {
   renderDetail();
   const versions = await screen.findByRole("region", { name: "Versions" });
-  const rows = within(versions).getAllByRole("row").slice(1);
+  const rows = (await within(versions).findAllByRole("row")).slice(1);
   expect(rows.map((row) => within(row).getAllByRole("cell")[0].textContent)).toEqual([
     "latest",
     "0.1.0",
