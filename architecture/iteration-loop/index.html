@@ -88,6 +88,11 @@ iteration, or after the daemon or the agent was off, the next start is the
 first occurrence after the current time. A finished rule (<code>COUNT</code> or <code>UNTIL</code>)
 stays saved but starts nothing. The agent view reports <code>schedule</code> and
 <code>schedule_next_at</code> (RFC 3339, empty when there is no next start).</p>
+<p>Each row of the agent list (<code>GET /api/agents</code>, <code>agent.ps</code>) also carries
+<code>current_iteration_started_at</code>, the start of the running iteration, and
+<code>last_iteration_at</code>, the start of the newest iteration in any status. Both are
+the stored <code>started_at</code> values and are absent when they do not apply. One
+query reads them for every agent, through the <code>(agent, started_at)</code> index.</p>
 <h3 id="agent-goals"><a class="blume-heading-anchor" href="#agent-goals">Agent Goals</a></h3>
 <p>Goal is per-agent and enabled by default. The reconciler retains one assigned
 Native Task selection until it is released: <code>done</code> or <code>cancelled</code>, lost
@@ -270,7 +275,7 @@ receives the agent’s model as <code>--model</code>; OpenCode has no effort set
 <code>yolo</code>, the default, passes <code>--yolo</code> (no sandbox, no approval prompts), and
 <code>approve-for-me</code> passes <code>--approve-for-me</code> (the workspace-write sandbox, with
 approval requests reviewed automatically by Codex). Change it with
-<code>tariboy harness codex-approval set MODE</code> or <strong>Settings → General → Codex</strong>; a
+<code>tariboy harness codex-approval set MODE</code> or <strong>Settings → Agent defaults → Codex</strong>; a
 running iteration keeps the flag it started with. <code>--approve-for-me</code> needs a
 Codex CLI that has the flag; an older one fails the launch with an unknown
 argument error. See

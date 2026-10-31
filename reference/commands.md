@@ -162,6 +162,8 @@ tariboy has four command surfaces:
 | `tariboy maintenance get` | Show database maintenance settings and the last run |
 | `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
 | `tariboy maintenance set` | Change database maintenance settings; unset flags keep their value |
+| `tariboy onboarding retry` | Register the default Store and build the starter image again when they are missing |
+| `tariboy onboarding status` | Report the first-run state: default Store, starter image, harness CLIs and agent count |
 | `tariboy operation log ID` | Read the log of a background operation |
 | `tariboy operation ls` | List background operations, newest first |
 | `tariboy operation show ID` | Show a background operation |
@@ -323,7 +325,7 @@ reference](/docs/reference/mail) for flags, routes and debugging.
 | `tmail reply ID TEXT [--ask]` | Answer a letter, which closes it |
 | `tmail requeue ID` | Return a dead letter to the inbox |
 | `tmail close ID [--note T]` | Archive without a reply (operator only) |
-| `tmail read ID...` | Mark letters read; a read notice closes (operator only) |
+| `tmail read ID...` | Mark letters read; a read notice to an agent closes (operator only) |
 | `tmail unread` | Count open letters by sender and kind (operator only) |
 | `tmail clear --as agent:NAME [--yes]` | Delete an agent's open letters (operator only) |
 

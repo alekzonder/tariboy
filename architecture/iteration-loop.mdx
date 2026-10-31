@@ -73,6 +73,12 @@ first occurrence after the current time. A finished rule (`COUNT` or `UNTIL`)
 stays saved but starts nothing. The agent view reports `schedule` and
 `schedule_next_at` (RFC 3339, empty when there is no next start).
 
+Each row of the agent list (`GET /api/agents`, `agent.ps`) also carries
+`current_iteration_started_at`, the start of the running iteration, and
+`last_iteration_at`, the start of the newest iteration in any status. Both are
+the stored `started_at` values and are absent when they do not apply. One
+query reads them for every agent, through the `(agent, started_at)` index.
+
 ### Agent Goals
 
 Goal is per-agent and enabled by default. The reconciler retains one assigned
@@ -257,7 +263,7 @@ Both Codex modes take their approval flag from the daemon's codex approval mode
 `yolo`, the default, passes `--yolo` (no sandbox, no approval prompts), and
 `approve-for-me` passes `--approve-for-me` (the workspace-write sandbox, with
 approval requests reviewed automatically by Codex). Change it with
-`tariboy harness codex-approval set MODE` or **Settings → General → Codex**; a
+`tariboy harness codex-approval set MODE` or **Settings → Agent defaults → Codex**; a
 running iteration keeps the flag it started with. `--approve-for-me` needs a
 Codex CLI that has the flag; an older one fails the launch with an unknown
 argument error. See

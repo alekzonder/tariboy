@@ -6,13 +6,13 @@ sidebar:
   icon: rocket
 ---
 
-This path is for the `0.100.0` alpha on an Apple Silicon Mac.
+This path is for the `0.101.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.100.0_aarch64.dmg`;
+- a verified `Tariboy_0.101.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -38,9 +38,22 @@ Never disable Gatekeeper globally and never run `spctl --master-disable`.
 Desktop opens the workspace directly. Daemon startup and saved-host reconnect
 continue in the background, with their state visible in the workspace.
 
-On the first start, a short tour highlights the servers, images, stores,
-agents, tasks, queues, and workflows. To take it again, or to read the
-changelog, open the **?** (Help) menu in the titlebar.
+On the first start, the home screen shows **Getting ready**. The daemon
+connects the Tariboy catalog, builds the starter image `basic`, and looks for
+the coding tools installed on the host. Each row turns green by itself. If a
+row fails, it says why in one sentence, with **Details** and **Retry**. A
+missing coding tool is shown in that list with its install hint, not as an
+error banner. To take the tour of the interface, or to read the changelog, open
+the **?** (Help) menu in the titlebar. The tour does not start by itself.
+
+After the first agent exists, the home screen shows what needs you, the
+agents that run now, today's numbers, and your recent agents. The sidebar has
+six items: **Home**, **Agents** (your agents, opened in place), **Tasks**,
+**Inbox**, **Library** (images, workflows, and sources), and **Settings**. The
+numbers next to **Tasks** and **Inbox** count what waits for you. The search
+field in the titlebar finds agents and tasks; press ⌘K or Ctrl+K to use it.
+The line at the foot of the sidebar shows your hosts and opens **Settings → Hosts**, where you add a
+host.
 
 This alpha includes WebView developer tools in release builds. Open
 them with **Option-Command-I** on macOS or choose **Inspect Element** from the
@@ -77,35 +90,54 @@ handoff; legacy daemons fail closed when active work cannot be preserved.
 
 ## 3. Create or select an image
 
-Open **Images**:
+For the first agent you do not have to do anything here: the daemon builds
+`basic` by itself. To use another image, open **Library → Images**:
 
-- on **Stores**, click **Add tariboy Store**, which registers
-  `https://github.com/alekzonder/tariboy-store.git` as the Store `tariboy`,
-  then build `tariboy/basic` from its detail (or run
+- use `basic:latest`: at its first start the daemon registers
+  `https://github.com/alekzonder/tariboy-store.git` as the Store `tariboy`
+  and builds `tariboy/basic` in the background. The build is in
+  **Settings → Maintenance**. If you removed the Store, click
+  **Add tariboy Store** in **Library → Sources**, then click **Build** on the
+  `basic` row of its card (or run
   `tariboy store add tariboy https://github.com/alekzonder/tariboy-store.git`
   and `tariboy image build tariboy/basic`); or
-- choose an existing built image; or
-- enter the path to an original directory containing `Tariboyfile.yaml`, set a
-  required name such as `reviewer`, validate the exact plugin/prompt template,
-  and build `reviewer:latest`.
+- choose an existing built image and click **Run agent**. Images that no agent
+  uses yet are under **Show unused**; or
+- choose **Add image → Build from directory**, enter the path to an original
+  directory containing `Tariboyfile.yaml`, set a required name such as
+  `reviewer`, validate the exact plugin/prompt template, and build
+  `reviewer:latest`.
 
 An image is a reusable template. It is not an agent and does not start work.
 
 ## 4. Create an agent
 
-Open **Agents → New agent**, select the host and image, and name the workspace.
-Harness, model, and effort are shown directly in the Runtime section. Model and
-effort stay editable and suggest values in two groups: **From harness** lists
-what the harness CLI on the selected host reports, and **Saved** lists values
-entered earlier for that harness. They are runtime settings, not schema-v2
-image content. A successful create remembers the model and effort locally for
-that harness.
-An agent has one on/off switch. **Start now** in the Lifecycle section, or
-**Start** in the agent header later, turns on the whole agent: Terminal and
-timer/message-triggered iterations. **Interactive** is on by default and
-enables Terminal; turn it off for a headless agent.
+On a host with no agent, the home screen has the card **Run your first agent**.
+Later, use **New agent** in the sidebar; it opens the same form.
 
-For the first walkthrough, keep Interactive on and use a non-bare image. From
+1. In **Folder**, type the path of your repository, for example
+   `~/code/my-app`. If the folder does not exist, click **Create it**.
+2. Keep **Image** `basic` and the selected **Coding tool**. The form selects a
+   coding tool that it found on the host.
+3. Keep the suggested **Name**, for example `my-app-basic`, or type another.
+4. Click **Start agent**.
+
+The agent opens on its **Terminal** tab. The line above the terminal says what
+happens while the coding tool starts, and the reason with **Retry** if it did
+not start.
+
+Every other setting has a default and is under **Advanced**. Model and effort
+are shown as one line under the coding tool; click **change** to edit them.
+They suggest values in two groups: **From harness** lists what the harness CLI
+on the selected host reports, and **Saved** lists values entered earlier for
+that harness. They are runtime settings, not schema-v2 image content. A
+successful create remembers the model and effort locally for that harness.
+An agent has one on/off switch. **Start agent**, or **Start** in the agent
+header later, turns on the whole agent: Terminal and timer/message-triggered
+iterations. **Advanced → Create without starting** creates it stopped.
+**Advanced → Headless (no terminal)** creates an agent without Terminal.
+
+For the first walkthrough, keep the terminal and use a non-bare image. From
 the CLI, `tariboy agent run IMAGE:TAG` creates an
 interactive agent too; pass `--interactive=false` for a headless one.
 A `--cwd` that does not exist is rejected; add `--create-cwd` to make the
@@ -114,11 +146,28 @@ existing agent.
 
 ## 5. Use Terminal
 
-Open the agent's **Terminal** tab and start the session. This is a real terminal
-to the selected harness. Startup can take a few seconds while the shim socket
-appears; Terminal retries during that bounded window. Leaving the tab does not
-hide or stop the session, and returning attaches a new terminal client to the
-same tmux session.
+Open the agent's **Terminal** tab. This is a real terminal to the selected
+harness. Use it to work with the agent by hand. For work that the agent must
+do on its own, give it a task in **Work**; the agent runs it while it is on.
+Startup can take a few seconds while the shim socket appears; Terminal retries
+during that bounded window. Leaving the tab does not hide or stop the session,
+and returning attaches a new terminal client to the same tmux session.
+
+The line above the terminal always says what the screen shows:
+
+- **Starting Claude Code in ~/code/my-app…** while the coding tool starts.
+- **Working on DEV-1 — this is its live screen.** while a run works on a task.
+- **Idle. The screen appears when a run starts.** when the agent waits for
+  work. What you type here is not recorded in a task.
+- **Off.** with a **Start** button when the agent is off.
+- **Claude Code did not start:** and the reason, with **Retry** and **Open
+  settings**.
+- **No interactive terminal. Enable it in Settings → Autopilot.** for an agent
+  without a terminal.
+
+The toolbar under the terminal has **Send files**, **Compose**,
+**Scrollback**, **Keys**, and **?** (help). Click **Keys** to show the
+**Esc**, **Enter**, **Ctrl-C**, **↑**, and **↓** keys.
 
 To try an ordinary terminal with no image instructions, create a separate agent
 from `bare:latest`. Bare requires Interactive and runs no autonomous
@@ -126,17 +175,42 @@ iterations.
 
 ## 6. Let Autopilot run
 
-Open **Configuration → Loop and timeouts**. Set a conservative interval and
-timeout, then save. While the agent is started, a letter to it stays open in
-its inbox and nudges the loop; a timer can also trigger it.
+1. Open the agent's **Settings** tab.
+2. Under **Autopilot**, select **Also every** and enter the interval in minutes.
+3. Set **Stop a run after** to a soft timeout in minutes.
+4. Under **Spending limit**, set daily and monthly limits in USD.
+5. Click **Save changes** at the top.
+
+To run only for tasks or messages, select **Only when given tasks or messages**.
+A separate schedule can still start runs. Open **Advanced → Schedule and
+timeouts** to edit that schedule, the hard timeout in seconds, and timeout
+and error policies. While the agent is started, a letter stays open in its
+inbox and nudges the loop.
+
+To give the agent work, open **Work**. Type a title in the **Give \<agent\> a
+task…** field and press Enter. If the agent is off, the button reads **Start &
+give** and also starts the agent. **Details** sets the queue, the priority,
+and a description. The task shows under **In progress**, **Queued**, or
+**Done**. When the agent asks you something or waits for your decision, a card
+shows under **Needs you**. Answer there, or choose an outcome, without opening
+the task.
 
 ## 7. Inspect and stop safely
 
-Open **Activity** to see trigger, current/previous iterations, outcome, usage,
-cost, messages, and audit. Then:
+The agent header says in one sentence what the agent does or waits for. Its
+primary button follows that state: **Answer**, **Give task**, **Start**, or
+**Restart**. **Answer** opens the first Needs you card in **Work**, and **Give
+task** puts the cursor in the task field.
 
-- use **Stop** to turn the agent off and prevent new iterations;
-- use **Kill** to terminate only current work.
+Open **Activity** to see the tasks done, runs, and cost of the period, with
+**Today** as the default. Under **More**, the **Runs log** shows the trigger,
+outcome, and audit of each run; **Usage** and **Status history** are there
+too. Then:
+
+- use **Stop** in the agent header to turn the agent off and prevent new runs;
+- use **⋯ → Force-stop current run** to stop only the current work, after you
+  confirm;
+- use **⋯ → Run once…** to start one run now while the agent is on.
 
 Quitting Tariboy leaves daemons and remote data running. Removing a host
 stops its local tunnel and removes local metadata, but does not delete the

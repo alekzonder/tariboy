@@ -13,21 +13,34 @@ runtime or compose configuration. They are not schema-v2 image fields.
 
 ## Browse built images
 
-The **Images** list has one row per image name on the selected server. **Latest
-image_version** and **Latest built at** describe exactly `name:latest`;
-**Newest built tag** and **Tag built at** describe the most recently built tag,
-which may be different. Missing latest shows **No latest**, and an unversioned
-manifest shows **Version not specified**. Newest is selected by parsed
-`built_at`, not SemVer. Tied dates prefer the matching version tag, then stable
-tag-name order; missing or invalid dates sort last. Imported archives retain
-their original build time, rather than showing the import time.
+In Desktop, open **Library → Images** (`/library/images`). The list has one row
+per image name on the selected host. **Version** and **Built** describe the
+newest tag. **Source** names the Store that built it, when the provenance says
+so. **Used by** counts the agents whose current or pending image is any tag of
+that name. **Run agent** opens the New agent dialog with `latest`, or with the
+newest tag when the image has no `latest`. The rows are sorted by **Used by**,
+then by name. **Show unused** is off by default, so images that no agent uses
+are hidden. The image `bare` is not listed: the New agent dialog offers it as
+**Plain terminal**. The search field filters by name.
 
-Select an image name to see its tags, manifest versions, build dates, full
-digests, and separate **Latest** and **Newest** badges. Current and pending agent
-usage and Run Agent, Export, Upload to servers, and Remove remain per-tag
-actions. Import stays on the Images root. Select a tag for its existing
-Overview, Template, Skills, and Files tabs; breadcrumbs return to its name or
-the root, and existing direct tag URLs keep working.
+Newest is selected by parsed `built_at`, not SemVer. Tied dates prefer the
+matching version tag, then stable tag-name order. Missing or invalid dates sort
+last. Imported archives keep their original build time, not the import time.
+
+The **Add image** menu has three items:
+
+- **Build from directory** opens the directory build form in a dialog.
+- **Import archive** opens the archive import in a dialog.
+- **Get from a source** opens **Library → Sources**.
+
+Select an image name to open its newest tag with the Overview, Template,
+Skills, and Files tabs. Below the Overview, **Versions** lists the tags with
+manifest versions, build dates, full digests, the Store, and separate
+**Latest** and **Newest** badges. It shows the newest five tags and **Show all
+N**. Current and pending agent usage and Run agent, Export, Upload to servers,
+and Remove stay on each tag row. Select a tag for its own tabs. The old
+`/servers/:hostId/images/…` URLs redirect to the same page under
+`/library/images`.
 
 Detail reads carry the displayed manifest digest. If a ref changes
 between reads, the UI reports the update, discards the old content, and reloads
@@ -93,10 +106,10 @@ The daemon runs each build in the background as an operation. A build does not
 block the Web UI, and it does not depend on the request that started it.
 
 - In the Web UI, **Build** shows the notice "Build started" with the link
-  **Open operation**. The link opens **Settings → Operations** on the page of
-  this build.
-- **Settings → Operations** lists every image and workflow build of the
-  server, newest first, 50 per page. The page of one operation shows its
+  **Open operation**. The link opens the page of this build under
+  **Settings → Maintenance**.
+- The **Operations log** of **Settings → Maintenance** lists every image and
+  workflow build of the host, newest first, 50 per page. The page of one operation shows its
   status, arguments, result or error and its full log. The page of a running
   operation updates its status and log live. **Download log** saves the log
   file.
@@ -142,8 +155,9 @@ is omitted, a source with `image_version` publishes both that version and
 without a version publishes only `latest`. Explicit tags, including
 `--tag latest`, take priority and do not add another ref.
 
-The daemon-managed `bare:latest` and `basic:latest` refs remain reserved and
-cannot be built, imported over, or removed.
+The daemon-managed `bare:latest` ref is reserved. You cannot build it, import
+over it, or remove it. `basic` is an ordinary Store image. You can rebuild,
+export, and remove `basic:latest`, also a legacy one without provenance.
 
 A store written by an earlier release is migrated once, when the daemon starts:
 each archive keeps its content digest as its ref id, so every digest already
@@ -175,12 +189,35 @@ running as `agent` with defaults, `team` lives at
 `/home/agent/.tariboy/stores/team/images/reviewer/Tariboyfile.yaml`.
 `TARIBOY_BASE_DIR` or the daemon's `--base-dir` changes that root.
 
-The Stores page offers the public Tariboy Store as one button. **Add tariboy
-Store** registers `https://github.com/alekzonder/tariboy-store.git` under the
-name `tariboy` on the selected server and opens its detail; it is the same
-request as `tariboy store add tariboy
-https://github.com/alekzonder/tariboy-store.git`. The button is hidden when the
-server already has a Store named `tariboy` or a Store with that source. The
+### The default Store
+
+On each start, the daemon registers the public Tariboy Store
+`https://github.com/alekzonder/tariboy-store.git` under the name `tariboy`.
+It does this only when no Store has the name `tariboy` or that source, and
+the daemon did not record a removal. After that, the daemon builds
+`tariboy/basic` when no image named `basic` exists. It never rebuilds an
+existing `basic`. Both steps run in the background, so the daemon is ready
+before they finish. The build is an ordinary operation in
+the **Operations log** of **Settings → Maintenance**.
+
+- If you remove the Store with `tariboy store remove tariboy`, the daemon does
+  not register it again by itself.
+- If the clone or the build fails, the daemon tries again at the next start or
+  when you run `onboarding.retry` (`POST /api/onboarding/retry`). It does not
+  retry on a timer.
+- `onboarding.status` (`GET /api/onboarding`) reports the state of the Store
+  and the starter image.
+- If `TARIBOY_ONBOARDING=off` is set or the daemon starts with
+  `--onboarding=off`, the daemon registers and builds nothing at start.
+
+If you removed the default Store, **Library → Sources** offers it again as one
+button. **Add tariboy Store** registers
+`https://github.com/alekzonder/tariboy-store.git` under the name `tariboy` on
+the selected server and opens its card; it is the same request as
+`tariboy store add tariboy https://github.com/alekzonder/tariboy-store.git`.
+The button is hidden when the server already has a Store named `tariboy` or a
+Store with that source, and while the daemon still connects the catalog. The
+form for another Store is under **Add another catalog**. The
 server needs HTTPS access to github.com; a failed clone registers nothing and
 shows the daemon error.
 A local source such as `/srv/company-images` is used in place, without a copy.
@@ -189,8 +226,8 @@ longer installs a separate built-in Store tree.
 
 A Store may also hold workflow sources at
 `workflows/<workflow_name>/Workflowfile.yaml`. Store detail lists them beside
-images, and `tariboy workflow build STORE/NAME` builds one; the Web UI Store
-detail lists them on its **Workflow images** tab with a **Build** button. The official Store
+images, and `tariboy workflow build STORE/NAME` builds one; the Store card in
+**Library → Sources** lists them under **Workflows** with a **Build** button. The official Store
 provides two: `development`, the pull request flow (`plan`, `approval`,
 `implement`, `review`, `complete`, `done`; it needs the `GH_TOKEN` queue secret
 and a `developers` pool), and `research`, one pool status for a `researchers`
@@ -202,8 +239,9 @@ operator sequence.
 
 A Store can refresh and rebuild itself on a schedule. `tariboy store auto NAME
 --interval MINUTES --image IMAGE` stores a whole-minute interval and the images
-selected for automatic builds; the Store detail exposes the same policy as an
-interval field and one **Auto** checkbox per image. An interval of `0` disables
+selected for automatic builds. The **Automatic builds** disclosure of the Store
+card in **Library → Sources** shows the same policy as an interval field and
+one checkbox per image. An interval of `0` disables
 it, which is the default for a new Store.
 
 Every minute the daemon runs the cycle for each Store whose interval has
@@ -275,12 +313,26 @@ has skills-lock.json; install Node.js (npm ships npx) on the daemon host`. Priva
 the server account's configured SSH or Git credential helpers. Configure access
 on that server before adding the Store; do not put credentials in its URL.
 
-The Store detail labels **Source image_version** and **Latest image_version**
-explicitly, highlights version mismatches, and keeps manual **Build** available
-when the versions match. This comparison cannot detect changed source bytes
-when `image_version` stays the same; use manual Build after such a change.
-Built artifacts appear in the existing **Images** workspace. Stores do not yet
-expose standalone skills or plugins.
+In Desktop, **Library → Sources** shows one card per Store. The card header has
+the name, the source, the number of images, and a `⋯` menu with **Refresh** and
+**Remove store…**. Each image row has the source `image_version`, one status,
+and one button:
+
+| Status | Button |
+| --- | --- |
+| **Built** | **Build** (rebuilds) |
+| **Update available (built → source)** | **Update** |
+| **Not built** | **Build** |
+| **Could not read the built image**, with **Details** | **Build** |
+| **The Store entry is invalid**, with **Details** | none |
+| **Build failed:** and the reason, with **Open operation** | **Build** |
+
+**Update available** shows only when the two versions are known and differ.
+This comparison cannot detect changed source bytes when `image_version` stays
+the same. Use **Build** after such a change. The **Automatic builds**
+disclosure below the tables holds the interval and the images it builds. Built
+artifacts appear in **Library → Images**. Stores do not yet expose standalone
+skills or plugins.
 
 ## Image versions
 
@@ -584,8 +636,8 @@ for this operation, not source backup or persistent state.
   pinned to them continue to resolve.
 - The official Store's `basic` source explicitly declares every plugin,
   packaged skill, runtime placeholder, and mandatory finish prompt it uses.
-  Add the `tariboy` Store, then build `tariboy/basic`; daemon
-  upgrades do not publish or replace that image.
+  The daemon builds `tariboy/basic` once after it registers the default
+  Store. Daemon upgrades do not publish or replace that image.
 - New build and validation requests require schema v2. Existing self-contained
   schema-v1 runnable archives remain readable and runnable only when they carry
   every byte their historical contract requires; they are not valid editable

@@ -19,7 +19,8 @@ dead letters, the wake path and the producers.</p>
 <code>message</code>) and a JSON <code>data</code> object. A send to several recipients writes one
 letter per recipient.</li>
 <li>A letter is a <strong>request</strong>, which its recipient answers with a reply, or a
-<strong>notice</strong>, which closes when its recipient has read it. A reply is a notice
+<strong>notice</strong>, which closes when an agent has read it or when the customer
+archives it. A reply is a notice
 unless <code>--ask</code> makes it a request.</li>
 <li><strong>Inbox</strong> is the open letters addressed to you, <strong>Sent</strong> the letters you
 sent, <strong>Archive</strong> the closed letters addressed to you, including dead ones.</li>
@@ -95,7 +96,7 @@ text with <code>--text -</code>, which reads standard input.</p>
 </tr>
 <tr>
 <td><code>tmail read ID...</code></td>
-<td>Mark letters read; a read notice closes</td>
+<td>Mark letters read; a read notice to an agent closes</td>
 <td>operator only</td>
 </tr>
 <tr>

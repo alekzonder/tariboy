@@ -21,7 +21,8 @@ dead letters, the wake path and the producers.
   `message`) and a JSON `data` object. A send to several recipients writes one
   letter per recipient.
 - A letter is a **request**, which its recipient answers with a reply, or a
-  **notice**, which closes when its recipient has read it. A reply is a notice
+  **notice**, which closes when an agent has read it or when the customer
+  archives it. A reply is a notice
   unless `--ask` makes it a request.
 - **Inbox** is the open letters addressed to you, **Sent** the letters you
   sent, **Archive** the closed letters addressed to you, including dead ones.
@@ -58,7 +59,7 @@ text with `--text -`, which reads standard input.
 | `tmail reply ID TEXT [--ask]` | Reply to a letter addressed to you, which closes it | yes |
 | `tmail requeue ID` | Put one of your dead letters back in the inbox | yes |
 | `tmail close ID [--note TEXT]` | Archive a letter without a reply | operator only |
-| `tmail read ID...` | Mark letters read; a read notice closes | operator only |
+| `tmail read ID...` | Mark letters read; a read notice to an agent closes | operator only |
 | `tmail unread` | Count open and unread letters, and open letters by sender and kind | operator only |
 | `tmail clear --as agent:NAME [--yes]` | Delete every open letter of an agent; asks for confirmation unless `--yes` | operator only |
 

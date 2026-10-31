@@ -279,13 +279,24 @@ the pause reason while the task is paused and is empty otherwise.
 
 ### Attention summary
 
-An open workflow task also carries two derived objects, so a list of tasks can
+An open workflow task also carries derived fields, so a list of tasks can
 show where each one is and whether it needs a person without reading every
 task's view. Both are absent on a flexible task and on a closed one.
 
 `workflow_step` is `{"index": 3, "total": 6}`: the position of the current
 status in the manifest, counted from 1, and the number of statuses the manifest
 declares.
+
+`workflow_initial` is `true` while an open workflow task is in its manifest's
+`initial_status`, and absent otherwise. It comes from the same manifest read as
+`workflow_step`.
+
+`workflow_outcomes` lists the outcomes of the current status, as
+`[{"on": "approved", "to": "merge"}, {"on": "drop", "to": "dropped", "terminal": true}]`.
+`terminal` is present only when the target status is terminal. The field is
+set only on an open workflow task whose current status the customer owns, and
+is absent otherwise. It comes from the same manifest read as `workflow_step`,
+so a list needs no extra query to offer the outcomes.
 
 `workflow_attention` is present only while something needs a person. It is
 derived from the task's open visit: its counters, its latest transition
@@ -328,6 +339,29 @@ an error that names the queue and the pool, and the agent continues to run. To
 delete the agent, remove it from the pool in the queue settings first. If the
 agent is the last member of a pool that the bound image uses, the pool change
 fails with `workflow_pool_empty`. Add another agent to the pool first.
+
+To delete a pool that the queue does not use, run `queue pool delete` with the
+current revision of the pool. Queue settings show a **Delete** button on each
+pool that the bound workflow does not use.
+
+```bash
+ttasks queue pool get DEV old-pool
+ttasks queue pool delete DEV old-pool --revision 3 --idempotency-key pool-del-1
+```
+
+The delete removes the pool and its member list. The agents stay and continue
+to run. The delete fails with `workflow_pool_empty` and changes nothing when one
+of these needs the pool:
+
+- The workflow that is bound to the queue.
+- The pinned workflow version of an unfinished task in the queue.
+- The queue's [`CUSTOMER_AGENT_POOL`](#a-pool-in-place-of-the-customer).
+- The open status visit of a task in the queue.
+
+A stale revision fails with `revision_conflict`. The delete also releases the
+holders of the pool. A new pool with the same name does not get the old
+holders. If a compose file declares the pool, the next compose apply creates it
+again.
 
 The reference is `NAME`, `NAME:TAG`, or `NAME:<digest>`; `NAME` means
 `latest`. The binding stores the digest the reference names now and the tag it
@@ -1807,10 +1841,42 @@ server the task or queue belongs to. A flexible task looks and behaves as it
 always did; everything below applies to a workflow task and a workflow queue.
 How the list shows these tasks is in [Tasks](/docs/tasks#desktop).
 
+The number next to **Tasks** in the sidebar, and the **Needs you** list on
+Home and Inbox, count the workflow tasks that wait for you: a task whose
+`waiting_on` is `customer`, unless it is still in its workflow's initial
+status, and a paused task (`waiting_on` is `pause`). The task list reports the
+initial status as `workflow_initial: true`, so a task that only waits for you
+to start it is not counted.
+
+### The Needs you card
+
+When a workflow task waits for you, a Needs you card shows the decision. The
+card is pinned at the top of the task sheet, it is in the **Needs you**
+section of the agent's **Work** tab, and it opens on Home and Inbox when you
+expand a Needs you row with **Answer in place**. In a customer status the card
+says "\<agent\> waits for your decision in \<status\>." It shows the artifacts
+to review: the artifacts that the step into the status required, then the
+artifacts that its outcomes require. Each one shows its latest value as
+Markdown and folds away, and the first one is open. The card has one message
+box and one button per outcome, labeled "\<outcome\> → \<next status\>". A
+button whose outcome misses an artifact is disabled. A button sends the same
+advance request as the Outcomes block below, with the message and `from` set
+to the status you saw, and follows it until its checks finish. For a paused
+task the card shows the reason with **Continue**, **Release holder** in a pool
+status, and **Cancel task**. While the card is pinned in the sheet, the
+workflow panel hides its pause banner and its Outcomes block.
+
+In the agent's **Work** tab, a row in **Queued** for a task in its workflow's
+initial status has one button per outcome of that status, from
+`workflow_outcomes`. The first outcome whose target is not terminal comes
+first. An outcome named `start` reads **Start**. See
+[The agent's Work tab](/docs/tasks#the-agents-work-tab).
+
 ### The workflow panel
 
 Opening a workflow task shows a **Workflow** panel in the task sheet in place of
-the status select. It reads top down: what is wrong, where the task is, what
+the status select. The panel is in a collapsed **Workflow** section, which is
+open when the task has a `workflow_attention`. It reads top down: what is wrong, where the task is, what
 may happen next, what it produced, and what ran. The workflow assigns pool
 work, so Save never changes the assignee. In an open, unpaused pool status the
 **Assignee** field is a list of the members of that status's pool: choosing one

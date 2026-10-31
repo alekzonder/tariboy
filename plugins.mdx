@@ -139,7 +139,7 @@ accepted as token values in argv.
 
 Settings descriptors use only Tariboy's built-in string, password,
 integer-list, status, and action controls. Desktop renders them under the
-route-selected server's **Settings → Integrations** section. Passwords are
+route-selected host's **Settings → Integrations** page, one tab for each plugin. Passwords are
 write-only. A plugin cannot inject JavaScript, HTML, CSS, React components,
 routes, or assets into the CLI or Desktop process. The daemon validates command
 names, field types, required values, action fields, and namespace ownership
@@ -162,7 +162,7 @@ tariboy telegram chat setup --chat-id -1001234567890
 tariboy telegram status
 ```
 
-The same fields and actions are available for the selected server under
+The same fields and actions are available for the selected host under
 **Settings → Integrations → Telegram**. The token is write-only. An empty
 allowed UID list is deny-all: no message or command is accepted, including from
 the configured chat, and discarded update offsets still advance so old

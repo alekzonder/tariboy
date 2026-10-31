@@ -214,7 +214,7 @@ which kept its name), compaction on at 10% free pages. A field missing from a
 stored value takes its default. The last run's
 result (times, trigger, backup path, rows deleted per category, logical size
 before and after, compaction, error) is stored under `maintenance_last_run`.
-Operators change both with **Settings → General → Backup & data retention**,
+Operators change both with **Settings → Agent defaults → Backup & data retention**,
 `tariboy maintenance get|set|run`, or `/api/maintenance`.
 
 A run, scheduled or manual, is serialized and always starts with a backup:
@@ -272,7 +272,7 @@ server-wide default is one JSON value under `retention_default` in
 `daemon_config`, where `0` means unlimited. A row in `retention_policies`
 overrides it per agent field by field: each non-zero field replaces the
 default's, and `0` inherits it, so an agent cannot be unlimited where the
-default sets a limit. Operators set the default with **Settings → General →
+default sets a limit. Operators set the default with **Settings → Agent defaults →
 Backup & data retention** or `tariboy retention set default`, and an agent's
 override in its settings or with `tariboy retention set <agent>`. The newest
 iteration and any running one are never pruned.
@@ -292,7 +292,8 @@ whose archive fails stays untouched. Archives are not rotated. The legacy
 senders and recipients of existing letters carried over in the same
 transaction — instead of following whichever account runs `tariboyd`. Read
 state is the letter's own `read_at`: opening a letter in the Desktop or
-`tariboy mail read` sets it, and a read notice closes.
+`tariboy mail read` sets it. A read notice to an agent closes; a read notice to
+the customer stays in the inbox until the customer archives it.
 
 ## Inbox state
 

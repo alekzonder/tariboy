@@ -12,11 +12,14 @@ Goal, and the interactive Terminal), and <strong>Stop</strong> turns all of it o
 no separate Autopilot switch.</p>
 <p>Agents from the terminal-only <code>bare:latest</code> image never run autonomous
 iterations. To keep a non-bare agent from iterating on a timer, set its
-interval to 0; it then iterates only for messages, including Goal tasks.</p>
+interval to 0. In <strong>Settings → Autopilot</strong>, select <strong>Only when given tasks or
+messages</strong> and click <strong>Save changes</strong>. A separate schedule under <strong>Advanced →
+Schedule and timeouts</strong> can still start runs. Set <strong>Schedule</strong> to <strong>None</strong>
+there to run only for messages, including Goal tasks.</p>
 <h2 id="trigger-model"><a class="blume-heading-anchor" href="#trigger-model">Trigger model</a></h2>
 <p>While the agent is started, an iteration can start from:</p>
 <ul>
-<li>a configured timer interval; or</li>
+<li>a configured timer interval or schedule; or</li>
 <li>an open letter in the agent’s inbox, including a <code>task.goal</code> letter.</li>
 </ul>
 <p>Letters are durable. Sending a letter to the agent stores it in its inbox and
@@ -39,9 +42,17 @@ again to clear the reason and resume the loop.</p>
 <li>a low cost budget;</li>
 <li>no external plugins sending mail until the timer path is understood.</li>
 </ul>
-<p>Set the interval and timeouts in <strong>Configuration → Loop and timeouts</strong>, or in
-the <strong>Loop</strong> section of the create dialog. Activity shows trigger,
-iteration state, result, deadlines, audit, usage, and cost. For Claude and
+<p>Set the interval and soft timeout in minutes under <strong>Settings → Autopilot</strong>.
+<strong>Also every</strong> sets a timer interval. <strong>Stop a run after</strong> sets the soft
+timeout, with <code>0</code> for no limit. Open <strong>Advanced → Schedule and timeouts</strong> for
+the schedule, hard timeout in seconds, and timeout and error policies.
+Set daily and monthly USD limits under <strong>Spending limit</strong>. Hourly and weekly
+limits are under <strong>Advanced → Hour and week budgets (USD)</strong>.
+Click <strong>Save changes</strong> at the top to apply the draft.
+During agent creation, the interval and timeouts are under <strong>Advanced →
+Autopilot</strong>.</p>
+<p>Activity shows trigger, iteration state, result, deadlines, audit, usage,
+and cost. For Claude and
 Codex harnesses, the audit is presented as a readable timeline of messages,
 reasoning, commands, skills, tool calls, and results; model and token metadata
 remains available on each AI call. A running soft deadline may be extended only
@@ -50,19 +61,21 @@ before timeout enforcement starts.</p>
 <ul>
 <li><strong>Start / Stop</strong> (agent header) — turn the agent on or off. From the CLI use
 <code>tariboy agent start NAME</code> and <code>tariboy agent stop NAME</code>.</li>
-<li><strong>Exec</strong> (agent header, shown while the agent is enabled) — start one manual
-iteration immediately. It is available for both interactive and
-non-interactive agents; optional one-shot text, entered in its dialog, is
-appended only to that iteration’s assembled prompt.</li>
-<li><strong>Kill</strong> — immediately stop current iteration or session; use when work is
+<li><strong>Run once…</strong> (the <code>⋯</code> menu of the agent header, shown while the agent is
+enabled) — start one manual iteration immediately. It is available for both
+interactive and non-interactive agents; optional one-shot text, entered in
+its dialog, is appended only to that iteration’s assembled prompt.</li>
+<li><strong>Force-stop current run</strong> (the <code>⋯</code> menu of the agent header) — after you
+confirm, immediately stop the current iteration or session; use when work is
 unsafe or stuck.</li>
 <li><strong>Budget</strong> — reject AI calls once the configured spend limit is reached.</li>
-<li><strong>Audit</strong> — inspect each proxied AI request and tool timeline. Copy readable
+<li><strong>Audit</strong> (Activity → <strong>Runs log</strong>) — inspect each proxied AI request and
+tool timeline. Copy readable
 Markdown or export a ZIP for the selected iteration or all retained
 iterations. Exports contain sensitive agent data; review the warning before
 downloading them.</li>
 </ul>
-<p>After a kill, verify the Activity outcome and the agent’s open letters before
+<p>After a force-stop, verify the Activity outcome and the agent’s open letters before
 starting the agent again. A killed or failed iteration leaves its letters
 open for redelivery.</p>
 <h2 id="event-driven-progression"><a class="blume-heading-anchor" href="#event-driven-progression">Event-driven progression</a></h2>

@@ -181,7 +181,7 @@ which kept its name), compaction on at 10% free pages. A field missing from a
 stored value takes its default. The last run’s
 result (times, trigger, backup path, rows deleted per category, logical size
 before and after, compaction, error) is stored under <code>maintenance_last_run</code>.
-Operators change both with <strong>Settings → General → Backup &amp; data retention</strong>,
+Operators change both with <strong>Settings → Agent defaults → Backup &amp; data retention</strong>,
 <code>tariboy maintenance get|set|run</code>, or <code>/api/maintenance</code>.</p>
 <p>A run, scheduled or manual, is serialized and always starts with a backup:
 <code>VACUUM INTO</code> on its own short-lived connection writes a consistent copy
@@ -234,7 +234,7 @@ server-wide default is one JSON value under <code>retention_default</code> in
 <code>daemon_config</code>, where <code>0</code> means unlimited. A row in <code>retention_policies</code>
 overrides it per agent field by field: each non-zero field replaces the
 default’s, and <code>0</code> inherits it, so an agent cannot be unlimited where the
-default sets a limit. Operators set the default with <strong>Settings → General →
+default sets a limit. Operators set the default with <strong>Settings → Agent defaults →
 Backup &amp; data retention</strong> or <code>tariboy retention set default</code>, and an agent’s
 override in its settings or with <code>tariboy retention set &lt;agent&gt;</code>. The newest
 iteration and any running one are never pruned.</p>
@@ -251,7 +251,8 @@ whose archive fails stays untouched. Archives are not rotated. The legacy
 senders and recipients of existing letters carried over in the same
 transaction — instead of following whichever account runs <code>tariboyd</code>. Read
 state is the letter’s own <code>read_at</code>: opening a letter in the Desktop or
-<code>tariboy mail read</code> sets it, and a read notice closes.</p>
+<code>tariboy mail read</code> sets it. A read notice to an agent closes; a read notice to
+the customer stays in the inbox until the customer archives it.</p>
 <h2 id="inbox-state"><a class="blume-heading-anchor" href="#inbox-state">Inbox state</a></h2>
 <p>Inbox saturation is derived rather than persisted. The agent status endpoint
 counts the agent’s open letters and returns <code>messages_pending</code>, the configured

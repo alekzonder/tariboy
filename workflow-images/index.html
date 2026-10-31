@@ -698,26 +698,29 @@ version already published there with other content is refused with
 <code>workflow_version_published</code>. <code>built_at</code> on the receiving daemon is the import
 time, and queue bindings do not move.</p>
 <h2 id="desktop"><a class="blume-heading-anchor" href="#desktop">Desktop</a></h2>
-<p>Each server’s workspace has a <strong>Workflow images</strong> section beside <strong>Images</strong>
-(<code>/servers/:hostId/workflows</code>). Every request goes to that server.</p>
+<p>Open <strong>Library → Workflows</strong> (<code>/library/workflows</code>). With two or more hosts,
+the Library header has a host selector. Every request goes to the selected
+host. The old <code>/servers/:hostId/workflows/…</code> URLs redirect to the same page.</p>
 <ul>
-<li><strong>Build from directory</strong> takes a <code>Workflowfile.yaml</code>, or the directory
+<li>The list has one row per workflow name, with the version of its first tag
+(<code>latest</code> first, then the other tags newest version first) and <strong>Bound to</strong>:
+the queues bound to any digest of that name. A queue whose binding cannot be
+read adds <code>unknown</code>, with the queue named on hover; the rest of the page
+still works. The name opens the page of that first tag.</li>
+<li><strong>Add workflow</strong> opens <strong>Build from directory</strong> in a dialog. It takes a
+<code>Workflowfile.yaml</code>, or the directory
 holding it, on that server. <strong>Validate</strong> shows the name, version, pools, and
 files, or every validation error as <code>code · path: message</code>. <strong>Build</strong>
 reports <code>built NAME:VERSION</code>, or <code>NAME:VERSION already built</code> when nothing
 changed, and lists the errors of a refused build; a version already
 published with other content suggests bumping it.</li>
-<li>The list groups tags by name, with <code>latest</code> first and then the other tags
-newest version first, and shows the version, the first 12 characters of the
-digest (the full digest on hover), the build time, and <strong>Bound to</strong>: the
-queues bound to that digest. A queue whose binding cannot be read adds
-<code>unknown</code>, with the queue named on hover; the rest of the page still works.</li>
-<li><strong>Upload to servers</strong> copies the image to other ready servers through the
+<li><strong>Upload to servers</strong>, on the tag page and on each row of its <strong>Versions</strong>,
+copies that tag to other ready servers through the
 export and import routes: the archive is downloaded once and imported on
 each selected server in turn. Each server reports <strong>Completed</strong>, <strong>Already
 present</strong>, or <strong>Failed</strong> with the daemon’s message, and a failure does not
 stop the others. Cancelling skips the servers not yet started.</li>
-<li>A tag’s page (<code>/servers/:hostId/workflows/:name/:tag</code>, where the tag may also
+<li>A tag’s page (<code>/library/workflows/:name/:tag</code>, where the tag may also
 be a full digest) shows the status graph as a table (owner, instruction
 path, outcomes with their required artifacts and checks with <code>run_as</code> and
 timeout, watch), the effective <a href="#limits">limits</a> of the workflow and of each
@@ -725,7 +728,9 @@ non-terminal status with where each value comes from, the declared
 artifacts, required secrets, <code>env</code>, and the stored files. Instruction files
 are shown by path only. <strong>Remove tag</strong> asks for confirmation; a
 <code>workflow_in_use</code> refusal is shown in place with the bound queues. A page
-opened by digest has no <strong>Remove tag</strong>.</li>
+opened by digest has no <strong>Remove tag</strong>. Below, <strong>Versions</strong> lists every tag
+of the name with its version, build time, and bound queues, and marks the
+tag on screen.</li>
 </ul>
 <p>Building from a Store selector stays in the CLI and Compose.</p>
 <h2 id="official-workflow-images"><a class="blume-heading-anchor" href="#official-workflow-images">Official workflow images</a></h2>

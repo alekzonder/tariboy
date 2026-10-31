@@ -8,14 +8,14 @@ sidebar:
 
 ## First checks
 
-1. Open **Settings → General** and note app/daemon version and local status.
+1. Open **Settings → Hosts** and note the daemon version and status of each host.
 2. For a remote problem, inspect the host phase and last structured error.
 3. Confirm the SSH alias still works in Terminal.
 4. Check free disk, writable `~/.local`, `python3`, `flock` (Linux), `tmux`, and the
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.100.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.101.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -61,7 +61,7 @@ result and `logs/shim.log`.
 
 ## Export diagnostics
 
-Open **Settings → General → Support bundle**, select exactly one local, SSH, or
+Open **Settings → Maintenance → Support bundle**, select exactly one local, SSH, or
 HTTPS host, and read the disclosure. The save dialog proposes
 `tariboy-support-<host>-<timestamp>.zip`, so the archive remains attributable
 after it is shared.

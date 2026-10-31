@@ -100,7 +100,8 @@ the key later rewrites nothing.</p>
 <p>Every letter is a <strong>request</strong> or a <strong>notice</strong>, chosen by its sender:</p>
 <ul>
 <li>A request needs an answer. It leaves the inbox when its recipient replies.</li>
-<li>A notice needs no answer. It leaves the inbox when its recipient has read it.</li>
+<li>A notice needs no answer. It leaves an agent’s inbox when the agent has read it,
+and the customer’s inbox when the customer archives it.</li>
 </ul>
 <p>A reply goes to the original sender with subject <code>Re: &lt;subject&gt;</code> and
 <code>in_reply_to</code> set, and closes the original in the same transaction. A reply is
@@ -136,7 +137,7 @@ leaves it empty and records a <code>close_note</code>.</p>
 <tr>
 <td><code>user:*</code></td>
 <td>the customer replies or archives it</td>
-<td>the customer opens it in the Desktop or runs <code>tariboy mail read</code> (<code>read</code>)</td>
+<td>the customer archives it; opening it or <code>tariboy mail read</code> only marks it read</td>
 </tr>
 <tr>
 <td><code>plugin:*</code></td>

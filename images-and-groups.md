@@ -47,7 +47,7 @@ it does not relabel earlier costs. Requests recorded without a snapshot,
 including older rows, appear as **Ungrouped** instead of inheriting current
 membership.
 
-Open a server's **Settings → Advanced → Usage** screen to filter all Usage
+Open **Settings → Usage & budgets** for a host to filter all Usage
 projections by **All groups**, **Ungrouped**, or a current group. The selection
 applies together to summary totals, daily series, aggregate rows, and recent
 requests. Saved names for deleted groups remain visible in historical rows,
@@ -63,7 +63,7 @@ agents**. Each member is still an ordinary agent and has the same lifecycle,
 terminal, configuration, and task controls. A custom team may contain any
 number of differently configured images; members can be assigned or removed at
 any time without deleting the underlying agent. Teams can be renamed and their
-lead changed in **Advanced → Groups**.
+lead changed in **Settings → Teams**.
 
 The creation wizard creates custom teams directly. Each member independently
 selects its name, image, harness, model, effort, cwd, interactive mode,

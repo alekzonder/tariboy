@@ -560,6 +560,14 @@ same client, always in operator mode.</li>
 <td>Change database maintenance settings; unset flags keep their value</td>
 </tr>
 <tr>
+<td><code>tariboy onboarding retry</code></td>
+<td>Register the default Store and build the starter image again when they are missing</td>
+</tr>
+<tr>
+<td><code>tariboy onboarding status</code></td>
+<td>Report the first-run state: default Store, starter image, harness CLIs and agent count</td>
+</tr>
+<tr>
 <td><code>tariboy operation log ID</code></td>
 <td>Read the log of a background operation</td>
 </tr>
@@ -949,7 +957,7 @@ reference</a> for flags, routes and debugging.</p>
 </tr>
 <tr>
 <td><code>tmail read ID...</code></td>
-<td>Mark letters read; a read notice closes (operator only)</td>
+<td>Mark letters read; a read notice to an agent closes (operator only)</td>
 </tr>
 <tr>
 <td><code>tmail unread</code></td>

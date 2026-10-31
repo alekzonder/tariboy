@@ -414,26 +414,29 @@ time, and queue bindings do not move.
 
 ## Desktop
 
-Each server's workspace has a **Workflow images** section beside **Images**
-(`/servers/:hostId/workflows`). Every request goes to that server.
+Open **Library → Workflows** (`/library/workflows`). With two or more hosts,
+the Library header has a host selector. Every request goes to the selected
+host. The old `/servers/:hostId/workflows/…` URLs redirect to the same page.
 
-- **Build from directory** takes a `Workflowfile.yaml`, or the directory
+- The list has one row per workflow name, with the version of its first tag
+  (`latest` first, then the other tags newest version first) and **Bound to**:
+  the queues bound to any digest of that name. A queue whose binding cannot be
+  read adds `unknown`, with the queue named on hover; the rest of the page
+  still works. The name opens the page of that first tag.
+- **Add workflow** opens **Build from directory** in a dialog. It takes a
+  `Workflowfile.yaml`, or the directory
   holding it, on that server. **Validate** shows the name, version, pools, and
   files, or every validation error as `code · path: message`. **Build**
   reports `built NAME:VERSION`, or `NAME:VERSION already built` when nothing
   changed, and lists the errors of a refused build; a version already
   published with other content suggests bumping it.
-- The list groups tags by name, with `latest` first and then the other tags
-  newest version first, and shows the version, the first 12 characters of the
-  digest (the full digest on hover), the build time, and **Bound to**: the
-  queues bound to that digest. A queue whose binding cannot be read adds
-  `unknown`, with the queue named on hover; the rest of the page still works.
-- **Upload to servers** copies the image to other ready servers through the
+- **Upload to servers**, on the tag page and on each row of its **Versions**,
+  copies that tag to other ready servers through the
   export and import routes: the archive is downloaded once and imported on
   each selected server in turn. Each server reports **Completed**, **Already
   present**, or **Failed** with the daemon's message, and a failure does not
   stop the others. Cancelling skips the servers not yet started.
-- A tag's page (`/servers/:hostId/workflows/:name/:tag`, where the tag may also
+- A tag's page (`/library/workflows/:name/:tag`, where the tag may also
   be a full digest) shows the status graph as a table (owner, instruction
   path, outcomes with their required artifacts and checks with `run_as` and
   timeout, watch), the effective [limits](#limits) of the workflow and of each
@@ -441,7 +444,9 @@ Each server's workspace has a **Workflow images** section beside **Images**
   artifacts, required secrets, `env`, and the stored files. Instruction files
   are shown by path only. **Remove tag** asks for confirmation; a
   `workflow_in_use` refusal is shown in place with the bound queues. A page
-  opened by digest has no **Remove tag**.
+  opened by digest has no **Remove tag**. Below, **Versions** lists every tag
+  of the name with its version, build time, and bound queues, and marks the
+  tag on screen.
 
 Building from a Store selector stays in the CLI and Compose.
 

@@ -264,6 +264,45 @@ not an agent's own environment overrides such as a different `CODEX_HOME`, and
 `codex debug models` may refresh its catalog over the network with the
 account's login.
 
+## First-run setup
+
+The daemon sets up a fresh host by itself. In the worker phase it starts a
+background routine that registers the default Store `tariboy` and then builds
+`tariboy/basic` through `image.build`, as an operation with the initiator
+`onboarding`. The rules for when it registers and builds are in
+[Images](/docs/images#the-default-store). `TARIBOY_ONBOARDING=off` or
+`tariboyd --onboarding=off` skips the routine at start. Every test daemon sets
+it off.
+
+The daemon config key `onboarding.default_store` holds `registered`, `failed`
+or `removed`. `store.remove` of the default Store writes `removed`. Error texts
+and the starter image state stay in daemon memory, so after a restart the
+routine tries a failed step again.
+
+Two commands read and drive it:
+
+| Command | Route | Result |
+| --- | --- | --- |
+| `onboarding.status` | `GET /api/onboarding` | `OnboardingStatus` |
+| `onboarding.retry` | `POST /api/onboarding/retry` | `OnboardingStatus` |
+
+`OnboardingStatus` has these fields:
+
+- `default_store`: `{state, name, source, error}`, where `state` is `registered`, `failed`, `removed` or `pending`.
+- `starter_image`: `{state, ref, error}`, where `state` is `ready`, `building`, `failed`, `skipped` (an image named `basic` already existed) or `pending`.
+- `harnesses`: `{type, found, install}` for `claude`, `codex`, `opencode` and `cursor`. `stub` is never in the list.
+- `agents`: the number of agents on the host.
+
+A Store that exists is `registered`, whatever the config key says. On a daemon
+with onboarding off, a missing Store is `failed` with the reason, so a client
+stops waiting. `onboarding.retry` starts the routine in the background, also
+on such a daemon, and returns the current status. A call while the routine
+runs only returns the status. Harness detection uses the PATH lookup of the
+missing-tools check. It is cached for five minutes, and `refresh=true` (CLI
+`--refresh`) looks again. When a clone or a build fails and `git` or `npx` is
+missing on the daemon PATH, the error starts with that tool and its install
+hint. `daemon.status` does not change.
+
 ## Managed model-price lifecycle
 
 The daemon owns one model-price catalog sourced from LiteLLM's fixed published
