@@ -3,6 +3,7 @@ package aiproxy
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +12,25 @@ import (
 	"sync/atomic"
 	"testing"
 )
+
+type failedStreamWriter struct{}
+
+func (failedStreamWriter) Header() http.Header       { return make(http.Header) }
+func (failedStreamWriter) WriteHeader(int)           {}
+func (failedStreamWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestProviderStreamCapturesUsageWhenClientWriteFails(t *testing.T) {
+	p := testProxy(t)
+	p.cfg.Pricing = &Pricing{table: map[string]ModelPrice{"actual-model": {InputPerMtok: 1_000_000, OutputPerMtok: 2_000_000}}}
+	ex := &Exchange{W: failedStreamWriter{}, ReqBody: []byte(`{"model":"alias"}`)}
+	line := "data: {\"model\":\"actual-model\",\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":10}}\n"
+	if err := p.streamThrough(ex, strings.NewReader(line)); err != io.ErrClosedPipe {
+		t.Fatalf("error = %v", err)
+	}
+	if ex.Model != "actual-model" || ex.Usage.InputTokens != 100 || ex.Usage.OutputTokens != 10 || ex.CostUSD != 120 || string(ex.RespBody) != line {
+		t.Fatalf("model=%q usage=%+v cost=%v transcript=%q", ex.Model, ex.Usage, ex.CostUSD, ex.RespBody)
+	}
+}
 
 func TestProviderRouteRestoredFromHandoff(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +122,31 @@ func TestInvalidRestoredProviderRouteFailsClosed(t *testing.T) {
 	}
 }
 
+func TestProviderRouteRejectsEmptyURLDelimiters(t *testing.T) {
+	for _, base := range []string{"https://example.com/v1?", "https://example.com/v1#"} {
+		reg := NewTokenRegistry(nil)
+		token, err := reg.Mint(Attribution{Agent: "alice", Iteration: "iteration"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		routes := map[string]ProviderRoute{"p": {BaseURL: base, Provider: "openai"}}
+		if err := reg.RegisterProviderRoutes(token, routes); err == nil {
+			t.Errorf("registered %q", base)
+		}
+		data, err := json.Marshal(handoffState{Tokens: map[string]Attribution{"token": {Routes: routes}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(t.TempDir(), "handoff.json")
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := OpenTokenRegistry(path, nil); err == nil {
+			t.Errorf("restored %q", base)
+		}
+	}
+}
+
 func TestProviderStreamWithoutResponseModelUsesRequestModel(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -124,6 +169,19 @@ func TestProviderStreamWithoutResponseModelUsesRequestModel(t *testing.T) {
 	p.ServeHTTP(httptest.NewRecorder(), r)
 	if len(rows) != 1 || rows[0].Model != "k3" || rows[0].InputTokens != 5 {
 		t.Fatalf("rows = %+v", rows)
+	}
+}
+
+func TestProviderStreamUsesModelReportedBeforeUsage(t *testing.T) {
+	p := testProxy(t)
+	p.cfg.Pricing = &Pricing{table: map[string]ModelPrice{"actual-model": {InputPerMtok: 1_000_000, OutputPerMtok: 2_000_000}}}
+	ex := &Exchange{W: httptest.NewRecorder(), ReqBody: []byte(`{"model":"alias"}`)}
+	stream := "data: {\"model\":\"actual-model\",\"usage\":null}\n\ndata: {\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":10}}\n\n"
+	if err := p.streamThrough(ex, strings.NewReader(stream)); err != nil {
+		t.Fatal(err)
+	}
+	if ex.Model != "actual-model" || ex.Usage.InputTokens != 100 || ex.Usage.OutputTokens != 10 || ex.CostUSD != 120 {
+		t.Fatalf("model=%q usage=%+v cost=%v", ex.Model, ex.Usage, ex.CostUSD)
 	}
 }
 

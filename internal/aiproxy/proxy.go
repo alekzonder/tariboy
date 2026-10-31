@@ -913,11 +913,8 @@ func (p *Proxy) streamThrough(ex *Exchange, body io.Reader) error {
 		line, err := br.ReadBytes('\n')
 		if len(line) > 0 {
 			// Pass through unmodified so the client stream is byte-identical.
-			if _, err := ex.W.Write(line); err != nil {
-				streamErr = err
-				break
-			}
-			if flusher != nil {
+			_, writeErr := ex.W.Write(line)
+			if writeErr == nil && flusher != nil {
 				flusher.Flush()
 			}
 			// Tee a capped copy for the transcript (never touches client output).
@@ -938,6 +935,10 @@ func (p *Proxy) streamThrough(ex *Exchange, body io.Reader) error {
 				if len(payload) > 0 && !bytes.Equal(payload, []byte("[DONE]")) {
 					acc.FeedData(payload)
 				}
+			}
+			if writeErr != nil {
+				streamErr = writeErr
+				break
 			}
 		}
 		if err != nil {

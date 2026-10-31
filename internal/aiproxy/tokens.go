@@ -39,7 +39,7 @@ func validProviderRoutes(routes map[string]ProviderRoute) bool {
 			return false
 		}
 		u, err := url.Parse(route.BaseURL)
-		if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
+		if err != nil || u.Hostname() == "" || u.User != nil || strings.ContainsAny(route.BaseURL, "?#") ||
 			(u.Scheme != "https" && u.Scheme != "http") || (u.Path != "" && !isSafeEscapedRoutePath(u.Path, u.EscapedPath())) ||
 			(route.Provider != string(ProviderOpenAI) && route.Provider != string(ProviderAnthropic)) {
 			return false
