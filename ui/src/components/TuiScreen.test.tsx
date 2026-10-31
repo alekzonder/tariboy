@@ -90,6 +90,7 @@ vi.mock("@/components/SendFilesButton", () => ({
 function ctrl(over: Partial<TerminalSocketController> = {}): TerminalSocketController {
   return {
     status: "open",
+    session: "present",
     absent: false,
     send: vi.fn(),
     sendResize: vi.fn(),
@@ -107,6 +108,38 @@ describe("TuiScreen", () => {
     termInstances.length = 0;
     webLinkAddons.length = 0;
     localStorage.clear();
+  });
+
+  it("checks an unknown session without showing the terminal or toolbar", () => {
+    render(<TuiScreen controller={ctrl({ session: "unknown", status: "open" })} />);
+    expect(screen.getByText("Checking session…")).toBeInTheDocument();
+    expect(screen.getByTestId("tui-screen")).toHaveClass("invisible");
+    expect(termInstances).toHaveLength(1);
+    expect(screen.queryByTestId("terminal-toolbar")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Starting/)).not.toBeInTheDocument();
+  });
+
+  it("reveals the existing terminal and toolbar only after the stream is confirmed", () => {
+    const c = ctrl({ session: "unknown" });
+    const { rerender } = render(<TuiScreen controller={c} />);
+    const term = termInstances[0];
+    rerender(<TuiScreen controller={{ ...c, session: "present" }} />);
+    expect(screen.queryByText("Checking session…")).not.toBeInTheDocument();
+    expect(screen.getByTestId("tui-screen")).not.toHaveClass("invisible");
+    expect(screen.getByTestId("terminal-toolbar")).toBeInTheDocument();
+    expect(termInstances).toEqual([term]);
+  });
+
+  it("retains the terminal screen and reports a lost connection until reconnect", () => {
+    const c = ctrl();
+    const { rerender } = render(<TuiScreen controller={c} />);
+    const term = termInstances[0];
+    rerender(<TuiScreen controller={{ ...c, status: "closed" }} />);
+    expect(screen.getByText("Connection lost. Reconnecting…")).toBeInTheDocument();
+    expect(screen.getByTestId("tui-screen")).not.toHaveClass("invisible");
+    rerender(<TuiScreen controller={c} />);
+    expect(screen.queryByText("Connection lost. Reconnecting…")).not.toBeInTheDocument();
+    expect(termInstances).toEqual([term]);
   });
 
   it("mounts the terminal container and hands the term to the controller", () => {

@@ -632,8 +632,8 @@ func (s *Server) serveTerminal(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := s.cctx.Control.Attach(name, cols, rows)
 	if err != nil {
-		// No interactive iteration: accept then close with a distinct code so
-		// the client can tell "no session" from other close reasons.
+		// Accept then close so the client can distinguish confirmed absence
+		// from a transient shim or transport failure.
 		//
 		// InsecureSkipVerify disables coder/websocket's default same-origin
 		// check, which would break the federated /terminals page: a browser
@@ -641,7 +641,11 @@ func (s *Server) serveTerminal(w http.ResponseWriter, r *http.Request) {
 		// equals Host. A bearer-authenticated request is trusted by its token;
 		// a tokenless one already passed rejectUntrustedOrigin above.
 		if c, e := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true}); e == nil {
-			c.Close(4404, "no interactive session")
+			if errors.Is(err, registry.ErrNoTerminalSession) {
+				c.Close(4404, "no interactive session")
+			} else {
+				c.Close(websocket.StatusInternalError, "terminal connection failed")
+			}
 		}
 		return
 	}
@@ -670,7 +674,11 @@ func (s *Server) serveTerminal(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if rerr != nil {
-				ws.Close(websocket.StatusNormalClosure, "eof")
+				if errors.Is(rerr, io.EOF) {
+					ws.Close(websocket.StatusNormalClosure, "eof")
+				} else {
+					ws.Close(websocket.StatusInternalError, "terminal connection failed")
+				}
 				return
 			}
 		}

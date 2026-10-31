@@ -57,6 +57,84 @@ function open(ws: FakeWebSocket) {
 }
 
 describe("useTerminalSocket", () => {
+  it("keeps the session unknown after open until terminal bytes arrive", () => {
+    const { result } = renderHook(() => useTerminalSocket("agent-a", true));
+    act(() => open(FakeWebSocket.last!));
+    expect(result.current.session).toBe("unknown");
+    act(() =>
+      FakeWebSocket.last!.onmessage?.({ data: new Uint8Array([65]).buffer } as MessageEvent),
+    );
+    expect(result.current.session).toBe("present");
+  });
+
+  it("preserves the first frame received before the terminal mounts", () => {
+    const { result } = renderHook(() => useTerminalSocket("agent-a", true));
+    act(() => open(FakeWebSocket.last!));
+    act(() =>
+      FakeWebSocket.last!.onmessage?.({ data: new Uint8Array([65, 66]).buffer } as MessageEvent),
+    );
+    const write = vi.fn();
+    act(() => result.current.attachTerm({ write } as unknown as import("@xterm/xterm").Terminal));
+    expect(Array.from(write.mock.calls[0][0] as Uint8Array)).toEqual([65, 66]);
+  });
+
+  it("does not carry an unmounted stream into a different agent", () => {
+    const { result, rerender } = renderHook(({ name }) => useTerminalSocket(name, true), {
+      initialProps: { name: "agent-a" },
+    });
+    act(() => open(FakeWebSocket.last!));
+    act(() =>
+      FakeWebSocket.last!.onmessage?.({ data: new Uint8Array([65]).buffer } as MessageEvent),
+    );
+    rerender({ name: "agent-b" });
+    expect(result.current.session).toBe("unknown");
+    const write = vi.fn();
+    act(() => result.current.attachTerm({ write } as unknown as import("@xterm/xterm").Terminal));
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("detaches disposed terminals and preserves frames for the replacement", () => {
+    const { result } = renderHook(() => useTerminalSocket("agent-a", true));
+    const disposedWrite = vi.fn();
+    act(() =>
+      result.current.attachTerm({
+        write: disposedWrite,
+      } as unknown as import("@xterm/xterm").Terminal),
+    );
+    act(() => result.current.attachTerm(null));
+    act(() => open(FakeWebSocket.last!));
+    act(() =>
+      FakeWebSocket.last!.onmessage?.({ data: new Uint8Array([67]).buffer } as MessageEvent),
+    );
+    const write = vi.fn();
+    act(() => result.current.attachTerm({ write } as unknown as import("@xterm/xterm").Terminal));
+    expect(disposedWrite).not.toHaveBeenCalled();
+    expect(Array.from(write.mock.calls[0][0] as Uint8Array)).toEqual([67]);
+  });
+
+  it("uses known absence immediately and only rechecks after explicit reconnect", () => {
+    const { result } = renderHook(() => useTerminalSocket("agent-a", true, undefined, true));
+    expect(result.current.session).toBe("absent");
+    expect(result.current.absent).toBe(true);
+    expect(FakeWebSocket.instances).toHaveLength(0);
+    act(() => result.current.reconnect());
+    expect(result.current.session).toBe("unknown");
+    expect(result.current.absent).toBe(false);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it("keeps a confirmed session after transport loss", () => {
+    const { result } = renderHook(() => useTerminalSocket("agent-a", true));
+    act(() => open(FakeWebSocket.last!));
+    act(() =>
+      FakeWebSocket.last!.onmessage?.({ data: new Uint8Array([65]).buffer } as MessageEvent),
+    );
+    act(() => FakeWebSocket.last!.onclose?.({ code: 1011 } as CloseEvent));
+    expect(result.current.session).toBe("present");
+    expect(result.current.absent).toBe(false);
+    expect(result.current.status).toBe("closed");
+  });
+
   it("opens a websocket and reports status open", () => {
     const { result } = renderHook(() => useTerminalSocket("agent-a", true));
     expect(FakeWebSocket.last).toBeDefined();
@@ -303,8 +381,13 @@ describe("useTerminalSocket", () => {
       });
       expect(FakeWebSocket.instances.length).toBe(2);
 
-      // The reconnected socket opens successfully, which should reset the backoff.
+      // Terminal bytes, rather than the WebSocket upgrade, confirm a successful attach.
       act(() => open(FakeWebSocket.instances[1]));
+      act(() =>
+        FakeWebSocket.instances[1].onmessage?.({
+          data: new Uint8Array([65]).buffer,
+        } as MessageEvent),
+      );
 
       // Close again: delay should be back at the 250ms minimum, not the grown 500ms.
       act(() => {
@@ -318,6 +401,20 @@ describe("useTerminalSocket", () => {
         vi.advanceTimersByTime(1);
       });
       expect(FakeWebSocket.instances.length).toBe(3);
+    });
+
+    it("backs off accepted connections whose terminal attach fails", () => {
+      renderHook(() => useTerminalSocket("agent-a", true));
+
+      for (const [index, delay] of [250, 500, 1000, 2000, 2000].entries()) {
+        const ws = FakeWebSocket.last!;
+        act(() => open(ws));
+        act(() => ws.onclose?.({ code: 1011 } as CloseEvent));
+        act(() => vi.advanceTimersByTime(delay - 1));
+        expect(FakeWebSocket.instances).toHaveLength(index + 1);
+        act(() => vi.advanceTimersByTime(1));
+        expect(FakeWebSocket.instances).toHaveLength(index + 2);
+      }
     });
 
     it("does not reconnect after unmount and closes the socket", () => {

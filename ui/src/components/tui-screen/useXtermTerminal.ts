@@ -130,6 +130,7 @@ export function useXtermTerminal(
     window.addEventListener("resize", refit);
 
     return () => {
+      attachTerm(null);
       refitRef.current = null;
       if (raf) cancelAnimationFrame(raf);
       window.removeEventListener("resize", refit);

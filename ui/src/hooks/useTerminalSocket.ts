@@ -7,6 +7,7 @@ import { ApiContext } from "@/components/apiContext";
 /** Connection lifecycle exposed to the Terminal tab. "connecting" covers both
  * the initial dial and any backoff-driven reconnect attempt. */
 type TerminalSocketStatus = "connecting" | "open" | "closed";
+type TerminalSession = "unknown" | "present" | "absent";
 
 /** Everything the Terminal tab needs to drive a live xterm.js session over
  * `GET /api/agents/<name>/terminal`: connection status, whether the daemon
@@ -15,10 +16,11 @@ type TerminalSocketStatus = "connecting" | "open" | "closed";
  * written to it directly. */
 export interface TerminalSocketController {
   status: TerminalSocketStatus;
+  session: TerminalSession;
   absent: boolean;
   send: (data: string | Uint8Array) => void;
   sendResize: (cols: number, rows: number) => void;
-  attachTerm: (t: Terminal) => void;
+  attachTerm: (t: Terminal | null) => void;
   name: string;
   /** Force the connect effect to tear down and re-dial immediately (backoff
    * reset to the minimum delay), clearing `absent` first. Intended for a
@@ -43,6 +45,23 @@ const CLOSE_CODE_ABSENT = 4404;
 // with this reason. That means the tmux session ended; retrying would only
 // attach to a missing session and print the same diagnostic into xterm.
 const CLOSE_REASON_EOF = "eof";
+
+function useTerminalSession(identity: string, knownAbsent: boolean) {
+  const [state, setState] = useState({
+    identity,
+    session: (knownAbsent ? "absent" : "unknown") as TerminalSession,
+  });
+  const setSession = useCallback(
+    (session: TerminalSession) =>
+      setState((previous) =>
+        previous.identity === identity && previous.session === session
+          ? previous
+          : { identity, session },
+      ),
+    [identity],
+  );
+  return [state.identity === identity ? state.session : "unknown", setSession] as const;
+}
 
 /** Build the terminal websocket URL. `target` undefined/null keeps today's
  * same-origin, no-token URL; a `Daemon` target dials that host's baseURL
@@ -85,16 +104,21 @@ export function useTerminalSocket(
   name: string,
   enabled: boolean,
   target?: Daemon | null,
+  knownAbsent = false,
 ): TerminalSocketController {
   // Omitted, the terminal is on the server of the surrounding ApiProvider.
   const provided = useContext(ApiContext);
   if (target === undefined && !provided)
     throw new Error("useApi must be used within an ApiProvider");
   const host = target === undefined ? provided!.target : target;
-  const [status, setStatus] = useState<TerminalSocketStatus>("connecting");
-  const [absent, setAbsent] = useState(false);
+  const identity = JSON.stringify([host?.id, name]);
+  const [status, setStatus] = useState<TerminalSocketStatus>(knownAbsent ? "closed" : "connecting");
+  const [session, setSession] = useTerminalSession(identity, knownAbsent);
+  const absent = session === "absent";
+  const initiallyAbsent = useRef(knownAbsent ? identity : null);
   const wsRef = useRef<WebSocket | null>(null);
   const termRef = useRef<Terminal | null>(null);
+  const pendingBytes = useRef({ identity, bytes: [] as Uint8Array[] });
   const reconnectDelayRef = useRef(RECONNECT_MIN_MS);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Bumping this forces the connect effect below to tear down and re-dial;
@@ -107,15 +131,23 @@ export function useTerminalSocket(
   // the whole session's window until a later resize frame lands.
   const sizeRef = useRef({ cols: INITIAL_COLS, rows: INITIAL_ROWS });
 
-  const attachTerm = useCallback((t: Terminal) => {
-    termRef.current = t;
-  }, []);
+  const attachTerm = useCallback(
+    (t: Terminal | null) => {
+      termRef.current = t;
+      if (!t) return;
+      if (pendingBytes.current.identity === identity) {
+        for (const bytes of pendingBytes.current.bytes) t.write(bytes);
+      }
+      pendingBytes.current = { identity, bytes: [] };
+    },
+    [identity],
+  );
 
   const reconnect = useCallback(() => {
     reconnectDelayRef.current = RECONNECT_MIN_MS;
-    setAbsent(false);
+    setSession("unknown");
     setRetryNonce((n) => n + 1);
-  }, []);
+  }, [setSession]);
 
   // Serialize the target so the connect effect keys off its VALUE (host +
   // token), not object identity — a caller re-rendering with a fresh but
@@ -123,7 +155,7 @@ export function useTerminalSocket(
   const targetKey = JSON.stringify(host);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || (initiallyAbsent.current === identity && retryNonce === 0)) return;
     let alive = true;
     const absentDeadline = Date.now() + ABSENT_GRACE_MS;
     let absentDelay = RECONNECT_MIN_MS;
@@ -131,17 +163,12 @@ export function useTerminalSocket(
     if (socketTarget && !socketTarget.baseURL) {
       queueMicrotask(() => {
         if (!alive) return;
-        setAbsent(false);
         setStatus("closed");
       });
       return () => {
         alive = false;
       };
     }
-    queueMicrotask(() => {
-      if (alive) setAbsent(false);
-    });
-
     const connect = () => {
       if (!alive) return;
       setStatus("connecting");
@@ -153,7 +180,6 @@ export function useTerminalSocket(
 
       ws.onopen = () => {
         if (!alive) return;
-        reconnectDelayRef.current = RECONNECT_MIN_MS;
         setStatus("open");
         // Emit the current terminal size on EVERY (re)connect. The mount-effect's
         // fit() runs while the ws is still CONNECTING (dropped), and it never
@@ -172,7 +198,16 @@ export function useTerminalSocket(
       ws.onmessage = (ev) => {
         if (!alive) return;
         if (ev.data instanceof ArrayBuffer) {
-          termRef.current?.write(new Uint8Array(ev.data));
+          if (ev.data.byteLength === 0) return;
+          reconnectDelayRef.current = RECONNECT_MIN_MS;
+          const bytes = new Uint8Array(ev.data);
+          if (termRef.current) termRef.current.write(bytes);
+          else {
+            if (pendingBytes.current.identity !== identity)
+              pendingBytes.current = { identity, bytes: [] };
+            pendingBytes.current.bytes.push(bytes);
+          }
+          setSession("present");
         }
       };
 
@@ -193,12 +228,12 @@ export function useTerminalSocket(
             reconnectTimerRef.current = setTimeout(connect, delay);
             return;
           }
-          setAbsent(true);
+          setSession("absent");
           setStatus("closed");
           return;
         }
         if (ev.code === 1000 && ev.reason === CLOSE_REASON_EOF) {
-          setAbsent(true);
+          setSession("absent");
           setStatus("closed");
           return;
         }
@@ -218,7 +253,7 @@ export function useTerminalSocket(
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [name, enabled, retryNonce, targetKey]);
+  }, [name, enabled, retryNonce, targetKey, identity, setSession]);
 
   const send = useCallback((data: string | Uint8Array) => {
     const ws = wsRef.current;
@@ -246,5 +281,5 @@ export function useTerminalSocket(
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ cols, rows }));
   }, []);
 
-  return { status, absent, send, sendResize, attachTerm, name, reconnect };
+  return { status, session, absent, send, sendResize, attachTerm, name, reconnect };
 }

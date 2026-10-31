@@ -1,4 +1,4 @@
-import { lazy, useState, type ReactNode } from "react";
+import { lazy, useCallback, useState, type ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import { ApiProvider } from "@/components/ApiProvider";
@@ -41,14 +41,25 @@ type TabContext = {
   view: AgentView | null;
   refresh: () => void;
   execCount: number;
+  terminalKey: string;
+  knownAbsent: boolean;
+  onAbsent: (absent: boolean) => void;
   needs: AgentNeeds;
   onNotificationsChanged: () => void;
 };
 
 const TAB_CONTENT: Record<AgentTab, (ctx: TabContext) => ReactNode> = {
   mailbox: ({ agent, view }) => <AgentMailboxTab name={agent.name} batch={view?.messages_batch} />,
-  console: ({ hostId, agent, refresh, execCount }) => (
-    <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} execCount={execCount} />
+  console: ({ hostId, agent, refresh, execCount, terminalKey, knownAbsent, onAbsent }) => (
+    <AgentConsoleTab
+      key={terminalKey}
+      hostId={hostId}
+      agent={agent}
+      refresh={refresh}
+      execCount={execCount}
+      knownAbsent={knownAbsent}
+      onAbsent={onAbsent}
+    />
   ),
   activity: () => <AgentActivityTab />,
   work: ({ hostId, agent, base, needs, refresh, onNotificationsChanged }) => (
@@ -110,6 +121,20 @@ function AgentWorkspaceContent({
   const { activeId, daemons, connection, status, currentView, refreshStatus } =
     useAgentWorkspaceStatus({ hostId, agentName: agent.name, unavailable });
   const [execCount, setExecCount] = useState(0);
+  const [absentSession, setAbsentSession] = useState<string | null>(null);
+  const identity = JSON.stringify([hostId, agent.name]);
+  const [lastIteration, setLastIteration] = useState("");
+  const observedIteration =
+    status?.name === agent.name
+      ? status.active_iteration?.id || status.last_iteration_id || ""
+      : "";
+  const iteration = observedIteration || lastIteration;
+  if (observedIteration && observedIteration !== lastIteration) setLastIteration(observedIteration);
+  const terminalKey = JSON.stringify([identity, iteration, execCount]);
+  const onAbsent = useCallback(
+    (absent: boolean) => setAbsentSession(absent ? terminalKey : null),
+    [terminalKey],
+  );
   const { refreshHost } = useCustomerQuestionNotifications();
   const needsYou = useNeedsYou();
   const needs = agentNeeds(
@@ -132,6 +157,9 @@ function AgentWorkspaceContent({
     view: currentView,
     refresh,
     execCount,
+    terminalKey,
+    knownAbsent: absentSession === terminalKey,
+    onAbsent,
     needs,
     onNotificationsChanged: () => {
       void refreshHost(hostId);

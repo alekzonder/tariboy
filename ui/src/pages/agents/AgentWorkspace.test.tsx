@@ -13,6 +13,9 @@ import { ApiError } from "@/lib/api";
 import { agentRow } from "@/test/fixtures/apiFixtures";
 import type { Daemon } from "@/lib/daemons";
 import * as desktop from "@/lib/desktop";
+import { useTerminalSocket } from "@/hooks/useTerminalSocket";
+
+const terminalState = vi.hoisted(() => ({ absent: false }));
 
 // Every agent-scoped GET the workspace sends, recorded with the host of the
 // client that sent it: (host, agent, action).
@@ -40,7 +43,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
 vi.mock("@/hooks/useTerminalSocket", () => ({
   useTerminalSocket: vi.fn(() => ({
     status: "closed",
-    absent: false,
+    absent: terminalState.absent,
     send: vi.fn(),
     sendResize: vi.fn(),
     attachTerm: vi.fn(),
@@ -118,6 +121,7 @@ const openMenu = () =>
   fireEvent.keyDown(screen.getByRole("button", { name: "More agent actions" }), { key: "Enter" });
 
 beforeEach(() => {
+  terminalState.absent = false;
   localStorage.clear();
   sessionStorage.clear();
   agentGetOn.mockResolvedValue(runningStatus);
@@ -348,6 +352,41 @@ describe("AgentWorkspace header", () => {
 });
 
 describe("AgentWorkspace tabs", () => {
+  it("keeps the terminal mounted across a failed status read and recovery", async () => {
+    const status = {
+      ...runningStatus,
+      iterations: 7,
+      last_iteration_id: "run-1",
+      active_iteration: { id: "run-1", started_at: "2026-10-31T10:00:00Z", timeout_extensions: 0 },
+    };
+    agentGetOn.mockResolvedValue(status);
+    renderAt("/agents/local/worker/console", { row: { ...agent, interactive: true } });
+    await screen.findByText(/run 7/);
+    const terminal = await screen.findByText("terminal");
+    let failed = false;
+    agentGetOn.mockImplementation(async () => {
+      failed = true;
+      throw new ApiError(500, "internal", "temporary status failure");
+    });
+    await waitFor(() => expect(failed).toBe(true), { timeout: 5000 });
+    expect(screen.getByText("terminal")).toBe(terminal);
+    let recovered = false;
+    agentGetOn.mockImplementation(async () => {
+      recovered = true;
+      return status;
+    });
+    await waitFor(() => expect(recovered).toBe(true), { timeout: 5000 });
+    expect(screen.getByText("terminal")).toBe(terminal);
+  });
+  it("remembers confirmed absence across tab switches without starting the agent", async () => {
+    terminalState.absent = true;
+    renderAt("/agents/local/worker/console", { row: { ...agent, interactive: true } });
+    await screen.findByText("terminal");
+    await userEvent.click(screen.getByRole("link", { name: "Activity" }));
+    await userEvent.click(screen.getByRole("link", { name: "Terminal" }));
+    await screen.findByText("terminal");
+    expect(useTerminalSocket).toHaveBeenLastCalledWith("worker", true, undefined, true);
+  });
   it("shows Work, Terminal, Activity and Settings with host and agent in every link", async () => {
     renderAt("/agents/local/worker/console");
 

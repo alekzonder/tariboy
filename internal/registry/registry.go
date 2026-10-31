@@ -6,6 +6,7 @@ package registry
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -220,6 +221,10 @@ type RunSpec struct {
 	Color                    string
 }
 
+// ErrNoTerminalSession means Attach established that no interactive iteration
+// exists; transport failures must not match it.
+var ErrNoTerminalSession = errors.New("no interactive session")
+
 // ServiceControl is the daemon-side agent lifecycle, implemented by loop.Manager
 // and consumed by the agent.* command handlers.
 type ServiceControl interface {
@@ -250,7 +255,7 @@ type ServiceControl interface {
 	SendKeysItems(name string, items []shim.KeyItem) error
 	// Attach opens a live PTY stream to the agent's running interactive shim,
 	// sizing the pane to cols x rows. The returned conn carries raw terminal
-	// bytes both ways; it errors when no interactive iteration is running.
+	// bytes both ways; ErrNoTerminalSession distinguishes absence from transport errors.
 	Attach(name string, cols, rows int) (net.Conn, error)
 	// Resize adjusts the running interactive shim's PTY dimensions.
 	Resize(name string, cols, rows int) error

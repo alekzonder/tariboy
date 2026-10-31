@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -204,7 +205,7 @@ func statusOf(r *http.Response) int {
 
 func TestServeTerminalNoSession(t *testing.T) {
 	t.Parallel()
-	ctrl := &fakeTermControl{attachErr: errors.New("no interactive iteration")}
+	ctrl := &fakeTermControl{attachErr: fmt.Errorf("no interactive iteration: %w", registry.ErrNoTerminalSession)}
 	ts := termServer(t, ctrl)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -220,6 +221,22 @@ func TestServeTerminalNoSession(t *testing.T) {
 	_, _, err = ws.Read(ctx)
 	if websocket.CloseStatus(err) != 4404 {
 		t.Fatalf("want close 4404, got err=%v (status=%d)", err, websocket.CloseStatus(err))
+	}
+}
+
+func TestServeTerminalAttachTransportFailure(t *testing.T) {
+	t.Parallel()
+	ts := termServer(t, &fakeTermControl{attachErr: &net.OpError{Op: "dial", Net: "unix", Err: errors.New("connection refused")}})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ws, _, err := websocket.Dial(ctx, wsURL(ts.URL)+"/api/agents/smoke/terminal", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.CloseNow()
+	_, _, err = ws.Read(ctx)
+	if websocket.CloseStatus(err) != websocket.StatusInternalError {
+		t.Fatalf("transport failure close = %v, want 1011", err)
 	}
 }
 
@@ -251,5 +268,29 @@ func TestServeTerminalSessionEOF(t *testing.T) {
 	}
 	if closeErr.Code != websocket.StatusNormalClosure || closeErr.Reason != "eof" {
 		t.Fatalf("close = %d/%q, want %d/eof", closeErr.Code, closeErr.Reason, websocket.StatusNormalClosure)
+	}
+}
+
+type terminalReadErrorConn struct{ net.Conn }
+
+func (terminalReadErrorConn) Read([]byte) (int, error) {
+	return 0, &net.OpError{Op: "read", Net: "unix", Err: errors.New("connection reset")}
+}
+
+func TestServeTerminalStreamTransportFailure(t *testing.T) {
+	t.Parallel()
+	shimEnd, handlerEnd := net.Pipe()
+	defer shimEnd.Close()
+	ts := termServer(t, &fakeTermControl{conn: terminalReadErrorConn{handlerEnd}})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ws, _, err := websocket.Dial(ctx, wsURL(ts.URL)+"/api/agents/smoke/terminal", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.CloseNow()
+	_, _, err = ws.Read(ctx)
+	if websocket.CloseStatus(err) != websocket.StatusInternalError {
+		t.Fatalf("stream transport failure close = %v, want 1011", err)
 	}
 }
