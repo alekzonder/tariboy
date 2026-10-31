@@ -127,6 +127,7 @@ export default function TaskDetail({
               confirmClose={confirmClose}
               setConfirmClose={setConfirmClose}
               onClose={onClose}
+              pending={pending}
             />
             {task.access === "context" ? (
               <div className="px-5 py-10 text-center text-body text-muted-foreground">

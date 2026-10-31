@@ -53,12 +53,14 @@ export function TaskDetailDraftAlerts({
   confirmClose,
   setConfirmClose,
   onClose,
+  pending,
 }: {
   task: Task;
   draft: ReturnType<typeof useTaskDetailDraft>;
   confirmClose: boolean;
   setConfirmClose: (open: boolean) => void;
   onClose: () => void;
+  pending: boolean;
 }) {
   const { dirty, baseline, saving, keepEdits, adopt } = draft;
   return (
@@ -76,7 +78,13 @@ export function TaskDetailDraftAlerts({
               <BannerButton tone="quiet" onClick={() => setConfirmClose(false)}>
                 Keep editing
               </BannerButton>
-              <BannerButton tone="danger" onClick={onClose}>
+              <BannerButton
+                tone="danger"
+                disabled={pending}
+                onClick={() => {
+                  if (!pending) onClose();
+                }}
+              >
                 Discard changes
               </BannerButton>
             </>

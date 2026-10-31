@@ -46,7 +46,12 @@ function show(view: WorkflowView = customerView, readError?: Error) {
     />
   );
   const result = render(element(), { api: client });
-  return { onClose, onComment, rerender: () => result.rerender(element()) };
+  return {
+    onClose,
+    onComment,
+    queryClient: result.client,
+    rerender: () => result.rerender(element()),
+  };
 }
 
 it("shows the initial customer's real outcomes above the description with no duplicate title", async () => {
@@ -123,6 +128,39 @@ it("keeps a stale decision draft accessible when another participant changes the
   expect(screen.getByRole("textbox", { name: "Outcome message" })).toHaveValue("My decision");
 });
 
+it.each(["rejected", "failed"] as const)(
+  "shows a settled %s request by the outcome and opens its details",
+  async (state) => {
+    const request = {
+      id: 11,
+      task_key: "REL-1",
+      outcome: "approve",
+      actor: "user:owner",
+      state,
+      created_at: "2026-10-01T10:06:00Z",
+      result_message: "The check needs attention",
+    };
+    show();
+    const panel = await screen.findByRole("region", { name: "Workflow decision" });
+    fireEvent.change(within(panel).getByRole("textbox", { name: "Outcome message" }), {
+      target: { value: "Keep the decision" },
+    });
+    api.advanceTask.mockResolvedValue(request);
+    api.getTaskWorkflow.mockResolvedValue({ ...customerView, last_request: request });
+    await userEvent.click(within(panel).getByRole("button", { name: "approve → publish" }));
+    const details = await within(panel).findByRole("button", { name: "View failure details" });
+    expect(within(panel).getByText("The check needs attention")).toBeVisible();
+    expect(within(panel).getByRole("textbox", { name: "Outcome message" })).toHaveValue(
+      "Keep the decision",
+    );
+    await userEvent.click(details);
+    const summary = screen.getByText("Workflow", { selector: "summary" });
+    expect(summary.closest("details")).toHaveAttribute("open");
+    expect(summary).toHaveFocus();
+    expect(api.advanceTask).toHaveBeenCalledOnce();
+  },
+);
+
 it("blocks duplicate transitions and closing while the request is pending", async () => {
   let resolve!: (value: unknown) => void;
   api.advanceTask.mockReturnValue(
@@ -136,6 +174,26 @@ it("blocks duplicate transitions and closing while the request is pending", asyn
   expect(button).toBeDisabled();
   expect(screen.getByRole("button", { name: "Close task detail" })).toBeDisabled();
   await userEvent.keyboard("{Escape}");
+  expect(onClose).not.toHaveBeenCalled();
+  await act(async () => resolve({ id: 1, state: "applied" }));
+});
+
+it("does not discard a draft while an outcome started after the close confirmation is pending", async () => {
+  let resolve!: (value: unknown) => void;
+  api.advanceTask.mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  const { onClose } = show();
+  fireEvent.change(await screen.findByRole("textbox", { name: "Outcome message" }), {
+    target: { value: "Keep this" },
+  });
+  await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
+  const discard = screen.getByRole("button", { name: "Discard changes" });
+  await userEvent.click(screen.getByRole("button", { name: "approve → publish" }));
+  expect(discard).toBeDisabled();
+  await userEvent.click(discard);
   expect(onClose).not.toHaveBeenCalled();
   await act(async () => resolve({ id: 1, state: "applied" }));
 });
@@ -163,6 +221,24 @@ it("keeps the task visible on a workflow read failure and retries", async () => 
   api.getTaskWorkflow.mockResolvedValue(customerView);
   await userEvent.click(screen.getAllByRole("button", { name: "Retry" })[0]);
   expect(await screen.findByRole("button", { name: "approve → publish" })).toBeEnabled();
+});
+
+it("shows a background workflow read failure and retries without losing the draft", async () => {
+  const { queryClient } = show();
+  const message = await screen.findByRole("textbox", { name: "Outcome message" });
+  const sticky = screen.getByRole("region", { name: "Workflow decision" }).parentElement!;
+  fireEvent.change(message, { target: { value: "Preserve this" } });
+  api.getTaskWorkflow.mockRejectedValue(new Error("background read failed"));
+  await act(async () => {
+    await queryClient.invalidateQueries();
+  });
+  const error = await within(sticky).findByText("background read failed");
+  expect(message).toHaveValue("Preserve this");
+  api.getTaskWorkflow.mockResolvedValue(customerView);
+  await userEvent.click(within(error.parentElement!).getByRole("button", { name: "Retry" }));
+  expect(await screen.findByRole("textbox", { name: "Outcome message" })).toHaveValue(
+    "Preserve this",
+  );
 });
 
 it("prevents closing while a confirmed pause decision is being sent", async () => {

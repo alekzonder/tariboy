@@ -18,17 +18,19 @@ import type { TaskDetailProps } from "./TaskDetailTypes";
 function Collapsed({
   label,
   open,
+  id,
   children,
 }: {
   label: string;
   open?: boolean;
+  id?: string;
   children: ReactNode;
 }) {
   // Only the first value counts: a later change must not close a section the
   // user opened, or open one they closed.
   const [initial] = useState(open);
   return (
-    <details open={initial} className="group min-w-0">
+    <details id={id} open={initial} className="group min-w-0">
       <summary className={`${LABEL} cursor-pointer select-none py-1`}>{label}</summary>
       <div className="flex min-w-0 flex-col gap-4.5 pt-2.5">{children}</div>
     </details>
@@ -147,7 +149,7 @@ export function TaskDetailBody({
       </Collapsed>
       {/* In place of the status select: the workflow changes the status. */}
       {editable && workflow && (
-        <Collapsed label="Workflow" open={!!task.workflow_attention}>
+        <Collapsed id="task-workflow-details" label="Workflow" open={!!task.workflow_attention}>
           <WorkflowPanel
             task={task}
             eventSequence={eventSequence}

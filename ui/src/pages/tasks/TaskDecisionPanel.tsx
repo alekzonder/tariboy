@@ -13,6 +13,7 @@ import { useWorkflowAdvance } from "./useWorkflowAdvance";
 import { CheckingStatus, OutcomeNotice } from "./WorkflowOutcomes";
 import WorkflowPauseBanner from "./WorkflowPauseBanner";
 import { visibleNotice } from "./workflowShared";
+import { explainProblem } from "./explainWorkflowProblem";
 
 export function TaskDecisionPanel({
   task,
@@ -41,6 +42,14 @@ export function TaskDecisionPanel({
     <>
       <div className="sticky top-0 z-[3] max-h-[60vh] overflow-auto bg-card shadow-[var(--raise)]">
         {children}
+        {query.error && (
+          <div role="alert" className="px-4 pb-3 text-ui">
+            {errorText(query.error)}{" "}
+            <Button type="button" size="sm" variant="ghost" onClick={refresh}>
+              Retry
+            </Button>
+          </div>
+        )}
         {query.data ? (
           <Decision
             task={task}
@@ -52,16 +61,7 @@ export function TaskDecisionPanel({
           />
         ) : (
           <div className="px-4 pb-3 text-ui">
-            {query.error ? (
-              <div role="alert">
-                {errorText(query.error)}{" "}
-                <Button type="button" size="sm" variant="ghost" onClick={refresh}>
-                  Retry
-                </Button>
-              </div>
-            ) : (
-              <span role="status">Loading workflow…</span>
-            )}
+            {!query.error && <span role="status">Loading workflow…</span>}
           </div>
         )}
       </div>
@@ -109,7 +109,37 @@ function Decision({
         />
       )}
       <DecisionActions view={view} editable={editable} advance={advance} refresh={refresh} />
+      <DecisionProblem view={view} />
     </section>
+  );
+}
+
+function DecisionProblem({ view }: { view: WorkflowView }) {
+  const problem = explainProblem(view);
+  if (!problem || (problem.kind !== "failed" && problem.kind !== "rejected")) return null;
+  return (
+    <div role="alert" className="flex flex-col gap-1 text-ui">
+      <span>{problem.title}</span>
+      {problem.detail && <span className="whitespace-pre-wrap break-words">{problem.detail}</span>}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="self-start"
+        onClick={() => {
+          const details = document.getElementById(
+            "task-workflow-details",
+          ) as HTMLDetailsElement | null;
+          if (details) {
+            details.open = true;
+            details.scrollIntoView?.({ block: "nearest" });
+            details.querySelector("summary")?.focus();
+          }
+        }}
+      >
+        View failure details
+      </Button>
+    </div>
   );
 }
 
