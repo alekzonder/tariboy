@@ -8,6 +8,7 @@ import type { AgentRow, ApiClient } from "@/lib/api";
 import { fakeApi } from "@/test/api";
 import { agentRow } from "@/test/fixtures/apiFixtures";
 import AgentConsoleTab from "./AgentConsoleTab";
+import { useTerminalSocket } from "@/hooks/useTerminalSocket";
 
 const reconnect = vi.fn();
 const socket = vi.hoisted(() => ({ status: "open", absent: false }));
@@ -117,14 +118,12 @@ describe("AgentConsoleTab non-interactive uploads", () => {
   });
 });
 
-it("says a stopped agent is off and starts it from the banner", async () => {
-  startAgent.mockResolvedValue({ name: "worker", action: "start" });
+it("checks for a surviving terminal even when the agent is stopped", () => {
   renderTab(agent({ interactive: true, state: "stopped", enabled: false }));
 
-  expect(screen.getByRole("status")).toHaveTextContent("Off.");
-  expect(screen.queryByTestId("tui-screen")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Start" }));
-  await waitFor(() => expect(startAgent).toHaveBeenCalledWith("worker"));
+  expect(useTerminalSocket).toHaveBeenLastCalledWith("worker", true, undefined, false);
+  expect(screen.getByTestId("tui-screen")).toBeInTheDocument();
+  expect(startAgent).not.toHaveBeenCalled();
 });
 
 describe("AgentConsoleTab and header Exec", () => {
@@ -158,65 +157,55 @@ describe("AgentConsoleTab and header Exec", () => {
   });
 });
 
-describe("AgentConsoleTab banner", () => {
+describe("AgentConsoleTab leaves work status in the header", () => {
   const live = { interactive: true, enabled: true, state: "running", cwd: "~/code/my-app" };
 
-  it("names the coding tool and folder while the terminal connects", () => {
+  it("does not claim that opening a socket starts the coding tool", () => {
     socket.status = "connecting";
     renderTab(agent({ ...live, harness: "claude" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("Starting Claude Code in ~/code/my-app…");
+    expect(screen.queryByText(/Starting/)).not.toBeInTheDocument();
   });
 
-  it("keeps the starting line while the daemon reports no session yet", () => {
+  it("does not claim startup after confirmed absence", () => {
     socket.status = "closed";
     socket.absent = true;
     renderTab(agent({ ...live, harness: "codex" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("Starting Codex in ~/code/my-app…");
+    expect(screen.queryByText(/Starting/)).not.toBeInTheDocument();
   });
 
-  it("names the terminal, not a coding tool, for a plain terminal agent", () => {
+  it("does not claim startup for a plain terminal either", () => {
     socket.status = "connecting";
     renderTab(agent({ ...live, image: "bare:latest", harness: "claude" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("Starting the terminal in ~/code/my-app…");
+    expect(screen.queryByText(/Starting/)).not.toBeInTheDocument();
   });
 
-  it("says the screen is the live run of the Goal task while working", () => {
+  it("does not repeat Working on below the tabs", () => {
     renderTab(agent({ ...live, harness: "claude", current_goal_task_key: "DEV-1" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Working on DEV-1 — this is its live screen.",
-    );
+    expect(screen.queryByText(/Working on/)).not.toBeInTheDocument();
   });
 
-  it("says an idle agent's screen appears when a run starts", () => {
+  it("does not hide an idle agent's surviving terminal", () => {
     renderTab(agent({ ...live, state: "idle", harness: "claude" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Idle. The screen appears when a run starts. Type here to talk to the agent directly; this is not recorded in a task.",
-    );
+    expect(screen.queryByText(/Idle\./)).not.toBeInTheDocument();
+    expect(useTerminalSocket).toHaveBeenLastCalledWith("worker", true, undefined, false);
   });
 
-  it("shows why the agent did not start, retries the start and links to Settings", async () => {
+  it("does not turn the header's halt reason into a terminal start failure", () => {
     socket.status = "connecting";
     startAgent.mockResolvedValue({ name: "worker", action: "start" });
     const refresh = renderTab(agent({ ...live, harness: "claude", halt_reason: "auth expired" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("Claude Code did not start: auth expired");
-    expect(screen.getByRole("link", { name: "Open settings" })).toHaveAttribute(
-      "href",
-      "/agents/remote/worker/settings",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-
-    await waitFor(() => expect(startAgent).toHaveBeenCalledWith("worker"));
-    expect(reconnect).toHaveBeenCalled();
-    expect(refresh).toHaveBeenCalled();
+    expect(screen.queryByText(/did not start/)).not.toBeInTheDocument();
+    expect(startAgent).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
-  it("shows an error reason of a stopped agent", () => {
+  it("does not repeat the header's error reason for a stopped agent", () => {
     socket.status = "closed";
     renderTab(
       agent({
@@ -228,7 +217,7 @@ describe("AgentConsoleTab banner", () => {
       }),
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("OpenCode did not start: boom");
+    expect(screen.queryByText(/did not start/)).not.toBeInTheDocument();
   });
 });
 
@@ -243,6 +232,6 @@ it("keeps an idle_limit halt out of the error banner", () => {
     }),
   );
 
-  expect(screen.getByRole("status")).toHaveTextContent("Off.");
+  expect(screen.queryByText("Off.")).not.toBeInTheDocument();
   expect(screen.queryByText(/did not start/)).not.toBeInTheDocument();
 });

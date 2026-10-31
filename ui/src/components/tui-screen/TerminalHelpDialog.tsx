@@ -9,6 +9,7 @@ import {
 const HELP_TEXT =
   "Terminal is for working with the agent by hand. For work it should carry out " +
   "on its own, give it a task in Work; it runs it when it is on. " +
+  "Text you type here is not recorded in a task. " +
   "This is a live terminal. Click it to focus — keystrokes go straight to the " +
   "session in real time. Use the buttons under Keys for Esc/Enter/Ctrl-C/arrows, or " +
   "the Compose button to draft a multi-line message and inject it (no trailing " +

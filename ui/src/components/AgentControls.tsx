@@ -223,7 +223,7 @@ type AgentControlsProps = {
   /** Route of this agent's Settings tab, for the menu's Settings item. */
   settingsPath: string;
   refresh?: () => void;
-  /** Called after a Run once request succeeds, e.g. to reconnect a terminal. */
+  /** Called after Start, Restart or Run once succeeds, to check for a new session. */
   onExec?: () => void;
   /** Called after the agent is deleted, so the caller can leave the route. */
   onDeleted?: () => void;
@@ -359,7 +359,10 @@ export function AgentControls(props: AgentControlsProps) {
   };
 
   const post = (action: "start" | "stop" | "restart") => () =>
-    void run(action, () => api.agentPost(name, action));
+    void run(action, async () => {
+      await api.agentPost(name, action);
+      if (action !== "stop") onExec?.();
+    });
 
   return (
     <div data-testid="agent-controls" className="flex shrink-0 items-center gap-1.5">

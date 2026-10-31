@@ -34,19 +34,20 @@ interface TermLike {
 
 const liveController = {
   status: "open" as const,
+  session: "present" as const,
   absent: false,
   name: "builder",
   send: () => {},
   sendResize: () => {},
-  attachTerm: (term: TermLike) => term.write(SESSION),
+  attachTerm: (term: TermLike | null) => term?.write(SESSION),
   reconnect: () => {},
 };
 
 const workspaceController = {
   ...liveController,
   name: "reviewer",
-  attachTerm: (term: TermLike) =>
-    term.write(
+  attachTerm: (term: TermLike | null) =>
+    term?.write(
       [
         "\x1b[38;5;39m[reviewer]\x1b[0m iteration 12   goal \x1b[1mTB-142\x1b[0m",
         "",
@@ -63,6 +64,7 @@ const absentController = {
   ...liveController,
   name: "docs-bot",
   absent: true,
+  session: "absent" as const,
   status: "closed" as const,
   attachTerm: () => {},
 };

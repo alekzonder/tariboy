@@ -1061,6 +1061,47 @@ func startPendingAdoption(
 	return id
 }
 
+func TestManagerAttachNoIteration(t *testing.T) {
+	t.Parallel()
+	m, _, _, _ := newManager(t, &fakeRunner{})
+	_, err := m.Attach("smoke", 80, 24)
+	if !errors.Is(err, registry.ErrNoTerminalSession) {
+		t.Fatalf("Attach without iteration = %v, want no terminal session", err)
+	}
+}
+
+func TestManagerAttachShimTransportFailure(t *testing.T) {
+	t.Parallel()
+	m, _, _, _ := newManager(t, &fakeRunner{})
+	m.runtimes.beginAdoption(agentdir.LiveIteration{Agent: "smoke", ID: "live", ShimSock: "unused"})
+	want := &net.OpError{Op: "dial", Net: "unix", Err: errors.New("connection refused")}
+	m.cfg.ConnectShim = func(string) (*shim.Client, error) { return nil, want }
+	_, err := m.Attach("smoke", 80, 24)
+	if !errors.Is(err, want) || errors.Is(err, registry.ErrNoTerminalSession) {
+		t.Fatalf("Attach transport error = %v, want original transport failure", err)
+	}
+}
+
+func TestManagerAttachUnsupportedShim(t *testing.T) {
+	t.Parallel()
+	m, _, agentsDir, _ := newManager(t, &fakeRunner{})
+	l := agentdir.New(agentsDir, "smoke").WithRuntime(m.cfg.RuntimeDir)
+	if err := os.MkdirAll(filepath.Dir(l.ShimSock()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("unix", l.ShimSock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() { _ = shim.Serve(ln, stubShim{}) }()
+	m.runtimes.beginAdoption(agentdir.LiveIteration{Agent: "smoke", ID: "live", ShimSock: l.ShimSock()})
+	_, err = m.Attach("smoke", 80, 24)
+	if !errors.Is(err, registry.ErrNoTerminalSession) {
+		t.Fatalf("Attach unsupported shim = %v, want no terminal session", err)
+	}
+}
+
 func TestManagerAttachForwardsToAdoptedShim(t *testing.T) {
 	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done"}}})

@@ -1597,7 +1597,7 @@ phases from title prefixes or assignee. Operator history remains available after
 
 #### Agent state
 
-The sidebar row, the agent header, and the Terminal banner show one derived
+The sidebar row and the agent header show one derived
 state. `deriveAgentState` in `ui/src/lib/agentState.ts` computes it in the UI.
 The first state that matches wins:
 
@@ -1864,8 +1864,7 @@ answers the same question about the next agent. An unknown tab still falls back
 to Work, and a selected task in the `?task=` query is dropped because it belongs
 to the agent being left. A sidebar agent selected from any other page opens on
 Work. A freshly created agent opens on Terminal. Start and Stop are in the
-agent header; the Terminal banner of an agent that is off also has a **Start**
-button.
+agent header. The empty Terminal panel also has a **Start** button.
 
 When a known explicit server route temporarily loses its tunnel or its
 authoritative aggregate refresh fails, the Desktop retains its last successful
@@ -2091,20 +2090,29 @@ text frames carry resize messages. A host or agent route change tears down the
 old socket and dials the newly selected target without stopping the tmux
 session.
 
-One banner line above the terminal always has text. It follows the agent
-state and the terminal session:
+The header owns the agent's work status. Terminal does not repeat Working,
+Idle, Off, or Starting. An interactive agent can keep a usable terminal while
+idle, disabled, or waiting for the customer. Opening the tab only attaches a
+client. It never starts the agent.
 
-| Case | Banner |
-| --- | --- |
-| error | "\<tool\> did not start: \<reason\>", with **Retry** and **Open settings** (`…/settings`) |
-| not interactive | "No interactive terminal. Enable it in Settings → Autopilot.", with a link to `…/settings`; the drop target for files and **Send files** stay below |
-| off | "Off.", with a **Start** button |
-| starting | "Starting \<tool\> in \<cwd\>…" |
-| working | "Working on \<KEY\> — this is its live screen." |
-| idle | "Idle. The screen appears when a run starts. Type here to talk to the agent directly; this is not recorded in a task." |
+Before session presence is known, the panel says "Checking session…" and hides
+the terminal surface and toolbar. The mounted terminal still receives bytes
+and measures its size. A WebSocket open event does not prove session presence.
+The first nonempty binary frame confirms the stream and reveals the terminal.
+Bytes that arrive before the terminal mounts wait in memory until it attaches.
+An open stream without bytes remains in the neutral checking state.
 
-Without a session, the terminal panel says "No terminal session. Start the
-agent, or turn on Interactive terminal in Settings → Autopilot."
+Confirmed absence shows "No terminal session. Start the agent, or turn on
+Interactive terminal in Settings → Autopilot." The workspace remembers this
+result across tab switches in memory, separately for each host and agent.
+A successful Start, Restart, or Run once, or a new iteration identifier, resets
+that result. Reloading the application also starts a new session check.
+Transport errors keep the last confirmed screen and show "Connection lost.
+Reconnecting…" while the client retries. They never establish absence.
+
+A non-interactive agent shows "No interactive terminal. Enable it in Settings
+→ Autopilot." with the Settings link, file drop target, and **Send files**.
+It does not open a terminal socket.
 
 The toolbar under the terminal has **Send files**, **Compose**,
 **Scrollback**, a **Keys** toggle, and the `?` help. **Keys** (with
@@ -2112,7 +2120,8 @@ The toolbar under the terminal has **Send files**, **Compose**,
 **↑**, and **↓**. Keys starts expanded in the Android build and collapsed in
 other builds. The help text starts with: "Terminal is for working with the
 agent by hand. For work it should carry out on its own, give it a task in
-Work; it runs it when it is on."
+Work; it runs it when it is on." It also explains that direct terminal input
+is not recorded in a task.
 
 In the Terminal tab, explicit `http://` and `https://` text in terminal
 output opens in the operator's default browser on **Command-click** (the `Meta`

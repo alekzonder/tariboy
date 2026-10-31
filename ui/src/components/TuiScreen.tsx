@@ -12,6 +12,26 @@ import { TuiAbsentPanel } from "./tui-screen/TuiAbsentPanel";
 import { useTmuxScrollback } from "./tui-screen/useTmuxScrollback";
 import { useXtermTerminal } from "./tui-screen/useXtermTerminal";
 
+function ConnectionNotice({
+  session,
+  status,
+}: Pick<TerminalSocketController, "session" | "status">) {
+  if (session === "unknown") {
+    return (
+      <div
+        role="status"
+        className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground"
+      >
+        Checking session…
+      </div>
+    );
+  }
+  if (status !== "open") {
+    return <p className="text-sm text-muted-foreground">Connection lost. Reconnecting…</p>;
+  }
+  return null;
+}
+
 /** The interactive terminal screen. Mounts a live xterm.js terminal driven by
  * the streaming websocket {@link TerminalSocketController}: PTY bytes are
  * written into the terminal and keystrokes flow back over `controller.send`.
@@ -35,7 +55,8 @@ export function TuiScreen({
   /** Standalone Terminal tab chrome or a flush surface embedded in a Workspace pane. */
   surface?: "standalone" | "workspace";
 }) {
-  const { absent, name, send, status } = controller;
+  const { absent, session, name, send, status } = controller;
+  const checking = session === "unknown";
   const [focused, setFocused] = useState(false);
 
   // Compose modal: Agent mode persists its per-agent draft, while Workspace
@@ -88,15 +109,19 @@ export function TuiScreen({
     // the window) instead of claiming 100% of the pane and overflowing it.
     <div
       className={cn(
-        fill ? "flex min-h-0 flex-1 flex-col" : workspaceSurface ? "flex flex-col" : "space-y-2",
-        fill && !workspaceSurface && "gap-2",
+        "relative flex flex-col",
+        fill && "min-h-0 flex-1",
+        !workspaceSurface && "gap-2",
       )}
     >
+      <ConnectionNotice session={session} status={status} />
       <div
         ref={containerRef}
         data-testid="tui-screen"
         data-terminal-surface={surface}
         data-file-drag-active={liveDrop.dragActive}
+        aria-hidden={checking}
+        inert={checking}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         onPaste={onPaste}
@@ -105,6 +130,7 @@ export function TuiScreen({
         onDrop={liveDrop.onDrop}
         className={cn(
           "overflow-hidden bg-zinc-950 p-2",
+          checking && "invisible",
           workspaceSurface ? "border-0" : "rounded-md border",
           fill ? "min-h-0 flex-1" : "h-[32rem]",
           // Mirror the old capture affordance: ring the terminal when focused.
@@ -113,19 +139,21 @@ export function TuiScreen({
         )}
       />
 
-      <TerminalToolbar
-        workspaceSurface={workspaceSurface}
-        closed={status === "closed"}
-        send={send}
-        scrollback={scrollback}
-        scrollbackButtonRef={scrollbackButtonRef}
-        onUploaded={(paths) => {
-          draft.append(buildPathsText(paths));
-          setModalOpen(true);
-        }}
-        onCompose={() => setModalOpen(true)}
-        onHelp={() => setHelpOpen(true)}
-      />
+      {!checking && (
+        <TerminalToolbar
+          workspaceSurface={workspaceSurface}
+          closed={status === "closed"}
+          send={send}
+          scrollback={scrollback}
+          scrollbackButtonRef={scrollbackButtonRef}
+          onUploaded={(paths) => {
+            draft.append(buildPathsText(paths));
+            setModalOpen(true);
+          }}
+          onCompose={() => setModalOpen(true)}
+          onHelp={() => setHelpOpen(true)}
+        />
+      )}
 
       <TerminalHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
 

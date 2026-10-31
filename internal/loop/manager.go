@@ -1431,9 +1431,17 @@ func (m *Manager) SendKeysItems(name string, items []shim.KeyItem) error {
 func (m *Manager) Attach(name string, cols, rows int) (net.Conn, error) {
 	client, _, err := m.currentShimClient(name)
 	if err != nil {
+		if errors.Is(err, errNoIteration) {
+			return nil, fmt.Errorf("%w: %w", registry.ErrNoTerminalSession, err)
+		}
 		return nil, err
 	}
-	return client.Attach(cols, rows)
+	conn, err := client.Attach(cols, rows)
+	var rpcErr *shim.RPCError
+	if errors.As(err, &rpcErr) && rpcErr.Code == -32601 {
+		return nil, fmt.Errorf("%w: %w", registry.ErrNoTerminalSession, err)
+	}
+	return conn, err
 }
 
 func (m *Manager) Resize(name string, cols, rows int) error {

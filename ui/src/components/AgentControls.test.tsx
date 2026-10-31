@@ -97,6 +97,26 @@ it("posts restart for the Restart primary action", async () => {
   await waitFor(() => expect(agentPost).toHaveBeenCalledWith("alpha", "restart"));
 });
 
+it.each(["start", "restart"] as const)(
+  "resets terminal absence only after successful %s",
+  async (action) => {
+    const onExec = vi.fn();
+    const agentPost = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue({});
+    render(
+      <MemoryRouter>
+        <AgentControls name="alpha" alive={false} primary={action} {...paths} onExec={onExec} />
+      </MemoryRouter>,
+      { api: fakeApi({ agentPost }, target) },
+    );
+    const button = screen.getByRole("button", { name: action === "start" ? "Start" : "Restart" });
+    fireEvent.click(button);
+    await waitFor(() => expect(agentPost).toHaveBeenCalledTimes(1));
+    expect(onExec).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    await waitFor(() => expect(onExec).toHaveBeenCalledOnce());
+  },
+);
+
 it("force-stops the current run only after the confirmation dialog", async () => {
   const agentPost = vi.fn().mockResolvedValue({});
   render(
