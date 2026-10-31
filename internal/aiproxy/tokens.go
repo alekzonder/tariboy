@@ -3,9 +3,18 @@ package aiproxy
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"io"
+	"net/url"
+	"strings"
 	"sync"
 )
+
+// ProviderRoute binds an OpenCode provider to its original upstream.
+type ProviderRoute struct {
+	BaseURL  string
+	Provider string
+}
 
 // Attribution is the identity a valid proxy token resolves to (spec §9).
 type Attribution struct {
@@ -18,6 +27,49 @@ type Attribution struct {
 	// on (epic dev-t-3e1 §2). Set live via UpdateTask; empty when untagged.
 	TaskID string
 	EpicID string
+	Routes map[string]ProviderRoute `json:",omitempty"`
+}
+
+func validProviderRoutes(routes map[string]ProviderRoute) bool {
+	if routes != nil && len(routes) == 0 {
+		return false
+	}
+	for id, route := range routes {
+		if id == "" || strings.Trim(id, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") != "" {
+			return false
+		}
+		u, err := url.Parse(route.BaseURL)
+		if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
+			(u.Scheme != "https" && u.Scheme != "http") || (u.Path != "" && !isSafeEscapedRoutePath(u.Path, u.EscapedPath())) ||
+			(route.Provider != string(ProviderOpenAI) && route.Provider != string(ProviderAnthropic)) {
+			return false
+		}
+	}
+	return true
+}
+
+// RegisterProviderRoutes publishes an iteration's routes together with its lease.
+func (t *TokenRegistry) RegisterProviderRoutes(token string, routes map[string]ProviderRoute) error {
+	if len(routes) == 0 || !validProviderRoutes(routes) {
+		return errors.New("invalid provider routes")
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	a, ok := t.tokens[token]
+	if !ok {
+		return errors.New("unknown proxy token")
+	}
+	old := a
+	a.Routes = make(map[string]ProviderRoute, len(routes))
+	for id, route := range routes {
+		a.Routes[id] = route
+	}
+	t.tokens[token] = a
+	if err := t.persistLocked(); err != nil {
+		t.tokens[token] = old
+		return err
+	}
+	return nil
 }
 
 // TokenRegistry maps short-lived bearer tokens to attribution. Registries made
@@ -44,6 +96,10 @@ func newTokenRegistry(r io.Reader) *TokenRegistry {
 }
 
 func (t *TokenRegistry) Mint(a Attribution) (string, error) {
+	if !validProviderRoutes(a.Routes) {
+		return "", errors.New("invalid provider routes")
+	}
+	a.Routes = copyProviderRoutes(a.Routes)
 	var b [24]byte
 	if _, err := io.ReadFull(t.rand, b[:]); err != nil {
 		return "", err
@@ -63,8 +119,20 @@ func (t *TokenRegistry) Mint(a Attribution) (string, error) {
 func (t *TokenRegistry) Resolve(token string) (Attribution, bool) {
 	t.mu.RLock()
 	a, ok := t.tokens[token]
+	a.Routes = copyProviderRoutes(a.Routes)
 	t.mu.RUnlock()
 	return a, ok
+}
+
+func copyProviderRoutes(routes map[string]ProviderRoute) map[string]ProviderRoute {
+	if routes == nil {
+		return nil
+	}
+	out := make(map[string]ProviderRoute, len(routes))
+	for id, route := range routes {
+		out[id] = route
+	}
+	return out
 }
 
 // UpdateTask sets the native task/root attribution on the live token(s) matching

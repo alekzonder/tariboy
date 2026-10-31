@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -39,7 +40,7 @@ func TestPersistentTokenRegistrySurvivesReopen(t *testing.T) {
 	}
 	want := attr
 	want.TaskID, want.EpicID = "dev-t-1.2", "dev-t-1"
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("attribution = %+v, want %+v", got, want)
 	}
 	if got := reopened.ListenAddr(); got != "127.0.0.1:43123" {
