@@ -71,8 +71,8 @@ function FolderGroup({
     (editing || draft.dirtyKeys.includes("cwd") || draft.dirtyKeys.includes("cwd-create"));
   return (
     <SettingsSection id="folder" title="Working folder">
-      {open ? (
-        <>
+      {stopped && (
+        <div hidden={!open} className="space-y-3">
           <FieldFrame field={field("cwd")} draft={draft}>
             <PathAutocomplete
               id="cwd"
@@ -82,33 +82,26 @@ function FolderGroup({
             />
           </FieldFrame>
           <DraftField field={field("cwd-create")} draft={draft} />
-        </>
-      ) : (
-        <div data-field="cwd" className="space-y-1 text-sm">
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="min-w-0 font-mono text-xs break-all">{cwd || "—"}</p>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7"
-              disabled={!stopped}
-              onClick={onEdit}
-            >
-              Change…
-            </Button>
-          </div>
-          {cwdError && (
-            <p role="alert" className="text-xs text-destructive">
-              {cwdError}
-            </p>
-          )}
-          {!stopped && (
-            <p className="text-xs text-muted-foreground">
-              Stop the agent before changing its working directory.
-            </p>
-          )}
         </div>
       )}
+      <div hidden={open} data-field="cwd" className="space-y-1 text-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="min-w-0 font-mono text-xs break-all">{cwd || "—"}</p>
+          <Button size="sm" variant="outline" className="h-7" disabled={!stopped} onClick={onEdit}>
+            Change…
+          </Button>
+        </div>
+        {cwdError && (
+          <p role="alert" className="text-xs text-destructive">
+            {cwdError}
+          </p>
+        )}
+        {!stopped && (
+          <p className="text-xs text-muted-foreground">
+            Stop the agent before changing its working directory.
+          </p>
+        )}
+      </div>
     </SettingsSection>
   );
 }
@@ -255,11 +248,12 @@ function SpendingGroup({ draft, sources }: SectionProps) {
   const exhausted = budget.exhausted ?? [];
   const periods = [
     ["day", "today"],
+    ["week", "this week"],
     ["month", "this month"],
   ] as const;
   return (
     <SettingsSection id="spending" title="Spending limit">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {periods.map(([period, when]) => {
           const key = `budget-${period}`;
           const spent = budget[`${period}_spent_usd`];

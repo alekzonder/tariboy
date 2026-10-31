@@ -320,7 +320,7 @@ it("saves a model, an interval and a day budget with the same requests as before
   type("Model", "opus");
   fireEvent.click(screen.getByRole("radio", { name: "Also every" }));
   type("Minutes between runs", "5");
-  type("Per day", "3");
+  type("Day", "3");
   expect(saveRow()).toHaveTextContent("3 unsaved changes in Model, Autopilot, Spending limit");
 
   save();
@@ -350,15 +350,18 @@ it("shows four groups, then Advanced closed, About and Danger, in the narrow tab
     "Danger",
   ]);
   expect(advancedTrigger()).toHaveAttribute("aria-expanded", "false");
-  expect(screen.queryByLabelText("Hard timeout")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Hard timeout")).not.toBeVisible();
 });
 
-it("has no master switch, run actions, search, Changed only or section chips", async () => {
+it("has Settings search without master switch, run actions, Changed only or section chips", async () => {
   fakeServer();
   render(tree());
   await ready();
   expect(screen.queryByText(/Master switch/)).not.toBeInTheDocument();
-  expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+  expect(screen.getByRole("searchbox", { name: "Search settings" })).toHaveAttribute(
+    "placeholder",
+    "Search settings…",
+  );
   expect(screen.queryByRole("button", { name: /Changed only/ })).not.toBeInTheDocument();
   expect(
     screen.queryByRole("navigation", { name: "Configuration blocks" }),
@@ -404,7 +407,7 @@ it("counts unsaved changes inside Advanced and keeps them while it is closed", a
   expect(within(section("Schedule and timeouts")).getByText("Changed")).toBeInTheDocument();
   expect(advancedTrigger()).toHaveTextContent("1 unsaved change");
   fireEvent.click(advancedTrigger());
-  expect(screen.queryByLabelText("Hard timeout")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Hard timeout")).not.toBeVisible();
   expect(saveRow()).toHaveTextContent("1 unsaved change in Advanced");
   await openAdvanced();
   expect(screen.getByLabelText("Hard timeout")).toHaveValue("300");
@@ -773,7 +776,7 @@ it("edits a stopped agent's working folder in place with suggestions from its ro
   render(tree(remote, "worker", null, refresh));
   await ready();
   expect(within(section("Working folder")).getByText("/srv/old")).toBeInTheDocument();
-  expect(screen.queryByLabelText("Working directory")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Working directory")).not.toBeVisible();
   const input = await changeFolder();
   expect(input).toHaveValue("/srv/old");
   fireEvent.change(input, { target: { value: "/srv/new" } });
@@ -860,21 +863,38 @@ it("shows day and month spend in Spending limit and exhausted periods", async ()
   expect(within(spending).queryByLabelText("Hour budget")).not.toBeInTheDocument();
 });
 
-it("keeps hour and week budgets with their spend under Advanced", async () => {
-  const server = fakeServer();
+it("edits Week once in Spending limit and keeps the other three budget values", async () => {
+  const server = fakeServer({
+    view: {
+      budget: {
+        ...stopped.budget!,
+        hour_usd: 1,
+        day_usd: 2,
+        week_usd: 3,
+        month_usd: 4,
+        week_spent_usd: 1.75,
+      },
+    },
+  });
   render(tree());
+  await ready();
+  const spending = section("Spending limit");
+  expect(within(spending).getByLabelText("Week")).toHaveValue(3);
+  expect(within(spending).getByText("USD (0 = none) · spent $1.75 this week")).toBeInTheDocument();
+  expect(screen.getAllByLabelText("Week")).toHaveLength(1);
+  type("Week", "7");
+  expect(saveRow()).toHaveTextContent("1 unsaved change in Spending limit");
   await openAdvanced();
-  const budgets = section("Hour and week budgets (USD)");
+  const budgets = section("Hour budget (USD)");
   expect(within(budgets).getByText(/Spent 0.25 of 1.00/)).toBeInTheDocument();
-  expect(within(budgets).getByText(/Unlimited/)).toBeInTheDocument();
-  type("Week budget", "7");
+  expect(within(budgets).queryByLabelText("Week")).not.toBeInTheDocument();
   save();
   await waitFor(() => expect(server.writes()).toEqual(["POST budget"]));
   expect(server.calls.find((c) => c.path.endsWith("/budget"))?.body).toEqual({
     hour_usd: "1",
-    day_usd: "0",
+    day_usd: "2",
     week_usd: "7",
-    month_usd: "0",
+    month_usd: "4",
   });
 });
 
@@ -892,7 +912,193 @@ it("leaves out every budget field when the daemon has no budget projection", asy
   await ready();
   expect(querySection("Spending limit")).not.toBeInTheDocument();
   await openAdvanced();
-  expect(querySection("Hour and week budgets (USD)")).not.toBeInTheDocument();
+  expect(querySection("Hour budget (USD)")).not.toBeInTheDocument();
+});
+
+it("saves a zero Week limit as unlimited", async () => {
+  const server = fakeServer({ view: { budget: { ...stopped.budget!, week_usd: 3 } } });
+  render(tree());
+  await ready();
+  type("Week", "0");
+  save();
+  await waitFor(() => expect(saveRow()).toHaveTextContent("All changes saved"));
+  expect(server.state.view.budget?.week_usd).toBe(0);
+});
+
+it("rejects an empty Week without saving the other edits", async () => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  type("Week", "");
+  type("Model", "opus");
+  save();
+  expect(await screen.findByText("Enter zero or a positive amount.")).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByLabelText("Week")).toHaveFocus());
+  expect(server.writes()).toEqual([]);
+});
+
+it("keeps Week after a rejected budget save", async () => {
+  const server = fakeServer({ fail: { "POST budget": "budget rejected" } });
+  render(tree());
+  await ready();
+  type("Week", "7");
+  save();
+  expect(await screen.findByText("budget rejected")).toBeVisible();
+  expect(screen.getByLabelText("Week")).toHaveValue(7);
+  expect(saveRow()).toHaveTextContent("1 unsaved change in Spending limit");
+  expect(server.writes()).toEqual(["POST budget"]);
+});
+
+// --- Settings search -----------------------------------------------------------
+
+const searchSettings = (value: string) =>
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search settings" }), {
+    target: { value },
+  });
+const clearSearch = () => fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+
+it.each([
+  ["MODEL", "Model"],
+  ["spending week", "Spending limit"],
+  ["hour", "Hour budget (USD)"],
+  ["MAIL maximum", "Mail"],
+  ["shell script", "Environment"],
+  ["Other views prompt", "Other views"],
+  ["about host", "About"],
+  ["delete agent", "Danger"],
+])("searches static section and field names for %s", async (query, title) => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  searchSettings(query);
+  const matches = screen.getAllByRole("region").filter((r) => r !== saveRow());
+  expect(matches.map((r) => r.getAttribute("aria-labelledby"))).toEqual([
+    section(title).getAttribute("aria-labelledby"),
+  ]);
+  expect(server.writes()).toEqual([]);
+});
+
+it.each([false, true])(
+  "restores Advanced disclosure after clearing a search (open=%s)",
+  async (open) => {
+    const server = fakeServer();
+    render(tree());
+    await ready();
+    if (open) await openAdvanced();
+    searchSettings("hard timeout");
+    expect(advancedTrigger()).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("Hard timeout")).toBeVisible();
+    clearSearch();
+    expect(advancedTrigger()).toHaveAttribute("aria-expanded", String(open));
+    expect(section("Model")).toBeVisible();
+    expect(server.writes()).toEqual([]);
+  },
+);
+
+it("preserves drafts and mounted editors through search and disclosure changes, then saves hidden edits", async () => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  type("Model", "opus");
+  type("Week", "9");
+  fireEvent.change(await changeFolder(), { target: { value: "/srv/new" } });
+  await openAdvanced();
+  type("Hard timeout", "300");
+  const editor = screen.getByLabelText("Hard timeout");
+  const folder = screen.getByLabelText("Working directory");
+  searchSettings("Model");
+  expect(editor).toBeInTheDocument();
+  expect(editor).not.toBeVisible();
+  clearSearch();
+  expect(screen.getByLabelText("Hard timeout")).toBe(editor);
+  expect(editor).toHaveValue("300");
+  expect(screen.getByLabelText("Working directory")).toBe(folder);
+  expect(control("Model")).toHaveValue("opus");
+  expect(screen.getByLabelText("Week")).toHaveValue(9);
+  searchSettings("nothing matches");
+  expect(screen.getByText("No settings match your search.")).toBeVisible();
+  expect(within(saveRow()).getByRole("button", { name: "Save changes" })).toBeVisible();
+  expect(server.writes()).toEqual([]);
+  save();
+  await waitFor(() => expect(saveRow()).toHaveTextContent("All changes saved"));
+  expect(server.writes()).toEqual([
+    "POST cwd",
+    "POST model",
+    "POST loop/hard-timeout",
+    "POST budget",
+  ]);
+  clearSearch();
+  expect(screen.getByLabelText("Week")).toHaveValue(9);
+});
+
+it("temporarily opens the matching folder editor and restores it when cleared", async () => {
+  fakeServer();
+  render(tree());
+  await ready();
+  searchSettings("working directory");
+  expect(screen.getByLabelText("Working directory")).toBeVisible();
+  clearSearch();
+  expect(screen.queryByRole("textbox", { name: "Working directory" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Change…" })).toBeVisible();
+});
+
+it("keeps intermediate minutes text when its section is hidden by search", async () => {
+  fakeServer({ view: { interval_s: 60 } });
+  render(tree());
+  await ready();
+  type("Minutes between runs", "1.");
+  const minutes = screen.getByLabelText("Minutes between runs");
+  searchSettings("Model");
+  clearSearch();
+  expect(screen.getByLabelText("Minutes between runs")).toBe(minutes);
+  expect(minutes).toHaveValue("1.");
+});
+
+it("ignores whitespace and secret values when searching", async () => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  await openAdvanced();
+  type("Secret key", "TOKEN");
+  type("Secret value", "unique-secret-123");
+  searchSettings("unique-secret-123");
+  expect(querySection("Environment")).not.toBeInTheDocument();
+  expect(screen.getByText("No settings match your search.")).toBeVisible();
+  clearSearch();
+  expect(screen.getByLabelText("Secret value")).toHaveValue("unique-secret-123");
+  searchSettings("   ");
+  expect(section("Model")).toBeVisible();
+  expect(section("Environment")).toBeVisible();
+  expect(server.writes()).toEqual([]);
+});
+
+it("clears a filter and reveals an invalid hidden field on Save", async () => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  searchSettings("Mail");
+  type("Mail: letters per iteration", "0");
+  searchSettings("Model");
+  save();
+  await waitFor(() => expect(screen.getByLabelText("Mail: letters per iteration")).toHaveFocus());
+  expect(screen.getByRole("searchbox", { name: "Search settings" })).toHaveValue("");
+  expect(section("Mail")).toBeVisible();
+  expect(advancedTrigger()).toHaveAttribute("aria-expanded", "true");
+  expect(server.writes()).toEqual([]);
+});
+
+it("reveals a hidden failed server field and keeps its draft", async () => {
+  const server = fakeServer({ fail: { "POST cwd": "directory does not exist" } });
+  render(tree());
+  await ready();
+  searchSettings("working directory");
+  type("Working directory", "/srv/missing");
+  searchSettings("Model");
+  save();
+  await waitFor(() => expect(screen.getByLabelText("Working directory")).toHaveFocus());
+  expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/missing");
+  expect(section("Working folder")).toBeVisible();
+  expect(server.writes()).toEqual(["POST cwd"]);
 });
 
 // --- Advanced → Goal, Mail -------------------------------------------------------

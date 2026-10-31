@@ -81,19 +81,14 @@ function MailSection({ draft, name }: SectionProps) {
 function BudgetsSection({ draft, sources }: SectionProps) {
   const budget = sources.view?.budget;
   if (!budget) return null;
+  const spent = budget.hour_spent_usd.toFixed(2);
+  const limit = Number(draft.values["budget-hour"] ?? 0);
+  const helper =
+    limit === 0 ? `Spent ${spent} · Unlimited` : `Spent ${spent} of ${limit.toFixed(2)}`;
   return (
-    <SettingsSection id="budgets" title="Hour and week budgets (USD)" level={4}>
+    <SettingsSection id="budgets" title="Hour budget (USD)" level={4}>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {(["hour", "week"] as const).map((period) => {
-          const key = `budget-${period}`;
-          const spent = budget[`${period}_spent_usd`];
-          const limit = Number(draft.values[key] ?? 0);
-          const helper =
-            limit === 0
-              ? `Spent ${spent.toFixed(2)} · Unlimited`
-              : `Spent ${spent.toFixed(2)} of ${limit.toFixed(2)}`;
-          return <DraftField key={key} field={{ ...field(key), helper }} draft={draft} />;
-        })}
+        <DraftField field={{ ...field("budget-hour"), helper }} draft={draft} />
       </div>
     </SettingsSection>
   );
@@ -139,11 +134,12 @@ export function AdvancedSettings(
     open: boolean;
     onOpenChange: (open: boolean) => void;
     dirty: number;
+    hidden: boolean;
   },
 ) {
-  const { base, open, onOpenChange, dirty, ...section } = props;
+  const { base, open, onOpenChange, dirty, hidden, ...section } = props;
   return (
-    <Collapsible open={open} onOpenChange={onOpenChange} className="border-t pt-3">
+    <Collapsible open={open} onOpenChange={onOpenChange} hidden={hidden} className="border-t pt-3">
       <CollapsibleTrigger className="group flex items-center gap-2 text-sm font-semibold">
         <ChevronRight
           aria-hidden="true"
@@ -152,7 +148,11 @@ export function AdvancedSettings(
         Advanced
         {dirty > 0 && <span className="text-xs font-medium text-primary">{unsaved(dirty)}</span>}
       </CollapsibleTrigger>
-      <CollapsibleContent className="mt-3 space-y-5 pl-6">
+      <CollapsibleContent
+        forceMount
+        hidden={!open}
+        className={open ? "mt-3 space-y-5 pl-6" : "hidden"}
+      >
         <SettingsSection id="image" title="Image" level={4}>
           <GeneralBlock {...section} />
         </SettingsSection>

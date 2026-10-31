@@ -228,10 +228,11 @@ it("lists the cards and the sections with counts, and opens a row in the drawer"
   expect(screen.getByTestId("needs-card")).toHaveTextContent("DEV-4");
   expect(screen.getByRole("heading", { name: "In progress (1)" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Queued (1)" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Done · last 7 days (1)" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Done (1)" })).toBeInTheDocument();
   expect(screen.queryByText("Old one")).not.toBeInTheDocument();
   expect(screen.queryByText("Plan")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+  fireEvent.click(screen.getByRole("combobox", { name: "Done period" }));
+  fireEvent.click(screen.getByRole("option", { name: "All time" }));
   expect(screen.getByText("Old one")).toBeInTheDocument();
   fireEvent.change(screen.getByRole("searchbox", { name: "Search done tasks" }), {
     target: { value: "readme" },
@@ -239,6 +240,92 @@ it("lists the cards and the sections with counts, and opens a row in the drawer"
   expect(screen.queryByText("Old one")).not.toBeInTheDocument();
   fireEvent.click(screen.getByText("Working"));
   expect(screen.getByRole("dialog")).toHaveTextContent("drawer TASK-1");
+});
+
+it("preserves Done search in both periods and uses the same period for costs", async () => {
+  closed = [
+    taskItem({ key: "TASK-5", title: "Readme", category: "done", completed_at: ago(1) }),
+    taskItem({ key: "TASK-6", title: "Old readme", category: "done", completed_at: ago(30) }),
+  ];
+  render(
+    <AgentWorkTab base="/agents/local/bob" agent={bob} needs={{ count: 0 }} refresh={vi.fn()} />,
+  );
+  await screen.findByText("Readme");
+  const search = screen.getByRole("searchbox", { name: "Search done tasks" });
+  expect(search).toHaveAttribute("placeholder", "Search completed tasks…");
+  const period = screen.getByRole("combobox", { name: "Done period" });
+  expect(period).toHaveTextContent("Last 7 days");
+  fireEvent.change(search, { target: { value: "TASK-6" } });
+  expect(
+    screen.getByText("No completed tasks match your search in the last 7 days."),
+  ).toBeInTheDocument();
+  fireEvent.click(period);
+  fireEvent.click(screen.getByRole("option", { name: "All time" }));
+  expect(screen.getByText("Old readme")).toBeInTheDocument();
+  expect(search).toHaveValue("TASK-6");
+  await waitFor(() =>
+    expect(api.getTaskActivity).toHaveBeenLastCalledWith(
+      expect.objectContaining({ since: "1970-01-01T00:00:00.000Z", agent: "bob" }),
+      expect.any(AbortSignal),
+    ),
+  );
+  fireEvent.change(search, { target: { value: "readme" } });
+  expect(screen.getByText("Readme")).toBeInTheDocument();
+  expect(screen.getByText("Old readme")).toBeInTheDocument();
+  fireEvent.click(period);
+  fireEvent.click(screen.getByRole("option", { name: "Last 7 days" }));
+  expect(search).toHaveValue("readme");
+  expect(screen.queryByText("Old readme")).not.toBeInTheDocument();
+  expect(api.listTasks.mock.calls.every(([filters]) => !filters.text)).toBe(true);
+});
+
+it("names the selected period when Done has no completed tasks", async () => {
+  render(
+    <AgentWorkTab base="/agents/local/bob" agent={bob} needs={{ count: 0 }} refresh={vi.fn()} />,
+  );
+  expect(await screen.findByText("No completed tasks in the last 7 days.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("combobox", { name: "Done period" }));
+  fireEvent.click(screen.getByRole("option", { name: "All time" }));
+  expect(screen.getByText("No completed tasks for All time.")).toBeInTheDocument();
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search done tasks" }), {
+    target: { value: "missing" },
+  });
+  expect(
+    screen.getByText("No completed tasks match your search for All time."),
+  ).toBeInTheDocument();
+});
+
+it("waits for the closed list before showing Done is empty", async () => {
+  active = [taskItem({ title: "Active list ready", category: "in_progress" })];
+  let resolveClosed = (_value: { tasks: Task[]; sequence: number }) => {};
+  const pendingClosed = new Promise<{ tasks: Task[]; sequence: number }>((resolve) => {
+    resolveClosed = resolve;
+  });
+  api.listTasks.mockImplementation((filters: TaskFilters) =>
+    filters.status_view === "closed"
+      ? pendingClosed
+      : Promise.resolve({ tasks: active, sequence: 1 }),
+  );
+  render(
+    <AgentWorkTab base="/agents/local/bob" agent={bob} needs={{ count: 0 }} refresh={vi.fn()} />,
+  );
+  await screen.findByText("Active list ready");
+  expect(screen.queryByText("No completed tasks in the last 7 days.")).not.toBeInTheDocument();
+  await act(async () => resolveClosed({ tasks: [], sequence: 1 }));
+  expect(await screen.findByText("No completed tasks in the last 7 days.")).toBeInTheDocument();
+});
+
+it("reports a failed closed-list read without claiming Done is empty", async () => {
+  api.listTasks.mockImplementation((filters: TaskFilters) =>
+    filters.status_view === "closed"
+      ? Promise.reject(new Error("Closed tasks unavailable"))
+      : Promise.resolve({ tasks: [], sequence: 1 }),
+  );
+  render(
+    <AgentWorkTab base="/agents/local/bob" agent={bob} needs={{ count: 0 }} refresh={vi.fn()} />,
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent("Closed tasks unavailable");
+  expect(screen.queryByText("No completed tasks in the last 7 days.")).not.toBeInTheDocument();
 });
 
 it("starts a task in its initial status from the Queued row", async () => {

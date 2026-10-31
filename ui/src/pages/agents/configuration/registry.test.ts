@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { SECTIONS, fieldOfKey, normalizeField, sectionOfKey, validateField } from "./registry";
+import {
+  SECTIONS,
+  fieldOfKey,
+  filterSections,
+  normalizeField,
+  sectionOfKey,
+  validateField,
+} from "./registry";
 
 const keysOf = (id: string) => SECTIONS.find((s) => s.id === id)!.fields.map((f) => f.key);
 
@@ -59,12 +66,15 @@ describe("SECTIONS", () => {
       ["budgets", true],
       ["environment", true],
       ["retention", true],
+      ["views", true],
+      ["about", false],
+      ["danger", false],
     ]);
     expect(keysOf("model")).toEqual(["harness", "model", "effort"]);
     expect(keysOf("folder")).toEqual(["cwd", "cwd-create"]);
     expect(keysOf("autopilot")).toEqual(["interval", "timeout", "interactive"]);
-    expect(keysOf("spending")).toEqual(["budget-day", "budget-month"]);
-    expect(keysOf("budgets")).toEqual(["budget-hour", "budget-week"]);
+    expect(keysOf("spending")).toEqual(["budget-day", "budget-week", "budget-month"]);
+    expect(keysOf("budgets")).toEqual(["budget-hour"]);
   });
 
   it("names the groups and fields in words", () => {
@@ -83,6 +93,29 @@ describe("SECTIONS", () => {
     expect(sectionOfKey("hard-timeout")?.id).toBe("schedule");
     expect(sectionOfKey("keep-days")?.id).toBe("retention");
     expect(sectionOfKey("nope")).toBeUndefined();
+  });
+});
+
+describe("settings search", () => {
+  it.each([
+    ["MODEL", ["model"]],
+    ["spending limit", ["spending"]],
+    ["week", ["spending"]],
+    ["hour", ["budgets"]],
+    ["  MAIL   maximum  ", ["mail"]],
+    ["shell script", ["environment"]],
+    ["working create directory", ["folder"]],
+    ["Other views prompt preview", ["views"]],
+    ["about host", ["about"]],
+    ["danger delete agent", ["danger"]],
+    ["model retention", []],
+    ["no matching setting", []],
+  ])("finds whole sections for %s", (query, ids) => {
+    expect(filterSections(query, SECTIONS).map((s) => s.id)).toEqual(ids);
+  });
+
+  it("treats whitespace as an empty query", () => {
+    expect(filterSections(" \t\n ", SECTIONS)).toEqual(SECTIONS);
   });
 });
 

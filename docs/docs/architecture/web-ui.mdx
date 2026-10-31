@@ -1676,8 +1676,8 @@ off. The `⋯` menu (**More agent actions**) has these items:
 - **Diagnostics**: opens `…/advanced`, starting with **Prompt**.
 
 The header has no state pill, host label, image chip, Goal link, working
-directory row, or budget line. Daily and monthly limits are in **Settings →
-Spending limit**. Hourly and weekly limits are under **Advanced**.
+directory row, or budget line. Daily, weekly, and monthly limits are in **Settings →
+Spending limit**. The hourly limit is under **Advanced**.
 Below 1200 px the sentence and the muted line wrap, and the buttons take a row
 of their own.
 
@@ -1741,7 +1741,7 @@ columns. Top down, it shows:
    Each button opens the existing task drawer on the agent's explicit host.
 3. **In progress (n)**.
 4. **Queued (n)**.
-5. **Done · last 7 days (n)**, with a search box and **Show all**.
+5. **Done (n)**, with **Search completed tasks…** and the **Last 7 days / All time** period selector.
 
 The composer works like this:
 
@@ -1772,9 +1772,12 @@ queries (`useAgentWork.ts`). The task event stream keeps them fresh. A task
 listed in Needs you is not repeated in the other sections. Queued
 holds the active tasks in the `open` category and the tasks in their
 workflow's initial status (`workflow_initial`). In progress holds the other
-active tasks. Done holds the closed tasks of the last seven days. **Show all**
-shows every closed task in the same rows. The search box filters Done by key
-and title.
+active tasks. Done defaults to closed tasks from the last seven days. **All time**
+shows every closed task in the same rows and selects the same period for row costs.
+The search box filters Done locally by key and title. Changing the period keeps the query.
+An empty result names the selected period and distinguishes no tasks from no search matches.
+The search and period controls have the same height. Their group wraps below the heading
+on a narrow panel, with the search taking the remaining space beside the period.
 
 A row shows the key, the title, the status in words (`statusWords` in
 `workModel.ts`), the age, and the cost from the task activity report when it
@@ -1921,11 +1924,11 @@ The agent's Settings tab has four groups in order:
 - **Autopilot**: **Only when given tasks or messages**, or **Also every** with
   an interval in minutes. **Stop a run after** sets the soft timeout in
   minutes, with `0` for no limit. **Interactive terminal** is here too.
-- **Spending limit**: daily and monthly USD limits, with the daemon's current
+- **Spending limit**: **Day**, **Week**, and **Month** USD limits, with the daemon's current
   spend beside each. `0` means no limit.
 
 **Advanced** starts collapsed. It contains **Image**, **Schedule and
-timeouts**, **Goal**, **Mail**, **Hour and week budgets (USD)**,
+timeouts**, **Goal**, **Mail**, **Hour budget (USD)**,
 **Environment**, **Retention and cleanup**, and **Other views**.
 Schedule and timeouts holds the schedule builder, hard timeout in seconds,
 timeout and error policies, idle limit, and AI inactivity timeout.
@@ -1935,6 +1938,13 @@ A saved schedule can start runs even when Autopilot has no timer interval.
 Below Advanced, **About** names the image and host. The image links to the
 Library. **Danger** contains **Delete agent**. Start, Stop, and Restart stay
 in the agent header and apply immediately.
+
+**Search settings…** filters whole sections by their static titles and field descriptions, without regard to letter case.
+Every query word must occur in one section. Field values, including secrets, never enter the search.
+Matching Advanced sections and the working folder editor open temporarily.
+Clearing the query restores the full form and the previous disclosure state. Whitespace alone does not filter.
+No matches shows a message and **Clear search**. Hidden sections and editors stay mounted, so their drafts remain.
+Search and disclosure changes save nothing. The sticky **Save changes** row stays available for hidden edits.
 
 **Schedule** is a builder for the agent's `RRULE` (see
 [Schedule](/docs/architecture/iteration-loop#schedule)). You select a mode and fill
@@ -1957,7 +1967,7 @@ with **Reset** and **Save changes** while edits exist. The Advanced disclosure
 also counts its unsaved edits. Closing it keeps those drafts.
 **Reset** drops every draft. **Save changes** first validates every changed
 field in the browser and sends nothing while any is invalid. It opens
-Advanced or the folder editor when needed and focuses the field.
+Advanced or the folder editor when needed, clears a blocking search, and focuses the field.
 Then it sends only changed fields through the existing per-field endpoints.
 Requests run serially in the existing order, with harness before model and effort.
 The four budget limits and the two retention limits each save as one request.
@@ -2002,8 +2012,8 @@ New-agent drafts use a maximum queue of 100, while Clone keeps the source
 agent's configured value.
 
 Settings also renders the daemon-authoritative per-agent USD budget
-projection. The daily and monthly fields are in **Spending limit**. Hourly
-and weekly fields are under **Advanced → Hour and week budgets (USD)**.
+projection. The daily, weekly, and monthly fields are in **Spending limit**. The hourly
+field is under **Advanced → Hour budget (USD)**.
 Each pairs current spend with an editable limit, where zero means unlimited.
 All four limits save in one request against the explicit agent-route host.
 Older daemons that omit the projection show neither budget section.

@@ -10,7 +10,7 @@ import { useTaskQueryEvents } from "@/pages/tasks/useTaskQueryEvents";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** The window the cost of a row comes from: the last seven days, or every
- *  day with Show all. Fixed at mount so the report's key stays put. */
+ *  day with All time. Fixed at mount so the report's key stays put. */
 function costWindow(showAll: boolean, now: number): ActivityWindow {
   const since = showAll ? new Date(0) : new Date(now - 7 * DAY_MS);
   return {
@@ -39,7 +39,7 @@ export function useAgentWork(agent: string, showAll: boolean) {
     now,
     active: activeQuery.data?.tasks ?? [],
     closed: closedQuery.data?.tasks ?? [],
-    loading: activeQuery.isPending,
+    closedReady: closedQuery.isSuccess,
     error: activeQuery.error ?? closedQuery.error,
     costs,
     reload: () => void refreshTasks(client, api),
