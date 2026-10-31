@@ -1,4 +1,19 @@
 import { expect, test, waitForMainWindow } from "./fixture";
+import type { W3CClient } from "./w3c";
+
+async function openAdvanced(desktop: W3CClient) {
+  await expect
+    .poll(() =>
+      desktop.execute<boolean>(`
+        const button = [...document.querySelectorAll('button[aria-expanded]')]
+          .find((candidate) => candidate.textContent.trim() === 'Advanced');
+        if (!button) return false;
+        if (button.getAttribute('aria-expanded') === 'false') button.click();
+        return true;
+      `),
+    )
+    .toBe(true);
+}
 
 test("configures an agent goal and task release fields", async ({ desktop, desktopWorker }) => {
   await waitForMainWindow(desktop);
@@ -39,6 +54,7 @@ test("configures an agent goal and task release fields", async ({ desktop, deskt
   await desktop.execute(
     `window.location.hash = "#/agents/local/worker/configuration"; return true;`,
   );
+  await openAdvanced(desktop);
   await expect
     .poll(() => desktop.execute<string>("return document.body.innerText"))
     .toContain("Current goal");
@@ -54,7 +70,7 @@ test("configures an agent goal and task release fields", async ({ desktop, deskt
 
   await desktop.elementClick(await desktop.findElement("css selector", "#goal-enabled"));
   await desktop.elementClick(
-    await desktop.findElement("xpath", "//button[normalize-space(.)='Save']"),
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Save changes']"),
   );
   await expect
     .poll(() => desktop.execute<string>("return document.body.innerText"))
@@ -63,6 +79,7 @@ test("configures an agent goal and task release fields", async ({ desktop, deskt
   await desktop.execute(
     `window.location.hash = "#/agents/local/worker/configuration"; return true;`,
   );
+  await openAdvanced(desktop);
   await expect
     .poll(() => desktop.execute<string>("return document.body.innerText"))
     .toContain("Current goal");
@@ -89,7 +106,7 @@ test("configures an agent goal and task release fields", async ({ desktop, deskt
     return true;
   `);
   await desktop.elementClick(
-    await desktop.findElement("xpath", "//button[normalize-space(.)='Save']"),
+    await desktop.findElement("xpath", "//button[normalize-space(.)='Save changes']"),
   );
   await expect
     .poll(() => desktop.execute<string>("return document.body.innerText"))
@@ -98,6 +115,7 @@ test("configures an agent goal and task release fields", async ({ desktop, deskt
   await desktop.execute(
     `window.location.hash = "#/agents/local/worker/configuration"; return true;`,
   );
+  await openAdvanced(desktop);
   await expect
     .poll(() => desktop.execute<string>("return document.body.innerText"))
     .toContain("Current goal");
@@ -159,6 +177,7 @@ test("configures an agent goal and task release fields", async ({ desktop, deskt
   await desktop.execute(
     `window.location.hash = "#/agents/local/worker/configuration"; return true;`,
   );
+  await openAdvanced(desktop);
   await expect
     .poll(() => desktop.execute<string>("return document.body.innerText"))
     .toContain("Current goal");

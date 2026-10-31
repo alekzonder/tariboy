@@ -271,8 +271,6 @@ export const fieldOfKey = (key: string) => FIELDS.get(key)?.field;
 // Whole seconds and counts: a non-numeric draft is left alone so the server,
 // not the page, decides that it is invalid.
 const WHOLE: Record<string, number | undefined> = {
-  interval: undefined,
-  timeout: undefined,
   "hard-timeout": undefined,
   "max-idle": 0,
   "ai-stall-timeout": 1,

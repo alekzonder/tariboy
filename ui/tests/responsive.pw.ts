@@ -207,6 +207,28 @@ for (const tab of ["work", "console", "activity", "settings", "mailbox", "advanc
   });
 }
 
+// The design's check: on a 1440×900 window the four groups of Settings are all
+// visible without scrolling, with the first-visit hint shown.
+test("agent Settings shows four groups above the fold at 1440×900", async ({ page }) => {
+  test.skip(test.info().project.name !== "desktop-1024", "one fixed window size is enough");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${fixture}/agents/local/${AGENT}/settings`);
+  const spending = page.getByRole("region", { name: "Spending limit" });
+  await expect(spending).toBeVisible();
+  for (const name of ["Model", "Working folder", "Autopilot"])
+    await expect(page.getByRole("region", { name })).toBeVisible();
+  const box = (await spending.boundingBox())!;
+  expect(box.y + box.height).toBeLessThanOrEqual(900);
+  await expect(page.getByRole("button", { name: /^Advanced/ })).toBeVisible();
+});
+
+test("agent Settings with Advanced open fits the window", async ({ page }) => {
+  await expectFits(page, `/agents/local/${AGENT}/settings`, async (p) => {
+    await p.getByRole("button", { name: /^Advanced/ }).click();
+    await expect(p.getByRole("region", { name: "Retention and cleanup" })).toBeVisible();
+  });
+});
+
 // The Work tab is a composer and task sections; ensureTask gives it a Queued row.
 test("agent Work tab composer, details and sections fit the window", async ({ page }) => {
   await expectFits(page, `/agents/local/${AGENT}/work`, async (p) => {

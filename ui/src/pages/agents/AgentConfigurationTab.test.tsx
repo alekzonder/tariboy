@@ -564,6 +564,31 @@ it("keeps an emptied minutes box and blocks Save with its reason", async () => {
   expect(server.writes()).toEqual([]);
 });
 
+it("can enable timed runs again after typing a zero interval", async () => {
+  fakeServer({ view: { interval_s: 600 } });
+  render(tree());
+  await ready();
+  type("Minutes between runs", "0");
+  fireEvent.click(screen.getByRole("radio", { name: "Also every" }));
+  expect(screen.getByRole("radio", { name: "Also every" })).toBeChecked();
+  expect(screen.getByLabelText("Minutes between runs")).toBeEnabled();
+  expect(screen.getByLabelText("Minutes between runs")).toHaveValue("30");
+});
+
+it.each([
+  ["Minutes between runs", "Enter the minutes between runs."],
+  ["Stop a run after (minutes)", "Enter the minutes, or 0 for no limit."],
+])("rejects negative fractional minutes in %s", async (label, error) => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  type(label, "-0.5");
+  save();
+  expect(await screen.findByText(error)).toBeInTheDocument();
+  expect(screen.getByLabelText(label)).toHaveValue("-0.5");
+  expect(server.writes()).toEqual([]);
+});
+
 it("says a saved schedule also starts runs", async () => {
   fakeServer({ view: { schedule: "RRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=0;BYSECOND=0" } });
   render(tree());

@@ -32,7 +32,8 @@ export function TuiAbsentPanel({
       )}
     >
       <div>
-        No terminal session. Start the agent, or turn on Interactive terminal in Settings → Model.
+        No terminal session. Start the agent, or turn on Interactive terminal in Settings →
+        Autopilot.
       </div>
       <div className="mt-2 flex items-center gap-2">
         {onStart && (

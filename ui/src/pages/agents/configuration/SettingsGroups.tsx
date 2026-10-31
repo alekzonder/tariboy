@@ -209,7 +209,12 @@ function AutopilotGroup({ draft, sources }: SectionProps) {
               name="autopilot-mode"
               checked={mode === "every"}
               disabled={!("interval" in draft.values)}
-              onChange={() => draft.setField("interval", toSeconds(every))}
+              onChange={() =>
+                draft.setField(
+                  "interval",
+                  toSeconds(Number(every) > 0 ? every : rememberedMinutes(interval)),
+                )
+              }
             />
             Also every
           </label>

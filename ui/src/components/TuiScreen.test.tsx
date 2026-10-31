@@ -197,7 +197,7 @@ describe("TuiScreen", () => {
     render(<TuiScreen controller={ctrl({ absent: true })} onStart={onStart} />);
     expect(
       screen.getByText(
-        "No terminal session. Start the agent, or turn on Interactive terminal in Settings → Model.",
+        "No terminal session. Start the agent, or turn on Interactive terminal in Settings → Autopilot.",
       ),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Start" }));

@@ -88,7 +88,7 @@ describe("SECTIONS", () => {
 
 describe("field helpers", () => {
   it("normalizes whole numbers and trims text", () => {
-    expect(normalizeField("interval", " 30.7 ")).toBe("30");
+    expect(normalizeField("hard-timeout", " 30.7 ")).toBe("30");
     expect(normalizeField("max-idle", "-4")).toBe("0");
     expect(normalizeField("interval", "abc")).toBe("abc");
     expect(normalizeField("cwd", "  /srv/new ")).toBe("/srv/new");
