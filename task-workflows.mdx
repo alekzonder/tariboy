@@ -1837,9 +1837,9 @@ The routes keep their `workflow-triggers` path for compatibility.
 ## Desktop
 
 Desktop's Tasks workspace reads the routes on this page, always against the
-server the task or queue belongs to. A flexible task looks and behaves as it
-always did; everything below applies to a workflow task and a workflow queue.
-How the list shows these tasks is in [Tasks](/docs/tasks#desktop).
+server the task or queue belongs to. The workflow controls below apply only
+to workflow tasks and queues. The shared task sheet and list are described in
+[Tasks](/docs/tasks#desktop).
 
 The number next to **Tasks** in the sidebar, and the **Needs you** list on
 Home and Inbox, count the workflow tasks that wait for you: a task whose
@@ -1850,21 +1850,41 @@ to start it is not counted.
 
 ### The Needs you card
 
-When a workflow task waits for you, a Needs you card shows the decision. The
-card is pinned at the top of the task sheet, it is in the **Needs you**
-section of the agent's **Work** tab, and it opens on Home and Inbox when you
-expand a Needs you row with **Answer in place**. In a customer status the card
-says "\<agent\> waits for your decision in \<status\>." It shows the artifacts
-to review: the artifacts that the step into the status required, then the
-artifacts that its outcomes require. Each one shows its latest value as
-Markdown and folds away, and the first one is open. The card has one message
-box and one button per outcome, labeled "\<outcome\> → \<next status\>". A
-button whose outcome misses an artifact is disabled. A button sends the same
-advance request as the Outcomes block below, with the message and `from` set
-to the status you saw, and follows it until its checks finish. For a paused
-task the card shows the reason with **Continue**, **Release holder** in a pool
-status, and **Cancel task**. While the card is pinned in the sheet, the
-workflow panel hides its pause banner and its Outcomes block.
+Home and Inbox keep the expandable Needs you card under Answer in place.
+For a customer status, it shows the artifacts to review, a message box, and
+one button per outcome. A button names the outcome and target status. It is
+disabled when a required artifact is missing. It sends the advance with the
+message and `from` set to the displayed status, then follows the request until
+its checks finish. A paused task shows its reason with Continue, Release
+holder for a pool status, and Cancel task.
+
+The agent's Work tab shows the same card. Its key and title form a button
+that opens the task sheet on the agent's host without sending an answer.
+Answer fields, outcomes, and links work independently. Closing the sheet
+restores focus to that button and retains the card's draft.
+
+### Task decisions and materials
+
+The task sheet has one title in its sticky header. The pencil edits it in
+place, and Save task appears only while task fields have unsaved changes.
+A compact decision panel sits directly below the header in the same sticky
+block. It shows the current stage, owner, wait reason, and available outcomes.
+An initial customer status offers its real outcomes, including the start action.
+Completed tasks offer no transitions. The sticky block has a height limit and
+scrolls on short screens, so its controls stay reachable.
+
+Outcome message is an optional message for the transition. It is separate
+from the comment form, which still answers questions and adds comments.
+Outcome buttons use the existing advance and request polling operations.
+They stay disabled while checks run, while another request is pending, while
+the task is paused, or while a required artifact is missing. Pause decisions
+and failed-request retries keep their existing operations and confirmations.
+
+Decision materials appear outside the sticky block, before the description.
+View plan and named material links expand, scroll to, and focus the artifact
+below. The materials come from the `requires` of transitions into and out of
+the current status. A missing artifact stays visible. Long values remain in
+this scrolling section rather than filling the sticky decision panel.
 
 In the agent's **Work** tab, a row in **Queued** for a task in its workflow's
 initial status has one button per outcome of that status, from
@@ -1874,10 +1894,9 @@ first. An outcome named `start` reads **Start**. See
 
 ### The workflow panel
 
-Opening a workflow task shows a **Workflow** panel in the task sheet in place of
-the status select. The panel is in a collapsed **Workflow** section, which is
-open when the task has a `workflow_attention`. It reads top down: what is wrong, where the task is, what
-may happen next, what it produced, and what ran. The workflow assigns pool
+The lower Workflow disclosure holds the status graph, artifact editing and
+history, runs, logs, visits, and operator actions. The compact panel above it
+owns the current decision and pause controls. The workflow assigns pool
 work, so Save never changes the assignee. In an open, unpaused pool status the
 **Assignee** field is a list of the members of that status's pool: choosing one
 runs `workflow reassign` at once (see [Changing the holder](#changing-the-holder)),
@@ -1887,15 +1906,8 @@ assignee is read-only text. The sheet has no
 task. Its actions menu offers **Move to queue…** instead (see
 [Tasks](/docs/tasks#moving-a-task-to-another-queue)). The panel follows the task's events as well as its revision: a rejected
 request, a script run, or another event refetches the view while the sheet is
-open, and an older response never replaces a newer one. The panel has these
-sections:
+open, and an older response never replaces a newer one. The workflow view retains these controls and details:
 
-- **Pause banner.** Appears first when the task is paused. It explains the
-  reason and offers **Continue** and **Cancel task**, plus **Release holder**
-  when the status is a pool status. **Continue** keeps the same holder in a
-  pool status and resumes the task in its current status otherwise. Each asks
-  for confirmation and sends `POST /api/tasks/{key}/workflow/resume` or the
-  cancel route.
 - **Problem.** Appears when something needs a person and the task is not
   paused, with a title, the script's own message as text, how close the task
   is to a pause (`2 of 5 rejections`, from the visit counters and the status
@@ -1921,29 +1933,19 @@ sections:
   holder, with the labeled actions **Run watch now**, **Return to agent…**,
   **Upgrade to NAME@VERSION…**, **Move to status…**, and **Cancel task**; see
   below.
-- **Outcomes.** Each outcome shows its target status, the artifacts it
-  requires (a set one ticked, a missing one highlighted), and its checks with
-  what each verifies, when the image describes it, and the resolved `run_as`
-  and timeout. In a customer status each outcome is a button, with an optional
-  message of up to 4096 characters; Desktop sends the advance request and
-  polls it until the checks finish, then shows an `applied` result by
-  reloading the task or a refusal with the daemon's message. A button is
-  disabled while a request is checking, while a request made elsewhere is
-  still pending (with **Refresh**), while the task is paused, and while a
-  required artifact has no value. A result that settled without applying is
-  shown here until the refetched view carries it; from then on the Problem
-  section explains it. In a pool or script status the outcomes are listed for
-  reference, because the agent or the watch script decides.
-- **Artifacts.** The artifacts an outcome of the current status requires come
-  first under **Needed to leave this status**, missing ones before set ones,
-  each with a `required by outcome → status` chip; the other declared
-  artifacts fold away behind **Other artifacts (n)**. Each shows its
-  description, the current value rendered as Markdown with a **Markdown** /
-  **Text** switch for plain text, collapsed to six lines or 600 characters
-  when long and shown in full once expanded, with **Edit** and **History**,
-  which loads the earlier values on demand in the same mode; a declared
-  artifact with no value shows **Set**. Editing is disabled once the task is
-  closed.
+- **Outcomes.** The workflow details show each declared outcome, its target,
+  required artifacts, and checks. Each check keeps its description, resolved
+  `run_as`, and timeout. The compact decision panel owns customer outcome
+  buttons and the Outcome message. Pool and script outcomes remain available
+  for reference, because the agent or watch script decides.
+- **Artifacts.** Decision materials list the artifacts required by transitions
+  into and out of the current status, with their transition names. The lower
+  workflow details retain all declared artifacts. Each artifact shows its
+  description and current value as Markdown, with a Markdown / Text switch.
+  Long values collapse to six lines or 600 characters and expand in place.
+  Edit and History remain available, and History loads earlier values on
+  demand. A declared artifact with no value shows Set. Editing is disabled
+  once the task is closed.
 - **Runs.** The latest 20 script runs with kind, script, state, verdict, exit
   code, and times. The verdict carries the tone: a failure or rejection is
   red, a pass or outcome green, a quiet run dim. A **Log** toggle loads the

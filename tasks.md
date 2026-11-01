@@ -206,31 +206,42 @@ the script's words and the count behind it (see
 gives the reason). Active, Closed, and All use the category too. There is no
 filter by workflow status. Flexible tasks keep the labels described above.
 
-Clicking a task opens a right-side sheet over the tree. When the task waits on
-you, its Needs you card is pinned at the top (see
-[The agent's Work tab](#the-agents-work-tab)). Then come the title and the
-description, and the comments. A collapsed **Details** section holds the
-author, customer, queue, group, blocked state, parent, the status of a
-flexible task, priority, assignee, pull request URL, block reason, and
-dependencies. **History** is collapsed by default. The flexible status
-`wait_customer` reads **Waiting for you**. The assignee is a list of
-**Unassigned**, **me**, and each agent. You cannot type a principal. In the
-comment form, the **Ask an agent** list mentions an agent, and **Reply Ok to
-the question** posts `Ok`. It starts at half the viewport width; drag its left separator
-or use its keyboard controls to resize it, and the chosen width survives reloads.
-**Back**, **Close**, Escape, or a backdrop click returns to the still-mounted
-tree with its expansion and scroll position preserved. Unsaved task, comment,
-or relation drafts require confirmation before being discarded.
+Clicking a task opens a right-side sheet over the tree. The sticky header
+shows the key, one title, status, and assignee. The pencil edits the title in
+that same place. Save task appears only while task fields have unsaved changes.
+For a workflow task, a compact decision panel sits directly below the header
+in the same sticky block. It shows the current stage, owner, wait reason, and
+available outcomes, including the initial customer action that starts work.
+The block has a height limit and scrolls on a short screen.
 
-For a workflow task the sheet has no status select, no Done action, no
-assignee control, and no **Move to another server…** (the daemon refuses to
-export a workflow task). It shows the **Workflow** panel instead, in a
-collapsed **Workflow** section that is open when the task needs attention.
-There the customer chooses outcomes, edits artifacts, reads script runs and logs, decides a pause,
-and moves or cancels the task. See [Desktop](/docs/task-workflows#desktop) in
-the workflow guide. Binding a queue to a workflow, its pools, and its env vars
-and secrets are in the `Manage queues…` dialog, in the queue's **Workflow**,
-**Pools**, and **Environment** tabs.
+Decision materials appear below the sticky block, before the description and
+comments. View plan and the named material links open and focus their artifacts
+there. An Outcome message belongs to the chosen outcome. To answer a question
+or add a comment, use the comment form. Completed tasks offer no transitions,
+and flexible tasks have no workflow decision panel.
+
+A collapsed Details section holds the author, customer, queue, group, blocked
+state, parent, flexible status, priority, assignee, pull request URL, block
+reason, and dependencies. History is collapsed by default. The flexible status
+`wait_customer` reads Waiting for you. The flexible assignee list contains
+Unassigned, me, and each agent. You cannot type a principal. In the comment
+form, Ask an agent mentions an agent, and Reply Ok to the question posts `Ok`.
+
+The sheet starts at half the viewport width. Drag its left separator or use
+its keyboard controls to resize it. The chosen width survives reloads.
+Back, Close, Escape, or a backdrop click returns to the still-mounted tree
+with its expansion and scroll position preserved. Unsaved task, comment,
+relation, or outcome-message drafts require confirmation before the sheet
+discards them. A pending decision prevents closure until it finishes.
+
+A workflow task has no flexible status select, Done action, or Move to another
+server action. Its lower Workflow disclosure holds the status graph,
+artifacts, runs, logs, visits, and operator actions. Existing confirmations
+still protect actions that override the workflow or cancel the task. In an
+open, unpaused pool status, the Assignee control can reassign the holder to a
+member of that pool. See [Desktop](/docs/task-workflows#desktop) in the workflow
+guide. Queue bindings, pools, environment variables, and secrets remain in the
+Manage queues dialog.
 
 Descriptions and comments render as Markdown. Their visual editor supports
 headings, bold, italic, strikethrough, links, lists, checklists, code, and tables.
@@ -311,13 +322,11 @@ agent does not pick up tasks and links to Settings.
 
 Below the composer, the tab has these sections:
 
-- **Needs you**: one card per task that waits for you. The card shows the
-  open question with **Send answer** and **Reply Ok to the question**, or the
-  decision of a customer status with the artifacts to review, a message box,
-  and one button per outcome, such as **approved → merge**. For a paused task
-  it shows the reason with **Continue**, **Release holder**, and **Cancel
-  task**. The same card is pinned in the task sheet, and it opens on Home and
-  Inbox when you expand a Needs you row with **Answer in place**.
+- **Needs you**: each card has a key and title button that opens the task sheet
+  on the agent's host. Opening it sends no answer. The card's answer fields,
+  outcomes, and links work independently. Closing the sheet restores focus to
+  the button and retains the card's draft. Home and Inbox keep their expandable
+  Needs you cards.
 - **In progress**: the other active tasks.
 - **Queued**: open tasks, and workflow tasks in their first status. Such a
   workflow task has one button per outcome of that status, so you can start
@@ -334,8 +343,7 @@ composer.
 ## Moving a task to another queue
 
 A task key names its queue, so a task that belongs in another queue of the same
-host is moved as a new task. In the task panel, the actions menu beside **Save
-task** opens **Move to queue…** for any open task, workflow or not. The dialog
+host is moved as a new task. In the task panel, the header actions menu opens **Move to queue…** for any open task, workflow or not. The dialog
 lists the other queues of this host and says what happens; for a workflow task
 it says that the current workflow stops. After the move the Tasks workspace
 opens the new task. The same move is `ttasks requeue KEY --queue QUEUE` for the
@@ -355,8 +363,7 @@ for the details.
 ## Moving a task to another server
 
 Each host keeps its own tasks, so work that belongs with another host is moved
-rather than copied by hand. In the task panel, the actions menu beside **Save
-task** opens **Move to another server**, which lists the other hosts registered
+rather than copied by hand. In the task panel, the header actions menu opens **Move to another server**, which lists the other hosts registered
 in the desktop app.
 
 The desktop app is the only component authenticated against both daemons, so it

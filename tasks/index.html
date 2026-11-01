@@ -178,30 +178,38 @@ the script’s words and the count behind it (see
 <strong>paused</strong> marker outranks both when the daemon paused the task (its tooltip
 gives the reason). Active, Closed, and All use the category too. There is no
 filter by workflow status. Flexible tasks keep the labels described above.</p>
-<p>Clicking a task opens a right-side sheet over the tree. When the task waits on
-you, its Needs you card is pinned at the top (see
-<a href="#the-agents-work-tab">The agent’s Work tab</a>). Then come the title and the
-description, and the comments. A collapsed <strong>Details</strong> section holds the
-author, customer, queue, group, blocked state, parent, the status of a
-flexible task, priority, assignee, pull request URL, block reason, and
-dependencies. <strong>History</strong> is collapsed by default. The flexible status
-<code>wait_customer</code> reads <strong>Waiting for you</strong>. The assignee is a list of
-<strong>Unassigned</strong>, <strong>me</strong>, and each agent. You cannot type a principal. In the
-comment form, the <strong>Ask an agent</strong> list mentions an agent, and <strong>Reply Ok to
-the question</strong> posts <code>Ok</code>. It starts at half the viewport width; drag its left separator
-or use its keyboard controls to resize it, and the chosen width survives reloads.
-<strong>Back</strong>, <strong>Close</strong>, Escape, or a backdrop click returns to the still-mounted
-tree with its expansion and scroll position preserved. Unsaved task, comment,
-or relation drafts require confirmation before being discarded.</p>
-<p>For a workflow task the sheet has no status select, no Done action, no
-assignee control, and no <strong>Move to another server…</strong> (the daemon refuses to
-export a workflow task). It shows the <strong>Workflow</strong> panel instead, in a
-collapsed <strong>Workflow</strong> section that is open when the task needs attention.
-There the customer chooses outcomes, edits artifacts, reads script runs and logs, decides a pause,
-and moves or cancels the task. See <a href="/tariboy/docs/task-workflows#desktop">Desktop</a> in
-the workflow guide. Binding a queue to a workflow, its pools, and its env vars
-and secrets are in the <code>Manage queues…</code> dialog, in the queue’s <strong>Workflow</strong>,
-<strong>Pools</strong>, and <strong>Environment</strong> tabs.</p>
+<p>Clicking a task opens a right-side sheet over the tree. The sticky header
+shows the key, one title, status, and assignee. The pencil edits the title in
+that same place. Save task appears only while task fields have unsaved changes.
+For a workflow task, a compact decision panel sits directly below the header
+in the same sticky block. It shows the current stage, owner, wait reason, and
+available outcomes, including the initial customer action that starts work.
+The block has a height limit and scrolls on a short screen.</p>
+<p>Decision materials appear below the sticky block, before the description and
+comments. View plan and the named material links open and focus their artifacts
+there. An Outcome message belongs to the chosen outcome. To answer a question
+or add a comment, use the comment form. Completed tasks offer no transitions,
+and flexible tasks have no workflow decision panel.</p>
+<p>A collapsed Details section holds the author, customer, queue, group, blocked
+state, parent, flexible status, priority, assignee, pull request URL, block
+reason, and dependencies. History is collapsed by default. The flexible status
+<code>wait_customer</code> reads Waiting for you. The flexible assignee list contains
+Unassigned, me, and each agent. You cannot type a principal. In the comment
+form, Ask an agent mentions an agent, and Reply Ok to the question posts <code>Ok</code>.</p>
+<p>The sheet starts at half the viewport width. Drag its left separator or use
+its keyboard controls to resize it. The chosen width survives reloads.
+Back, Close, Escape, or a backdrop click returns to the still-mounted tree
+with its expansion and scroll position preserved. Unsaved task, comment,
+relation, or outcome-message drafts require confirmation before the sheet
+discards them. A pending decision prevents closure until it finishes.</p>
+<p>A workflow task has no flexible status select, Done action, or Move to another
+server action. Its lower Workflow disclosure holds the status graph,
+artifacts, runs, logs, visits, and operator actions. Existing confirmations
+still protect actions that override the workflow or cancel the task. In an
+open, unpaused pool status, the Assignee control can reassign the holder to a
+member of that pool. See <a href="/tariboy/docs/task-workflows#desktop">Desktop</a> in the workflow
+guide. Queue bindings, pools, environment variables, and secrets remain in the
+Manage queues dialog.</p>
 <p>Descriptions and comments render as Markdown. Their visual editor supports
 headings, bold, italic, strikethrough, links, lists, checklists, code, and tables.
 Switch to <strong>Source Markdown</strong> to edit the source directly; content the visual editor
@@ -271,13 +279,11 @@ task stays. When the agent’s Goal setting is off, the composer says that the
 agent does not pick up tasks and links to Settings.</p>
 <p>Below the composer, the tab has these sections:</p>
 <ul>
-<li><strong>Needs you</strong>: one card per task that waits for you. The card shows the
-open question with <strong>Send answer</strong> and <strong>Reply Ok to the question</strong>, or the
-decision of a customer status with the artifacts to review, a message box,
-and one button per outcome, such as <strong>approved → merge</strong>. For a paused task
-it shows the reason with <strong>Continue</strong>, <strong>Release holder</strong>, and <strong>Cancel
-task</strong>. The same card is pinned in the task sheet, and it opens on Home and
-Inbox when you expand a Needs you row with <strong>Answer in place</strong>.</li>
+<li><strong>Needs you</strong>: each card has a key and title button that opens the task sheet
+on the agent’s host. Opening it sends no answer. The card’s answer fields,
+outcomes, and links work independently. Closing the sheet restores focus to
+the button and retains the card’s draft. Home and Inbox keep their expandable
+Needs you cards.</li>
 <li><strong>In progress</strong>: the other active tasks.</li>
 <li><strong>Queued</strong>: open tasks, and workflow tasks in their first status. Such a
 workflow task has one button per outcome of that status, so you can start
@@ -292,8 +298,7 @@ opens the tab at the first task’s card, and <strong>Give task</strong> focuses
 composer.</p>
 <h2 id="moving-a-task-to-another-queue"><a class="blume-heading-anchor" href="#moving-a-task-to-another-queue">Moving a task to another queue</a></h2>
 <p>A task key names its queue, so a task that belongs in another queue of the same
-host is moved as a new task. In the task panel, the actions menu beside <strong>Save
-task</strong> opens <strong>Move to queue…</strong> for any open task, workflow or not. The dialog
+host is moved as a new task. In the task panel, the header actions menu opens <strong>Move to queue…</strong> for any open task, workflow or not. The dialog
 lists the other queues of this host and says what happens; for a workflow task
 it says that the current workflow stops. After the move the Tasks workspace
 opens the new task. The same move is <code>ttasks requeue KEY --queue QUEUE</code> for the
@@ -310,8 +315,7 @@ is refused (<code>requeue_has_children</code>); move or close the subtasks first
 for the details.</p>
 <h2 id="moving-a-task-to-another-server"><a class="blume-heading-anchor" href="#moving-a-task-to-another-server">Moving a task to another server</a></h2>
 <p>Each host keeps its own tasks, so work that belongs with another host is moved
-rather than copied by hand. In the task panel, the actions menu beside <strong>Save
-task</strong> opens <strong>Move to another server</strong>, which lists the other hosts registered
+rather than copied by hand. In the task panel, the header actions menu opens <strong>Move to another server</strong>, which lists the other hosts registered
 in the desktop app.</p>
 <p>The desktop app is the only component authenticated against both daemons, so it
 drives the move: it exports the task tree from this daemon, imports it into the

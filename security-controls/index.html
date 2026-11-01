@@ -81,6 +81,20 @@ owner-only and the handoff file plus atomic temporary files use mode <code>0600<
 Tokens are never logged, audited, stored in SQLite, or included in support
 bundles. Startup prunes leases that no longer map to a <code>running</code> iteration;
 adoption revokes the remaining lease when its shim finishes.</p>
+<p>OpenCode leases also carry the prepared provider addresses. Routes cannot be
+chosen from request-supplied URLs, and cross-origin upstream redirects remain
+blocked.
+OpenCode retains its own API-key environment and authentication files; the
+proxy forwards those credentials to the bound provider without persisting
+them in the lease. OAuth and external OpenCode plugins are unsupported because
+their transport hooks can bypass the configured SDK address, so preparation
+rejects them. The complete temporary <code>OPENCODE_CONFIG_CONTENT</code> value is masked
+in launch logs and audit, and probe output is never included in failures.
+The handoff file remains owner-only and excluded from diagnostics.</p>
+<p>This routing controls ordinary harness requests, not arbitrary network commands
+an agent can execute. A provider with an unknown price records tokens and zero
+USD; a USD budget cannot bound that provider’s actual spend. See
+<a href="/tariboy/docs/architecture/ai-proxy#opencode-harness">OpenCode routing</a>.</p>
 <h2 id="runtime-controls"><a class="blume-heading-anchor" href="#runtime-controls">Runtime controls</a></h2>
 <ul>
 <li>Start and Stop are the one on/off switch of an agent.</li>
@@ -254,7 +268,7 @@ remove it. See <a href="/tariboy/docs/images#the-default-store">Images</a>.</p>
 start. An explicit <code>onboarding.retry</code> (<code>POST /api/onboarding/retry</code>) still
 runs the routine.</p>
 <h2 id="alpha-signing-and-gatekeeper"><a class="blume-heading-anchor" href="#alpha-signing-and-gatekeeper">Alpha signing and Gatekeeper</a></h2>
-<p><code>0.101.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
+<p><code>0.102.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
 <code>SHA256SUMS</code> before opening it. If Gatekeeper blocks it, Control-click only the
 named <code>/Applications/Tariboy.app</code>, choose <strong>Open</strong>, and confirm.
 If Control-click Open is unavailable, use <strong>System Settings → Privacy &amp;

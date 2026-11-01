@@ -184,6 +184,17 @@ exports and filesystem effects from either script are available to that
 iteration. A source-time failure prevents the harness from starting and follows
 the existing `harness_error` lifecycle.
 
+OpenCode sources these scripts once during preparation, before discovering its
+providers. It carries their exported environment, resulting working directory,
+and umask into the launch instead of sourcing them again. Script output is
+discarded during this bounded preparation; failures report a fixed diagnostic
+without shell output or environment values. Original provider environment URLs
+remain available for discovery. The final routing overlay takes precedence over
+inline configuration exported by either script, and a second effective-config
+probe checks it before launch. Missing proxy routing or unsupported OpenCode
+configuration fails preparation with `harness_error`; see
+[OpenCode routing](/docs/architecture/ai-proxy#opencode-harness).
+
 The same scripts, in the same order, are sourced before every command the
 daemon runs as the agent outside an iteration: each durable script run, where
 a source-time failure fails that run, and each `run_as: agent` workflow check,

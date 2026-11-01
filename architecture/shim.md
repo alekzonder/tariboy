@@ -154,10 +154,13 @@ environment values remain excluded. Closing a browser connection tears down
 only that attach client; it never kills the tmux session or harness.
 
 The daemon distinguishes terminal lifecycle from transport lifecycle. A PTY
-EOF is closed as WebSocket `1000/eof`; Desktop stops reconnecting immediately
-and shows the stopped-session panel. A `4404` no-session response can also mean
-that Start has queued an interactive iteration but its shim socket is not ready
-yet, so Desktop retries it for at most five seconds with capped exponential
-delay before showing the same panel. An abnormal WebSocket close remains
-transient and reconnects indefinitely with capped delay, which lets a live shim
-terminal recover across a brief daemon or network interruption.
+EOF is closed as WebSocket `1000/eof`. Desktop stops reconnecting immediately
+and shows the stopped-session panel. WebSocket `4404` means no current
+iteration exists or the shim does not support an interactive terminal.
+Start can return before the loop publishes its current iteration, so Desktop
+retries `4404` for at most five seconds with capped exponential delay.
+After that grace, it shows the same panel. A shim connection failure or a
+non-EOF stream failure closes with `1011`, not `4404` or `1000/eof`.
+These failures and other abnormal WebSocket closes reconnect indefinitely
+with capped delay. A live terminal can thus recover across a brief daemon
+or network interruption without reporting that the session ended.

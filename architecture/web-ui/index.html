@@ -51,8 +51,9 @@ the route-independent banner below the titlebar requires an explicit install
 action and reports installation failures for retry.</p>
 <p>There is no interface mode. Every user gets the same agent workspace, and it
 uses progressive disclosure: the everyday views are tabs, and the rarer views
-are one step away. <strong>Mailbox</strong> and <strong>Advanced</strong> are routes that the agent’s
-<strong>Settings</strong> links to, the terminal hotkeys are behind <strong>Keys</strong>, and the
+are one step away. The agent header’s <strong>⋯ → Diagnostics</strong> opens the existing
+diagnostic views, including <strong>Mailbox</strong>. <strong>Settings → Advanced → Other views</strong>
+keeps its links to the same routes. The terminal hotkeys are behind <strong>Keys</strong>, and the
 header’s rarer actions are in its <code>⋯</code> menu. A value that an older release
 stored under <code>app:ui-mode:v1</code> is ignored.</p>
 <p>The <strong>New agent</strong> dialog shows five fields in this order: <strong>Run on</strong> (only when
@@ -182,16 +183,16 @@ field is at the top of the navigation drawer instead.</p>
 <td><code>/</code> (see <a href="#home">Home</a>)</td>
 </tr>
 <tr>
-<td><strong>Agents</strong></td>
-<td>nothing: it opens and closes the agent list in place</td>
-</tr>
-<tr>
 <td><strong>Tasks</strong></td>
 <td><code>/tasks</code></td>
 </tr>
 <tr>
 <td><strong>Inbox</strong></td>
 <td><code>/inbox</code></td>
+</tr>
+<tr>
+<td><strong>Agents</strong></td>
+<td>nothing: it opens and closes the agent list in place</td>
 </tr>
 <tr>
 <td><strong>Library</strong></td>
@@ -203,6 +204,8 @@ field is at the top of the navigation drawer instead.</p>
 </tr>
 </tbody>
 </table></div>
+<p>Home, Tasks, and Inbox stay above Agents in visual and keyboard order.
+Only the agent list scrolls. Library, Settings, and the hosts line stay at the bottom.</p>
 <p>Settings has one flat list of seven pages. There is no index page:</p>
 <div class="blume-table-scroll" tabIndex="0"><table>
 <thead>
@@ -353,7 +356,10 @@ other than Hosts show one host. They take an optional
 remembered active host. A <code>?host=</code> that names another host selects it through
 the route host boundary, which shows <strong>Connecting to host…</strong> or <strong>Host
 unavailable.</strong> while it does. With two or more hosts in the workspace, the
-page has a host selector, and a pick replaces <code>?host=</code>. Settings → Hosts and
+page has a host selector, and a pick replaces <code>?host=</code>. In Tasks and Library,
+the selector comes first in the top content row, before filters or tabs.
+Both use <code>HostScopeSelect</code>, labeled <strong>Host</strong>, with a 28 px height,
+16 px left padding, and 6 px between controls. Settings → Hosts and
 Settings → Application have no selector. With one
 host nothing about hosts is shown, and links that the UI builds carry
 <code>?host=</code> only with two or more hosts. A desktop notification always names its
@@ -643,7 +649,7 @@ do not change;</li>
 <li>a <strong>More</strong> segment with three views:
 <ul>
 <li><strong>Runs log</strong> (default): the iteration audit view, the same component as
-<strong>Advanced → Full audit</strong>, limited to runs that started in the period, with
+<strong>Diagnostics → Full audit</strong>, limited to runs that started in the period, with
 the tag filter below;</li>
 <li><strong>Usage</strong>: the agent’s AI usage over the period; task and epic keys open
 the task panel in place;</li>
@@ -658,7 +664,7 @@ page has a
 the task panel in place on that server, and an <strong>Agents</strong> view, whose names open
 that agent’s Activity tab with the same period. All its requests go to the
 selected host.</p>
-<p>The agent’s Settings, Activity, and Advanced pages and the server Activity
+<p>The agent’s Settings, Activity, and Diagnostics pages and the server Activity
 page share one frame, <code>TabPage</code>: 16 px side and top padding, 24 px bottom
 padding, and 16 px between blocks. Settings is a centered column of at
 most <code>max-w-5xl</code>; the others use the full width. Mailbox, Work, and Terminal fill
@@ -667,9 +673,9 @@ the page without a frame.</p>
 <p>The Runs log filters its iteration list by tag. The tag filter and the
 selected iteration live in the URL query beside the period, and a filter change
 replaces the history entry instead of adding one per keystroke. Matching is the
-daemon’s: an iteration matches any of the listed tags. Under <strong>Advanced → Full
+daemon’s: an iteration matches any of the listed tags. Under <strong>Diagnostics → Full
 audit</strong> the same list keeps its own started-at date filters, where both date
-bounds are inclusive, and <strong>Advanced → Raw usage</strong> keeps its own window presets.</p>
+bounds are inclusive, and <strong>Diagnostics → Raw usage</strong> keeps its own window presets.</p>
 <p>Each row shows its tags beside its status. The selected iteration has a tag
 editor above its log that adds one tag or removes one, each saved as a complete
 replacement of that iteration’s tag set. Batch tagging over many iterations is a
@@ -996,8 +1002,8 @@ and settings routes of <code>routes.tsx</code>;</li>
 <li><code>NeedsYouLive</code>, which reads the counts and rows of “needs you”, the task
 lookup of the search field, and the workspace manager dialog;</li>
 <li>every agent workspace tab and the Goal task drawer in <code>AgentWorkspace</code>;</li>
-<li>the Needs you card (<code>tasks/NeedsYouCard.tsx</code>) in the Work tab and in the
-Home list, because it brings the Markdown renderer;</li>
+<li>the Needs you card (<code>tasks/NeedsYouCard.tsx</code>) in the Work tab and the
+Home and Inbox lists, because it brings the Markdown renderer;</li>
 <li>the TipTap editor (<code>tasks/TaskMarkdownEditor.tsx</code>): <code>MarkdownEditor</code> in
 <code>TaskMarkdown.tsx</code> is a lazy wrapper, so <code>MarkdownContent</code> never loads TipTap;</li>
 <li>the file viewer of <code>FileBrowser</code>, with CodeMirror, its languages, and the
@@ -1422,26 +1428,31 @@ protects unsaved task, comment, and relation drafts with the confirmation
 Task Detail also offers the <code>wait_customer</code> status, labeled “Waiting for you”
 (<code>flexibleStatusLabel</code> gives this label everywhere), and an editable <code>Pull request</code> field. Both use the existing optimistic revision and explicit-host
 request path.
-The sheet is one <code>--card</code> island with its own scroll and a sticky identity
-header carrying the task key, title, status and assignee. <code>TaskDetailBody</code>
-then renders these parts, top down:</p>
+The sheet is one <code>--card</code> island with its own scroll. One sticky block holds
+the identity header and, for a workflow task, <code>TaskDecisionPanel</code> immediately
+below it. The header shows the key, one title, status, and assignee. The pencil
+edits the title in that same place. Save task appears only while task fields
+are dirty and saves them explicitly. The sticky block has a height limit and
+its own vertical scroll on short screens. It needs no fixed header offset.</p>
+<p><code>TaskDecisionPanel</code> shows the current stage, owner, wait reason, and actual
+outcomes from the shared workflow view. An initial customer status offers its
+start outcome. A completed task offers no transitions, and a flexible task has
+no workflow panel. Outcome message is separate from the existing comment form,
+which still answers questions and posts comments. The panel reuses the existing
+advance, request polling, pause, retry, and confirmation operations.</p>
+<p><code>TaskDetailBody</code> renders these parts below the sticky block:</p>
 <ol>
-<li>The Needs you card (<code>NeedsYouCard</code>, see <a href="#needs-you-card">Needs you card</a>),
-pinned when the viewer can edit the task and the task waits on the
-customer: <code>needsYouTask(task)</code> selects it, or an open comment wait
-addresses the customer. While the card is pinned, the sheet does not show
-the “Waiting for an answer” banner. Otherwise an open comment wait shows
-that banner.</li>
-<li>The title and the description (<code>TaskDetailFields</code>).</li>
-<li>The comments.</li>
-<li><strong>Details</strong>, collapsed: author, customer, queue, group, blocked, parent,
-then <code>TaskDetailProperties</code> (the status of a flexible task, priority,
-assignee, pull request, manual block reason) and the dependencies.</li>
-<li><strong>Workflow</strong>, collapsed, for a workflow task only: the <code>WorkflowPanel</code>. The
-section is open when the task has a <code>workflow_attention</code>. While the card is
-pinned, the panel hides its Outcomes block and its pause banner, because
-the card offers both.</li>
-<li><strong>History</strong>, collapsed by default.</li>
+<li>Decision materials for a workflow task, outside the sticky block. View plan
+and named material links expand, scroll to, and focus the matching artifact.
+Dependencies come from the <code>requires</code> of transitions into and out of the
+current status. Missing values stay visible.</li>
+<li>The description (<code>TaskDetailFields</code>).</li>
+<li>The comments and their existing answer controls.</li>
+<li>Details, collapsed: author, customer, queue, group, blocked, parent, then
+<code>TaskDetailProperties</code> and dependencies.</li>
+<li>Workflow, collapsed: the status graph, artifact editing and history, runs,
+logs, visits, and operator actions. Destructive confirmations still apply.</li>
+<li>History, collapsed by default.</li>
 </ol>
 <p>The assignee of a flexible task is a select of “Unassigned”, “me” (the
 customer principal), and each agent as <code>agent:&lt;name&gt;</code>. A current assignee
@@ -1484,36 +1495,18 @@ query it is a select of that pool’s members (<code>listAgentPools</code> throu
 <code>onTaskChanged</code>; otherwise it is text. <code>TaskDetail</code> hides <strong>Move to
 another server…</strong> for one, and neither its banner nor a comment chip asks for
 a comment on the workflow’s own (<code>system:workflow</code>) wait. In place of the status
-select it renders <code>WorkflowPanel</code> in its <strong>Workflow</strong> section. The panel reads
-the shared workflow query. A task revision, an event sequence, or
-a completed write marks that query stale, so a workflow event refreshes the
-panel even when the task revision stays the same. It composes, top down,
-<code>WorkflowPauseBanner</code> (<code>resumeTaskWorkflow</code>, <code>cancelWorkflowTask</code>),
-<code>WorkflowProblem</code> (the one problem <code>explainProblem</code> in <code>explainWorkflowProblem.ts</code>
-picks from the view, with <code>retryTransitionRequest</code> behind <strong>Retry</strong> and the
-run’s log through <code>RunRow</code> with <code>autoLoad</code>), <code>WorkflowStepper</code> (the view’s
-<code>statuses</code> as steps, marked by <code>stepMarks</code> in <code>workflowGraph.ts</code>; the panel
-owns the selected step, which starts at the current status and follows it
-until the customer picks a step), the header with <code>stepOf</code>,
-<code>WorkflowOutcomes</code> (<code>advanceTask</code> with <code>from</code>, through the <code>useWorkflowAdvance</code>
-hook that the Needs you card shares), <code>WorkflowArtifacts</code>
-(<code>setTaskArtifact</code>, <code>getTaskArtifactHistory</code>; for the selected step only the
-artifacts <code>stepArtifacts</code> finds in the <code>requires</code> of a transition into it,
-then out of it, each naming its transition; <strong>Show all artifacts</strong>, or a
-second click on the step, clears the selection and lists every entry of the
-view’s <code>declared_artifacts</code> in one list, those <code>requiredBy</code> names for the
-current status first), <code>WorkflowRuns</code>
-(<code>getTaskScriptRunLog</code>; <code>runTone</code> gives each row its tone), the visit list,
-and the header’s labeled <strong>Run watch now</strong>, <strong>Return to agent…</strong>, <strong>Upgrade to
-NAME@VERSION…</strong>, <strong>Move to status…</strong>, and <strong>Cancel task</strong> buttons: <strong>Run watch
-now</strong> appears when <code>canRunWatch</code> finds an open, unpaused script status with a
-watch, is disabled while <code>hasActiveRun</code> finds a pending or running run, and
-sends <code>runTaskWatch</code>, then refetches the view; <code>ReturnToAgent</code> picks its
-targets with <code>returnTargets</code> and sends <code>advanceTask</code> or <code>moveTaskWorkflow</code>, the
-upgrade form appears when <code>canUpgrade</code> finds the view’s <code>queue_digest</code> differs
-from its <code>digest</code> and sends <code>upgradeTaskWorkflow</code>, the move form uses
-<code>moveTaskWorkflow</code> (targets from the view’s <code>statuses</code>), and cancel uses
-<code>cancelWorkflowTask</code>. The move and upgrade forms live in
+select it renders <code>WorkflowPanel</code> in its <strong>Workflow</strong> section. The decision panel, materials, and lower workflow disclosure read the shared
+workflow query. A task revision, an event sequence, or a completed write marks
+that query stale. A workflow event therefore refreshes the view even when the
+task revision stays the same. <code>useWorkflowAdvance</code> and <code>useFollowRequest</code>
+continue to submit and follow outcomes. <code>WorkflowProblem</code> supplies retry and
+run logs, and the existing pause controls supply resume and cancel.</p>
+<p>The lower disclosure retains <code>WorkflowStepper</code>, <code>WorkflowArtifacts</code>,
+<code>WorkflowRuns</code>, visits, and the operator actions. The stepper uses <code>stepMarks</code>
+in <code>workflowGraph.ts</code> and the statuses from the workflow view. Artifact reads,
+writes, history, and logs keep their existing API methods. Run watch now,
+Return to agent, Upgrade, Move to status, and Cancel task keep their existing
+eligibility rules and request paths. The move and upgrade forms live in
 <code>WorkflowMoveForms.tsx</code>. <code>stepMarks</code>, <code>returnTargets</code>, and <code>defaultReturnTarget</code>
 read <code>runVisits</code>, the visits of the task’s current workflow digest. Outcomes, the problem block, and the return form follow
 a transition request through <code>useFollowRequest</code> in <code>workflowShared.ts</code>
@@ -1712,8 +1705,9 @@ The recipient picker lists the host’s agents. <code>?letter=&lt;id&gt;</code> 
 selector; letters of several hosts are not merged into one list. The sidebar’s
 <strong>Inbox</strong> item carries the customer’s open letter count of every workspace
 host.</p>
-<p><strong>Agent → Mailbox</strong> (<code>/agents/:hostId/:agent/mailbox</code>) is not a tab: the
-agent’s <strong>Settings</strong> links to it under <strong>Advanced → Other views</strong>. It is
+<p><strong>Agent → Mailbox</strong> (<code>/agents/:hostId/:agent/mailbox</code>) is not a tab.
+<strong>Diagnostics</strong> and <strong>Settings → Advanced → Other views</strong> link to it.
+It has links to <strong>Diagnostics</strong> and <strong>Back to Work</strong> for the same host and agent. It is
 that agent’s mailbox, read with <code>as=agent:&lt;name&gt;</code>, so the operator replies on
 the agent’s behalf. <strong>Compose</strong> writes from the customer to that agent; the
 recipient is fixed. The toolbar shows <code>batch N · inbox K/M</code>: N is the agent’s
@@ -1800,7 +1794,7 @@ phases from title prefixes or assignee. Operator history remains available after
 <a href="/tariboy/docs/task-workflows">Task workflows</a>.</p>
 <h3 id="agent-workspace"><a class="blume-heading-anchor" href="#agent-workspace">Agent workspace</a></h3>
 <h4 id="agent-state"><a class="blume-heading-anchor" href="#agent-state">Agent state</a></h4>
-<p>The sidebar row, the agent header, and the Terminal banner show one derived
+<p>The sidebar row and the agent header show one derived
 state. <code>deriveAgentState</code> in <code>ui/src/lib/agentState.ts</code> computes it in the UI.
 The first state that matches wins:</p>
 <div class="blume-table-scroll" tabIndex="0"><table>
@@ -1911,10 +1905,11 @@ alias resolves.</li>
 <li><strong>Clone</strong>: opens the New agent dialog with this agent as the clone source.</li>
 <li><strong>Pin</strong> or <strong>Unpin</strong>: the same pin as the sidebar.</li>
 <li><strong>Settings</strong>: opens the agent’s Settings tab.</li>
+<li><strong>Diagnostics</strong>: opens <code>…/advanced</code>, starting with <strong>Prompt</strong>.</li>
 </ul>
 <p>The header has no state pill, host label, image chip, Goal link, working
-directory row, or budget line. Daily and monthly limits are in <strong>Settings →
-Spending limit</strong>. Hourly and weekly limits are under <strong>Advanced</strong>.
+directory row, or budget line. Daily, weekly, and monthly limits are in <strong>Settings →
+Spending limit</strong>. The hourly limit is under <strong>Advanced</strong>.
 Below 1200 px the sentence and the muted line wrap, and the buttons take a row
 of their own.</p>
 <h4 id="tabs-and-routes"><a class="blume-heading-anchor" href="#tabs-and-routes">Tabs and routes</a></h4>
@@ -1955,6 +1950,13 @@ waiting for you”. <strong>Settings → Advanced → Other views</strong> links
 mailbox</strong>, <strong>Prompt preview</strong>, <strong>Context</strong>, <strong>Files</strong>, <strong>Scripts</strong>, <strong>Full
 audit</strong>, <strong>Raw usage</strong>, and <strong>Raw settings</strong>. These open <code>…/mailbox</code> or
 <code>…/advanced?view=…</code>. These routes are not tabs. There is no Autopilot tab.</p>
+<p><strong>⋯ → Diagnostics</strong> opens the same <code>…/advanced</code> route from every agent tab.
+The page has the title <strong>Diagnostics</strong> and offers <strong>Prompt</strong>, <strong>Context</strong>,
+<strong>Files</strong>, <strong>Scripts</strong>, <strong>Full audit</strong>, <strong>Raw usage</strong>, <strong>Raw settings</strong>, and <strong>Mailbox</strong>.
+<strong>Mailbox</strong> opens the existing <code>…/mailbox</code> route. <strong>Back to Work</strong> returns to
+<code>…/work</code> for the same host and agent, including when a direct link opened the page.
+Existing <code>…/advanced?view=…</code> links keep their selected view.
+Opening Diagnostics or Mailbox does not run a script, send a letter, or clear an inbox.</p>
 <p>These routes redirect:</p>
 <div class="blume-table-scroll" tabIndex="0"><table>
 <thead>
@@ -2016,10 +2018,11 @@ columns. Top down, it shows:</p>
 <li>The composer (<code>TaskComposer.tsx</code>), one line with the placeholder “Give
 &lt;agent&gt; a task…”, a <strong>Give</strong> button, and <strong>Details</strong>.</li>
 <li><strong>Needs you (n)</strong>: one Needs you card for each item of the agent’s
-<code>needs you</code> state, the same items that the tab badge and the header count.</li>
+<code>needs you</code> state, the same items that the tab badge and the header count.
+Each button opens the existing task drawer on the agent’s explicit host.</li>
 <li><strong>In progress (n)</strong>.</li>
 <li><strong>Queued (n)</strong>.</li>
-<li><strong>Done · last 7 days (n)</strong>, with a search box and <strong>Show all</strong>.</li>
+<li><strong>Done (n)</strong>, with <strong>Search completed tasks…</strong> and the <strong>Last 7 days / All time</strong> period selector.</li>
 </ol>
 <p>The composer works like this:</p>
 <ul>
@@ -2047,12 +2050,15 @@ Settings. The create still works.</li>
 <p>The rows come from <code>listTasks</code> with <code>assignee=agent:&lt;name&gt;</code>, one read with
 <code>status_view=active</code> and one with <code>status_view=closed</code>, through the shared task
 queries (<code>useAgentWork.ts</code>). The task event stream keeps them fresh. A task
-that a Needs you card shows is not repeated in the other sections. Queued
+listed in Needs you is not repeated in the other sections. Queued
 holds the active tasks in the <code>open</code> category and the tasks in their
 workflow’s initial status (<code>workflow_initial</code>). In progress holds the other
-active tasks. Done holds the closed tasks of the last seven days. <strong>Show all</strong>
-shows every closed task in the same rows. The search box filters Done by key
-and title.</p>
+active tasks. Done defaults to closed tasks from the last seven days. <strong>All time</strong>
+shows every closed task in the same rows and selects the same period for row costs.
+The search box filters Done locally by key and title. Changing the period keeps the query.
+An empty result names the selected period and distinguishes no tasks from no search matches.
+The search and period controls have the same height. Their group wraps below the heading
+on a narrow panel, with the search taking the remaining space beside the period.</p>
 <p>A row shows the key, the title, the status in words (<code>statusWords</code> in
 <code>workModel.ts</code>), the age, and the cost from the task activity report when it
 is known. The status words are “Not started” for a task in the initial
@@ -2063,7 +2069,11 @@ task in its workflow’s initial status has one button per item of its
 first, as the primary button. An outcome named <code>start</code> reads <strong>Start</strong>, and
 the others read “&lt;outcome&gt; → &lt;status&gt;”. A button sends the advance
 through <code>useWorkflowAdvance</code>.</p>
-<p>A row click opens the task drawer. The tab reads these query parameters:</p>
+<p>A row click opens the task drawer. The key and title of a Needs you card form
+one button that opens the same drawer. The card’s answer fields, outcomes, and
+links work independently. Opening the drawer sends no answer or outcome.
+Closing it restores focus to the opening button and keeps the card’s draft.
+The tab reads these query parameters:</p>
 <div class="blume-table-scroll" tabIndex="0"><table>
 <thead>
 <tr>
@@ -2087,10 +2097,11 @@ through <code>useWorkflowAdvance</code>.</p>
 </tbody>
 </table></div>
 <h4 id="needs-you-card"><a class="blume-heading-anchor" href="#needs-you-card">Needs you card</a></h4>
-<p><code>NeedsYouCard</code> (<code>ui/src/pages/tasks/NeedsYouCard.tsx</code>) is one component for
-three places: the Work tab, the top of the task drawer, and the Needs you list
-on Home and Inbox when a task row is expanded. The Work tab and the list load
-it lazily. The card shows:</p>
+<p><code>NeedsYouCard</code> (<code>ui/src/pages/tasks/NeedsYouCard.tsx</code>) serves the Work tab and
+the Needs you lists on Home and Inbox when a task row is expanded. They load
+it lazily. Work supplies the optional action that opens the drawer from the
+key and title. The drawer uses
+<code>TaskDecisionPanel</code> plus the existing comment form. The card shows:</p>
 <ul>
 <li>the key, the title, the status in words, and the age;</li>
 <li>the open question, as Markdown: an unresolved wait that addresses the
@@ -2159,8 +2170,7 @@ answers the same question about the next agent. An unknown tab still falls back
 to Work, and a selected task in the <code>?task=</code> query is dropped because it belongs
 to the agent being left. A sidebar agent selected from any other page opens on
 Work. A freshly created agent opens on Terminal. Start and Stop are in the
-agent header; the Terminal banner of an agent that is off also has a <strong>Start</strong>
-button.</p>
+agent header. The empty Terminal panel also has a <strong>Start</strong> button.</p>
 <p>When a known explicit server route temporarily loses its tunnel or its
 authoritative aggregate refresh fails, the Desktop retains its last successful
 server and agent snapshot in React memory rather than flashing the whole pane
@@ -2196,11 +2206,11 @@ agent is stopped. The editor includes <strong>Create directory if missing</stron
 <li><strong>Autopilot</strong>: <strong>Only when given tasks or messages</strong>, or <strong>Also every</strong> with
 an interval in minutes. <strong>Stop a run after</strong> sets the soft timeout in
 minutes, with <code>0</code> for no limit. <strong>Interactive terminal</strong> is here too.</li>
-<li><strong>Spending limit</strong>: daily and monthly USD limits, with the daemon’s current
+<li><strong>Spending limit</strong>: <strong>Day</strong>, <strong>Week</strong>, and <strong>Month</strong> USD limits, with the daemon’s current
 spend beside each. <code>0</code> means no limit.</li>
 </ul>
 <p><strong>Advanced</strong> starts collapsed. It contains <strong>Image</strong>, <strong>Schedule and
-timeouts</strong>, <strong>Goal</strong>, <strong>Mail</strong>, <strong>Hour and week budgets (USD)</strong>,
+timeouts</strong>, <strong>Goal</strong>, <strong>Mail</strong>, <strong>Hour budget (USD)</strong>,
 <strong>Environment</strong>, <strong>Retention and cleanup</strong>, and <strong>Other views</strong>.
 Schedule and timeouts holds the schedule builder, hard timeout in seconds,
 timeout and error policies, idle limit, and AI inactivity timeout.
@@ -2209,6 +2219,12 @@ A saved schedule can start runs even when Autopilot has no timer interval.</p>
 <p>Below Advanced, <strong>About</strong> names the image and host. The image links to the
 Library. <strong>Danger</strong> contains <strong>Delete agent</strong>. Start, Stop, and Restart stay
 in the agent header and apply immediately.</p>
+<p><strong>Search settings…</strong> filters whole sections by their static titles and field descriptions, without regard to letter case.
+Every query word must occur in one section. Field values, including secrets, never enter the search.
+Matching Advanced sections and the working folder editor open temporarily.
+Clearing the query restores the full form and the previous disclosure state. Whitespace alone does not filter.
+No matches shows a message and <strong>Clear search</strong>. Hidden sections and editors stay mounted, so their drafts remain.
+Search and disclosure changes save nothing. The sticky <strong>Save changes</strong> row stays available for hidden edits.</p>
 <p><strong>Schedule</strong> is a builder for the agent’s <code>RRULE</code> (see
 <a href="/tariboy/docs/architecture/iteration-loop#schedule">Schedule</a>). You select a mode and fill
 in its fields: <strong>None</strong> (no schedule), <strong>Every N minutes / hours</strong>, <strong>Daily</strong>
@@ -2229,7 +2245,7 @@ with <strong>Reset</strong> and <strong>Save changes</strong> while edits exist.
 also counts its unsaved edits. Closing it keeps those drafts.
 <strong>Reset</strong> drops every draft. <strong>Save changes</strong> first validates every changed
 field in the browser and sends nothing while any is invalid. It opens
-Advanced or the folder editor when needed and focuses the field.
+Advanced or the folder editor when needed, clears a blocking search, and focuses the field.
 Then it sends only changed fields through the existing per-field endpoints.
 Requests run serially in the existing order, with harness before model and effort.
 The four budget limits and the two retention limits each save as one request.
@@ -2269,8 +2285,8 @@ positive whole-number <code>messages_batch</code> and <code>messages_max_queue</
 New-agent drafts use a maximum queue of 100, while Clone keeps the source
 agent’s configured value.</p>
 <p>Settings also renders the daemon-authoritative per-agent USD budget
-projection. The daily and monthly fields are in <strong>Spending limit</strong>. Hourly
-and weekly fields are under <strong>Advanced → Hour and week budgets (USD)</strong>.
+projection. The daily, weekly, and monthly fields are in <strong>Spending limit</strong>. The hourly
+field is under <strong>Advanced → Hour budget (USD)</strong>.
 Each pairs current spend with an editable limit, where zero means unlimited.
 All four limits save in one request against the explicit agent-route host.
 Older daemons that omit the projection show neither budget section.
@@ -2364,51 +2380,34 @@ its explicit host target.</p>
 text frames carry resize messages. A host or agent route change tears down the
 old socket and dials the newly selected target without stopping the tmux
 session.</p>
-<p>One banner line above the terminal always has text. It follows the agent
-state and the terminal session:</p>
-<div class="blume-table-scroll" tabIndex="0"><table>
-<thead>
-<tr>
-<th>Case</th>
-<th>Banner</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>error</td>
-<td>“&lt;tool&gt; did not start: &lt;reason&gt;”, with <strong>Retry</strong> and <strong>Open settings</strong> (<code>…/settings</code>)</td>
-</tr>
-<tr>
-<td>not interactive</td>
-<td>“No interactive terminal. Enable it in Settings → Autopilot.”, with a link to <code>…/settings</code>; the drop target for files and <strong>Send files</strong> stay below</td>
-</tr>
-<tr>
-<td>off</td>
-<td>“Off.”, with a <strong>Start</strong> button</td>
-</tr>
-<tr>
-<td>starting</td>
-<td>“Starting &lt;tool&gt; in &lt;cwd&gt;…”</td>
-</tr>
-<tr>
-<td>working</td>
-<td>“Working on &lt;KEY&gt; — this is its live screen.”</td>
-</tr>
-<tr>
-<td>idle</td>
-<td>“Idle. The screen appears when a run starts. Type here to talk to the agent directly; this is not recorded in a task.”</td>
-</tr>
-</tbody>
-</table></div>
-<p>Without a session, the terminal panel says “No terminal session. Start the
-agent, or turn on Interactive terminal in Settings → Autopilot.”</p>
+<p>The header owns the agent’s work status. Terminal does not repeat Working,
+Idle, Off, or Starting. An interactive agent can keep a usable terminal while
+idle, disabled, or waiting for the customer. Opening the tab only attaches a
+client. It never starts the agent.</p>
+<p>Before session presence is known, the panel says “Checking session…” and hides
+the terminal surface and toolbar. The mounted terminal still receives bytes
+and measures its size. A WebSocket open event does not prove session presence.
+The first nonempty binary frame confirms the stream and reveals the terminal.
+Bytes that arrive before the terminal mounts wait in memory until it attaches.
+An open stream without bytes remains in the neutral checking state.</p>
+<p>Confirmed absence shows “No terminal session. Start the agent, or turn on
+Interactive terminal in Settings → Autopilot.” The workspace remembers this
+result across tab switches in memory, separately for each host and agent.
+A successful Start, Restart, or Run once, or a new iteration identifier, resets
+that result. Reloading the application also starts a new session check.
+Transport errors keep the last confirmed screen and show “Connection lost.
+Reconnecting…” while the client retries. They never establish absence.</p>
+<p>A non-interactive agent shows “No interactive terminal. Enable it in Settings
+→ Autopilot.” with the Settings link, file drop target, and <strong>Send files</strong>.
+It does not open a terminal socket.</p>
 <p>The toolbar under the terminal has <strong>Send files</strong>, <strong>Compose</strong>,
 <strong>Scrollback</strong>, a <strong>Keys</strong> toggle, and the <code>?</code> help. <strong>Keys</strong> (with
 <code>aria-expanded</code>) shows or hides the hotkeys <strong>Esc</strong>, <strong>Enter</strong>, <strong>Ctrl-C</strong>,
 <strong>↑</strong>, and <strong>↓</strong>. Keys starts expanded in the Android build and collapsed in
 other builds. The help text starts with: “Terminal is for working with the
 agent by hand. For work it should carry out on its own, give it a task in
-Work; it runs it when it is on.”</p>
+Work; it runs it when it is on.” It also explains that direct terminal input
+is not recorded in a task.</p>
 <p>In the Terminal tab, explicit <code>http://</code> and <code>https://</code> text in terminal
 output opens in the operator’s default browser on <strong>Command-click</strong> (the <code>Meta</code>
 modifier); this is a Desktop capability and does nothing in a plain browser.

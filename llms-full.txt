@@ -1109,6 +1109,46 @@ retained iterations. Its explicit ZIP export contains `audit.md` for human
 review and lossless `audit.jsonl` records for downstream analysis. The JSONL
 records preserve the raw proxied request and response bodies.
 
+## OpenCode harness
+
+Both OpenCode launch modes prepare provider routes before starting the shim.
+After the global and agent shell scripts run, bounded `opencode debug config`
+and `opencode models --verbose` probes resolve the main model, `small_model`,
+and explicitly configured agent models. The main model must be an explicit
+`provider/model` selection in the agent settings or OpenCode configuration.
+When no small model is configured, it uses the main model.
+
+Each selected provider's original address is bound to the iteration lease.
+Address templates such as `${API_HOST}` use the final launch environment.
+An unresolved template fails preparation before the harness starts.
+An in-memory `OPENCODE_CONFIG_CONTENT` overlay replaces its `options.baseURL`
+with a tokenized local route, limits enabled providers and their model lists,
+and is checked again with `debug config`. Image skills keep their existing
+`OPENCODE_CONFIG_DIR`. Original configuration and authentication files are not
+rewritten, and API keys remain OpenCode's responsibility. The proxy forwards
+provider authentication only to the bound upstream and removes its own token.
+For example, `kimi-code-plan-global/k3` keeps Kimi's coding endpoint rather
+than selecting OpenAI from the model name.
+
+Supported transports are `@ai-sdk/openai`, `@ai-sdk/openai-compatible`, and
+`@ai-sdk/anthropic` with API-key authentication. Missing proxy service, failed
+probes, unresolved models, external OpenCode plugins, OAuth credentials, model
+transport overrides, and incompatible transports fail preparation. Inline
+`OPENCODE_CONFIG_CONTENT` must be a JSON object; JSONC configuration files
+remain supported by OpenCode. No direct-provider fallback is installed.
+
+Requests use the ordinary usage, budget, attribution, and full transcript path.
+OpenAI-compatible streams request final usage. Provider routes survive daemon
+handoff with the lease and disappear when it is revoked. This accounts for new
+iterations; previous direct requests have no proxy transcript to recover.
+
+Pricing uses the exact returned or requested model identifier, including `k3`,
+without substituting a similar model. Unknown prices retain token counts and
+zero cost with a bounded warning. OpenCode's zero Kimi catalog price does not
+establish a per-token subscription price: a reliable manual or catalog price
+is needed for nonzero USD accounting. Unknown prices also mean USD budgets
+cannot cap actual provider spend.
+
 ## Cursor harness
 
 The Cursor CLI speaks Connect RPC over HTTP/2, so the proxy listener also
@@ -1341,6 +1381,17 @@ Immediately before the unchanged harness command is executed, Bash sources
 exports and filesystem effects from either script are available to that
 iteration. A source-time failure prevents the harness from starting and follows
 the existing `harness_error` lifecycle.
+
+OpenCode sources these scripts once during preparation, before discovering its
+providers. It carries their exported environment, resulting working directory,
+and umask into the launch instead of sourcing them again. Script output is
+discarded during this bounded preparation; failures report a fixed diagnostic
+without shell output or environment values. Original provider environment URLs
+remain available for discovery. The final routing overlay takes precedence over
+inline configuration exported by either script, and a second effective-config
+probe checks it before launch. Missing proxy routing or unsupported OpenCode
+configuration fails preparation with `harness_error`; see
+[OpenCode routing](/docs/architecture/ai-proxy#opencode-harness).
 
 The same scripts, in the same order, are sourced before every command the
 daemon runs as the agent outside an iteration: each durable script run, where
@@ -1990,13 +2041,16 @@ environment values remain excluded. Closing a browser connection tears down
 only that attach client; it never kills the tmux session or harness.
 
 The daemon distinguishes terminal lifecycle from transport lifecycle. A PTY
-EOF is closed as WebSocket `1000/eof`; Desktop stops reconnecting immediately
-and shows the stopped-session panel. A `4404` no-session response can also mean
-that Start has queued an interactive iteration but its shim socket is not ready
-yet, so Desktop retries it for at most five seconds with capped exponential
-delay before showing the same panel. An abnormal WebSocket close remains
-transient and reconnects indefinitely with capped delay, which lets a live shim
-terminal recover across a brief daemon or network interruption.
+EOF is closed as WebSocket `1000/eof`. Desktop stops reconnecting immediately
+and shows the stopped-session panel. WebSocket `4404` means no current
+iteration exists or the shim does not support an interactive terminal.
+Start can return before the loop publishes its current iteration, so Desktop
+retries `4404` for at most five seconds with capped exponential delay.
+After that grace, it shows the same panel. A shim connection failure or a
+non-EOF stream failure closes with `1011`, not `4404` or `1000/eof`.
+These failures and other abnormal WebSocket closes reconnect indefinitely
+with capped delay. A live terminal can thus recover across a brief daemon
+or network interruption without reporting that the session ended.
 
 ---
 
@@ -2645,8 +2699,9 @@ action and reports installation failures for retry.
 
 There is no interface mode. Every user gets the same agent workspace, and it
 uses progressive disclosure: the everyday views are tabs, and the rarer views
-are one step away. **Mailbox** and **Advanced** are routes that the agent's
-**Settings** links to, the terminal hotkeys are behind **Keys**, and the
+are one step away. The agent header's **⋯ → Diagnostics** opens the existing
+diagnostic views, including **Mailbox**. **Settings → Advanced → Other views**
+keeps its links to the same routes. The terminal hotkeys are behind **Keys**, and the
 header's rarer actions are in its `⋯` menu. A value that an older release
 stored under `app:ui-mode:v1` is ignored.
 
@@ -2778,11 +2833,14 @@ The sidebar has six items:
 | Item | Opens |
 | --- | --- |
 | **Home** | `/` (see [Home](#home)) |
-| **Agents** | nothing: it opens and closes the agent list in place |
 | **Tasks** | `/tasks` |
 | **Inbox** | `/inbox` |
+| **Agents** | nothing: it opens and closes the agent list in place |
 | **Library** | `/library/images`, with **Images**, **Workflows**, and **Sources** tabs |
 | **Settings** | `/settings/hosts`, the first of the Settings pages |
+
+Home, Tasks, and Inbox stay above Agents in visual and keyboard order.
+Only the agent list scrolls. Library, Settings, and the hosts line stay at the bottom.
 
 Settings has one flat list of seven pages. There is no index page:
 
@@ -2876,7 +2934,10 @@ other than Hosts show one host. They take an optional
 remembered active host. A `?host=` that names another host selects it through
 the route host boundary, which shows **Connecting to host…** or **Host
 unavailable.** while it does. With two or more hosts in the workspace, the
-page has a host selector, and a pick replaces `?host=`. Settings → Hosts and
+page has a host selector, and a pick replaces `?host=`. In Tasks and Library,
+the selector comes first in the top content row, before filters or tabs.
+Both use `HostScopeSelect`, labeled **Host**, with a 28 px height,
+16 px left padding, and 6 px between controls. Settings → Hosts and
 Settings → Application have no selector. With one
 host nothing about hosts is shown, and links that the UI builds carry
 `?host=` only with two or more hosts. A desktop notification always names its
@@ -3125,7 +3186,7 @@ The agent tab is one view for every user. Under the cards it shows:
 - the cost chart for the period, from `getAgentUsage`;
 - a **More** segment with three views:
   - **Runs log** (default): the iteration audit view, the same component as
-    **Advanced → Full audit**, limited to runs that started in the period, with
+    **Diagnostics → Full audit**, limited to runs that started in the period, with
     the tag filter below;
   - **Usage**: the agent's AI usage over the period; task and epic keys open
     the task panel in place;
@@ -3139,7 +3200,7 @@ the task panel in place on that server, and an **Agents** view, whose names open
 that agent's Activity tab with the same period. All its requests go to the
 selected host.
 
-The agent's Settings, Activity, and Advanced pages and the server Activity
+The agent's Settings, Activity, and Diagnostics pages and the server Activity
 page share one frame, `TabPage`: 16 px side and top padding, 24 px bottom
 padding, and 16 px between blocks. Settings is a centered column of at
 most `max-w-5xl`; the others use the full width. Mailbox, Work, and Terminal fill
@@ -3150,9 +3211,9 @@ the page without a frame.
 The Runs log filters its iteration list by tag. The tag filter and the
 selected iteration live in the URL query beside the period, and a filter change
 replaces the history entry instead of adding one per keystroke. Matching is the
-daemon's: an iteration matches any of the listed tags. Under **Advanced → Full
+daemon's: an iteration matches any of the listed tags. Under **Diagnostics → Full
 audit** the same list keeps its own started-at date filters, where both date
-bounds are inclusive, and **Advanced → Raw usage** keeps its own window presets.
+bounds are inclusive, and **Diagnostics → Raw usage** keeps its own window presets.
 
 Each row shows its tags beside its status. The selected iteration has a tag
 editor above its log that adds one tag or removes one, each saved as a complete
@@ -3512,8 +3573,8 @@ Everything else loads with `React.lazy` when it first renders:
 - `NeedsYouLive`, which reads the counts and rows of "needs you", the task
   lookup of the search field, and the workspace manager dialog;
 - every agent workspace tab and the Goal task drawer in `AgentWorkspace`;
-- the Needs you card (`tasks/NeedsYouCard.tsx`) in the Work tab and in the
-  Home list, because it brings the Markdown renderer;
+- the Needs you card (`tasks/NeedsYouCard.tsx`) in the Work tab and the
+  Home and Inbox lists, because it brings the Markdown renderer;
 - the TipTap editor (`tasks/TaskMarkdownEditor.tsx`): `MarkdownEditor` in
   `TaskMarkdown.tsx` is a lazy wrapper, so `MarkdownContent` never loads TipTap;
 - the file viewer of `FileBrowser`, with CodeMirror, its languages, and the
@@ -3795,26 +3856,33 @@ Task Detail also offers the `wait_customer` status, labeled "Waiting for you"
 (`flexibleStatusLabel` gives this label everywhere), and an editable `Pull
 request` field. Both use the existing optimistic revision and explicit-host
 request path.
-The sheet is one `--card` island with its own scroll and a sticky identity
-header carrying the task key, title, status and assignee. `TaskDetailBody`
-then renders these parts, top down:
+The sheet is one `--card` island with its own scroll. One sticky block holds
+the identity header and, for a workflow task, `TaskDecisionPanel` immediately
+below it. The header shows the key, one title, status, and assignee. The pencil
+edits the title in that same place. Save task appears only while task fields
+are dirty and saves them explicitly. The sticky block has a height limit and
+its own vertical scroll on short screens. It needs no fixed header offset.
 
-1. The Needs you card (`NeedsYouCard`, see [Needs you card](#needs-you-card)),
-   pinned when the viewer can edit the task and the task waits on the
-   customer: `needsYouTask(task)` selects it, or an open comment wait
-   addresses the customer. While the card is pinned, the sheet does not show
-   the "Waiting for an answer" banner. Otherwise an open comment wait shows
-   that banner.
-2. The title and the description (`TaskDetailFields`).
-3. The comments.
-4. **Details**, collapsed: author, customer, queue, group, blocked, parent,
-   then `TaskDetailProperties` (the status of a flexible task, priority,
-   assignee, pull request, manual block reason) and the dependencies.
-5. **Workflow**, collapsed, for a workflow task only: the `WorkflowPanel`. The
-   section is open when the task has a `workflow_attention`. While the card is
-   pinned, the panel hides its Outcomes block and its pause banner, because
-   the card offers both.
-6. **History**, collapsed by default.
+`TaskDecisionPanel` shows the current stage, owner, wait reason, and actual
+outcomes from the shared workflow view. An initial customer status offers its
+start outcome. A completed task offers no transitions, and a flexible task has
+no workflow panel. Outcome message is separate from the existing comment form,
+which still answers questions and posts comments. The panel reuses the existing
+advance, request polling, pause, retry, and confirmation operations.
+
+`TaskDetailBody` renders these parts below the sticky block:
+
+1. Decision materials for a workflow task, outside the sticky block. View plan
+   and named material links expand, scroll to, and focus the matching artifact.
+   Dependencies come from the `requires` of transitions into and out of the
+   current status. Missing values stay visible.
+2. The description (`TaskDetailFields`).
+3. The comments and their existing answer controls.
+4. Details, collapsed: author, customer, queue, group, blocked, parent, then
+   `TaskDetailProperties` and dependencies.
+5. Workflow, collapsed: the status graph, artifact editing and history, runs,
+   logs, visits, and operator actions. Destructive confirmations still apply.
+6. History, collapsed by default.
 
 The assignee of a flexible task is a select of "Unassigned", "me" (the
 customer principal), and each agent as `agent:<name>`. A current assignee
@@ -3858,36 +3926,19 @@ query it is a select of that pool's members (`listAgentPools` through
 `onTaskChanged`; otherwise it is text. `TaskDetail` hides **Move to
 another server…** for one, and neither its banner nor a comment chip asks for
 a comment on the workflow's own (`system:workflow`) wait. In place of the status
-select it renders `WorkflowPanel` in its **Workflow** section. The panel reads
-the shared workflow query. A task revision, an event sequence, or
-a completed write marks that query stale, so a workflow event refreshes the
-panel even when the task revision stays the same. It composes, top down,
-`WorkflowPauseBanner` (`resumeTaskWorkflow`, `cancelWorkflowTask`),
-`WorkflowProblem` (the one problem `explainProblem` in `explainWorkflowProblem.ts`
-picks from the view, with `retryTransitionRequest` behind **Retry** and the
-run's log through `RunRow` with `autoLoad`), `WorkflowStepper` (the view's
-`statuses` as steps, marked by `stepMarks` in `workflowGraph.ts`; the panel
-owns the selected step, which starts at the current status and follows it
-until the customer picks a step), the header with `stepOf`,
-`WorkflowOutcomes` (`advanceTask` with `from`, through the `useWorkflowAdvance`
-hook that the Needs you card shares), `WorkflowArtifacts`
-(`setTaskArtifact`, `getTaskArtifactHistory`; for the selected step only the
-artifacts `stepArtifacts` finds in the `requires` of a transition into it,
-then out of it, each naming its transition; **Show all artifacts**, or a
-second click on the step, clears the selection and lists every entry of the
-view's `declared_artifacts` in one list, those `requiredBy` names for the
-current status first), `WorkflowRuns`
-(`getTaskScriptRunLog`; `runTone` gives each row its tone), the visit list,
-and the header's labeled **Run watch now**, **Return to agent…**, **Upgrade to
-NAME@VERSION…**, **Move to status…**, and **Cancel task** buttons: **Run watch
-now** appears when `canRunWatch` finds an open, unpaused script status with a
-watch, is disabled while `hasActiveRun` finds a pending or running run, and
-sends `runTaskWatch`, then refetches the view; `ReturnToAgent` picks its
-targets with `returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the
-upgrade form appears when `canUpgrade` finds the view's `queue_digest` differs
-from its `digest` and sends `upgradeTaskWorkflow`, the move form uses
-`moveTaskWorkflow` (targets from the view's `statuses`), and cancel uses
-`cancelWorkflowTask`. The move and upgrade forms live in
+select it renders `WorkflowPanel` in its **Workflow** section. The decision panel, materials, and lower workflow disclosure read the shared
+workflow query. A task revision, an event sequence, or a completed write marks
+that query stale. A workflow event therefore refreshes the view even when the
+task revision stays the same. `useWorkflowAdvance` and `useFollowRequest`
+continue to submit and follow outcomes. `WorkflowProblem` supplies retry and
+run logs, and the existing pause controls supply resume and cancel.
+
+The lower disclosure retains `WorkflowStepper`, `WorkflowArtifacts`,
+`WorkflowRuns`, visits, and the operator actions. The stepper uses `stepMarks`
+in `workflowGraph.ts` and the statuses from the workflow view. Artifact reads,
+writes, history, and logs keep their existing API methods. Run watch now,
+Return to agent, Upgrade, Move to status, and Cancel task keep their existing
+eligibility rules and request paths. The move and upgrade forms live in
 `WorkflowMoveForms.tsx`. `stepMarks`, `returnTargets`, and `defaultReturnTarget`
 read `runVisits`, the visits of the task's current workflow digest. Outcomes, the problem block, and the return form follow
 a transition request through `useFollowRequest` in `workflowShared.ts`
@@ -4095,8 +4146,9 @@ selector; letters of several hosts are not merged into one list. The sidebar's
 **Inbox** item carries the customer's open letter count of every workspace
 host.
 
-**Agent → Mailbox** (`/agents/:hostId/:agent/mailbox`) is not a tab: the
-agent's **Settings** links to it under **Advanced → Other views**. It is
+**Agent → Mailbox** (`/agents/:hostId/:agent/mailbox`) is not a tab.
+**Diagnostics** and **Settings → Advanced → Other views** link to it.
+It has links to **Diagnostics** and **Back to Work** for the same host and agent. It is
 that agent's mailbox, read with `as=agent:<name>`, so the operator replies on
 the agent's behalf. **Compose** writes from the customer to that agent; the
 recipient is fixed. The toolbar shows `batch N · inbox K/M`: N is the agent's
@@ -4195,7 +4247,7 @@ phases from title prefixes or assignee. Operator history remains available after
 
 #### Agent state
 
-The sidebar row, the agent header, and the Terminal banner show one derived
+The sidebar row and the agent header show one derived
 state. `deriveAgentState` in `ui/src/lib/agentState.ts` computes it in the UI.
 The first state that matches wins:
 
@@ -4263,10 +4315,11 @@ off. The `⋯` menu (**More agent actions**) has these items:
 - **Clone**: opens the New agent dialog with this agent as the clone source.
 - **Pin** or **Unpin**: the same pin as the sidebar.
 - **Settings**: opens the agent's Settings tab.
+- **Diagnostics**: opens `…/advanced`, starting with **Prompt**.
 
 The header has no state pill, host label, image chip, Goal link, working
-directory row, or budget line. Daily and monthly limits are in **Settings →
-Spending limit**. Hourly and weekly limits are under **Advanced**.
+directory row, or budget line. Daily, weekly, and monthly limits are in **Settings →
+Spending limit**. The hourly limit is under **Advanced**.
 Below 1200 px the sentence and the muted line wrap, and the buttons take a row
 of their own.
 
@@ -4286,6 +4339,14 @@ waiting for you". **Settings → Advanced → Other views** links to **Open
 mailbox**, **Prompt preview**, **Context**, **Files**, **Scripts**, **Full
 audit**, **Raw usage**, and **Raw settings**. These open `…/mailbox` or
 `…/advanced?view=…`. These routes are not tabs. There is no Autopilot tab.
+
+**⋯ → Diagnostics** opens the same `…/advanced` route from every agent tab.
+The page has the title **Diagnostics** and offers **Prompt**, **Context**,
+**Files**, **Scripts**, **Full audit**, **Raw usage**, **Raw settings**, and **Mailbox**.
+**Mailbox** opens the existing `…/mailbox` route. **Back to Work** returns to
+`…/work` for the same host and agent, including when a direct link opened the page.
+Existing `…/advanced?view=…` links keep their selected view.
+Opening Diagnostics or Mailbox does not run a script, send a letter, or clear an inbox.
 
 These routes redirect:
 
@@ -4319,9 +4380,10 @@ columns. Top down, it shows:
    \<agent\> a task…", a **Give** button, and **Details**.
 2. **Needs you (n)**: one Needs you card for each item of the agent's
    `needs you` state, the same items that the tab badge and the header count.
+   Each button opens the existing task drawer on the agent's explicit host.
 3. **In progress (n)**.
 4. **Queued (n)**.
-5. **Done · last 7 days (n)**, with a search box and **Show all**.
+5. **Done (n)**, with **Search completed tasks…** and the **Last 7 days / All time** period selector.
 
 The composer works like this:
 
@@ -4349,12 +4411,15 @@ The composer works like this:
 The rows come from `listTasks` with `assignee=agent:<name>`, one read with
 `status_view=active` and one with `status_view=closed`, through the shared task
 queries (`useAgentWork.ts`). The task event stream keeps them fresh. A task
-that a Needs you card shows is not repeated in the other sections. Queued
+listed in Needs you is not repeated in the other sections. Queued
 holds the active tasks in the `open` category and the tasks in their
 workflow's initial status (`workflow_initial`). In progress holds the other
-active tasks. Done holds the closed tasks of the last seven days. **Show all**
-shows every closed task in the same rows. The search box filters Done by key
-and title.
+active tasks. Done defaults to closed tasks from the last seven days. **All time**
+shows every closed task in the same rows and selects the same period for row costs.
+The search box filters Done locally by key and title. Changing the period keeps the query.
+An empty result names the selected period and distinguishes no tasks from no search matches.
+The search and period controls have the same height. Their group wraps below the heading
+on a narrow panel, with the search taking the remaining space beside the period.
 
 A row shows the key, the title, the status in words (`statusWords` in
 `workModel.ts`), the age, and the cost from the task activity report when it
@@ -4367,7 +4432,11 @@ first, as the primary button. An outcome named `start` reads **Start**, and
 the others read "\<outcome\> → \<status\>". A button sends the advance
 through `useWorkflowAdvance`.
 
-A row click opens the task drawer. The tab reads these query parameters:
+A row click opens the task drawer. The key and title of a Needs you card form
+one button that opens the same drawer. The card's answer fields, outcomes, and
+links work independently. Opening the drawer sends no answer or outcome.
+Closing it restores focus to the opening button and keeps the card's draft.
+The tab reads these query parameters:
 
 | Query | Effect |
 | --- | --- |
@@ -4377,10 +4446,11 @@ A row click opens the task drawer. The tab reads these query parameters:
 
 #### Needs you card
 
-`NeedsYouCard` (`ui/src/pages/tasks/NeedsYouCard.tsx`) is one component for
-three places: the Work tab, the top of the task drawer, and the Needs you list
-on Home and Inbox when a task row is expanded. The Work tab and the list load
-it lazily. The card shows:
+`NeedsYouCard` (`ui/src/pages/tasks/NeedsYouCard.tsx`) serves the Work tab and
+the Needs you lists on Home and Inbox when a task row is expanded. They load
+it lazily. Work supplies the optional action that opens the drawer from the
+key and title. The drawer uses
+`TaskDecisionPanel` plus the existing comment form. The card shows:
 
 - the key, the title, the status in words, and the age;
 - the open question, as Markdown: an unresolved wait that addresses the
@@ -4456,8 +4526,7 @@ answers the same question about the next agent. An unknown tab still falls back
 to Work, and a selected task in the `?task=` query is dropped because it belongs
 to the agent being left. A sidebar agent selected from any other page opens on
 Work. A freshly created agent opens on Terminal. Start and Stop are in the
-agent header; the Terminal banner of an agent that is off also has a **Start**
-button.
+agent header. The empty Terminal panel also has a **Start** button.
 
 When a known explicit server route temporarily loses its tunnel or its
 authoritative aggregate refresh fails, the Desktop retains its last successful
@@ -4497,11 +4566,11 @@ The agent's Settings tab has four groups in order:
 - **Autopilot**: **Only when given tasks or messages**, or **Also every** with
   an interval in minutes. **Stop a run after** sets the soft timeout in
   minutes, with `0` for no limit. **Interactive terminal** is here too.
-- **Spending limit**: daily and monthly USD limits, with the daemon's current
+- **Spending limit**: **Day**, **Week**, and **Month** USD limits, with the daemon's current
   spend beside each. `0` means no limit.
 
 **Advanced** starts collapsed. It contains **Image**, **Schedule and
-timeouts**, **Goal**, **Mail**, **Hour and week budgets (USD)**,
+timeouts**, **Goal**, **Mail**, **Hour budget (USD)**,
 **Environment**, **Retention and cleanup**, and **Other views**.
 Schedule and timeouts holds the schedule builder, hard timeout in seconds,
 timeout and error policies, idle limit, and AI inactivity timeout.
@@ -4511,6 +4580,13 @@ A saved schedule can start runs even when Autopilot has no timer interval.
 Below Advanced, **About** names the image and host. The image links to the
 Library. **Danger** contains **Delete agent**. Start, Stop, and Restart stay
 in the agent header and apply immediately.
+
+**Search settings…** filters whole sections by their static titles and field descriptions, without regard to letter case.
+Every query word must occur in one section. Field values, including secrets, never enter the search.
+Matching Advanced sections and the working folder editor open temporarily.
+Clearing the query restores the full form and the previous disclosure state. Whitespace alone does not filter.
+No matches shows a message and **Clear search**. Hidden sections and editors stay mounted, so their drafts remain.
+Search and disclosure changes save nothing. The sticky **Save changes** row stays available for hidden edits.
 
 **Schedule** is a builder for the agent's `RRULE` (see
 [Schedule](/docs/architecture/iteration-loop#schedule)). You select a mode and fill
@@ -4533,7 +4609,7 @@ with **Reset** and **Save changes** while edits exist. The Advanced disclosure
 also counts its unsaved edits. Closing it keeps those drafts.
 **Reset** drops every draft. **Save changes** first validates every changed
 field in the browser and sends nothing while any is invalid. It opens
-Advanced or the folder editor when needed and focuses the field.
+Advanced or the folder editor when needed, clears a blocking search, and focuses the field.
 Then it sends only changed fields through the existing per-field endpoints.
 Requests run serially in the existing order, with harness before model and effort.
 The four budget limits and the two retention limits each save as one request.
@@ -4578,8 +4654,8 @@ New-agent drafts use a maximum queue of 100, while Clone keeps the source
 agent's configured value.
 
 Settings also renders the daemon-authoritative per-agent USD budget
-projection. The daily and monthly fields are in **Spending limit**. Hourly
-and weekly fields are under **Advanced → Hour and week budgets (USD)**.
+projection. The daily, weekly, and monthly fields are in **Spending limit**. The hourly
+field is under **Advanced → Hour budget (USD)**.
 Each pairs current spend with an editable limit, where zero means unlimited.
 All four limits save in one request against the explicit agent-route host.
 Older daemons that omit the projection show neither budget section.
@@ -4683,20 +4759,29 @@ text frames carry resize messages. A host or agent route change tears down the
 old socket and dials the newly selected target without stopping the tmux
 session.
 
-One banner line above the terminal always has text. It follows the agent
-state and the terminal session:
+The header owns the agent's work status. Terminal does not repeat Working,
+Idle, Off, or Starting. An interactive agent can keep a usable terminal while
+idle, disabled, or waiting for the customer. Opening the tab only attaches a
+client. It never starts the agent.
 
-| Case | Banner |
-| --- | --- |
-| error | "\<tool\> did not start: \<reason\>", with **Retry** and **Open settings** (`…/settings`) |
-| not interactive | "No interactive terminal. Enable it in Settings → Autopilot.", with a link to `…/settings`; the drop target for files and **Send files** stay below |
-| off | "Off.", with a **Start** button |
-| starting | "Starting \<tool\> in \<cwd\>…" |
-| working | "Working on \<KEY\> — this is its live screen." |
-| idle | "Idle. The screen appears when a run starts. Type here to talk to the agent directly; this is not recorded in a task." |
+Before session presence is known, the panel says "Checking session…" and hides
+the terminal surface and toolbar. The mounted terminal still receives bytes
+and measures its size. A WebSocket open event does not prove session presence.
+The first nonempty binary frame confirms the stream and reveals the terminal.
+Bytes that arrive before the terminal mounts wait in memory until it attaches.
+An open stream without bytes remains in the neutral checking state.
 
-Without a session, the terminal panel says "No terminal session. Start the
-agent, or turn on Interactive terminal in Settings → Autopilot."
+Confirmed absence shows "No terminal session. Start the agent, or turn on
+Interactive terminal in Settings → Autopilot." The workspace remembers this
+result across tab switches in memory, separately for each host and agent.
+A successful Start, Restart, or Run once, or a new iteration identifier, resets
+that result. Reloading the application also starts a new session check.
+Transport errors keep the last confirmed screen and show "Connection lost.
+Reconnecting…" while the client retries. They never establish absence.
+
+A non-interactive agent shows "No interactive terminal. Enable it in Settings
+→ Autopilot." with the Settings link, file drop target, and **Send files**.
+It does not open a terminal socket.
 
 The toolbar under the terminal has **Send files**, **Compose**,
 **Scrollback**, a **Keys** toggle, and the `?` help. **Keys** (with
@@ -4704,7 +4789,8 @@ The toolbar under the terminal has **Send files**, **Compose**,
 **↑**, and **↓**. Keys starts expanded in the Android build and collapsed in
 other builds. The help text starts with: "Terminal is for working with the
 agent by hand. For work it should carry out on its own, give it a task in
-Work; it runs it when it is on."
+Work; it runs it when it is on." It also explains that direct terminal input
+is not recorded in a task.
 
 In the Terminal tab, explicit `http://` and `https://` text in terminal
 output opens in the operator's default browser on **Command-click** (the `Meta`
@@ -9056,13 +9142,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.101.0` alpha on an Apple Silicon Mac.
+This path is for the `0.102.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.101.0_aarch64.dmg`;
+- a verified `Tariboy_0.102.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -10410,6 +10496,22 @@ Tokens are never logged, audited, stored in SQLite, or included in support
 bundles. Startup prunes leases that no longer map to a `running` iteration;
 adoption revokes the remaining lease when its shim finishes.
 
+OpenCode leases also carry the prepared provider addresses. Routes cannot be
+chosen from request-supplied URLs, and cross-origin upstream redirects remain
+blocked.
+OpenCode retains its own API-key environment and authentication files; the
+proxy forwards those credentials to the bound provider without persisting
+them in the lease. OAuth and external OpenCode plugins are unsupported because
+their transport hooks can bypass the configured SDK address, so preparation
+rejects them. The complete temporary `OPENCODE_CONFIG_CONTENT` value is masked
+in launch logs and audit, and probe output is never included in failures.
+The handoff file remains owner-only and excluded from diagnostics.
+
+This routing controls ordinary harness requests, not arbitrary network commands
+an agent can execute. A provider with an unknown price records tokens and zero
+USD; a USD budget cannot bound that provider's actual spend. See
+[OpenCode routing](/docs/architecture/ai-proxy#opencode-harness).
+
 ## Runtime controls
 
 - Start and Stop are the one on/off switch of an agent.
@@ -10602,7 +10704,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.101.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.102.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -10716,7 +10818,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.101.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.102.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -12723,9 +12825,9 @@ The routes keep their `workflow-triggers` path for compatibility.
 ## Desktop
 
 Desktop's Tasks workspace reads the routes on this page, always against the
-server the task or queue belongs to. A flexible task looks and behaves as it
-always did; everything below applies to a workflow task and a workflow queue.
-How the list shows these tasks is in [Tasks](/docs/tasks#desktop).
+server the task or queue belongs to. The workflow controls below apply only
+to workflow tasks and queues. The shared task sheet and list are described in
+[Tasks](/docs/tasks#desktop).
 
 The number next to **Tasks** in the sidebar, and the **Needs you** list on
 Home and Inbox, count the workflow tasks that wait for you: a task whose
@@ -12736,21 +12838,41 @@ to start it is not counted.
 
 ### The Needs you card
 
-When a workflow task waits for you, a Needs you card shows the decision. The
-card is pinned at the top of the task sheet, it is in the **Needs you**
-section of the agent's **Work** tab, and it opens on Home and Inbox when you
-expand a Needs you row with **Answer in place**. In a customer status the card
-says "\<agent\> waits for your decision in \<status\>." It shows the artifacts
-to review: the artifacts that the step into the status required, then the
-artifacts that its outcomes require. Each one shows its latest value as
-Markdown and folds away, and the first one is open. The card has one message
-box and one button per outcome, labeled "\<outcome\> → \<next status\>". A
-button whose outcome misses an artifact is disabled. A button sends the same
-advance request as the Outcomes block below, with the message and `from` set
-to the status you saw, and follows it until its checks finish. For a paused
-task the card shows the reason with **Continue**, **Release holder** in a pool
-status, and **Cancel task**. While the card is pinned in the sheet, the
-workflow panel hides its pause banner and its Outcomes block.
+Home and Inbox keep the expandable Needs you card under Answer in place.
+For a customer status, it shows the artifacts to review, a message box, and
+one button per outcome. A button names the outcome and target status. It is
+disabled when a required artifact is missing. It sends the advance with the
+message and `from` set to the displayed status, then follows the request until
+its checks finish. A paused task shows its reason with Continue, Release
+holder for a pool status, and Cancel task.
+
+The agent's Work tab shows the same card. Its key and title form a button
+that opens the task sheet on the agent's host without sending an answer.
+Answer fields, outcomes, and links work independently. Closing the sheet
+restores focus to that button and retains the card's draft.
+
+### Task decisions and materials
+
+The task sheet has one title in its sticky header. The pencil edits it in
+place, and Save task appears only while task fields have unsaved changes.
+A compact decision panel sits directly below the header in the same sticky
+block. It shows the current stage, owner, wait reason, and available outcomes.
+An initial customer status offers its real outcomes, including the start action.
+Completed tasks offer no transitions. The sticky block has a height limit and
+scrolls on short screens, so its controls stay reachable.
+
+Outcome message is an optional message for the transition. It is separate
+from the comment form, which still answers questions and adds comments.
+Outcome buttons use the existing advance and request polling operations.
+They stay disabled while checks run, while another request is pending, while
+the task is paused, or while a required artifact is missing. Pause decisions
+and failed-request retries keep their existing operations and confirmations.
+
+Decision materials appear outside the sticky block, before the description.
+View plan and named material links expand, scroll to, and focus the artifact
+below. The materials come from the `requires` of transitions into and out of
+the current status. A missing artifact stays visible. Long values remain in
+this scrolling section rather than filling the sticky decision panel.
 
 In the agent's **Work** tab, a row in **Queued** for a task in its workflow's
 initial status has one button per outcome of that status, from
@@ -12760,10 +12882,9 @@ first. An outcome named `start` reads **Start**. See
 
 ### The workflow panel
 
-Opening a workflow task shows a **Workflow** panel in the task sheet in place of
-the status select. The panel is in a collapsed **Workflow** section, which is
-open when the task has a `workflow_attention`. It reads top down: what is wrong, where the task is, what
-may happen next, what it produced, and what ran. The workflow assigns pool
+The lower Workflow disclosure holds the status graph, artifact editing and
+history, runs, logs, visits, and operator actions. The compact panel above it
+owns the current decision and pause controls. The workflow assigns pool
 work, so Save never changes the assignee. In an open, unpaused pool status the
 **Assignee** field is a list of the members of that status's pool: choosing one
 runs `workflow reassign` at once (see [Changing the holder](#changing-the-holder)),
@@ -12773,15 +12894,8 @@ assignee is read-only text. The sheet has no
 task. Its actions menu offers **Move to queue…** instead (see
 [Tasks](/docs/tasks#moving-a-task-to-another-queue)). The panel follows the task's events as well as its revision: a rejected
 request, a script run, or another event refetches the view while the sheet is
-open, and an older response never replaces a newer one. The panel has these
-sections:
+open, and an older response never replaces a newer one. The workflow view retains these controls and details:
 
-- **Pause banner.** Appears first when the task is paused. It explains the
-  reason and offers **Continue** and **Cancel task**, plus **Release holder**
-  when the status is a pool status. **Continue** keeps the same holder in a
-  pool status and resumes the task in its current status otherwise. Each asks
-  for confirmation and sends `POST /api/tasks/{key}/workflow/resume` or the
-  cancel route.
 - **Problem.** Appears when something needs a person and the task is not
   paused, with a title, the script's own message as text, how close the task
   is to a pause (`2 of 5 rejections`, from the visit counters and the status
@@ -12807,29 +12921,19 @@ sections:
   holder, with the labeled actions **Run watch now**, **Return to agent…**,
   **Upgrade to NAME@VERSION…**, **Move to status…**, and **Cancel task**; see
   below.
-- **Outcomes.** Each outcome shows its target status, the artifacts it
-  requires (a set one ticked, a missing one highlighted), and its checks with
-  what each verifies, when the image describes it, and the resolved `run_as`
-  and timeout. In a customer status each outcome is a button, with an optional
-  message of up to 4096 characters; Desktop sends the advance request and
-  polls it until the checks finish, then shows an `applied` result by
-  reloading the task or a refusal with the daemon's message. A button is
-  disabled while a request is checking, while a request made elsewhere is
-  still pending (with **Refresh**), while the task is paused, and while a
-  required artifact has no value. A result that settled without applying is
-  shown here until the refetched view carries it; from then on the Problem
-  section explains it. In a pool or script status the outcomes are listed for
-  reference, because the agent or the watch script decides.
-- **Artifacts.** The artifacts an outcome of the current status requires come
-  first under **Needed to leave this status**, missing ones before set ones,
-  each with a `required by outcome → status` chip; the other declared
-  artifacts fold away behind **Other artifacts (n)**. Each shows its
-  description, the current value rendered as Markdown with a **Markdown** /
-  **Text** switch for plain text, collapsed to six lines or 600 characters
-  when long and shown in full once expanded, with **Edit** and **History**,
-  which loads the earlier values on demand in the same mode; a declared
-  artifact with no value shows **Set**. Editing is disabled once the task is
-  closed.
+- **Outcomes.** The workflow details show each declared outcome, its target,
+  required artifacts, and checks. Each check keeps its description, resolved
+  `run_as`, and timeout. The compact decision panel owns customer outcome
+  buttons and the Outcome message. Pool and script outcomes remain available
+  for reference, because the agent or watch script decides.
+- **Artifacts.** Decision materials list the artifacts required by transitions
+  into and out of the current status, with their transition names. The lower
+  workflow details retain all declared artifacts. Each artifact shows its
+  description and current value as Markdown, with a Markdown / Text switch.
+  Long values collapse to six lines or 600 characters and expand in place.
+  Edit and History remain available, and History loads earlier values on
+  demand. A declared artifact with no value shows Set. Editing is disabled
+  once the task is closed.
 - **Runs.** The latest 20 script runs with kind, script, state, verdict, exit
   code, and times. The verdict carries the tone: a failure or rejection is
   red, a pass or outcome green, a quiet run dim. A **Log** toggle loads the
@@ -13143,31 +13247,42 @@ the script's words and the count behind it (see
 gives the reason). Active, Closed, and All use the category too. There is no
 filter by workflow status. Flexible tasks keep the labels described above.
 
-Clicking a task opens a right-side sheet over the tree. When the task waits on
-you, its Needs you card is pinned at the top (see
-[The agent's Work tab](#the-agents-work-tab)). Then come the title and the
-description, and the comments. A collapsed **Details** section holds the
-author, customer, queue, group, blocked state, parent, the status of a
-flexible task, priority, assignee, pull request URL, block reason, and
-dependencies. **History** is collapsed by default. The flexible status
-`wait_customer` reads **Waiting for you**. The assignee is a list of
-**Unassigned**, **me**, and each agent. You cannot type a principal. In the
-comment form, the **Ask an agent** list mentions an agent, and **Reply Ok to
-the question** posts `Ok`. It starts at half the viewport width; drag its left separator
-or use its keyboard controls to resize it, and the chosen width survives reloads.
-**Back**, **Close**, Escape, or a backdrop click returns to the still-mounted
-tree with its expansion and scroll position preserved. Unsaved task, comment,
-or relation drafts require confirmation before being discarded.
+Clicking a task opens a right-side sheet over the tree. The sticky header
+shows the key, one title, status, and assignee. The pencil edits the title in
+that same place. Save task appears only while task fields have unsaved changes.
+For a workflow task, a compact decision panel sits directly below the header
+in the same sticky block. It shows the current stage, owner, wait reason, and
+available outcomes, including the initial customer action that starts work.
+The block has a height limit and scrolls on a short screen.
 
-For a workflow task the sheet has no status select, no Done action, no
-assignee control, and no **Move to another server…** (the daemon refuses to
-export a workflow task). It shows the **Workflow** panel instead, in a
-collapsed **Workflow** section that is open when the task needs attention.
-There the customer chooses outcomes, edits artifacts, reads script runs and logs, decides a pause,
-and moves or cancels the task. See [Desktop](/docs/task-workflows#desktop) in
-the workflow guide. Binding a queue to a workflow, its pools, and its env vars
-and secrets are in the `Manage queues…` dialog, in the queue's **Workflow**,
-**Pools**, and **Environment** tabs.
+Decision materials appear below the sticky block, before the description and
+comments. View plan and the named material links open and focus their artifacts
+there. An Outcome message belongs to the chosen outcome. To answer a question
+or add a comment, use the comment form. Completed tasks offer no transitions,
+and flexible tasks have no workflow decision panel.
+
+A collapsed Details section holds the author, customer, queue, group, blocked
+state, parent, flexible status, priority, assignee, pull request URL, block
+reason, and dependencies. History is collapsed by default. The flexible status
+`wait_customer` reads Waiting for you. The flexible assignee list contains
+Unassigned, me, and each agent. You cannot type a principal. In the comment
+form, Ask an agent mentions an agent, and Reply Ok to the question posts `Ok`.
+
+The sheet starts at half the viewport width. Drag its left separator or use
+its keyboard controls to resize it. The chosen width survives reloads.
+Back, Close, Escape, or a backdrop click returns to the still-mounted tree
+with its expansion and scroll position preserved. Unsaved task, comment,
+relation, or outcome-message drafts require confirmation before the sheet
+discards them. A pending decision prevents closure until it finishes.
+
+A workflow task has no flexible status select, Done action, or Move to another
+server action. Its lower Workflow disclosure holds the status graph,
+artifacts, runs, logs, visits, and operator actions. Existing confirmations
+still protect actions that override the workflow or cancel the task. In an
+open, unpaused pool status, the Assignee control can reassign the holder to a
+member of that pool. See [Desktop](/docs/task-workflows#desktop) in the workflow
+guide. Queue bindings, pools, environment variables, and secrets remain in the
+Manage queues dialog.
 
 Descriptions and comments render as Markdown. Their visual editor supports
 headings, bold, italic, strikethrough, links, lists, checklists, code, and tables.
@@ -13248,13 +13363,11 @@ agent does not pick up tasks and links to Settings.
 
 Below the composer, the tab has these sections:
 
-- **Needs you**: one card per task that waits for you. The card shows the
-  open question with **Send answer** and **Reply Ok to the question**, or the
-  decision of a customer status with the artifacts to review, a message box,
-  and one button per outcome, such as **approved → merge**. For a paused task
-  it shows the reason with **Continue**, **Release holder**, and **Cancel
-  task**. The same card is pinned in the task sheet, and it opens on Home and
-  Inbox when you expand a Needs you row with **Answer in place**.
+- **Needs you**: each card has a key and title button that opens the task sheet
+  on the agent's host. Opening it sends no answer. The card's answer fields,
+  outcomes, and links work independently. Closing the sheet restores focus to
+  the button and retains the card's draft. Home and Inbox keep their expandable
+  Needs you cards.
 - **In progress**: the other active tasks.
 - **Queued**: open tasks, and workflow tasks in their first status. Such a
   workflow task has one button per outcome of that status, so you can start
@@ -13271,8 +13384,7 @@ composer.
 ## Moving a task to another queue
 
 A task key names its queue, so a task that belongs in another queue of the same
-host is moved as a new task. In the task panel, the actions menu beside **Save
-task** opens **Move to queue…** for any open task, workflow or not. The dialog
+host is moved as a new task. In the task panel, the header actions menu opens **Move to queue…** for any open task, workflow or not. The dialog
 lists the other queues of this host and says what happens; for a workflow task
 it says that the current workflow stops. After the move the Tasks workspace
 opens the new task. The same move is `ttasks requeue KEY --queue QUEUE` for the
@@ -13292,8 +13404,7 @@ for the details.
 ## Moving a task to another server
 
 Each host keeps its own tasks, so work that belongs with another host is moved
-rather than copied by hand. In the task panel, the actions menu beside **Save
-task** opens **Move to another server**, which lists the other hosts registered
+rather than copied by hand. In the task panel, the header actions menu opens **Move to another server**, which lists the other hosts registered
 in the desktop app.
 
 The desktop app is the only component authenticated against both daemons, so it

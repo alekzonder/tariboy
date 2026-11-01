@@ -86,6 +86,22 @@ Tokens are never logged, audited, stored in SQLite, or included in support
 bundles. Startup prunes leases that no longer map to a `running` iteration;
 adoption revokes the remaining lease when its shim finishes.
 
+OpenCode leases also carry the prepared provider addresses. Routes cannot be
+chosen from request-supplied URLs, and cross-origin upstream redirects remain
+blocked.
+OpenCode retains its own API-key environment and authentication files; the
+proxy forwards those credentials to the bound provider without persisting
+them in the lease. OAuth and external OpenCode plugins are unsupported because
+their transport hooks can bypass the configured SDK address, so preparation
+rejects them. The complete temporary `OPENCODE_CONFIG_CONTENT` value is masked
+in launch logs and audit, and probe output is never included in failures.
+The handoff file remains owner-only and excluded from diagnostics.
+
+This routing controls ordinary harness requests, not arbitrary network commands
+an agent can execute. A provider with an unknown price records tokens and zero
+USD; a USD budget cannot bound that provider's actual spend. See
+[OpenCode routing](/docs/architecture/ai-proxy#opencode-harness).
+
 ## Runtime controls
 
 - Start and Stop are the one on/off switch of an agent.
@@ -278,7 +294,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.101.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.102.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
