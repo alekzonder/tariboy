@@ -1,3 +1,26 @@
+## [0.102.0] - 2026-11-01
+
+### Added
+
+- Workflow task details show decision controls below the sticky header, with outcome messages and links to required materials. Initial customer stages offer their start actions.
+- The agent menu opens Diagnostics from every tab. Diagnostics and Mailbox link back to Work on the same host.
+
+### Changed
+
+- Tasks and Inbox stay above the scrolling agent list. Library places the host selector before its tabs.
+- Task titles use one editor in the header. Save task appears when task fields have unsaved changes. Needs you cards open task details.
+- OpenCode requests use the local AI proxy for usage, budgets, and transcripts. Original provider credentials and configuration files remain unchanged.
+- OpenCode requires explicit provider/model selections and supported API-key transports. OAuth, external plugins, and model transport overrides stop launch. Unknown model prices record zero USD, so USD budgets cannot cap their actual spend.
+
+### Fixed
+
+- Terminal sessions remain available independently of agent work status. Connection failures retry without reporting that the session ended or losing the existing screen.
+- Task decisions retain drafts and errors across refreshes. Pending decisions prevent closing or discarding the task sheet.
+- Settings search filters sections without losing drafts. Weekly spending limits appear beside Day and Month.
+- Done tasks have readable search and period controls. Search persists between Last 7 days and All time, and empty results name the selected period.
+
+[0.102.0]: https://github.com/alekzonder/tariboy/compare/v0.101.0...v0.102.0
+
 ## [0.101.0] - 2026-10-31
 
 ### Added
