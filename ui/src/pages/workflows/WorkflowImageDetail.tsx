@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, type WorkflowImageManifest } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
+import { RoleSection } from "@/components/role/RoleSection";
+import { roleText } from "@/components/role/roleText";
 import { useWorkflowConfirm } from "@/pages/tasks/WorkflowConfirm";
 import { errorText } from "@/lib/errors";
 import { useMounted } from "@/pages/tasks/workflowShared";
@@ -115,6 +117,11 @@ export default function WorkflowImageDetail({
         onRemove={remove}
         error={error}
         removeError={removeError}
+      />
+      <RoleSection
+        variant="section"
+        text={roleText(manifest)}
+        empty="This workflow image has no ROLE.md."
       />
       <StatusesTable definition={definition} />
       <LimitsTable definition={definition} />

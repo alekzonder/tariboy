@@ -271,6 +271,28 @@ window.fetch = routeFetch(
         env: {},
         layers: [],
         prompt_template_sha256: "template-sha",
+        // Taller than 320px at every width, with a table wider than a phone.
+        role: {
+          text: [
+            "# Reviewer",
+            "",
+            "You review one pull request at a time.",
+            "",
+            "- Read the diff",
+            "- Run the checks",
+            "- Reply on GitHub",
+            "- Ask before a scope change",
+            "- Keep one branch",
+            "- Name the failing test",
+            "- Say what you changed",
+            "",
+            "| Step | Owner | Input | Output | Check | Notes |",
+            "| --- | --- | --- | --- | --- | --- |",
+            "| review | reviewer_agent | pull_request | review_comments | unit_tests | approved |",
+            "",
+            "Never merge.",
+          ].join("\n"),
+        },
       }),
     "* /api/images/reviewer%3Av3/export": (req) => {
       if (fullURL(req).origin === "https://source.tariboy.test") recordTransferRequest(req);

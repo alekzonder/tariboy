@@ -62,6 +62,7 @@ function ImageField({ form, checklistShown }: { form: CreateAgentForm; checklist
         value={form.imageChoice}
         onChange={form.changeImage}
         disabled={form.formDisabled}
+        role={form.plainTerminal ? null : form.role}
       />
       {loadingImages && <p className="text-xs text-muted-foreground">Loading built images…</p>}
     </div>

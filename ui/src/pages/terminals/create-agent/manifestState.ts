@@ -1,4 +1,5 @@
 import type { ImageManifest, ImageSummary } from "@/lib/api";
+import { roleText } from "@/components/role/roleText";
 import type { AgentCreateDraft } from "../agentCreateDraft";
 
 export interface ManifestInputs {
@@ -46,6 +47,8 @@ export function manifestState(inputs: ManifestInputs) {
     targetImageAvailable,
     manifestIsCurrent,
     loadingManifest,
+    // The selected image's ROLE.md; a bare image runs no role.
+    role: manifestIsCurrent && !manifest.bare ? roleText(manifest) : null,
     ...manifestDefaults(manifestIsCurrent ? manifest : null, inputs.draftPlugins),
   };
 }

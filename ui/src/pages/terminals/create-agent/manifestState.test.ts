@@ -26,6 +26,7 @@ describe("manifestState", () => {
       targetImageAvailable: true,
       manifestIsCurrent: true,
       loadingManifest: false,
+      role: null,
       bare: false,
       schemaV2: false,
       defaultHarness: "codex",

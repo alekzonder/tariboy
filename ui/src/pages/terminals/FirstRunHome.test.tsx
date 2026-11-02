@@ -177,3 +177,18 @@ it("explains a failed catalog with Details and Retry and still starts a plain te
   await waitFor(() => expect(onboardingRetry).toHaveBeenCalledOnce());
   expect(await screen.findByText("Connecting the Tariboy catalog…")).toBeInTheDocument();
 });
+
+it("shows the role fragment of the starter image under Image", async () => {
+  imageManifestGet.mockImplementation(async () =>
+    manifest({
+      name: "basic",
+      tag: "latest",
+      harness: { type: "claude", interactive: true },
+      role: { text: "# Basic\n\nA general coding agent." },
+    }),
+  );
+  renderHome();
+  const fragment = await screen.findByText("A general coding agent.");
+  expect(screen.getByLabelText("image").getAttribute("aria-describedby")).toBe(fragment.id);
+  expect(screen.getByRole("button", { name: "Show role" })).toBeInTheDocument();
+});

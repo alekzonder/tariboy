@@ -212,3 +212,26 @@ it("lists the versions of the name with their bindings and an upload each", asyn
   );
   expect(await screen.findByText("Upload workflow development:latest")).toBeInTheDocument();
 });
+
+it("shows Role under the header, before Statuses", async () => {
+  api.getWorkflowImage.mockResolvedValue({
+    ...manifest,
+    role: { text: "## Developer\n\nYou ship one pull request per task." },
+  });
+  renderDetail();
+  const role = await screen.findByRole("region", { name: "Role" });
+  expect(role).toHaveTextContent("From ROLE.md");
+  expect(role).toHaveTextContent("You ship one pull request per task.");
+  const statuses = screen.getByRole("table", { name: "Statuses" });
+  expect(role.nextElementSibling).toContainElement(statuses);
+});
+
+it.each([
+  ["no ROLE.md", undefined],
+  ["a whitespace ROLE.md", { text: "  \n " }],
+])("shows the empty line for %s", async (_, role) => {
+  api.getWorkflowImage.mockResolvedValue({ ...manifest, role });
+  renderDetail();
+  const section = await screen.findByRole("region", { name: "Role" });
+  expect(section).toHaveTextContent("This workflow image has no ROLE.md.");
+});
