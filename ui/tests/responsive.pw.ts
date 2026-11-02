@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "playwright/test";
+import { metricsReport, metricsSlice } from "../src/test/fixtures/apiFixtures";
 
 const daemonURL = "http://127.0.0.1:4176";
 const fixture = "/tests/tasks-fixture.html#";
@@ -97,6 +98,55 @@ let taskKey = "";
 test.beforeEach(async ({ request }) => {
   await ensureAgent(request);
   taskKey = await ensureTask(request);
+});
+
+// The isolated daemon has no completed tasks: Metrics gets a full report.
+const METRICS_REPORT = metricsReport({
+  agents: [
+    metricsSlice({ name: "responsive-agent-with-a-long-name", version: undefined }),
+    metricsSlice({ name: "alice", version: undefined }),
+  ],
+  images: [
+    metricsSlice({ name: "developer", version: "0.23.2" }),
+    metricsSlice({ name: "developer", version: "0.23.1" }),
+  ],
+  workflows: [
+    metricsSlice({ name: "development", version: "0.10.1" }),
+    metricsSlice({ name: "development", version: "0.10.0" }),
+  ],
+});
+const METRICS_ROUTES = [
+  "/metrics",
+  "/metrics?view=images",
+  "/metrics?view=workflows",
+  "/metrics/compare?kind=image&name=developer",
+];
+
+async function fakeMetrics(page: Page) {
+  await page.route(
+    (url) => url.pathname === "/api/metrics",
+    (route) => route.fulfill({ json: { ok: true, result: METRICS_REPORT } }),
+  );
+}
+
+for (const route of METRICS_ROUTES) {
+  test(`${route} fits the window with a full report`, async ({ page }) => {
+    await fakeMetrics(page);
+    await expectFits(page, route, async (p) => {
+      // Below 640 px the compare table is hidden and a list of blocks shows.
+      await expect(p.getByText("Tasks done").filter({ visible: true }).first()).toBeVisible();
+    });
+  });
+}
+
+test("the Metrics toolbar stays one row on a desktop", async ({ page }) => {
+  test.skip(page.viewportSize()!.width < 1024, "phones and tablets may wrap");
+  await fakeMetrics(page);
+  await page.goto(`${fixture}/metrics`);
+  await expect(page.getByText("$12.40").first()).toBeVisible();
+  const bars = await toolbarRows(page);
+  expect(bars.length).toBeGreaterThan(0);
+  for (const bar of bars) expect(bar.rows, bar.label).toBe(1);
 });
 
 test("task detail fits the window", async ({ page }) => {
