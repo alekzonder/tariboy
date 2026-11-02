@@ -50,6 +50,45 @@ func visibleDescendantCounts(ctx context.Context, q queryer, actor Actor, taskID
 	return total, active, err
 }
 
+// visibleFamily reads the task's parent and direct children through the one
+// visibility rule: a hidden parent is nil, hidden children are only counted.
+func visibleFamily(ctx context.Context, q queryer, actor Actor, taskID int64) (*TaskParent, []Task, int, error) {
+	cte, args := visibleCTE(actor)
+	parent, err := scanVisibleTask(q.QueryRowContext(ctx, cte+visibleTaskSelect+`
+		WHERE t.id = (SELECT parent_id FROM tasks WHERE id = ?)`, append(args, taskID)...))
+	var ref *TaskParent
+	switch {
+	case err == nil:
+		ref = &TaskParent{Key: parent.Key, Title: parent.Title, Queue: parent.Queue, Access: parent.Access}
+	case !errors.Is(err, sql.ErrNoRows):
+		return nil, nil, 0, err
+	}
+	rows, err := q.QueryContext(ctx, cte+visibleTaskSelect+`
+		WHERE t.parent_id = ?
+		ORDER BY t.priority, t.position, t.task_key`, append(args, taskID)...)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	defer rows.Close()
+	children := []Task{}
+	for rows.Next() {
+		child, err := scanVisibleTask(rows)
+		if err != nil {
+			return nil, nil, 0, err
+		}
+		children = append(children, child)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, 0, err
+	}
+	var hidden int
+	err = q.QueryRowContext(ctx, cte+`
+		SELECT COUNT(*) FROM tasks c
+		WHERE c.parent_id = ? AND c.id NOT IN (SELECT id FROM visible_access)`,
+		append(args, taskID)...).Scan(&hidden)
+	return ref, children, hidden, err
+}
+
 func (s *TaskService) UpdateTask(ctx context.Context, actor Actor, key string, in UpdateTaskInput) (Task, error) {
 	if err := validateActor(actor); err != nil {
 		return Task{}, err

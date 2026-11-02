@@ -35,6 +35,8 @@ const detail = (over: Partial<TaskDetail>): TaskDetail => ({
   waiting_for: [],
   descendants: 0,
   active_descendants: 0,
+  children: [],
+  hidden_children: 0,
   ...over,
 });
 

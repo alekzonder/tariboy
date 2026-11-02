@@ -188,6 +188,8 @@ export const OpenTask = () => (
       relations: RELATIONS,
       descendants: 0,
       active_descendants: 0,
+      children: [],
+      hidden_children: 0,
     }}
   />
 );
@@ -214,6 +216,8 @@ export const ManagedWorkflow = () => (
         relations: RELATIONS,
         descendants: 0,
         active_descendants: 0,
+        children: [],
+        hidden_children: 0,
       }}
     />
   </DaemonProvider>

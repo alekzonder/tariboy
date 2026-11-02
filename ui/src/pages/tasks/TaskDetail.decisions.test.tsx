@@ -31,6 +31,8 @@ function show(view: WorkflowView = customerView, readError?: Error) {
         relations: [],
         descendants: 0,
         active_descendants: 0,
+        children: [],
+        hidden_children: 0,
       }}
       events={[]}
       principals={{ customer: "user:owner", agents: [], groups: [] }}

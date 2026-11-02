@@ -98,6 +98,8 @@ export const detail: TaskDetail = {
   ],
   descendants: 0,
   active_descendants: 0,
+  children: [],
+  hidden_children: 0,
 };
 export const notification: Letter = letter({
   id: "notification-1",

@@ -399,10 +399,15 @@ func (s *TaskService) GetTask(ctx context.Context, actor Actor, key string) (Tas
 	if err != nil {
 		return TaskDetail{}, err
 	}
+	parent, children, hidden, err := visibleFamily(ctx, s.db, actor, task.ID)
+	if err != nil {
+		return TaskDetail{}, err
+	}
 	return TaskDetail{
 		Task: task, Comments: comments,
 		Descendants: total, ActiveDescendants: active,
 		WaitingFor: waits, Relations: relations, HolderReadOnly: holderOnly,
+		Parent: parent, Children: children, HiddenChildren: hidden,
 	}, nil
 }
 

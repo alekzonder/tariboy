@@ -83,6 +83,8 @@ const detail: Detail = {
   relations: [],
   descendants: 0,
   active_descendants: 0,
+  children: [],
+  hidden_children: 0,
 };
 
 it("does not show one server's detail while the same key loads on another", async () => {
