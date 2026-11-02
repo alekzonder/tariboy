@@ -3,9 +3,17 @@ import {
   activeNav,
   legacyServerRedirect,
   legacySettingsPath,
+  hostSettingsPath,
   navPath,
   scopedPath,
 } from "./navRoutes";
+
+describe("hostSettingsPath", () => {
+  it("names the host in ?host=, the local daemon as local", () => {
+    expect(hostSettingsPath("maintenance", "")).toBe("/settings/maintenance?host=local");
+    expect(hostSettingsPath("agent-defaults", "d_abc")).toBe("/settings/agent-defaults?host=d_abc");
+  });
+});
 
 describe("legacyServerRedirect", () => {
   it.each([
