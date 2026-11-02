@@ -4135,6 +4135,409 @@
         ],
         "type": "object"
       },
+      "MetricsImageVersionUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "cost_usd": {
+            "type": "number"
+          },
+          "image": {
+            "type": "string"
+          },
+          "image_digest": {
+            "type": "string"
+          },
+          "image_ref": {
+            "type": "string"
+          },
+          "image_version": {
+            "description": "unknown when no iterations row records it",
+            "type": "string"
+          },
+          "iterations": {
+            "type": "integer"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/MetricsTokens"
+          }
+        },
+        "required": [
+          "image",
+          "image_ref",
+          "image_version",
+          "image_digest",
+          "iterations",
+          "tokens",
+          "cost_usd"
+        ],
+        "type": "object"
+      },
+      "MetricsNullSeconds": {
+        "description": "seconds, null when unknown",
+        "nullable": true,
+        "type": "integer"
+      },
+      "MetricsQuality": {
+        "additionalProperties": false,
+        "description": "average, minimum and count of scored assessment axes; null without scores",
+        "nullable": true,
+        "properties": {
+          "image_process": {
+            "additionalProperties": false,
+            "nullable": true,
+            "properties": {
+              "avg": {
+                "type": "number"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "min": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "avg",
+              "min",
+              "count"
+            ],
+            "type": "object"
+          },
+          "role": {
+            "additionalProperties": false,
+            "nullable": true,
+            "properties": {
+              "avg": {
+                "type": "number"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "min": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "avg",
+              "min",
+              "count"
+            ],
+            "type": "object"
+          },
+          "task_fit": {
+            "additionalProperties": false,
+            "nullable": true,
+            "properties": {
+              "avg": {
+                "type": "number"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "min": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "avg",
+              "min",
+              "count"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "image_process",
+          "role",
+          "task_fit"
+        ],
+        "type": "object"
+      },
+      "MetricsReport": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/MetricsSlice"
+            },
+            "type": "array"
+          },
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/MetricsSlice"
+            },
+            "type": "array"
+          },
+          "since": {
+            "type": "string"
+          },
+          "total": {
+            "$ref": "#/components/schemas/MetricsSlice"
+          },
+          "until": {
+            "type": "string"
+          },
+          "workflows": {
+            "items": {
+              "$ref": "#/components/schemas/MetricsSlice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "since",
+          "until",
+          "total",
+          "agents",
+          "images",
+          "workflows"
+        ],
+        "type": "object"
+      },
+      "MetricsReworkByOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "changes_requested": {
+            "type": "integer"
+          },
+          "conflict": {
+            "type": "integer"
+          },
+          "rework": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "changes_requested",
+          "rework",
+          "conflict"
+        ],
+        "type": "object"
+      },
+      "MetricsSlice": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "tasks": {
+            "$ref": "#/components/schemas/MetricsTaskStats"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/MetricsUsage"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "usage",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "MetricsTaskAgentUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/MetricsImageVersionUsage"
+            },
+            "type": "array"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/MetricsUsage"
+          }
+        },
+        "required": [
+          "agent",
+          "usage",
+          "images"
+        ],
+        "type": "object"
+      },
+      "MetricsTaskAverages": {
+        "additionalProperties": false,
+        "properties": {
+          "cache_read_tokens": {
+            "type": "number"
+          },
+          "cache_write_tokens": {
+            "type": "number"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "customer_questions": {
+            "type": "number"
+          },
+          "input_tokens": {
+            "type": "number"
+          },
+          "iterations": {
+            "type": "number"
+          },
+          "output_tokens": {
+            "type": "number"
+          },
+          "rejected_advances": {
+            "type": "number"
+          },
+          "rework_rounds": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "iterations",
+          "input_tokens",
+          "output_tokens",
+          "cache_write_tokens",
+          "cache_read_tokens",
+          "cost_usd",
+          "rework_rounds",
+          "rejected_advances",
+          "customer_questions"
+        ],
+        "type": "object"
+      },
+      "MetricsTaskStats": {
+        "additionalProperties": false,
+        "properties": {
+          "avg": {
+            "$ref": "#/components/schemas/MetricsTaskAverages",
+            "description": "absent when no task is done"
+          },
+          "lead_time_avg_s": {
+            "$ref": "#/components/schemas/MetricsNullSeconds"
+          },
+          "lead_time_median_s": {
+            "$ref": "#/components/schemas/MetricsNullSeconds"
+          },
+          "mixed_tasks": {
+            "description": "tasks that ran on more than one version of this slice",
+            "type": "integer"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/MetricsQuality"
+          },
+          "sum": {
+            "$ref": "#/components/schemas/MetricsTaskSums"
+          },
+          "tasks_done": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tasks_done",
+          "mixed_tasks",
+          "lead_time_median_s",
+          "lead_time_avg_s",
+          "sum",
+          "quality"
+        ],
+        "type": "object"
+      },
+      "MetricsTaskSums": {
+        "additionalProperties": false,
+        "properties": {
+          "cost_usd": {
+            "type": "number"
+          },
+          "customer_questions": {
+            "type": "integer"
+          },
+          "iterations": {
+            "type": "integer"
+          },
+          "rejected_advances": {
+            "type": "integer"
+          },
+          "rework_rounds": {
+            "type": "integer"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/MetricsTokens"
+          }
+        },
+        "required": [
+          "iterations",
+          "tokens",
+          "cost_usd",
+          "rework_rounds",
+          "rejected_advances",
+          "customer_questions"
+        ],
+        "type": "object"
+      },
+      "MetricsTokens": {
+        "additionalProperties": false,
+        "properties": {
+          "cache_read": {
+            "type": "integer"
+          },
+          "cache_write": {
+            "type": "integer"
+          },
+          "input": {
+            "type": "integer"
+          },
+          "output": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input",
+          "output",
+          "cache_write",
+          "cache_read"
+        ],
+        "type": "object"
+      },
+      "MetricsUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "cost_usd": {
+            "description": "US dollars",
+            "type": "number"
+          },
+          "iterations": {
+            "description": "distinct iterations",
+            "type": "integer"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/MetricsTokens"
+          }
+        },
+        "required": [
+          "iterations",
+          "tokens",
+          "cost_usd"
+        ],
+        "type": "object"
+      },
+      "MetricsWorkflowRef": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "digest"
+        ],
+        "type": "object"
+      },
       "OnboardingDefaultStore": {
         "additionalProperties": false,
         "properties": {
@@ -6218,6 +6621,91 @@
         "required": [
           "count",
           "events"
+        ],
+        "type": "object"
+      },
+      "TaskMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/MetricsTaskAgentUsage"
+            },
+            "type": "array"
+          },
+          "completed_at": {
+            "type": "string"
+          },
+          "customer_questions": {
+            "type": "integer"
+          },
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/MetricsImageVersionUsage"
+            },
+            "type": "array"
+          },
+          "key": {
+            "type": "string"
+          },
+          "lead_time_s": {
+            "$ref": "#/components/schemas/MetricsNullSeconds"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/MetricsQuality"
+          },
+          "rejected_advances": {
+            "type": "integer"
+          },
+          "rework_by_outcome": {
+            "$ref": "#/components/schemas/MetricsReworkByOutcome"
+          },
+          "rework_rounds": {
+            "type": "integer"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "status_time_s": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "seconds in each status",
+            "type": "object"
+          },
+          "title": {
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/MetricsUsage"
+          },
+          "workflows": {
+            "items": {
+              "$ref": "#/components/schemas/MetricsWorkflowRef"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "status",
+          "started_at",
+          "completed_at",
+          "lead_time_s",
+          "status_time_s",
+          "usage",
+          "rework_rounds",
+          "rework_by_outcome",
+          "rejected_advances",
+          "customer_questions",
+          "quality",
+          "agents",
+          "images",
+          "workflows"
         ],
         "type": "object"
       },
@@ -20858,6 +21346,200 @@
           }
         },
         "summary": "Back up the database, delete expired data, and compact it now"
+      }
+    },
+    "/api/metrics": {
+      "get": {
+        "operationId": "metrics.server",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "agent",
+            "required": false,
+            "schema": {
+              "description": "only this agent's iterations and tasks",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "image",
+            "required": false,
+            "schema": {
+              "description": "only iterations and tasks on image NAME[:VERSION]",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workflow",
+            "required": false,
+            "schema": {
+              "description": "only iterations and tasks under workflow NAME[:VERSION]; none for no workflow",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "description": "RFC 3339 time (inclusive lower bound; default 30 days before until)",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "description": "RFC 3339 time (exclusive upper bound; default now)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MetricsReport"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Server metrics over a period, in total and by agent, image version and workflow version"
+      }
+    },
+    "/api/metrics/tasks/{key}": {
+      "get": {
+        "operationId": "metrics.task",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "description": "task key, current or old",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/TaskMetrics"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Metrics of one task: lead time, status time, usage, rework, questions, quality, agents and versions"
       }
     },
     "/api/onboarding": {
