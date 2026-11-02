@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { LazyBoundary } from "@/components/LazyBoundary";
 import AuditLogPage from "@/pages/AuditLogPage";
 import AgentUsagePage from "@/pages/AgentUsagePage";
 import { useApi } from "@/components/apiContext";
@@ -20,20 +21,40 @@ import { usageParams } from "@/pages/agentUsage/usageParams";
 import TabPage from "@/components/TabPage";
 import AgentStatusHistory from "./AgentStatusHistory";
 
+const AgentMetricsView = lazy(() => import("./AgentMetricsView"));
+
 // The URL keeps the older view names (?view=iterations|usage|status) so
 // existing links still open the matching More view.
-type MoreView = "iterations" | "usage" | "status";
+type MoreView = "iterations" | "usage" | "status" | "metrics";
 const MORE_VIEWS: Array<{ value: MoreView; label: string }> = [
   { value: "iterations", label: "Runs log" },
   { value: "usage", label: "Usage" },
   { value: "status", label: "Status history" },
+  { value: "metrics", label: "Metrics" },
 ];
 
 function moreViewFrom(params: URLSearchParams): MoreView {
   const raw = params.get("view");
   // Runs log is the default, and an ?iteration= deep link (e.g. from Usage)
   // opens it too.
-  return raw === "usage" || raw === "status" ? raw : "iterations";
+  return raw === "usage" || raw === "status" || raw === "metrics" ? raw : "iterations";
+}
+
+function MoreArea({ view, bounds }: { view: MoreView; bounds: { since: string; until: string } }) {
+  if (view === "iterations") {
+    return (
+      <div className="h-[70vh] min-h-96 shrink-0">
+        <AuditLogPage period={bounds} />
+      </div>
+    );
+  }
+  if (view === "usage") return <AgentUsagePage period={bounds} />;
+  if (view === "status") return <AgentStatusHistory since={bounds.since} until={bounds.until} />;
+  return (
+    <LazyBoundary resetKey="agent-metrics">
+      <AgentMetricsView />
+    </LazyBoundary>
+  );
 }
 
 /** The agent's cost per bucket over the period, polled like the Usage view. */
@@ -59,8 +80,8 @@ function useCostSeries(name: string, since: string, until: string) {
 }
 
 /** One Activity view for every agent: the period, its totals, the tasks worked
- *  on, the cost over time, and a More area with the runs log, usage and status
- *  history. */
+ *  on, the cost over time, and a More area with the runs log, usage, status
+ *  history and metrics. */
 export default function AgentActivityTab() {
   const name = useAgentName();
   const { window, setPeriod, setCustom } = useActivityWindow("today");
@@ -98,15 +119,7 @@ export default function AgentActivityTab() {
       </div>
       <CostChart series={series} />
       <Segmented label="More" options={MORE_VIEWS} value={view} onChange={selectView} />
-      {view === "iterations" ? (
-        <div className="h-[70vh] min-h-96 shrink-0">
-          <AuditLogPage period={bounds} />
-        </div>
-      ) : view === "usage" ? (
-        <AgentUsagePage period={bounds} />
-      ) : (
-        <AgentStatusHistory since={bounds.since} until={bounds.until} />
-      )}
+      <MoreArea view={view} bounds={bounds} />
       {taskKey && <TaskDrawer key={taskKey} taskKey={taskKey} onClose={() => setTaskKey("")} />}
     </TabPage>
   );

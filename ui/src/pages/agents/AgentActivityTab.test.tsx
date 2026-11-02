@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
+import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { AgentNameContext } from "@/lib/agent";
+import { metricsReport } from "@/test/fixtures/apiFixtures";
 import AgentActivityTab from "./AgentActivityTab";
 
 vi.mock("@/pages/tasks/TaskDrawer", () => ({
@@ -83,6 +84,7 @@ beforeEach(() => {
       urls.push(url);
       let result: unknown = { events: [] };
       if (url.includes("/api/task-activity")) result = report;
+      else if (url.includes("/api/metrics?")) result = metricsReport();
       else if (url.includes("/usage")) result = USAGE;
       else if (url.includes("/iterations")) result = { iterations: [], count: 0 };
       else if (url.includes("status/history"))
@@ -255,7 +257,7 @@ describe("AgentActivityTab", () => {
       within(more())
         .getAllByRole("radio")
         .map((b) => b.textContent),
-    ).toEqual(["Runs log", "Usage", "Status history"]);
+    ).toEqual(["Runs log", "Usage", "Status history", "Metrics"]);
     expect(within(more()).getByRole("radio", { name: "Runs log" })).toHaveAttribute(
       "aria-checked",
       "true",
@@ -272,6 +274,25 @@ describe("AgentActivityTab", () => {
     expect(screen.queryByText("old status")).not.toBeInTheDocument();
   });
 
+  it("opens the agent's metrics in More and asks for them once, not every minute", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      renderTab();
+      await screen.findByRole("button", { name: "DEV-1" });
+      expect(urls.some((u) => u.includes("/api/metrics?"))).toBe(false);
+      fireEvent.click(within(more()).getByRole("radio", { name: "Metrics" }));
+      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("view=metrics"));
+      expect(await screen.findByRole("link", { name: "Open in Metrics" })).toBeInTheDocument();
+      const metricsCalls = () => urls.filter((u) => u.includes("/api/metrics?"));
+      expect(metricsCalls()).toHaveLength(1);
+      expect(metricsCalls()[0]).toContain("agent=alice");
+      await act(async () => vi.advanceTimersByTime(61e3));
+      expect(metricsCalls()).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("draws the cost chart once when the Usage view is open", async () => {
     renderTab("?view=usage");
     expect(await screen.findByRole("button", { name: "Models" })).toBeInTheDocument();
@@ -283,6 +304,7 @@ describe("AgentActivityTab", () => {
     ["?view=iterations", "Runs log"],
     ["?view=usage", "Usage"],
     ["?view=status", "Status history"],
+    ["?view=metrics", "Metrics"],
     ["?iteration=it-1", "Runs log"],
   ])("opens %s in the matching More view", async (search, label) => {
     renderTab(search);

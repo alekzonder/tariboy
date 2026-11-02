@@ -1,10 +1,7 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sortRows, type Column, type Sort } from "./sliceSort";
-
-const CELL = "px-3 py-1.5 whitespace-nowrap";
-// The first column stays at the left edge while the table scrolls sideways.
-const STICKY = "sticky left-0 z-10 bg-card";
+import { CELL, STICKY } from "./tableClasses";
 
 /** A sortable table of slices in its own horizontal scroller. The first
  *  column, when `head` is given, is the row header and stays in place. */

@@ -406,6 +406,19 @@ it("collapses Details and History and keeps the workflow in its own section", as
   expect(screen.getByRole("button", { name: "Expand" })).toHaveAttribute("aria-expanded", "false");
 });
 
+it("puts a closed Metrics section right before Details and asks for no metrics", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch");
+  renderDetail(workflowTask, [], [], people);
+  await screen.findByText("release@1.2.0");
+  const metrics = screen.getByRole("button", { name: "Metrics" });
+  expect(metrics).toHaveAttribute("aria-expanded", "false");
+  const details = screen.getByText("Details", { selector: "summary" });
+  expect(metrics.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const comments = screen.getAllByText(/comment/i)[0];
+  expect(comments.compareDocumentPosition(metrics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(fetchSpy.mock.calls.some(([url]) => String(url).includes("/api/metrics"))).toBe(false);
+});
+
 it("opens the workflow section when the workflow reports a problem", async () => {
   renderDetail(
     { ...workflowTask, workflow_attention: { kind: "rejected", message: "CI is red", count: 1 } },

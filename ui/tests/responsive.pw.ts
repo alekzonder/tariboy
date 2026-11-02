@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "playwright/test";
-import { metricsReport, metricsSlice } from "../src/test/fixtures/apiFixtures";
+import { metricsReport, metricsSlice, taskMetrics } from "../src/test/fixtures/apiFixtures";
 
 const daemonURL = "http://127.0.0.1:4176";
 const fixture = "/tests/tasks-fixture.html#";
@@ -62,8 +62,10 @@ async function expectFits(page: Page, route: string, ready?: (page: Page) => Pro
   else await page.waitForLoadState("networkidle");
   // RESPONSIVE_SHOTS=dir keeps a picture of each page for a person to look at.
   if (process.env.RESPONSIVE_SHOTS) {
+    const dark = await page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches);
+    const width = page.viewportSize()?.width;
     await page.screenshot({
-      path: `${process.env.RESPONSIVE_SHOTS}/${test.info().project.name}${route.replace(/[^a-z0-9]+/gi, "_")}.png`,
+      path: `${process.env.RESPONSIVE_SHOTS}/${test.info().project.name}-${width}${dark ? "-dark" : ""}${route.replace(/[^a-z0-9]+/gi, "_")}.png`,
     });
   }
   expect(await overflowing(page), `overflow at ${route}`).toEqual([]);
@@ -152,6 +154,119 @@ test("the Metrics toolbar stays one row on a desktop", async ({ page }) => {
 test("task detail fits the window", async ({ page }) => {
   await expectFits(page, `/tasks?task=${taskKey}`);
   await expect(page.getByText(taskKey).first()).toBeVisible();
+});
+
+// The task metrics of a long-lived task: long agent names, five statuses and
+// several image versions, so the Agents table is wider than a phone.
+const usageOf = (iterations: number, cost: number) => ({
+  iterations,
+  cost_usd: cost,
+  tokens: { input: 1_200_000, output: 90_000, cache_write: 40_000, cache_read: 3_000_000 },
+});
+const imageRun = (version: string) => ({
+  image: "developer-with-a-long-image-name",
+  image_version: version,
+  image_digest: "",
+  image_ref: "",
+  ...usageOf(3, 0.62),
+  tokens: usageOf(0, 0).tokens,
+});
+const TASK_METRICS = taskMetrics({
+  // The responsive task is an open flexible task.
+  status: "open",
+  status_time_s: {
+    open: 7200,
+    in_progress: 52_000,
+    wait_customer: 9000,
+    done: 1800,
+    cancelled: 600,
+  },
+  agents: [
+    {
+      agent: AGENT,
+      usage: usageOf(9, 3.1),
+      images: [imageRun("0.23.2"), imageRun("0.23.1")],
+    },
+    { agent: "reviewer-agent-with-another-long-name", usage: usageOf(3, 0.4), images: [] },
+  ],
+  images: [imageRun("0.23.2"), imageRun("0.23.1"), imageRun("unknown")],
+  workflows: [{ name: "development", version: "0.10.1", digest: "d" }],
+});
+
+async function openTaskMetrics(page: Page) {
+  await page.addInitScript(() => localStorage.setItem("tasks:metrics-open:v1", "open"));
+  await page.route(
+    (url) => url.pathname.startsWith("/api/metrics/tasks/"),
+    (route) => route.fulfill({ json: { ok: true, result: TASK_METRICS } }),
+  );
+}
+
+// The section sits below the description and comments, and the sticky task
+// header covers the top of the sheet: bring it to the middle so a screenshot
+// shows it.
+const taskMetricsReady = async (page: Page) => {
+  await expect(page.getByRole("table", { name: "Agents" })).toBeVisible();
+  await page
+    .getByRole("button", { name: /^Metrics/ })
+    .evaluate((element) => element.scrollIntoView({ block: "center" }));
+};
+
+// Screens 3 and 4 of the metrics design, in both themes. The default theme is
+// `system`, so it follows the color scheme of the page.
+for (const colorScheme of ["light", "dark"] as const) {
+  test.describe(`metrics of an agent and a task, ${colorScheme}`, () => {
+    test.use({ colorScheme });
+
+    test("the agent Metrics view fits the window", async ({ page }) => {
+      await fakeMetrics(page);
+      await expectFits(page, `/agents/local/${AGENT}/activity?view=metrics`, async (p) => {
+        // The tab has a Tasks done card of its own: wait for the view's.
+        const view = p.getByRole("region", { name: "Agent metrics" });
+        await expect(view.getByRole("table", { name: "development" })).toBeVisible();
+        await p
+          .getByRole("radiogroup", { name: "More" })
+          .evaluate((element) => element.scrollIntoView({ block: "start" }));
+      });
+    });
+
+    test("the open task Metrics section fits the window", async ({ page }) => {
+      await openTaskMetrics(page);
+      await expectFits(page, `/tasks?task=${taskKey}`, taskMetricsReady);
+    });
+  });
+}
+
+test("the task Agents table scrolls in its own container with a pinned Agent column", async ({
+  page,
+}) => {
+  test.skip(page.viewportSize()!.width !== 360, "one phone width is enough");
+  await openTaskMetrics(page);
+  await page.goto(`${fixture}/tasks?task=${taskKey}`);
+  await taskMetricsReady(page);
+  const table = page.getByRole("table", { name: "Agents" });
+  const result = await table.evaluate((element) => {
+    const scroller = element.parentElement!;
+    const before = { scroll: scroller.scrollWidth, client: scroller.clientWidth };
+    scroller.scrollLeft = 120;
+    const header = element.querySelector("tbody th")!.getBoundingClientRect();
+    return {
+      ...before,
+      scrolled: scroller.scrollLeft,
+      offset: Math.round(header.left - scroller.getBoundingClientRect().left),
+      page: document.documentElement.scrollWidth <= window.innerWidth,
+    };
+  });
+  expect(result.scroll).toBeGreaterThan(result.client);
+  expect(result.scrolled).toBeGreaterThan(0);
+  expect(Math.abs(result.offset)).toBeLessThanOrEqual(1);
+  expect(result.page).toBe(true);
+});
+
+test("the task Metrics section works on a 320 px sheet", async ({ page }) => {
+  test.skip(page.viewportSize()!.width !== 360, "one run at its own size");
+  await page.setViewportSize({ width: 320, height: 700 });
+  await openTaskMetrics(page);
+  await expectFits(page, `/tasks?task=${taskKey}`, taskMetricsReady);
 });
 
 // The tops of the direct children of every visible [data-toolbar]: a toolbar

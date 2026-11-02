@@ -134,6 +134,23 @@ export function agentMetricsQuery(window: MetricsWindow): string {
   return params.toString();
 }
 
+/** `?host=` and the period of /metrics for an agent tab window. The Metrics
+ *  bar has no Today, so Today goes as a custom range from local midnight. */
+export function metricsPeriodParams(host: string, window: ActivityWindow): URLSearchParams {
+  const params = new URLSearchParams({ host });
+  if (window.period === "week" || window.period === "month") {
+    params.set("period", window.period);
+    return params;
+  }
+  params.set("period", "custom");
+  const own = window.period === "custom";
+  const since = own ? window.customSince : window.since && localInput(window.since);
+  const until = own ? window.customUntil : window.until && localInput(window.until);
+  if (since) params.set("since", since);
+  if (until) params.set("until", until);
+  return params;
+}
+
 /** An RFC 3339 time as a `datetime-local` value in local time, to the minute. */
 function localInput(iso: string): string {
   const d = new Date(iso);
