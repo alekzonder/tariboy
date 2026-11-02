@@ -1,3 +1,17 @@
+## [0.103.0] - 2026-11-02
+
+### Added
+
+- Assessor agents record immutable assessments of an iteration, a task, or both. Each assessment has three scores and zero or more violations with evidence. `tariboy assessment add|ls|show` and the operator API `assessment.ls` and `assessment.show` read them. Recording needs the new optional `assessments` capability. Nightly maintenance deletes assessments older than `retention_days`.
+- An optional `ROLE.md` at the root of an image or workflow image build context goes into the manifest field `role`. It holds at most 500 characters. A longer, empty or invalid UTF-8 file fails the build. Pull, push to a Store, import and activation reject such a role.
+- The sidebar host menu opens Host settings and Maintenance for that host. The local daemon also has this menu.
+
+### Changed
+
+- The Task Processing Order block states the iteration mode: workflow, flexible or request. Images read the process from this line.
+
+[0.103.0]: https://github.com/alekzonder/tariboy/compare/v0.102.0...v0.103.0
+
 ## [0.102.0] - 2026-11-01
 
 ### Added
