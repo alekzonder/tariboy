@@ -4,6 +4,7 @@ import type { MetricsSlice } from "@/lib/api";
 import {
   QUALITY_AXES,
   SMALL_SAMPLE_TASKS,
+  UNKNOWN_REASON,
   avgTokens,
   fmtAvg,
   fmtDuration,
@@ -27,6 +28,19 @@ export interface CompareRow {
   countB?: number;
   /** A row that holds a text instead of numbers. */
   note?: string;
+  /** Why a null value of A or B is not known. */
+  reasonA?: string;
+  reasonB?: string;
+}
+
+const MISSING = "No data for this version in this period.";
+
+/** Why a version with data has no value in this row. */
+function reasonFor(id: string): string | undefined {
+  if (id.startsWith("lead_")) return UNKNOWN_REASON.leadTime;
+  if (id.startsWith("quality_")) return UNKNOWN_REASON.qualityAxis;
+  if (id.endsWith("_task")) return UNKNOWN_REASON.perTask;
+  return undefined;
 }
 
 type Pick = (s: MetricsSlice) => number | null | undefined;
@@ -74,6 +88,11 @@ export function compareRows(a?: MetricsSlice, b?: MetricsSlice): CompareRow[] {
   rows.push(...qualityRows(a, b));
   for (const [id, label, format, pick] of PERIOD) {
     rows.push({ id, label, format, better: null, a: read(a, pick), b: read(b, pick) });
+  }
+  for (const row of rows) {
+    if (row.note) continue;
+    if (row.a === null) row.reasonA = a ? reasonFor(row.id) : MISSING;
+    if (row.b === null) row.reasonB = b ? reasonFor(row.id) : MISSING;
   }
   return rows;
 }
@@ -141,7 +160,8 @@ export function changeOf(row: CompareRow): { text: string; verdict: Verdict | nu
   if (row.note || row.a === null || row.b === null) return null;
   const diff = row.b - row.a;
   const sign = diff > 0 ? "+" : diff < 0 ? "−" : "";
-  const amount = diff === 0 ? "0" : `${sign}${fmt(row.format, Math.abs(diff))}`;
+  const zero = row.format === "money" ? fmt("money", 0) : "0";
+  const amount = diff === 0 ? zero : `${sign}${fmt(row.format, Math.abs(diff))}`;
   const percent = row.a === 0 ? "" : ` (${sign}${Math.round(Math.abs((diff / row.a) * 100))}%)`;
   let verdict: Verdict | null = null;
   if (row.better) {

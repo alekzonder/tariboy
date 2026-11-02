@@ -4,11 +4,11 @@ import { UNKNOWN_REASON, versionLabel } from "@/lib/metricsFormat";
 import { cn } from "@/lib/utils";
 import { changeOf, fmtCell, type CompareRow } from "./compareModel";
 
-const MISSING = "No data for this version in this period.";
-
 function Value({ row, side }: { row: CompareRow; side: "a" | "b" }) {
   const text = fmtCell(row, side);
-  return text ? <>{text}</> : <Unknown reason={MISSING} />;
+  if (text) return <>{text}</>;
+  const reason = side === "a" ? row.reasonA : row.reasonB;
+  return <Unknown reason={reason ?? UNKNOWN_REASON.change} />;
 }
 
 /** The change and its verdict word; the icon's color repeats the word. */

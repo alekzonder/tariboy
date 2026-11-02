@@ -122,12 +122,23 @@ export function agentMetricsQuery(window: MetricsWindow): string {
   const params = new URLSearchParams({ view: "metrics" });
   if (window.period === "week" || window.period === "month") {
     params.set("period", window.period);
+  } else if (window.period === "custom") {
+    params.set("period", "custom");
+    if (window.customSince) params.set("since", window.customSince);
+    if (window.customUntil) params.set("until", window.customUntil);
   } else {
     params.set("period", "custom");
-    if (window.since) params.set("since", window.since);
-    if (window.until) params.set("until", window.until);
+    if (window.since) params.set("since", localInput(window.since));
+    if (window.until) params.set("until", localInput(window.until));
   }
   return params.toString();
+}
+
+/** An RFC 3339 time as a `datetime-local` value in local time, to the minute. */
+function localInput(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export type CompareKind = "image" | "workflow";

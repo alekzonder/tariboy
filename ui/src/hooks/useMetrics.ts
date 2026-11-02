@@ -10,6 +10,8 @@ interface Answer {
   updatedAt: Date | null;
 }
 
+const NO_ANSWER: Answer = { request: "", report: null, error: null, updatedAt: null };
+
 /**
  * Loads `GET /api/metrics` once for each host, period and filter, and again on
  * `retry()`. It does not poll: the request is heavy. A new request cancels the
@@ -24,12 +26,7 @@ export function useMetrics(filter: MetricsFilter | null) {
   const request = filter
     ? JSON.stringify([api.target?.id ?? "", since, until, agent, image, workflow, attempt])
     : "";
-  const [answer, setAnswer] = useState<Answer>({
-    request: "",
-    report: null,
-    error: null,
-    updatedAt: null,
-  });
+  const [answer, setAnswer] = useState<Answer>(NO_ANSWER);
 
   useEffect(() => {
     if (!request) return;
@@ -49,12 +46,14 @@ export function useMetrics(filter: MetricsFilter | null) {
 
   const answered = answer.request === request;
   const pending = !!request && !answered;
+  // Without a usable period the last report belongs to another period.
+  const { report, updatedAt } = request ? answer : NO_ANSWER;
   return {
-    report: answer.report,
+    report,
     error: answered ? answer.error : null,
-    loading: pending && !answer.report,
-    updating: pending && !!answer.report,
-    updatedAt: answer.updatedAt,
+    loading: pending && !report,
+    updating: pending && !!report,
+    updatedAt,
     retry: () => setAttempt((n) => n + 1),
   };
 }

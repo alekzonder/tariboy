@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { UNKNOWN_REASON } from "@/lib/metricsFormat";
 import { metricsSlice } from "@/test/fixtures/apiFixtures";
 import { changeOf, compareRows, fmtCell, smallSample } from "./compareModel";
 
@@ -59,6 +60,21 @@ describe("compareRows", () => {
     expect(rows.every((r) => r.b === null)).toBe(true);
     expect(changeOf(rows[0])).toBeNull();
   });
+
+  it("gives each unknown value its own reason", () => {
+    const a = slice({ lead_time_median_s: null, avg: null });
+    a.tasks.quality = { ...a.tasks.quality!, role: null };
+    const rows = compareRows(a, undefined);
+    const reasons = (id: string) => {
+      const r = rows.find((row) => row.id === id)!;
+      return [r.reasonA, r.reasonB];
+    };
+    const missing = "No data for this version in this period.";
+    expect(reasons("lead_median")).toEqual([UNKNOWN_REASON.leadTime, missing]);
+    expect(reasons("cost_task")).toEqual([UNKNOWN_REASON.perTask, missing]);
+    expect(reasons("quality_role")).toEqual([UNKNOWN_REASON.qualityAxis, missing]);
+    expect(reasons("tasks_done")).toEqual([undefined, missing]);
+  });
 });
 
 describe("changeOf", () => {
@@ -78,6 +94,13 @@ describe("changeOf", () => {
     });
     expect(changeOf(row("Quality: Role", 70, 80))).toMatchObject({ verdict: "better" });
     expect(changeOf(row("Runs per task", 2, 2))).toEqual({ text: "0 (0%)", verdict: "no change" });
+  });
+
+  it("shows a zero cost change as dollars", () => {
+    expect(changeOf(row("Cost per task", 1.37, 1.37))).toEqual({
+      text: "$0.00 (0%)",
+      verdict: "no change",
+    });
   });
 
   it("gives no percent from zero and no verdict for a count without direction", () => {

@@ -128,10 +128,18 @@ describe("metrics query", () => {
   it("opens an agent's Metrics view on the same window", () => {
     const month = metricsWindow(q("period=month"), NOW);
     expect(agentMetricsQuery(month)).toBe("view=metrics&period=month");
+    // The agent tab's Custom fields take local datetime-local values.
     const quarter = metricsWindow(q("period=quarter"), NOW);
-    expect(agentMetricsQuery(quarter)).toBe(
-      `view=metrics&period=custom&since=${encodeURIComponent(quarter.since)}&until=${encodeURIComponent(quarter.until)}`,
-    );
+    const link = new URLSearchParams(agentMetricsQuery(quarter));
+    expect(link.get("period")).toBe("custom");
+    for (const bound of ["since", "until"] as const) {
+      expect(link.get(bound)).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+      expect(
+        Math.abs(new Date(link.get(bound)!).getTime() - Date.parse(quarter[bound])),
+      ).toBeLessThan(60_000);
+    }
+    const custom = metricsWindow(q("period=custom&since=2026-10-01T10:00"), NOW);
+    expect(agentMetricsQuery(custom)).toBe("view=metrics&period=custom&since=2026-10-01T10%3A00");
   });
 });
 

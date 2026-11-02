@@ -49,6 +49,14 @@ describe("useMetrics", () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it("drops the last report when the period becomes unusable", async () => {
+    const { calls, result, rerender } = setup(WEEK);
+    await act(async () => calls[0].resolve(metricsReport()));
+    expect(result.current.report).not.toBeNull();
+    rerender({ filter: null });
+    expect(result.current).toMatchObject({ report: null, updatedAt: null, updating: false });
+  });
+
   it("cancels the older request and never shows its late answer", async () => {
     const { calls, result, rerender } = setup(WEEK);
     rerender({ filter: { ...MONTH, agent: "alice" } });
