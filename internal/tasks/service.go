@@ -95,7 +95,7 @@ func (s *TaskService) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor,
 	if bound {
 		workflowDigest = binding.Digest
 	}
-	filed, crossQueueAssigned, err := createTaskReportTx(ctx, tx, actor, queue, group, parentKey, in.Assignee)
+	filed, crossQueueAssigned, err := createTaskReportTx(ctx, tx, actor, queue, group, place.parentQueue, in.Assignee)
 	if err != nil {
 		return Task{}, err
 	}
@@ -144,7 +144,7 @@ func (s *TaskService) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor,
 	if err != nil {
 		return Task{}, err
 	}
-	if crossQueueAssigned {
+	if crossQueueAssigned || (filed && parentKey != "") {
 		task.Access, err = taskAccess(ctx, tx, actor, task.ID)
 		if err != nil {
 			return Task{}, err
@@ -157,11 +157,11 @@ func (s *TaskService) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor,
 }
 
 // createTaskPlacement is where createTaskTx puts a new task: a child takes its
-// parent's queue, customer, and group.
+// parent's customer, and its queue and group unless it names another queue.
 type createTaskPlacement struct {
 	queue, customer, group string
 	parentID               any
-	parentKey              string
+	parentKey, parentQueue string
 }
 
 // createTaskPlacementTx resolves the new task's parent, if any, and checks
@@ -182,8 +182,13 @@ func (s *TaskService) createTaskPlacementTx(ctx context.Context, tx *sql.Tx, act
 				return createTaskPlacement{}, err
 			}
 		}
-		place.queue, place.customer, place.group = parent.Queue, parent.Customer, parent.Group
-		place.parentID, place.parentKey = parent.ID, parent.Key
+		place.customer = parent.Customer
+		place.parentID, place.parentKey, place.parentQueue = parent.ID, parent.Key, parent.Queue
+		// A child in another queue keeps its own group: the parent's group would
+		// give that group's agents write access across the queue boundary.
+		if place.queue == "" || place.queue == parent.Queue {
+			place.queue, place.group = parent.Queue, parent.Group
+		}
 	} else if place.queue == "" {
 		return createTaskPlacement{}, newError(http.StatusBadRequest, "missing_queue", "queue is required for a root task")
 	}
@@ -219,22 +224,24 @@ func (s *TaskService) createTaskQueueTx(ctx context.Context, tx *sql.Tx, queue, 
 	return binding, bound, nil
 }
 
-// createTaskReportTx reports whether a new root task is a filed report or a
-// task assigned across a queue the actor does not run.
+// createTaskReportTx reports whether a new root task, or a child in another
+// queue than its parent's, is a filed report or a task assigned across a
+// queue the actor does not run. parentQueue is "" for a root.
 func createTaskReportTx(
 	ctx context.Context,
 	tx *sql.Tx,
 	actor Actor,
 	queue string,
 	group string,
-	parentKey string,
+	parentQueue string,
 	assignee string,
 ) (filed, crossQueueAssigned bool, err error) {
 	// An unassigned root task from an agent that does not run the queue is a filed report:
 	// it is ungrouped and (through the visibility rules) invisible to its author afterwards,
 	// so triage belongs to whoever runs the queue. An explicit assignee instead owns only
 	// that task and its descendants; it does not gain access to the rest of the queue.
-	if !actor.IsCustomer && parentKey == "" {
+	// A child filed into another queue follows the same rule; its author keeps read access.
+	if !actor.IsCustomer && queue != parentQueue {
 		runsQueue, err := agentRunsQueue(ctx, tx, actor, queue)
 		if err != nil {
 			return false, false, err
@@ -242,7 +249,7 @@ func createTaskReportTx(
 		if !runsQueue {
 			if group != "" {
 				return false, false, newError(http.StatusBadRequest, "report_cannot_assign",
-					"a root task created in a queue you do not run cannot carry a group")
+					"a task created in a queue you do not run cannot carry a group")
 			}
 			if strings.TrimSpace(assignee) == "" {
 				filed = true
@@ -388,7 +395,7 @@ func (s *TaskService) GetTask(ctx context.Context, actor Actor, key string) (Tas
 	if err != nil {
 		return TaskDetail{}, err
 	}
-	total, active, err := descendantCounts(ctx, s.db, task.ID)
+	total, active, err := visibleDescendantCounts(ctx, s.db, actor, task.ID)
 	if err != nil {
 		return TaskDetail{}, err
 	}

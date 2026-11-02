@@ -2747,7 +2747,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Move a task in its queue tree */
+    /** Move a task in the task tree */
     post: operations["tasks.move"];
     delete?: never;
     options?: never;
@@ -14303,7 +14303,7 @@ export interface operations {
           priority?: "P0" | "P1" | "P2" | "P3";
           /** @description Canonical pull request URL */
           pull_request?: string;
-          /** @description Queue prefix for a root task */
+          /** @description Queue prefix for a root task; with a parent, the child's queue (default: the parent's) */
           queue?: string;
           /** @description Task title */
           title: string;

@@ -25795,7 +25795,7 @@
                     "type": "string"
                   },
                   "queue": {
-                    "description": "Queue prefix for a root task",
+                    "description": "Queue prefix for a root task; with a parent, the child's queue (default: the parent's)",
                     "type": "string"
                   },
                   "title": {
@@ -27278,7 +27278,7 @@
             "description": "Typed error"
           }
         },
-        "summary": "Move a task in its queue tree"
+        "summary": "Move a task in the task tree"
       }
     },
     "/api/tasks/{key}/relations": {

@@ -91,19 +91,26 @@ func (s *TaskService) ExportTask(ctx context.Context, actor Actor, key string) (
 		return TransferBundle{}, err
 	}
 	// A workflow task stays in the queue whose workflow it pinned.
-	var pinned bool
+	// Import creates the whole bundle in one queue, so a subtree with a child in
+	// another queue does not transfer; it may also hold tasks the actor cannot see.
+	var pinned, crossQueue bool
 	if err := s.db.QueryRowContext(ctx, `
 		WITH RECURSIVE subtree(id) AS (
 			SELECT id FROM tasks WHERE id = ?
 			UNION ALL
 			SELECT t.id FROM tasks t JOIN subtree s ON t.parent_id = s.id
 		)
-		SELECT EXISTS(SELECT 1 FROM tasks t JOIN subtree s ON s.id = t.id WHERE t.workflow_digest IS NOT NULL)`,
-		task.ID).Scan(&pinned); err != nil {
+		SELECT EXISTS(SELECT 1 FROM tasks t JOIN subtree s ON s.id = t.id WHERE t.workflow_digest IS NOT NULL),
+		       EXISTS(SELECT 1 FROM tasks t JOIN subtree s ON s.id = t.id WHERE t.queue_prefix <> ?)`,
+		task.ID, task.Queue).Scan(&pinned, &crossQueue); err != nil {
 		return TransferBundle{}, err
 	}
 	if pinned {
 		return TransferBundle{}, workflowManagedError()
+	}
+	if crossQueue {
+		return TransferBundle{}, newError(http.StatusConflict, "cross_queue_subtree",
+			"the subtree has tasks in another queue; move or detach them before the export")
 	}
 	rows, err := s.db.QueryContext(ctx, transferSubtree, task.ID)
 	if err != nil {

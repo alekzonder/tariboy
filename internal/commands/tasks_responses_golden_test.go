@@ -239,5 +239,13 @@ func TestTasksResponsesMatchGolden(t *testing.T) {
 		tasksGoldenCall{"tasks.activity agent", "tasks.activity", registry.Params{"since": window["since"], "until": window["until"], "agent": "dev-a"}},
 		tasksGoldenCall{"tasks.activity empty", "tasks.activity", registry.Params{"since": tasksGoldenClock.Add(-48 * time.Hour).Format(time.RFC3339), "until": tasksGoldenClock.Add(-24 * time.Hour).Format(time.RFC3339)}},
 	)
+
+	// A child in another queue keeps its own queue and key, created there or moved under the parent.
+	create("tasks.create child in another queue", "EMP-CHILD", registry.Params{"queue": "EMP", "parent_key": other, "title": "Child in another queue"})
+	loose := create("tasks.create loose", "EMP-LOOSE", registry.Params{"queue": "EMP", "title": "Loose"})
+	runAll(
+		tasksGoldenCall{"tasks.move under a parent in another queue", "tasks.move", registry.Params{"key": loose, "parent_key": other, "revision": rev(loose)}},
+		tasksGoldenCall{"tasks.list subtree across queues", "tasks.list", registry.Params{"subtree": other}},
+	)
 	recorder.check("tasks_responses.golden.json", *updateTasksGolden)
 }

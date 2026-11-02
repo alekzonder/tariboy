@@ -6,34 +6,23 @@ import (
 	"testing"
 )
 
-func TestMoveRejectsDescendantAndCrossQueueAndReordersRoots(t *testing.T) {
+// A parent in another queue is covered in cross_queue_test.go.
+func TestMoveRejectsDescendantAndReordersRoots(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
-	for _, q := range []CreateQueueInput{
-		{Prefix: "TEST", Name: "Test"},
-		{Prefix: "CORE", Name: "Core"},
-	} {
-		if _, err := svc.CreateQueue(ctx, customer, q); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := svc.CreateQueue(ctx, customer, CreateQueueInput{Prefix: "TEST", Name: "Test"}); err != nil {
+		t.Fatal(err)
 	}
 	root, _ := svc.CreateTask(ctx, customer, CreateTaskInput{Queue: "TEST", Title: "root"})
 	child, _ := svc.CreateTask(ctx, customer, CreateTaskInput{ParentKey: root.Key, Title: "child"})
 	other, _ := svc.CreateTask(ctx, customer, CreateTaskInput{Queue: "TEST", Title: "other"})
-	core, _ := svc.CreateTask(ctx, customer, CreateTaskInput{Queue: "CORE", Title: "core"})
 
 	if _, err := svc.MoveTask(ctx, customer, root.Key, MoveInput{
 		ParentKey: child.Key,
 		Revision:  root.Revision,
 	}); ErrorCode(err) != "hierarchy_cycle" {
 		t.Fatalf("cycle error = %v; want hierarchy_cycle", err)
-	}
-	if _, err := svc.MoveTask(ctx, customer, other.Key, MoveInput{
-		ParentKey: core.Key,
-		Revision:  other.Revision,
-	}); ErrorCode(err) != "cross_queue_move" {
-		t.Fatalf("cross queue error = %v; want cross_queue_move", err)
 	}
 	moved, err := svc.MoveTask(ctx, customer, other.Key, MoveInput{
 		BeforeKey: root.Key,

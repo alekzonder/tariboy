@@ -88,7 +88,7 @@ func TaskOperatorCommands() []registry.Command {
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				return control.ClaimTask(ctx, actor, p.Trimmed("key"), p.Int64("revision"))
 			}),
-		taskRoute("tasks.move", "POST", "/api/tasks/{key}/move", "Move a task in its queue tree",
+		taskRoute("tasks.move", "POST", "/api/tasks/{key}/move", "Move a task in the task tree",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				var in tasks.MoveRequest
 				tasks.Decode(p, &in)

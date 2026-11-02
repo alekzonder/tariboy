@@ -33,6 +33,23 @@ func descendantCounts(ctx context.Context, q queryer, taskID int64) (total int, 
 	return total, active, err
 }
 
+// visibleDescendantCounts is descendantCounts limited to the descendants the
+// actor sees. The completion rule still counts every descendant.
+func visibleDescendantCounts(ctx context.Context, q queryer, actor Actor, taskID int64) (total int, active int, err error) {
+	cte, args := visibleCTE(actor)
+	err = q.QueryRowContext(ctx, cte+`,
+		descendants(id, status) AS (
+			SELECT id, status FROM tasks WHERE parent_id = ?
+			UNION ALL
+			SELECT t.id, t.status
+			FROM tasks t JOIN descendants d ON t.parent_id = d.id
+		)
+		SELECT COUNT(*),
+		       COALESCE(SUM(CASE WHEN status NOT IN ('done', 'cancelled') THEN 1 ELSE 0 END), 0)
+		FROM descendants d JOIN visible_access v ON v.id = d.id`, append(args, taskID)...).Scan(&total, &active)
+	return total, active, err
+}
+
 func (s *TaskService) UpdateTask(ctx context.Context, actor Actor, key string, in UpdateTaskInput) (Task, error) {
 	if err := validateActor(actor); err != nil {
 		return Task{}, err

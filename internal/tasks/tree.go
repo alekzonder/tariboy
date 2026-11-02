@@ -109,8 +109,10 @@ func moveTaskTargetTx(ctx context.Context, tx *sql.Tx, actor Actor, task Task, i
 			return moveTaskTarget{}, newError(http.StatusConflict, "invalid_before",
 				"a task cannot be ordered before itself")
 		}
+		// Order is kept per queue under a parent, so a before task is a sibling of the same queue.
 		if before.Queue != task.Queue {
-			return moveTaskTarget{}, newError(http.StatusConflict, "cross_queue_move", "tasks cannot move across queues")
+			return moveTaskTarget{}, newError(http.StatusConflict, "invalid_before",
+				"before task must be in the moved task's queue")
 		}
 		if before.Priority != task.Priority {
 			return moveTaskTarget{}, newError(http.StatusConflict, "priority_bucket_mismatch",
@@ -132,7 +134,26 @@ func moveTaskTargetTx(ctx context.Context, tx *sql.Tx, actor Actor, task Task, i
 		}
 		target.beforeID = before.ID
 	}
+	if target.parentID == nil && task.ParentKey != "" {
+		if err := moveTaskCheckDetachTx(ctx, tx, actor, task); err != nil {
+			return moveTaskTarget{}, err
+		}
+	}
 	return target, nil
+}
+
+// moveTaskCheckDetachTx requires write access on a parent in another queue
+// before its child becomes a root, so the child's owner cannot take ordered
+// work out of a tree it does not run.
+func moveTaskCheckDetachTx(ctx context.Context, tx *sql.Tx, actor Actor, task Task) error {
+	parent, err := taskByKey(ctx, tx, task.ParentKey)
+	if err != nil {
+		return err
+	}
+	if parent.Queue == task.Queue {
+		return nil
+	}
+	return requireWrite(ctx, tx, actor, parent)
 }
 
 // moveTaskCheckParentTx rejects a parent the task cannot move beneath.
@@ -143,10 +164,9 @@ func moveTaskCheckParentTx(ctx context.Context, tx *sql.Tx, actor Actor, task, p
 	if parent.ID == task.ID {
 		return newError(http.StatusConflict, "hierarchy_cycle", "a task cannot parent itself")
 	}
-	if parent.Queue != task.Queue {
-		return newError(http.StatusConflict, "cross_queue_move", "tasks cannot move across queues")
-	}
-	if parent.Customer != task.Customer || parent.Group != task.Group {
+	// A parent in another queue keeps the task in its own queue and group;
+	// only the customer is shared by the whole tree.
+	if parent.Customer != task.Customer || (parent.Queue == task.Queue && parent.Group != task.Group) {
 		return newError(http.StatusConflict, "scope_change", "move would change inherited task scope")
 	}
 	var descendant bool
