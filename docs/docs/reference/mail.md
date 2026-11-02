@@ -57,7 +57,7 @@ text with `--text -`, which reads standard input.
 | `tmail show ID` | One letter and the reply that closed it, if any | yes |
 | `tmail send --to P[,P] --subject S --text T [--kind K] [--deadline D] [--notice] [--data JSON] [--instant]` | Send a letter; a request unless `--notice`. `--instant` sends an [instant letter](#instant-letters) | yes |
 | `tmail reply ID TEXT [--ask] [--instant]` | Reply to a letter addressed to you, which closes it | yes |
-| `tmail instant [--format text\|json]` | For a harness hook: print the [instant letters](#the-hook-command) that wait for the running iteration | agent only; prints nothing in operator mode |
+| `tmail instant [--format FORMAT]` | For a harness hook: print the [instant letters](#the-hook-command) that wait for the running iteration | agent only; prints nothing in operator mode |
 | `tmail requeue ID` | Put one of your dead letters back in the inbox | yes |
 | `tmail close ID [--note TEXT]` | Archive a letter without a reply | operator only |
 | `tmail read ID...` | Mark letters read; a read notice to an agent closes | operator only |
@@ -242,7 +242,7 @@ starts again with `waiting`, `queued` or `stopped`.
 
 ### The hook command
 
-`tmail instant [--format text|json]` is for a harness hook that runs after
+`tmail instant [--format FORMAT]` is for a harness hook that runs after
 each tool call. Run it in agent mode:
 
 1. The daemon sets `TARIBOY_INSTANT_MAIL_FLAG` in the environment of each
@@ -258,7 +258,22 @@ each tool call. Run it in agent mode:
    `delivered`, adds one to its `attempts`, and records the audit event
    `mail_instant_shown`. A letter whose sixth attempt this would be becomes
    dead with reason `attempts`.
-5. `text` prints the block below. `json` prints `{"ids":[...],"text":"..."}`.
+5. It prints the letters in the format that `--format` names:
+
+| `--format` | Output |
+| --- | --- |
+| `text` (default) | The block below |
+| `json` | `{"ids":[...],"text":"..."}` |
+| `claude-post-tool-use` | `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":TEXT}}` |
+| `claude-post-tool-use-failure` | The same, with `"hookEventName":"PostToolUseFailure"` |
+| `claude-stop` | `{"decision":"block","reason":TEXT}` |
+
+`TEXT` is the block below. `tmail` builds the JSON itself, so a hook needs no
+`jq`, `python` or `node`.
+
+If the iteration already called `loop.sh done`, the daemon takes no letter
+and keeps the flag file. A `Stop` hook therefore never continues a finished
+iteration. The letter stays `waiting`, and the next prompt reads it.
 
 No letters, an error, the timeout and operator mode print nothing and exit 0.
 `tmail instant` writes nothing to standard error, because a hook can show that
@@ -302,13 +317,41 @@ AI proxy does not change requests.
 
 | Harness | Interactive | Batch |
 | --- | --- | --- |
-| claude | next iteration | next iteration |
+| claude | hook | hook |
 | codex | next iteration | next iteration |
 | opencode | next iteration | next iteration |
 
-No harness hook calls `tmail instant` yet. Until a hook is connected, an
-instant letter stays `waiting` or `queued`, the next iteration reads it, and
-its state becomes `read`. The limits that stay with a hook:
+For claude, the daemon writes a plugin with three hooks into
+`<base-dir>/agents/<name>/harness-hooks/claude/`. It passes the plugin with
+one more `--plugin-dir` flag, after the plugin of the image skills. The
+interactive mode and the batch mode get the same flag.
+
+| Claude Code event | Command |
+| --- | --- |
+| `PostToolUse`, every tool | `tmail instant --format claude-post-tool-use` |
+| `PostToolUseFailure`, every tool | `tmail instant --format claude-post-tool-use-failure` |
+| `Stop` | `tmail instant --format claude-stop` |
+
+The `PostToolUse` hooks add the letters to the context of the model after the
+tool call. The `Stop` hook stops the end of the turn, and the model continues
+with the letters. Each hook calls the absolute path of `tmail` that the daemon
+finds on the `PATH` of the iteration, and has a timeout of 5 seconds. The
+agent shell prologue therefore cannot change which `tmail` runs.
+
+The daemon connects the hooks only when all of these are true:
+
+- The harness is claude, version `2.1.227` or newer. The daemon runs
+  `claude --version` before each iteration.
+- The image is not bare, and the agent has the `mail` capability (or its old
+  name `messages`).
+- `tmail` is on the `PATH` of the iteration.
+
+If a condition is false, or the daemon cannot write the plugin, the iteration
+starts without the hooks. Except for a missing capability or another harness,
+the daemon log has a warning. An instant letter then stays `waiting` or
+`queued`, the next iteration reads it, and its state becomes `read`. The same
+is true for codex and opencode, which have no hooks yet. The limits that stay
+with a hook:
 
 - A long tool call holds the letter until the call ends. Nothing stops model
   output that has no tool call.

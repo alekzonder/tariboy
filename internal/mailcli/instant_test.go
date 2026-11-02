@@ -133,3 +133,70 @@ func TestSendAndReplyPassInstant(t *testing.T) {
 }
 
 func io2() *bytes.Buffer { return &bytes.Buffer{} }
+
+// claudeHookFormats maps each Claude Code hook format to the JSON it prints
+// for the text block, built here independently of the production code.
+func claudeHookFormats(text string) map[string]map[string]any {
+	return map[string]map[string]any{
+		"claude-post-tool-use": {"hookSpecificOutput": map[string]any{
+			"hookEventName": "PostToolUse", "additionalContext": text}},
+		"claude-post-tool-use-failure": {"hookSpecificOutput": map[string]any{
+			"hookEventName": "PostToolUseFailure", "additionalContext": text}},
+		"claude-stop": {"decision": "block", "reason": text},
+	}
+}
+
+func TestInstantClaudeHookFormats(t *testing.T) {
+	const text = "# Instant messages\n\"quoted\" <b> & \\ hello\n"
+	raw, _ := json.Marshal(map[string]any{"ids": []string{"m-1"}, "text": text})
+	for format, want := range claudeHookFormats(text) {
+		useRecorder(t, string(raw))
+		code, out, errOut := runInstantCLI(t, instantEnv(t, true), "--format", format)
+		if code != 0 || errOut != "" {
+			t.Fatalf("%s: code %d err %q", format, code, errOut)
+		}
+		var got map[string]any
+		if err := json.Unmarshal([]byte(out), &got); err != nil {
+			t.Fatalf("%s: output %q is not JSON: %v", format, out, err)
+		}
+		gotJSON, _ := json.Marshal(got)
+		wantJSON, _ := json.Marshal(want)
+		if string(gotJSON) != string(wantJSON) {
+			t.Fatalf("%s: got %s, want %s", format, gotJSON, wantJSON)
+		}
+	}
+}
+
+func TestInstantClaudeHookFormatsAreSilentWithoutLetters(t *testing.T) {
+	for format := range claudeHookFormats("") {
+		useRecorder(t, `{"ids":[],"text":""}`)
+		if code, out, errOut := runInstantCLI(t, instantEnv(t, true), "--format", format); code != 0 || out != "" || errOut != "" {
+			t.Fatalf("%s empty: code %d out %q err %q", format, code, out, errOut)
+		}
+		if code, out, errOut := runInstantCLI(t, instantEnv(t, false), "--format", format); code != 0 || out != "" || errOut != "" {
+			t.Fatalf("%s no flag: code %d out %q err %q", format, code, out, errOut)
+		}
+		if code, out, errOut := runInstantCLI(t, mapEnv("TARIBOY_INSTANT_MAIL_FLAG", "/x"), "--format", format); code != 0 || out != "" || errOut != "" {
+			t.Fatalf("%s no socket: code %d out %q err %q", format, code, out, errOut)
+		}
+		rec, _ := useRecorder(t, "")
+		rec.err = errors.New("connection refused")
+		if code, out, errOut := runInstantCLI(t, instantEnv(t, true), "--format", format); code != 0 || out != "" || errOut != "" {
+			t.Fatalf("%s socket error: code %d out %q err %q", format, code, out, errOut)
+		}
+	}
+}
+
+func TestInstantClaudeHookFormatTimeoutIsSilent(t *testing.T) {
+	old := newCaller
+	t.Cleanup(func() { newCaller = old })
+	newCaller = func(string) Caller { return slowCaller{} }
+	start := time.Now()
+	code, out, errOut := runInstantCLI(t, instantEnv(t, true), "--format", "claude-stop")
+	if code != 0 || out != "" || errOut != "" {
+		t.Fatalf("code %d out %q err %q", code, out, errOut)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("instant took %s; want the 1.5 s timeout", elapsed)
+	}
+}

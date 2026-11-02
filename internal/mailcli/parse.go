@@ -61,7 +61,7 @@ var commands = []command{
 		instantFlag,
 		{"as", false, "Principal to reply as (operator-only); agent:name replies on the agent's behalf"},
 	}, help: helpText["reply"]},
-	{name: "instant", flags: []flagSpec{{"format", false, "Output format: text (default) or json"}}, help: helpText["instant"]},
+	{name: "instant", flags: []flagSpec{{"format", false, "Output format: text (default), json, claude-post-tool-use, claude-post-tool-use-failure or claude-stop"}}, help: helpText["instant"]},
 	{name: "requeue", positional: []string{"id"}, flags: []flagSpec{asFlag}, help: helpText["requeue"]},
 	{name: "close", positional: []string{"id"}, operatorOnly: true, flags: []flagSpec{{"note", false, "Archive note"}, asFlag}, help: helpText["close"]},
 	{name: "read", positional: []string{"id..."}, operatorOnly: true, flags: []flagSpec{asFlag}, help: helpText["read"]},

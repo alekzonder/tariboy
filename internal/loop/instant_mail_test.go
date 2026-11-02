@@ -217,6 +217,45 @@ func TestRunKeepsHookDeliveredNoticeOpenOnError(t *testing.T) {
 	}
 }
 
+// After loop.sh done, a Stop hook must not take the letter: it stays waiting
+// with its flag, and the next prompt shows it and marks it read.
+func TestToolsInstantAfterDoneLeavesTheLetterForTheNextIteration(t *testing.T) {
+	m, as := instantManager(t)
+	mb := mail.New(storetest.Open(t), nil, agentStoreDirectory{as: as})
+	mb.SetInstantRuntime(m)
+	m.cfg.Mail = mb
+	if err := as.CreateIteration(agent.Iteration{ID: "run-1", Agent: "run", Trigger: "manual", Status: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.SetIterationDone("run-1", true); err != nil {
+		t.Fatal(err)
+	}
+	l, err := mb.Send(mail.Letter{From: "user:customer", To: "agent:run", Subject: "s", Body: "late", Instant: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := toolsFacade{agent: "run", cfg: &m.cfg, iterations: fixedIteration("run-1")}
+	var d agentapi.Deps
+	f.mailDeps(&d)
+	res, err := d.MailAction("instant", map[string]any{})
+	if err != nil || len(res.(mail.MailInstantResult).IDs) != 0 || res.(mail.MailInstantResult).Text != "" {
+		t.Fatalf("take after done = %+v, %v; want empty", res, err)
+	}
+	flag := agentdir.New(m.cfg.AgentsDir, "run").InstantMailFlag("run-1")
+	if _, err := os.Stat(flag); err != nil {
+		t.Fatalf("flag after a take past done: %v; want it kept", err)
+	}
+	if got := letterOf(t, mb, "agent:run", l[0].ID); got.InstantState != mail.InstantWaiting {
+		t.Fatalf("letter after a take past done = %+v; want waiting", got)
+	}
+	if _, err := mb.RenderIteration("run", "run-2", 10); err != nil {
+		t.Fatal(err)
+	}
+	if got := letterOf(t, mb, "agent:run", l[0].ID); got.InstantState != mail.InstantRead || got.InstantIteration != "run-2" {
+		t.Fatalf("letter after the next prompt = %+v; want read in run-2", got)
+	}
+}
+
 func TestPromptRenderMarksInstantLetterReadInTheIteration(t *testing.T) {
 	t.Parallel()
 	r, ag, l, ml, iterID := newPromptProbe(t)
