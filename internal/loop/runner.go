@@ -1115,10 +1115,12 @@ func (r *ShimRunner) mintProxyToken(ctx context.Context, ag agent.Agent, iterati
 	if in.hasCurrentGoal {
 		taskID, epicID = in.currentGoal.Key, in.currentGoal.Key
 		if in.currentGoal.ParentKey != "" {
-			taskID, epicID, err = resolveNativeTaskAttribution(ctx, r.cfg.Tasks, ag.Name, in.currentGoal.Key)
-			if err != nil {
-				return "", "", fmt.Errorf("resolve current agent goal attribution: %w", err)
+			attribution, aErr := resolveNativeTaskAttribution(ctx, r.cfg.Tasks, ag.Name, in.currentGoal.Key)
+			if aErr != nil {
+				return "", "", fmt.Errorf("resolve current agent goal attribution: %w", aErr)
 			}
+			attribution.warnPartial(r.cfg.Logger, ag.Name)
+			taskID, epicID = attribution.TaskID, attribution.EpicID
 		}
 	}
 	name, tag := imageNameTag(ag.ImageRef)

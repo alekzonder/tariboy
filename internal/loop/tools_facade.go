@@ -186,7 +186,7 @@ func (f toolsFacade) setGoal(key string) (map[string]any, error) {
 	if !ok {
 		return nil, errGoalUnavailable
 	}
-	result, err := setGoal(context.Background(), f.cfg.Tasks, f.cfg.SetGoal, proxy, iteration, f.agent, key)
+	result, err := setGoal(context.Background(), f.cfg.Log, f.cfg.Tasks, f.cfg.SetGoal, proxy, iteration, f.agent, key)
 	if err == nil {
 		if taskID, _ := result["task_id"].(string); taskID != "" {
 			f.goals.noteSelectedGoal(f.agent, iteration, taskID)

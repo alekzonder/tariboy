@@ -706,6 +706,56 @@ func TestRunAttributesTokenToCurrentGoal(t *testing.T) {
 	}
 }
 
+// TestRunAttributesGoalBehindHiddenParentToItsRealRoot: a goal whose parent
+// sits in a queue the agent cannot see still starts, and the proxy token gets
+// the real root of the tree.
+func TestRunAttributesGoalBehindHiddenParentToItsRealRoot(t *testing.T) {
+	t.Parallel()
+	binder := &fakeBinder{base: "http://127.0.0.1:5555"}
+	r, ag, _, _ := newRunnerForProxyTest(t, binder)
+	tree := newCrossQueueGoal(t, ag.Name)
+	r.cfg.CurrentGoal = func(string, time.Time) (tasks.Task, bool, error) { return tree.leaf, true, nil }
+	r.cfg.Tasks = tree.service
+
+	if _, err := r.Run(context.Background(), ag, "manual", "alice-1", ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(binder.updates) != 1 {
+		t.Fatalf("proxy attribution updates = %v, want one", binder.updates)
+	}
+	if got := binder.updates[0]; got.key != binder.minted[0] || got.task != tree.leaf.Key || got.epic != tree.root.Key {
+		t.Fatalf("proxy attribution = %+v, want token/%s/%s", got, tree.leaf.Key, tree.root.Key)
+	}
+}
+
+// TestRunStartsWhenAnAncestorIsUnreadable: an ancestor the daemon cannot read
+// makes the last read ancestor the root and logs a warning; the run starts.
+func TestRunStartsWhenAnAncestorIsUnreadable(t *testing.T) {
+	t.Parallel()
+	binder := &fakeBinder{base: "http://127.0.0.1:5555"}
+	r, ag, _, _ := newRunnerForProxyTest(t, binder)
+	var logs bytes.Buffer
+	r.cfg.Logger = slog.New(slog.NewTextHandler(&logs, nil))
+	r.cfg.CurrentGoal = func(string, time.Time) (tasks.Task, bool, error) {
+		return tasks.Task{Key: "SUPER-3", ParentKey: "SUPER-2"}, true, nil
+	}
+	r.cfg.Tasks = &attributionTaskReader{
+		tasks: map[string]tasks.Task{
+			"SUPER-2": {Key: "SUPER-2", ParentKey: "SUPER-1"},
+			"SUPER-3": {Key: "SUPER-3", ParentKey: "SUPER-2"},
+		},
+		err: map[string]error{"SUPER-1": errors.New("storage down")},
+	}
+
+	if _, err := r.Run(context.Background(), ag, "manual", "alice-1", ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(binder.updates) != 1 || binder.updates[0].task != "SUPER-3" || binder.updates[0].epic != "SUPER-2" {
+		t.Fatalf("proxy attribution updates = %+v, want SUPER-3/SUPER-2", binder.updates)
+	}
+	assertPartialAttributionWarning(t, logs.String(), ag.Name, "SUPER-3", "SUPER-2", "storage down")
+}
+
 func TestRunFailsWhenGoalAttributionCannotBePersisted(t *testing.T) {
 	t.Parallel()
 	binder := &fakeBinder{base: "http://127.0.0.1:5555", failUpdate: true}
