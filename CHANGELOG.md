@@ -1,3 +1,14 @@
+## [0.106.0] - 2026-11-02
+
+### Added
+
+- A letter can be instant. An instant letter reaches the running iteration of the recipient at the end of its next tool call, not at the next iteration. The customer and `plugin:telegram` can send instant letters. An agent can send one only when the recipient allows it in the new `mail_instant_senders` setting. By default, this is the group lead. `mail.send`, `mail.reply` and `tmail` accept `instant`. The letter shows its delivery state: waiting, queued, stopped, delivered, read or not_delivered.
+- Claude Code agents with the mail capability get instant letters through plugin hooks. This needs claude 2.1.227 or newer and a non-bare image. In other cases the letter waits for the next iteration.
+- In the web UI, Compose and the reply to an agent have a "Deliver to the current iteration" switch. A counter shows the length of the text against the limit of 8,000 characters. Instant letters have an "instant" tag, and the letter card shows the delivery state.
+- `tasks.get` returns the parent and the children of a task. The task panel shows them. The task tree shows subtasks from other queues.
+
+[0.106.0]: https://github.com/alekzonder/tariboy/compare/v0.105.0...v0.106.0
+
 ## [0.105.0] - 2026-11-02
 
 ### Added
