@@ -532,6 +532,17 @@ with `workflow_managed` when it names an explicit assignee, because the workflow
 assigns. A task cannot enter a bound queue by import, and a tree that contains a
 workflow task cannot be exported; both are refused with `workflow_managed`.
 
+A child can be in another queue than its parent
+(`ttasks create --parent KEY --queue OTHER`, or `ttasks move KEY --parent
+OTHER-KEY`). The child follows the workflow of its own queue, or no workflow
+when its queue has none. A child in a bound queue under a flexible parent enters
+the initial status of its queue's workflow like a root task there. A flexible
+child under a workflow task stays flexible. The parent's status, Goal selection,
+and holder do not change. A move never changes the queue or workflow of a task.
+The `active_descendants` check on the parent counts every descendant, also a
+descendant in another queue that the caller cannot see. See
+[Subtasks in another queue](/docs/tasks#subtasks-in-another-queue).
+
 ### Binding from Compose
 
 `tariboy compose up` can bind a queue with `task_queues.<PREFIX>.workflow`; see

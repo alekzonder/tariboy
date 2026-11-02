@@ -29,6 +29,7 @@
 - [The shim](https://alekzonder.github.io/tariboy/architecture/shim): tariboy-shim runs a single harness iteration under a watchdog, so a runaway iteration can be killed without touching the daemon.
 - [State model — the DB is the source of truth](https://alekzonder.github.io/tariboy/architecture/state-model): The SQLite DB is the single source of configuration; live state is computed, not stored, which is why test daemons must be isolated.
 - [The AI proxy & the audit log](https://alekzonder.github.io/tariboy/architecture/ai-proxy): Every LLM call routes through the in-process AI proxy, which enforces budgets and writes a per-iteration audit transcript.
+- [Metrics](https://alekzonder.github.io/tariboy/architecture/metrics): Task, agent, image, workflow and server metrics that the daemon computes on request from tasks, workflow visits, AI requests, iterations and assessments.
 - [Desktop web UI](https://alekzonder.github.io/tariboy/architecture/web-ui): React and xterm.js provide the Desktop control surface while host-local daemons remain API and WebSocket services.
 
 ## Binaries & commands

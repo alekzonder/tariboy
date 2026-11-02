@@ -805,9 +805,11 @@ all derived from it.
 - **Some commands run in the CLI.** A command with `Local` runs in the CLI
   process instead of over HTTP: `daemon start|stop|restart|status|logs`,
   `update`, the `compose` verbs, `image build`, `workflow build`,
-  `operation ls` and `operation log`. `daemon status`, the build verbs and the
-  operation verbs also keep their HTTP routes; the CLI side of a build starts
-  the operation and reads its log over the socket.
+  `operation ls`, `operation log`, `metrics task` and `metrics server`.
+  `daemon status`, the build verbs, the operation verbs and the metrics verbs
+  also keep their HTTP routes; the CLI side of a build starts the operation
+  and reads its log over the socket, and the CLI side of a metrics verb reads
+  the report over the socket and prints it as tables.
   `AbsPathArgs` names the path arguments the CLI makes absolute, and
   `ExitCodeFrom` derives the CLI exit code from a result.
 - **Results are typed Go structs.** A handler returns a named struct, never
@@ -1910,6 +1912,182 @@ Mail writes the audit events `mail_sent`, `mail_answered`, `mail_closed`,
 
 ---
 
+# Metrics
+Source: https://alekzonder.github.io/tariboy/architecture/metrics
+
+The metrics commands report how long tasks take, how many iterations, tokens
+and US dollars they use, how often they come back for rework, and how the
+assessments score them. The daemon computes every value when it receives a
+request. It stores no aggregate and adds no table. The code is in
+`internal/metrics`. The commands are in `internal/commands/metrics.go`.
+
+| Command | Route | Result type |
+| --- | --- | --- |
+| `tariboy metrics task KEY` | `GET /api/metrics/tasks/{key}` | `TaskMetrics` |
+| `tariboy metrics server` | `GET /api/metrics` | `MetricsReport` |
+
+Access is the same as for `tariboy usage`. The daemon socket and the loopback
+HTTP listener of the operator serve the commands. The tools socket of an agent
+does not serve them. See [the command reference](/docs/reference/commands#metrics)
+for the flags and examples.
+
+## Units
+
+- A time is a whole number of seconds in JSON. Its field name ends in `_s`.
+  The text output of the CLI shows hours and minutes, for example `12h 05m`.
+- A cost is in US dollars, rounded to 6 decimal places, as in `tariboy usage`.
+- Tokens are counted by kind: `input`, `output`, `cache_write`, `cache_read`.
+- A value that is not known is `null`, not zero. This applies to
+  `lead_time_s` of a task that is not done, to the lead times of a slice
+  without done tasks, and to `quality` without scores.
+
+## Metrics of one task
+
+`metrics task` accepts the current key of a task or an old key. Old keys come
+from `task_key_aliases`. All metrics of the task use the current key and all
+old keys.
+
+| Field | Unit | Definition | Source |
+| --- | --- | --- | --- |
+| `lead_time_s` | seconds | From the first entry to `in_progress` to completion. `null` if the task is not `done` or has no start. | `tasks.started_at` and `tasks.completed_at`. If `started_at` is empty, the first `task_events` row that sets `status` to `in_progress`. |
+| `status_time_s` | seconds per status | The sum of the time in each status. An open interval counts up to the time of the request. `done` and `cancelled` do not count. | A workflow task: `task_status_visits` (`left_at` − `entered_at`). A task without a workflow: the `task_events` rows that set `status`, with `task.created` or `task.imported` as `open`. |
+| `usage.iterations` | count | The number of distinct iterations of the task. A request without an iteration id adds tokens and cost, but no iteration. | `COUNT(DISTINCT iteration)` of `ai_requests` with `task_id` equal to a key of the task |
+| `usage.tokens` | tokens | Token sums by kind. | The same `ai_requests` rows |
+| `usage.cost_usd` | US dollars | The cost sum. | The same `ai_requests` rows |
+| `rework_rounds` | count | The number of visits that ended with `changes_requested`, `rework` or `conflict`. | `task_status_visits.outcome` |
+| `rework_by_outcome` | count per outcome | The same count for each of the three outcomes. | `task_status_visits.outcome` |
+| `rejected_advances` | count | The number of `advance` requests that a check rejected. | Sum of `task_status_visits.rejected_requests` |
+| `customer_questions` | count | The number of waits for an answer of the customer. | `task_waiting_for` rows with `expected_principal` equal to `tasks.customer` |
+| `quality` | score from 0 to 100 | For each axis `image_process`, `role`, `task_fit`: `avg`, `min` and `count` of the scores. An axis without scores is `null`. Without any score, `quality` is `null`. | `assessment_axes` with `verdict = scored` of the `assessments` with the task's key |
+| `agents[]` | | For each agent: `usage` and `images[]`, the image versions of that agent's iterations. | `ai_requests.agent` |
+| `images[]` | | The iterations, tokens and cost on each image version: `image`, `image_ref`, `image_version`, `image_digest`. | See [Image version of an iteration](#image-version-of-an-iteration) |
+| `workflows[]` | | The workflow versions of the task's visits: `name`, `version`, `digest`. Empty for a task without a workflow. | `task_status_visits.workflow_digest` → `task_workflow_images` |
+
+A task without a workflow has no visits. Its `rework_rounds` and
+`rejected_advances` are 0.
+
+### Questions to the customer
+
+`ttasks ask` and a question of the workflow engine create a `task_waiting_for`
+row. The row names the principal who must answer. `customer_questions` counts
+the rows that wait for the customer of the task. Only one wait for each
+principal can be open on a task. A second question before the answer to the
+first one makes no new row, so it counts as one question. The table
+`task_workflow_questions` is not a source: no code writes it.
+
+## Image version of an iteration
+
+The image version comes from the iteration, not from the current
+configuration of the agent.
+
+1. The `iterations` row of `ai_requests.iteration` gives `image_ref`,
+   `image_version` and `image_digest`. The image name is `image_ref` without
+   its tag.
+2. If retention removed the `iterations` row, `ai_requests.image_name` and
+   `image_tag` give the reference and `ai_requests.image_digest` gives the
+   digest. The version comes from another `iterations` row with the same
+   digest.
+3. If no row gives the version, the version is `unknown`. The iteration goes
+   to the image slice with the version `unknown`.
+
+## Workflow version of an iteration
+
+The workflow version of an iteration comes from the visit of its task that
+was open when the iteration started (`entered_at` ≤ start < `left_at`, or
+`left_at` is empty). The start is `iterations.started_at`. Without an
+`iterations` row, the start is the time of the first AI request of the
+iteration. The visit's `workflow_digest` maps to `task_workflow_images.name`
+and `version`.
+
+- If no visit was open at the start, for example because the iteration
+  started before the first visit, the current `tasks.workflow_digest` of the
+  task gives the version.
+- If `task_workflow_images` has no row for the digest, the workflow name is
+  `unknown` and the version is empty.
+- An iteration without a task, or with a task without a workflow, goes to the
+  workflow slice `none`.
+
+## Server report
+
+`metrics server` reports one period. The default period is the 30 days before
+the request. `--since` is an inclusive bound and `--until` is an exclusive
+bound.
+
+The report has `total`, `agents[]`, `images[]` and `workflows[]`. Each slice
+has two blocks:
+
+- `usage`: the iterations, tokens and cost of the AI requests with `ts` in the
+  period. Each iteration goes to the exact agent, image version and workflow
+  version of that iteration.
+- `tasks`: the aggregates of the tasks with `status = done` and
+  `completed_at` in the period. The iterations, tokens and cost in this
+  block are for the whole life of each task, not only for the period.
+
+| `tasks` field | Unit | Definition |
+| --- | --- | --- |
+| `tasks_done` | count | The done tasks of the slice |
+| `mixed_tasks` | count | Image and workflow slices only: done tasks that ran on more than one version and also on this version |
+| `lead_time_median_s`, `lead_time_avg_s` | seconds | Median and average of `lead_time_s`. `null` without a lead time. |
+| `sum` | | Sums of `iterations`, `tokens`, `cost_usd`, `rework_rounds`, `rejected_advances`, `customer_questions` |
+| `avg` | per task | The same values divided by `tasks_done`, rounded to 2 decimal places. Not in the response when `tasks_done` is 0. |
+| `quality` | score | Per axis: average, minimum and count of all scores of the slice's tasks. `null` without scores. |
+
+### Tasks with several agents or versions
+
+- Agent slices: a task counts in the slice of each agent that made an
+  iteration for it. `total` counts each task once.
+- Image slices: a task counts in a version slice only if all its iterations
+  ran on that one version. A task with iterations on more than one version
+  adds 1 to `mixed_tasks` of each of those versions. Its lead time, rework
+  and questions go to no version slice. A task without iterations goes to no
+  image slice.
+- Workflow slices: the same rule, with the workflow versions of the task's
+  visits. A task without a workflow goes to the slice `none`.
+
+### Filters
+
+`--agent`, `--image NAME[:VERSION]` and `--workflow NAME[:VERSION]` limit the
+report:
+
+- `usage` keeps only the iterations of that agent, on that image, under that
+  workflow.
+- `tasks` keeps only the done tasks with an iteration of that agent, with an
+  iteration on that image, and with a visit under that workflow.
+- The slice lists keep only the agent, the image versions and the workflow
+  versions that the filter selects. A kept task adds nothing to the slices of
+  other agents or versions. The version rule still uses all versions of the
+  task, so a kept task with two versions adds to `mixed_tasks`.
+
+An image name can include a registry port, as in
+`--image localhost:5000/dev:1.0`. The version follows the last colon after
+the last slash.
+
+`--workflow none` selects the iterations and tasks without a workflow.
+`--image NAME:unknown` selects the iterations without a known version. An
+input that is not `NAME` or `NAME:VERSION` fails with `invalid_param`. A
+`--since` or `--until` that is not an RFC 3339 time fails with `bad_time`.
+
+## Retention
+
+Retention removes `ai_requests`, `iterations` and `assessments` rows older
+than the retention period. It removes `task_events`, `task_status_visits`
+and `task_waiting_for` rows only with their task. As a result:
+
+- the iterations, tokens and cost of an old task are smaller than the real
+  values, or 0;
+- the image version of an old iteration can be `unknown`, which can make
+  its task mixed;
+- `quality` can be `null` although an assessment existed.
+
+## Performance
+
+The metrics read the database in one read-only transaction. `ai_requests`
+has no index on `task_id`, so each request scans that table a small number of
+times. On a copy of a database with 67,832 AI requests, `metrics server` for
+30 days answered in less than 2 seconds.
+
+---
+
 # The shim
 Source: https://alekzonder.github.io/tariboy/architecture/shim
 
@@ -2478,9 +2656,19 @@ inserts the default `TASK` queue when no queue has that prefix. Recursive
 CTEs derive descendants, inherited access, blocking cycles, and active
 descendants without a configured depth limit.
 
+`visibleCTE` in `internal/tasks/repo.go` is the one visibility rule for an
+agent. A parent can have a child in another queue. The recursive step that
+gives write access to descendants follows only a child with the same
+`queue_prefix` as its parent. The read-only ancestor chain also stops at a
+parent in another queue. The author of a child in another queue gets rank 0
+(`context`) for that child only. Authorship gives write access only to a child
+in its parent's queue.
+
 Priority is persisted as a constrained `P0` through `P3` value and defaults to
 `P2`. Every root or nested sibling set has canonical order `(priority,
-position, task key)`. Manual positions are normalized within a priority bucket,
+position, task key)`. Positions are kept per `(queue_prefix, parent_id,
+priority)`, so the children of one parent that are in different queues have
+separate orders. Manual positions are normalized within a priority bucket,
 so reparenting preserves priority without disturbing other buckets.
 
 `started_at` records the first time a task's status became `in_progress` and
@@ -2816,7 +3004,16 @@ agent row. A new agent opens on its **Terminal** tab.
   default, the other names follow in A–Z order, and `bare` is last as **Plain
   terminal (bare)**. **Advanced → Image → version** picks another tag. When the
   host has no built image except `bare`, the host's checklist rows are shown
-  above the field.
+  above the field. When the list is closed and the selected image has a
+  `ROLE.md`, a fragment of it is shown under the field. The fragment is the
+  first paragraph that is not a heading, else the first list item, as plain
+  text in two lines at most. The field's `aria-describedby` names it. If the
+  file has more blocks or the fragment does not fit, **Show role** opens the
+  full text as Markdown in a box of 240px at most, with its own scroll, and
+  **Hide role** closes it. A new image closes it. The fragment comes from the
+  manifest that the form already loads, so it adds no request. The form shows
+  nothing for `bare`, for an image without `ROLE.md`, while the manifest
+  loads, and when the manifest fails.
 - **Coding tool** is a radio group from the host's harness detection
   (`GET /api/onboarding`), labeled with the harness ID, for example **Claude
   Code · claude**. `stub` is never offered. The form selects the image's
@@ -3380,6 +3577,14 @@ five tags and **Show all N**, and it marks the tag on screen. The Source cell
 stays on one line and shows the full text in its title. The page shows the
 original source CWD when provenance exists and reuses the same native VS Code
 folder action for local and SSH paths.
+The first card of the **Overview** is **Role**, with `From ROLE.md` on the
+right. It shows the `role.text` of the manifest as Markdown. A text of 320px or
+less is shown whole. A taller text folds to its first 240px with a fade and
+**Show all**. **Show less** folds it again and scrolls back to the card's
+heading when that heading is above the screen. Focus inside the folded text
+unfolds it. The open state is not kept. Without `ROLE.md`, or with a file of
+whitespace only, the card shows `This image has no ROLE.md.` The image `bare`
+has no Role card. The other tabs and the header do not show the role.
 Manifest, provenance, template, and file reads carry the same expected digest;
 a changed mutable ref clears the old view and reloads once, then offers manual
 refresh if it changes again. Directory builds and all detail requests capture
@@ -3476,6 +3681,16 @@ shows its manifest, removes the tag after an in-app confirmation, and lists the
 to servers**, which copies that tag to other ready servers with the export and
 import archive routes. Every request carries the explicit host target. See
 [Workflow images → Desktop](/docs/workflow-images#desktop).
+The first section under the page header is **Role**, before **Statuses**. It
+works as the Role card of an image page, with the text in a bordered box. Its
+empty line is `This workflow image has no ROLE.md.`
+
+Both Role views and the form use `MarkdownContent` with its `role` variant
+(`ui/src/components/role/`). The variant makes `h1` `text-lg`, `h2`
+`text-base`, and `h3` to `h6` `text-sm`. It shows the alt text of an image in
+italics and loads no image. A table keeps its words whole and scrolls inside
+its box. Raw HTML is never rendered, because `rehype-raw` is not loaded. Links
+open as in task Markdown.
 
 The sidebar's **Library** item opens Images, with **Workflows** and **Sources**
 as tabs of one Library header.
@@ -3674,6 +3889,8 @@ Everything else loads with `React.lazy` when it first renders:
   Home and Inbox lists, because it brings the Markdown renderer;
 - the TipTap editor (`tasks/TaskMarkdownEditor.tsx`): `MarkdownEditor` in
   `TaskMarkdown.tsx` is a lazy wrapper, so `MarkdownContent` never loads TipTap;
+- the full role text of the New agent form (`role/RoleMarkdown.tsx`), so the
+  form loads the Markdown renderer only after **Show role**;
 - the file viewer of `FileBrowser`, with CodeMirror, its languages, and the
   highlighted preview;
 - the onboarding tour overlay and the **Changelog** window with
@@ -3706,7 +3923,7 @@ part of the first download.
 `npm run bundle:budget`, a step of `make frontend-check`, has three limits in
 bytes before compression. The entry chunk is limited to 351,000 bytes. The
 entry chunk plus its static imports is limited to 723,000 bytes. All JavaScript
-chunks, lazily loaded ones included, are limited to 3,215,000 bytes. The step
+chunks, lazily loaded ones included, are limited to 3,383,000 bytes. The step
 fails when a size is over its limit. The budget does not measure CSS or the
 start time on a device.
 
@@ -6093,7 +6310,7 @@ and removes the directory afterwards. It checks three sizes against
 | --- | --- |
 | The entry chunk | 351,000 |
 | The initial JavaScript: the entry chunk and every chunk that it imports statically | 723,000 |
-| All JavaScript: every chunk, lazily loaded chunks included | 3,215,000 |
+| All JavaScript: every chunk, lazily loaded chunks included | 3,383,000 |
 
 The sizes are minified bytes before compression. Each limit is the size at
 the time the limit was set, plus 5%, rounded up to 1,000 bytes. When the code
@@ -9358,13 +9575,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.103.0` alpha on an Apple Silicon Mac.
+This path is for the `0.104.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.103.0_aarch64.dmg`;
+- a verified `Tariboy_0.104.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -9734,6 +9951,8 @@ tariboy has four command surfaces:
 | `tariboy maintenance get` | Show database maintenance settings and the last run |
 | `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
 | `tariboy maintenance set` | Change database maintenance settings; unset flags keep their value |
+| `tariboy metrics server` | Server metrics over a period, in total and by agent, image version and workflow version |
+| `tariboy metrics task KEY` | Metrics of one task: lead time, status time, usage, rework, questions, quality, agents and versions |
 | `tariboy onboarding retry` | Register the default Store and build the starter image again when they are missing |
 | `tariboy onboarding status` | Report the first-run state: default Store, starter image, harness CLIs and agent count |
 | `tariboy operation log ID` | Read the log of a background operation |
@@ -9855,6 +10074,42 @@ tariboy iteration ls worker --started-after 2026-09-01 --started-before 2026-09-
 ```
 
 `iteration ls` rows and `iteration inspect` both report a sorted `tags` list.
+
+### Metrics
+
+`tariboy metrics` reports task metrics that the daemon computes from tasks,
+workflow visits, AI requests, iterations and assessments.
+[Metrics](/docs/architecture/metrics) defines each value, its unit and its
+source.
+
+- `tariboy metrics task KEY` prints the metrics of one task. KEY is the
+  current key or an old key of the task.
+- `tariboy metrics server` prints the report of a period: the total and one
+  row for each agent, image version and workflow version.
+
+`metrics server` takes these flags:
+
+| Flag | Value |
+| --- | --- |
+| `--since`, `-s` | RFC 3339 time, inclusive. The default is 30 days before `--until`. |
+| `--until`, `-u` | RFC 3339 time, exclusive. The default is the time of the request. |
+| `--agent`, `-a` | Only the iterations and tasks of this agent |
+| `--image`, `-i` | `NAME` or `NAME:VERSION`. Only the iterations and tasks on this image. |
+| `--workflow`, `-w` | `NAME` or `NAME:VERSION`. Only the iterations and tasks under this workflow. `none` selects work without a workflow. |
+
+Both commands print tables, with times in hours and minutes. The global
+`--json` flag prints the API response, with times in seconds and costs in US
+dollars.
+
+```bash
+tariboy metrics task DEV-42
+tariboy metrics task DEV-42 --json
+tariboy metrics server
+tariboy metrics server --since 2026-10-01T00:00:00Z --until 2026-11-01T00:00:00Z
+tariboy metrics server --agent tariboy-developer-bob
+tariboy metrics server --image developer:0.23.1 --json
+tariboy metrics server --workflow development:0.10.1
+```
 
 ## Agent capability scripts
 
@@ -10920,7 +11175,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.103.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.104.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -11034,7 +11289,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.103.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.104.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -11735,6 +11990,17 @@ or left `open` as described under [Dispatch](#dispatch). The creation is refused
 with `workflow_managed` when it names an explicit assignee, because the workflow
 assigns. A task cannot enter a bound queue by import, and a tree that contains a
 workflow task cannot be exported; both are refused with `workflow_managed`.
+
+A child can be in another queue than its parent
+(`ttasks create --parent KEY --queue OTHER`, or `ttasks move KEY --parent
+OTHER-KEY`). The child follows the workflow of its own queue, or no workflow
+when its queue has none. A child in a bound queue under a flexible parent enters
+the initial status of its queue's workflow like a root task there. A flexible
+child under a workflow task stays flexible. The parent's status, Goal selection,
+and holder do not change. A move never changes the queue or workflow of a task.
+The `active_descendants` check on the parent counts every descendant, also a
+descendant in another queue that the caller cannot see. See
+[Subtasks in another queue](/docs/tasks#subtasks-in-another-queue).
 
 ### Binding from Compose
 
@@ -13309,12 +13575,16 @@ of `P0` Critical, `P1` High, `P2` Normal (the default), or `P3` Low. Root and
 nested sibling sets sort by priority, then manual position, then task key.
 
 Parent/child depth is unlimited. Assigning or authoring an ancestor exposes its
-whole descendant subtree to that agent; otherwise an agent sees only nested
-tasks it authored, tasks assigned to it, and tasks visible through its current
-group. Authoring alone does not expose a root task: see **Filing a task into a
-queue** below. Ancestors needed to render an allowed descendant are returned as
-read-only context. Group membership is resolved when access is checked, not
-copied into the task.
+descendant subtree in the same queue to that agent; otherwise an agent sees only
+nested tasks it authored, tasks assigned to it, and tasks visible through its
+current group. Authoring alone does not expose a root task: see **Filing a task
+into a queue** below. Ancestors needed to render an allowed descendant are
+returned as read-only context. Group membership is resolved when access is
+checked, not copied into the task.
+
+A queue boundary stops both rules. Write access does not pass from a parent to
+a child in another queue, and the read-only ancestor chain stops at a parent in
+another queue. See [Subtasks in another queue](#subtasks-in-another-queue).
 
 An agent explicitly mentioned in an open answer request receives response-only
 access: it can read the task and add the answering comment, but cannot edit,
@@ -13324,9 +13594,11 @@ access.
 `blocks` is directional and cycle-checked; `related` is symmetric. A task is
 ready when it is open, unassigned, has no manual block, and has no active
 incoming blocker. Completing a parent with active descendants returns a
-conflict unless the caller explicitly chooses **complete anyway**. Reading one
-task also returns `descendants` and `active_descendants` for its whole subtree,
-so a tree that keeps growing instead of closing is visible without walking it.
+conflict unless the caller explicitly chooses **complete anyway**. This check
+counts every descendant, also one the caller cannot see. Reading one task also
+returns `descendants` and `active_descendants` for the part of its subtree that
+the reader can see, so a tree that keeps growing instead of closing is visible
+without walking it.
 
 Flexible tasks use `open`, `in_progress`, `wait_customer`, `done`, or
 `cancelled` status. When the assigned agent asks the task customer a question,
@@ -13382,10 +13654,95 @@ defect it noticed outside its current assignment. Triage stays with the queue's
 has none, that notification goes to the customer instead. To let a specific
 agent triage a queue, the customer adds it to the queue's owners.
 
+The same rule applies to a child that an agent creates in a queue it does not
+run (`ttasks create --parent KEY --queue OTHER`). A filed child differs in one
+point: its author keeps read-only (`context`) access to it, and the create
+response carries `filed: true` and `access: "context"`. The author cannot
+change, claim, comment on, or complete that child.
+
 `ttasks move KEY --to-root` detaches a task from its parent, which is the
 inverse operation: the task becomes a root, and the mover loses access to it
 unless it is the assignee or runs the queue. A move without `--parent`,
 `--before`, or `--to-root` is refused rather than treated as a detach.
+
+## Subtasks in another queue
+
+A task can have a child in another queue. The child keeps its own queue, key,
+workflow, and status. Only its parent link crosses the queue boundary.
+
+Create a child in another queue with `--parent` and `--queue`:
+
+```bash
+ttasks create --parent TARI-ab12 --queue DESIGN --title "Draw the screens"
+```
+
+The creator must have write access to the parent. In the child's queue, the
+ordinary rules of that queue apply:
+
+- If the creator runs the queue, the create is ordinary. `--assignee` and
+  `--group` are allowed.
+- If the creator does not run the queue, a create without `--assignee` is
+  filed (see **Filing a task into a queue**). A create with `--assignee` gives
+  that agent the task and its same-queue descendants. `--group` is refused with
+  `report_cannot_assign`.
+- If the queue has a workflow, the child enters the workflow's initial status,
+  and an explicit `--assignee` is refused with `workflow_managed`.
+
+The child takes the parent's customer. It does not take the parent's group,
+because a group gives write access without the tree. Without `--queue`, or with
+the parent's queue, a child takes the parent's queue and group as before.
+
+Access stops at the queue boundary:
+
+| Who | Access to the child in another queue | Access to the parent |
+| --- | --- | --- |
+| An agent that writes the parent, by queue, assignment, or group | None | Unchanged |
+| The child's assignee, or an agent that runs the child's queue | Write, and write on its same-queue descendants | None |
+| The child's author, with no other rule | Read-only (`context`) | Unchanged |
+| The customer | Write | Write |
+
+A workflow task keeps its workflow rules: the status holder, the customer pool,
+and `workflow_managed`. A visible child shows its `parent_key` even when the
+reader cannot see the parent. `ttasks list --subtree KEY` returns only the
+descendants that the reader can see, each with its `queue` and `status`.
+
+Move an existing task under a parent in another queue with `--parent`:
+
+```bash
+ttasks move DEV-ab12 --parent TARILEAD-cd34
+```
+
+A move changes only the parent. The task keeps its queue, key, workflow, and
+status. To change the queue of a task, use `ttasks requeue`, which creates a new
+task (see [Moving a task to another queue](#moving-a-task-to-another-queue)).
+These rules apply to the move:
+
+- The mover must have write access to the task and to the new parent.
+- The task and the new parent must have the same customer. Otherwise the move
+  is refused with `scope_change`. A group mismatch is refused only when the new
+  parent is in the same queue.
+- The same-queue descendants of the task move with it. Its children in other
+  queues stay under it.
+- Order is kept per queue under a parent. `--before KEY` must name a task of the
+  moved task's queue with the same priority. A task of another queue is refused
+  with `invalid_before`. Without `--parent`, the task moves under the parent of
+  the `--before` task, even when that parent is in another queue.
+- `--to-root` on a task whose parent is in another queue also needs write
+  access to that parent. Otherwise the owner of the child could take ordered
+  work out of a tree that it does not run. For a parent in the same queue, write
+  access to the task is enough.
+
+Events for the child, such as `task.created` and `task.moved`, are recorded on
+the child. Only a reader that can see the child receives them. The owner of the
+parent who cannot see the child gets no event and no notification about it.
+
+A hidden active child still blocks the completion of its parent with
+`active_descendants`. The error gives only the count. The customer sees the
+keys.
+
+The export for [Moving a task to another server](#moving-a-task-to-another-server)
+refuses a tree with a task in another queue with `cross_queue_subtree`. Move or
+detach those tasks first.
 
 ## Questions and notifications
 
@@ -13639,6 +13996,9 @@ original authors and times, and the relations whose two ends are both inside
 that subtree. What does not move: the event log, notifications, reminders,
 relations pointing outside the subtree.
 
+This daemon refuses the export when the subtree has a task in another queue
+(`cross_queue_subtree`) or a task that follows a workflow (`workflow_managed`).
+
 The target daemon refuses the import, changing nothing, when:
 
 - it has no queue with the same prefix (`queue_not_found`);
@@ -13716,6 +14076,7 @@ ttasks ready --claim
 ttasks show TEST-fkt3
 ttasks create --queue TEST --title "Investigate failure" --priority P1
 ttasks create --parent TEST-fkt3 --title "Add regression test"
+ttasks create --parent TEST-fkt3 --queue DESIGN --title "Draw the screens"
 ttasks assign TEST-fkt3 worker
 ttasks update TEST-fkt3 --priority P0
 ttasks update TEST-fkt3 --pull-request https://example.com/org/repo/pull/42

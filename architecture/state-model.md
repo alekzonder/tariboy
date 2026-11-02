@@ -407,9 +407,19 @@ inserts the default `TASK` queue when no queue has that prefix. Recursive
 CTEs derive descendants, inherited access, blocking cycles, and active
 descendants without a configured depth limit.
 
+`visibleCTE` in `internal/tasks/repo.go` is the one visibility rule for an
+agent. A parent can have a child in another queue. The recursive step that
+gives write access to descendants follows only a child with the same
+`queue_prefix` as its parent. The read-only ancestor chain also stops at a
+parent in another queue. The author of a child in another queue gets rank 0
+(`context`) for that child only. Authorship gives write access only to a child
+in its parent's queue.
+
 Priority is persisted as a constrained `P0` through `P3` value and defaults to
 `P2`. Every root or nested sibling set has canonical order `(priority,
-position, task key)`. Manual positions are normalized within a priority bucket,
+position, task key)`. Positions are kept per `(queue_prefix, parent_id,
+priority)`, so the children of one parent that are in different queues have
+separate orders. Manual positions are normalized within a priority bucket,
 so reparenting preserves priority without disturbing other buckets.
 
 `started_at` records the first time a task's status became `in_progress` and

@@ -448,9 +448,11 @@ all derived from it.
 - **Some commands run in the CLI.** A command with `Local` runs in the CLI
   process instead of over HTTP: `daemon start|stop|restart|status|logs`,
   `update`, the `compose` verbs, `image build`, `workflow build`,
-  `operation ls` and `operation log`. `daemon status`, the build verbs and the
-  operation verbs also keep their HTTP routes; the CLI side of a build starts
-  the operation and reads its log over the socket.
+  `operation ls`, `operation log`, `metrics task` and `metrics server`.
+  `daemon status`, the build verbs, the operation verbs and the metrics verbs
+  also keep their HTTP routes; the CLI side of a build starts the operation
+  and reads its log over the socket, and the CLI side of a metrics verb reads
+  the report over the socket and prints it as tables.
   `AbsPathArgs` names the path arguments the CLI makes absolute, and
   `ExitCodeFrom` derives the CLI exit code from a result.
 - **Results are typed Go structs.** A handler returns a named struct, never
