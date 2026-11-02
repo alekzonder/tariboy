@@ -62,7 +62,7 @@ describe("compareRows", () => {
   });
 
   it("gives each unknown value its own reason", () => {
-    const a = slice({ lead_time_median_s: null, avg: null });
+    const a = slice({ lead_time_median_s: null, avg: undefined });
     a.tasks.quality = { ...a.tasks.quality!, role: null };
     const rows = compareRows(a, undefined);
     const reasons = (id: string) => {
