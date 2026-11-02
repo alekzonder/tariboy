@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { RefreshCw } from "lucide-react";
 import TabPage from "@/components/TabPage";
 import { AboutNumbers } from "@/components/metrics/AboutNumbers";
 import { MetricsCards } from "@/components/metrics/MetricsCards";
@@ -30,55 +29,13 @@ import { hostToParam } from "@/lib/terminalsHost";
 import { cn } from "@/lib/utils";
 import { AgentsTable } from "./AgentsTable";
 import { FilterChips, MetricsToolbar } from "./MetricsToolbar";
+import { PageHeading } from "./PageHeading";
 
 const VIEWS = [
   { value: "agents", label: "Agents" },
   { value: "images", label: "Images" },
   { value: "workflows", label: "Workflows" },
 ] as const satisfies ReadonlyArray<{ value: MetricsView; label: string }>;
-
-const hhmm = (date: Date) =>
-  date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-
-/** The title, with Refresh and the time of the last answer on the right. */
-export function PageHeading({
-  title,
-  subtitle,
-  updatedAt,
-  updating,
-  disabled,
-  onRefresh,
-}: {
-  title: ReactNode;
-  subtitle: ReactNode;
-  updatedAt: Date | null;
-  updating: boolean;
-  disabled: boolean;
-  onRefresh: () => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-2">
-      <div className="min-w-0">
-        <h1 className="text-xl font-semibold">{title}</h1>
-        <p className="text-sm break-words text-muted-foreground">{subtitle}</p>
-      </div>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {updatedAt && <span>Updated {hhmm(updatedAt)}</span>}
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          aria-busy={updating}
-          disabled={disabled}
-          onClick={onRefresh}
-        >
-          <RefreshCw aria-hidden="true" />
-          {updating ? "Updating…" : "Refresh"}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 /** What shows in place of the numbers when the period has none. */
 function EmptyPeriod({
