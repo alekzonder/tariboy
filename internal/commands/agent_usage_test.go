@@ -105,6 +105,55 @@ func TestAgentUsageGroupingAndTotals(t *testing.T) {
 	}
 }
 
+// TestAgentUsageGroupsCrossQueueGoalByTaskAndRealRoot: cost of a goal in
+// another queue than its root is grouped on the goal by task and on the real
+// root by epic, although the agent cannot read that root.
+func TestAgentUsageGroupsCrossQueueGoalByTaskAndRealRoot(t *testing.T) {
+	t.Parallel()
+	c, as, _ := ctxWithStore(t)
+	if err := as.Create(agent.Agent{Name: "alice", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	taskService := tasks.NewService(c.Store.DB, "customer", time.Now)
+	c.Tasks = taskService
+	customer := tasks.CustomerActor("customer")
+	for _, prefix := range []string{"ROOTQ", "WORKQ"} {
+		if _, err := taskService.CreateQueue(t.Context(), customer, tasks.CreateQueueInput{Prefix: prefix, Name: prefix}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root, err := taskService.CreateTask(t.Context(), customer, tasks.CreateTaskInput{Queue: "ROOTQ", Title: "Project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, err := taskService.CreateTask(t.Context(), customer, tasks.CreateTaskInput{ParentKey: root.Key, Title: "Parent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf, err := taskService.CreateTask(t.Context(), customer, tasks.CreateTaskInput{ParentKey: parent.Key, Queue: "WORKQ",
+		Title: "Order", Assignee: "alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ap := aiproxy.NewStore(c.Store, nil)
+	if err := ap.Insert(aiproxy.AIRequest{ID: "r1", TS: time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC).Format(time.RFC3339Nano),
+		Agent: "alice", Iteration: "it-1", Model: "claude-opus-4-8", InputTokens: 10, OutputTokens: 5,
+		CostUSD: 0.30, Status: "ok", TaskID: leaf.Key, EpicID: root.Key}); err != nil {
+		t.Fatal(err)
+	}
+
+	for groupBy, key := range map[string]string{"task": leaf.Key, "epic": root.Key} {
+		res, err := h(t, "agent.usage")(c, registry.Params{"name": "alice", "group_by": groupBy})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows := res.(AgentUsage).Rows
+		if got := agentUsageRowsByKey(rows)[key]; len(rows) != 1 || got == nil || got.Requests != 1 || got.CostUSD != 0.30 {
+			t.Fatalf("group_by=%s rows = %+v, want one row %s", groupBy, rows, key)
+		}
+	}
+}
+
 // agentUsageRowsByKey indexes agent.usage rows by their key.
 func agentUsageRowsByKey(rows []AgentUsageRow) map[string]*AgentUsageRow {
 	out := map[string]*AgentUsageRow{}
