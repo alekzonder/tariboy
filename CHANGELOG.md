@@ -1,3 +1,15 @@
+## [0.105.0] - 2026-11-02
+
+### Added
+
+- The web UI has a Metrics item in the sidebar. `/metrics` shows the task metrics for a period. You can filter them by agent, image and workflow. Tables show the agents, images and workflows. `/metrics/compare` compares two versions of one image or workflow. Activity and Settings → Usage & budgets link to Metrics.
+
+### Fixed
+
+- An agent can start an iteration and run `goal set` when its goal is a child task in another queue. Before, both failed with `task ... not found`. AI usage goes to the real root task. The agent does not get the key of a root task that it cannot read.
+
+[0.105.0]: https://github.com/alekzonder/tariboy/compare/v0.104.0...v0.105.0
+
 ## [0.104.0] - 2026-11-02
 
 ### Added
