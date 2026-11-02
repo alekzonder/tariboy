@@ -82,9 +82,7 @@ describe("metricsErrorKind", () => {
     expect(metricsErrorKind(new ApiError(400, "bad_time", "since is not RFC 3339"))).toBe(
       "bad_time",
     );
-    expect(metricsErrorKind(new ApiError(400, "invalid_param", "bad image"))).toBe(
-      "invalid_param",
-    );
+    expect(metricsErrorKind(new ApiError(400, "invalid_param", "bad image"))).toBe("invalid_param");
     expect(metricsErrorKind(new ApiError(404, "not_found", "unknown route GET /api/metrics"))).toBe(
       "old_daemon",
     );

@@ -45,15 +45,20 @@ describe("metrics api", () => {
   it("passes the caller's signal, so a newer request can cancel an older one", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockImplementation(
-        (_url: string, init: RequestInit) =>
-          new Promise((_resolve, reject) =>
-            init.signal?.addEventListener("abort", () => reject(new Error("aborted"))),
-          ),
-      ),
+      vi
+        .fn()
+        .mockImplementation(
+          (_url: string, init: RequestInit) =>
+            new Promise((_resolve, reject) =>
+              init.signal?.addEventListener("abort", () => reject(new Error("aborted"))),
+            ),
+        ),
     );
     const controller = new AbortController();
-    const pending = createApi(null).metrics.getMetrics({ since: "a", until: "b" }, controller.signal);
+    const pending = createApi(null).metrics.getMetrics(
+      { since: "a", until: "b" },
+      controller.signal,
+    );
     controller.abort();
     await expect(pending).rejects.toThrow("aborted");
   });

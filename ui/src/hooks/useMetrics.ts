@@ -34,18 +34,16 @@ export function useMetrics(filter: MetricsFilter | null) {
   useEffect(() => {
     if (!request) return;
     const controller = new AbortController();
-    api.metrics
-      .getMetrics({ since, until, agent, image, workflow }, controller.signal)
-      .then(
-        (report) => {
-          if (!controller.signal.aborted) {
-            setAnswer({ request, report, error: null, updatedAt: new Date() });
-          }
-        },
-        (error: unknown) => {
-          if (!controller.signal.aborted) setAnswer((prev) => ({ ...prev, request, error }));
-        },
-      );
+    api.metrics.getMetrics({ since, until, agent, image, workflow }, controller.signal).then(
+      (report) => {
+        if (!controller.signal.aborted) {
+          setAnswer({ request, report, error: null, updatedAt: new Date() });
+        }
+      },
+      (error: unknown) => {
+        if (!controller.signal.aborted) setAnswer((prev) => ({ ...prev, request, error }));
+      },
+    );
     return () => controller.abort();
   }, [api, request, since, until, agent, image, workflow]);
 

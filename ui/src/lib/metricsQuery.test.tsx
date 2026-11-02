@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import type { PropsWithChildren } from "react";
@@ -64,25 +64,28 @@ describe("metrics period", () => {
   });
 
   it("keeps the window still until the period changes or refresh is asked", () => {
-    let location = "";
-    function Spy() {
-      location = useLocation().search;
-      return null;
-    }
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
     const wrapper = ({ children }: PropsWithChildren) => (
-      <MemoryRouter initialEntries={["/metrics?period=week&agent=a"]}>
-        <Spy />
-        {children}
-      </MemoryRouter>
+      <MemoryRouter initialEntries={["/metrics?period=week&agent=a"]}>{children}</MemoryRouter>
     );
-    const { result } = renderHook(() => useMetricsWindow(), { wrapper });
-    const first = result.current.window.until;
+    const { result, rerender } = renderHook(
+      () => ({ ...useMetricsWindow(), search: useLocation().search }),
+      { wrapper },
+    );
+    expect(result.current.window.until).toBe(NOW.toISOString());
+    const later = new Date(NOW.getTime() + 5 * 60e3);
+    vi.setSystemTime(later);
+    rerender();
+    expect(result.current.window.until).toBe(NOW.toISOString());
+    act(() => result.current.refresh());
+    expect(result.current.window.until).toBe(later.toISOString());
     act(() => result.current.setPeriod("quarter"));
-    expect(location).toBe("?period=quarter&agent=a");
+    expect(result.current.search).toBe("?period=quarter&agent=a");
     expect(result.current.window.period).toBe("quarter");
     act(() => result.current.setCustom("since", "2026-10-01T10:00"));
-    expect(location).toContain("since=2026-10-01T10%3A00");
-    expect(typeof first).toBe("string");
+    expect(result.current.search).toContain("since=2026-10-01T10%3A00");
+    vi.useRealTimers();
   });
 });
 

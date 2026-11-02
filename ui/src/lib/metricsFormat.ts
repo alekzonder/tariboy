@@ -6,6 +6,13 @@ import type { MetricsTokens } from "@/lib/api";
 /** Below this many done tasks a version comparison warns that it can be random. */
 export const SMALL_SAMPLE_TASKS = 5;
 
+/** The assessment axes, in the order every screen shows them. */
+export const QUALITY_AXES = [
+  { key: "image_process", label: "Image and process" },
+  { key: "role", label: "Role" },
+  { key: "task_fit", label: "Task fit" },
+] as const;
+
 /** Why a value is not known, for the hint and the screen reader. */
 export const UNKNOWN_REASON = {
   leadTime: "No completed task with a start time in this period.",
