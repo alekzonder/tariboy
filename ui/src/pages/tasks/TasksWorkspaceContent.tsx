@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Queue } from "@/lib/api";
 import { errorText } from "@/lib/errors";
+import { parentQueueOf } from "@/lib/taskTree";
 import QueueSettingsDialog from "./QueueSettingsDialog";
 import { TaskFilterBar } from "./TaskFilterBar";
 import TaskDetail, { TaskDetailLoading } from "./TaskDetail";
@@ -127,7 +128,7 @@ export function TasksWorkspaceContent({
         {creatingParent && (
           <TaskForm
             queues={queues}
-            initialQueue={tasks.find((task) => task.key === creatingParent)?.queue || queue}
+            initialQueue={parentQueueOf(creatingParent, tasks)}
             parentKey={creatingParent}
             onCreate={create}
             onCancel={() => setCreatingParent(null)}
@@ -191,6 +192,8 @@ function TasksWorkspaceList({
   return (
     <TaskTree
       tasks={data.visibleTasks}
+      knownTasks={data.listedTasks}
+      queues={data.queues}
       mode={scopeAgent ? "agent" : "all"}
       activeQuestionTaskKeys={data.activeQuestionTaskKeys}
       expanded={expanded}

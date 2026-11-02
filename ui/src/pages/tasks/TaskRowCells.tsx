@@ -1,4 +1,4 @@
-import { ChevronRight, TriangleAlert } from "lucide-react";
+import { ChevronRight, CornerLeftUp, TriangleAlert } from "lucide-react";
 import { useState, type CSSProperties, type ReactNode } from "react";
 import {
   DropdownMenu,
@@ -9,14 +9,15 @@ import {
 import { PriorityTag, StatusPill } from "@/components/ui/status";
 import { cn } from "@/lib/utils";
 import { TONE_TEXT, taskTone } from "@/lib/statusTone";
-import { taskPriority, type TaskPriority, type WorkflowAttention } from "@/lib/api";
+import { taskPriority, type Queue, type TaskPriority, type WorkflowAttention } from "@/lib/api";
 import {
   isWorkflowTask,
   taskStatusLabel,
   workflowAttentionTone,
   workflowStatusBadge,
 } from "@/lib/tasks";
-import type { VisibleTaskRow } from "@/lib/taskTree";
+import { queueMarkerLabel, type TaskParentLink, type VisibleTaskRow } from "@/lib/taskTree";
+import QueueMarker from "./QueueMarker";
 import type { TaskColumnId } from "./taskColumnLayout";
 import { INDENT_PX, MAX_INDENT_DEPTH } from "./taskColumns";
 import { formatTaskDuration, formatTaskTime } from "./taskTime";
@@ -45,7 +46,11 @@ interface TaskRowCellProps {
   expanded: boolean;
   onToggle: () => void;
   onSelect: () => void;
+  /** Opens another task in the panel: the parent a row links to. */
+  onOpenTask?: (key: string) => void;
   onPriorityChange?: (priority: TaskPriority) => Promise<void> | void;
+  /** The queues, for the names in a queue marker. */
+  queues?: readonly Queue[];
 }
 
 /** A problem on a workflow task, as one mark the row has room for; the title
@@ -92,7 +97,7 @@ function PriorityCell({ row, style, readOnly, onPriorityChange }: TaskRowCellPro
   );
 }
 
-function KeyCell({ row, style, expanded, onToggle }: TaskRowCellProps) {
+function KeyCell({ row, style, expanded, onToggle, queues }: TaskRowCellProps) {
   return (
     <span
       data-column="key"
@@ -114,6 +119,9 @@ function KeyCell({ row, style, expanded, onToggle }: TaskRowCellProps) {
           className={cn("size-2.5 transition-transform duration-[120ms]", expanded && "rotate-90")}
         />
       </button>
+      {row.crossQueue && row.parentQueue && (
+        <QueueMarker label={queueMarkerLabel(row.task, row.parentQueue, queues ?? [])} />
+      )}
       <span className="min-w-0 truncate font-mono text-meta text-muted-foreground tabular-nums">
         {row.task.key}
       </span>
@@ -121,28 +129,67 @@ function KeyCell({ row, style, expanded, onToggle }: TaskRowCellProps) {
   );
 }
 
-function TitleCell({ row, hasActiveQuestion, onSelect }: TaskRowCellProps) {
+/** `in KEY` after the title of a root whose parent is in another queue. On a
+ *  phone only the icon stays, on a 24px target. */
+function ParentLink({ link, onOpenTask }: { link: TaskParentLink; onOpenTask?: (key: string) => void }) {
+  const content = (
+    <>
+      <CornerLeftUp aria-hidden="true" className="size-3" />
+      <span data-parent-link-text className="hidden sm:inline">
+        in <span className="font-mono">{link.key}</span>
+      </span>
+    </>
+  );
+  const look = "inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center gap-1 text-meta text-muted-foreground";
+  if (!link.canOpen || !onOpenTask) {
+    return (
+      <span title="You cannot open this task" className={look}>
+        {content}
+      </span>
+    );
+  }
   return (
     <button
       type="button"
-      data-column="task"
-      className="task-row-main relative z-2 flex min-w-0 flex-1 items-center gap-1.75 overflow-hidden text-left"
-      onClick={onSelect}
+      aria-label={`Open parent task ${link.key}`}
+      className={cn(
+        look,
+        "rounded-sm hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+      )}
+      onClick={() => onOpenTask(link.key)}
     >
-      <span className="min-w-0 truncate">{row.task.title}</span>
-      {hasActiveQuestion && (
-        <span
-          className="size-1.25 shrink-0 rounded-full bg-primary"
-          role="img"
-          aria-label={`Unread question notification for ${row.task.key}`}
-        />
-      )}
-      {row.task.blocked && (
-        <StatusPill tone="danger" size="sm">
-          blocked
-        </StatusPill>
-      )}
+      {content}
     </button>
+  );
+}
+
+function TitleCell({ row, hasActiveQuestion, onSelect, onOpenTask }: TaskRowCellProps) {
+  return (
+    <span
+      data-column="task"
+      className="relative z-2 flex min-w-0 flex-1 items-center gap-1.75 overflow-hidden"
+    >
+      <button
+        type="button"
+        className="task-row-main flex min-w-0 items-center gap-1.75 overflow-hidden text-left"
+        onClick={onSelect}
+      >
+        <span className="min-w-0 truncate">{row.task.title}</span>
+        {hasActiveQuestion && (
+          <span
+            className="size-1.25 shrink-0 rounded-full bg-primary"
+            role="img"
+            aria-label={`Unread question notification for ${row.task.key}`}
+          />
+        )}
+        {row.task.blocked && (
+          <StatusPill tone="danger" size="sm">
+            blocked
+          </StatusPill>
+        )}
+      </button>
+      {row.parentLink && <ParentLink link={row.parentLink} onOpenTask={onOpenTask} />}
+    </span>
   );
 }
 

@@ -1,7 +1,7 @@
-import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { useDndContext, useDraggable, useDroppable } from "@dnd-kit/core";
 import { GripVertical, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { TaskPriority } from "@/lib/api";
+import type { Queue, TaskPriority } from "@/lib/api";
 import type { VisibleTaskRow } from "@/lib/taskTree";
 import { useTaskColumns } from "./taskColumnLayout";
 import { TASK_COLUMNS, type TaskRowMode } from "./taskColumns";
@@ -29,10 +29,16 @@ export default function TaskRow({
   goal = false,
   onToggle,
   onSelect,
+  onOpenTask,
   onAddChild,
   onPriorityChange,
+  queues,
 }: {
   row: VisibleTaskRow;
+  /** The queues, for the names in a queue marker. */
+  queues?: readonly Queue[];
+  /** Opens another task, such as the parent a root links to. */
+  onOpenTask?: (key: string) => void;
   mode: TaskRowMode;
   hasActiveQuestion: boolean;
   expanded: boolean;
@@ -50,7 +56,11 @@ export default function TaskRow({
   const { setNodeRef, setActivatorNodeRef, isDragging, listeners, attributes } = useDraggable({
     id: row.task.key,
     disabled: readOnly,
+    data: { crossQueue: !!row.crossQueue },
   });
+  // A child from another queue cannot move among siblings, so no row offers
+  // it a place before or after itself.
+  const besideAllowed = !useDndContext().active?.data.current?.crossQueue;
   const { setNodeRef: setBeforeRef, isOver: overBefore } = useDroppable({
     id: `before:${row.task.key}`,
     disabled: readOnly,
@@ -72,7 +82,9 @@ export default function TaskRow({
     expanded,
     onToggle,
     onSelect,
+    onOpenTask,
     onPriorityChange,
+    queues,
   };
   return (
     <div
@@ -100,7 +112,7 @@ export default function TaskRow({
       <span
         ref={setBeforeRef}
         data-testid={`drop-before-${row.task.key}`}
-        className={`task-drop-zone before ${overBefore ? "is-over" : ""}`}
+        className={`task-drop-zone before ${overBefore && besideAllowed ? "is-over" : ""}`}
       />
       <span
         ref={setInsideRef}
@@ -110,7 +122,7 @@ export default function TaskRow({
       <span
         ref={setAfterRef}
         data-testid={`drop-after-${row.task.key}`}
-        className={`task-drop-zone after ${overAfter ? "is-over" : ""}`}
+        className={`task-drop-zone after ${overAfter && besideAllowed ? "is-over" : ""}`}
       />
       {/* The grip lives in the row's own left padding: the reference table has
           no column for it, and it is only there under the pointer anyway. */}

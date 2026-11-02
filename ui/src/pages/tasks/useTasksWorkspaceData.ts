@@ -6,6 +6,7 @@ import { useApiQuery } from "@/hooks/useApiQuery";
 import { isConnectionError, type Task } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 import { countTasksByQueue } from "@/lib/tasks";
+import { filterTasksByQueue } from "@/lib/taskTree";
 import { tasksWithQuestionsAndOpen, unreadQuestionTaskKeys } from "@/lib/taskList";
 import { taskListScope } from "./taskListScope";
 import { taskKeys, taskQueries } from "./taskQueries";
@@ -118,8 +119,9 @@ export function useTasksWorkspaceData(
   });
 
   // The queue filter is applied here rather than in `listTasks`, so the queue
-  // menu can count the queues from the same load instead of asking again.
-  const visibleTasks = queue ? listedTasks.filter((task) => task.queue === queue) : listedTasks;
+  // menu can count the queues from the same load instead of asking again. It
+  // keeps the queue's tasks with their subtrees from every queue.
+  const visibleTasks = queue ? filterTasksByQueue(listedTasks, queue) : listedTasks;
   const queueCounts = useMemo(() => countTasksByQueue(tasks), [tasks]);
 
   return {
@@ -141,6 +143,7 @@ export function useTasksWorkspaceData(
     loadMetadata,
     setTasks,
     activeQuestionTaskKeys,
+    listedTasks,
     visibleTasks,
     queueCounts,
   };
