@@ -84,6 +84,7 @@ func writeRichWorkflowSource(t *testing.T) string {
 	files := map[string]string{
 		"Workflowfile.yaml":   workflowRichManifest,
 		"statuses/plan.md":    "plan the work\n",
+		"ROLE.md":             "# Rich workflow\n\nPlans and checks the work.\n",
 		"scripts/incoming.sh": "#!/bin/sh\nexit 0\n",
 		"scripts/check.sh":    "#!/bin/sh\nexit 0\n",
 		"scripts/monitor.sh":  "#!/bin/sh\nexit 0\n",

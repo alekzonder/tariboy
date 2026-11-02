@@ -28,7 +28,8 @@ type Registry struct {
 	OnPublished func(name string)
 }
 
-// insert records m. An existing row for the digest is left as it is; a row
+// insert records m. An existing row for the digest is left as it is, except
+// that a row recorded before ROLE.md was read gains the role of m; a row
 // holding the same name and version under another digest is an error.
 func (r *Registry) insert(m Manifest) error {
 	data, err := json.Marshal(m)
@@ -40,7 +41,8 @@ func (r *Registry) insert(m Manifest) error {
 	builtAt, _ := store.NormalizeTimeValue(m.BuiltAt)
 	_, err = r.DB.Exec(
 		`INSERT INTO task_workflow_images (digest, name, version, manifest, built_at) VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT(digest) DO NOTHING`,
+		 ON CONFLICT(digest) DO UPDATE SET manifest = json_set(task_workflow_images.manifest, '$.role', json_extract(excluded.manifest, '$.role'))
+		 WHERE json_type(task_workflow_images.manifest, '$.role') IS NULL AND json_type(excluded.manifest, '$.role') = 'object'`,
 		m.Digest, m.Name, m.Version, string(data), builtAt)
 	return err
 }

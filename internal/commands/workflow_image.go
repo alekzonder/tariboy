@@ -12,6 +12,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/operations"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/rolefile"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -153,7 +154,7 @@ func workflowBuild() registry.Command {
 		Path:        "workflow.build",
 		AbsPathArgs: []string{"path"},
 		Summary:     "Start a background build of a workflow image from a Workflowfile.yaml",
-		Help:        "The daemon builds the workflow image as an operation. The CLI prints the operation log until the build ends, then the result; --detach prints only the operation id.",
+		Help:        "The daemon builds the workflow image as an operation. The CLI prints the operation log until the build ends, then the result; --detach prints only the operation id. An optional ROLE.md next to Workflowfile.yaml goes into the manifest field role (up to 65536 bytes; a longer file is cut with a warning). It never enters the Goal block or a prompt.",
 		Args: append([]registry.Arg{
 			{Name: "source", Type: registry.String, Help: "Store selector (store/workflow)"},
 			{Name: "path", Flag: "path", Type: registry.String, Help: "Workflowfile.yaml or its directory"},
@@ -219,7 +220,22 @@ func runWorkflowBuild(c *registry.Ctx, params registry.Params, log *operations.L
 	} else {
 		log.Printf("%s %s is already published with digest %s", m.Name, m.Version, m.Digest)
 	}
+	logRoleTruncation(m, log)
 	return WorkflowImageBuildResult{Name: m.Name, Version: m.Version, Digest: m.Digest, Tags: nonNil(tags), Created: created}, nil
+}
+
+// logRoleTruncation warns when the manifest kept only part of ROLE.md. The
+// source size is the size of the ROLE.md file entry.
+func logRoleTruncation(m workflowimage.Manifest, log *operations.Log) {
+	if m.Role == nil || !m.Role.Truncated {
+		return
+	}
+	for _, f := range m.Files {
+		if f.Path == rolefile.FileName {
+			log.Printf("%s", rolefile.Warning(f.Size))
+			return
+		}
+	}
 }
 
 func workflowLs() registry.Command {

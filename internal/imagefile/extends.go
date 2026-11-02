@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/alekzonder/tariboy/internal/rolefile"
 	"github.com/alekzonder/tariboy/internal/safefs"
 	"gopkg.in/yaml.v3"
 )
@@ -124,6 +125,10 @@ func Assemble(dir, root string, roots ResolveRoots, install func(dir string) err
 // assembleLayer copies one layer into build and rewrites src's paths so they
 // keep naming the same files from build.
 func assembleLayer(k int, layer, build string, src *V2, install func(string) error) error {
+	// ROLE.md is never inherited: only the last layer's own file may remain.
+	if err := os.Remove(filepath.Join(build, rolefile.FileName)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	if err := copyTree(layer, build); err != nil {
 		return err
 	}

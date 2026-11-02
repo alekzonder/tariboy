@@ -1,6 +1,9 @@
 package image
 
-import "github.com/alekzonder/tariboy/internal/agentskills"
+import (
+	"github.com/alekzonder/tariboy/internal/agentskills"
+	"github.com/alekzonder/tariboy/internal/rolefile"
+)
 
 const ManifestSchemaVersion = 2
 
@@ -58,4 +61,10 @@ type Manifest struct {
 	// Bare marks an instructions-free image: the runner launches the harness
 	// with no assembled prompt, no bin shims on PATH and no i-am-done tooling.
 	Bare bool `json:"bare,omitempty"`
+	// Role is ROLE.md from the build context root. It is metadata only and
+	// never enters the prompt or the agent directory.
+	Role *rolefile.Role `json:"role,omitempty"`
+	// RoleSourceBytes is the size of the ROLE.md the build read, for the
+	// truncation warning. It is not stored.
+	RoleSourceBytes int64 `json:"-"`
 }

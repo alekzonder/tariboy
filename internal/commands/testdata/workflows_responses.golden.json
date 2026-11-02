@@ -221,7 +221,7 @@
   },
   "workflow.build rich": {
     "created": true,
-    "digest": "9ccdad4f2505699d72a83faf9ef218362ca676e84d1dfcb03e24dbf070ed37a6",
+    "digest": "39040b9a6481cf46c8931f715443e1235d613f0c56065c3f9c941925c427425d",
     "name": "rich",
     "tags": [
       "0.1.0",
@@ -408,8 +408,14 @@
       "watch_spacing": "30s",
       "workflow_version": "0.1.0"
     },
-    "digest": "9ccdad4f2505699d72a83faf9ef218362ca676e84d1dfcb03e24dbf070ed37a6",
+    "digest": "39040b9a6481cf46c8931f715443e1235d613f0c56065c3f9c941925c427425d",
     "files": [
+      {
+        "executable": false,
+        "path": "ROLE.md",
+        "sha256": "f9a97a1f8b61effe89820069a249b992020bbb3e32b14db568f02315dce72ada",
+        "size": 44
+      },
       {
         "executable": false,
         "path": "Workflowfile.yaml",
@@ -442,6 +448,11 @@
       }
     ],
     "name": "rich",
+    "role": {
+      "limit_bytes": 65536,
+      "text": "# Rich workflow\n\nPlans and checks the work.\n",
+      "truncated": false
+    },
     "schema_version": 1,
     "version": "0.1.0"
   },
@@ -464,14 +475,14 @@
       },
       {
         "built_at": "$VOLATILE",
-        "digest": "9ccdad4f2505699d72a83faf9ef218362ca676e84d1dfcb03e24dbf070ed37a6",
+        "digest": "39040b9a6481cf46c8931f715443e1235d613f0c56065c3f9c941925c427425d",
         "name": "rich",
         "tag": "0.1.0",
         "version": "0.1.0"
       },
       {
         "built_at": "$VOLATILE",
-        "digest": "9ccdad4f2505699d72a83faf9ef218362ca676e84d1dfcb03e24dbf070ed37a6",
+        "digest": "39040b9a6481cf46c8931f715443e1235d613f0c56065c3f9c941925c427425d",
         "name": "rich",
         "tag": "latest",
         "version": "0.1.0"

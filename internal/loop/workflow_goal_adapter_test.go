@@ -44,7 +44,7 @@ func workflowGoalFixture(t *testing.T) (*tasks.Service, *workflowimage.Store, ta
 		t.Fatal(err)
 	}
 	src := t.TempDir()
-	for rel, content := range map[string]string{"Workflowfile.yaml": adapterWorkflow, "statuses/work.md": "Do the work.\n"} {
+	for rel, content := range map[string]string{"Workflowfile.yaml": adapterWorkflow, "statuses/work.md": "Do the work.\n", "ROLE.md": goalRoleMarker + "\n"} {
 		p := filepath.Join(src, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
@@ -134,5 +134,23 @@ func TestTaskWorkflowGoalsReadsTheViewAndTheInstructions(t *testing.T) {
 	}
 	if got := RuntimeGoal(ctx, src, task, "dev-1", log); !strings.Contains(got, "\n\nYour question to the customer is open.") {
 		t.Fatalf("holder question:\n%s", got)
+	}
+}
+
+// goalRoleMarker is the text of the fixture's ROLE.md. ROLE.md is manifest
+// metadata only and must never reach the Goal block.
+const goalRoleMarker = "GOAL-ROLE-MARKER-9b1e"
+
+func TestWorkflowGoalLeavesOutRole(t *testing.T) {
+	t.Parallel()
+	svc, images, task := workflowGoalFixture(t)
+	m, err := images.Inspect("demo", "latest")
+	if err != nil || m.Role == nil || !strings.Contains(m.Role.Text, goalRoleMarker) {
+		t.Fatalf("fixture role = %+v, %v", m.Role, err)
+	}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	got := RuntimeGoal(context.Background(), TaskWorkflowGoals{Tasks: svc, Images: images, Log: log}, task, "dev-1", log)
+	if !strings.Contains(got, "Do the work.") || strings.Contains(got, goalRoleMarker) {
+		t.Fatalf("goal block:\n%s", got)
 	}
 }

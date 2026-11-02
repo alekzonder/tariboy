@@ -170,3 +170,30 @@ func TestAssembleInstallsEachLayerLockInTheBuildDirectory(t *testing.T) {
 		t.Fatalf("demo skill = %q, want the child install", data)
 	}
 }
+
+func TestAssembleDoesNotInheritRole(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		"parent/Tariboyfile.yaml": "schema_version: 2\nplugins: []\nskills: []\nprompts: []\n",
+		"parent/ROLE.md":          "parent role",
+		"bare/Tariboyfile.yaml":   "schema_version: 2\nextends: [../parent]\nplugins: []\nskills: []\nprompts: []\n",
+		"own/Tariboyfile.yaml":    "schema_version: 2\nextends: [../parent]\nplugins: []\nskills: []\nprompts: []\n",
+		"own/ROLE.md":             "child role",
+	})
+	dir, cleanup, err := Assemble(filepath.Join(root, "bare"), t.TempDir(), ResolveRoots{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if _, err := os.Lstat(filepath.Join(dir, "ROLE.md")); !os.IsNotExist(err) {
+		t.Fatalf("parent ROLE.md was inherited: %v", err)
+	}
+	dir, cleanup2, err := Assemble(filepath.Join(root, "own"), t.TempDir(), ResolveRoots{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup2()
+	if data, err := os.ReadFile(filepath.Join(dir, "ROLE.md")); err != nil || string(data) != "child role" {
+		t.Fatalf("ROLE.md = %q, %v; want the child's", data, err)
+	}
+}

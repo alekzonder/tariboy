@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/alekzonder/tariboy/internal/rolefile"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 )
 
@@ -59,6 +60,9 @@ type Manifest struct {
 	BuiltAt       string            `json:"built_at"` // RFC 3339, set at first publication
 	Definition    workflowfile.File `json:"definition"`
 	Files         []FileEntry       `json:"files"`
+	// Role is ROLE.md from the source root. It is metadata only: the digest
+	// covers ROLE.md as a file, and the text never enters a prompt.
+	Role *rolefile.Role `json:"role,omitempty"`
 }
 
 // computeDigest hashes one line per file, sorted by path:
