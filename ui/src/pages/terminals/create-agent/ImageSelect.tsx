@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { RoleFragment } from "@/components/role/RoleFragment";
 import { Input } from "@/components/ui/input";
 import type { ImageChoice } from "@/lib/onboarding/firstRun";
 
@@ -9,20 +10,26 @@ function ChoiceDetail({ choice }: { choice: ImageChoice }) {
   return detail ? <span className="text-xs text-muted-foreground">{detail}</span> : null;
 }
 
-/** One row per image name; typing filters by name. The value stays `name:tag`. */
+/** One row per image name; typing filters by name. The value stays `name:tag`.
+ *  Under the closed field, the selected image's `role` (its ROLE.md) shows as a
+ *  fragment. */
 export function ImageSelect({
   id,
   choices,
   value,
   onChange,
   disabled,
+  role,
 }: {
   id: string;
   choices: ImageChoice[];
   value: ImageChoice | null;
   onChange: (ref: string) => void;
   disabled: boolean;
+  role: string | null;
 }) {
+  const fragmentId = `${id}-role`;
+  const showRole = value !== null && role !== null;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const filtered = choices.filter((choice) =>
@@ -44,6 +51,7 @@ export function ImageSelect({
         onBlur={() => setOpen(false)}
         placeholder="Choose an image"
         aria-label="image"
+        aria-describedby={showRole && !open ? fragmentId : undefined}
         disabled={disabled}
         className="h-8"
       />
@@ -52,6 +60,7 @@ export function ImageSelect({
           <ChoiceDetail choice={value} />
         </div>
       )}
+      {showRole && !open && <RoleFragment key={value.ref} id={fragmentId} text={role} />}
       {open && (
         <div
           role="listbox"

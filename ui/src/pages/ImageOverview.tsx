@@ -1,5 +1,7 @@
 import { type ReactNode } from "react";
 import { useImageContext } from "@/components/imageContext";
+import { RoleSection } from "@/components/role/RoleSection";
+import { roleText } from "@/components/role/roleText";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { visibleImageSections } from "./imageOverviewSections";
 
@@ -23,6 +25,9 @@ export default function ImageOverview() {
 
   return (
     <div className="grid gap-4">
+      {!manifest.bare && (
+        <RoleSection variant="card" text={roleText(manifest)} empty="This image has no ROLE.md." />
+      )}
       {visibleImageSections(manifest).map((section) => (
         <Section key={section.title} title={section.title}>
           {section.render(manifest)}

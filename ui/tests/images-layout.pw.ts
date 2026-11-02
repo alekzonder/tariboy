@@ -198,3 +198,36 @@ test("cancels every unstarted selected destination without requesting it", async
       expect.objectContaining({ url: expect.stringContaining("cancelled-b.tariboy.test") }),
     );
 });
+
+test("folds a tall Role card at 360px and keeps it inside the screen", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto("/tests/images-fixture.html?mode=detail");
+  const role = page.getByRole("region", { name: "Role" });
+  await expect(role).toBeVisible();
+  await expect(role.getByText("From ROLE.md")).toBeVisible();
+  const showAll = role.getByRole("button", { name: "Show all" });
+  await expect(showAll).toHaveAttribute("aria-expanded", "false");
+  expect((await showAll.boundingBox())!.height).toBeGreaterThanOrEqual(32);
+  const body = page.locator(`[id="${await showAll.getAttribute("aria-controls")}"]`);
+  expect((await body.boundingBox())!.height).toBe(240);
+
+  await showAll.click();
+  await expect(role.getByRole("button", { name: "Show less" })).toBeFocused();
+  expect((await body.boundingBox())!.height).toBeGreaterThan(320);
+  const table = role.locator("table");
+  await expect(table).toBeVisible();
+  // The wide table scrolls inside its own box; the card stays on the screen.
+  expect(await table.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  const card = (await role.boundingBox())!;
+  expect(card.x).toBeGreaterThanOrEqual(0);
+  expect(card.x + card.width).toBeLessThanOrEqual(360);
+  expect(
+    await role.evaluate((element) => {
+      const right = element.getBoundingClientRect().right;
+      return [...element.querySelectorAll("*")].every(
+        (child) =>
+          child.closest("table") !== null || child.getBoundingClientRect().right <= right + 0.5,
+      );
+    }),
+  ).toBe(true);
+});

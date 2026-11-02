@@ -16,6 +16,7 @@ import {
   setupCreateAgentDialog,
   cloneSource,
   hosts,
+  manifest,
   openAdvanced,
   renderDialog,
 } from "@/test/terminals/createAgentDialog";
@@ -277,4 +278,91 @@ it("opens Advanced in clone mode and suggests a free name", async () => {
   expect(screen.getByRole("switch", { name: "Use a managed folder" })).toBeChecked();
   expect(screen.getByLabelText("name")).toHaveValue("worker-2");
   expect(screen.getByRole("radio", { name: "Codex" })).toBeChecked();
+});
+
+const roleImages = () => {
+  listImages.mockResolvedValue({
+    images: [
+      imageSummary({ name: "worker", tag: "v1" }),
+      imageSummary({ name: "writer", tag: "v1" }),
+      imageSummary({ name: "plain", tag: "v1" }),
+      imageSummary({ name: "bare", tag: "latest", bare: true }),
+    ],
+    count: 4,
+  });
+  const roles: Record<string, string> = {
+    worker: "# Reviewer\n\nYou **review** [pull requests](https://x.test).\n\n- Merge nothing",
+    writer: "You write docs.",
+    bare: "Never shown.",
+  };
+  calls.imageManifestGet.mockImplementation(async (ref) => {
+    const name = ref.split(":")[0];
+    return manifest({
+      name,
+      bare: name === "bare",
+      ...(roles[name] ? { role: { text: roles[name] } } : {}),
+    });
+  });
+};
+
+const chooseImage = (name: string) => {
+  fireEvent.focus(screen.getByLabelText("image"));
+  fireEvent.click(screen.getByRole("option", { name }));
+  fireEvent.blur(screen.getByLabelText("image"));
+};
+
+it("shows the selected image's role fragment under Image and opens the full role", async () => {
+  roleImages();
+  renderDialog();
+  const fragment = await screen.findByText("You review pull requests.");
+  expect(fragment).toHaveClass("line-clamp-2", "text-sm", "text-muted-foreground");
+  expect(screen.getByLabelText("image").getAttribute("aria-describedby")).toContain(fragment.id);
+  expect(screen.queryByRole("heading", { name: "Reviewer" })).not.toBeInTheDocument();
+
+  const show = screen.getByRole("button", { name: "Show role" });
+  expect(show).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(show);
+  expect(show).toHaveAccessibleName("Hide role");
+  expect(show).toHaveAttribute("aria-expanded", "true");
+  const full = document.getElementById(show.getAttribute("aria-controls")!)!;
+  expect(full).toHaveClass("max-h-60", "overflow-auto", "rounded", "border", "p-3");
+  expect(await within(full).findByRole("heading", { name: "Reviewer" })).toBeInTheDocument();
+
+  fireEvent.click(show);
+  expect(show).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByRole("heading", { name: "Reviewer" })).not.toBeInTheDocument();
+});
+
+it("changes the fragment with the image and closes the full role", async () => {
+  roleImages();
+  renderDialog();
+  fireEvent.click(await screen.findByRole("button", { name: "Show role" }));
+  chooseImage("writer");
+  expect(await screen.findByText("You write docs.")).toBeInTheDocument();
+  expect(screen.queryByText("You review pull requests.")).not.toBeInTheDocument();
+  // One short paragraph needs no full view.
+  expect(screen.queryByRole("button", { name: /role$/ })).not.toBeInTheDocument();
+});
+
+it("adds nothing without ROLE.md, for bare, or when the manifest fails", async () => {
+  roleImages();
+  renderDialog({ imageRef: "plain:v1" });
+  await waitFor(() =>
+    expect(calls.imageManifestGet).toHaveBeenCalledWith("plain:v1", expect.anything()),
+  );
+  await waitFor(() => expect(screen.getByLabelText("image")).toHaveValue("plain"));
+  expect(screen.queryByRole("button", { name: "Show role" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("image")).not.toHaveAttribute("aria-describedby");
+
+  chooseImage("Plain terminal (bare)");
+  await waitFor(() =>
+    expect(calls.imageManifestGet).toHaveBeenCalledWith("bare:latest", expect.anything()),
+  );
+  await screen.findByText("Terminal only");
+  expect(screen.queryByText("Never shown.")).not.toBeInTheDocument();
+
+  calls.imageManifestGet.mockRejectedValue(new Error("boom"));
+  chooseImage("worker");
+  expect(await screen.findByText(/Could not load image worker:v1/)).toBeInTheDocument();
+  expect(screen.queryByText("You review pull requests.")).not.toBeInTheDocument();
 });

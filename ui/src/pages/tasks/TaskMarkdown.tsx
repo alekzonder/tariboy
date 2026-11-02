@@ -1,24 +1,32 @@
 import { lazy, type ComponentProps } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { LazyBoundary } from "@/components/LazyBoundary";
-import { markdownStyles, openMarkdownLink } from "./taskMarkdownShared";
+import { markdownStyles, openMarkdownLink, roleMarkdownStyles } from "./taskMarkdownShared";
 
 // TipTap and ProseMirror load with the first editor, never for a viewer.
 const RichMarkdownEditor = lazy(() => import("./TaskMarkdownEditor"));
 
-export function MarkdownContent({ children }: { children: string }) {
+const link: Components["a"] = ({ href, children: content, title }) => (
+  <a href={href} title={title} onClick={(event) => openMarkdownLink(event, href)}>
+    {content}
+  </a>
+);
+
+// A ROLE.md loads no images: the reader sees the alt text.
+const roleComponents: Components = {
+  a: link,
+  img: ({ alt }) => <span className="text-muted-foreground italic">{alt}</span>,
+};
+
+/** Raw HTML in the Markdown is never rendered: rehype-raw is not loaded. The
+ *  `role` variant draws a ROLE.md: smaller headings and no images. */
+export function MarkdownContent({ children, variant }: { children: string; variant?: "role" }) {
   return (
-    <div className={markdownStyles}>
+    <div className={variant === "role" ? roleMarkdownStyles : markdownStyles}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        components={{
-          a: ({ href, children: content, title }) => (
-            <a href={href} title={title} onClick={(event) => openMarkdownLink(event, href)}>
-              {content}
-            </a>
-          ),
-        }}
+        components={variant === "role" ? roleComponents : { a: link }}
       >
         {children}
       </ReactMarkdown>

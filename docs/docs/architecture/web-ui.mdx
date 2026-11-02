@@ -81,7 +81,16 @@ agent row. A new agent opens on its **Terminal** tab.
   default, the other names follow in A–Z order, and `bare` is last as **Plain
   terminal (bare)**. **Advanced → Image → version** picks another tag. When the
   host has no built image except `bare`, the host's checklist rows are shown
-  above the field.
+  above the field. When the list is closed and the selected image has a
+  `ROLE.md`, a fragment of it is shown under the field. The fragment is the
+  first paragraph that is not a heading, else the first list item, as plain
+  text in two lines at most. The field's `aria-describedby` names it. If the
+  file has more blocks or the fragment does not fit, **Show role** opens the
+  full text as Markdown in a box of 240px at most, with its own scroll, and
+  **Hide role** closes it. A new image closes it. The fragment comes from the
+  manifest that the form already loads, so it adds no request. The form shows
+  nothing for `bare`, for an image without `ROLE.md`, while the manifest
+  loads, and when the manifest fails.
 - **Coding tool** is a radio group from the host's harness detection
   (`GET /api/onboarding`), labeled with the harness ID, for example **Claude
   Code · claude**. `stub` is never offered. The form selects the image's
@@ -645,6 +654,14 @@ five tags and **Show all N**, and it marks the tag on screen. The Source cell
 stays on one line and shows the full text in its title. The page shows the
 original source CWD when provenance exists and reuses the same native VS Code
 folder action for local and SSH paths.
+The first card of the **Overview** is **Role**, with `From ROLE.md` on the
+right. It shows the `role.text` of the manifest as Markdown. A text of 320px or
+less is shown whole. A taller text folds to its first 240px with a fade and
+**Show all**. **Show less** folds it again and scrolls back to the card's
+heading when that heading is above the screen. Focus inside the folded text
+unfolds it. The open state is not kept. Without `ROLE.md`, or with a file of
+whitespace only, the card shows `This image has no ROLE.md.` The image `bare`
+has no Role card. The other tabs and the header do not show the role.
 Manifest, provenance, template, and file reads carry the same expected digest;
 a changed mutable ref clears the old view and reloads once, then offers manual
 refresh if it changes again. Directory builds and all detail requests capture
@@ -741,6 +758,16 @@ shows its manifest, removes the tag after an in-app confirmation, and lists the
 to servers**, which copies that tag to other ready servers with the export and
 import archive routes. Every request carries the explicit host target. See
 [Workflow images → Desktop](/docs/workflow-images#desktop).
+The first section under the page header is **Role**, before **Statuses**. It
+works as the Role card of an image page, with the text in a bordered box. Its
+empty line is `This workflow image has no ROLE.md.`
+
+Both Role views and the form use `MarkdownContent` with its `role` variant
+(`ui/src/components/role/`). The variant makes `h1` `text-lg`, `h2`
+`text-base`, and `h3` to `h6` `text-sm`. It shows the alt text of an image in
+italics and loads no image. A table keeps its words whole and scrolls inside
+its box. Raw HTML is never rendered, because `rehype-raw` is not loaded. Links
+open as in task Markdown.
 
 The sidebar's **Library** item opens Images, with **Workflows** and **Sources**
 as tabs of one Library header.
@@ -939,6 +966,8 @@ Everything else loads with `React.lazy` when it first renders:
   Home and Inbox lists, because it brings the Markdown renderer;
 - the TipTap editor (`tasks/TaskMarkdownEditor.tsx`): `MarkdownEditor` in
   `TaskMarkdown.tsx` is a lazy wrapper, so `MarkdownContent` never loads TipTap;
+- the full role text of the New agent form (`role/RoleMarkdown.tsx`), so the
+  form loads the Markdown renderer only after **Show role**;
 - the file viewer of `FileBrowser`, with CodeMirror, its languages, and the
   highlighted preview;
 - the onboarding tour overlay and the **Changelog** window with
