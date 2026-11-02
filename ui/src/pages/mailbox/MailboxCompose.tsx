@@ -96,6 +96,8 @@ function LetterText({
       <Textarea
         autoFocus
         aria-label="Text"
+        // A long letter scrolls, so the counter and the warning stay in view.
+        className="max-h-60"
         aria-describedby={counted ? counter : undefined}
         value={text}
         onChange={(event) => onText(event.target.value)}
