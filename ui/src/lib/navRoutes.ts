@@ -59,6 +59,7 @@ export type NavItem =
   | "library-images"
   | "library-workflows"
   | "library-sources"
+  | "metrics"
   | "settings";
 
 /** The path of a nav item on the page host `hostId`. */
@@ -68,6 +69,7 @@ export function navPath(item: NavItem, _hostId: string): string {
       return "/";
     case "tasks":
     case "inbox":
+    case "metrics":
       return `/${item}`;
     case "library-images":
       return "/library/images";
@@ -83,11 +85,12 @@ export function navPath(item: NavItem, _hostId: string): string {
 /** The sidebar item a path belongs to; an agent or a team belongs to none. */
 export function activeNav(
   pathname: string,
-): "home" | "tasks" | "inbox" | "library" | "settings" | null {
+): "home" | "tasks" | "inbox" | "library" | "metrics" | "settings" | null {
   if (pathname === "/" || pathname === "/activity") return "home";
   if (pathname === "/tasks" || pathname === "/inbox") return pathname.slice(1) as "tasks" | "inbox";
   if (pathname === "/app-settings") return "settings";
   if (pathname === "/library" || pathname.startsWith("/library/")) return "library";
+  if (pathname === "/metrics" || pathname.startsWith("/metrics/")) return "metrics";
   if (pathname === "/settings" || pathname.startsWith("/settings/")) return "settings";
   return null;
 }
@@ -104,6 +107,12 @@ export function scopedPath(
   for (const [key, value] of Object.entries(query)) params.set(key, value);
   const search = params.toString();
   return `/${section}${search ? `?${search}` : ""}`;
+}
+
+/** `/metrics` on the host the current page names in `?host=`, if any. */
+export function metricsPathFrom(search: URLSearchParams): string {
+  const host = search.get("host");
+  return host === null ? "/metrics" : `/metrics?${new URLSearchParams({ host })}`;
 }
 
 /** A host's Settings page, always with `?host=` so it opens that host and

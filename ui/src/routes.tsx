@@ -28,6 +28,11 @@ export function AppRoutes() {
       <Route path="/tasks" element={<TerminalsPage serverView="tasks" scoped />} />
       <Route path="/inbox" element={<TerminalsPage serverView="mail" scoped />} />
       <Route path="/activity" element={<TerminalsPage serverView="activity" scoped />} />
+      <Route path="/metrics" element={<TerminalsPage serverView="metrics" scoped />} />
+      <Route
+        path="/metrics/compare"
+        element={<TerminalsPage serverView="metrics-compare" scoped />}
+      />
       <Route path="/app-settings" element={<AppSettings />} />
       <Route path="/agents/new" element={<CanonicalCreateRedirect />} />
       <Route path="/agents/:hostId/teams/:team" element={<TerminalsPage />} />

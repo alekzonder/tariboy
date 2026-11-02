@@ -97,6 +97,18 @@ describe("Usage & budgets", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Usage" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "Budgets" })).toBeInTheDocument();
   });
+
+  it("points to Metrics for the numbers per completed task, on the same host", () => {
+    renderPage("/settings/usage?host=remote", "/settings/usage", <UsageSettings />);
+
+    expect(
+      screen.getByText(/Cost per completed task, rework and lead time are in/),
+    ).toHaveTextContent("Cost per completed task, rework and lead time are in Metrics.");
+    expect(screen.getByRole("link", { name: "Metrics" })).toHaveAttribute(
+      "href",
+      "/metrics?host=remote",
+    );
+  });
 });
 
 describe("Maintenance", () => {

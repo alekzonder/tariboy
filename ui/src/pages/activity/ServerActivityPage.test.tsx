@@ -80,6 +80,18 @@ const renderPage = () =>
   );
 
 describe("ServerActivityPage", () => {
+  it("links to Metrics on the same host", async () => {
+    render(
+      <MemoryRouter initialEntries={["/activity?host=remote&period=week"]}>
+        <ServerActivityPage hostId="remote" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("link", { name: "Metrics" })).toHaveAttribute(
+      "href",
+      "/metrics?host=remote",
+    );
+  });
+
   it("lists every agent's tasks and opens a task in place", async () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "DEV-7" }));

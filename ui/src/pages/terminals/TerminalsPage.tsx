@@ -31,6 +31,8 @@ export type ServerView =
   | "mail"
   | "tasks"
   | "activity"
+  | "metrics"
+  | "metrics-compare"
   | "images"
   | "image-detail"
   | "workflows"

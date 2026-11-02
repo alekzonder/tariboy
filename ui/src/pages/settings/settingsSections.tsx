@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { NavLink, useParams } from "react-router-dom";
+import { Link, NavLink, useParams, useSearchParams } from "react-router-dom";
 import type { PluginContribution } from "@/lib/api";
 import { useApi } from "@/components/apiContext";
+import { metricsPathFrom } from "@/lib/navRoutes";
 import { cn } from "@/lib/utils";
 import { ShellScriptEditor } from "@/components/ShellScriptEditor";
 import { SupportBundle } from "@/components/SupportBundle";
@@ -26,8 +27,16 @@ function SettingsSection({ title, children }: { title: string; children: ReactNo
 
 /** Settings → Usage & budgets: the AI usage of the host and its budgets. */
 export function UsageSettings() {
+  const [searchParams] = useSearchParams();
   return (
     <SettingsSection title="Usage & budgets">
+      <p className="text-sm text-muted-foreground">
+        Cost per completed task, rework and lead time are in{" "}
+        <Link to={metricsPathFrom(searchParams)} className="underline">
+          Metrics
+        </Link>
+        .
+      </p>
       <UsagePage />
       <BudgetsPage />
     </SettingsSection>

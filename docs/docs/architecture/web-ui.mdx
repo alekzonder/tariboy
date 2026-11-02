@@ -195,7 +195,7 @@ last key. A host that fails adds no results and shows no error. **Enter** opens
 the first result. ⌘K or Ctrl+K focuses the field. On a compact screen the
 field is at the top of the navigation drawer instead.
 
-The sidebar has six items:
+The sidebar has seven items:
 
 | Item | Opens |
 | --- | --- |
@@ -204,10 +204,12 @@ The sidebar has six items:
 | **Inbox** | `/inbox` |
 | **Agents** | nothing: it opens and closes the agent list in place |
 | **Library** | `/library/images`, with **Images**, **Workflows**, and **Sources** tabs |
+| **Metrics** | `/metrics` (see [Metrics](#metrics)) |
 | **Settings** | `/settings/hosts`, the first of the Settings pages |
 
 Home, Tasks, and Inbox stay above Agents in visual and keyboard order.
-Only the agent list scrolls. Library, Settings, and the hosts line stay at the bottom.
+Only the agent list scrolls. Library, Metrics, Settings, and the hosts line
+stay at the bottom. Metrics has no count.
 
 Settings has one flat list of seven pages. There is no index page:
 
@@ -299,8 +301,8 @@ archive uploads and downloads.
 
 ## Routes and host scope
 
-`/tasks`, `/inbox`, `/activity`, the Library pages, and the Settings pages
-other than Hosts show one host. They take an optional
+`/tasks`, `/inbox`, `/activity`, `/metrics`, `/metrics/compare`, the Library
+pages, and the Settings pages other than Hosts show one host. They take an optional
 `?host=<id>` (`local` is the local daemon). Without it, the page shows the
 remembered active host. A `?host=` that names another host selects it through
 the route host boundary, which shows **Connecting to host…** or **Host
@@ -577,6 +579,65 @@ padding, and 16 px between blocks. Settings is a centered column of at
 most `max-w-5xl`; the others use the full width. Mailbox, Work, and Terminal fill
 the page without a frame.
 
+The host Activity page has a **Metrics** link at the right end of its period
+bar. It opens `/metrics` with the same `?host=`.
+
+## Metrics
+
+The sidebar's **Metrics** item opens `/metrics`, the metrics of one host. The
+daemon computes the numbers as
+[Metrics](/docs/architecture/metrics) describes. Activity counts the work in a
+time window. Metrics counts the whole life of each task that completed in the
+period, so the two pages show different numbers for the same words.
+
+The page has these routes:
+
+| Route | Screen |
+| --- | --- |
+| `/metrics` | the host summary with the **Agents** view |
+| `/metrics?view=images` | the **Images** view |
+| `/metrics?view=workflows` | the **Workflows** view |
+| `/metrics/compare?kind=image&name=NAME&a=V1&b=V2` | two versions of one image |
+| `/metrics/compare?kind=workflow&name=NAME&a=V1&b=V2` | two versions of one workflow |
+
+Both routes take `?host=` as `/activity` does, and the period as
+`?period=week|month|quarter|custom` with `?since=` and `?until=` for Custom.
+Month is the default. `/metrics` also takes the filters `?agent=`,
+`?image=NAME[:VERSION]`, and `?workflow=NAME[:VERSION]`. A change of the
+period, a filter, the view, or a compared version replaces the history entry.
+
+`/metrics` sends one `GET /api/metrics?since=&until=[&agent=][&image=][&workflow=]`
+request for each host, period, and filter. `/metrics/compare` sends one
+request with `image=NAME` or `workflow=NAME` and shows two slices of
+`images[]` or `workflows[]`. There is no polling, because the request can take
+seconds on a large database. The window ends at the time of the load, of
+**Refresh**, or of a change of the period or a filter. **Refresh** shows
+`Updating…` while it loads and `Updated HH:MM` after. During a reload the
+previous numbers stay on the screen, dimmed. A new request cancels the
+previous one with an `AbortSignal`, and a response for an older host, period,
+or filter never replaces the current one.
+
+`/metrics` shows the total cards, the **Quality** block, a segment with
+**Agents**, **Images**, and **Workflows**, the table of the view, and **About
+these numbers**. An agent name opens
+`/agents/:hostId/:agent/activity?view=metrics` with the same window. An agent
+that is not on the host any more has no link. The Images and Workflows tables
+group the versions of one name, newest version first. **Compare versions** and
+the `⇄` button of a version row open `/metrics/compare`. From `⇄`, B is the
+version of the row and A is the nearest older version.
+
+`/metrics/compare` shows the two versions side by side with the difference
+B − A, the percentage of A, and the word `better`, `worse`, or `no change`.
+**Swap** exchanges `a` and `b`. Without versions in the URL, B is the newest
+version and A the version before it. If a version has fewer than 5 completed
+tasks (`SMALL_SAMPLE_TASKS` in `lib/metricsFormat.ts`), the page warns that
+the sample is small. The **Mixed tasks** block counts the done tasks that ran
+on more than one version. A URL without `kind` or `name` opens `/metrics`.
+
+The formatting functions, the error kinds, and the components in
+`ui/src/components/metrics/` do not depend on the page, so the agent view and
+the task panel can use them.
+
 ## Iteration tags in Activity
 
 The Runs log filters its iteration list by tag. The tag filter and the
@@ -599,6 +660,9 @@ from the route-selected daemon. Its selector offers **All groups**,
 summary cards, daily series, group-aware aggregate table, and recent-request
 table from one `/api/usage` response with the same filter; an older polling
 response cannot replace a newer selection.
+
+Under the page heading, the line `Cost per completed task, rework and lead time
+are in Metrics.` links **Metrics** to `/metrics` with the same `?host=`.
 
 Aggregate and recent-request rows display the group name saved with each AI
 request, using **Ungrouped** for a null snapshot. A deleted historical group
@@ -865,7 +929,7 @@ modules; it holds no requests of its own.
   a `Daemon` = that host).
 - One module per domain: `agents`, `iterations`, `usage`, `daemon`,
   `harnesses`, `plugins`, `scripts`, `files`, `images`, `imageSources`,
-  `groups`, `stores`, `mail`, `audit`, `tasks`, and `workflows`. Each
+  `groups`, `stores`, `mail`, `audit`, `tasks`, `workflows`, and `metrics`. Each
   module re-exports the types of its responses (see [API types](#api-types))
   and exports a factory that receives a transport bound to one host. Domain
   methods never take a target. `lib/tasks.ts` and `lib/audit.ts` keep only
@@ -956,8 +1020,9 @@ field, the sidebar navigation and agent list, the hosts line, the "needs you"
 context, the providers, host selection, and the agent workspace frame.
 Everything else loads with `React.lazy` when it first renders:
 
-- the pages in `TerminalsRoutes` (Home, Tasks, Inbox, Activity, Images,
-  Workflows, Sources, and Settings), the host selector, and the nested image
+- the pages in `TerminalsRoutes` (Home, Tasks, Inbox, Activity, Metrics, the
+  version comparison, Images, Workflows, Sources, and Settings), the host
+  selector, and the nested image
   and settings routes of `routes.tsx`;
 - `NeedsYouLive`, which reads the counts and rows of "needs you", the task
   lookup of the search field, and the workspace manager dialog;

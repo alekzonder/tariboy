@@ -116,6 +116,7 @@ describe("navPath and activeNav", () => {
     ["library-images", "/library/images"],
     ["library-workflows", "/library/workflows"],
     ["library-sources", "/library/sources"],
+    ["metrics", "/metrics"],
     ["settings", "/settings/hosts"],
   ] as const)("opens %s at %s", (item, path) => {
     expect(navPath(item, "d_abc")).toBe(path);
@@ -130,6 +131,9 @@ describe("navPath and activeNav", () => {
     ["/library/images/basic/latest/skills", "library"],
     ["/library/workflows/x/1", "library"],
     ["/library/sources/tariboy", "library"],
+    ["/metrics", "metrics"],
+    ["/metrics/compare", "metrics"],
+    ["/metricsx", null],
     ["/settings/hosts", "settings"],
     ["/settings/maintenance/operations/3", "settings"],
     ["/settingsx", null],

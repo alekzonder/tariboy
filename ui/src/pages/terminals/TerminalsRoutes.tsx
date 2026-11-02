@@ -20,6 +20,8 @@ import type { CreateDialogState } from "./TerminalsSidebar";
 const InboxPage = lazy(() => import("@/pages/mailbox/InboxPage"));
 const TasksWorkspace = lazy(() => import("@/pages/tasks/TasksWorkspace"));
 const ServerActivityPage = lazy(() => import("@/pages/activity/ServerActivityPage"));
+const MetricsPage = lazy(() => import("@/pages/metrics/MetricsPage"));
+const MetricsComparePage = lazy(() => import("@/pages/metrics/MetricsComparePage"));
 const LibraryImagesPage = lazy(() => import("@/pages/images/LibraryImagesPage"));
 const StoresPage = lazy(() => import("@/pages/StoresPage"));
 const WorkflowImagesPage = lazy(() => import("@/pages/workflows/WorkflowImagesPage"));
@@ -44,6 +46,8 @@ interface ServerRoute {
   routeTag?: string;
   initialTaskKey?: string;
   multiHost: boolean;
+  /** The names of the host's agents. */
+  agents: string[];
   /** The host selector; null with one host. */
   hostControl: ReactNode;
   onNotificationsChanged: () => void;
@@ -66,6 +70,17 @@ const SERVER_VIEWS: Record<ServerView, (route: ServerRoute) => ReactNode> = {
   ),
   activity: (route) => (
     <ServerActivityPage key={route.hostId} hostId={route.hostId} hostControl={route.hostControl} />
+  ),
+  metrics: (route) => (
+    <MetricsPage
+      key={route.hostId}
+      hostId={route.hostId}
+      hostControl={route.hostControl}
+      agents={route.agents}
+    />
+  ),
+  "metrics-compare": (route) => (
+    <MetricsComparePage key={route.hostId} hostControl={route.hostControl} />
   ),
   images: (route) => library(route, <LibraryImagesPage key={route.hostId} hostId={route.hostId} />),
   "image-detail": (route) => library(route, <ImageLayout hostId={route.hostId} />),
@@ -168,6 +183,7 @@ export function TerminalsRoutes({
         routeTag,
         initialTaskKey: searchParams.get("task") ?? undefined,
         multiHost,
+        agents: selectedHost?.agents.map((agent) => agent.name) ?? [],
         hostControl: multiHost ? <HostScopeSelect hosts={workspaceHosts} hostId={hostId} /> : null,
         onNotificationsChanged: () => void refreshHost(hostId),
         boundary: (body) => (

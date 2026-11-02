@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { periodQuery, useActivityWindow } from "@/lib/activityPeriod";
+import { metricsPathFrom } from "@/lib/navRoutes";
 import { hostToParam } from "@/lib/terminalsHost";
 import { useTaskActivity } from "@/hooks/useTaskActivity";
 import TaskDrawer from "@/pages/tasks/TaskDrawer";
@@ -46,6 +47,9 @@ export default function ServerActivityPage({
       <div className="flex flex-wrap items-center gap-2">
         {hostControl}
         <ActivityPeriodBar window={window} onPeriod={setPeriod} onCustom={setCustom} />
+        <Link to={metricsPathFrom(searchParams)} className="ml-auto text-sm underline">
+          Metrics
+        </Link>
       </div>
       <ActivityTotals totals={report?.totals ?? null} />
       {error && (

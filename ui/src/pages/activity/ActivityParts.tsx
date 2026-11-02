@@ -8,17 +8,18 @@ import { cn } from "@/lib/utils";
 const fmtUSD = (usd: number) => `$${usd.toFixed(2)}`;
 
 /** The period buttons (Hour · Day · Week · Custom unless periods says
- *  otherwise), with the custom range inputs and their error. */
-export function ActivityPeriodBar({
+ *  otherwise), with the custom range inputs and their error. Metrics passes
+ *  its own period set. */
+export function ActivityPeriodBar<P extends string = ActivityPeriod>({
   window,
   onPeriod,
   onCustom,
-  periods = ACTIVITY_PERIODS,
+  periods = ACTIVITY_PERIODS as Array<{ period: P; label: string }>,
 }: {
-  window: ActivityWindow;
-  onPeriod: (period: ActivityPeriod) => void;
+  window: Omit<ActivityWindow, "period"> & { period: P };
+  onPeriod: (period: P) => void;
   onCustom: (bound: "since" | "until", value: string) => void;
-  periods?: Array<{ period: ActivityPeriod; label: string }>;
+  periods?: Array<{ period: P; label: string }>;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
