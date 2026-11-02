@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApi } from "@/lib/api";
-import { metricsReport } from "@/test/fixtures/apiFixtures";
+import { metricsReport, taskMetrics } from "@/test/fixtures/apiFixtures";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -64,8 +64,8 @@ describe("metrics api", () => {
   });
 
   it("reads one task's metrics by its key", async () => {
-    const calls = stubFetch({});
-    await createApi(null).metrics.getTaskMetrics("DEV-1/x");
+    const calls = stubFetch(taskMetrics());
+    expect(await createApi(null).metrics.getTaskMetrics("DEV-1/x")).toEqual(taskMetrics());
     expect(calls[0].url).toBe("/api/metrics/tasks/DEV-1%2Fx");
   });
 });

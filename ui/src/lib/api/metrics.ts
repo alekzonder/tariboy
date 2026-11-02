@@ -2,11 +2,9 @@ import type { MetricsReport, TaskMetrics } from "../api-types.generated";
 import type { Transport } from "./client";
 
 export type {
-  MetricsImageVersionUsage,
   MetricsQuality,
   MetricsReport,
   MetricsSlice,
-  MetricsTaskStats,
   MetricsTokens,
   TaskMetrics,
 } from "../api-types.generated";

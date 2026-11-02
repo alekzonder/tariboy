@@ -4,7 +4,7 @@ import type { Column } from "./sliceSort";
 import { Known } from "./Unknown";
 
 /** The lowest axis average: the weakest side of the work. */
-export function lowestQuality(quality: MetricsQuality): number | null {
+function lowestQuality(quality: MetricsQuality): number | null {
   if (!quality) return null;
   const avgs = QUALITY_AXES.flatMap(({ key }) => (quality[key] ? [quality[key].avg] : []));
   return avgs.length ? Math.min(...avgs) : null;
