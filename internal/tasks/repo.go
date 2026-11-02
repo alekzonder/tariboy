@@ -87,20 +87,30 @@ func taskByID(ctx context.Context, q queryer, id int64) (Task, error) {
 // read-only ancestor chain required to place them in the tree (rank 0). Its
 // arguments do not depend on the number of tasks, so a query joins it instead
 // of binding a variable per visible id. The recursive CTE has no depth limit.
+//
+// A queue boundary stops the tree: write access passes only to children in
+// the same queue, and the ancestor chain stops at a parent in another queue.
+// The author of a child in another queue reads it (rank 0) and nothing more.
+// This is the one visibility rule; every read and write check goes through it.
 func visibleCTE(actor Actor) (string, []any) {
 	if actor.IsCustomer {
-		return `WITH visible_access(id, access_rank) AS (SELECT id, 2 FROM tasks) `, nil
+		// RECURSIVE in both branches lets a caller append a recursive CTE.
+		return `WITH RECURSIVE visible_access(id, access_rank) AS (SELECT id, 2 FROM tasks) `, nil
 	}
 	agent := strings.TrimPrefix(actor.Principal, "agent:")
 	return `
-		WITH RECURSIVE writeable(id) AS (
+		WITH RECURSIVE writeable(id, queue_prefix) AS (
+			SELECT id, queue_prefix FROM tasks WHERE assignee = ?
+			UNION
 			-- Authorship carries write access inside a tree the agent is already responsible
 			-- for, but not to a root: a root it authored in a queue it does not run is a
 			-- filed report, and holding on to it would turn filing into self-assignment.
-			SELECT id FROM tasks
-			WHERE assignee = ? OR (author = ? AND parent_id IS NOT NULL)
+			-- A child it filed into another queue is such a report too.
+			SELECT t.id, t.queue_prefix FROM tasks t
+			JOIN tasks p ON p.id = t.parent_id AND p.queue_prefix = t.queue_prefix
+			WHERE t.author = ?
 			UNION
-			SELECT t.id
+			SELECT t.id, t.queue_prefix
 			FROM tasks t
 			WHERE EXISTS (
 				SELECT 1
@@ -111,7 +121,7 @@ func visibleCTE(actor Actor) (string, []any) {
 				  AND (qo.agent IS NOT NULL OR q.responsible_agent = ?)
 			)
 			UNION
-			SELECT t.id
+			SELECT t.id, t.queue_prefix
 			FROM tasks t
 			WHERE t.group_name <> ''
 			  AND EXISTS (
@@ -119,9 +129,9 @@ func visibleCTE(actor Actor) (string, []any) {
 				WHERE ag.name = ? AND ag."group" = t.group_name
 			)
 			UNION
-			SELECT child.id
+			SELECT child.id, child.queue_prefix
 			FROM tasks child
-			JOIN writeable parent ON child.parent_id = parent.id
+			JOIN writeable parent ON child.parent_id = parent.id AND child.queue_prefix = parent.queue_prefix
 		),
 		respondable(id) AS (
 			SELECT DISTINCT t.id
@@ -137,18 +147,22 @@ func visibleCTE(actor Actor) (string, []any) {
 			SELECT id, 2 FROM writeable
 			UNION
 			SELECT id, 1 FROM respondable
+			UNION
+			SELECT t.id, 0 FROM tasks t
+			JOIN tasks p ON p.id = t.parent_id AND p.queue_prefix <> t.queue_prefix
+			WHERE t.author = ?
 		),
 		visible(id, access_rank) AS (
 			SELECT id, access_rank FROM direct
 			UNION
-			SELECT parent.parent_id, 0
+			SELECT node.parent_id, 0
 			FROM visible
-			JOIN tasks parent ON parent.id = visible.id
-			WHERE parent.parent_id IS NOT NULL
+			JOIN tasks node ON node.id = visible.id
+			JOIN tasks up ON up.id = node.parent_id AND up.queue_prefix = node.queue_prefix
 		),
 		visible_access(id, access_rank) AS (
 			SELECT id, MAX(access_rank) FROM visible GROUP BY id
-		) `, []any{actor.Principal, actor.Principal, agent, agent, agent, actor.Principal}
+		) `, []any{actor.Principal, actor.Principal, agent, agent, agent, actor.Principal, actor.Principal}
 }
 
 // accessName names an access_rank of visible_access.

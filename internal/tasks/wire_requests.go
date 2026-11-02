@@ -101,7 +101,7 @@ type ReadyRequest struct {
 
 // CreateRequest creates a root or child task.
 type CreateRequest struct {
-	Queue          string `json:"queue" flag:"queue" help:"Queue prefix for a root task"`
+	Queue          string `json:"queue" flag:"queue" help:"Queue prefix for a root task; with a parent, the child's queue (default: the parent's)"`
 	ParentKey      string `json:"parent_key" flag:"parent" help:"Parent task key"`
 	Title          string `json:"title" flag:"title" required:"true" help:"Task title"`
 	Description    string `json:"description" flag:"description" help:"Task description"`

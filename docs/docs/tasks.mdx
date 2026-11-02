@@ -47,12 +47,16 @@ of `P0` Critical, `P1` High, `P2` Normal (the default), or `P3` Low. Root and
 nested sibling sets sort by priority, then manual position, then task key.
 
 Parent/child depth is unlimited. Assigning or authoring an ancestor exposes its
-whole descendant subtree to that agent; otherwise an agent sees only nested
-tasks it authored, tasks assigned to it, and tasks visible through its current
-group. Authoring alone does not expose a root task: see **Filing a task into a
-queue** below. Ancestors needed to render an allowed descendant are returned as
-read-only context. Group membership is resolved when access is checked, not
-copied into the task.
+descendant subtree in the same queue to that agent; otherwise an agent sees only
+nested tasks it authored, tasks assigned to it, and tasks visible through its
+current group. Authoring alone does not expose a root task: see **Filing a task
+into a queue** below. Ancestors needed to render an allowed descendant are
+returned as read-only context. Group membership is resolved when access is
+checked, not copied into the task.
+
+A queue boundary stops both rules. Write access does not pass from a parent to
+a child in another queue, and the read-only ancestor chain stops at a parent in
+another queue. See [Subtasks in another queue](#subtasks-in-another-queue).
 
 An agent explicitly mentioned in an open answer request receives response-only
 access: it can read the task and add the answering comment, but cannot edit,
@@ -62,9 +66,11 @@ access.
 `blocks` is directional and cycle-checked; `related` is symmetric. A task is
 ready when it is open, unassigned, has no manual block, and has no active
 incoming blocker. Completing a parent with active descendants returns a
-conflict unless the caller explicitly chooses **complete anyway**. Reading one
-task also returns `descendants` and `active_descendants` for its whole subtree,
-so a tree that keeps growing instead of closing is visible without walking it.
+conflict unless the caller explicitly chooses **complete anyway**. This check
+counts every descendant, also one the caller cannot see. Reading one task also
+returns `descendants` and `active_descendants` for the part of its subtree that
+the reader can see, so a tree that keeps growing instead of closing is visible
+without walking it.
 
 Flexible tasks use `open`, `in_progress`, `wait_customer`, `done`, or
 `cancelled` status. When the assigned agent asks the task customer a question,
@@ -120,10 +126,95 @@ defect it noticed outside its current assignment. Triage stays with the queue's
 has none, that notification goes to the customer instead. To let a specific
 agent triage a queue, the customer adds it to the queue's owners.
 
+The same rule applies to a child that an agent creates in a queue it does not
+run (`ttasks create --parent KEY --queue OTHER`). A filed child differs in one
+point: its author keeps read-only (`context`) access to it, and the create
+response carries `filed: true` and `access: "context"`. The author cannot
+change, claim, comment on, or complete that child.
+
 `ttasks move KEY --to-root` detaches a task from its parent, which is the
 inverse operation: the task becomes a root, and the mover loses access to it
 unless it is the assignee or runs the queue. A move without `--parent`,
 `--before`, or `--to-root` is refused rather than treated as a detach.
+
+## Subtasks in another queue
+
+A task can have a child in another queue. The child keeps its own queue, key,
+workflow, and status. Only its parent link crosses the queue boundary.
+
+Create a child in another queue with `--parent` and `--queue`:
+
+```bash
+ttasks create --parent TARI-ab12 --queue DESIGN --title "Draw the screens"
+```
+
+The creator must have write access to the parent. In the child's queue, the
+ordinary rules of that queue apply:
+
+- If the creator runs the queue, the create is ordinary. `--assignee` and
+  `--group` are allowed.
+- If the creator does not run the queue, a create without `--assignee` is
+  filed (see **Filing a task into a queue**). A create with `--assignee` gives
+  that agent the task and its same-queue descendants. `--group` is refused with
+  `report_cannot_assign`.
+- If the queue has a workflow, the child enters the workflow's initial status,
+  and an explicit `--assignee` is refused with `workflow_managed`.
+
+The child takes the parent's customer. It does not take the parent's group,
+because a group gives write access without the tree. Without `--queue`, or with
+the parent's queue, a child takes the parent's queue and group as before.
+
+Access stops at the queue boundary:
+
+| Who | Access to the child in another queue | Access to the parent |
+| --- | --- | --- |
+| An agent that writes the parent, by queue, assignment, or group | None | Unchanged |
+| The child's assignee, or an agent that runs the child's queue | Write, and write on its same-queue descendants | None |
+| The child's author, with no other rule | Read-only (`context`) | Unchanged |
+| The customer | Write | Write |
+
+A workflow task keeps its workflow rules: the status holder, the customer pool,
+and `workflow_managed`. A visible child shows its `parent_key` even when the
+reader cannot see the parent. `ttasks list --subtree KEY` returns only the
+descendants that the reader can see, each with its `queue` and `status`.
+
+Move an existing task under a parent in another queue with `--parent`:
+
+```bash
+ttasks move DEV-ab12 --parent TARILEAD-cd34
+```
+
+A move changes only the parent. The task keeps its queue, key, workflow, and
+status. To change the queue of a task, use `ttasks requeue`, which creates a new
+task (see [Moving a task to another queue](#moving-a-task-to-another-queue)).
+These rules apply to the move:
+
+- The mover must have write access to the task and to the new parent.
+- The task and the new parent must have the same customer. Otherwise the move
+  is refused with `scope_change`. A group mismatch is refused only when the new
+  parent is in the same queue.
+- The same-queue descendants of the task move with it. Its children in other
+  queues stay under it.
+- Order is kept per queue under a parent. `--before KEY` must name a task of the
+  moved task's queue with the same priority. A task of another queue is refused
+  with `invalid_before`. Without `--parent`, the task moves under the parent of
+  the `--before` task, even when that parent is in another queue.
+- `--to-root` on a task whose parent is in another queue also needs write
+  access to that parent. Otherwise the owner of the child could take ordered
+  work out of a tree that it does not run. For a parent in the same queue, write
+  access to the task is enough.
+
+Events for the child, such as `task.created` and `task.moved`, are recorded on
+the child. Only a reader that can see the child receives them. The owner of the
+parent who cannot see the child gets no event and no notification about it.
+
+A hidden active child still blocks the completion of its parent with
+`active_descendants`. The error gives only the count. The customer sees the
+keys.
+
+The export for [Moving a task to another server](#moving-a-task-to-another-server)
+refuses a tree with a task in another queue with `cross_queue_subtree`. Move or
+detach those tasks first.
 
 ## Questions and notifications
 
@@ -377,6 +468,9 @@ original authors and times, and the relations whose two ends are both inside
 that subtree. What does not move: the event log, notifications, reminders,
 relations pointing outside the subtree.
 
+This daemon refuses the export when the subtree has a task in another queue
+(`cross_queue_subtree`) or a task that follows a workflow (`workflow_managed`).
+
 The target daemon refuses the import, changing nothing, when:
 
 - it has no queue with the same prefix (`queue_not_found`);
@@ -454,6 +548,7 @@ ttasks ready --claim
 ttasks show TEST-fkt3
 ttasks create --queue TEST --title "Investigate failure" --priority P1
 ttasks create --parent TEST-fkt3 --title "Add regression test"
+ttasks create --parent TEST-fkt3 --queue DESIGN --title "Draw the screens"
 ttasks assign TEST-fkt3 worker
 ttasks update TEST-fkt3 --priority P0
 ttasks update TEST-fkt3 --pull-request https://example.com/org/repo/pull/42

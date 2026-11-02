@@ -118,3 +118,23 @@ func cliSpecs() []tasks.Spec {
 	}
 	return out
 }
+
+func TestCrossQueueChildIsDocumentedInHelp(t *testing.T) {
+	for _, tt := range []struct {
+		path  []string
+		wants []string
+	}{
+		{[]string{"create"}, []string{"child in another queue", "--parent TARI-ab12 --queue DESIGN"}},
+		{[]string{"move"}, []string{"keeps its queue and key", "parent may be in another queue", "moved task's queue", "ttasks move DEV-12 --parent TARI-3"}},
+	} {
+		var out strings.Builder
+		if code := Run(context.Background(), append(append([]string{}, tt.path...), "--help"), mapEnv(), &out, io.Discard); code != 0 {
+			t.Fatalf("%v: code %d", tt.path, code)
+		}
+		for _, want := range tt.wants {
+			if !strings.Contains(out.String(), want) {
+				t.Errorf("%v help lacks %q:\n%s", tt.path, want, &out)
+			}
+		}
+	}
+}

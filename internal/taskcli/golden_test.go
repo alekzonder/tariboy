@@ -26,6 +26,7 @@ func TestParseGoldenPayloads(t *testing.T) {
 		{[]string{"create", "--queue", "DEV", "--title", "T", "--description", "D", "--pull-request", "https://example.test/pull/1", "--assignee", "worker", "--group", "core", "--priority", "P1", "--idempotency-key", "k1"},
 			"create", `{"assignee":"worker","description":"D","group":"core","idempotency_key":"k1","priority":"P1","pull_request":"https://example.test/pull/1","queue":"DEV","title":"T"}`, false},
 		{[]string{"create", "--parent", "DEV-1", "--title", "child"}, "create", `{"parent_key":"DEV-1","title":"child"}`, false},
+		{[]string{"create", "--parent", "TARI-1", "--queue", "DESIGN", "--title", "child"}, "create", `{"parent_key":"TARI-1","queue":"DESIGN","title":"child"}`, false},
 		{[]string{"update", "DEV-1", "--title", "T", "--description", "D", "--status", "done", "--pull-request=", "--assignee", "worker", "--manual-block-reason", "", "--priority", "P0", "--revision", "3"},
 			"update", `{"assignee":"worker","description":"D","key":"DEV-1","manual_block_reason":"","priority":"P0","pull_request":"","revision":3,"status":"done","title":"T"}`, false},
 		{[]string{"update", "--manual-block-reason", "waiting", "DEV-1"}, "update", `{"key":"DEV-1","manual_block_reason":"waiting"}`, false},
