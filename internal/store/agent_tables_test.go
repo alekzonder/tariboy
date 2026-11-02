@@ -8,6 +8,9 @@ import (
 // agentKeyedExempt lists agent-keyed tables that agent removal deliberately
 // leaves alone. Every entry needs a reason.
 var agentKeyedExempt = map[string]string{
+	"assessment_axes":         "historical quality evidence keyed by a snapshot of the agent name (cascade from assessments)",
+	"assessment_violations":   "historical quality evidence keyed by a snapshot of the agent name (cascade from assessments)",
+	"assessments":             "historical quality evidence keyed by a snapshot of the agent name",
 	"events":                  "audit log: kept after the agent is removed",
 	"eval_results":            "eval history keyed by image and iteration: kept for image quality reports",
 	"task_agent_pool_members": "tasks own pool membership (FK RESTRICT to agents; a purge Remove rejects a pool member first)",

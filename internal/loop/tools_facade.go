@@ -93,6 +93,7 @@ func (f toolsFacade) deps(ag agent.Agent, l agentdir.Layout) agentapi.Deps {
 	}
 	f.lifecycleDeps(&d)
 	f.mailDeps(&d)
+	f.assessmentDeps(&d)
 	f.scheduleDeps(&d)
 	f.scriptDeps(&d)
 	f.groupDeps(&d)
@@ -202,6 +203,18 @@ func (f toolsFacade) mailDeps(d *agentapi.Deps) {
 				Msg: "mail is unavailable"}
 		}
 		return f.cfg.Mail.AgentAction(f.agent, f.iterations.currentIterationID(f.agent), action, body)
+	}
+}
+
+// assessmentDeps wires the assessment routes: this agent is the assessor of
+// an add, in its current iteration.
+func (f toolsFacade) assessmentDeps(d *agentapi.Deps) {
+	d.AssessmentAction = func(action string, body map[string]any) (any, error) {
+		if f.cfg.Assessments == nil {
+			return nil, api.UserError{Status: http.StatusServiceUnavailable, Code: "unavailable",
+				Msg: "assessments are unavailable"}
+		}
+		return f.cfg.Assessments.AgentAction(f.agent, f.iterations.currentIterationID(f.agent), action, body)
 	}
 }
 

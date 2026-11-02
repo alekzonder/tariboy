@@ -18,6 +18,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/api"
+	"github.com/alekzonder/tariboy/internal/assessment"
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/commands"
 	"github.com/alekzonder/tariboy/internal/events"
@@ -168,6 +169,7 @@ type coreParts struct {
 	audit         *audit.Registry
 	rec           Recorder
 	customerLogin string
+	assessments   *assessment.Service
 }
 
 // openStore opens the store, telemetry and the mailbox.
@@ -225,7 +227,7 @@ func openStore(ctx context.Context, proc *process, stack *shutdownStack) (*coreP
 
 	return &coreParts{
 		st: st, metrics: metrics, agents: as, mail: mailbox, hub: hub, audit: auditReg,
-		rec: rec, customerLogin: customerLogin,
+		rec: rec, customerLogin: customerLogin, assessments: assessment.New(st.DB, time.Now),
 	}, nil
 }
 
@@ -536,7 +538,7 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 	manager := loop.NewManager(loop.ManagerConfig{
 		AgentsDir: p.AgentsDir(), RuntimeDir: p.RuntimeDir(),
 		ShimBin:  firstNonEmpty(os.Getenv("TARIBOY_SHIM_BIN"), filepath.Join(firstNonEmpty(proc.exeDir, "."), "tariboy-shim")),
-		ImgStore: tk.images, Store: c.agents, Log: log, Clock: time.Now, Mail: c.mail,
+		ImgStore: tk.images, Store: c.agents, Log: log, Clock: time.Now, Mail: c.mail, Assessments: c.assessments,
 		Schedules: schedStore, Scripts: scriptStore, ScriptResults: scriptPublisher, Emit: c.hub.Emit, Proxy: px.proxy,
 		Groups: groupProv,
 		CodexApproval: func() string {
@@ -613,6 +615,7 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 		Store: st, Log: log, BaseDir: p.Base, Socket: p.Socket(), HTTPAddr: o.HTTPAddr,
 		Version: version.Version, StartedAt: time.Now(), Control: manager, Scripts: manager, Mail: c.mail, Plugins: pl.host,
 		Groups:         groupProv,
+		Assessments:    c.assessments,
 		Operator:       tk.service.CustomerLogin(),
 		Retention:      &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},
 		Maintenance:    maint,

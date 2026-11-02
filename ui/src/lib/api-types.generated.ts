@@ -1179,6 +1179,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/assessments": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List assessments, newest first */
+    get: operations["assessment.ls"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/assessments/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Show one assessment with its axes and violations */
+    get: operations["assessment.show"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/backup": {
     parameters: {
       query?: never;
@@ -3453,6 +3487,72 @@ export interface components {
       name: string;
       value: string;
     };
+    Assessment: {
+      assessor_agent: string;
+      assessor_image_digest: string;
+      assessor_image_ref: string;
+      assessor_image_version: string;
+      axes: components["schemas"]["AssessmentAxis"][];
+      created_at: string;
+      id: string;
+      image_digest: string;
+      image_ref: string;
+      image_version: string;
+      iteration_id: string;
+      rubric_version: string;
+      subject_agent: string;
+      summary: string;
+      task_key: string;
+      violations: components["schemas"]["AssessmentViolation"][];
+      workflow_digest: string;
+      workflow_version: string;
+    };
+    AssessmentAxis: {
+      axis: string;
+      note: string;
+      score?: number;
+      verdict: string;
+    };
+    AssessmentEvidence: {
+      iteration_id: string;
+      kind: string;
+      locator: string;
+      run_id: string;
+      sequence: number;
+      task_key: string;
+    };
+    AssessmentList: {
+      assessments: components["schemas"]["AssessmentSummary"][];
+    };
+    AssessmentShowResult: {
+      assessment: components["schemas"]["Assessment"];
+    };
+    AssessmentSummary: {
+      assessor_agent: string;
+      assessor_image_digest: string;
+      assessor_image_ref: string;
+      assessor_image_version: string;
+      axes: components["schemas"]["AssessmentAxis"][];
+      created_at: string;
+      id: string;
+      image_digest: string;
+      image_ref: string;
+      image_version: string;
+      iteration_id: string;
+      rubric_version: string;
+      subject_agent: string;
+      summary: string;
+      task_key: string;
+      violation_count: number;
+      workflow_digest: string;
+      workflow_version: string;
+    };
+    AssessmentViolation: {
+      axis: string;
+      description: string;
+      evidence: components["schemas"]["AssessmentEvidence"];
+      quote: string;
+    };
     AuditLogEvent: {
       at: string;
       data: string;
@@ -5012,6 +5112,13 @@ export type AgentUsageTotals = components["schemas"]["AgentUsageTotals"];
 export type AgentUserPromptResult = components["schemas"]["AgentUserPromptResult"];
 export type AgentView = components["schemas"]["AgentView"];
 export type Artifact = components["schemas"]["Artifact"];
+export type Assessment = components["schemas"]["Assessment"];
+export type AssessmentAxis = components["schemas"]["AssessmentAxis"];
+export type AssessmentEvidence = components["schemas"]["AssessmentEvidence"];
+export type AssessmentList = components["schemas"]["AssessmentList"];
+export type AssessmentShowResult = components["schemas"]["AssessmentShowResult"];
+export type AssessmentSummary = components["schemas"]["AssessmentSummary"];
+export type AssessmentViolation = components["schemas"]["AssessmentViolation"];
 export type AuditLogEvent = components["schemas"]["AuditLogEvent"];
 export type AuditLogResult = components["schemas"]["AuditLogResult"];
 export type BackupArchive = components["schemas"]["BackupArchive"];
@@ -9241,6 +9348,96 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["AgentSavedResult"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "assessment.ls": {
+    parameters: {
+      query?: {
+        iteration?: string;
+        task?: string;
+        agent?: string;
+        assessor?: string;
+        image?: string;
+        image_version?: string;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["AssessmentList"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "assessment.show": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["AssessmentShowResult"];
           };
         };
       };

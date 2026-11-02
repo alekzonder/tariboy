@@ -77,6 +77,10 @@ type Deps struct {
 	// TaskAction is the native Tasks surface. The daemon binds the caller from
 	// this socket's Agent field; request bodies never carry identity.
 	TaskAction func(action string, body map[string]any) (any, error)
+	// AssessmentAction runs one /tools/assessment/<action> call (add, ls,
+	// show) as this agent. add is gated by the `assessments` capability; the
+	// reads are open to every agent. Nil yields unavailable.
+	AssessmentAction func(action string, body map[string]any) (any, error)
 }
 
 type Server struct {
@@ -170,6 +174,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /tools/image/build", s.gated("image-creator", s.imageBuild))
 	mux.HandleFunc("POST /tools/goal/set", s.gated("goal", s.goalSet))
 	mux.HandleFunc("POST /tools/tasks/{action}", s.gated("tasks", s.nativeTaskAction))
+	mux.HandleFunc("POST /tools/assessment/add", s.gated("assessments", s.assessmentAdd))
+	mux.HandleFunc("GET /tools/assessment/ls", s.assessmentLs)
+	mux.HandleFunc("GET /tools/assessment/show/{id}", s.assessmentShow)
 	mux.HandleFunc("GET /tools/group/info", s.groupInfo)
 	mux.HandleFunc("GET /tools/group/status", s.groupStatus)
 	mux.HandleFunc("GET /tools/group/status/{member}", s.groupStatus)

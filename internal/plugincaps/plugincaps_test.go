@@ -110,3 +110,12 @@ func TestGoalCapabilityReplacesCurrentTask(t *testing.T) {
 		t.Fatal("goal is not a capability")
 	}
 }
+
+func TestAssessmentsCapabilityIsOptionalAndNeedsNoSkill(t *testing.T) {
+	if !IsOptional("assessments") {
+		t.Fatal("assessments must be an OPTIONAL built-in capability")
+	}
+	if _, err := ValidateExplicit([]string{"whoami", "loop", "mail", "assessments"}, nil); err != nil {
+		t.Fatalf("assessments plugin validation: %v", err)
+	}
+}

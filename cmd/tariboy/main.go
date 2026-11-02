@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/assessmentcli"
 	"github.com/alekzonder/tariboy/internal/cli"
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/commands"
@@ -65,6 +66,11 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) int {
 	}
 	if argv, ok := mailArgs(rest); ok {
 		return mailcli.RunOperator(ctx, argv, sock, out, errOut)
+	}
+	// tariboy assessment writes only as the agent of TARIBOY_TOOLS_SOCKET;
+	// without it ls and show read through the operator socket.
+	if argv, ok := clientArgs(rest, "assessment"); ok {
+		return assessmentcli.Run(argv, os.Getenv("TARIBOY_TOOLS_SOCKET"), sock, os.Stdin, out, errOut)
 	}
 	// compose has always accepted its flags before the verb
 	// (`compose -f FILE up`); the registry resolves the verb first.

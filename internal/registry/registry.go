@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/assessment"
 	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/maintenance"
 	"github.com/alekzonder/tariboy/internal/onboarding"
@@ -76,6 +77,7 @@ type Ctx struct {
 	Control     ServiceControl
 	Scripts     ScriptControl
 	Mail        *mail.Mail
+	Assessments *assessment.Service // read side of the assessment store; nil outside the daemon
 	Plugins     PluginControl
 	Groups      GroupControl
 	Operator    string

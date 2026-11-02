@@ -145,6 +145,9 @@ func BuildRegistry() *registry.Registry {
 	for _, cmd := range mailCommands() {
 		mustRegister(r, cmd)
 	}
+	for _, cmd := range assessmentCommands() {
+		mustRegister(r, cmd)
+	}
 	mustRegister(r, scheduleLs())
 	mustRegister(r, scriptLs())
 	mustRegister(r, scriptRunOnce())
@@ -258,6 +261,7 @@ func BuildRegistry() *registry.Registry {
 	mustGroup(r, "tasks.comments", "Manage native task comments")
 	mustGroup(r, "tasks.relations", "Manage native task relations")
 	mustGroup(r, "mail", "Read and send mail as the customer or another principal")
+	mustGroup(r, "assessment", "Read assessments of iterations and tasks")
 	mustGroup(r, "agent.mail", "Manage an agent's mailbox")
 	mustGroup(r, "harness", "Inspect the harnesses installed on the daemon host")
 	mustGroup(r, "onboarding", "Inspect or retry the first-run setup of the daemon")
