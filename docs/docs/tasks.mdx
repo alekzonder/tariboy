@@ -72,6 +72,15 @@ returns `descendants` and `active_descendants` for the part of its subtree that
 the reader can see, so a tree that keeps growing instead of closing is visible
 without walking it.
 
+The same read (`tasks.get`, also `ttasks show --json`) also returns the direct family of
+the task. The visibility rule of `tasks.list` decides what the reader sees:
+
+| Field | Content |
+| --- | --- |
+| `parent` | `key`, `title`, `queue`, and `access` of the parent. The field is absent for a root task and for a parent that the reader cannot see. |
+| `children` | The direct children that the reader can see, from every queue and every category, closed ones included. Each item has the fields of a `tasks.list` row. The order is the tree order: priority, position, key. |
+| `hidden_children` | The number of direct children that the reader cannot see. The response gives no key, title, or queue for them. |
+
 Flexible tasks use `open`, `in_progress`, `wait_customer`, `done`, or
 `cancelled` status. When the assigned agent asks the task customer a question,
 the same comment transaction moves a non-terminal task to `wait_customer`.
@@ -297,6 +306,38 @@ the script's words and the count behind it (see
 gives the reason). Active, Closed, and All use the category too. There is no
 filter by workflow status. Flexible tasks keep the labels described above.
 
+A [subtask in another queue](#subtasks-in-another-queue) stands under its
+parent in the tree, as a subtask of the same queue does:
+
+- If its parent is in the tree and in another queue, the **Key** cell shows a
+  queue marker (a layers icon) between the chevron and the key. Its tooltip
+  and accessible name give the queue, the queue name, the workflow, and the
+  parent queue, for example
+  `Queue TARIDESIGN · Design · workflow design-flow (parent queue TARI)`. A
+  queue without a workflow reads `flexible tasks`. A root task and a subtask in
+  its parent's queue have no marker.
+- Each row shows the status by the model of its own task. A workflow subtask
+  under a flexible parent shows its workflow status, step, and markers. A
+  flexible subtask under a workflow parent shows a flexible label.
+- A subtask in another queue cannot move among its siblings with the mouse. It
+  cannot go inside a row of another queue either. A drop on the tree root
+  detaches it from its parent and keeps its queue. A refused drop shows
+  `Tasks can only move inside their queue and outside their own subtree`.
+- The **+** button of a row makes the new subtask in the queue of that row. The
+  form shows `Queue: {PREFIX}` in place of the queue select. The Desktop does
+  not make a subtask in another queue.
+
+The **Queue** filter keeps each task of the chosen queue with its whole
+subtree from every queue. A subtask in the chosen queue under an ancestor in
+that queue stays in the subtree and does not repeat as a root. Rows of other
+queues in the subtree are not dimmed. A task of the chosen queue whose parent
+is in another queue becomes a root. After its title it shows `in {KEY}`, a
+link that opens the parent in the sheet. On a phone the link is only an icon
+with a 24×24 px target. If the parent is not in the loaded list, the link is
+text with the tooltip `You cannot open this task`. The parent queue then comes
+from the parent key, up to its last `-`. The queue counts in the menu do not
+change with the filter: each task counts only in its own queue.
+
 Clicking a task opens a right-side sheet over the tree. The sticky header
 shows the key, one title, status, and assignee. The pencil edits the title in
 that same place. Save task appears only while task fields have unsaved changes.
@@ -311,9 +352,39 @@ there. An Outcome message belongs to the chosen outcome. To answer a question
 or add a comment, use the comment form. Completed tasks offer no transitions,
 and flexible tasks have no workflow decision panel.
 
+The header of a subtask shows `Subtask of {KEY} {title}` above the title, on
+one line. The line is a button that opens the parent in the same sheet. If the
+parent is in another queue, a queue marker with the text
+`Parent queue {PREFIX} · {name}` stands before the key. If the reader cannot
+see the parent, the line is `Subtask of {KEY}` as text, with the tooltip
+`You cannot open this task`.
+
+A **Subtasks** section follows the description and comes before the comments.
+Its heading gives the number of visible direct subtasks, for example
+`Subtasks 3`. Each row shows a queue marker for a subtask in another queue,
+the key, the title, the status as the tree shows it, and the assignee without
+`agent:`. The rows come from the `children` field in tree order. Closed
+subtasks stay in the list in every Active, Done, or All view. A row opens its
+subtask in the same sheet. On a phone a row has two lines: the marker, key,
+and status, then the title. The assignee is hidden there. If the reader cannot
+see some subtasks, a line under the list says
+`1 more subtask is hidden from you.` or `{N} more subtasks are hidden from you.`
+The section is hidden for a task without subtasks. Two placeholder rows show
+while a list loads. If a later read of the task fails, the section shows
+`Could not load subtasks.` and **Retry** in place of the list. Realtime task
+events refresh the section with the rest of the sheet.
+
+Opening the parent or a subtask from the sheet asks for confirmation first
+when the sheet holds unsaved drafts, as closing does. After the move, the key
+of the opened task takes the focus. If that task is hidden or no longer
+exists, the sheet says `You cannot open {KEY}. It is hidden from you or no
+longer exists.` A task sheet opened from an agent, usage, or a letter moves
+the same way.
+
 A collapsed Details section holds the author, customer, queue, group, blocked
 state, parent, flexible status, priority, assignee, pull request URL, block
-reason, and dependencies. History is collapsed by default. The flexible status
+reason, and dependencies. The parent is a button that opens it, or text when
+the reader cannot see the parent. History is collapsed by default. The flexible status
 `wait_customer` reads Waiting for you. The flexible assignee list contains
 Unassigned, me, and each agent. You cannot type a principal. In the comment
 form, Ask an agent mentions an agent, and Reply Ok to the question posts `Ok`.
