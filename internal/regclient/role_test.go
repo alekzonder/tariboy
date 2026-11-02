@@ -54,7 +54,7 @@ func TestPushThenPullKeepsRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pulled.Role == nil || pulled.Role.Text != "# Reviewer\n" || pulled.Role.LimitBytes != 65536 {
+	if pulled.Role == nil || pulled.Role.Text != "# Reviewer\n" {
 		t.Fatalf("pulled role = %+v", pulled.Role)
 	}
 }

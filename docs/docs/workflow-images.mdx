@@ -340,6 +340,10 @@ manifest field `role`. Tariboy does not put this text into the Goal block, the
 status instructions, or any agent prompt. The text is metadata for people and
 for the UI.
 
+Write `ROLE.md` in English. Say only what the role is and why the workflow
+exists. Do not describe the process, skills, commands, or rules. The daemon
+does not check the language or the content of the text.
+
 The build applies these rules:
 
 | Case | Result |
@@ -347,26 +351,26 @@ The build applies these rules:
 | No `ROLE.md` | The manifest has no `role` field. |
 | Only white space | The same as no file. |
 | Not valid UTF-8 | The build fails with `workflow_invalid` and the text `ROLE.md is not valid UTF-8`. |
-| Up to 65536 bytes | `role.text` is the full file, and `role.truncated` is `false`. |
-| More than 65536 bytes | `role.text` keeps the first bytes up to the limit, cut at a UTF-8 character boundary. `role.truncated` is `true`, and the build log shows the file size and the limit. |
+| Up to 500 characters | `role.text` is the full file. |
+| More than 500 characters | The build fails with `workflow_invalid`. The error gives the file size in characters and the limit of 500. |
 
-The limit is in `role.limit_bytes`. `ROLE.md` is one of the stored files, so it
-is part of the digest like any other file. The `role` field does not change the
-digest rule. `tariboy workflow inspect` and
-`GET /api/workflow-images/{name}/{tag}` show the field:
+A character is one Unicode code point, so 500 Cyrillic letters are in the
+limit. `ROLE.md` is one of the stored files, so it is part of the digest like
+any other file. The `role` field does not change the digest rule.
+`tariboy workflow inspect` and `GET /api/workflow-images/{name}/{tag}` show the
+field:
 
 ```json
 "role": {
-  "text": "# Development\n\nPlans, implements and reviews a change.\n",
-  "truncated": false,
-  "limit_bytes": 65536
+  "text": "# Development\n\nPlans, implements and reviews a change.\n"
 }
 ```
 
 A workflow image built before this feature has no `role` field. If you build
 the same content again, the build adds `role` to the stored manifest and to its
 database row. The digest and the build time do not change. An import of a
-workflow archive reads `role` from the `ROLE.md` in the archive.
+workflow archive reads `role` from the `ROLE.md` in the archive and applies the
+same rules, so a file of more than 500 characters fails the import.
 
 ## Commands
 

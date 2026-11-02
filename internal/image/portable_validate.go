@@ -70,27 +70,20 @@ type v2PortableManifest struct {
 	Plugins              []v2PortablePlugin     `json:"plugins"`
 	Skills               []agentskills.Metadata `json:"skills"`
 	PromptTemplateSHA256 string                 `json:"prompt_template_sha256"`
-	Role                 *v2PortableRole        `json:"role,omitempty"`
+	Role                 *rolefile.Role         `json:"role,omitempty"`
 }
 
-// v2PortableRole is the strict schema of the optional manifest field "role".
-type v2PortableRole struct {
-	Text       string `json:"text"`
-	Truncated  bool   `json:"truncated"`
-	LimitBytes int    `json:"limit_bytes"`
-}
-
-// validatePortableRole checks the optional role of a strict manifest. The JSON
+// validatePortableRole checks the optional role of a manifest. The JSON
 // decoder replaces invalid UTF-8 with U+FFFD, so the raw manifest bytes are
 // checked too.
-func validatePortableRole(role *v2PortableRole, manifestBody []byte) error {
+func validatePortableRole(role *rolefile.Role, manifestBody []byte) error {
 	if role == nil {
 		return nil
 	}
 	if !utf8.Valid(manifestBody) {
 		return errors.New("invalid schema-v2 manifest role: manifest is not valid UTF-8")
 	}
-	if err := rolefile.Validate(rolefile.Role(*role)); err != nil {
+	if err := rolefile.Validate(*role); err != nil {
 		return fmt.Errorf("invalid schema-v2 manifest role: %w", err)
 	}
 	return nil

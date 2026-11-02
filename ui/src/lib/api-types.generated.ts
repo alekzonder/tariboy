@@ -4011,9 +4011,7 @@ export interface components {
       settings: components["schemas"]["MaintenanceSettings"];
     };
     ManifestRole: {
-      limit_bytes: number;
       text: string;
-      truncated: boolean;
     };
     OnboardingDefaultStore: {
       error?: string;

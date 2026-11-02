@@ -64,7 +64,4 @@ type Manifest struct {
 	// Role is ROLE.md from the build context root. It is metadata only and
 	// never enters the prompt or the agent directory.
 	Role *rolefile.Role `json:"role,omitempty"`
-	// RoleSourceBytes is the size of the ROLE.md the build read, for the
-	// truncation warning. It is not stored.
-	RoleSourceBytes int64 `json:"-"`
 }

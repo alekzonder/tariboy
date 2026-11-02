@@ -38,7 +38,7 @@ func TestBuildV2RecordsRoleInManifest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := rolefile.Role{Text: "# Reviewer\n" + roleMarker + "\n", LimitBytes: rolefile.LimitBytes}
+	want := rolefile.Role{Text: "# Reviewer\n" + roleMarker + "\n"}
 	if man.Role == nil || *man.Role != want {
 		t.Fatalf("built role = %+v", man.Role)
 	}
@@ -88,20 +88,14 @@ func TestBuildV2RejectsInvalidUTF8Role(t *testing.T) {
 	}
 }
 
-func TestBuildV2TruncatesLargeRole(t *testing.T) {
-	body := strings.Repeat("r", rolefile.LimitBytes+100)
-	_, _, man, err := buildWithRole(t, []byte(body))
-	if err != nil {
-		t.Fatal(err)
+func TestBuildV2RoleLimit(t *testing.T) {
+	body := strings.Repeat("я", rolefile.LimitChars)
+	if _, _, man, err := buildWithRole(t, []byte(body)); err != nil || man.Role == nil || man.Role.Text != body {
+		t.Fatalf("500 characters: role = %+v, err = %v", man.Role, err)
 	}
-	if man.Role == nil || !man.Role.Truncated || len(man.Role.Text) != rolefile.LimitBytes || man.Role.LimitBytes != rolefile.LimitBytes {
-		t.Fatalf("role = %+v", man.Role)
-	}
-	if man.RoleSourceBytes != int64(len(body)) {
-		t.Fatalf("RoleSourceBytes = %d", man.RoleSourceBytes)
-	}
-	if out, _ := json.Marshal(man); bytes.Contains(out, []byte("RoleSourceBytes")) || bytes.Contains(out, []byte("source_bytes")) {
-		t.Fatalf("source size leaked into JSON: %s", out)
+	_, _, _, err := buildWithRole(t, []byte(body+"я"))
+	if err == nil || !strings.Contains(err.Error(), "501 characters") || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("501 characters: err = %v", err)
 	}
 }
 
@@ -187,11 +181,10 @@ func TestPortableArchiveRejectsInvalidRole(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := map[string]struct{ role, want string }{
-		"whitespace text": {`{"text":" \n","truncated":false,"limit_bytes":65536}`, "role: text is empty"},
-		"over limit":      {`{"text":"` + strings.Repeat("a", rolefile.MinLimitBytes+1) + `","truncated":true,"limit_bytes":16384}`, "more than limit_bytes"},
-		"small limit":     {`{"text":"role","truncated":false,"limit_bytes":1024}`, "limit_bytes 1024 is less than 16384"},
-		"invalid utf8":    {"{\"text\":\"role \xff\",\"truncated\":false,\"limit_bytes\":65536}", "role: manifest is not valid UTF-8"},
-		"unknown field":   {`{"text":"role","truncated":false,"limit_bytes":65536,"extra":1}`, `unknown field "extra"`},
+		"whitespace text": {`{"text":" \n"}`, "role: text is empty"},
+		"over limit":      {`{"text":"` + strings.Repeat("я", rolefile.LimitChars+1) + `"}`, "text is 501 characters"},
+		"invalid utf8":    {"{\"text\":\"role \xff\"}", "role: manifest is not valid UTF-8"},
+		"unknown field":   {`{"text":"role","extra":1}`, `unknown field "extra"`},
 	}
 	for name, tc := range cases {
 		tampered := rewriteArchiveMember(t, archive, "manifest.json", func(body []byte) []byte {
@@ -209,6 +202,17 @@ func TestPortableArchiveRejectsInvalidRole(t *testing.T) {
 		_, err := ValidatePortableArchive(tampered, ref)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: err = %v, want %q", name, err, tc.want)
+		}
+		if name == "unknown field" {
+			continue // the lenient check of pull and push ignores unknown fields
+		}
+		// Pull and the store's push use the lenient ValidateArchive.
+		path := filepath.Join(t.TempDir(), "image.tar.gz")
+		if err := os.WriteFile(path, tampered, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ValidateArchive(path, ref); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: ValidateArchive err = %v, want %q", name, err, tc.want)
 		}
 	}
 }

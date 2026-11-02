@@ -352,7 +352,18 @@ func fileDigest(path string) (string, error) {
 
 // ValidateArchive verifies a staged archive before callers publish it at ref.
 func ValidateArchive(archivePath string, ref Ref) (Manifest, error) {
-	return inspectArchive(archivePath, ref)
+	m, err := inspectArchive(archivePath, ref)
+	if err != nil || m.Role == nil {
+		return m, err
+	}
+	data, err := readFileFromTar(archivePath, "manifest.json")
+	if err != nil {
+		return Manifest{}, err
+	}
+	if err := validatePortableRole(m.Role, data); err != nil {
+		return Manifest{}, err
+	}
+	return m, nil
 }
 
 func readFileFromTar(archive, want string) ([]byte, error) {

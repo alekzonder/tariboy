@@ -50,7 +50,7 @@ func TestImageInspectReturnsRole(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := result.(ImageManifest)
-	want := ManifestRole{Text: "# Reviewer\n" + commandRoleMarker + "\n", LimitBytes: rolefile.LimitBytes}
+	want := ManifestRole{Text: "# Reviewer\n" + commandRoleMarker + "\n"}
 	if got.Role == nil || *got.Role != want {
 		t.Fatalf("role = %+v", got.Role)
 	}
@@ -72,28 +72,16 @@ func TestImageInspectReturnsRole(t *testing.T) {
 	}
 }
 
-func TestImageBuildWarnsAboutTruncatedRole(t *testing.T) {
+func TestImageBuildRejectsRoleOverLimit(t *testing.T) {
 	c := localCtx(t)
 	dir := writeExample(t)
-	size := rolefile.LimitBytes + 4000
-	writeRole(t, dir, strings.Repeat("r", size))
-	result, err := callCommand(t, c, "image.build", registry.Params{"name": "big", "path": dir})
-	if err != nil {
-		t.Fatal(err)
+	writeRole(t, dir, strings.Repeat("я", rolefile.LimitChars+1))
+	_, err := callCommand(t, c, "image.build", registry.Params{"name": "big", "path": dir, "wait": true})
+	if err == nil || !strings.Contains(err.Error(), "501 characters") || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("err = %v", err)
 	}
-	op := finishedOperation(t, c, result.(OperationStarted).Operation.ID)
-	if op.ErrorMessage != "" {
-		t.Fatalf("operation = %+v", op)
-	}
-	if log := operationLogText(t, c, op.ID); !strings.Contains(log, rolefile.Warning(int64(size))) {
-		t.Fatalf("log lacks the warning:\n%s", log)
-	}
-	inspected, err := callCommand(t, c, "image.inspect", registry.Params{"ref": "big:latest"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if role := inspected.(ImageManifest).Role; role == nil || !role.Truncated || len(role.Text) != rolefile.LimitBytes {
-		t.Fatalf("role = %+v", role)
+	if _, err := callCommand(t, c, "image.inspect", registry.Params{"ref": "big:latest"}); err == nil {
+		t.Fatal("the failed build left an image")
 	}
 }
 
@@ -118,7 +106,7 @@ func TestWorkflowInspectReturnsRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := ManifestRole{Text: "# Flow\n", LimitBytes: rolefile.LimitBytes}
+	want := ManifestRole{Text: "# Flow\n"}
 	if got := result.(WorkflowImageManifest).Role; got == nil || *got != want {
 		t.Fatalf("role = %+v", got)
 	}
@@ -136,21 +124,13 @@ func TestWorkflowInspectReturnsRole(t *testing.T) {
 	}
 }
 
-func TestWorkflowBuildWarnsAboutTruncatedRole(t *testing.T) {
+func TestWorkflowBuildRejectsRoleOverLimit(t *testing.T) {
 	c := workflowCtx(t)
 	dir := writeWorkflowSource(t, t.TempDir(), "1.0.0")
-	size := rolefile.LimitBytes + 1
-	writeRole(t, dir, strings.Repeat("w", size))
-	result, err := callCommand(t, c, "workflow.build", registry.Params{"path": dir})
-	if err != nil {
-		t.Fatal(err)
-	}
-	op := finishedOperation(t, c, result.(OperationStarted).Operation.ID)
-	if op.ErrorMessage != "" {
-		t.Fatalf("operation = %+v", op)
-	}
-	if log := operationLogText(t, c, op.ID); !strings.Contains(log, rolefile.Warning(int64(size))) {
-		t.Fatalf("log lacks the warning:\n%s", log)
+	writeRole(t, dir, strings.Repeat("я", rolefile.LimitChars+1))
+	_, err := callCommand(t, c, "workflow.build", registry.Params{"path": dir, "wait": true})
+	if err == nil || !strings.Contains(err.Error(), "501 characters") || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

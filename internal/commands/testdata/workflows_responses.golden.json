@@ -449,9 +449,7 @@
     ],
     "name": "rich",
     "role": {
-      "limit_bytes": 65536,
-      "text": "# Rich workflow\n\nPlans and checks the work.\n",
-      "truncated": false
+      "text": "# Rich workflow\n\nPlans and checks the work.\n"
     },
     "schema_version": 1,
     "version": "0.1.0"

@@ -189,7 +189,7 @@ func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *St
 	if manifest.Skills == nil {
 		manifest.Skills = []agentskills.Metadata{}
 	}
-	if manifest.Role, manifest.RoleSourceBytes, err = rolefile.Read(src.Dir); err != nil {
+	if manifest.Role, err = rolefile.Read(src.Dir); err != nil {
 		return Manifest{}, err
 	}
 	digest, err := store.writeV2Archive(ref, manifest, prepared.template, prepared.layers, prepared.skills, archiveOut)

@@ -24,7 +24,7 @@ func sourceWithRole(t *testing.T, role string) *workflowfile.File {
 func TestPublishRecordsRole(t *testing.T) {
 	s := newStore(t)
 	m := publish(t, s, sourceWithRole(t, "# Workflow role\n"))
-	want := rolefile.Role{Text: "# Workflow role\n", LimitBytes: rolefile.LimitBytes}
+	want := rolefile.Role{Text: "# Workflow role\n"}
 	if m.Role == nil || *m.Role != want {
 		t.Fatalf("published role = %+v", m.Role)
 	}
@@ -63,11 +63,17 @@ func TestPublishRejectsInvalidUTF8Role(t *testing.T) {
 	}
 }
 
-func TestPublishTruncatesLargeRole(t *testing.T) {
-	m := publish(t, newStore(t), sourceWithRole(t, strings.Repeat("w", rolefile.LimitBytes+1)))
-	if m.Role == nil || !m.Role.Truncated || len(m.Role.Text) != rolefile.LimitBytes {
-		t.Fatalf("role = %+v", m.Role)
+func TestPublishRoleLimit(t *testing.T) {
+	body := strings.Repeat("я", rolefile.LimitChars)
+	if m := publish(t, newStore(t), sourceWithRole(t, body)); m.Role == nil || m.Role.Text != body {
+		t.Fatalf("500 characters: role = %+v", m.Role)
 	}
+	s := newStore(t)
+	_, _, err := s.Publish(sourceWithRole(t, body+"я"), t0)
+	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "501 characters") || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("501 characters: err = %v", err)
+	}
+	noRefs(t, s)
 }
 
 // TestRoleDoesNotChangeDigestRule pins the digest of a source with ROLE.md

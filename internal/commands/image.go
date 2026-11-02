@@ -23,7 +23,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
-	"github.com/alekzonder/tariboy/internal/rolefile"
 	"github.com/alekzonder/tariboy/internal/stores"
 	"github.com/alekzonder/tariboy/internal/tidy"
 )
@@ -46,7 +45,7 @@ func imageBuild() registry.Command {
 		Path:        "image.build",
 		AbsPathArgs: []string{"path"},
 		Summary:     "Start a background build of an agent image from a Tariboyfile.yaml",
-		Help:        "The daemon builds the image as an operation. The CLI prints the operation log until the build ends, then the result; --detach prints only the operation id. An optional ROLE.md next to Tariboyfile.yaml goes into the manifest field role (up to 65536 bytes; a longer file is cut with a warning). It is not inherited through extends and never enters the prompt.",
+		Help:        "The daemon builds the image as an operation. The CLI prints the operation log until the build ends, then the result; --detach prints only the operation id. An optional ROLE.md next to Tariboyfile.yaml goes into the manifest field role (up to 500 characters; a longer file fails the build). It is not inherited through extends and never enters the prompt.",
 		Args: append([]registry.Arg{
 			{Name: "source", Type: registry.String, Help: "Store selector (store/image)"},
 			{Name: "name", Flag: "name", Type: registry.String, Help: "target image name"},
@@ -306,9 +305,6 @@ func publishImage(c *registry.Ctx, params imageBuildParams, source imageBuildSou
 			return restore("build_failed", err)
 		}
 		log.Printf("built %s digest %s, %d layers", refs[0], man.Digest, len(man.Layers))
-		if man.Role != nil && man.Role.Truncated {
-			log.Printf("%s", rolefile.Warning(man.RoleSourceBytes))
-		}
 		for _, ref := range refs[1:] {
 			log.Printf("tag %s", ref)
 			if err := store.SetTag(ref, man.Digest); err != nil {
