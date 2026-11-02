@@ -49,8 +49,16 @@ type Filter struct {
 
 // ParseNameVersion splits NAME[:VERSION].
 func ParseNameVersion(s string) (name, version string, err error) {
-	name, version, found := strings.Cut(s, ":")
-	if s != "" && (name == "" || (found && version == "") || strings.Contains(version, ":")) {
+	name = s
+	// The version follows the last colon after the last slash, so a
+	// registry port stays in the name.
+	if i := strings.LastIndex(s, ":"); i > strings.LastIndex(s, "/") {
+		name, version = s[:i], s[i+1:]
+		if version == "" {
+			return "", "", errInvalid(fmt.Sprintf("%q is not NAME[:VERSION]", s))
+		}
+	}
+	if s != "" && name == "" {
 		return "", "", errInvalid(fmt.Sprintf("%q is not NAME[:VERSION]", s))
 	}
 	return name, version, nil

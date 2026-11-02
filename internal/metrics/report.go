@@ -73,9 +73,12 @@ func (s sliceSet) get(name, version string) *sliceAcc {
 }
 
 // place counts a task in the slice of its only version, or as mixed in
-// the slice of each of its versions.
-func place[V interface{ key() string }](s sliceSet, e *taskEval, versions map[string]V, nameVersion func(V) (string, string)) {
+// the slice of each of its versions. Versions outside the filter get no slice.
+func place[V interface{ key() string }](s sliceSet, e *taskEval, versions map[string]V, nameVersion func(V) (string, string), match func(V) bool) {
 	for _, v := range versions {
+		if !match(v) {
+			continue
+		}
 		acc := s.get(nameVersion(v))
 		if len(versions) == 1 {
 			acc.tasks = append(acc.tasks, e)
@@ -120,11 +123,13 @@ func (d *data) report(f Filter, rows []iterRow, since, until string, now time.Ti
 		}
 		total.tasks = append(total.tasks, e)
 		for agent := range e.agents {
-			acc := agents.get(agent, "")
-			acc.tasks = append(acc.tasks, e)
+			if f.Agent == "" || agent == f.Agent {
+				acc := agents.get(agent, "")
+				acc.tasks = append(acc.tasks, e)
+			}
 		}
-		place(images, e, e.images, func(v imageVer) (string, string) { return v.name, v.version })
-		place(workflows, e, e.workflows, func(v wfVer) (string, string) { return v.name, v.version })
+		place(images, e, e.images, func(v imageVer) (string, string) { return v.name, v.version }, f.matchImage)
+		place(workflows, e, e.workflows, func(v wfVer) (string, string) { return v.name, v.version }, f.matchWorkflow)
 	}
 	return MetricsReport{Since: since, Until: until, Total: total.slice(), Agents: agents.list(), Images: images.list(), Workflows: workflows.list()}
 }

@@ -134,10 +134,10 @@ func load(ctx context.Context, tx *sql.Tx, cond string, args []any, fallbackVers
 			d.tasks[id].visits = append(d.tasks[id].visits, v)
 			return nil
 		}},
-		{`SELECT task_id, CASE WHEN kind = 'task.created' THEN COALESCE(json_extract(payload, '$.status'), 'open')
+		{`SELECT task_id, CASE WHEN kind IN ('task.created', 'task.imported') THEN COALESCE(json_extract(payload, '$.status'), 'open')
 				ELSE json_extract(payload, '$.status') END, created_at
 			FROM task_events WHERE task_id IN (` + ids + `) AND json_valid(payload)
-				AND (kind = 'task.created' OR json_type(payload, '$.status') = 'text') ORDER BY sequence`, idArgs, func(r *sql.Rows) error {
+				AND (kind IN ('task.created', 'task.imported') OR json_type(payload, '$.status') = 'text') ORDER BY sequence`, idArgs, func(r *sql.Rows) error {
 			var id int64
 			var c statusChange
 			var at string
@@ -242,18 +242,21 @@ func loadIterations(ctx context.Context, tx *sql.Tx, cond string, args []any, fa
 	var out []iterRow
 	err := query(ctx, tx, `SELECT a.iteration, a.agent, COALESCE(a.task_id, ''), MIN(a.ts),
 			SUM(a.input_tokens), SUM(a.output_tokens), SUM(a.cache_write_tokens), SUM(a.cache_read_tokens), SUM(a.cost_usd),
-			MAX(a.image_name), MAX(a.image_digest),
+			MAX(a.image_name), MAX(a.image_tag), MAX(a.image_digest),
 			COALESCE(i.started_at, ''), COALESCE(i.image_ref, ''), COALESCE(i.image_version, ''), COALESCE(i.image_digest, '')
 		FROM ai_requests a LEFT JOIN iterations i ON i.id = a.iteration
 		WHERE `+cond+` GROUP BY a.iteration, a.agent, a.task_id`, args, func(r *sql.Rows) error {
 		var it iterRow
-		var firstTS, aiName, aiDigest, started, ref, version, digest string
+		var firstTS, aiName, aiTag, aiDigest, started, ref, version, digest string
 		if err := r.Scan(&it.iteration, &it.agent, &it.taskKey, &firstTS, &it.tokens.Input, &it.tokens.Output,
-			&it.tokens.CacheWrite, &it.tokens.CacheRead, &it.cost, &aiName, &aiDigest, &started, &ref, &version, &digest); err != nil {
+			&it.tokens.CacheWrite, &it.tokens.CacheRead, &it.cost, &aiName, &aiTag, &aiDigest, &started, &ref, &version, &digest); err != nil {
 			return err
 		}
 		if ref == "" { // no iterations row: retention removed it
 			ref, digest, version = aiName, aiDigest, ""
+			if aiTag != "" {
+				ref += ":" + aiTag
+			}
 		}
 		if version == "" {
 			version = cmp.Or(fallbackVersions[digest], UnknownVersion)

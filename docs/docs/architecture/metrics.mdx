@@ -41,8 +41,8 @@ old keys.
 | Field | Unit | Definition | Source |
 | --- | --- | --- | --- |
 | `lead_time_s` | seconds | From the first entry to `in_progress` to completion. `null` if the task is not `done` or has no start. | `tasks.started_at` and `tasks.completed_at`. If `started_at` is empty, the first `task_events` row that sets `status` to `in_progress`. |
-| `status_time_s` | seconds per status | The sum of the time in each status. An open interval counts up to the time of the request. `done` and `cancelled` do not count. | A workflow task: `task_status_visits` (`left_at` − `entered_at`). A task without a workflow: the `task_events` rows that set `status`, with `task.created` as `open`. |
-| `usage.iterations` | count | The number of distinct iterations of the task. | `COUNT(DISTINCT iteration)` of `ai_requests` with `task_id` equal to a key of the task |
+| `status_time_s` | seconds per status | The sum of the time in each status. An open interval counts up to the time of the request. `done` and `cancelled` do not count. | A workflow task: `task_status_visits` (`left_at` − `entered_at`). A task without a workflow: the `task_events` rows that set `status`, with `task.created` or `task.imported` as `open`. |
+| `usage.iterations` | count | The number of distinct iterations of the task. A request without an iteration id adds tokens and cost, but no iteration. | `COUNT(DISTINCT iteration)` of `ai_requests` with `task_id` equal to a key of the task |
 | `usage.tokens` | tokens | Token sums by kind. | The same `ai_requests` rows |
 | `usage.cost_usd` | US dollars | The cost sum. | The same `ai_requests` rows |
 | `rework_rounds` | count | The number of visits that ended with `changes_requested`, `rework` or `conflict`. | `task_status_visits.outcome` |
@@ -74,9 +74,10 @@ configuration of the agent.
 1. The `iterations` row of `ai_requests.iteration` gives `image_ref`,
    `image_version` and `image_digest`. The image name is `image_ref` without
    its tag.
-2. If retention removed the `iterations` row, `ai_requests.image_name` gives
-   the name and `ai_requests.image_digest` gives the digest. The version
-   comes from another `iterations` row with the same digest.
+2. If retention removed the `iterations` row, `ai_requests.image_name` and
+   `image_tag` give the reference and `ai_requests.image_digest` gives the
+   digest. The version comes from another `iterations` row with the same
+   digest.
 3. If no row gives the version, the version is `unknown`. The iteration goes
    to the image slice with the version `unknown`.
 
@@ -87,8 +88,15 @@ was open when the iteration started (`entered_at` ≤ start < `left_at`, or
 `left_at` is empty). The start is `iterations.started_at`. Without an
 `iterations` row, the start is the time of the first AI request of the
 iteration. The visit's `workflow_digest` maps to `task_workflow_images.name`
-and `version`. An iteration without a task, or with a task without a
-workflow, goes to the workflow slice `none`.
+and `version`.
+
+- If no visit was open at the start, for example because the iteration
+  started before the first visit, the current `tasks.workflow_digest` of the
+  task gives the version.
+- If `task_workflow_images` has no row for the digest, the workflow name is
+  `unknown` and the version is empty.
+- An iteration without a task, or with a task without a workflow, goes to the
+  workflow slice `none`.
 
 ## Server report
 
@@ -136,6 +144,14 @@ report:
   workflow.
 - `tasks` keeps only the done tasks with an iteration of that agent, with an
   iteration on that image, and with a visit under that workflow.
+- The slice lists keep only the agent, the image versions and the workflow
+  versions that the filter selects. A kept task adds nothing to the slices of
+  other agents or versions. The version rule still uses all versions of the
+  task, so a kept task with two versions adds to `mixed_tasks`.
+
+An image name can include a registry port, as in
+`--image localhost:5000/dev:1.0`. The version follows the last colon after
+the last slash.
 
 `--workflow none` selects the iterations and tasks without a workflow.
 `--image NAME:unknown` selects the iterations without a known version. An

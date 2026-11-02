@@ -60,6 +60,7 @@ func newFixture(t *testing.T) *Reader {
 	task(1, "DEV-1", "done", "wfd1", ts(1, 10, 0), ts(1, 16, 0))
 	task(2, "DEV-2", "done", "", "", ts(2, 5, 0))
 	task(3, "DEV-3", "in_progress", "wfd2", ts(3, 0, 0), "")
+	task(4, "DEV-4", "in_progress", "", ts(5, 2, 0), "") // imported from another server
 	exec(t, st, `INSERT INTO task_key_aliases(old_key, task_id, created_at) VALUES ('OLD-7', 2, ?)`, ts(2, 0, 0))
 
 	visit := func(task, seq int, status, entered, left, outcome string, rejected int, digest string) {
@@ -84,6 +85,8 @@ func newFixture(t *testing.T) *Reader {
 	event(2, "task.updated", `{"status":"wait_customer"}`, ts(2, 3, 0))
 	event(2, "task.updated", `{"status":"in_progress"}`, ts(2, 4, 0))
 	event(2, "task.updated", `{"status":"done"}`, ts(2, 5, 0))
+	event(4, "task.imported", `{"key":"DEV-4"}`, ts(5, 0, 0))
+	event(4, "task.updated", `{"status":"in_progress"}`, ts(5, 2, 0))
 
 	exec(t, st, `INSERT INTO task_comments(id, task_id, author, body, created_at, updated_at) VALUES (1, 1, 'agent:alice', 'q', ?, ?)`, ts(1, 11, 0), ts(1, 11, 0))
 	for _, w := range [][]string{{"user:customer", ts(1, 11, 0)}, {"user:customer", ts(1, 13, 30)}, {"agent:bob", ts(1, 14, 0)}} {
@@ -192,7 +195,7 @@ func TestTaskMetricsTaskWithoutWorkflowOldKeyAndRetainedIteration(t *testing.T) 
 		t.Fatalf("usage = %+v rework = %d", m.Usage, m.ReworkRounds)
 	}
 	if len(m.Images) != 2 || m.Images[0].ImageVersion != "1.0.0" || m.Images[1].ImageVersion != "2.0.0" || m.Images[1].ImageDigest != "sha2" ||
-		m.Images[1].ImageRef != "developer" {
+		m.Images[1].ImageRef != "developer:latest" {
 		t.Fatalf("images = %+v", m.Images)
 	}
 	if len(m.Workflows) != 0 {
@@ -219,6 +222,17 @@ func TestTaskMetricsOpenTask(t *testing.T) {
 	}
 	if m.StatusTimeS["implement"] != int64(fixtureNow.Sub(time.Date(2026, 10, 3, 0, 0, 0, 0, time.UTC))/time.Second) {
 		t.Fatalf("an open visit runs to now: %v", m.StatusTimeS)
+	}
+}
+
+func TestTaskMetricsImportedTaskStartsAtImport(t *testing.T) {
+	t.Parallel()
+	m, err := newFixture(t).Task(context.Background(), "DEV-4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.StatusTimeS["open"] != 7200 || len(m.StatusTimeS) != 2 {
+		t.Fatalf("status time = %v", m.StatusTimeS)
 	}
 }
 
@@ -302,12 +316,18 @@ func TestReportFilters(t *testing.T) {
 		iterations int64
 		cost       float64
 		done       int
+		// slices lists the only rows of the filtered breakdown: a task of
+		// several agents or versions adds no row outside the filter.
+		slices func(MetricsReport) []MetricsSlice
+		only   string
 	}{
-		{"agent", func(f *Filter) { f.Agent = "bob" }, 2, 0.35, 1},
-		{"image version", func(f *Filter) { f.Image, f.ImageVersion = "developer", "2.0.0" }, 2, 1.4, 1},
-		{"image name", func(f *Filter) { f.Image = "developer" }, 6, 2.15, 2},
-		{"workflow version", func(f *Filter) { f.Workflow, f.WorkflowVersion = "development", "0.10.0" }, 2, 0.5, 1},
-		{"workflow none", func(f *Filter) { f.Workflow = "none" }, 3, 1.6, 1},
+		{"agent", func(f *Filter) { f.Agent = "bob" }, 2, 0.35, 1, func(r MetricsReport) []MetricsSlice { return r.Agents }, "bob "},
+		{"image version", func(f *Filter) { f.Image, f.ImageVersion = "developer", "2.0.0" }, 2, 1.4, 1,
+			func(r MetricsReport) []MetricsSlice { return r.Images }, "developer 2.0.0"},
+		{"image name", func(f *Filter) { f.Image = "developer" }, 6, 2.15, 2, nil, ""},
+		{"workflow version", func(f *Filter) { f.Workflow, f.WorkflowVersion = "development", "0.10.0" }, 2, 0.5, 1,
+			func(r MetricsReport) []MetricsSlice { return r.Workflows }, "development 0.10.0"},
+		{"workflow none", func(f *Filter) { f.Workflow = "none" }, 3, 1.6, 1, func(r MetricsReport) []MetricsSlice { return r.Workflows }, "none "},
 	} {
 		f := period()
 		c.filter(&f)
@@ -317,6 +337,11 @@ func TestReportFilters(t *testing.T) {
 		}
 		if rep.Total.Usage.Iterations != c.iterations || !near(rep.Total.Usage.CostUSD, c.cost) || rep.Total.Tasks.Done != c.done {
 			t.Fatalf("%s: total = %+v", c.name, rep.Total)
+		}
+		if c.slices != nil {
+			if got := c.slices(rep); len(got) != 1 || got[0].Name+" "+got[0].Version != c.only {
+				t.Fatalf("%s: slices = %+v", c.name, got)
+			}
 		}
 	}
 }
@@ -387,13 +412,13 @@ func TestJSONRoundTrip(t *testing.T) {
 
 func TestParseNameVersion(t *testing.T) {
 	t.Parallel()
-	for in, want := range map[string][2]string{"developer": {"developer", ""}, "developer:0.23.1": {"developer", "0.23.1"}, "": {"", ""}} {
+	for in, want := range map[string][2]string{"developer": {"developer", ""}, "developer:0.23.1": {"developer", "0.23.1"}, "": {"", ""}, "localhost:5000/dev": {"localhost:5000/dev", ""}, "localhost:5000/dev:1.0": {"localhost:5000/dev", "1.0"}} {
 		name, version, err := ParseNameVersion(in)
 		if err != nil || name != want[0] || version != want[1] {
 			t.Fatalf("%q = %q %q %v", in, name, version, err)
 		}
 	}
-	for _, in := range []string{"developer:", ":1.0", "a:b:c"} {
+	for _, in := range []string{"developer:", ":1.0", "localhost:5000/dev:"} {
 		if _, _, err := ParseNameVersion(in); err == nil {
 			t.Fatalf("%q must be invalid", in)
 		}
