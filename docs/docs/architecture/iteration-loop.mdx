@@ -204,8 +204,18 @@ interactive argv get it, after the image skill bridge. The hooks
 `PostToolUse`, `PostToolUseFailure` and `Stop` call that absolute `tmail`
 path. If `tmail` is missing, the version is older or unrecognized, or the write
 fails, the runner logs a warning and starts the iteration without the hooks.
-The [mail reference](/docs/reference/mail#harness-support) gives the hook
-output and the limits.
+
+A codex agent with the same conditions gets the hooks too, but the runner
+writes no file for them. If `codex --version` gives `0.141.0` or newer and the
+daemon codex approval mode is `yolo`, the runner appends
+`--dangerously-bypass-hook-trust` and two `-c hooks.<event>=...` overrides
+to the harness argv: `PostToolUse` and `Stop`, each with the absolute `tmail`
+path. Both `codex exec` and the codex TUI get the same arguments. The runner
+does not set `CODEX_HOME` or change `HOME`. In `approve-for-me`, with an
+older or unrecognized version, or without `tmail`, the runner logs a warning
+and starts the iteration without the hooks. The
+[mail reference](/docs/reference/mail#harness-support) gives the hook output
+and the limits.
 
 Before starting the shim, the runner checks the adapter's actual executable
 against this final environment. For a non-bare image it also resolves `python3`

@@ -1162,8 +1162,8 @@ func (r *ShimRunner) buildLaunch(ctx context.Context, ag agent.Agent, l agentdir
 	if r.cfg.CodexApproval != nil {
 		codexApproval = r.cfg.CodexApproval()
 	}
-	hargv, henv, err := adapter.Command(cwd, l.PromptPath(iterationID),
-		harness.Config{Model: ag.Model, Effort: ag.Effort, Interactive: ag.Interactive, SessionID: iterationID, ProxyURL: proxyURL, Bare: in.bare, CodexApproval: codexApproval})
+	hcfg := harness.Config{Model: ag.Model, Effort: ag.Effort, Interactive: ag.Interactive, SessionID: iterationID, ProxyURL: proxyURL, Bare: in.bare, CodexApproval: codexApproval}
+	hargv, henv, err := adapter.Command(cwd, l.PromptPath(iterationID), hcfg)
 	if err != nil {
 		return preparedRun{}, err
 	}
@@ -1194,7 +1194,7 @@ func (r *ShimRunner) buildLaunch(ctx context.Context, ag agent.Agent, l agentdir
 	if err != nil {
 		return preparedRun{}, err
 	}
-	hargv = append(hargv, r.instantHooksArgs(ag, l, adapter, env, cwd, in.bare)...)
+	hargv = append(hargv, r.instantHooksArgs(ag, l, adapter, env, cwd, hcfg)...)
 	if adapter.Type() == "opencode" {
 		hargv = append([]string{"/bin/sh", "-c", `umask "$1"; shift; exec "$@"`, "tariboy-opencode", mask}, hargv...)
 	} else {

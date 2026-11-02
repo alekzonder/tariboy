@@ -8,14 +8,15 @@ import (
 
 // instantHooksArgs writes the harness plugin whose hooks run tmail instant and
 // returns the args that load it. It loads the plugin only for a harness with
-// such hooks (claude), a non-bare image and an agent with the mail capability.
-// A missing tmail, an old harness or a failed write only logs a warning: the
-// iteration starts without the hooks and the letter reaches the next prompt.
-// The hooks call the absolute tmail path, so a PATH change in the agent shell
-// prologue does not affect them.
-func (r *ShimRunner) instantHooksArgs(ag agent.Agent, l agentdir.Layout, adapter harness.Adapter, env []string, cwd string, bare bool) []string {
+// such hooks (claude, codex), a non-bare image and an agent with the mail
+// capability. cfg is the config the adapter's Command got. A missing tmail, an
+// old harness, a mode the adapter refuses or a failed write only logs a
+// warning: the iteration starts without the hooks and the letter reaches the
+// next prompt. The hooks call the absolute tmail path, so a PATH change in the
+// agent shell prologue does not affect them.
+func (r *ShimRunner) instantHooksArgs(ag agent.Agent, l agentdir.Layout, adapter harness.Adapter, env []string, cwd string, cfg harness.Config) []string {
 	hooker, ok := adapter.(harness.InstantMailHooker)
-	if !ok || bare || !hasMailPlugin(ag.Plugins) {
+	if !ok || cfg.Bare || !hasMailPlugin(ag.Plugins) {
 		return nil
 	}
 	warn := func(reason string, err error) []string {
@@ -28,7 +29,7 @@ func (r *ShimRunner) instantHooksArgs(ag agent.Agent, l agentdir.Layout, adapter
 		return warn("tmail not found", err)
 	}
 	dir := l.InstantHooksDir(adapter.Type())
-	hooks, err := hooker.InstantMailHooks(tmail, dir)
+	hooks, err := hooker.InstantMailHooks(tmail, dir, cfg)
 	if err != nil {
 		return warn("build hooks", err)
 	}

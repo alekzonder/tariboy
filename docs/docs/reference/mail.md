@@ -267,6 +267,8 @@ each tool call. Run it in agent mode:
 | `claude-post-tool-use` | `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":TEXT}}` |
 | `claude-post-tool-use-failure` | The same, with `"hookEventName":"PostToolUseFailure"` |
 | `claude-stop` | `{"decision":"block","reason":TEXT}` |
+| `codex-post-tool-use` | The same as `claude-post-tool-use` |
+| `codex-stop` | The same as `claude-stop` |
 
 `TEXT` is the block below. `tmail` builds the JSON itself, so a hook needs no
 `jq`, `python` or `node`.
@@ -318,7 +320,7 @@ AI proxy does not change requests.
 | Harness | Interactive | Batch |
 | --- | --- | --- |
 | claude | hook | hook |
-| codex | next iteration | next iteration |
+| codex | hook | hook |
 | opencode | next iteration | next iteration |
 
 For claude, the daemon writes a plugin with three hooks into
@@ -338,10 +340,41 @@ with the letters. Each hook calls the absolute path of `tmail` that the daemon
 finds on the `PATH` of the iteration, and has a timeout of 5 seconds. The
 agent shell prologue therefore cannot change which `tmail` runs.
 
+For codex, the daemon writes no file. It adds the two hooks to the codex
+command as `-c` configuration overrides, which codex reads as one more
+configuration layer. `CODEX_HOME`, `HOME` and `XDG_CONFIG_HOME` do not change,
+and no file goes into `~/.codex` or the working directory. The interactive
+mode and the batch mode (`codex exec`) get the same arguments:
+
+```text
+--dangerously-bypass-hook-trust
+-c hooks.PostToolUse=[{matcher="*",hooks=[{type="command",command="'/path/to/tmail' instant --format codex-post-tool-use",timeout=5}]}]
+-c hooks.Stop=[{hooks=[{type="command",command="'/path/to/tmail' instant --format codex-stop",timeout=5}]}]
+```
+
+| Codex event | Command |
+| --- | --- |
+| `PostToolUse`, every tool | `tmail instant --format codex-post-tool-use` |
+| `Stop` | `tmail instant --format codex-stop` |
+
+Codex runs `PostToolUse` also after a failed tool call. It has no separate
+failure event. Codex runs only trusted hooks, and it keeps the trust in the
+`config.toml` of the user. `--dangerously-bypass-hook-trust` lets the hooks
+run without that trust, for this run only. The flag also runs every other
+enabled hook without review: the hooks in `~/.codex/config.toml` and the hooks
+of a trusted repository. Codex shows a warning about the flag in the
+`codex exec` event stream and on the TUI screen. The warning does not stop the
+iteration. The [Codex approval mode](/docs/security-controls#codex-approval-mode)
+section gives the security effect.
+
 The daemon connects the hooks only when all of these are true:
 
-- The harness is claude, version `2.1.227` or newer. The daemon runs
-  `claude --version` before each iteration.
+- The harness is claude, version `2.1.227` or newer, or codex, version
+  `0.141.0` or newer. The daemon runs `claude --version` or `codex --version`
+  before each iteration. A version that the daemon cannot read counts as too
+  old.
+- For codex, the daemon codex approval mode is `yolo`. In `approve-for-me`,
+  the trust bypass would let an unreviewed hook run outside the sandbox.
 - The image is not bare, and the agent has the `mail` capability (or its old
   name `messages`).
 - `tmail` is on the `PATH` of the iteration.
@@ -350,8 +383,8 @@ If a condition is false, or the daemon cannot write the plugin, the iteration
 starts without the hooks. Except for a missing capability or another harness,
 the daemon log has a warning. An instant letter then stays `waiting` or
 `queued`, the next iteration reads it, and its state becomes `read`. The same
-is true for codex and opencode, which have no hooks yet. The limits that stay
-with a hook:
+is true for opencode, which has no hooks yet. The limits that stay with a
+hook:
 
 - A long tool call holds the letter until the call ends. Nothing stops model
   output that has no tool call.
@@ -359,6 +392,10 @@ with a hook:
   waits for the next prompt.
 - A failure to create the flag file is logged. The next iteration reads the
   letter.
+- Codex does not document hooks in `-c` overrides or the trust bypass as a
+  stable interface. If a newer codex changes them, the hooks do not run and
+  the next iteration reads the letter. The version check finds only an older
+  codex.
 
 ## Agent settings
 

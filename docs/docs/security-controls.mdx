@@ -150,6 +150,18 @@ Each daemon chooses how its Codex agents run commands:
 The mode is per daemon, applies to every Codex agent on it, and takes effect
 from the next iteration. Other harnesses are unaffected.
 
+The mode also controls the
+[instant mail hooks](/docs/reference/mail#harness-support) of Codex:
+
+- In `yolo`, the runner starts Codex with `--dangerously-bypass-hook-trust`
+  so that the Tariboy hooks run without trust in `~/.codex/config.toml`. The
+  flag also runs every other enabled hook without review: unreviewed hooks in
+  `~/.codex/config.toml` and the hooks of a trusted repository in `.codex/`.
+  A hook gets no more access than a `yolo` command already has.
+- In `approve-for-me`, the runner does not add the flag or the hooks. A hook
+  runs outside the sandbox, so the flag would let an unreviewed repository
+  hook escape it. Instant letters then wait for the next iteration.
+
 ## Local and remote files
 
 Local data defaults to `~/.tariboy`; runtime files default to
