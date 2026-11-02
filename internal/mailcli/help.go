@@ -37,6 +37,11 @@ var helpText = map[string]commandHelp{
 			"TEXT may be given with --text instead; a TEXT of - reads it from stdin. In operator mode, --as agent:NAME replies on the agent's behalf.",
 		"ID  Letter id (required)\nTEXT  Reply text, or - for stdin (required unless --text is given)",
 		"tmail reply m-20261026T104200Z-000007 'Done: the bucket is created.'\ntmail reply m-20261026T104200Z-000007 'Which region?' --ask"},
+	"instant": {"Print the instant letters that wait for the running iteration", "instant [--format text|json]",
+		"For harness hooks after each tool call. Without the flag file named by TARIBOY_INSTANT_MAIL_FLAG it exits at once without calling the daemon. " +
+			"Otherwise it takes the waiting instant letters once and prints them in the form of the prompt's Messages section; --format json prints {\"ids\":[...],\"text\":\"...\"}. " +
+			"No letters, an error, a 1.5 s timeout or operator mode print nothing and exit 0.",
+		"", "tmail instant\ntmail instant --format json"},
 	"requeue": {"Return one of your dead letters to the inbox", "requeue ID",
 		"A request nobody answered in time is dead-lettered. Requeue puts it back in your inbox as an open letter.",
 		"ID  Letter id (required)", "tmail requeue m-20261026T104200Z-000007"},

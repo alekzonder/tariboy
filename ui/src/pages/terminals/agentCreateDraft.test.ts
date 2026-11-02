@@ -27,6 +27,7 @@ const source = {
   plugins: ["context", "custom"],
   messages_batch: 8,
   messages_max_queue: 900,
+  mail_instant_senders: null,
   group: "reviewers",
   alias: "Clone",
   notes: "all fields",

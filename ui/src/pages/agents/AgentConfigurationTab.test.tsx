@@ -48,6 +48,7 @@ const stopped: AgentView = {
   ai_stall_timeout_s: 1800,
   messages_batch: 10,
   messages_max_queue: 100,
+  mail_instant_senders: null,
   user_prompt: "",
   env: {},
   plugins: [],

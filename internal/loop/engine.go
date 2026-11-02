@@ -248,7 +248,14 @@ func (e *Engine) AbortCurrent(id string) bool {
 // the agent is on, not halted by a stop policy, and not on the terminal-only
 // bare image.
 func (e *Engine) iterates() bool {
-	return e.ag.Enabled && e.ag.ErrorReason == "" && e.ag.ImageRef != image.BareRef.String()
+	return agentIterates(e.ag)
+}
+
+// agentIterates is the one test of whether an agent launches loop iterations
+// on its own: it is on, not halted by a stop policy, and not on the
+// terminal-only bare image.
+func agentIterates(a agent.Agent) bool {
+	return a.Enabled && a.ErrorReason == "" && a.ImageRef != image.BareRef.String()
 }
 
 // reload re-reads the agent config so runtime-mutable settings apply on the next

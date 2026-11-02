@@ -20,6 +20,7 @@ type toolBody struct {
 	Deadline string         `json:"deadline"`
 	Notice   bool           `json:"notice"`
 	Ask      bool           `json:"ask"`
+	Instant  bool           `json:"instant"`
 }
 
 // AgentAction runs one /tools/mail/<action> call of agent (mailbox design §3):
@@ -47,13 +48,13 @@ func (m *Mail) AgentAction(agent, iterationID, action string, body map[string]an
 		return m.Thread(me, in.ID)
 	case "send":
 		letters, err := m.Send(Letter{From: me, To: in.To, Subject: in.Subject, Body: in.Text, Kind: in.Kind,
-			Data: in.Data, Deadline: in.Deadline, NeedsReply: !in.Notice, ProducedInIteration: iterationID})
+			Data: in.Data, Deadline: in.Deadline, NeedsReply: !in.Notice, ProducedInIteration: iterationID, Instant: in.Instant})
 		if err != nil {
 			return nil, err
 		}
 		return MailSendResult{Letters: letters}, nil
 	case "reply":
-		reply, closed, err := m.Reply(ReplyRequest{As: me, ID: in.ID, Text: in.Text, Ask: in.Ask, Iteration: iterationID})
+		reply, closed, err := m.Reply(ReplyRequest{As: me, ID: in.ID, Text: in.Text, Ask: in.Ask, Iteration: iterationID, Instant: in.Instant})
 		if err != nil {
 			return nil, err
 		}

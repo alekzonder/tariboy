@@ -202,6 +202,9 @@ func (f toolsFacade) mailDeps(d *agentapi.Deps) {
 			return nil, api.UserError{Status: http.StatusServiceUnavailable, Code: "unavailable",
 				Msg: "mail is unavailable"}
 		}
+		if action == "instant" {
+			return f.takeInstant()
+		}
 		return f.cfg.Mail.AgentAction(f.agent, f.iterations.currentIterationID(f.agent), action, body)
 	}
 }

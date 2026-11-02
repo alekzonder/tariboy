@@ -94,6 +94,9 @@ func mailGoldenCalls(ids mailFixtureIDs) []mailGoldenCall {
 		{"mail.requeue", "mail.requeue", registry.Params{"id": ids.dead, "as": "agent:worker"}},
 		{"agent.messages.batch", "agent.messages.batch", registry.Params{"name": "worker", "value": float64(7)}},
 		{"agent.messages.max-queue", "agent.messages.max-queue", registry.Params{"name": "worker", "value": float64(70)}},
+		{"agent.messages.instant-senders", "agent.messages.instant-senders", registry.Params{"name": "worker", "senders": []any{"agent:other"}}},
+		{"agent.messages.instant-senders reset", "agent.messages.instant-senders", registry.Params{"name": "worker", "reset": true}},
+		{"mail.send instant", "mail.send", registry.Params{"to": "agent:worker", "text": "now", "instant": true}},
 		{"agent.mail.clear", "agent.mail.clear", registry.Params{"name": "worker"}},
 	}
 }
@@ -152,6 +155,9 @@ func mailTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 		{"POST", "/api/mail/{id}/requeue", "/api/mail/" + ids.dead + "/requeue", map[string]any{"as": "agent:worker"}},
 		{"POST", "/api/agents/{name}/messages/batch", "/api/agents/worker/messages/batch", map[string]any{"value": 7}},
 		{"POST", "/api/agents/{name}/messages/max-queue", "/api/agents/worker/messages/max-queue", map[string]any{"value": 70}},
+		{"POST", "/api/agents/{name}/messages/instant-senders", "/api/agents/worker/messages/instant-senders", map[string]any{"senders": []string{"agent:other"}}},
+		{"POST", "/api/agents/{name}/messages/instant-senders", "/api/agents/worker/messages/instant-senders", map[string]any{"reset": true}},
+		{"POST", "/api/mail", "/api/mail", map[string]any{"to": "agent:worker", "text": "now", "instant": true}},
 		{"POST", "/api/agents/{name}/mail/clear", "/api/agents/worker/mail/clear", nil},
 	}
 }

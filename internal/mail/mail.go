@@ -80,6 +80,14 @@ type Letter struct {
 	DeadAt              string         `json:"dead_at"`
 	DeadReason          string         `json:"dead_reason"`
 	ProducedInIteration string         `json:"produced_in_iteration"`
+	// Instant asks for delivery into the recipient's running iteration at the
+	// next tool call. InstantState is one of the Instant* states, "" without
+	// the flag; InstantIteration and InstantAt are the iteration and the time
+	// of the delivery or of the prompt render.
+	Instant          bool   `json:"instant"`
+	InstantState     string `json:"instant_state"`
+	InstantIteration string `json:"instant_iteration"`
+	InstantAt        string `json:"instant_at"`
 	// IdempotencyKey is the producer retry guard, unique per recipient. It is
 	// not part of the Letter JSON.
 	IdempotencyKey string `json:"-"`
@@ -99,6 +107,8 @@ type ReplyRequest struct {
 	OnBehalf bool
 	// Iteration is the iteration the reply was written in, if any.
 	Iteration string
+	// Instant sends the reply as an instant letter.
+	Instant bool
 }
 
 // Hint is the live refetch hint for one written row (the /api/mail/ws frame).
@@ -215,6 +225,7 @@ type Mail struct {
 	event      func(Hint)
 	audit      func(agent, kind, dataJSON string)
 	deadlines  Deadlines
+	instant    InstantRuntime
 }
 
 // New returns the mailbox over st. clock defaults to time.Now.

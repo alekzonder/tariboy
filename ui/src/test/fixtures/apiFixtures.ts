@@ -64,6 +64,7 @@ export const agentView = (over: Partial<AgentView> = {}): AgentView => ({
   plugins: [],
   messages_batch: 0,
   messages_max_queue: 0,
+  mail_instant_senders: null,
   notes: "",
   ...over,
 });

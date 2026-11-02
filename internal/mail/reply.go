@@ -35,7 +35,7 @@ func (m *Mail) Reply(r ReplyRequest) (Letter, bool, error) {
 	}
 	reply := Letter{From: r.As, To: orig.From, Subject: replySubject(orig.Subject), Body: r.Text,
 		Kind: KindMessage, NeedsReply: r.Ask, InReplyTo: orig.ID, Data: map[string]any{},
-		ProducedInIteration: r.Iteration}
+		ProducedInIteration: r.Iteration, Instant: r.Instant}
 	if r.OnBehalf {
 		reply.Data["on_behalf"] = "operator"
 	}
@@ -47,6 +47,9 @@ func (m *Mail) Reply(r ReplyRequest) (Letter, bool, error) {
 		targets, err = []target{{principal: reply.To, closed: true}}, nil
 	}
 	if err != nil {
+		return Letter{}, false, err
+	}
+	if err := m.prepareInstant(reply, targets); err != nil {
 		return Letter{}, false, err
 	}
 	tx, err := m.db.Begin()
@@ -175,11 +178,15 @@ func (m *Mail) MarkRead(as string, ids []string) (closedNotices, read int, err e
 // it is still ahead and cleared when it has passed.
 func (m *Mail) Requeue(as, id string) (Letter, error) {
 	limit := 0
+	// arrival is the state a requeued instant letter starts over in, read
+	// before the transaction like at send.
+	var arrival target
 	if name, ok := strings.CutPrefix(as, "agent:"); ok {
 		var err error
 		if limit, err = m.dir.InboxCap(name); err != nil {
 			return Letter{}, err
 		}
+		arrival.instantState, arrival.iteration = m.arrivalState(as)
 	}
 	tx, err := m.db.Begin()
 	if err != nil {
@@ -208,14 +215,23 @@ func (m *Mail) Requeue(as, id string) (Letter, error) {
 	if err := m.requeueDeadlineTx(tx, &l); err != nil {
 		return Letter{}, err
 	}
+	// A requeued instant letter starts over, as at send.
+	var marks []instantMark
+	if l.Instant {
+		l.InstantState, l.InstantIteration, l.InstantAt = arrival.instantState, "", ""
+		if l.InstantState == InstantWaiting {
+			marks = []instantMark{{agent: strings.TrimPrefix(as, "agent:"), iteration: arrival.iteration}}
+		}
+	}
 	if _, err := tx.Exec(`UPDATE mail SET dead_at = '', dead_reason = '', attempts = 0, answered_at = '',
-		answer_id = '', deadline = ? WHERE id = ?`, l.Deadline, id); err != nil {
+		answer_id = '', deadline = ?, instant_state = ?, instant_iteration = '', instant_at = '' WHERE id = ?`,
+		l.Deadline, l.InstantState, id); err != nil {
 		return Letter{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return Letter{}, err
 	}
-	m.emit(written{letters: []Letter{l}, audits: []auditEvent{letterAudit("mail_requeued", l, map[string]any{"reason": reason})}})
+	m.emit(written{letters: []Letter{l}, marks: marks, audits: []auditEvent{letterAudit("mail_requeued", l, map[string]any{"reason": reason})}})
 	return l, nil
 }
 

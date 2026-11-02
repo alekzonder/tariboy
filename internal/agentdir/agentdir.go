@@ -184,3 +184,9 @@ func (l Layout) newestIteration() (string, error) {
 	}
 	return newest, nil
 }
+
+// InstantMailFlag is the flag file that tells the iteration's hook an instant
+// letter waits (TARIBOY_INSTANT_MAIL_FLAG).
+func (l Layout) InstantMailFlag(id string) string {
+	return filepath.Join(l.IterationDir(id), "instant-mail")
+}

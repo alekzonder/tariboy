@@ -186,6 +186,14 @@ agent environment and secrets. An explicit agent `PATH` is therefore an
 intentional override. Non-bare images prepend the agent bin directory after the
 override; bare images omit that prefix and otherwise keep the daemon baseline.
 
+Each iteration also gets `TARIBOY_INSTANT_MAIL_FLAG`, the path of the flag
+file `<base-dir>/agents/<name>/iterations/<iteration>/instant-mail`. The daemon
+sets it after the agent environment and the image skill environment, so
+neither can change it. The daemon creates the file when an
+[instant letter](/docs/reference/mail#instant-letters) waits for the
+iteration. Agent scripts and image activation do not get the variable,
+because they do not run in an iteration.
+
 Before starting the shim, the runner checks the adapter's actual executable
 against this final environment. For a non-bare image it also resolves `python3`
 there and supplies that absolute interpreter path to the packaged skill

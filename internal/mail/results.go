@@ -70,3 +70,10 @@ func (m *Mail) Thread(as, id string) (MailThread, error) {
 	}
 	return MailThread{Letter: l, Reply: reply}, nil
 }
+
+// MailInstantResult is what the tool route /tools/mail/instant returns: the
+// instant letters it delivered and the text block a hook prints.
+type MailInstantResult struct {
+	IDs  []string `json:"ids"`
+	Text string   `json:"text"`
+}

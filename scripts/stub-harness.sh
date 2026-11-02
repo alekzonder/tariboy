@@ -13,6 +13,10 @@
 #   STUB_AI  set to 1 to POST one AI request through the proxy before finishing (default unset)
 #   STUB_STDOUT    line to print before finishing             (default unset)
 #   STUB_TASKS_MINE file to receive a direct ttasks mine result (default unset)
+#   STUB_INSTANT_LOOP "steps|file": instead of STUB_SLEEP, make STEPS fake tool
+#                  calls 0.5 s apart and run `tmail instant` after each, as a
+#                  hook does; each non-empty output is appended to FILE after a
+#                  line with the time in milliseconds (default unset)
 set -eu
 
 tool_post() {
@@ -32,7 +36,19 @@ if [ -n "${STUB_TASKS_MINE:-}" ]; then
   ttasks mine --json >"$STUB_TASKS_MINE"
 fi
 
-sleep "${STUB_SLEEP:-0.2}"
+if [ -n "${STUB_INSTANT_LOOP:-}" ]; then
+  IL_STEPS="${STUB_INSTANT_LOOP%%|*}"
+  IL_OUT="${STUB_INSTANT_LOOP#*|}"
+  for _ in $(seq "$IL_STEPS"); do
+    sleep 0.5
+    IL_TEXT="$(tmail instant 2>/dev/null || true)"
+    if [ -n "$IL_TEXT" ]; then
+      printf 'at_ms %s\n%s\n' "$(date +%s%3N)" "$IL_TEXT" >>"$IL_OUT"
+    fi
+  done
+else
+  sleep "${STUB_SLEEP:-0.2}"
+fi
 
 if [ -n "${STUB_STDOUT:-}" ]; then
   printf '%s\n' "$STUB_STDOUT"

@@ -12,11 +12,14 @@ import (
 
 // target is one resolved recipient. cap is the inbox cap of an agent
 // recipient (zero or less: none). closed stores the letter closed: nobody
-// reads it.
+// reads it. instantState is the state an instant letter starts in, and
+// iteration the running iteration it waits for.
 type target struct {
-	principal string
-	cap       int
-	closed    bool
+	principal    string
+	cap          int
+	closed       bool
+	instantState string
+	iteration    string
 }
 
 // Send validates the sender and the recipients, expands groups and writes one
@@ -50,6 +53,9 @@ func (m *Mail) SendGuarded(l Letter, guard func(*sql.Tx) error) ([]Letter, error
 	if err != nil {
 		return nil, err
 	}
+	if err := m.prepareInstant(l, targets); err != nil {
+		return nil, err
+	}
 	tx, err := m.db.Begin()
 	if err != nil {
 		return nil, err
@@ -69,6 +75,19 @@ func (m *Mail) SendGuarded(l Letter, guard func(*sql.Tx) error) ([]Letter, error
 	}
 	m.emit(w)
 	return out, nil
+}
+
+// prepareInstant checks an instant letter and sets the state it starts in
+// for each target; a letter without the flag passes unchanged.
+func (m *Mail) prepareInstant(l Letter, targets []target) error {
+	if !l.Instant {
+		return nil
+	}
+	if err := m.checkInstant(l.From, targets); err != nil {
+		return err
+	}
+	m.instantTargets(targets)
+	return nil
 }
 
 // ValidateRecipient checks that to (a comma list) names principals a letter
@@ -104,6 +123,7 @@ func normalize(l Letter, now time.Time) (Letter, error) {
 	l.ID, l.Seq, l.CreatedAt = "", 0, ""
 	l.ReadAt, l.AnsweredAt, l.AnswerID, l.CloseNote = "", "", "", ""
 	l.Attempts, l.DeadAt, l.DeadReason = 0, "", ""
+	l.InstantState, l.InstantIteration, l.InstantAt = "", "", ""
 	return l, nil
 }
 
@@ -274,6 +294,12 @@ func (m *Mail) writeTx(tx *sql.Tx, l Letter, targets []target, now time.Time) ([
 		if err := closeOnArrival(tx, &row, t); err != nil {
 			return nil, written{}, err
 		}
+		if row.Instant {
+			row.InstantState = t.instantState
+			if !row.Open() {
+				row.InstantState = InstantNotDelivered
+			}
+		}
 		row, err := insertLetter(tx, row, now)
 		if err != nil {
 			return nil, written{}, err
@@ -285,6 +311,9 @@ func (m *Mail) writeTx(tx *sql.Tx, l Letter, targets []target, now time.Time) ([
 		}
 		out = append(out, row)
 		w.letters = append(w.letters, row)
+		if row.InstantState == InstantWaiting {
+			w.marks = append(w.marks, instantMark{agent: strings.TrimPrefix(row.To, "agent:"), iteration: t.iteration})
+		}
 		w.audits = append(w.audits, letterAudit("mail_sent", row, nil))
 		if row.DeadAt != "" {
 			w.audits = append(w.audits, letterAudit("mail_dead", row, map[string]any{"reason": row.DeadReason}))

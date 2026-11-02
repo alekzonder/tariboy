@@ -30,40 +30,43 @@ type AgentHalt struct {
 
 // AgentView is one agent's full configuration (agent.inspect).
 type AgentView struct {
-	Name                     string            `json:"name"`
-	Image                    string            `json:"image"`
-	Digest                   string            `json:"digest"`
-	State                    string            `json:"state"`
-	Cwd                      string            `json:"cwd"`
-	ConfiguredCwd            string            `json:"configured_cwd"`
-	Harness                  string            `json:"harness"`
-	Model                    string            `json:"model"`
-	Effort                   string            `json:"effort"`
-	Interactive              bool              `json:"interactive"`
-	Enabled                  bool              `json:"enabled"`
-	IntervalS                int               `json:"interval_s"`
-	TimeoutS                 int               `json:"timeout_s"`
-	HardTimeoutS             int               `json:"hard_timeout_s"`
-	OnTimeout                string            `json:"on_timeout"`
-	OnError                  string            `json:"on_error"`
-	UserPrompt               string            `json:"user_prompt"`
-	Env                      map[string]string `json:"env"`
-	Plugins                  []string          `json:"plugins"`
-	MessagesBatch            int               `json:"messages_batch"`
-	MessagesMaxQueue         int               `json:"messages_max_queue"`
-	GoalEnabled              bool              `json:"goal_enabled"`
-	GoalWaitCustomerTimeoutS int               `json:"goal_wait_customer_timeout_s"`
-	GoalDeliveryCooldownS    int               `json:"goal_delivery_cooldown_s"`
-	CurrentGoalTaskKey       string            `json:"current_goal_task_key"`
-	Group                    string            `json:"group"`
-	Alias                    string            `json:"alias"`
-	Notes                    string            `json:"notes"`
-	Color                    string            `json:"color"`
-	MaxIdleIterations        int               `json:"max_idle_iterations"`
-	AIStallTimeoutS          int               `json:"ai_stall_timeout_s"`
-	Schedule                 string            `json:"schedule"`
-	ScheduleNextAt           string            `json:"schedule_next_at"`
-	Budget                   AgentBudget       `json:"budget"`
+	Name             string            `json:"name"`
+	Image            string            `json:"image"`
+	Digest           string            `json:"digest"`
+	State            string            `json:"state"`
+	Cwd              string            `json:"cwd"`
+	ConfiguredCwd    string            `json:"configured_cwd"`
+	Harness          string            `json:"harness"`
+	Model            string            `json:"model"`
+	Effort           string            `json:"effort"`
+	Interactive      bool              `json:"interactive"`
+	Enabled          bool              `json:"enabled"`
+	IntervalS        int               `json:"interval_s"`
+	TimeoutS         int               `json:"timeout_s"`
+	HardTimeoutS     int               `json:"hard_timeout_s"`
+	OnTimeout        string            `json:"on_timeout"`
+	OnError          string            `json:"on_error"`
+	UserPrompt       string            `json:"user_prompt"`
+	Env              map[string]string `json:"env"`
+	Plugins          []string          `json:"plugins"`
+	MessagesBatch    int               `json:"messages_batch"`
+	MessagesMaxQueue int               `json:"messages_max_queue"`
+	// MailInstantSenders is null when not set: the lead of the agent's group
+	// may send it instant letters.
+	MailInstantSenders       []string    `json:"mail_instant_senders" jsonschema_extras:"nullable=true"`
+	GoalEnabled              bool        `json:"goal_enabled"`
+	GoalWaitCustomerTimeoutS int         `json:"goal_wait_customer_timeout_s"`
+	GoalDeliveryCooldownS    int         `json:"goal_delivery_cooldown_s"`
+	CurrentGoalTaskKey       string      `json:"current_goal_task_key"`
+	Group                    string      `json:"group"`
+	Alias                    string      `json:"alias"`
+	Notes                    string      `json:"notes"`
+	Color                    string      `json:"color"`
+	MaxIdleIterations        int         `json:"max_idle_iterations"`
+	AIStallTimeoutS          int         `json:"ai_stall_timeout_s"`
+	Schedule                 string      `json:"schedule"`
+	ScheduleNextAt           string      `json:"schedule_next_at"`
+	Budget                   AgentBudget `json:"budget"`
 	AgentHalt
 }
 

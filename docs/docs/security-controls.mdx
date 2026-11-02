@@ -119,6 +119,22 @@ USD; a USD budget cannot bound that provider's actual spend. See
 Removing a host is local cleanup, not remote deletion. Quitting the app leaves
 daemons running. Treat both behaviors as continuity features, not stop controls.
 
+An [instant letter](/docs/reference/mail#instant-letters) puts text into a
+running iteration at the end of a tool call:
+
+- Only the customer, `plugin:telegram`, and an agent that the recipient
+  allows in `mail_instant_senders` may send one. When the list is not set,
+  only the lead of the recipient's group may send. A `system:*` sender never
+  may. The daemon refuses every other sender with `instant_not_allowed`.
+- The daemon identifies the receiving agent by its tools socket, never by the
+  request body.
+- The block marks each body as untrusted data from its sender, like the
+  untrusted task text in the Goal block. The body is in a code fence that it
+  cannot close, and it is cut at 8,000 Unicode code points.
+- The text reaches the model only as the output of the hook. The AI proxy does
+  not change requests, so the transcript and the audit keep the text.
+- Mail does not redact letter bodies.
+
 ### Codex approval mode
 
 Each daemon chooses how its Codex agents run commands:

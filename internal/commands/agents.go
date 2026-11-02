@@ -56,7 +56,7 @@ func agentView(c *registry.Ctx, a agent.Agent, state string) (AgentView, error) 
 		Interactive: a.Interactive, Enabled: a.Enabled, IntervalS: a.IntervalS,
 		TimeoutS: a.TimeoutS, HardTimeoutS: a.HardTimeoutS, OnTimeout: a.OnTimeout,
 		OnError: a.OnError, UserPrompt: a.UserPrompt, Env: a.Env, Plugins: a.Plugins,
-		MessagesBatch: a.MessagesBatch, MessagesMaxQueue: a.MessagesMaxQueue,
+		MessagesBatch: a.MessagesBatch, MessagesMaxQueue: a.MessagesMaxQueue, MailInstantSenders: a.MailInstantSenders,
 		GoalEnabled: a.GoalEnabled, GoalWaitCustomerTimeoutS: a.GoalWaitCustomerTimeoutS, GoalDeliveryCooldownS: a.GoalDeliveryCooldownS,
 		CurrentGoalTaskKey: a.CurrentGoalTaskKey,
 		Group:              a.Group, Alias: a.Alias, Notes: a.Notes, Color: a.Color,
@@ -314,6 +314,7 @@ func agentRun() registry.Command {
 			{Name: "user_prompt", Type: registry.String, Help: "standing user prompt"},
 			{Name: "messages_batch", Type: registry.Int, Help: "maximum messages delivered per iteration"},
 			{Name: "messages_max_queue", Type: registry.Int, Help: "maximum queued messages"},
+			{Name: "mail_instant_senders", Type: registry.String, Repeatable: true, Help: "agents allowed to send instant letters, as agent:<name> (default: the group lead)"},
 			{Name: "goal_enabled", Flag: "goal-enabled", Type: registry.Bool, Default: true, Help: "enable Native Task goal selection (default true)"},
 			{Name: "goal_wait_customer_timeout_s", Flag: "goal-wait-customer-timeout-s", Type: registry.Int, Default: 300, Help: "customer-wait grace period in whole seconds (default 300)"},
 			{Name: "goal_delivery_cooldown_s", Flag: "goal-delivery-cooldown-s", Type: registry.Int, Default: 60, Help: "minimum seconds between Goal deliveries (default 60)"},
@@ -434,6 +435,11 @@ func agentRun() registry.Command {
 			}
 			if spec.ImageRef == "" {
 				return nil, api.UserError{Code: "missing_image", Msg: "image ref is required"}
+			}
+			if p.Has("mail_instant_senders") {
+				if spec.MailInstantSenders, err = instantSenders(c, p.Strings("mail_instant_senders")); err != nil {
+					return nil, err
+				}
 			}
 			// Expand a relative/~ cwd against the daemon's fs root ($HOME) before
 			// validating — the UI cwd picker offers paths relative to that root, so

@@ -60,7 +60,7 @@ func (a *API) auth(w http.ResponseWriter, r *http.Request) (Identity, bool) {
 }
 
 // send is POST /api/plugin/mail {to, subject, text, kind, data, notice,
-// idempotency_key}: the letter goes from plugin:<name>, a request unless
+// instant, idempotency_key}: the letter goes from plugin:<name>, a request unless
 // notice is set. A letter stored dead because the recipient's inbox is full
 // answers 409 inbox_full, so the plugin can tell its user.
 func (a *API) send(w http.ResponseWriter, r *http.Request) {
@@ -79,6 +79,7 @@ func (a *API) send(w http.ResponseWriter, r *http.Request) {
 		Kind           string         `json:"kind"`
 		Data           map[string]any `json:"data"`
 		Notice         bool           `json:"notice"`
+		Instant        bool           `json:"instant"`
 		IdempotencyKey string         `json:"idempotency_key"`
 	}
 	if !api.DecodeJSONBody(w, r, maxPluginBodyBytes, &body) {
@@ -90,7 +91,8 @@ func (a *API) send(w http.ResponseWriter, r *http.Request) {
 	}
 	letters, err := a.mail.Send(mail.Letter{
 		From: "plugin:" + id.Name, To: body.To, Subject: body.Subject, Body: body.Text, Kind: body.Kind,
-		Data: body.Data, NeedsReply: !body.Notice, IdempotencyKey: pluginIdempotencyKey(id.Name, body.IdempotencyKey),
+		Data: body.Data, NeedsReply: !body.Notice, Instant: body.Instant,
+		IdempotencyKey: pluginIdempotencyKey(id.Name, body.IdempotencyKey),
 	})
 	if err != nil {
 		api.WriteError(w, a.log, "plugin "+id.Name+" mail", err)
