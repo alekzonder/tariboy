@@ -57,6 +57,7 @@ func imagesFixture(t *testing.T) (*registry.Ctx, imagesFixtureDirs) {
 	imagesWriteFiles(t, dirs.versioned, map[string]string{
 		"Tariboyfile.yaml":                        "schema_version: 2\nimage_version: 1.2.0\nplugins: []\nskills:\n  - dir: ./skills/golden-review\nprompts:\n  - file: ./task.md\n",
 		"task.md":                                 "REVIEW THE CHANGE",
+		"ROLE.md":                                 "# Reviewer\n\nReviews golden changes.\n",
 		"skills/golden-review/SKILL.md":           skill,
 		".agents/skills/golden-review/SKILL.md":   skill,
 		"skills/golden-review/notes/checklist.md": "check",

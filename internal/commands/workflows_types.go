@@ -166,6 +166,7 @@ type WorkflowImageManifest struct {
 	BuiltAt       string                  `json:"built_at"`
 	Definition    WorkflowImageDefinition `json:"definition"`
 	Files         []WorkflowImageFile     `json:"files"`
+	Role          *ManifestRole           `json:"role,omitempty"`
 }
 
 // workflowManifestFrom copies m through its JSON encoding: the mirror types

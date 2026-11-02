@@ -15,11 +15,13 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/imagecontract"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/portablearchive"
+	"github.com/alekzonder/tariboy/internal/rolefile"
 	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
 )
@@ -68,6 +70,23 @@ type v2PortableManifest struct {
 	Plugins              []v2PortablePlugin     `json:"plugins"`
 	Skills               []agentskills.Metadata `json:"skills"`
 	PromptTemplateSHA256 string                 `json:"prompt_template_sha256"`
+	Role                 *rolefile.Role         `json:"role,omitempty"`
+}
+
+// validatePortableRole checks the optional role of a manifest. The JSON
+// decoder replaces invalid UTF-8 with U+FFFD, so the raw manifest bytes are
+// checked too.
+func validatePortableRole(role *rolefile.Role, manifestBody []byte) error {
+	if role == nil {
+		return nil
+	}
+	if !utf8.Valid(manifestBody) {
+		return errors.New("invalid schema-v2 manifest role: manifest is not valid UTF-8")
+	}
+	if err := rolefile.Validate(*role); err != nil {
+		return fmt.Errorf("invalid schema-v2 manifest role: %w", err)
+	}
+	return nil
 }
 
 type v2PortablePlugin struct {
@@ -247,6 +266,9 @@ func validateV2PortableMembers(manifestBody []byte, members map[string]portableI
 	}
 	if _, err := store.ParseInputTime(strict.BuiltAt); err != nil {
 		return errors.New("invalid schema-v2 manifest built_at")
+	}
+	if err := validatePortableRole(strict.Role, manifestBody); err != nil {
+		return err
 	}
 	seenPlugins := make(map[string]bool, len(strict.Plugins))
 	for _, plugin := range strict.Plugins {

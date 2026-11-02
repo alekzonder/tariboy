@@ -45,7 +45,7 @@ func imageBuild() registry.Command {
 		Path:        "image.build",
 		AbsPathArgs: []string{"path"},
 		Summary:     "Start a background build of an agent image from a Tariboyfile.yaml",
-		Help:        "The daemon builds the image as an operation. The CLI prints the operation log until the build ends, then the result; --detach prints only the operation id.",
+		Help:        "The daemon builds the image as an operation. The CLI prints the operation log until the build ends, then the result; --detach prints only the operation id. An optional ROLE.md next to Tariboyfile.yaml goes into the manifest field role (up to 500 characters; a longer file fails the build). It is not inherited through extends and never enters the prompt.",
 		Args: append([]registry.Arg{
 			{Name: "source", Type: registry.String, Help: "Store selector (store/image)"},
 			{Name: "name", Flag: "name", Type: registry.String, Help: "target image name"},

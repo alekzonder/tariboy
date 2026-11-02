@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/refstore"
+	"github.com/alekzonder/tariboy/internal/rolefile"
 	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tidy"
@@ -251,7 +252,7 @@ func (s *Store) Publish(src *workflowfile.File, now time.Time) (Manifest, bool, 
 // manifest validation, then the source scan. A source the scan refuses is
 // reported as one source_invalid error. It reads src.Dir and writes nothing.
 func Validate(src *workflowfile.File) []workflowfile.ValidationError {
-	_, _, err := prepareSource(src)
+	_, _, _, err := prepareSource(src)
 	var invalid *InvalidError
 	switch {
 	case err == nil:
@@ -277,32 +278,81 @@ func storeNameErrors(src *workflowfile.File) []workflowfile.ValidationError {
 	return errs
 }
 
-// prepareSource validates src and reads its whole directory.
-func prepareSource(src *workflowfile.File) ([]sourceFile, []FileEntry, error) {
+// prepareSource validates src, reads its whole directory, and reads the role
+// from the captured ROLE.md at the source root, if any.
+func prepareSource(src *workflowfile.File) ([]sourceFile, []FileEntry, *rolefile.Role, error) {
 	if errs := workflowfile.Validate(src); len(errs) > 0 {
-		return nil, nil, &InvalidError{Errors: errs}
+		return nil, nil, nil, &InvalidError{Errors: errs}
 	}
 	if errs := storeNameErrors(src); len(errs) > 0 {
-		return nil, nil, &InvalidError{Errors: errs}
+		return nil, nil, nil, &InvalidError{Errors: errs}
 	}
 	files, err := scan(src.Dir)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	entries := make([]FileEntry, len(files))
+	var role *rolefile.Role
 	for i, f := range files {
 		entries[i] = f.FileEntry
+		if f.Path == rolefile.FileName {
+			if role, err = rolefile.FromBytes(f.content); err != nil {
+				return nil, nil, nil, invalidf("%v", err)
+			}
+		}
 	}
 	if err := checkScanned(src, entries); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return files, entries, nil
+	return files, entries, role, nil
+}
+
+// addRole writes role into the stored manifest of content published before
+// ROLE.md was read. The digest covers only the files, so it does not change.
+// The read-only modes of the content directory and manifest are restored.
+func (s *Store) addRole(m Manifest, role *rolefile.Role) (Manifest, error) {
+	if m.Role != nil || role == nil {
+		return m, nil
+	}
+	m.Role = role
+	data, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return Manifest{}, err
+	}
+	dir := s.ContentDir(m.Name, m.Digest)
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return Manifest{}, err
+	}
+	defer os.Chmod(dir, 0o500)
+	tmp, err := os.CreateTemp(dir, "."+manifestName+tmpPrefix)
+	if err != nil {
+		return Manifest{}, err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		tmp.Close()
+		return Manifest{}, err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return Manifest{}, err
+	}
+	if err := tmp.Close(); err != nil {
+		return Manifest{}, err
+	}
+	if err := os.Chmod(tmp.Name(), 0o400); err != nil {
+		return Manifest{}, err
+	}
+	if err := os.Rename(tmp.Name(), filepath.Join(dir, manifestName)); err != nil {
+		return Manifest{}, err
+	}
+	return m, nil
 }
 
 // publishLocked is Publish for a caller that already holds mu. A non-empty
 // want refuses a source whose digest differs, before anything is written.
 func (s *Store) publishLocked(src *workflowfile.File, want string, now time.Time) (Manifest, bool, error) {
-	files, entries, err := prepareSource(src)
+	files, entries, role, err := prepareSource(src)
 	if err != nil {
 		return Manifest{}, false, err
 	}
@@ -316,6 +366,10 @@ func (s *Store) publishLocked(src *workflowfile.File, want string, now time.Time
 	switch {
 	case err == nil && prev == digest:
 		m, err := s.readManifest(name, digest)
+		if err != nil {
+			return Manifest{}, false, err
+		}
+		m, err = s.addRole(m, role)
 		return m, false, err
 	case err == nil:
 		return Manifest{}, false, fmt.Errorf("%w: %s %s is %s", ErrVersionPublished, name, version, prev)
@@ -336,6 +390,9 @@ func (s *Store) publishLocked(src *workflowfile.File, want string, now time.Time
 		if m, err = s.readManifest(name, digest); err != nil {
 			return Manifest{}, false, err
 		}
+		if m, err = s.addRole(m, role); err != nil {
+			return Manifest{}, false, err
+		}
 	} else if errors.Is(statErr, fs.ErrNotExist) {
 		def := *src
 		def.Dir = "" // the stored definition does not carry the source path
@@ -347,6 +404,7 @@ func (s *Store) publishLocked(src *workflowfile.File, want string, now time.Time
 			BuiltAt:       store.FormatTime(now),
 			Definition:    def,
 			Files:         entries,
+			Role:          role,
 		}
 		if err := s.install(m, files); err != nil {
 			return Manifest{}, false, err

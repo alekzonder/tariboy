@@ -2532,6 +2532,9 @@
             "nullable": true,
             "type": "array"
           },
+          "role": {
+            "$ref": "#/components/schemas/ManifestRole"
+          },
           "schema_version": {
             "type": "integer"
           },
@@ -3842,6 +3845,18 @@
         "required": [
           "settings",
           "last_run"
+        ],
+        "type": "object"
+      },
+      "ManifestRole": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
         ],
         "type": "object"
       },
@@ -7243,6 +7258,9 @@
           },
           "name": {
             "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ManifestRole"
           },
           "schema_version": {
             "type": "integer"

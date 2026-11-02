@@ -3686,6 +3686,7 @@ export interface components {
       policy: components["schemas"]["ImageManifestPolicy"];
       prompt_template_sha256?: string;
       requires_secrets: string[] | null;
+      role?: components["schemas"]["ManifestRole"];
       schema_version: number;
       skills?: components["schemas"]["ImageSkill"][];
       tag?: string;
@@ -4008,6 +4009,9 @@ export interface components {
     MaintenanceView: {
       last_run: components["schemas"]["MaintenanceLastRun"];
       settings: components["schemas"]["MaintenanceSettings"];
+    };
+    ManifestRole: {
+      text: string;
     };
     OnboardingDefaultStore: {
       error?: string;
@@ -4851,6 +4855,7 @@ export interface components {
       digest: string;
       files: components["schemas"]["WorkflowImageFile"][];
       name: string;
+      role?: components["schemas"]["ManifestRole"];
       schema_version: number;
       version: string;
     };
@@ -5097,6 +5102,7 @@ export type MaintenanceLastRun = components["schemas"]["MaintenanceLastRun"];
 export type MaintenanceRun = components["schemas"]["MaintenanceRun"];
 export type MaintenanceSettings = components["schemas"]["MaintenanceSettings"];
 export type MaintenanceView = components["schemas"]["MaintenanceView"];
+export type ManifestRole = components["schemas"]["ManifestRole"];
 export type OnboardingDefaultStore = components["schemas"]["OnboardingDefaultStore"];
 export type OnboardingHarness = components["schemas"]["OnboardingHarness"];
 export type OnboardingStarterImage = components["schemas"]["OnboardingStarterImage"];

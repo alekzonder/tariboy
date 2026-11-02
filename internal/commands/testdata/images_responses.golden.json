@@ -96,6 +96,9 @@
     "policy": {},
     "prompt_template_sha256": "e2471afeb85b787e745ae9f57f9fec97ae9ee254bf7817aa076018199e2f3563",
     "requires_secrets": null,
+    "role": {
+      "text": "# Reviewer\n\nReviews golden changes.\n"
+    },
     "schema_version": 2,
     "skills": [
       {

@@ -173,6 +173,13 @@ type ImageManifest struct {
 	Layers               []ImageLayer          `json:"layers" jsonschema_extras:"nullable=true"`
 	PromptTemplateSHA256 string                `json:"prompt_template_sha256,omitempty"`
 	Bare                 bool                  `json:"bare,omitempty"`
+	Role                 *ManifestRole         `json:"role,omitempty"`
+}
+
+// ManifestRole is ROLE.md from the build context of an image or workflow
+// image. It is metadata only and never part of a prompt.
+type ManifestRole struct {
+	Text string `json:"text"`
 }
 
 // ImagePromptResult is an image's assembled prompt (image.prompt).
@@ -291,6 +298,7 @@ func imageManifest(m image.Manifest) ImageManifest {
 		Layers:               convertSlice(m.Layers, func(l image.Layer) ImageLayer { return ImageLayer(l) }),
 		PromptTemplateSHA256: m.PromptTemplateSHA256,
 		Bare:                 m.Bare,
+		Role:                 (*ManifestRole)(m.Role),
 	}
 }
 

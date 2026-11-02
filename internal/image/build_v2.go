@@ -18,6 +18,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/imagecontract"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
+	"github.com/alekzonder/tariboy/internal/rolefile"
 	storetime "github.com/alekzonder/tariboy/internal/store"
 )
 
@@ -188,6 +189,9 @@ func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *St
 	if manifest.Skills == nil {
 		manifest.Skills = []agentskills.Metadata{}
 	}
+	if manifest.Role, err = rolefile.Read(src.Dir); err != nil {
+		return Manifest{}, err
+	}
 	digest, err := store.writeV2Archive(ref, manifest, prepared.template, prepared.layers, prepared.skills, archiveOut)
 	if err != nil {
 		return Manifest{}, err
@@ -221,7 +225,8 @@ func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, l
 		Plugins              []ManifestPlugin       `json:"plugins"`
 		Skills               []agentskills.Metadata `json:"skills"`
 		PromptTemplateSHA256 string                 `json:"prompt_template_sha256"`
-	}{man.SchemaVersion, man.ImageVersion, man.ID, man.Name, man.BuiltAt, man.Plugins, man.Skills, man.PromptTemplateSHA256}, "", "  ")
+		Role                 *rolefile.Role         `json:"role,omitempty"`
+	}{man.SchemaVersion, man.ImageVersion, man.ID, man.Name, man.BuiltAt, man.Plugins, man.Skills, man.PromptTemplateSHA256, man.Role}, "", "  ")
 	if err != nil {
 		tmp.Close()
 		return "", err

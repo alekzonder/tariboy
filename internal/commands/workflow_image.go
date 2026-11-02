@@ -153,7 +153,7 @@ func workflowBuild() registry.Command {
 		Path:        "workflow.build",
 		AbsPathArgs: []string{"path"},
 		Summary:     "Start a background build of a workflow image from a Workflowfile.yaml",
-		Help:        "The daemon builds the workflow image as an operation. The CLI prints the operation log until the build ends, then the result; --detach prints only the operation id.",
+		Help:        "The daemon builds the workflow image as an operation. The CLI prints the operation log until the build ends, then the result; --detach prints only the operation id. An optional ROLE.md next to Workflowfile.yaml goes into the manifest field role (up to 500 characters; a longer file fails the build). It never enters the Goal block or a prompt.",
 		Args: append([]registry.Arg{
 			{Name: "source", Type: registry.String, Help: "Store selector (store/workflow)"},
 			{Name: "path", Flag: "path", Type: registry.String, Help: "Workflowfile.yaml or its directory"},
