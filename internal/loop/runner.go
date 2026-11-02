@@ -43,12 +43,16 @@ type PromptParts struct {
 	UserPrompt      string
 	OneShot         string
 	Goal            string
+	Mode            IterationMode
 	Tail            string
 }
 
-func AssemblePrompt(p PromptParts) string {
+func AssemblePrompt(p PromptParts) (string, error) {
 	header := fmt.Sprintf("# You are agent %s\ncwd: %s", p.Agent, p.Cwd)
-	work := FormatTaskProcessingOrder(RuntimePromptValues{OneShot: p.OneShot, Messages: p.Messages, AwaitingReplies: p.AwaitingReplies, Goal: p.Goal})
+	work, err := FormatTaskProcessingOrder(RuntimePromptValues{OneShot: p.OneShot, Messages: p.Messages, AwaitingReplies: p.AwaitingReplies, Goal: p.Goal, Mode: p.Mode})
+	if err != nil {
+		return "", err
+	}
 	sections := []string{header, p.ImagePrompt, p.Context, work, p.UserPrompt, p.Tail}
 	var kept []string
 	for _, s := range sections {
@@ -56,7 +60,7 @@ func AssemblePrompt(p PromptParts) string {
 			kept = append(kept, strings.TrimRight(s, "\n"))
 		}
 	}
-	return strings.Join(kept, "\n\n") + "\n"
+	return strings.Join(kept, "\n\n") + "\n", nil
 }
 
 // mailInstruction is the standing instruction after the rendered letters
@@ -1020,6 +1024,7 @@ func (r *ShimRunner) assemblePrompt(ctx context.Context, ag agent.Agent, l agent
 	if in.hasCurrentGoal {
 		goal = RuntimeGoal(ctx, r.cfg.WorkflowGoals, in.currentGoal, ag.Name, r.cfg.Logger)
 	}
+	mode := IterationModeFor(in.currentGoal, in.hasCurrentGoal)
 	if in.schemaVersion == 2 {
 		template, err := ReadPromptTemplate(l.ImageDir(), in.iteration.PromptTemplateSHA256)
 		if err != nil {
@@ -1032,6 +1037,7 @@ func (r *ShimRunner) assemblePrompt(ctx context.Context, ag agent.Agent, l agent
 		prompt, err := RenderPromptTemplate(template, l.ImageDir(), RuntimePromptValues{
 			Identity: FormatRuntimeIdentity(ag.Name, ag.ImageRef, in.iteration.ImageVersion, ag.ImageDigest, agentCwd(ag, l), iterationID),
 			Goal:     goal,
+			Mode:     mode,
 			Workdir:  workdir,
 			Context:  contextText, Messages: FormatMessages(batch), AwaitingReplies: FormatAwaitingReplies(awaiting, r.cfg.Clock()), UserPrompt: ag.UserPrompt, OneShot: oneShot,
 		})
@@ -1049,12 +1055,15 @@ func (r *ShimRunner) assemblePrompt(ctx context.Context, ag agent.Agent, l agent
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		r.cfg.Logger.Warn("read image prompt tail", "agent", ag.Name, "err", err)
 	}
-	prompt := AssemblePrompt(PromptParts{
+	prompt, err := AssemblePrompt(PromptParts{
 		Agent: ag.Name, Cwd: agentCwd(ag, l), ImagePrompt: string(imagePrompt),
 		Context: contextText, Messages: FormatMessages(batch),
 		AwaitingReplies: FormatAwaitingReplies(awaiting, r.cfg.Clock()),
-		UserPrompt:      ag.UserPrompt, OneShot: oneShot, Goal: goal, Tail: string(tail),
+		UserPrompt:      ag.UserPrompt, OneShot: oneShot, Goal: goal, Mode: mode, Tail: string(tail),
 	})
+	if err != nil {
+		return "", nil, err
+	}
 	return prompt, batch, nil
 }
 

@@ -79,7 +79,7 @@ func TestRenderPromptTemplatePreservesOtherLayersOrder(t *testing.T) {
 	}
 	got, err := RenderPromptTemplate(template, dir, RuntimePromptValues{
 		Identity: "ID", Messages: "", Context: "CTX\n",
-		Workdir: workdir, OneShot: "RUN",
+		Workdir: workdir, OneShot: "RUN", Mode: IterationModeRequest,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestRenderPromptTemplateEmptyStillIncludesTaskProcessingOrder(t *testing.T)
 	t.Parallel()
 	template := image.PromptTemplate{SchemaVersion: 2}
 	template.SHA256 = promptTemplateSHA(t, template)
-	got, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{})
+	got, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{Mode: IterationModeRequest})
 	if err != nil || !strings.HasPrefix(got, "# Task Processing Order\n") {
 		t.Fatalf("prompt = %q, %v", got, err)
 	}
@@ -122,6 +122,7 @@ func TestRenderPromptTemplateNamesOwningSkillForRuntimeData(t *testing.T) {
 		t.Run(tt.runtime, func(t *testing.T) {
 			template := image.PromptTemplate{SchemaVersion: 2, Entries: []image.TemplateEntry{{Kind: "runtime", Runtime: tt.runtime}}}
 			template.SHA256 = promptTemplateSHA(t, template)
+			tt.value.Mode = IterationModeRequest
 			got, err := RenderPromptTemplate(template, t.TempDir(), tt.value)
 			if err != nil {
 				t.Fatal(err)
@@ -147,7 +148,7 @@ func TestRenderPromptTemplateRejectsUnsafeLayerPath(t *testing.T) {
 	t.Parallel()
 	template := image.PromptTemplate{SchemaVersion: 2, Entries: []image.TemplateEntry{{Kind: "file", ArchivePath: "../secret", SHA256: strings.Repeat("0", 64)}}}
 	template.SHA256 = promptTemplateSHA(t, template)
-	if _, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{}); err == nil {
+	if _, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{Mode: IterationModeRequest}); err == nil {
 		t.Fatal("unsafe layer accepted")
 	}
 }

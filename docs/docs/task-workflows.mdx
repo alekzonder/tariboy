@@ -1228,6 +1228,11 @@ an image with a v2 prompt template it appears under `## Goal` in Task Processing
 Order, without the `# Agent Goal` heading it has in the older prompt layout. See
 [Iteration loop](/docs/architecture/iteration-loop#agent-goals).
 
+Before `## One-shot`, Task Processing Order states the line
+``Iteration mode: `workflow`. The goal task follows a workflow: the status instructions in the Goal section set the process.``
+The daemon sets this mode when the workflow digest of the selected task row is
+not empty. The mode stays `workflow` when the workflow data cannot be loaded.
+
 The block is rendered in this order:
 
 1. A fixed paragraph: do only the work of the current status; leave it only with

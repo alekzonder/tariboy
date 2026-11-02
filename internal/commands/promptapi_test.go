@@ -233,3 +233,80 @@ func TestPromptPreviewV2RendersAuthoritativeGoal(t *testing.T) {
 		}
 	}
 }
+
+// provisionPromptImage writes a schema-v2 template image, or a schema-v1
+// PROMPT.md image, for agent name.
+func provisionPromptImage(t *testing.T, c *registry.Ctx, name string, schema int) {
+	t.Helper()
+	l := agentdir.New(agentsDir(c), name)
+	if err := os.MkdirAll(filepath.Join(l.ImageDir(), "prompt"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"schema_version":1,"name":"x","tag":"latest"}`
+	if schema == 2 {
+		manifest = `{"schema_version":2,"name":"x","tag":"latest"}`
+		entries := []image.TemplateEntry{{Kind: "runtime", Runtime: "goal"}}
+		templateSHA, err := image.PromptTemplateHash(entries)
+		if err != nil {
+			t.Fatal(err)
+		}
+		template, err := json.Marshal(image.PromptTemplate{SchemaVersion: 2, Entries: entries, SHA256: templateSHA})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(l.ImageDir(), "prompt", "template.json"), template, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	} else if err := os.WriteFile(filepath.Join(l.ImageDir(), "PROMPT.md"), []byte("# image prompt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(l.ImageDir(), "manifest.json"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPromptPreviewStatesIterationMode(t *testing.T) {
+	t.Parallel()
+	lines := map[string]string{
+		"workflow": "Iteration mode: `workflow`. The goal task follows a workflow: the status instructions in the Goal section set the process.",
+		"flexible": "Iteration mode: `flexible`. The goal task has no workflow: your image instructions set the process.",
+		"request":  "Iteration mode: `request`. No goal task is selected: work from the one-shot instruction or the messages.",
+	}
+	for _, tt := range []struct {
+		mode   string
+		schema int
+	}{{"workflow", 2}, {"flexible", 2}, {"request", 2}, {"workflow", 1}} {
+		c, as, _ := ctxWithStore(t)
+		if err := as.Create(agent.Agent{Name: "dev", Enabled: true, OnTimeout: "restart", OnError: "restart"}); err != nil {
+			t.Fatal(err)
+		}
+		if tt.mode != "request" {
+			svc := tasks.NewService(c.Store.DB, "customer", time.Now)
+			ctx := context.Background()
+			if _, err := svc.CreateQueue(ctx, tasks.CustomerActor("customer"), tasks.CreateQueueInput{Prefix: "MODE", Name: "Modes"}); err != nil {
+				t.Fatal(err)
+			}
+			task, err := svc.CreateTask(ctx, tasks.CustomerActor("customer"), tasks.CreateTaskInput{Queue: "MODE", Title: "Mode task", Assignee: "agent:dev"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.mode == "workflow" {
+				// No workflow service is wired, so the preview takes the
+				// workflow-data fallback; the mode still comes from the row.
+				if _, err := c.Store.DB.Exec(`UPDATE tasks SET workflow_digest = 'd1', workflow_status = 'implement' WHERE id = ?`, task.ID); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		provisionPromptImage(t, c, "dev", tt.schema)
+		res, err := h(t, "prompt.get")(c, registry.Params{"name": "dev"})
+		if err != nil {
+			t.Fatalf("%s v%d: %v", tt.mode, tt.schema, err)
+		}
+		prompt := res.(AgentPromptPreview).Prompt
+		before, _, found := strings.Cut(prompt, "## One-shot")
+		if !found || !strings.Contains(before, lines[tt.mode]+"\n\n") || strings.Count(prompt, "Iteration mode: ") != 1 {
+			t.Fatalf("%s v%d: mode line missing, misplaced or repeated in %s", tt.mode, tt.schema, prompt)
+		}
+	}
+}

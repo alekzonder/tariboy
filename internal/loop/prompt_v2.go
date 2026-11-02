@@ -41,6 +41,7 @@ type RuntimePromptValues struct {
 	AwaitingReplies string
 	UserPrompt      string
 	OneShot         string
+	Mode            IterationMode
 }
 
 func FormatRuntimeIdentity(agentName, imageRef, imageVersion, imageDigest, cwd, iterationID string) string {
@@ -66,7 +67,11 @@ func FormatRuntimeGoalGuidance() string {
 
 // FormatTaskProcessingOrder is platform-owned, independent of image placeholders.
 // Only generated headings are removed or nested; input text stays literal.
-func FormatTaskProcessingOrder(values RuntimePromptValues) string {
+func FormatTaskProcessingOrder(values RuntimePromptValues) (string, error) {
+	mode, err := formatIterationMode(values.Mode)
+	if err != nil {
+		return "", err
+	}
 	oneShot := values.OneShot
 	if strings.TrimSpace(oneShot) == "" {
 		oneShot = "No one-shot instruction for this iteration."
@@ -85,7 +90,8 @@ func FormatTaskProcessingOrder(values RuntimePromptValues) string {
 	return "# Task Processing Order\n\n" +
 		"Process the following inputs in order: one-shot, then messages, then goal.\n" +
 		"If an input is absent, continue to the next section; do not run commands merely to look for that absent input.\n\n" +
-		"## One-shot\n\n" + oneShot + "\n\n## Messages\n\n" + messages + "\n\n## Goal\n\n" + goal
+		mode + "\n\n" +
+		"## One-shot\n\n" + oneShot + "\n\n## Messages\n\n" + messages + "\n\n## Goal\n\n" + goal, nil
 }
 
 func FormatRuntimeWorkdir(path string) (string, error) {
@@ -111,7 +117,11 @@ func RenderPromptTemplate(template image.PromptTemplate, imageDir string, values
 	if err != nil {
 		return "", err
 	}
-	parts := []string{FormatTaskProcessingOrder(values)}
+	order, err := FormatTaskProcessingOrder(values)
+	if err != nil {
+		return "", err
+	}
+	parts := []string{order}
 	for i, entry := range template.Entries {
 		var body string
 		switch entry.Kind {
