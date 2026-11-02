@@ -14,6 +14,7 @@ import { imageSourcesApi } from "./imageSources";
 import { imagesApi } from "./images";
 import { iterationsApi } from "./iterations";
 import { mailApi } from "./mail";
+import { metricsApi } from "./metrics";
 import { onboardingApi } from "./onboarding";
 import { operationsApi } from "./operations";
 import { pluginsApi } from "./plugins";
@@ -35,6 +36,7 @@ export * from "./imageSources";
 export * from "./images";
 export * from "./iterations";
 export * from "./mail";
+export * from "./metrics";
 export * from "./onboarding";
 export * from "./operations";
 export * from "./plugins";
@@ -57,6 +59,7 @@ export interface ApiClient extends Transport {
   readonly images: ReturnType<typeof imagesApi>;
   readonly iterations: ReturnType<typeof iterationsApi>;
   readonly mail: ReturnType<typeof mailApi>;
+  readonly metrics: ReturnType<typeof metricsApi>;
   readonly onboarding: ReturnType<typeof onboardingApi>;
   readonly operations: ReturnType<typeof operationsApi>;
   readonly plugins: ReturnType<typeof pluginsApi>;
@@ -86,6 +89,7 @@ export function createApi(target: ApiTarget): ApiClient {
     images: imagesApi(t),
     iterations: iterationsApi(t),
     mail: mailApi(t),
+    metrics: metricsApi(t),
     onboarding: onboardingApi(t),
     operations: operationsApi(t),
     plugins: pluginsApi(t),
