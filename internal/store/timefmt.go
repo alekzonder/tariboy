@@ -73,6 +73,7 @@ func NormalizeTimeValue(v string) (string, bool) {
 // TestTimeColumnsCoverSchema fails when a new time column is missing here.
 var timeColumns = map[string][]string{
 	"agents":                       {"created_at", "last_goal_delivery_at", "status_updated"},
+	"assessments":                  {"created_at"},
 	"ai_requests":                  {"ts"},
 	"budgets":                      {"created_at"},
 	"eval_results":                 {"created_at"},

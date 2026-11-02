@@ -1595,6 +1595,281 @@
         ],
         "type": "object"
       },
+      "Assessment": {
+        "additionalProperties": false,
+        "properties": {
+          "assessor_agent": {
+            "type": "string"
+          },
+          "assessor_image_digest": {
+            "type": "string"
+          },
+          "assessor_image_ref": {
+            "type": "string"
+          },
+          "assessor_image_version": {
+            "type": "string"
+          },
+          "axes": {
+            "items": {
+              "$ref": "#/components/schemas/AssessmentAxis"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image_digest": {
+            "type": "string"
+          },
+          "image_ref": {
+            "type": "string"
+          },
+          "image_version": {
+            "type": "string"
+          },
+          "iteration_id": {
+            "type": "string"
+          },
+          "rubric_version": {
+            "type": "string"
+          },
+          "subject_agent": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "task_key": {
+            "type": "string"
+          },
+          "violations": {
+            "items": {
+              "$ref": "#/components/schemas/AssessmentViolation"
+            },
+            "type": "array"
+          },
+          "workflow_digest": {
+            "type": "string"
+          },
+          "workflow_version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "assessor_agent",
+          "assessor_image_ref",
+          "assessor_image_version",
+          "assessor_image_digest",
+          "rubric_version",
+          "iteration_id",
+          "task_key",
+          "subject_agent",
+          "image_ref",
+          "image_version",
+          "image_digest",
+          "workflow_digest",
+          "workflow_version",
+          "summary",
+          "axes",
+          "violations"
+        ],
+        "type": "object"
+      },
+      "AssessmentAxis": {
+        "additionalProperties": false,
+        "properties": {
+          "axis": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "score": {
+            "type": "integer"
+          },
+          "verdict": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "axis",
+          "verdict",
+          "note"
+        ],
+        "type": "object"
+      },
+      "AssessmentEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "iteration_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "locator": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer"
+          },
+          "task_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "iteration_id",
+          "locator",
+          "task_key",
+          "sequence",
+          "run_id"
+        ],
+        "type": "object"
+      },
+      "AssessmentList": {
+        "additionalProperties": false,
+        "properties": {
+          "assessments": {
+            "items": {
+              "$ref": "#/components/schemas/AssessmentSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "assessments"
+        ],
+        "type": "object"
+      },
+      "AssessmentShowResult": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment": {
+            "$ref": "#/components/schemas/Assessment"
+          }
+        },
+        "required": [
+          "assessment"
+        ],
+        "type": "object"
+      },
+      "AssessmentSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "assessor_agent": {
+            "type": "string"
+          },
+          "assessor_image_digest": {
+            "type": "string"
+          },
+          "assessor_image_ref": {
+            "type": "string"
+          },
+          "assessor_image_version": {
+            "type": "string"
+          },
+          "axes": {
+            "items": {
+              "$ref": "#/components/schemas/AssessmentAxis"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image_digest": {
+            "type": "string"
+          },
+          "image_ref": {
+            "type": "string"
+          },
+          "image_version": {
+            "type": "string"
+          },
+          "iteration_id": {
+            "type": "string"
+          },
+          "rubric_version": {
+            "type": "string"
+          },
+          "subject_agent": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "task_key": {
+            "type": "string"
+          },
+          "violation_count": {
+            "type": "integer"
+          },
+          "workflow_digest": {
+            "type": "string"
+          },
+          "workflow_version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "assessor_agent",
+          "assessor_image_ref",
+          "assessor_image_version",
+          "assessor_image_digest",
+          "rubric_version",
+          "iteration_id",
+          "task_key",
+          "subject_agent",
+          "image_ref",
+          "image_version",
+          "image_digest",
+          "workflow_digest",
+          "workflow_version",
+          "summary",
+          "axes",
+          "violation_count"
+        ],
+        "type": "object"
+      },
+      "AssessmentViolation": {
+        "additionalProperties": false,
+        "properties": {
+          "axis": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/AssessmentEvidence"
+          },
+          "quote": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "axis",
+          "description",
+          "quote",
+          "evidence"
+        ],
+        "type": "object"
+      },
       "AuditLogEvent": {
         "additionalProperties": false,
         "properties": {
@@ -15674,6 +15949,218 @@
           }
         },
         "summary": "Set the agent's standing user-prompt"
+      }
+    },
+    "/api/assessments": {
+      "get": {
+        "operationId": "assessment.ls",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "iteration",
+            "required": false,
+            "schema": {
+              "description": "assessed iteration id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "task",
+            "required": false,
+            "schema": {
+              "description": "assessed task key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent",
+            "required": false,
+            "schema": {
+              "description": "assessed agent",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assessor",
+            "required": false,
+            "schema": {
+              "description": "assessor agent",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "image",
+            "required": false,
+            "schema": {
+              "description": "image reference of the assessed iteration",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "image_version",
+            "required": false,
+            "schema": {
+              "description": "image version of the assessed iteration",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "most assessments to return (default 100, at most 1000)",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/AssessmentList"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "List assessments, newest first"
+      }
+    },
+    "/api/assessments/{id}": {
+      "get": {
+        "operationId": "assessment.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "assessment id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/AssessmentShowResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Show one assessment with its axes and violations"
       }
     },
     "/api/backup": {

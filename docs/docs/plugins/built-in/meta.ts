@@ -16,5 +16,6 @@ export default defineMeta({
     "image-creator",
     "goal",
     "tasks",
+    "assessments",
   ],
 });

@@ -43,6 +43,9 @@ var builtins = map[string]Capability{
 	"image-creator": {Plugin: "image-creator", Skill: "image-creator"},
 	"tasks":         {Plugin: "tasks", Skill: "tasks", Launcher: "scripts/tasks.sh"},
 	"workdir":       {Plugin: "workdir", Skill: "workdir"},
+	// assessments opens the assessment write route; the image's own skills
+	// say how to assess, so it needs no packaged skill.
+	"assessments": {Plugin: "assessments"},
 }
 
 var runtimes = map[string]Capability{

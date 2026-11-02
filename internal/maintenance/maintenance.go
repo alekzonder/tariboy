@@ -356,6 +356,8 @@ func (s *Service) cleanup(cutoffAt, msgCutoffAt time.Time, deleted map[string]in
 	}
 	step("events", simple(`DELETE FROM events WHERE ts < ?`))
 	step("task_idempotency", simple(`DELETE FROM task_idempotency WHERE created_at < ?`))
+	// Axes and violations go with their assessment by ON DELETE CASCADE.
+	step("assessments", simple(`DELETE FROM assessments WHERE created_at < ?`))
 	return errors.Join(errs...)
 }
 

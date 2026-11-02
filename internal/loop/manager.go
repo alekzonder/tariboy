@@ -21,6 +21,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/api"
+	"github.com/alekzonder/tariboy/internal/assessment"
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/image"
@@ -85,6 +86,11 @@ type ManagerConfig struct {
 	Emit                func(events.Event)
 	Proxy               ProxyBinder
 	Groups              GroupProvisioner
+
+	// Assessments serves the agent's /tools/assessment routes; nil answers
+	// them unavailable.
+	Assessments *assessment.Service
+
 	// AuditFor returns the shared per-agent audit recorder. Wired by the daemon to
 	// its audit.Registry so the daemon Recorder, the engine lifecycle sink, and the
 	// runner's log tailer all share one *audit.Log per agent. Nil disables audit.

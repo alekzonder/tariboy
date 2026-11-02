@@ -120,6 +120,7 @@
       "compacted": false,
       "deleted": {
         "ai_requests": 0,
+        "assessments": 0,
         "events": 0,
         "mail": 0,
         "operations": 0,
@@ -159,6 +160,7 @@
     "compacted": false,
     "deleted": {
       "ai_requests": 0,
+      "assessments": 0,
       "events": 0,
       "mail": 0,
       "operations": 0,

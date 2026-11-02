@@ -78,6 +78,7 @@ controls](/docs/security-controls) for the full transport and credential rules.
 | Loop engine and shim runner | At most one iteration per agent, prompt preparation, timeouts, completion, and process supervision | Task state rules |
 | Image store and builder | Built plugin/prompt artifacts addressed by ref id, source provenance, runnable import/export, and Store path resolution | Harness/model/runtime policy or editable source snapshots |
 | Mail | Letters, recipient checks, inbox caps, attempts, dead letters, and the wake and hint hooks | Direct process-to-process delivery guarantees |
+| Assessments | Immutable assessments of iterations and tasks with their image and workflow snapshots. Agents write them through `POST /tools/assessment/add` (capability `assessments`). Operators read them through `assessment.ls` and `assessment.show` | Updates, deletes, or a write through the operator API |
 | Native Tasks service | Queues, task trees, comments, relations, pools, triggers, notifications, workflow bindings, queue secrets, transition requests, and script run records | Agent authentication or running script processes |
 | Workflow script worker | Executing pending check and watch runs: environment, working directory, process group, timeout, run log, and result parsing | What a verdict means for the task |
 | Plugin host | Plugin process lifecycle, plugin tokens, and delivery of each plugin's inbox to its `/deliver` | Provider credentials in plugin environments |
@@ -438,7 +439,8 @@ all derived from it.
   `internal/commands`.
 - **Errors map once.** `internal/api/errors.go` maps a domain error to its
   HTTP answer for both the operator API and the per-agent capability socket:
-  `api.UserError` and `*tasks.Error` carry their own status, a parameter error
+  `api.UserError`, `*tasks.Error`, `*mail.Error` and `*assessment.Error` carry
+  their own status, a parameter error
   is `400`, not-found sentinels are `404`, script state conflicts are `409`.
   Any other error is `500 internal` with a fixed text, and its detail goes only
   to the daemon log. Both servers decode JSON bodies with the same size limit

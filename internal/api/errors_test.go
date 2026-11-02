@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alekzonder/tariboy/internal/assessment"
 	"github.com/alekzonder/tariboy/internal/mail"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/schedule"
@@ -40,6 +41,8 @@ func TestErrorResponseMapsDomainErrors(t *testing.T) {
 		{"schedule invalid", fmt.Errorf("%w: bad cron", schedule.ErrInvalid), 400, "invalid_schedule", "invalid schedule: bad cron"},
 		{"mail not found", fmt.Errorf("show: %w", &mail.Error{Status: 404, Code: "not_found", Msg: "letter m-1 not found"}), 404, "not_found", "letter m-1 not found"},
 		{"mail answer on task", &mail.Error{Status: 409, Code: "answer_on_task", Msg: "answer it on the task"}, 409, "answer_on_task", "answer it on the task"},
+		{"assessment invalid", fmt.Errorf("add: %w", &assessment.Error{Status: 400, Code: "invalid_assessment", Msg: "summary is required"}), 400, "invalid_assessment", "summary is required"},
+		{"assessment not found", &assessment.Error{Status: 404, Code: "not_found", Msg: "assessment \"as-1\" not found"}, 404, "not_found", "assessment \"as-1\" not found"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
