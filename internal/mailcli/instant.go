@@ -23,8 +23,8 @@ type instantResult struct {
 // may show the model; only a bad --format is a usage error.
 func runInstant(parsed request, m mode, stdout, stderr io.Writer) int {
 	format := parsed.flags["format"]
-	if format != "" && format != "text" && format != "json" {
-		fmt.Fprintln(stderr, usagef("instant", "--format must be text or json, got %q", format))
+	if !validInstantFormat(format) {
+		fmt.Fprintln(stderr, usagef("instant", "--format must be one of %s, got %q", instantFormatList, format))
 		return 2
 	}
 	if m.toolsSocket == "" || m.instantFlag == "" {
@@ -53,11 +53,47 @@ func runInstant(parsed request, m mode, stdout, stderr io.Writer) int {
 	if r.err != nil || json.Unmarshal(r.raw, &res) != nil || len(res.IDs) == 0 {
 		return 0
 	}
-	if format == "json" {
-		out, _ := json.Marshal(res)
-		fmt.Fprintln(stdout, string(out))
-		return 0
-	}
-	fmt.Fprint(stdout, res.Text)
+	fmt.Fprint(stdout, formatInstant(format, res))
 	return 0
+}
+
+// instantFormatList names the --format values of tmail instant.
+const instantFormatList = "text, json, claude-post-tool-use, claude-post-tool-use-failure, claude-stop"
+
+// claudeHookEvents maps a Claude Code PostToolUse-style format to the hook
+// event name its hookSpecificOutput must carry.
+var claudeHookEvents = map[string]string{
+	"claude-post-tool-use":         "PostToolUse",
+	"claude-post-tool-use-failure": "PostToolUseFailure",
+}
+
+func validInstantFormat(format string) bool {
+	switch format {
+	case "", "text", "json", "claude-stop":
+		return true
+	}
+	_, ok := claudeHookEvents[format]
+	return ok
+}
+
+// formatInstant renders taken letters. The claude-* formats are the JSON a
+// Claude Code hook prints: tmail builds it itself, so the hook needs no jq,
+// python or node.
+func formatInstant(format string, res instantResult) string {
+	var v any
+	switch format {
+	case "", "text":
+		return res.Text
+	case "json":
+		v = res
+	case "claude-stop":
+		v = map[string]string{"decision": "block", "reason": res.Text}
+	default:
+		v = map[string]any{"hookSpecificOutput": map[string]string{
+			"hookEventName":     claudeHookEvents[format],
+			"additionalContext": res.Text,
+		}}
+	}
+	out, _ := json.Marshal(v)
+	return string(out) + "\n"
 }

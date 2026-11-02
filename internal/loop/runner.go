@@ -1194,6 +1194,7 @@ func (r *ShimRunner) buildLaunch(ctx context.Context, ag agent.Agent, l agentdir
 	if err != nil {
 		return preparedRun{}, err
 	}
+	hargv = append(hargv, r.instantHooksArgs(ag, l, adapter, env, cwd, in.bare)...)
 	if adapter.Type() == "opencode" {
 		hargv = append([]string{"/bin/sh", "-c", `umask "$1"; shift; exec "$@"`, "tariboy-opencode", mask}, hargv...)
 	} else {

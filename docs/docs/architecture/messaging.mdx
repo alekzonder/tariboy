@@ -164,7 +164,15 @@ letter. The flag uses the same `Send` path with these additions:
 - `POST /tools/mail/instant` takes the waiting letters once. It adds one
   attempt to each, with the same limit of five as the prompt render. The
   prompt render marks an instant letter `read`, and a dead one becomes
-  `not_delivered`.
+  `not_delivered`. After `loop.sh done` it takes nothing and keeps the flag
+  file, so a `Stop` hook cannot continue a finished iteration.
+- Claude Code 2.1.227 or newer runs `tmail instant` from the hooks
+  `PostToolUse`, `PostToolUseFailure` and `Stop` in both modes. `tmail` prints
+  the hook JSON itself (`--format claude-post-tool-use`,
+  `claude-post-tool-use-failure`, `claude-stop`). The letter text reaches the
+  model only as hook output. A long tool call holds the letter, and model
+  output without a tool call is not stopped. Codex, OpenCode and an older
+  Claude Code read the letter in the next iteration.
 - At `done`, the runner closes the notices that a hook delivered in the
   iteration, as it closes the rendered notices.
 

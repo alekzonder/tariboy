@@ -43,11 +43,16 @@ func writeInstantFlag(path string) error {
 // takeInstant is the /tools/mail/instant action of agent: it removes the flag
 // file of the current iteration, then hands the waiting instant letters to
 // the hook. A letter written after the removal creates the flag again, so no
-// new letter is missed. A failed take restores the flag.
+// new letter is missed. A failed take restores the flag. After loop.sh done
+// it takes nothing and keeps the flag: a Stop hook must not continue a
+// finished iteration, so the letter waits for the next prompt.
 func (f toolsFacade) takeInstant() (mail.MailInstantResult, error) {
 	empty := mail.MailInstantResult{IDs: []string{}}
 	iteration := f.iterations.currentIterationID(f.agent)
 	if iteration == "" {
+		return empty, nil
+	}
+	if f.iterationDone(iteration) {
 		return empty, nil
 	}
 	flag := agentdir.New(f.cfg.AgentsDir, f.agent).InstantMailFlag(iteration)
@@ -64,6 +69,16 @@ func (f toolsFacade) takeInstant() (mail.MailInstantResult, error) {
 	}
 	empty.Text = FormatInstantMessages(letters)
 	return empty, nil
+}
+
+// iterationDone reports whether the agent called loop.sh done in iteration.
+// An unreadable iteration counts as not done: the take then works as before.
+func (f toolsFacade) iterationDone(iteration string) bool {
+	if f.cfg.Store == nil {
+		return false
+	}
+	it, err := f.cfg.Store.GetIteration(f.agent, iteration)
+	return err == nil && it.DoneFlag
 }
 
 // instantInstruction ends the instant block, like mailInstruction ends the
