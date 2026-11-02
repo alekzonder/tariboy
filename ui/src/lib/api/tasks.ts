@@ -27,6 +27,7 @@ export type {
   Task,
   TaskDetail,
   TaskPage,
+  TaskParent,
   TransferBundle,
   WaitingFor,
   WorkflowAttention,

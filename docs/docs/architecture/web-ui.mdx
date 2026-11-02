@@ -1333,12 +1333,26 @@ advance, request polling, pause, retry, and confirmation operations.
    Dependencies come from the `requires` of transitions into and out of the
    current status. Missing values stay visible.
 2. The description (`TaskDetailFields`).
-3. The comments and their existing answer controls.
-4. Details, collapsed: author, customer, queue, group, blocked, parent, then
+3. Subtasks (`TaskSubtasksSection`): the `children` and `hidden_children` of
+   the `tasks.get` response, with the row status from `TaskStatusView`, the
+   component the tree's Status column also uses. The panel passes the state
+   of `taskQueries.detail`, so a failed reread shows
+   `Could not load subtasks.` with **Retry** (`refetch`) in place of the list.
+4. The comments and their existing answer controls.
+5. Details, collapsed: author, customer, queue, group, blocked, parent (a
+   button from `TaskDetailParent.tsx` when `detail.parent` is set), then
    `TaskDetailProperties` and dependencies.
-5. Workflow, collapsed: the status graph, artifact editing and history, runs,
+6. Workflow, collapsed: the status graph, artifact editing and history, runs,
    logs, visits, and operator actions. Destructive confirmations still apply.
-6. History, collapsed by default.
+7. History, collapsed by default.
+
+The header's `Subtask of` line (`TaskParentLine`), the Parent field, and the
+Subtasks rows open another task in the same sheet through `onOpenTask`.
+`useTaskDetailClose` routes that request through the draft confirmation that
+guards closing. The Tasks page sets `openLinked` in `useTasksWorkspaceView`,
+and `TaskDrawer` keeps its own current key. A panel opened this way focuses
+its title heading. A `404` or `403` read of a linked task shows
+`taskReadErrorText` in the loading sheet, and the drawer stays open for it.
 
 The assignee of a flexible task is a select of "Unassigned", "me" (the
 customer principal), and each agent as `agent:<name>`. A current assignee
@@ -1465,7 +1479,11 @@ list with **New queue**, and the selected queue in **General** (the existing
 `PATCH`), **Workflow**, **Pools**, **Environment**, and, for a bound queue,
 **Sources** tabs. The queue
 filter is applied in the client so that menu can count from the load the tree
-already performs; `status_view`, the text search, `assignee` and
+already performs. `filterTasksByQueue` in `lib/taskTree.ts` keeps each task of
+the queue with its whole subtree from every queue, and `buildTaskForest`
+receives the full list too, so a root whose parent is filtered out links to it
+(`parentLink`). A child whose loaded parent is in another queue carries
+`crossQueue`, and its Key cell shows `QueueMarker`; `status_view`, the text search, `assignee` and
 `waiting_for` stay daemon-side. The **New task** form preselects the queue
 selected in the filter. When `All queues` is selected, it preselects the queue
 of the last root task created from a form on that server, or the first queue

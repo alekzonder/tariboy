@@ -63,6 +63,8 @@ function renderDetail(
     relations: [],
     descendants: 0,
     active_descendants: 0,
+    children: [],
+    hidden_children: 0,
   };
   const onSave = vi.fn().mockResolvedValue(task);
   const onTaskChanged = vi.fn();
@@ -431,6 +433,8 @@ it("keeps the workflow section open after its problem clears", async () => {
         relations: [],
         descendants: 0,
         active_descendants: 0,
+        children: [],
+        hidden_children: 0,
       }}
       events={[]}
       principals={people}

@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { Queue } from "@/lib/api";
 import { errorText } from "@/lib/errors";
+import { parentQueueOf } from "@/lib/taskTree";
+import { taskReadErrorText } from "./taskReadError";
 import QueueSettingsDialog from "./QueueSettingsDialog";
 import { TaskFilterBar } from "./TaskFilterBar";
 import TaskDetail, { TaskDetailLoading } from "./TaskDetail";
@@ -127,7 +129,7 @@ export function TasksWorkspaceContent({
         {creatingParent && (
           <TaskForm
             queues={queues}
-            initialQueue={tasks.find((task) => task.key === creatingParent)?.queue || queue}
+            initialQueue={parentQueueOf(creatingParent, tasks)}
             parentKey={creatingParent}
             onCreate={create}
             onCancel={() => setCreatingParent(null)}
@@ -144,6 +146,8 @@ export function TasksWorkspaceContent({
       <TasksWorkspaceDetail
         data={data}
         actions={actions}
+        linked={state.linked}
+        onOpenTask={state.openLinked}
         width={effectiveDetailWidth}
         resizeHandle={detailResizeHandle}
         onClose={closeDetail}
@@ -191,6 +195,8 @@ function TasksWorkspaceList({
   return (
     <TaskTree
       tasks={data.visibleTasks}
+      knownTasks={data.listedTasks}
+      queues={data.queues}
       mode={scopeAgent ? "agent" : "all"}
       activeQuestionTaskKeys={data.activeQuestionTaskKeys}
       expanded={expanded}
@@ -209,26 +215,28 @@ function TasksWorkspaceList({
 function TasksWorkspaceDetail({
   data,
   actions,
+  linked,
+  onOpenTask,
   width,
   resizeHandle,
   onClose,
 }: {
   data: TasksWorkspaceData;
   actions: TasksWorkspaceActions;
+  /** The open task came from a link in the panel. */
+  linked: boolean;
+  onOpenTask: (key: string) => void;
   width: number;
   resizeHandle: ReactNode;
   onClose: () => void;
 }) {
   const { loadingKey, detailQuery, historyQuery, detail, principals, events } = data;
   if (loadingKey) {
+    const error = detailQuery.error ?? historyQuery.error;
     return (
       <TaskDetailLoading
         taskKey={loadingKey}
-        error={
-          detailQuery.error || historyQuery.error
-            ? errorText(detailQuery.error ?? historyQuery.error)
-            : undefined
-        }
+        error={error ? taskReadErrorText(loadingKey, error, linked) : undefined}
         width={width}
         resizeHandle={resizeHandle}
         onClose={onClose}
@@ -251,6 +259,14 @@ function TasksWorkspaceDetail({
       onTransfer={actions.transferDetail}
       onRequeue={actions.requeueDetail}
       onDeleteRelation={actions.deleteRelation}
+      onOpenTask={onOpenTask}
+      queues={data.queues}
+      focusTitle={linked}
+      subtasksStatus={{
+        fetching: detailQuery.isFetching,
+        error: detailQuery.isError,
+        retry: () => void detailQuery.refetch(),
+      }}
     />
   );
 }

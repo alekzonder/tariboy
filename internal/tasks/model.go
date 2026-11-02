@@ -326,9 +326,24 @@ type TaskDetail struct {
 	ActiveDescendants int          `json:"active_descendants"`
 	WaitingFor        []WaitingFor `json:"waiting_for"`
 	Relations         []Relation   `json:"relations"`
+	// Parent is the parent the reader can see; nil for a root or a hidden parent.
+	Parent *TaskParent `json:"parent,omitempty"`
+	// Children are the direct children the reader can see, of every category
+	// and queue, in tree order. HiddenChildren counts the direct children the
+	// reader cannot see.
+	Children       []Task `json:"children"`
+	HiddenChildren int    `json:"hidden_children"`
 	// HolderReadOnly is true when the reader sees the task only through its
 	// workflow holder row, as a former holder; it is never marshalled.
 	HolderReadOnly bool `json:"-"`
+}
+
+// TaskParent names a task's parent in TaskDetail.
+type TaskParent struct {
+	Key    string `json:"key"`
+	Title  string `json:"title"`
+	Queue  string `json:"queue"`
+	Access string `json:"access"`
 }
 
 type CreateQueueInput struct {

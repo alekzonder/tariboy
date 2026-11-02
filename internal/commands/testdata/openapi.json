@@ -6570,6 +6570,12 @@
           "active_descendants": {
             "type": "integer"
           },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            },
+            "type": "array"
+          },
           "comments": {
             "items": {
               "$ref": "#/components/schemas/Comment"
@@ -6578,6 +6584,12 @@
           },
           "descendants": {
             "type": "integer"
+          },
+          "hidden_children": {
+            "type": "integer"
+          },
+          "parent": {
+            "$ref": "#/components/schemas/TaskParent"
           },
           "relations": {
             "items": {
@@ -6601,7 +6613,9 @@
           "descendants",
           "active_descendants",
           "waiting_for",
-          "relations"
+          "relations",
+          "children",
+          "hidden_children"
         ],
         "type": "object"
       },
@@ -6728,6 +6742,30 @@
         "required": [
           "tasks",
           "sequence"
+        ],
+        "type": "object"
+      },
+      "TaskParent": {
+        "additionalProperties": false,
+        "properties": {
+          "access": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "queue": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "queue",
+          "access"
         ],
         "type": "object"
       },

@@ -4753,8 +4753,11 @@ export interface components {
     };
     TaskDetail: {
       active_descendants: number;
+      children: components["schemas"]["Task"][];
       comments: components["schemas"]["Comment"][];
       descendants: number;
+      hidden_children: number;
+      parent?: components["schemas"]["TaskParent"];
       relations: components["schemas"]["Relation"][];
       task: components["schemas"]["Task"];
       waiting_for: components["schemas"]["WaitingFor"][];
@@ -4788,6 +4791,12 @@ export interface components {
       next_cursor?: string;
       sequence: number;
       tasks: components["schemas"]["Task"][];
+    };
+    TaskParent: {
+      access: string;
+      key: string;
+      queue: string;
+      title: string;
     };
     TaskQueueEnvList: {
       count: number;
@@ -5452,6 +5461,7 @@ export type TaskDetail = components["schemas"]["TaskDetail"];
 export type TaskEventList = components["schemas"]["TaskEventList"];
 export type TaskMetrics = components["schemas"]["TaskMetrics"];
 export type TaskPage = components["schemas"]["TaskPage"];
+export type TaskParent = components["schemas"]["TaskParent"];
 export type TaskQueueEnvList = components["schemas"]["TaskQueueEnvList"];
 export type TaskQueueEnvSet = components["schemas"]["TaskQueueEnvSet"];
 export type TaskQueueList = components["schemas"]["TaskQueueList"];

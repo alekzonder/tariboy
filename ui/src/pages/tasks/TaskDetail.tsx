@@ -29,6 +29,10 @@ export default function TaskDetail({
   onRequeue,
   onTaskChanged,
   assigneeOptions,
+  onOpenTask,
+  queues,
+  focusTitle,
+  subtasksStatus,
 }: TaskDetailProps) {
   const task = detail.task;
   const workflow = isWorkflowTask(task);
@@ -47,14 +51,13 @@ export default function TaskDetail({
   const pending = draft.saving || uploadingDescription || uploadingComment || decisionPending;
   const hasDraft =
     draft.dirty || commentDirty || decisionDirty || Boolean(relations.relationTarget.trim());
-  const { returnFocus, initialFocusRef, confirmClose, setConfirmClose, close } = useTaskDetailClose(
-    hasDraft,
-    pending,
-    onClose,
-  );
+  const closing = useTaskDetailClose(hasDraft, pending, onClose, onOpenTask);
+  const { returnFocus, initialFocusRef, titleRef, close, requestOpen } = closing;
   const header = (
     <TaskDetailHeader
-      task={task}
+      {...{ task, queues, titleRef }}
+      parent={detail.parent}
+      onOpenParent={requestOpen}
       pending={pending}
       title={draft.title}
       setTitle={draft.setTitle}
@@ -86,7 +89,7 @@ export default function TaskDetail({
         style={{ "--tasks-detail-width": `${width}px` } as CSSProperties}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
-          initialFocusRef.current?.focus();
+          (focusTitle ? titleRef : initialFocusRef).current?.focus();
         }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
@@ -124,9 +127,9 @@ export default function TaskDetail({
             <TaskDetailDraftAlerts
               task={task}
               draft={draft}
-              confirmClose={confirmClose}
-              setConfirmClose={setConfirmClose}
-              onClose={onClose}
+              confirmClose={closing.confirmClose}
+              setConfirmClose={closing.setConfirmClose}
+              onClose={closing.discard}
               pending={pending}
             />
             {task.access === "context" ? (
@@ -153,6 +156,8 @@ export default function TaskDetail({
                 setUploadingComment={setUploadingComment}
                 historyOpen={historyOpen}
                 setHistoryOpen={setHistoryOpen}
+                {...{ queues, subtasksStatus }}
+                onOpenTask={requestOpen}
               />
             )}
           </div>

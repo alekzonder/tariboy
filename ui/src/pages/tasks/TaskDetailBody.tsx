@@ -10,6 +10,8 @@ import { LABEL, EMPTY } from "./panelStyles";
 import { TaskDetailFields, TaskDetailProperties } from "./TaskDetailFields";
 import { TaskRelationsSection } from "./TaskRelationsSection";
 import { TaskHistorySection } from "./TaskHistorySection";
+import { TaskParentField } from "./TaskDetailParent";
+import { TaskDetailSubtasks } from "./TaskSubtasksSection";
 import type { useTaskDetailDraft } from "./useTaskDetailDraft";
 import type { useTaskDetailRelations } from "./useTaskDetailRelations";
 import type { TaskDetailProps } from "./TaskDetailTypes";
@@ -56,6 +58,9 @@ export function TaskDetailBody({
   setUploadingComment,
   historyOpen,
   setHistoryOpen,
+  queues,
+  onOpenTask,
+  subtasksStatus,
 }: Pick<
   TaskDetailProps,
   | "detail"
@@ -65,6 +70,9 @@ export function TaskDetailBody({
   | "assigneeOptions"
   | "onTaskChanged"
   | "onComment"
+  | "queues"
+  | "onOpenTask"
+  | "subtasksStatus"
 > & {
   draft: ReturnType<typeof useTaskDetailDraft>;
   relations: ReturnType<typeof useTaskDetailRelations>;
@@ -113,6 +121,7 @@ export function TaskDetailBody({
           <p className={EMPTY}>Response access — comments only.</p>
         </div>
       )}
+      <TaskDetailSubtasks {...{ detail, queues, onOpenTask, subtasksStatus }} />
       <TaskComments
         comments={comments}
         waits={commentWaits}
@@ -132,7 +141,16 @@ export function TaskDetailBody({
           <Meta label="Queue" value={task.queue} />
           <Meta label="Group" value={task.group} />
           <Meta label="Blocked" value={task.blocked ? "Yes" : "No"} mono={false} />
-          <Meta label="Parent" value={task.parent_key} />
+          <Meta
+            label="Parent"
+            value={
+              <TaskParentField
+                parentKey={task.parent_key}
+                parent={detail.parent}
+                onOpen={onOpenTask}
+              />
+            }
+          />
         </dl>
         {editable && (
           <>

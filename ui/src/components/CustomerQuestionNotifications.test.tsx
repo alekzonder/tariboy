@@ -296,6 +296,8 @@ function taskDetail(key: string, description: string): TaskDetail {
     relations: [],
     descendants: 0,
     active_descendants: 0,
+    children: [],
+    hidden_children: 0,
   };
 }
 

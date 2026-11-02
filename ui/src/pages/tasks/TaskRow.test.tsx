@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Task } from "@/lib/api";
+import type { Queue, Task } from "@/lib/api";
+import type { VisibleTaskRow } from "@/lib/taskTree";
 import {
   moveTaskColumn,
   readTaskColumnLayout,
@@ -520,6 +521,165 @@ describe("task row opening", () => {
     expect(onToggle).toHaveBeenCalledTimes(1);
     expect(onAddChild).toHaveBeenCalledTimes(1);
     expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
+const queues: Queue[] = [
+  {
+    prefix: "TARIDESIGN",
+    name: "Design",
+    description: "",
+    owners: [],
+    responsible_agent: "",
+    revision: 1,
+    created_at: "2026-09-19T08:00:00Z",
+    updated_at: "2026-09-19T08:00:00Z",
+  },
+];
+const designChild: Task = {
+  ...task,
+  key: "TARIDESIGN-2",
+  queue: "TARIDESIGN",
+  parent_key: "TARI-1",
+  title: "Design the tree",
+};
+
+function renderPlaced(row: Partial<VisibleTaskRow>, next: Task = designChild) {
+  const handlers = { onSelect: vi.fn(), onOpenTask: vi.fn() };
+  render(
+    <TaskRow
+      row={{ task: next, depth: 1, hasChildren: false, orphaned: false, ...row }}
+      mode="all"
+      queues={queues}
+      hasActiveQuestion={false}
+      expanded={false}
+      selected={false}
+      onToggle={vi.fn()}
+      onAddChild={vi.fn()}
+      {...handlers}
+    />,
+  );
+  return handlers;
+}
+
+describe("a child from another queue", () => {
+  it("marks the key with the queue it comes from, outside the tab order", () => {
+    renderPlaced({ crossQueue: true, parentQueue: "TARI" });
+
+    const label = "Queue TARIDESIGN · Design · flexible tasks (parent queue TARI)";
+    const marker = screen.getByRole("img", { name: label });
+    expect(marker).toHaveAttribute("title", label);
+    expect(marker).not.toHaveAttribute("tabindex");
+    expect(marker.closest("button")).toBeNull();
+    const key = screen.getByText("TARIDESIGN-2");
+    expect(marker.compareDocumentPosition(key) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(marker.parentElement).toBe(key.parentElement);
+  });
+
+  it("has no marker in the parent's queue or at the root", () => {
+    renderPlaced({ crossQueue: false, parentQueue: "TARIDESIGN" });
+    expect(screen.queryByRole("img", { name: /^Queue / })).toBeNull();
+  });
+
+  it("has no marker on a root task", () => {
+    renderPlaced({ depth: 0 }, { ...designChild, parent_key: "" });
+    expect(screen.queryByRole("img", { name: /^Queue / })).toBeNull();
+  });
+
+  it("shows its own workflow status under a flexible parent", () => {
+    renderPlaced(
+      { crossQueue: true, parentQueue: "TARI" },
+      {
+        ...designChild,
+        status: "review",
+        workflow_name: "design-flow",
+        workflow_digest: "abc",
+        workflow_step: { index: 3, total: 6 },
+        waiting_on: "pause",
+        workflow_paused_reason: "stalled",
+      },
+    );
+
+    const row = screen.getByTestId("task-row-TARIDESIGN-2");
+    expect(within(row).getByText("Review")).toBeInTheDocument();
+    // The step is there on a wide screen and hidden on a phone.
+    expect(within(row).getByText("3/6")).toHaveClass("hidden", "sm:inline");
+    expect(within(row).getByText("paused")).toHaveAttribute("title", "stalled");
+    expect(
+      screen.getByRole("img", {
+        name: "Queue TARIDESIGN · Design · workflow design-flow (parent queue TARI)",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a workflow child's owner and problem marks", () => {
+    const workflowChild = {
+      ...designChild,
+      status: "review",
+      workflow_name: "design-flow",
+      workflow_digest: "abc",
+    };
+    renderPlaced(
+      { crossQueue: true, parentQueue: "TARI" },
+      {
+        ...workflowChild,
+        waiting_on: "customer",
+      },
+    );
+    expect(screen.getByText("customer")).toBeInTheDocument();
+  });
+
+  it("shows a flexible label for a flexible child under a workflow parent", () => {
+    renderPlaced(
+      { crossQueue: true, parentQueue: "TARI" },
+      { ...designChild, status: "done", category: "done" },
+    );
+    expect(screen.getByText("Done")).toBeInTheDocument();
+  });
+});
+
+describe("the link to a parent in another queue", () => {
+  const link = { key: "TARI-1", queue: "TARI", canOpen: true };
+
+  it("opens the parent from a button after the title", async () => {
+    const { onOpenTask, onSelect } = renderPlaced({ depth: 0, orphaned: true, parentLink: link });
+
+    const button = screen.getByRole("button", { name: "Open parent task TARI-1" });
+    expect(button).toHaveTextContent("in TARI-1");
+    expect(button).toHaveClass("shrink-0");
+    const title = screen.getByText("Design the tree");
+    expect(title.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.click(button);
+    button.focus();
+    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard(" ");
+
+    expect(onOpenTask).toHaveBeenCalledTimes(3);
+    expect(onOpenTask).toHaveBeenCalledWith("TARI-1");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("keeps only the icon on a phone, with a 24px target", () => {
+    renderPlaced({ depth: 0, orphaned: true, parentLink: link });
+
+    const button = screen.getByRole("button", { name: "Open parent task TARI-1" });
+    expect(button).toHaveClass("min-h-6", "min-w-6");
+    const text = button.querySelector("[data-parent-link-text]");
+    expect(text).toHaveTextContent("in TARI-1");
+    expect(text).toHaveClass("hidden", "sm:inline");
+    expect(within(button).getByText("TARI-1")).toHaveClass("font-mono");
+  });
+
+  it("is plain text when the parent cannot be opened", () => {
+    renderPlaced({ depth: 0, orphaned: true, parentLink: { ...link, canOpen: false } });
+
+    expect(screen.queryByRole("button", { name: "Open parent task TARI-1" })).toBeNull();
+    expect(screen.getByTitle("You cannot open this task")).toHaveTextContent("in TARI-1");
+  });
+
+  it("is absent without a link", () => {
+    renderPlaced({ depth: 0, orphaned: true });
+    expect(screen.queryByText(/^in /)).toBeNull();
   });
 });
 
