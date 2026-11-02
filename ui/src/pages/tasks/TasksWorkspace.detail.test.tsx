@@ -597,6 +597,98 @@ describe("TasksWorkspace", () => {
     expect(commentList.compareDocumentPosition(commentForm)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
+  describe("moving between a task and its family in the panel", () => {
+    const rootDetail: TaskDetail = { ...detail, children: [child], hidden_children: 1 };
+    const childDetail: TaskDetail = {
+      ...detail,
+      task: child,
+      comments: [],
+      parent: { key: root.key, title: root.title, queue: root.queue, access: "write" },
+    };
+    const byKey = (key: string) => Promise.resolve(key === child.key ? childDetail : rootDetail);
+    const openChild = async () => {
+      await userEvent.click(await screen.findByRole("button", { name: "Expand TEST-1" }));
+      await userEvent.click(await screen.findByRole("button", { name: /Desktop tree/ }));
+    };
+
+    beforeEach(() => api.getTask.mockImplementation((key: string) => byKey(key)));
+
+    it("opens a subtask in the same panel and focuses its title", async () => {
+      render(<TasksWorkspace />);
+      await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+      const section = await screen.findByRole("region", { name: "Subtasks" });
+      expect(within(section).getByText("1 more subtask is hidden from you.")).toBeInTheDocument();
+      await userEvent.click(
+        within(section).getByRole("button", { name: "Open subtask TEST-2: Desktop tree, Open" }),
+      );
+
+      const heading = await screen.findByRole("heading", { name: "TEST-2" });
+      await waitFor(() => expect(heading).toHaveFocus());
+      expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    });
+
+    it("asks before a draft is dropped by opening the parent", async () => {
+      render(<TasksWorkspace />);
+      await openChild();
+      // The header line comes first; the Parent field in Details is the second.
+      const [parent] = await screen.findAllByRole("button", {
+        name: "Open parent task TEST-1: Ship native tasks",
+      });
+      await userEvent.click(screen.getByRole("button", { name: "Edit title" }));
+      fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Unsaved title" } });
+      await userEvent.click(parent);
+
+      expect(
+        screen.getByText(
+          "Are you sure you want to close this task? Unsaved changes will be discarded.",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "TEST-2" })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+      const heading = await screen.findByRole("heading", { name: "TEST-1" });
+      await waitFor(() => expect(heading).toHaveFocus());
+    });
+
+    it("says a task opened from a link is hidden or gone", async () => {
+      render(<TasksWorkspace />);
+      await openChild();
+      await screen.findByRole("heading", { name: "TEST-2" });
+      const gone = new ApiError(404, "not_found", "task not found");
+      api.getTask.mockImplementation((key: string) =>
+        key === root.key ? Promise.reject(gone) : byKey(key),
+      );
+      const [parent] = await screen.findAllByRole("button", {
+        name: "Open parent task TEST-1: Ship native tasks",
+      });
+      await userEvent.click(parent);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "You cannot open TEST-1. It is hidden from you or no longer exists.",
+      );
+    });
+
+    it("refreshes the subtasks on a realtime event and retries a failed read", async () => {
+      render(<TasksWorkspace />);
+      await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
+      await screen.findByRole("region", { name: "Subtasks" });
+      const added: Task = { ...child, key: "TEST-3", title: "Added later" };
+      api.getTask.mockResolvedValue({ ...rootDetail, children: [child, added] });
+      await act(async () => taskSocket.options?.onHint?.({ sequence: 12 }));
+      expect(
+        await screen.findByRole("button", { name: /Open subtask TEST-3/ }),
+      ).toBeInTheDocument();
+
+      api.getTask.mockRejectedValueOnce(new Error("Refresh failed"));
+      await act(async () => taskSocket.options?.onHint?.({ sequence: 13 }));
+      expect(await screen.findByText("Could not load subtasks.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Open subtask/ })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+      expect(
+        await screen.findByRole("button", { name: /Open subtask TEST-3/ }),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("copies the original comment Markdown", async () => {
     const markdown = "# Status\n\n- **ready**\n- `tested`";
     const writeText = vi.fn().mockResolvedValue(undefined);

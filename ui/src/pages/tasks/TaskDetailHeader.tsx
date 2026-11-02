@@ -1,7 +1,7 @@
 import { useState, type Ref } from "react";
 import { MoreHorizontal, Pencil, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import type { Task } from "@/lib/api";
+import type { Queue, Task, TaskParent } from "@/lib/api";
 import { isWorkflowTask, taskStatusLabel } from "@/lib/tasks";
 import { Button } from "@/components/ui/button";
 import { DialogTitle } from "@/components/ui/dialog";
@@ -15,6 +15,7 @@ import { StatusPill } from "@/components/ui/status";
 import { taskTone } from "@/lib/statusTone";
 import { formatTaskTime } from "./taskTime";
 import { MetaInline } from "./TaskDetailControls";
+import { TaskParentLine } from "./TaskDetailParent";
 
 export function TaskDetailHeader({
   task,
@@ -27,8 +28,18 @@ export function TaskDetailHeader({
   initialFocusRef,
   onRequeue,
   onTransfer,
+  parent,
+  queues,
+  onOpenParent,
+  titleRef,
 }: {
   task: Task;
+  /** The parent the reader can see; without it a subtask names its parent by key. */
+  parent?: TaskParent;
+  queues?: readonly Queue[];
+  onOpenParent?: (key: string) => void;
+  /** Takes the focus after the panel moved to another task. */
+  titleRef?: Ref<HTMLHeadingElement>;
   pending: boolean;
   title: string;
   setTitle: (title: string) => void;
@@ -46,9 +57,14 @@ export function TaskDetailHeader({
   return (
     <header className="flex items-start gap-2.5 bg-card px-3.5 pt-2.75 pb-2.5">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <TaskParentLine task={task} parent={parent} queues={queues} onOpen={onOpenParent} />
         <div className="flex min-w-0 items-center gap-2.25">
           <DialogTitle asChild>
-            <h2 className="shrink-0 font-mono text-ui font-medium tabular-nums text-muted-foreground">
+            <h2
+              ref={titleRef}
+              tabIndex={-1}
+              className="shrink-0 rounded-sm font-mono text-ui font-medium tabular-nums text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
               {task.key}
             </h2>
           </DialogTitle>

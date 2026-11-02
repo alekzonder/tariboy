@@ -9,7 +9,13 @@ import {
 import { PriorityTag, StatusPill } from "@/components/ui/status";
 import { cn } from "@/lib/utils";
 import { TONE_TEXT, taskTone } from "@/lib/statusTone";
-import { taskPriority, type Queue, type TaskPriority, type WorkflowAttention } from "@/lib/api";
+import {
+  taskPriority,
+  type Queue,
+  type Task,
+  type TaskPriority,
+  type WorkflowAttention,
+} from "@/lib/api";
 import {
   isWorkflowTask,
   taskStatusLabel,
@@ -131,7 +137,13 @@ function KeyCell({ row, style, expanded, onToggle, queues }: TaskRowCellProps) {
 
 /** `in KEY` after the title of a root whose parent is in another queue. On a
  *  phone only the icon stays, on a 24px target. */
-function ParentLink({ link, onOpenTask }: { link: TaskParentLink; onOpenTask?: (key: string) => void }) {
+function ParentLink({
+  link,
+  onOpenTask,
+}: {
+  link: TaskParentLink;
+  onOpenTask?: (key: string) => void;
+}) {
   const content = (
     <>
       <CornerLeftUp aria-hidden="true" className="size-3" />
@@ -140,7 +152,8 @@ function ParentLink({ link, onOpenTask }: { link: TaskParentLink; onOpenTask?: (
       </span>
     </>
   );
-  const look = "inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center gap-1 text-meta text-muted-foreground";
+  const look =
+    "inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center gap-1 text-meta text-muted-foreground";
   if (!link.canOpen || !onOpenTask) {
     return (
       <span title="You cannot open this task" className={look}>
@@ -226,39 +239,56 @@ function WorkflowStatusBadge({ task }: { task: VisibleTaskRow["task"] }): ReactN
   }
 }
 
-function StatusCell({ row, style }: TaskRowCellProps) {
-  const tone = taskTone(row.task.category);
-  if (!isWorkflowTask(row.task)) {
+/** A task's status by its own model: the flexible label, or the workflow
+ *  status with its step (not on a phone) and its owner or problem mark. The
+ *  Status column and the panel's Subtasks list both show it. */
+export function TaskStatusView({
+  task,
+  style,
+  column,
+  className,
+}: {
+  task: Task;
+  style?: CSSProperties;
+  column?: string;
+  className?: string;
+}) {
+  const tone = taskTone(task.category);
+  if (!isWorkflowTask(task)) {
     return (
-      <span data-column="status" style={style} className="shrink-0">
-        <StatusPill tone={tone}>{taskStatusLabel(row.task)}</StatusPill>
+      <span data-column={column} style={style} className={cn("shrink-0", className)}>
+        <StatusPill tone={tone}>{taskStatusLabel(task)}</StatusPill>
       </span>
     );
   }
   return (
     <span
-      data-column="status"
+      data-column={column}
       style={style}
-      className="flex min-w-0 shrink-0 items-center gap-1 overflow-hidden"
+      className={cn("flex min-w-0 shrink-0 items-center gap-1 overflow-hidden", className)}
     >
       <StatusPill tone={tone} className="min-w-0 shrink">
         {/* A workflow status ID can be 64 characters: CSS clips it, the
             title keeps the whole ID readable. */}
-        <span title={row.task.status} className="min-w-0 max-w-[24ch] truncate">
-          {taskStatusLabel(row.task)}
+        <span title={task.status} className="min-w-0 max-w-[24ch] truncate">
+          {taskStatusLabel(task)}
         </span>
       </StatusPill>
-      {row.task.workflow_step && (
+      {task.workflow_step && (
         <span
-          title={`Step ${row.task.workflow_step.index} of ${row.task.workflow_step.total}`}
+          title={`Step ${task.workflow_step.index} of ${task.workflow_step.total}`}
           className="hidden shrink-0 font-mono text-tiny tabular-nums text-muted-foreground sm:inline"
         >
-          {row.task.workflow_step.index}/{row.task.workflow_step.total}
+          {task.workflow_step.index}/{task.workflow_step.total}
         </span>
       )}
-      <WorkflowStatusBadge task={row.task} />
+      <WorkflowStatusBadge task={task} />
     </span>
   );
+}
+
+function StatusCell({ row, style }: TaskRowCellProps) {
+  return <TaskStatusView task={row.task} style={style} column="status" />;
 }
 
 function DurationCell({ row, style }: TaskRowCellProps) {

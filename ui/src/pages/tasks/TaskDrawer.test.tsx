@@ -383,3 +383,67 @@ it("closes from the loading state", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
   expect(onClose).toHaveBeenCalled();
 });
+
+const subtask: Task = {
+  ...task,
+  key: "DESIGN-2",
+  queue: "DESIGN",
+  parent_key: "TEST-1",
+  title: "Design it",
+};
+const parentRef = { key: "TEST-1", title: "Ship the drawer", queue: "TEST", access: "write" };
+
+it("opens a subtask and its parent in the same drawer", async () => {
+  api.getTask.mockImplementation((key: string) =>
+    Promise.resolve(
+      key === subtask.key
+        ? { ...detail, task: subtask, parent: parentRef }
+        : { ...detail, children: [subtask] },
+    ),
+  );
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />);
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Open subtask DESIGN-2: Design it, Open" }),
+  );
+  const heading = await screen.findByRole("heading", { name: "DESIGN-2" });
+  await waitFor(() => expect(heading).toHaveFocus());
+
+  const [parent] = screen.getAllByRole("button", {
+    name: "Open parent task TEST-1: Ship the drawer",
+  });
+  await userEvent.click(parent);
+  const back = await screen.findByRole("heading", { name: "TEST-1" });
+  await waitFor(() => expect(back).toHaveFocus());
+});
+
+it("keeps the drawer open on a linked task that is hidden or gone", async () => {
+  const onClose = vi.fn();
+  api.getTask.mockImplementation((key: string) =>
+    key === subtask.key
+      ? Promise.reject(new ApiError(404, "not_found", "task not found"))
+      : Promise.resolve({ ...detail, children: [subtask] }),
+  );
+  render(<TaskDrawer taskKey="TEST-1" onClose={onClose} />);
+  await userEvent.click(await screen.findByRole("button", { name: /Open subtask DESIGN-2/ }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "You cannot open DESIGN-2. It is hidden from you or no longer exists.",
+  );
+  expect(onClose).not.toHaveBeenCalled();
+});
+
+it("takes comments only on a subtask with respond access", async () => {
+  api.getTask.mockImplementation((key: string) =>
+    Promise.resolve(
+      key === subtask.key
+        ? { ...detail, task: { ...subtask, access: "respond" }, parent: parentRef }
+        : { ...detail, children: [subtask] },
+    ),
+  );
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />);
+  await userEvent.click(await screen.findByRole("button", { name: /Open subtask DESIGN-2/ }));
+
+  expect(await screen.findByText("Response access — comments only.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Edit title" })).toBeNull();
+  expect(screen.getByLabelText("Comment")).toBeInTheDocument();
+});

@@ -619,15 +619,21 @@ describe("a child from another queue", () => {
       workflow_name: "design-flow",
       workflow_digest: "abc",
     };
-    renderPlaced({ crossQueue: true, parentQueue: "TARI" }, {
-      ...workflowChild,
-      waiting_on: "customer",
-    });
+    renderPlaced(
+      { crossQueue: true, parentQueue: "TARI" },
+      {
+        ...workflowChild,
+        waiting_on: "customer",
+      },
+    );
     expect(screen.getByText("customer")).toBeInTheDocument();
   });
 
   it("shows a flexible label for a flexible child under a workflow parent", () => {
-    renderPlaced({ crossQueue: true, parentQueue: "TARI" }, { ...designChild, status: "done", category: "done" });
+    renderPlaced(
+      { crossQueue: true, parentQueue: "TARI" },
+      { ...designChild, status: "done", category: "done" },
+    );
     expect(screen.getByText("Done")).toBeInTheDocument();
   });
 });

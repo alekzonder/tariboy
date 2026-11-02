@@ -30,7 +30,7 @@ export function Meta({
   mono = true,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   mono?: boolean;
 }) {
   return (

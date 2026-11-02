@@ -4,6 +4,7 @@ import type {
   Task,
   TaskEvent,
   PrincipalInfo,
+  Queue,
   TaskPriority,
   TaskRelationType,
   TaskStatus,
@@ -42,4 +43,19 @@ export interface TaskDetailProps {
   /** A closed list of assignees instead of the free-text field; the owner of
    *  `onSave` gives each value its meaning. */
   assigneeOptions?: ReadonlyArray<{ value: string; label: string }>;
+  /** Opens the parent or a subtask in this panel; without it they are text. */
+  onOpenTask?: (key: string) => void;
+  /** The queues, for the names in a queue marker. */
+  queues?: readonly Queue[];
+  /** The panel was opened from another task: its title takes the focus. */
+  focusTitle?: boolean;
+  /** The state of the read behind `detail`, for the Subtasks section. */
+  subtasksStatus?: TaskSubtasksStatus;
+}
+
+interface TaskSubtasksStatus {
+  fetching: boolean;
+  /** The latest read of the task failed. */
+  error: boolean;
+  retry: () => void;
 }

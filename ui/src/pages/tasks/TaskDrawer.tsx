@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useApi } from "@/components/apiContext";
 import { useApiQuery } from "@/hooks/useApiQuery";
@@ -13,6 +13,7 @@ import TaskDetail, { TaskDetailLoading } from "./TaskDetail";
 import TaskPanelResizeHandle from "./TaskPanelResizeHandle";
 import { clampTaskDetailWidth, useTaskPanelWidths } from "./useTaskPanelWidths";
 import { moveTaskToHost, type TaskEdit } from "./taskDrawerMove";
+import { isHiddenTaskError, taskReadErrorText } from "./taskReadError";
 import "./tasks.css";
 import { idempotencyKey } from "@/lib/ids";
 
@@ -30,17 +31,25 @@ export interface AssigneeChoice {
  * One task, opened where it was mentioned. It is the same panel the Tasks
  * workspace shows, with shared server queries and independent selection.
  */
-function TaskDrawerContent({
-  taskKey,
-  onClose,
-  assignees,
-  onMoved,
-}: {
+interface TaskDrawerProps {
   taskKey: string;
   onClose: () => void;
   assignees?: readonly AssigneeChoice[];
   /** The task now lives on `hostId`; the owner reopens it there. */
   onMoved?: (hostId: string) => void;
+}
+
+function TaskDrawerContent({
+  taskKey,
+  onClose,
+  assignees,
+  onMoved,
+  linked,
+  onOpenTask,
+}: TaskDrawerProps & {
+  /** The task was opened from a link in the drawer, not by the owner. */
+  linked: boolean;
+  onOpenTask: (key: string) => void;
 }) {
   const api = useApi();
   const client = useQueryClient();
@@ -67,21 +76,20 @@ function TaskDrawerContent({
     const error = detailQuery.error ?? historyQuery.error;
     if (!error || isConnectionError(error)) return;
     toast.error(errorText(error));
+    // A linked task that is hidden or gone keeps the drawer open to say so.
+    if (linked && isHiddenTaskError(error)) return;
     if (!detailQuery.data && !isAccessError(error)) onClose();
-  }, [detailQuery.error, detailQuery.data, historyQuery.error, onClose]);
+  }, [detailQuery.error, detailQuery.data, historyQuery.error, onClose, linked]);
 
   if (detail?.task.key !== taskKey || !historyQuery.data) {
+    const error = detailQuery.error ?? historyQuery.error;
     return (
       <TaskDetailLoading
         taskKey={taskKey}
         width={detailWidth}
         resizeHandle={resizeHandle}
         onClose={onClose}
-        error={
-          detailQuery.error || historyQuery.error
-            ? errorText(detailQuery.error ?? historyQuery.error)
-            : undefined
-        }
+        error={error ? taskReadErrorText(taskKey, error, linked) : undefined}
       />
     );
   }
@@ -96,6 +104,13 @@ function TaskDrawerContent({
       resizeHandle={resizeHandle}
       onClose={onClose}
       assigneeOptions={assignees}
+      onOpenTask={onOpenTask}
+      focusTitle={linked}
+      subtasksStatus={{
+        fetching: detailQuery.isFetching,
+        error: detailQuery.isError,
+        retry: () => void detailQuery.refetch(),
+      }}
       onTransfer={async (hostID: string) => {
         const host = await resolveDaemon(hostID);
         if (!host) throw new Error("That server is no longer registered");
@@ -185,10 +200,24 @@ function TaskDrawerContent({
   );
 }
 
-export default function TaskDrawer(props: Parameters<typeof TaskDrawerContent>[0]) {
-  const api = useApi();
+/** The drawer starts on the owner's task; a parent or subtask link moves it. */
+function TaskDrawerSession(props: TaskDrawerProps) {
+  const [current, setCurrent] = useState({ key: props.taskKey, linked: false });
   return (
     <TaskDrawerContent
+      key={current.key}
+      {...props}
+      taskKey={current.key}
+      linked={current.linked}
+      onOpenTask={(key) => setCurrent({ key, linked: true })}
+    />
+  );
+}
+
+export default function TaskDrawer(props: TaskDrawerProps) {
+  const api = useApi();
+  return (
+    <TaskDrawerSession
       key={JSON.stringify([api.target?.id ?? "local", props.taskKey])}
       {...props}
     />

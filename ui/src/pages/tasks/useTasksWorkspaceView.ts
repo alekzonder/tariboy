@@ -26,10 +26,20 @@ export function useTasksWorkspaceView() {
     setCreatingParent("");
   };
 
+  // The open task came from a link in the panel, not from the tree.
+  const [linked, setLinked] = useState(false);
   const loadDetail = useCallback(async (key: string) => {
+    setLinked(false);
     setSelectedKey(key);
   }, []);
-  const closeDetail = () => setSelectedKey("");
+  const openLinked = useCallback((key: string) => {
+    setLinked(true);
+    setSelectedKey(key);
+  }, []);
+  const closeDetail = () => {
+    setLinked(false);
+    setSelectedKey("");
+  };
   const toggleExpanded = (key: string) =>
     setExpanded((current) => {
       const next = new Set(current);
@@ -57,6 +67,8 @@ export function useTasksWorkspaceView() {
     setCreatingParent,
     startCreate,
     loadDetail,
+    openLinked,
+    linked,
     closeDetail,
     toggleExpanded,
   };

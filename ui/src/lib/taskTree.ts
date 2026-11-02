@@ -45,7 +45,9 @@ export function parentQueueOf(parentKey: string, tasks: readonly Task[]): string
 /** The title of the queue marker of a child in another queue. */
 export function queueMarkerLabel(task: Task, parentQueue: string, queues: readonly Queue[]) {
   const name = queues.find((queue) => queue.prefix === task.queue)?.name;
-  const kind = isWorkflowTask(task) ? `workflow ${task.workflow_name ?? ""}`.trim() : "flexible tasks";
+  const kind = isWorkflowTask(task)
+    ? `workflow ${task.workflow_name ?? ""}`.trim()
+    : "flexible tasks";
   const parts = name ? [`Queue ${task.queue}`, name, kind] : [`Queue ${task.queue}`];
   return `${parts.join(" · ")} (parent queue ${parentQueue})`;
 }
@@ -68,7 +70,8 @@ export function filterTasksByQueue(tasks: Task[], queue: string): Task[] {
     if (known !== undefined) return known;
     const parent = byKey.get(task.parent_key);
     const result =
-      task.queue === queue || (!!parent && !seen.has(parent.key) && keeps(parent, seen.add(task.key)));
+      task.queue === queue ||
+      (!!parent && !seen.has(parent.key) && keeps(parent, seen.add(task.key)));
     kept.set(task.key, result);
     return result;
   };
