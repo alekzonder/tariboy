@@ -28,6 +28,7 @@ function renderSidebar(
     onEditServer: vi.fn(),
     onRemoveServer: vi.fn(),
     onConnectHost: vi.fn(),
+    onOpenHostSettings: vi.fn(),
     onNavigate: vi.fn(),
   };
   render(

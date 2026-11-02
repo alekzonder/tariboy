@@ -27,15 +27,17 @@ export interface HostActions {
   onEditServer: (hostId: string) => void;
   onRemoveServer: (hostId: string) => void;
   onConnectHost: (hostId: string) => void;
+  onOpenHostSettings: (hostId: string, page: "agent-defaults" | "maintenance") => void;
 }
 
 const SUBHEADING_CLASS =
   "px-2 pt-1.5 pb-1 text-caption font-medium tracking-[.02em] text-muted-foreground";
 
-/** The host's own menu. The implicit local host has no registry entry (id
- *  ""), so there is nothing to edit or remove for it. */
+/** The host's own menu: its settings, then Edit and Remove. The implicit
+ *  local host has no registry entry (id ""), so there is nothing to edit or
+ *  remove for it. */
 function HostMenu({ host, actions }: { host: HostAgents; actions: HostActions }) {
-  if (host.host.id === "") return null;
+  const registered = host.host.id !== "";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -49,12 +51,24 @@ function HostMenu({ host, actions }: { host: HostAgents; actions: HostActions })
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => actions.onEditServer(host.host.id)}>
-          Edit host
+        <DropdownMenuItem
+          onSelect={() => actions.onOpenHostSettings(host.host.id, "agent-defaults")}
+        >
+          Host settings
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => actions.onRemoveServer(host.host.id)}>
-          Remove host
+        <DropdownMenuItem onSelect={() => actions.onOpenHostSettings(host.host.id, "maintenance")}>
+          Maintenance
         </DropdownMenuItem>
+        {registered && (
+          <>
+            <DropdownMenuItem onSelect={() => actions.onEditServer(host.host.id)}>
+              Edit host
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => actions.onRemoveServer(host.host.id)}>
+              Remove host
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

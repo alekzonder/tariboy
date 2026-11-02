@@ -2,7 +2,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useDaemons } from "@/components/daemonContext";
 import type { HostAgents } from "@/lib/aggregate";
-import { scopedPath } from "@/lib/navRoutes";
+import { hostSettingsPath, scopedPath } from "@/lib/navRoutes";
 import { hostToParam } from "@/lib/terminalsHost";
 import { DEFAULT_AGENT_TAB } from "@/pages/agents/agentWorkspaceModel";
 import type { CloneAgentSource } from "./CreateAgentDialog";
@@ -87,6 +87,9 @@ export function TerminalsSidebar({
     onEditServer: closing((id: string) => void server.editServer(id)),
     onRemoveServer: (id) => void server.removeServer(id),
     onConnectHost: (id) => void server.connectHost(id),
+    onOpenHostSettings: closing((id: string, page: "agent-defaults" | "maintenance") =>
+      navigate(hostSettingsPath(page, id)),
+    ),
     onNavigate: () => sidebar.setDrawerOpen(false),
   };
   const props = {

@@ -9,7 +9,7 @@ import type {
   ImageManifest,
   ImageSummary,
 } from "@/lib/api";
-import { addDaemon, listDaemons, getDaemonToken, type Daemon } from "@/lib/daemons";
+import { addDaemon, listDaemons, getDaemonToken, setActiveId, type Daemon } from "@/lib/daemons";
 import * as desktop from "@/lib/desktop";
 import {
   cleanupTerminalsPage,
@@ -246,12 +246,53 @@ describe("TerminalsPage Update all", () => {
 });
 
 describe("TerminalsPage server management", () => {
-  it("offers a manage menu for remote servers but not for the local daemon", async () => {
+  it("offers Edit and Remove for remote servers but not for the local daemon", async () => {
     await registerProd();
     renderAt("/terminals");
-    await waitFor(() => expect(screen.getByText("prod")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "manage prod" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "manage This daemon (local)" })).toBeNull();
+
+    await openManageMenu();
+    expect(await screen.findByRole("menuitem", { name: "Edit host" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Remove host" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Host settings" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Maintenance" })).toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+
+    await openManageMenu("This daemon (local)");
+    expect(await screen.findByRole("menuitem", { name: "Host settings" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Maintenance" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Edit host" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Remove host" })).toBeNull();
+  });
+
+  it("opens a server's Maintenance for that server, not the active one", async () => {
+    const id = await registerProd();
+    renderAt("/terminals");
+
+    await openManageMenu();
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Maintenance" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent(`/settings/maintenance?host=${id}`),
+    );
+    expect(await screen.findByRole("combobox", { name: "Host" })).toHaveTextContent("prod");
+  });
+
+  it("opens the local daemon's settings while another host is active", async () => {
+    const id = await registerProd();
+    await setActiveId(id);
+    renderAt("/terminals");
+
+    await openManageMenu("This daemon (local)");
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Host settings" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/settings/agent-defaults?host=local",
+      ),
+    );
+    expect(await screen.findByRole("combobox", { name: "Host" })).toHaveTextContent(
+      "This daemon (local)",
+    );
   });
 
   it("edits a server and re-polls immediately with the new values", async () => {

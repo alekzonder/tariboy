@@ -139,6 +139,8 @@ export function renderAt(path: string, attention: ReadonlyMap<string, number> = 
                 <Route path="/tasks" element={<TerminalsPage scoped />} />
                 <Route path="/settings" element={<TerminalsPage serverView="settings" scoped />}>
                   <Route path="hosts" element={<DaemonsPage />} />
+                  <Route path="agent-defaults" element={<p>Agent defaults page</p>} />
+                  <Route path="maintenance" element={<p>Maintenance page</p>} />
                 </Route>
               </Routes>
             </SidebarStateProvider>
@@ -190,6 +192,8 @@ export async function registerProd(): Promise<string> {
 
 // Radix opens a DropdownMenu on pointerdown, which jsdom's fireEvent.click
 // does not synthesize — drive it from the keyboard instead.
-export async function openManageMenu(): Promise<void> {
-  fireEvent.keyDown(await screen.findByRole("button", { name: "manage prod" }), { key: "Enter" });
+export async function openManageMenu(label = "prod"): Promise<void> {
+  fireEvent.keyDown(await screen.findByRole("button", { name: `manage ${label}` }), {
+    key: "Enter",
+  });
 }

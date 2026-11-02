@@ -106,6 +106,12 @@ export function scopedPath(
   return `/${section}${search ? `?${search}` : ""}`;
 }
 
+/** A host's Settings page, always with `?host=` so it opens that host and
+ *  not the remembered active one. */
+export function hostSettingsPath(page: "agent-defaults" | "maintenance", hostId: string): string {
+  return `/settings/${page}?${new URLSearchParams({ host: hostToParam(hostId) })}`;
+}
+
 /**
  * Where an old URL now lives, or null when it still opens as it is: the
  * host-exact `/servers/:hostId/mail|tasks|activity` pages move the path host

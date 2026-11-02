@@ -252,7 +252,11 @@ shows only in the pinned block. Then each host lists its expandable **Teams**
 and its **Individual agents**. With one host in the workspace the list has no
 host heading. With two or more, each host has a heading with its
 reachability, an **Update** action when it runs an older daemon, and a `⋯`
-menu (**Edit host**, **Remove host**). A host heading opens `/tasks?host=<id>`.
+menu. The menu has **Host settings**, which opens
+`/settings/agent-defaults?host=<id>`, and **Maintenance**, which opens
+`/settings/maintenance?host=<id>` with backups and the operations log. A
+registered host also has **Edit host** and **Remove host**; the local daemon
+has none. A host heading opens `/tasks?host=<id>`.
 
 An agent row shows the agent's derived state (see
 [Agent state](#agent-state)). The dot has the color of the state. On the
