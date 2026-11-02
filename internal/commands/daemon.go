@@ -162,6 +162,9 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, transcriptCommand())
 	mustRegister(r, usageCommand())
 	mustRegister(r, agentUsage())
+	for _, cmd := range metricsCommands() {
+		mustRegister(r, cmd)
+	}
 	mustRegister(r, harnessModels())
 	mustRegister(r, harnessCodexApprovalGet())
 	mustRegister(r, harnessCodexApprovalSet())
@@ -233,6 +236,7 @@ func BuildRegistry() *registry.Registry {
 	mustGroup(r, "schedule", "Manage agent schedules")
 	mustGroup(r, "script", "Manage agent background scripts")
 	mustGroup(r, "budget", "Manage token budgets")
+	mustGroup(r, "metrics", "Task, agent, image, workflow and server metrics")
 	mustGroup(r, "plugin", "Install and manage external plugins")
 	mustGroup(r, "agent.image", "Select an agent image")
 	mustGroup(r, "group", "Manage agent groups")

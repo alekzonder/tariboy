@@ -10,6 +10,7 @@ export default defineMeta({
     "shim",
     "state-model",
     "ai-proxy",
+    "metrics",
     "web-ui",
   ],
 });

@@ -162,6 +162,8 @@ tariboy has four command surfaces:
 | `tariboy maintenance get` | Show database maintenance settings and the last run |
 | `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
 | `tariboy maintenance set` | Change database maintenance settings; unset flags keep their value |
+| `tariboy metrics server` | Server metrics over a period, in total and by agent, image version and workflow version |
+| `tariboy metrics task KEY` | Metrics of one task: lead time, status time, usage, rework, questions, quality, agents and versions |
 | `tariboy onboarding retry` | Register the default Store and build the starter image again when they are missing |
 | `tariboy onboarding status` | Report the first-run state: default Store, starter image, harness CLIs and agent count |
 | `tariboy operation log ID` | Read the log of a background operation |
@@ -283,6 +285,42 @@ tariboy iteration ls worker --started-after 2026-09-01 --started-before 2026-09-
 ```
 
 `iteration ls` rows and `iteration inspect` both report a sorted `tags` list.
+
+### Metrics
+
+`tariboy metrics` reports task metrics that the daemon computes from tasks,
+workflow visits, AI requests, iterations and assessments.
+[Metrics](/docs/architecture/metrics) defines each value, its unit and its
+source.
+
+- `tariboy metrics task KEY` prints the metrics of one task. KEY is the
+  current key or an old key of the task.
+- `tariboy metrics server` prints the report of a period: the total and one
+  row for each agent, image version and workflow version.
+
+`metrics server` takes these flags:
+
+| Flag | Value |
+| --- | --- |
+| `--since`, `-s` | RFC 3339 time, inclusive. The default is 30 days before `--until`. |
+| `--until`, `-u` | RFC 3339 time, exclusive. The default is the time of the request. |
+| `--agent`, `-a` | Only the iterations and tasks of this agent |
+| `--image`, `-i` | `NAME` or `NAME:VERSION`. Only the iterations and tasks on this image. |
+| `--workflow`, `-w` | `NAME` or `NAME:VERSION`. Only the iterations and tasks under this workflow. `none` selects work without a workflow. |
+
+Both commands print tables, with times in hours and minutes. The global
+`--json` flag prints the API response, with times in seconds and costs in US
+dollars.
+
+```bash
+tariboy metrics task DEV-42
+tariboy metrics task DEV-42 --json
+tariboy metrics server
+tariboy metrics server --since 2026-10-01T00:00:00Z --until 2026-11-01T00:00:00Z
+tariboy metrics server --agent tariboy-developer-bob
+tariboy metrics server --image developer:0.23.1 --json
+tariboy metrics server --workflow development:0.10.1
+```
 
 ## Agent capability scripts
 

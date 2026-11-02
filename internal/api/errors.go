@@ -9,6 +9,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/assessment"
 	"github.com/alekzonder/tariboy/internal/mail"
+	"github.com/alekzonder/tariboy/internal/metrics"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/script"
@@ -58,6 +59,10 @@ func ErrorResponse(err error) (status int, code, msg string, data map[string]any
 	var ae *assessment.Error
 	if errors.As(err, &ae) {
 		return statusOr400(ae.Status), ae.Code, ae.Msg, nil, true
+	}
+	var xe *metrics.Error
+	if errors.As(err, &xe) {
+		return statusOr400(xe.Status), xe.Code, xe.Msg, nil, true
 	}
 	var pe *registry.ParamError
 	if errors.As(err, &pe) {

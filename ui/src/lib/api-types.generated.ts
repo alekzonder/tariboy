@@ -1939,6 +1939,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/metrics": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Server metrics over a period, in total and by agent, image version and workflow version */
+    get: operations["metrics.server"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/metrics/tasks/{key}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Metrics of one task: lead time, status time, usage, rework, questions, quality, agents and versions */
+    get: operations["metrics.task"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/onboarding": {
     parameters: {
       query?: never;
@@ -4113,6 +4147,108 @@ export interface components {
     ManifestRole: {
       text: string;
     };
+    MetricsImageVersionUsage: {
+      cost_usd: number;
+      image: string;
+      image_digest: string;
+      image_ref: string;
+      /** @description unknown when no iterations row records it */
+      image_version: string;
+      iterations: number;
+      tokens: components["schemas"]["MetricsTokens"];
+    };
+    /** @description seconds, null when unknown */
+    MetricsNullSeconds: number | null;
+    /** @description average, minimum and count of scored assessment axes; null without scores */
+    MetricsQuality: {
+      image_process: {
+        avg: number;
+        count: number;
+        min: number;
+      } | null;
+      role: {
+        avg: number;
+        count: number;
+        min: number;
+      } | null;
+      task_fit: {
+        avg: number;
+        count: number;
+        min: number;
+      } | null;
+    } | null;
+    MetricsReport: {
+      agents: components["schemas"]["MetricsSlice"][];
+      images: components["schemas"]["MetricsSlice"][];
+      since: string;
+      total: components["schemas"]["MetricsSlice"];
+      until: string;
+      workflows: components["schemas"]["MetricsSlice"][];
+    };
+    MetricsReworkByOutcome: {
+      changes_requested: number;
+      conflict: number;
+      rework: number;
+    };
+    MetricsSlice: {
+      name?: string;
+      tasks: components["schemas"]["MetricsTaskStats"];
+      usage: components["schemas"]["MetricsUsage"];
+      version?: string;
+    };
+    MetricsTaskAgentUsage: {
+      agent: string;
+      images: components["schemas"]["MetricsImageVersionUsage"][];
+      usage: components["schemas"]["MetricsUsage"];
+    };
+    MetricsTaskAverages: {
+      cache_read_tokens: number;
+      cache_write_tokens: number;
+      cost_usd: number;
+      customer_questions: number;
+      input_tokens: number;
+      iterations: number;
+      output_tokens: number;
+      rejected_advances: number;
+      rework_rounds: number;
+    };
+    MetricsTaskStats: {
+      /** @description absent when no task is done */
+      avg?: components["schemas"]["MetricsTaskAverages"];
+      lead_time_avg_s: components["schemas"]["MetricsNullSeconds"];
+      lead_time_median_s: components["schemas"]["MetricsNullSeconds"];
+      /** @description tasks that ran on more than one version of this slice */
+      mixed_tasks: number;
+      quality: components["schemas"]["MetricsQuality"];
+      sum: components["schemas"]["MetricsTaskSums"];
+      tasks_done: number;
+    };
+    MetricsTaskSums: {
+      cost_usd: number;
+      customer_questions: number;
+      iterations: number;
+      rejected_advances: number;
+      rework_rounds: number;
+      tokens: components["schemas"]["MetricsTokens"];
+    };
+    MetricsTokens: {
+      cache_read: number;
+      cache_write: number;
+      input: number;
+      output: number;
+    };
+    MetricsUsage: {
+      /** @description US dollars */
+      cost_usd: number;
+      /** @description distinct iterations */
+      iterations: number;
+      tokens: components["schemas"]["MetricsTokens"];
+    };
+    MetricsWorkflowRef: {
+      digest: string;
+      name: string;
+      version: string;
+    };
     OnboardingDefaultStore: {
       error?: string;
       name: string;
@@ -4626,6 +4762,27 @@ export interface components {
     TaskEventList: {
       count: number;
       events: components["schemas"]["Event"][];
+    };
+    TaskMetrics: {
+      agents: components["schemas"]["MetricsTaskAgentUsage"][];
+      completed_at: string;
+      customer_questions: number;
+      images: components["schemas"]["MetricsImageVersionUsage"][];
+      key: string;
+      lead_time_s: components["schemas"]["MetricsNullSeconds"];
+      quality: components["schemas"]["MetricsQuality"];
+      rejected_advances: number;
+      rework_by_outcome: components["schemas"]["MetricsReworkByOutcome"];
+      rework_rounds: number;
+      started_at: string;
+      status: string;
+      /** @description seconds in each status */
+      status_time_s: {
+        [key: string]: number;
+      };
+      title: string;
+      usage: components["schemas"]["MetricsUsage"];
+      workflows: components["schemas"]["MetricsWorkflowRef"][];
     };
     TaskPage: {
       next_cursor?: string;
@@ -5210,6 +5367,19 @@ export type MaintenanceRun = components["schemas"]["MaintenanceRun"];
 export type MaintenanceSettings = components["schemas"]["MaintenanceSettings"];
 export type MaintenanceView = components["schemas"]["MaintenanceView"];
 export type ManifestRole = components["schemas"]["ManifestRole"];
+export type MetricsImageVersionUsage = components["schemas"]["MetricsImageVersionUsage"];
+export type MetricsNullSeconds = components["schemas"]["MetricsNullSeconds"];
+export type MetricsQuality = components["schemas"]["MetricsQuality"];
+export type MetricsReport = components["schemas"]["MetricsReport"];
+export type MetricsReworkByOutcome = components["schemas"]["MetricsReworkByOutcome"];
+export type MetricsSlice = components["schemas"]["MetricsSlice"];
+export type MetricsTaskAgentUsage = components["schemas"]["MetricsTaskAgentUsage"];
+export type MetricsTaskAverages = components["schemas"]["MetricsTaskAverages"];
+export type MetricsTaskStats = components["schemas"]["MetricsTaskStats"];
+export type MetricsTaskSums = components["schemas"]["MetricsTaskSums"];
+export type MetricsTokens = components["schemas"]["MetricsTokens"];
+export type MetricsUsage = components["schemas"]["MetricsUsage"];
+export type MetricsWorkflowRef = components["schemas"]["MetricsWorkflowRef"];
 export type OnboardingDefaultStore = components["schemas"]["OnboardingDefaultStore"];
 export type OnboardingHarness = components["schemas"]["OnboardingHarness"];
 export type OnboardingStarterImage = components["schemas"]["OnboardingStarterImage"];
@@ -5280,6 +5450,7 @@ export type TaskArtifactList = components["schemas"]["TaskArtifactList"];
 export type TaskCommentList = components["schemas"]["TaskCommentList"];
 export type TaskDetail = components["schemas"]["TaskDetail"];
 export type TaskEventList = components["schemas"]["TaskEventList"];
+export type TaskMetrics = components["schemas"]["TaskMetrics"];
 export type TaskPage = components["schemas"]["TaskPage"];
 export type TaskQueueEnvList = components["schemas"]["TaskQueueEnvList"];
 export type TaskQueueEnvSet = components["schemas"]["TaskQueueEnvSet"];
@@ -11914,6 +12085,94 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["MaintenanceRun"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "metrics.server": {
+    parameters: {
+      query?: {
+        agent?: string;
+        image?: string;
+        workflow?: string;
+        since?: string;
+        until?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["MetricsReport"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "metrics.task": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        key: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["TaskMetrics"];
           };
         };
       };
