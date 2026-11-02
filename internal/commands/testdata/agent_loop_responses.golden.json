@@ -272,12 +272,12 @@
       }
     ],
     "name": "alpha",
-    "prompt": "# You are agent alpha\ncwd: $CWD\n\n# image prompt\n\nremember X\n\n# Task Processing Order\n\nProcess the following inputs in order: one-shot, then messages, then goal.\nIf an input is absent, continue to the next section; do not run commands merely to look for that absent input.\n\n## One-shot\n\n[runtime: one-shot]\n\n## Messages\n\n[runtime: messages]\n\n## Goal\n\nNo goal selected for this iteration.\n\nUse the Native Task workflow for selected work. If a task is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n\nnew prompt\n"
+    "prompt": "# You are agent alpha\ncwd: $CWD\n\n# image prompt\n\nremember X\n\n# Task Processing Order\n\nProcess the following inputs in order: one-shot, then messages, then goal.\nIf an input is absent, continue to the next section; do not run commands merely to look for that absent input.\n\nIteration mode: `request`. No goal task is selected: work from the one-shot instruction or the messages.\n\n## One-shot\n\n[runtime: one-shot]\n\n## Messages\n\n[runtime: messages]\n\n## Goal\n\nNo goal selected for this iteration.\n\nUse the Native Task workflow for selected work. If a task is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n\nnew prompt\n"
   },
   "prompt.get v1 without layers": {
     "layers": null,
     "name": "beta",
-    "prompt": "# You are agent beta\ncwd: $BASE/agents/beta/workdir\n\n# beta prompt\n\nbeta context\n\n# Task Processing Order\n\nProcess the following inputs in order: one-shot, then messages, then goal.\nIf an input is absent, continue to the next section; do not run commands merely to look for that absent input.\n\n## One-shot\n\n[runtime: one-shot]\n\n## Messages\n\n[runtime: messages]\n\n## Goal\n\nNo goal selected for this iteration.\n\nUse the Native Task workflow for selected work. If a task is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n"
+    "prompt": "# You are agent beta\ncwd: $BASE/agents/beta/workdir\n\n# beta prompt\n\nbeta context\n\n# Task Processing Order\n\nProcess the following inputs in order: one-shot, then messages, then goal.\nIf an input is absent, continue to the next section; do not run commands merely to look for that absent input.\n\nIteration mode: `request`. No goal task is selected: work from the one-shot instruction or the messages.\n\n## One-shot\n\n[runtime: one-shot]\n\n## Messages\n\n[runtime: messages]\n\n## Goal\n\nNo goal selected for this iteration.\n\nUse the Native Task workflow for selected work. If a task is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n"
   },
   "prompt.get v2": {
     "layers": [
@@ -295,7 +295,7 @@
       }
     ],
     "name": "v2",
-    "prompt": "# Task Processing Order\n\nProcess the following inputs in order: one-shot, then messages, then goal.\nIf an input is absent, continue to the next section; do not run commands merely to look for that absent input.\n\n## One-shot\n\n[runtime: one-shot]\n\n## Messages\n\n[runtime: messages]\n\n## Goal\n\nNo goal selected for this iteration.\n\nUse the Native Task workflow for selected work. If a task is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n\nSTATIC\n\n# [runtime: user-prompt]\n\nUSER\n"
+    "prompt": "# Task Processing Order\n\nProcess the following inputs in order: one-shot, then messages, then goal.\nIf an input is absent, continue to the next section; do not run commands merely to look for that absent input.\n\nIteration mode: `request`. No goal task is selected: work from the one-shot instruction or the messages.\n\n## One-shot\n\n[runtime: one-shot]\n\n## Messages\n\n[runtime: messages]\n\n## Goal\n\nNo goal selected for this iteration.\n\nUse the Native Task workflow for selected work. If a task is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n\nSTATIC\n\n# [runtime: user-prompt]\n\nUSER\n"
   },
   "user-prompt.get": {
     "name": "alpha",

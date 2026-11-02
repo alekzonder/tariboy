@@ -114,12 +114,16 @@ func promptGet() registry.Command {
 			var prompt string
 			layers := promptLayers(man.Layers)
 			goal := ""
+			mode := loop.IterationModeRequest
 			if a.ImageRef != image.BareRef.String() {
-				if task, ok, err := taskgoal.NewStore(c.Store).Current(a.Name, time.Now().UTC()); err != nil {
+				task, ok, err := taskgoal.NewStore(c.Store).Current(a.Name, time.Now().UTC())
+				if err != nil {
 					return nil, err
-				} else if ok {
+				}
+				if ok {
 					goal = loop.RuntimeGoal(p.Ctx, workflowGoals(c), task, a.Name, c.Log)
 				}
+				mode = loop.IterationModeFor(task, ok)
 			}
 			if a.ImageRef == image.BareRef.String() {
 				layers = AgentPromptLayers{}
@@ -133,7 +137,7 @@ func promptGet() registry.Command {
 					return nil, err
 				}
 				prompt, err = loop.RenderPromptTemplate(template, l.ImageDir(), loop.RuntimePromptValues{
-					Identity: loop.FormatRuntimeIdentity(a.Name, a.ImageRef, man.ImageVersion, a.ImageDigest, cwd, ""), Goal: goal, Context: string(contextText),
+					Identity: loop.FormatRuntimeIdentity(a.Name, a.ImageRef, man.ImageVersion, a.ImageDigest, cwd, ""), Goal: goal, Mode: mode, Context: string(contextText),
 					Messages: "[runtime: messages]", UserPrompt: a.UserPrompt, OneShot: "[runtime: one-shot]",
 				})
 				if err != nil {
@@ -146,7 +150,10 @@ func promptGet() registry.Command {
 					return nil, api.UserError{Code: "not_provisioned", Msg: err.Error()}
 				}
 				tail, _ := os.ReadFile(filepath.Join(l.ImageDir(), "PROMPT_TAIL.md"))
-				prompt = loop.AssemblePrompt(loop.PromptParts{Agent: a.Name, Cwd: cwd, ImagePrompt: string(imagePrompt), Context: string(contextText), UserPrompt: a.UserPrompt, Goal: goal, Messages: "[runtime: messages]", OneShot: "[runtime: one-shot]", Tail: string(tail)})
+				prompt, err = loop.AssemblePrompt(loop.PromptParts{Agent: a.Name, Cwd: cwd, ImagePrompt: string(imagePrompt), Context: string(contextText), UserPrompt: a.UserPrompt, Goal: goal, Mode: mode, Messages: "[runtime: messages]", OneShot: "[runtime: one-shot]", Tail: string(tail)})
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			return AgentPromptPreview{Name: a.Name, Prompt: prompt, Layers: layers}, nil

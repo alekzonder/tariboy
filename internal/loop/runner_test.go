@@ -36,9 +36,20 @@ import (
 	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
+// assembleRequestPrompt assembles a schema-v1 prompt in request mode.
+func assembleRequestPrompt(t *testing.T, p PromptParts) string {
+	t.Helper()
+	p.Mode = IterationModeRequest
+	got, err := AssemblePrompt(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
 func TestAssemblePromptOrder(t *testing.T) {
 	t.Parallel()
-	got := AssemblePrompt(PromptParts{
+	got := assembleRequestPrompt(t, PromptParts{
 		Agent: "smoke", Cwd: "/w",
 		ImagePrompt: "SYSTEM+BODY", Context: "CTX", UserPrompt: "STANDING",
 		OneShot: "ONESHOT", Tail: "i-am-done",
@@ -58,7 +69,7 @@ func TestAssemblePromptOrder(t *testing.T) {
 
 func TestAssemblePromptSkipsBlanks(t *testing.T) {
 	t.Parallel()
-	got := AssemblePrompt(PromptParts{Agent: "a", Cwd: "/w", ImagePrompt: "BODY", Tail: "TAIL"})
+	got := assembleRequestPrompt(t, PromptParts{Agent: "a", Cwd: "/w", ImagePrompt: "BODY", Tail: "TAIL"})
 	if strings.Contains(got, "\n\n\n") {
 		t.Fatalf("blank sections not collapsed: %q", got)
 	}
@@ -194,7 +205,7 @@ func TestClassifyHardWatchdogAsTimeout(t *testing.T) {
 
 func TestAssemblePromptMessagesOrder(t *testing.T) {
 	t.Parallel()
-	got := AssemblePrompt(PromptParts{
+	got := assembleRequestPrompt(t, PromptParts{
 		Agent: "smoke", Cwd: "/w",
 		ImagePrompt: "BODY", Context: "CTX", Messages: "MSGS", UserPrompt: "STANDING", Tail: "TAIL",
 	})
@@ -1329,6 +1340,7 @@ func TestRunnerSchemaV2AppendsGoalGuidanceWithoutGoalTemplateEntry(t *testing.T)
 	if strings.Contains(prompt, "workdir: "+externalCwd) {
 		t.Fatalf("prompt used effective CWD as managed workdir:\n%s", prompt)
 	}
+	assertModeLine(t, prompt, IterationModeRequest)
 }
 
 func TestRunnerSchemaV2RendersAuthoritativeGoal(t *testing.T) {
@@ -1401,6 +1413,24 @@ func TestRunnerSchemaV2RendersAuthoritativeGoal(t *testing.T) {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("missing %q in %s", want, body)
 		}
+	}
+	assertModeLine(t, string(body), IterationModeFlexible)
+}
+
+func TestRunnerSchemaV1StatesIterationMode(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		task    tasks.Task
+		hasGoal bool
+		want    IterationMode
+	}{
+		{tasks.Task{Key: "DEV-1", Title: "workflow", WorkflowDigest: "d1", WorkflowStatus: "implement"}, true, IterationModeWorkflow},
+		{tasks.Task{Key: "FLEX-1", Title: "flexible"}, true, IterationModeFlexible},
+		{tasks.Task{}, false, IterationModeRequest},
+	} {
+		r, ag, l, _, iterID := newPromptProbe(t)
+		r.cfg.CurrentGoal = func(string, time.Time) (tasks.Task, bool, error) { return tt.task, tt.hasGoal, nil }
+		assertModeLine(t, prepAndReadPrompt(t, r, ag, l, iterID), tt.want)
 	}
 }
 
