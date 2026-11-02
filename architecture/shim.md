@@ -16,6 +16,17 @@ iteration under a watchdog**. The daemon hands it:
 
 Everything after `--` is the harness command it supervises.
 
+The harness gets the environment of its iteration through the shim unchanged,
+including `TARIBOY_INSTANT_MAIL_FLAG`. A harness hook uses it to run
+`tmail instant` after each tool call. Claude Code 2.1.227 or newer gets these
+hooks in both modes: `PostToolUse`, `PostToolUseFailure` and `Stop`, in a
+plugin under `<base-dir>/agents/<name>/harness-hooks/claude/`. The hooks run
+inside the harness, so the shim does not change for them, and it never types
+a letter into the tmux session. Codex, OpenCode and an older Claude Code get an
+[instant letter](/docs/reference/mail#harness-support) in the next iteration.
+A long tool call holds the letter until the call ends, and the hooks do not
+stop model output that has no tool call.
+
 The shim binds its RPC socket before it starts the harness or creates the tmux
 session. A bind failure is fatal: the shim writes the error to `shim.log` and
 exits without `result.json`. The daemon reaps the shim process it launched;

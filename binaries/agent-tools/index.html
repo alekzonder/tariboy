@@ -48,7 +48,11 @@ must therefore include it.</p>
 </tr>
 <tr>
 <td><code>tmail send --to P …</code> / <code>tmail reply ID TEXT</code></td>
-<td>send a letter, answer one</td>
+<td>send a letter, answer one; <code>--instant</code> sends an <a href="/tariboy/docs/reference/mail#instant-letters">instant letter</a></td>
+</tr>
+<tr>
+<td><code>tmail instant [--format text|json]</code></td>
+<td>for a harness hook: print the instant letters that wait for this iteration (<code>POST /tools/mail/instant</code>)</td>
 </tr>
 <tr>
 <td><code>scripts/schedule.sh add</code>/<code>ls</code>/<code>cancel</code></td>

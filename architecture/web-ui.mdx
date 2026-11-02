@@ -1333,12 +1333,26 @@ advance, request polling, pause, retry, and confirmation operations.
    Dependencies come from the `requires` of transitions into and out of the
    current status. Missing values stay visible.
 2. The description (`TaskDetailFields`).
-3. The comments and their existing answer controls.
-4. Details, collapsed: author, customer, queue, group, blocked, parent, then
+3. Subtasks (`TaskSubtasksSection`): the `children` and `hidden_children` of
+   the `tasks.get` response, with the row status from `TaskStatusView`, the
+   component the tree's Status column also uses. The panel passes the state
+   of `taskQueries.detail`, so a failed reread shows
+   `Could not load subtasks.` with **Retry** (`refetch`) in place of the list.
+4. The comments and their existing answer controls.
+5. Details, collapsed: author, customer, queue, group, blocked, parent (a
+   button from `TaskDetailParent.tsx` when `detail.parent` is set), then
    `TaskDetailProperties` and dependencies.
-5. Workflow, collapsed: the status graph, artifact editing and history, runs,
+6. Workflow, collapsed: the status graph, artifact editing and history, runs,
    logs, visits, and operator actions. Destructive confirmations still apply.
-6. History, collapsed by default.
+7. History, collapsed by default.
+
+The header's `Subtask of` line (`TaskParentLine`), the Parent field, and the
+Subtasks rows open another task in the same sheet through `onOpenTask`.
+`useTaskDetailClose` routes that request through the draft confirmation that
+guards closing. The Tasks page sets `openLinked` in `useTasksWorkspaceView`,
+and `TaskDrawer` keeps its own current key. A panel opened this way focuses
+its title heading. A `404` or `403` read of a linked task shows
+`taskReadErrorText` in the loading sheet, and the drawer stays open for it.
 
 The assignee of a flexible task is a select of "Unassigned", "me" (the
 customer principal), and each agent as `agent:<name>`. A current assignee
@@ -1465,7 +1479,11 @@ list with **New queue**, and the selected queue in **General** (the existing
 `PATCH`), **Workflow**, **Pools**, **Environment**, and, for a bound queue,
 **Sources** tabs. The queue
 filter is applied in the client so that menu can count from the load the tree
-already performs; `status_view`, the text search, `assignee` and
+already performs. `filterTasksByQueue` in `lib/taskTree.ts` keeps each task of
+the queue with its whole subtree from every queue, and `buildTaskForest`
+receives the full list too, so a root whose parent is filtered out links to it
+(`parentLink`). A child whose loaded parent is in another queue carries
+`crossQueue`, and its Key cell shows `QueueMarker`; `status_view`, the text search, `assignee` and
 `waiting_for` stay daemon-side. The **New task** form preselects the queue
 selected in the filter. When `All queues` is selected, it preselects the queue
 of the last root task created from a form on that server, or the first queue
@@ -1586,7 +1604,30 @@ second is a question from `system:workflow`, because only a status outcome
 closes it.
 **Compose** opens a dialog
 with the recipient, the subject, the text and a **No reply needed** switch: off
-sends a request, on sends a notice. Every write shows a toast with the daemon's
+sends a request, on sends a notice.
+
+The customer can send an instant letter, which reaches the agent's running
+iteration after its current tool call. The form shows a **Deliver to the
+current iteration** switch, with a one-line hint under it, only when the
+customer writes to an agent: **Compose** to an `agent:*` recipient, in Inbox
+and in **Agent → Mailbox**, and **Reply** in Inbox to a letter from `agent:*`.
+A reply to `plugin:*` or `system:*` and a reply in **Agent → Mailbox**, which
+the operator writes as the agent, have no switch. In a new letter the switch is
+under **No reply needed**. In a reply it is under the text. The switch is off
+in each new dialog, and `mail.send` or `mail.reply` carries its value as
+`instant`. The UI does not check who may send an instant letter. The daemon
+refuses one with `instant_not_allowed` or `instant_recipient`, and the toast
+shows its message. While the switch is on, a counter `N / 8,000` is under the
+text. It counts the trimmed text in Unicode code points, the unit of the
+daemon's limit. Over 8,000 the counter changes color and a warning line
+appears in a polite live region, so a screen reader announces it once. **Send**
+stays enabled. An instant letter has an `instant` tag first in its row in every
+box. Its card has a **Delivery** field after **State** that reads
+`instant_state`, for example `Instant · delivered to iteration <id> at <time>`.
+An empty or unknown state reads `Instant`. A change of `instant_state` sends an
+`/api/mail/ws` hint, so the open card updates without a reload.
+
+Every write shows a toast with the daemon's
 message on failure and refetches; nothing changes optimistically. The lists
 refetch on every `/api/mail/ws` hint for the mailbox's principal (every hint for
 the customer) and on every reconnect, through `useMailSocket` in

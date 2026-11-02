@@ -144,6 +144,47 @@ section of the prompt with the standing instruction that names
 under `### Awaiting replies`. See the [mail reference](/docs/reference/mail#the-prompt-block)
 for the exact text.
 
+## Instant delivery
+
+An instant letter has the flag `instant`. It reaches the running iteration of
+its recipient at the next end of a tool call, through a harness hook that runs
+`tmail instant`. Without a running iteration it wakes the agent like any
+letter. The flag uses the same `Send` path with these additions:
+
+- Only the customer, `plugin:telegram`, and an agent that the recipient
+  allows may set it. The recipient setting `mail_instant_senders` lists the
+  allowed agents. When it is not set, the lead of the recipient's group may
+  send. Every recipient must be an agent.
+- Mail reads the loop state through the `InstantRuntime` seam, which the loop
+  manager implements. A letter to an agent with a running iteration starts
+  `waiting`, and the manager creates the flag file of that iteration. A letter
+  to an agent that starts iterations on its own starts `queued`. Any other
+  letter starts `stopped`. One function, `agentIterates`, decides whether an
+  agent starts iterations on its own.
+- `POST /tools/mail/instant` takes the waiting letters once. It adds one
+  attempt to each, with the same limit of five as the prompt render. The
+  prompt render marks an instant letter `read`, and a dead one becomes
+  `not_delivered`. After `loop.sh done` it takes nothing and keeps the flag
+  file, so a `Stop` hook cannot continue a finished iteration.
+- Claude Code 2.1.227 or newer runs `tmail instant` from the hooks
+  `PostToolUse`, `PostToolUseFailure` and `Stop` in both modes. `tmail` prints
+  the hook JSON itself (`--format claude-post-tool-use`,
+  `claude-post-tool-use-failure`, `claude-stop`). The letter text reaches the
+  model only as hook output. A long tool call holds the letter, and model
+  output without a tool call is not stopped. Codex, OpenCode and an older
+  Claude Code read the letter in the next iteration.
+- At `done`, the runner closes the notices that a hook delivered in the
+  iteration, as it closes the rendered notices.
+
+The web UI and Desktop render one mailbox. Its form sets the flag with the
+**Deliver to the current iteration** switch when the customer writes to an
+agent. The list tags an instant letter `instant`, and the letter card shows a
+**Delivery** field with the `instant_state` of the letter. The
+[Web UI mailbox](/docs/architecture/web-ui#mailbox) section describes them.
+
+The [mail reference](/docs/reference/mail#instant-letters) gives the rules,
+the states, the hook command, the block format and the harness table.
+
 ## Producers
 
 Every producer writes through the one `Send` operation, so the Inbox and Sent
@@ -254,7 +295,7 @@ plugin's `/deliver` posts the reply to the topic of the sending agent.
 ## Live hints and the event hub
 
 `GET /api/mail/ws` streams one frame per written letter, `{id, from, to, kind,
-ts}`. A frame is only a refetch hint: the HTTP responses stay authoritative.
+ts}`, and one frame per change of the `instant_state` of a letter. A frame is only a refetch hint: the HTTP responses stay authoritative.
 Nothing is replayed, because a client refetches on connect and on every
 reconnect.
 
@@ -281,3 +322,5 @@ The hub keeps no history, so neither stream replays the lost events.
 
 Mail writes the audit events `mail_sent`, `mail_answered`, `mail_closed`,
 `mail_dead`, `mail_requeued` and `mail_cleared` to the agent's audit log.
+A hook delivery writes `mail_instant_shown` with the letter and the iteration
+to the audit log of the recipient agent.

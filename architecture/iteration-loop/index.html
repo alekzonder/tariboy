@@ -209,6 +209,25 @@ with that daemon environment, applies harness-required values, then explicit
 agent environment and secrets. An explicit agent <code>PATH</code> is therefore an
 intentional override. Non-bare images prepend the agent bin directory after the
 override; bare images omit that prefix and otherwise keep the daemon baseline.</p>
+<p>Each iteration also gets <code>TARIBOY_INSTANT_MAIL_FLAG</code>, the path of the flag
+file <code>&lt;base-dir&gt;/agents/&lt;name&gt;/iterations/&lt;iteration&gt;/instant-mail</code>. The daemon
+sets it after the agent environment and the image skill environment, so
+neither can change it. The daemon creates the file when an
+<a href="/tariboy/docs/reference/mail#instant-letters">instant letter</a> waits for the
+iteration. Agent scripts and image activation do not get the variable,
+because they do not run in an iteration.</p>
+<p>For a Claude Code agent with the <code>mail</code> capability on a non-bare image, the
+runner also loads the instant mail hooks. After the executable preflight below,
+it finds <code>tmail</code> on the final <code>PATH</code> and runs <code>claude --version</code>. If the
+version is <code>2.1.227</code> or newer, it writes the plugin
+<code>&lt;base-dir&gt;/agents/&lt;name&gt;/harness-hooks/claude/</code> and appends
+<code>--plugin-dir &lt;that directory&gt;</code> to the harness argv. Both the batch and the
+interactive argv get it, after the image skill bridge. The hooks
+<code>PostToolUse</code>, <code>PostToolUseFailure</code> and <code>Stop</code> call that absolute <code>tmail</code>
+path. If <code>tmail</code> is missing, the version is older or unrecognized, or the write
+fails, the runner logs a warning and starts the iteration without the hooks.
+The <a href="/tariboy/docs/reference/mail#harness-support">mail reference</a> gives the hook
+output and the limits.</p>
 <p>Before starting the shim, the runner checks the adapter’s actual executable
 against this final environment. For a non-bare image it also resolves <code>python3</code>
 there and supplies that absolute interpreter path to the packaged skill

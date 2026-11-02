@@ -111,6 +111,22 @@ Do not rely on a budget to cap a Cursor agent’s spend; see
 </ul>
 <p>Removing a host is local cleanup, not remote deletion. Quitting the app leaves
 daemons running. Treat both behaviors as continuity features, not stop controls.</p>
+<p>An <a href="/tariboy/docs/reference/mail#instant-letters">instant letter</a> puts text into a
+running iteration at the end of a tool call:</p>
+<ul>
+<li>Only the customer, <code>plugin:telegram</code>, and an agent that the recipient
+allows in <code>mail_instant_senders</code> may send one. When the list is not set,
+only the lead of the recipient’s group may send. A <code>system:*</code> sender never
+may. The daemon refuses every other sender with <code>instant_not_allowed</code>.</li>
+<li>The daemon identifies the receiving agent by its tools socket, never by the
+request body.</li>
+<li>The block marks each body as untrusted data from its sender, like the
+untrusted task text in the Goal block. The body is in a code fence that it
+cannot close, and it is cut at 8,000 Unicode code points.</li>
+<li>The text reaches the model only as the output of the hook. The AI proxy does
+not change requests, so the transcript and the audit keep the text.</li>
+<li>Mail does not redact letter bodies.</li>
+</ul>
 <h3 id="codex-approval-mode"><a class="blume-heading-anchor" href="#codex-approval-mode">Codex approval mode</a></h3>
 <p>Each daemon chooses how its Codex agents run commands:</p>
 <ul>
@@ -268,7 +284,7 @@ remove it. See <a href="/tariboy/docs/images#the-default-store">Images</a>.</p>
 start. An explicit <code>onboarding.retry</code> (<code>POST /api/onboarding/retry</code>) still
 runs the routine.</p>
 <h2 id="alpha-signing-and-gatekeeper"><a class="blume-heading-anchor" href="#alpha-signing-and-gatekeeper">Alpha signing and Gatekeeper</a></h2>
-<p><code>0.105.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
+<p><code>0.106.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
 <code>SHA256SUMS</code> before opening it. If Gatekeeper blocks it, Control-click only the
 named <code>/Applications/Tariboy.app</code>, choose <strong>Open</strong>, and confirm.
 If Control-click Open is unavailable, use <strong>System Settings → Privacy &amp;

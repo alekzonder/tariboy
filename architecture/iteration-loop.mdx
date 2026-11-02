@@ -186,6 +186,27 @@ agent environment and secrets. An explicit agent `PATH` is therefore an
 intentional override. Non-bare images prepend the agent bin directory after the
 override; bare images omit that prefix and otherwise keep the daemon baseline.
 
+Each iteration also gets `TARIBOY_INSTANT_MAIL_FLAG`, the path of the flag
+file `<base-dir>/agents/<name>/iterations/<iteration>/instant-mail`. The daemon
+sets it after the agent environment and the image skill environment, so
+neither can change it. The daemon creates the file when an
+[instant letter](/docs/reference/mail#instant-letters) waits for the
+iteration. Agent scripts and image activation do not get the variable,
+because they do not run in an iteration.
+
+For a Claude Code agent with the `mail` capability on a non-bare image, the
+runner also loads the instant mail hooks. After the executable preflight below,
+it finds `tmail` on the final `PATH` and runs `claude --version`. If the
+version is `2.1.227` or newer, it writes the plugin
+`<base-dir>/agents/<name>/harness-hooks/claude/` and appends
+`--plugin-dir <that directory>` to the harness argv. Both the batch and the
+interactive argv get it, after the image skill bridge. The hooks
+`PostToolUse`, `PostToolUseFailure` and `Stop` call that absolute `tmail`
+path. If `tmail` is missing, the version is older or unrecognized, or the write
+fails, the runner logs a warning and starts the iteration without the hooks.
+The [mail reference](/docs/reference/mail#harness-support) gives the hook
+output and the limits.
+
 Before starting the shim, the runner checks the adapter's actual executable
 against this final environment. For a non-bare image it also resolves `python3`
 there and supplies that absolute interpreter path to the packaged skill

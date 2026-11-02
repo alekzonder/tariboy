@@ -119,6 +119,22 @@ USD; a USD budget cannot bound that provider's actual spend. See
 Removing a host is local cleanup, not remote deletion. Quitting the app leaves
 daemons running. Treat both behaviors as continuity features, not stop controls.
 
+An [instant letter](/docs/reference/mail#instant-letters) puts text into a
+running iteration at the end of a tool call:
+
+- Only the customer, `plugin:telegram`, and an agent that the recipient
+  allows in `mail_instant_senders` may send one. When the list is not set,
+  only the lead of the recipient's group may send. A `system:*` sender never
+  may. The daemon refuses every other sender with `instant_not_allowed`.
+- The daemon identifies the receiving agent by its tools socket, never by the
+  request body.
+- The block marks each body as untrusted data from its sender, like the
+  untrusted task text in the Goal block. The body is in a code fence that it
+  cannot close, and it is cut at 8,000 Unicode code points.
+- The text reaches the model only as the output of the hook. The AI proxy does
+  not change requests, so the transcript and the audit keep the text.
+- Mail does not redact letter bodies.
+
 ### Codex approval mode
 
 Each daemon chooses how its Codex agents run commands:
@@ -294,7 +310,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.105.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.106.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
