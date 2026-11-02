@@ -475,8 +475,51 @@ builds. Only Store builds run the per-layer skills installer; for the other
 builds, restore the lock in each image directory first. Managed image sources
 and team imports reject `extends`. A child can only append: it cannot remove
 an inherited entry or insert a prompt between a parent's prompts. Layering
-never deletes files, so a skill directory copied from a parent keeps files the
-child's copy lacks. Rebuilding a parent does not rebuild its children.
+deletes no files except `ROLE.md`, so a skill directory copied from a parent
+keeps files the child's copy lacks. Rebuilding a parent does not rebuild its
+children.
+
+### Describe the role with `ROLE.md`
+
+`ROLE.md` is an optional Markdown file that describes what the image is for.
+Put it next to `Tariboyfile.yaml`. The build copies its text into the manifest
+field `role`. Tariboy does not put this text into the agent prompt, the prompt
+layers, or the agent directory. The text is metadata for people and for the UI.
+
+Write `ROLE.md` in English. Say only what the role is and why the image
+exists. Do not describe the process, skills, commands, or rules. The daemon
+does not check the language or the content of the text.
+
+The build applies these rules:
+
+| Case | Result |
+| --- | --- |
+| No `ROLE.md` | The manifest has no `role` field. `manifest.json` is the same as before this feature. |
+| Only white space | The same as no file. |
+| Not valid UTF-8 | The build fails with `ROLE.md is not valid UTF-8`. |
+| Up to 500 characters | `role.text` is the full file. |
+| More than 500 characters | The build fails. The error gives the file size in characters and the limit of 500. |
+| A symbolic link or not a regular file | The build fails. |
+
+A character is one Unicode code point, so 500 Cyrillic letters are in the
+limit. A child image built with `extends` does not inherit the `ROLE.md` of a
+parent. Only the file in the directory of the image that you build counts.
+`tariboy image inspect` and `GET /api/images/{ref}` show the field:
+
+```json
+"role": {
+  "text": "# Reviewer\n\nReviews pull requests.\n"
+}
+```
+
+`ROLE.md` is not a member of the image archive, but `role` is part of
+`manifest.json`. Thus `ROLE.md` changes the image digest. Pull, push to a
+Store, import and the activation of an image by an agent accept `role` only
+when the text is valid UTF-8, is not empty, and has 500 characters or fewer.
+The strict archive check, which runs on import and on activation, also
+rejects unknown fields in `role`. A daemon older than this feature does not
+know the field: its strict check rejects an image with `role`. Images built
+before this feature have no `role` field.
 
 ## Packaged Agent Skills
 

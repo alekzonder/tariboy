@@ -141,7 +141,24 @@ began and made no transition request during it, and pauses the task at the
 limit; see [Pauses](/docs/task-workflows#pauses).
 
 The block starts with `# Task Processing Order` and a fixed instruction to
-process one-shot, then messages, then Goal. Its `## One-shot`, `## Messages`,
+process one-shot, then messages, then Goal. The next paragraph is the
+iteration mode line. The mode tells the image how the agent works in this
+iteration, so the image does not guess the process from the Goal text. The
+line is the same for all images and does not depend on the image template:
+
+| Mode | When | Line |
+| --- | --- | --- |
+| `workflow` | A Goal task is selected and its row has a workflow digest | ``Iteration mode: `workflow`. The goal task follows a workflow: the status instructions in the Goal section set the process.`` |
+| `flexible` | A Goal task is selected and its row has no workflow digest | ``Iteration mode: `flexible`. The goal task has no workflow: your image instructions set the process.`` |
+| `request` | No Goal task is selected | ``Iteration mode: `request`. No goal task is selected: work from the one-shot instruction or the messages.`` |
+
+One function, `loop.IterationModeFor`, computes the mode from the selected
+task row alone. The runner and the prompt preview both call it, for schema v1
+and schema v2 images. If the workflow data of a workflow task cannot be
+loaded, the mode stays `workflow`. In that case the Goal subsection shows the
+fallback note to run `ttasks workflow get KEY`. A prompt built without a known
+mode fails with the error `iteration mode is not set`, and the iteration does
+not start. The line appears once, before `## One-shot`. Its `## One-shot`, `## Messages`,
 and `## Goal` subsections always appear. Missing inputs explicitly say that
 there is no one-shot instruction, no incoming messages, or no selected Goal
 for this iteration; the agent is told to continue without running commands
@@ -152,7 +169,8 @@ requests before notices, followed by the standing instruction to answer each
 request with `tmail reply`; see [Mail](/docs/reference/mail#the-prompt-block).
 Bare sessions still receive no prompt.
 
-The operator prompt preview uses the same grouping and Goal selection. It
+The operator prompt preview uses the same grouping, Goal selection, and
+iteration mode line. It
 keeps placeholders for messages and the one-shot supplied at execution time;
 viewing the preview does not render letters or increment their attempts.
 

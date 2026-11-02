@@ -305,7 +305,8 @@ A build publishes two tags that point at the digest: the `workflow_version`
 and `latest`. The stored tree is owner-only and read-only: directories are
 `0500`, regular files `0400`, and executable files `0500`. `manifest.json`
 holds the schema version, name, version, digest, build time, the definition
-as parsed, and the path, SHA-256, executable flag, and size of every file.
+as parsed, the path, SHA-256, executable flag, and size of every file, and the
+`role` from `ROLE.md` when the source has one.
 
 A source may hold at most 256 files, at most 4 MiB per file, and at most 32 MiB
 in total. Symlinks and special files anywhere in the source are rejected.
@@ -330,6 +331,46 @@ last tag of a digest deletes its row in a transaction that commits only after
 the content is deleted. At startup the daemon inserts any missing row for
 stored content and deletes any row whose content is gone, unless a queue binds
 or a task pins its digest, so a crash between a disk write and its row heals. See [State model](/docs/architecture/state-model).
+
+### Describe the role with `ROLE.md`
+
+`ROLE.md` is an optional Markdown file that describes what the workflow is
+for. Put it next to `Workflowfile.yaml`. The build copies its text into the
+manifest field `role`. Tariboy does not put this text into the Goal block, the
+status instructions, or any agent prompt. The text is metadata for people and
+for the UI.
+
+Write `ROLE.md` in English. Say only what the role is and why the workflow
+exists. Do not describe the process, skills, commands, or rules. The daemon
+does not check the language or the content of the text.
+
+The build applies these rules:
+
+| Case | Result |
+| --- | --- |
+| No `ROLE.md` | The manifest has no `role` field. |
+| Only white space | The same as no file. |
+| Not valid UTF-8 | The build fails with `workflow_invalid` and the text `ROLE.md is not valid UTF-8`. |
+| Up to 500 characters | `role.text` is the full file. |
+| More than 500 characters | The build fails with `workflow_invalid`. The error gives the file size in characters and the limit of 500. |
+
+A character is one Unicode code point, so 500 Cyrillic letters are in the
+limit. `ROLE.md` is one of the stored files, so it is part of the digest like
+any other file. The `role` field does not change the digest rule.
+`tariboy workflow inspect` and `GET /api/workflow-images/{name}/{tag}` show the
+field:
+
+```json
+"role": {
+  "text": "# Development\n\nPlans, implements and reviews a change.\n"
+}
+```
+
+A workflow image built before this feature has no `role` field. If you build
+the same content again, the build adds `role` to the stored manifest and to its
+database row. The digest and the build time do not change. An import of a
+workflow archive reads `role` from the `ROLE.md` in the archive and applies the
+same rules, so a file of more than 500 characters fails the import.
 
 ## Commands
 

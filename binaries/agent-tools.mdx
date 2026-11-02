@@ -26,6 +26,7 @@ must therefore include it.
 | `tmail send --to P …` / `tmail reply ID TEXT` | send a letter, answer one |
 | `scripts/schedule.sh add`/`ls`/`cancel` | agent-owned scheduled wake-ups |
 | `scripts/scripts.sh run`/`schedule`/`rerun`/`ls`/`runs`/`logs`/`cancel`/`rm` | local asynchronous commands and run history |
+| `tariboy assessment add --file PATH` / `ls` / `show ID` | record an [assessment](/docs/plugins/built-in/assessments) (needs `assessments`); read assessments (open to every agent) |
 | `GET /tools/group/info`, `status`, `observe/{member}`, `POST /tools/group/loop` | group coordination; group sends are `tmail send --to group:<g>` or `agent:<member>` |
 
 `tariboy-tasks` is installed globally with the `ttasks` alias. Packaged daemons

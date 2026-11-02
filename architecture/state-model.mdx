@@ -205,6 +205,75 @@ transaction, and an id belonging to another agent fails the whole batch rather
 than writing part of it. Tags are a property of the iteration, not of the agent
 that applied them: who tagged an iteration is not recorded.
 
+## Assessments
+
+An assessment is a record of how well an agent did the work of one iteration
+or one task. Another agent, the assessor, writes it. Later reports use
+assessments to compare image versions and workflow versions. Migration
+`0075_assessments.sql` adds three tables:
+
+- `assessments`: one row for each assessment. The `id` is
+  `as-<yyyymmddThhmmssZ>-<seq>`, where `seq` is the row's
+  `INTEGER PRIMARY KEY AUTOINCREMENT`, zero-padded to six digits. The row
+  holds `created_at`, the assessor (`assessor_agent`, `assessor_image_ref`,
+  `assessor_image_version`, `assessor_image_digest`), `rubric_version`, the
+  subject (`iteration_id`, `task_key`, or both), the snapshots and `summary`.
+- `assessment_axes`: exactly three rows for each assessment, one for each axis.
+  The axes are `image_process` (the agent followed the process of its image),
+  `role` (the agent followed `ROLE.md`) and `task_fit` (the result fits the
+  task and what the customer expected). The `verdict` is `scored`, with a
+  `score` from 0 to 100, or `not_applicable`, without a score. An image
+  without an approved `ROLE.md` gets `not_applicable` on `role`.
+- `assessment_violations`: zero or more rows for each assessment. Each row has
+  an axis, a `description`, a `quote` and its evidence. The evidence kind is
+  `transcript` (an iteration id and a locator in its transcript),
+  `task_event` (a task key and a `task_events.sequence`) or `script_run` (a
+  `srun-...` run id). The daemon does not make sure that the evidence still
+  exists, because retention deletes transcripts, events and runs.
+
+The daemon writes the assessor and the snapshots. The request cannot set them.
+The assessor is the agent of the tools socket, and its image fields come from
+the `iterations` row of its current iteration. Without a running iteration,
+the write fails with `409 no_iteration`. The subject snapshots are
+`subject_agent`, `image_ref`, `image_version` and `image_digest` from the
+`iterations` row of the subject iteration. For a task that follows a workflow,
+the snapshots also include `workflow_digest` and `workflow_version`, the tag
+of the workflow image. The daemon takes them when it writes the assessment.
+
+The write fails with `400 invalid_assessment` in these cases:
+
+- The request has no `iteration_id` and no `task_key`.
+- The iteration or the task does not exist.
+- The request has both, and they are not linked.
+- `rubric_version` or `summary` is empty.
+- The axes are not exactly the three axes, each one time.
+- A `scored` axis has no score or a score outside 0..100, or a
+  `not_applicable` axis has a score.
+- A violation has no description, no quote, an unknown axis or evidence that
+  does not match its kind.
+
+An iteration and a task are linked when the agent of the iteration is the
+assignee of the task, or when `task_events` of the task has an event with
+`actor = agent:<agent of the iteration>`. The second condition is necessary
+for a task that follows a workflow. After the agent leaves its status, the
+task goes to the customer or to another pool, but the events of the agent
+stay.
+
+An assessment is immutable. No command changes or deletes one. A second
+assessment of the same iteration or task is a new row with a new id. The
+row, its axes and its violations are written in one transaction, so a failed
+write leaves no part of an assessment.
+
+The axes and the violations reference `assessments(seq)` with
+`ON DELETE CASCADE`. The tables have no foreign key to `iterations`, `tasks`
+or `agents`. An assessment stays after iteration retention deletes its
+iteration and after the operator removes its agents. For this reason the
+three tables are in `agentKeyedExempt`, and the snapshots keep the image and
+the workflow of the subject.
+
+The nightly `VACUUM INTO` backup copies the tables with the rest of the
+database. Retention deletes old assessments, see the next section.
+
 ## Nightly backup and data retention
 
 Maintenance settings are one JSON value under `maintenance` in `daemon_config`;
@@ -249,6 +318,10 @@ when retention is `0`:
   the log file `<base-dir>/operations/<id>.log` of each deleted operation is
   removed.
 - **Daemon events** (`events`) and task mutation idempotency records.
+- **Assessments** — `assessments` rows created before the cutoff, with their
+  axes and violations by cascade. The run counts them as `assessments`. The
+  category uses the general retention period and has no separate setting.
+  When retention is `0`, every assessment stays.
 
 When compaction is on and at least the threshold share of pages is free, a
 full `VACUUM` plus `wal_checkpoint(TRUNCATE)` returns the space to the file

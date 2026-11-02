@@ -57,6 +57,7 @@
 - [image-creator](https://alekzonder.github.io/tariboy/plugins/built-in/image-creator): Build a runnable Tariboy image from any source directory readable by the daemon.
 - [goal](https://alekzonder.github.io/tariboy/plugins/built-in/goal): Receive or set the selected Native Task and AI usage attribution.
 - [tasks](https://alekzonder.github.io/tariboy/plugins/built-in/tasks): Use Native Tasks through the globally installed ttasks client.
+- [assessments](https://alekzonder.github.io/tariboy/plugins/built-in/assessments): Let an assessor agent record an immutable assessment of an iteration or a task through its tools socket.
 
 ## Images & groups
 

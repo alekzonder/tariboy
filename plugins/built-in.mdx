@@ -26,6 +26,7 @@ runtime prompt entries explicitly. Neither kind starts a supervised subprocess.
 | [`scripts`](/docs/plugins/built-in/scripts) | Optional | Yes | `scripts/scripts.sh …` | Script records and logs |
 | [`image-creator`](/docs/plugins/built-in/image-creator) | Optional | No | `scripts/image_creator.sh build` | Built image in the host image store |
 | [`tasks`](/docs/plugins/built-in/tasks) | Optional | Yes | Bare `tasks` command | Native Tasks in SQLite |
+| [`assessments`](/docs/plugins/built-in/assessments) | Optional | No | `tariboy assessment add` | Assessments in SQLite |
 
 “Historical core” describes schema-v1 resolution, where `whoami`, `loop`, and
 `mail` (then named `messages`) were added automatically. It does **not** mean schema-v2 images
@@ -80,7 +81,7 @@ whoami, loop, messages, context, status, workdir, scripts, goal, tasks
 It lists `messages`, the alias of `mail`, until the Store moves its images to
 the `mail` plugin and skill.
 
-It deliberately excludes `schedule` and `image-creator`. Register and refresh
+It deliberately excludes `schedule`, `image-creator` and `assessments`. Register and refresh
 the Store, then build it. Existing agents
 remain pinned to their assigned image digest until an image change is activated
 for a future iteration.

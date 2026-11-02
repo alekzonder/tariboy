@@ -435,6 +435,7 @@ controls](/docs/security-controls) for the full transport and credential rules.
 | Loop engine and shim runner | At most one iteration per agent, prompt preparation, timeouts, completion, and process supervision | Task state rules |
 | Image store and builder | Built plugin/prompt artifacts addressed by ref id, source provenance, runnable import/export, and Store path resolution | Harness/model/runtime policy or editable source snapshots |
 | Mail | Letters, recipient checks, inbox caps, attempts, dead letters, and the wake and hint hooks | Direct process-to-process delivery guarantees |
+| Assessments | Immutable assessments of iterations and tasks with their image and workflow snapshots. Agents write them through `POST /tools/assessment/add` (capability `assessments`). Operators read them through `assessment.ls` and `assessment.show` | Updates, deletes, or a write through the operator API |
 | Native Tasks service | Queues, task trees, comments, relations, pools, triggers, notifications, workflow bindings, queue secrets, transition requests, and script run records | Agent authentication or running script processes |
 | Workflow script worker | Executing pending check and watch runs: environment, working directory, process group, timeout, run log, and result parsing | What a verdict means for the task |
 | Plugin host | Plugin process lifecycle, plugin tokens, and delivery of each plugin's inbox to its `/deliver` | Provider credentials in plugin environments |
@@ -795,7 +796,8 @@ all derived from it.
   `internal/commands`.
 - **Errors map once.** `internal/api/errors.go` maps a domain error to its
   HTTP answer for both the operator API and the per-agent capability socket:
-  `api.UserError` and `*tasks.Error` carry their own status, a parameter error
+  `api.UserError`, `*tasks.Error`, `*mail.Error` and `*assessment.Error` carry
+  their own status, a parameter error
   is `400`, not-found sentinels are `404`, script state conflicts are `409`.
   Any other error is `500 internal` with a fixed text, and its detail goes only
   to the daemon log. Both servers decode JSON bodies with the same size limit
@@ -1339,7 +1341,24 @@ began and made no transition request during it, and pauses the task at the
 limit; see [Pauses](/docs/task-workflows#pauses).
 
 The block starts with `# Task Processing Order` and a fixed instruction to
-process one-shot, then messages, then Goal. Its `## One-shot`, `## Messages`,
+process one-shot, then messages, then Goal. The next paragraph is the
+iteration mode line. The mode tells the image how the agent works in this
+iteration, so the image does not guess the process from the Goal text. The
+line is the same for all images and does not depend on the image template:
+
+| Mode | When | Line |
+| --- | --- | --- |
+| `workflow` | A Goal task is selected and its row has a workflow digest | ``Iteration mode: `workflow`. The goal task follows a workflow: the status instructions in the Goal section set the process.`` |
+| `flexible` | A Goal task is selected and its row has no workflow digest | ``Iteration mode: `flexible`. The goal task has no workflow: your image instructions set the process.`` |
+| `request` | No Goal task is selected | ``Iteration mode: `request`. No goal task is selected: work from the one-shot instruction or the messages.`` |
+
+One function, `loop.IterationModeFor`, computes the mode from the selected
+task row alone. The runner and the prompt preview both call it, for schema v1
+and schema v2 images. If the workflow data of a workflow task cannot be
+loaded, the mode stays `workflow`. In that case the Goal subsection shows the
+fallback note to run `ttasks workflow get KEY`. A prompt built without a known
+mode fails with the error `iteration mode is not set`, and the iteration does
+not start. The line appears once, before `## One-shot`. Its `## One-shot`, `## Messages`,
 and `## Goal` subsections always appear. Missing inputs explicitly say that
 there is no one-shot instruction, no incoming messages, or no selected Goal
 for this iteration; the agent is told to continue without running commands
@@ -1350,7 +1369,8 @@ requests before notices, followed by the standing instruction to answer each
 request with `tmail reply`; see [Mail](/docs/reference/mail#the-prompt-block).
 Bare sessions still receive no prompt.
 
-The operator prompt preview uses the same grouping and Goal selection. It
+The operator prompt preview uses the same grouping, Goal selection, and
+iteration mode line. It
 keeps placeholders for messages and the one-shot supplied at execution time;
 viewing the preview does not render letters or increment their attempts.
 
@@ -2256,6 +2276,75 @@ transaction, and an id belonging to another agent fails the whole batch rather
 than writing part of it. Tags are a property of the iteration, not of the agent
 that applied them: who tagged an iteration is not recorded.
 
+## Assessments
+
+An assessment is a record of how well an agent did the work of one iteration
+or one task. Another agent, the assessor, writes it. Later reports use
+assessments to compare image versions and workflow versions. Migration
+`0075_assessments.sql` adds three tables:
+
+- `assessments`: one row for each assessment. The `id` is
+  `as-<yyyymmddThhmmssZ>-<seq>`, where `seq` is the row's
+  `INTEGER PRIMARY KEY AUTOINCREMENT`, zero-padded to six digits. The row
+  holds `created_at`, the assessor (`assessor_agent`, `assessor_image_ref`,
+  `assessor_image_version`, `assessor_image_digest`), `rubric_version`, the
+  subject (`iteration_id`, `task_key`, or both), the snapshots and `summary`.
+- `assessment_axes`: exactly three rows for each assessment, one for each axis.
+  The axes are `image_process` (the agent followed the process of its image),
+  `role` (the agent followed `ROLE.md`) and `task_fit` (the result fits the
+  task and what the customer expected). The `verdict` is `scored`, with a
+  `score` from 0 to 100, or `not_applicable`, without a score. An image
+  without an approved `ROLE.md` gets `not_applicable` on `role`.
+- `assessment_violations`: zero or more rows for each assessment. Each row has
+  an axis, a `description`, a `quote` and its evidence. The evidence kind is
+  `transcript` (an iteration id and a locator in its transcript),
+  `task_event` (a task key and a `task_events.sequence`) or `script_run` (a
+  `srun-...` run id). The daemon does not make sure that the evidence still
+  exists, because retention deletes transcripts, events and runs.
+
+The daemon writes the assessor and the snapshots. The request cannot set them.
+The assessor is the agent of the tools socket, and its image fields come from
+the `iterations` row of its current iteration. Without a running iteration,
+the write fails with `409 no_iteration`. The subject snapshots are
+`subject_agent`, `image_ref`, `image_version` and `image_digest` from the
+`iterations` row of the subject iteration. For a task that follows a workflow,
+the snapshots also include `workflow_digest` and `workflow_version`, the tag
+of the workflow image. The daemon takes them when it writes the assessment.
+
+The write fails with `400 invalid_assessment` in these cases:
+
+- The request has no `iteration_id` and no `task_key`.
+- The iteration or the task does not exist.
+- The request has both, and they are not linked.
+- `rubric_version` or `summary` is empty.
+- The axes are not exactly the three axes, each one time.
+- A `scored` axis has no score or a score outside 0..100, or a
+  `not_applicable` axis has a score.
+- A violation has no description, no quote, an unknown axis or evidence that
+  does not match its kind.
+
+An iteration and a task are linked when the agent of the iteration is the
+assignee of the task, or when `task_events` of the task has an event with
+`actor = agent:<agent of the iteration>`. The second condition is necessary
+for a task that follows a workflow. After the agent leaves its status, the
+task goes to the customer or to another pool, but the events of the agent
+stay.
+
+An assessment is immutable. No command changes or deletes one. A second
+assessment of the same iteration or task is a new row with a new id. The
+row, its axes and its violations are written in one transaction, so a failed
+write leaves no part of an assessment.
+
+The axes and the violations reference `assessments(seq)` with
+`ON DELETE CASCADE`. The tables have no foreign key to `iterations`, `tasks`
+or `agents`. An assessment stays after iteration retention deletes its
+iteration and after the operator removes its agents. For this reason the
+three tables are in `agentKeyedExempt`, and the snapshots keep the image and
+the workflow of the subject.
+
+The nightly `VACUUM INTO` backup copies the tables with the rest of the
+database. Retention deletes old assessments, see the next section.
+
 ## Nightly backup and data retention
 
 Maintenance settings are one JSON value under `maintenance` in `daemon_config`;
@@ -2300,6 +2389,10 @@ when retention is `0`:
   the log file `<base-dir>/operations/<id>.log` of each deleted operation is
   removed.
 - **Daemon events** (`events`) and task mutation idempotency records.
+- **Assessments** — `assessments` rows created before the cutoff, with their
+  axes and violations by cascade. The run counts them as `assessments`. The
+  category uses the general retention period and has no separate setting.
+  When retention is `0`, every assessment stays.
 
 When compaction is on and at least the threshold share of pages is free, a
 full `VACUUM` plus `wal_checkpoint(TRUNCATE)` returns the space to the file
@@ -2894,7 +2987,11 @@ shows only in the pinned block. Then each host lists its expandable **Teams**
 and its **Individual agents**. With one host in the workspace the list has no
 host heading. With two or more, each host has a heading with its
 reachability, an **Update** action when it runs an older daemon, and a `⋯`
-menu (**Edit host**, **Remove host**). A host heading opens `/tasks?host=<id>`.
+menu. The menu has **Host settings**, which opens
+`/settings/agent-defaults?host=<id>`, and **Maintenance**, which opens
+`/settings/maintenance?host=<id>` with backups and the operations log. A
+registered host also has **Edit host** and **Remove host**; the local daemon
+has none. A host heading opens `/tasks?host=<id>`.
 
 An agent row shows the agent's derived state (see
 [Agent state](#agent-state)). The dot has the color of the state. On the
@@ -5085,6 +5182,7 @@ must therefore include it.
 | `tmail send --to P …` / `tmail reply ID TEXT` | send a letter, answer one |
 | `scripts/schedule.sh add`/`ls`/`cancel` | agent-owned scheduled wake-ups |
 | `scripts/scripts.sh run`/`schedule`/`rerun`/`ls`/`runs`/`logs`/`cancel`/`rm` | local asynchronous commands and run history |
+| `tariboy assessment add --file PATH` / `ls` / `show ID` | record an [assessment](/docs/plugins/built-in/assessments) (needs `assessments`); read assessments (open to every agent) |
 | `GET /tools/group/info`, `status`, `observe/{member}`, `POST /tools/group/loop` | group coordination; group sends are `tmail send --to group:<g>` or `agent:<member>` |
 
 `tariboy-tasks` is installed globally with the `ttasks` alias. Packaged daemons
@@ -5414,6 +5512,7 @@ when the daemon is down.
 | `files` | `upload` base64 content to the shared server directory |
 | `loop` | `enable`, `disable`, `interval`, `timeout`, `hard-timeout`, `on-timeout`, `on-error` |
 | `mail` | the [`tmail`](/docs/reference/mail) client in operator mode: `inbox`, `sent`, `archive`, `show`, `send`, `reply`, `requeue`, `close`, `read`, `unread`, `clear` |
+| `assessment` | `ls` with `--iteration`, `--task`, `--agent`, `--assessor`, `--image`, `--image-version`, `--limit`, and `show ID`: read [assessments](/docs/plugins/built-in/assessments). `add` works only in an agent with `TARIBOY_TOOLS_SOCKET` |
 | `group` | `create`, `assign`, `inspect`, `ls`, `rm` |
 | `plugin` | `install`, `ls`, `inspect`, `logs`, `rm` |
 | `telegram` | contributed by the running bundled plugin: `configure`, `chat setup`, `status` |
@@ -7194,8 +7293,51 @@ builds. Only Store builds run the per-layer skills installer; for the other
 builds, restore the lock in each image directory first. Managed image sources
 and team imports reject `extends`. A child can only append: it cannot remove
 an inherited entry or insert a prompt between a parent's prompts. Layering
-never deletes files, so a skill directory copied from a parent keeps files the
-child's copy lacks. Rebuilding a parent does not rebuild its children.
+deletes no files except `ROLE.md`, so a skill directory copied from a parent
+keeps files the child's copy lacks. Rebuilding a parent does not rebuild its
+children.
+
+### Describe the role with `ROLE.md`
+
+`ROLE.md` is an optional Markdown file that describes what the image is for.
+Put it next to `Tariboyfile.yaml`. The build copies its text into the manifest
+field `role`. Tariboy does not put this text into the agent prompt, the prompt
+layers, or the agent directory. The text is metadata for people and for the UI.
+
+Write `ROLE.md` in English. Say only what the role is and why the image
+exists. Do not describe the process, skills, commands, or rules. The daemon
+does not check the language or the content of the text.
+
+The build applies these rules:
+
+| Case | Result |
+| --- | --- |
+| No `ROLE.md` | The manifest has no `role` field. `manifest.json` is the same as before this feature. |
+| Only white space | The same as no file. |
+| Not valid UTF-8 | The build fails with `ROLE.md is not valid UTF-8`. |
+| Up to 500 characters | `role.text` is the full file. |
+| More than 500 characters | The build fails. The error gives the file size in characters and the limit of 500. |
+| A symbolic link or not a regular file | The build fails. |
+
+A character is one Unicode code point, so 500 Cyrillic letters are in the
+limit. A child image built with `extends` does not inherit the `ROLE.md` of a
+parent. Only the file in the directory of the image that you build counts.
+`tariboy image inspect` and `GET /api/images/{ref}` show the field:
+
+```json
+"role": {
+  "text": "# Reviewer\n\nReviews pull requests.\n"
+}
+```
+
+`ROLE.md` is not a member of the image archive, but `role` is part of
+`manifest.json`. Thus `ROLE.md` changes the image digest. Pull, push to a
+Store, import and the activation of an image by an agent accept `role` only
+when the text is valid UTF-8, is not empty, and has 500 characters or fewer.
+The strict archive check, which runs on import and on activation, also
+rejects unknown fields in `role`. A daemon older than this feature does not
+know the field: its strict check rejects an image with `role`. Images built
+before this feature have no `role` field.
 
 ## Packaged Agent Skills
 
@@ -8172,6 +8314,7 @@ runtime prompt entries explicitly. Neither kind starts a supervised subprocess.
 | [`scripts`](/docs/plugins/built-in/scripts) | Optional | Yes | `scripts/scripts.sh …` | Script records and logs |
 | [`image-creator`](/docs/plugins/built-in/image-creator) | Optional | No | `scripts/image_creator.sh build` | Built image in the host image store |
 | [`tasks`](/docs/plugins/built-in/tasks) | Optional | Yes | Bare `tasks` command | Native Tasks in SQLite |
+| [`assessments`](/docs/plugins/built-in/assessments) | Optional | No | `tariboy assessment add` | Assessments in SQLite |
 
 “Historical core” describes schema-v1 resolution, where `whoami`, `loop`, and
 `mail` (then named `messages`) were added automatically. It does **not** mean schema-v2 images
@@ -8226,7 +8369,7 @@ whoami, loop, messages, context, status, workdir, scripts, goal, tasks
 It lists `messages`, the alias of `mail`, until the Store moves its images to
 the `mail` plugin and skill.
 
-It deliberately excludes `schedule` and `image-creator`. Register and refresh
+It deliberately excludes `schedule`, `image-creator` and `assessments`. Register and refresh
 the Store, then build it. Existing agents
 remain pinned to their assigned image digest until an image change is activated
 for a future iteration.
@@ -8249,6 +8392,79 @@ scripts, or Tasks.
 
 For the image schema and runtime marker list, see [Images](/docs/images). For
 external process plugins, see [Plugins](/docs/plugins#external-plugins).
+
+---
+
+# assessments
+Source: https://alekzonder.github.io/tariboy/plugins/built-in/assessments
+
+`assessments` lets an agent record an assessment. An assessment is an
+immutable record of how well another agent did the work of one iteration or
+one task: three axes with a score and the violations found. It is an optional
+capability. The official `basic` image does not include it.
+
+## Capability surface
+
+Inside the agent, `tariboy assessment` uses `$TARIBOY_TOOLS_SOCKET`:
+
+```bash
+tariboy assessment add --file assessment.json
+tariboy assessment add --file -        # read the JSON from standard input
+tariboy assessment ls --iteration ITERATION-ID
+tariboy assessment show as-20261102T081853Z-000001
+```
+
+`add` sends the JSON object to `POST /tools/assessment/add`. Only an agent
+with the `assessments` capability can call that route. Without it, the route
+returns `404 plugin_disabled`. The reads `GET /tools/assessment/ls` and
+`GET /tools/assessment/show/{id}` are open to every agent. The capability
+packages no skill and needs no runtime placeholder. The image's own skills
+tell the agent how to assess.
+
+The JSON object of `add` has these fields:
+
+```json
+{
+  "rubric_version": "rubric-1",
+  "iteration_id": "tariboy-dev-20261102082326-1",
+  "task_key": "DEV-1",
+  "summary": "Followed the process. Skipped one test.",
+  "axes": [
+    {"axis": "image_process", "verdict": "scored", "score": 80, "note": "one skipped test"},
+    {"axis": "role", "verdict": "not_applicable"},
+    {"axis": "task_fit", "verdict": "scored", "score": 95}
+  ],
+  "violations": [
+    {"axis": "image_process", "description": "Skipped the failing test",
+     "quote": "the test is not needed",
+     "evidence": {"kind": "transcript", "iteration_id": "tariboy-dev-20261102082326-1", "locator": "event 42"}}
+  ]
+}
+```
+
+Give `iteration_id`, `task_key` or both. The evidence kind is `transcript`
+(with `iteration_id` and `locator`), `task_event` (with `task_key` and
+`sequence`) or `script_run` (with a `run_id` that starts with `srun-`).
+
+The daemon writes the assessor fields from the socket identity and the
+current iteration. It writes the image and workflow snapshots from the
+iteration and task rows. Fields of that kind in the request are discarded.
+The validation rules, the link rule for an iteration and a task, and the
+retention of assessments are in
+[State model](/docs/architecture/state-model#assessments).
+
+## Operator access
+
+Operators read assessments with `tariboy assessment ls` and
+`tariboy assessment show ID`, or with `GET /api/assessments` and
+`GET /api/assessments/{id}`. The operator API and the operator CLI cannot
+write an assessment: `tariboy assessment add` without
+`TARIBOY_TOOLS_SOCKET` exits with code `2`.
+
+## Related reference
+
+- [Agent tools](/docs/binaries/agent-tools)
+- [Operator CLI](/docs/binaries/operator-cli)
 
 ---
 
@@ -9142,13 +9358,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.102.0` alpha on an Apple Silicon Mac.
+This path is for the `0.103.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.102.0_aarch64.dmg`;
+- a verified `Tariboy_0.103.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -10704,7 +10920,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.102.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.103.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -10818,7 +11034,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.102.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.103.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -12215,6 +12431,11 @@ block as a real iteration, so what you read there is what the agent is given. In
 an image with a v2 prompt template it appears under `## Goal` in Task Processing
 Order, without the `# Agent Goal` heading it has in the older prompt layout. See
 [Iteration loop](/docs/architecture/iteration-loop#agent-goals).
+
+Before `## One-shot`, Task Processing Order states the line
+``Iteration mode: `workflow`. The goal task follows a workflow: the status instructions in the Goal section set the process.``
+The daemon sets this mode when the workflow digest of the selected task row is
+not empty. The mode stays `workflow` when the workflow data cannot be loaded.
 
 The block is rendered in this order:
 
@@ -13876,7 +14097,8 @@ A build publishes two tags that point at the digest: the `workflow_version`
 and `latest`. The stored tree is owner-only and read-only: directories are
 `0500`, regular files `0400`, and executable files `0500`. `manifest.json`
 holds the schema version, name, version, digest, build time, the definition
-as parsed, and the path, SHA-256, executable flag, and size of every file.
+as parsed, the path, SHA-256, executable flag, and size of every file, and the
+`role` from `ROLE.md` when the source has one.
 
 A source may hold at most 256 files, at most 4 MiB per file, and at most 32 MiB
 in total. Symlinks and special files anywhere in the source are rejected.
@@ -13901,6 +14123,46 @@ last tag of a digest deletes its row in a transaction that commits only after
 the content is deleted. At startup the daemon inserts any missing row for
 stored content and deletes any row whose content is gone, unless a queue binds
 or a task pins its digest, so a crash between a disk write and its row heals. See [State model](/docs/architecture/state-model).
+
+### Describe the role with `ROLE.md`
+
+`ROLE.md` is an optional Markdown file that describes what the workflow is
+for. Put it next to `Workflowfile.yaml`. The build copies its text into the
+manifest field `role`. Tariboy does not put this text into the Goal block, the
+status instructions, or any agent prompt. The text is metadata for people and
+for the UI.
+
+Write `ROLE.md` in English. Say only what the role is and why the workflow
+exists. Do not describe the process, skills, commands, or rules. The daemon
+does not check the language or the content of the text.
+
+The build applies these rules:
+
+| Case | Result |
+| --- | --- |
+| No `ROLE.md` | The manifest has no `role` field. |
+| Only white space | The same as no file. |
+| Not valid UTF-8 | The build fails with `workflow_invalid` and the text `ROLE.md is not valid UTF-8`. |
+| Up to 500 characters | `role.text` is the full file. |
+| More than 500 characters | The build fails with `workflow_invalid`. The error gives the file size in characters and the limit of 500. |
+
+A character is one Unicode code point, so 500 Cyrillic letters are in the
+limit. `ROLE.md` is one of the stored files, so it is part of the digest like
+any other file. The `role` field does not change the digest rule.
+`tariboy workflow inspect` and `GET /api/workflow-images/{name}/{tag}` show the
+field:
+
+```json
+"role": {
+  "text": "# Development\n\nPlans, implements and reviews a change.\n"
+}
+```
+
+A workflow image built before this feature has no `role` field. If you build
+the same content again, the build adds `role` to the stored manifest and to its
+database row. The digest and the build time do not change. An import of a
+workflow archive reads `role` from the `ROLE.md` in the archive and applies the
+same rules, so a file of more than 500 characters fails the import.
 
 ## Commands
 
