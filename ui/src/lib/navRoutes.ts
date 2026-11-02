@@ -109,6 +109,12 @@ export function scopedPath(
   return `/${section}${search ? `?${search}` : ""}`;
 }
 
+/** `/metrics` on the host the current page names in `?host=`, if any. */
+export function metricsPathFrom(search: URLSearchParams): string {
+  const host = search.get("host");
+  return host === null ? "/metrics" : `/metrics?${new URLSearchParams({ host })}`;
+}
+
 /** A host's Settings page, always with `?host=` so it opens that host and
  *  not the remembered active one. */
 export function hostSettingsPath(page: "agent-defaults" | "maintenance", hostId: string): string {
