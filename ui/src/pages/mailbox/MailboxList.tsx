@@ -12,6 +12,13 @@ const EMPTY: Record<MailBox, string> = {
 function LetterTags({ letter }: { letter: Letter }) {
   return (
     <>
+      {/* The tint sits on an opaque background, so the text keeps 4.5:1 on a
+          hovered or selected row too. */}
+      {letter.instant && (
+        <span className="shrink-0 rounded-control bg-card bg-linear-to-r from-primary/8 to-primary/8 px-1.5 text-caption text-primary">
+          instant
+        </span>
+      )}
       {letter.kind !== "message" && (
         <span className="rounded-control bg-muted px-1.5 text-caption text-muted-foreground">
           {letter.kind}

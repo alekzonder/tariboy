@@ -68,6 +68,36 @@ describe("MailboxList", () => {
     expect(screen.getByText("ops, qa")).toBeVisible();
   });
 
+  it("tags an instant letter first in every box, and only an instant letter", () => {
+    const instant = letter({
+      id: "i1",
+      subject: "Quick fix",
+      kind: "task.done",
+      needs_reply: false,
+      instant: true,
+      dead_at: "x",
+      dead_reason: "queue_limit",
+    });
+    const plain = letter({ id: "p1", subject: "Plain" });
+    for (const box of ["inbox", "sent", "archive"] as const) {
+      const view = render(
+        <MailboxList box={box} letters={[instant, plain]} selected="" onSelect={vi.fn()} />,
+      );
+      const row = screen.getByRole("button", { name: /Quick fix/ });
+      const tags = within(row).getByText("instant").parentElement!.querySelectorAll("span");
+      expect([...tags].map((tag) => tag.textContent)).toEqual([
+        "Quick fix",
+        "instant",
+        "task.done",
+        "notice",
+        "dead · queue_limit",
+      ]);
+      const other = screen.getByRole("button", { name: /Plain/ });
+      expect(within(other).queryByText("instant")).toBeNull();
+      view.unmount();
+    }
+  });
+
   it("says when a box is empty", () => {
     render(<MailboxList box="archive" letters={[]} selected="" onSelect={vi.fn()} />);
     expect(screen.getByText("No archived letters.")).toBeVisible();

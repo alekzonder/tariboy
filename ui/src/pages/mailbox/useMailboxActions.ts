@@ -42,10 +42,11 @@ export function useMailboxActions(as: string, refresh: () => Promise<void>) {
           subject: values.subject,
           text: values.text,
           notice: values.notice,
+          instant: values.instant,
         }),
       ),
-    reply: (letter: Letter, text: string) =>
-      run("replied", "reply", () => api.mail.reply(letter.id, { text, as: actAs })),
+    reply: (letter: Letter, text: string, instant: boolean) =>
+      run("replied", "reply", () => api.mail.reply(letter.id, { text, as: actAs, instant })),
     // The customer's comment answers the question: the daemon closes the
     // letter, and the task's status and comments refetch.
     answer: (letter: Letter, body: string, key: string) =>

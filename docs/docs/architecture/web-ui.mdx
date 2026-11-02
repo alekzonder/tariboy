@@ -1604,7 +1604,30 @@ second is a question from `system:workflow`, because only a status outcome
 closes it.
 **Compose** opens a dialog
 with the recipient, the subject, the text and a **No reply needed** switch: off
-sends a request, on sends a notice. Every write shows a toast with the daemon's
+sends a request, on sends a notice.
+
+The customer can send an instant letter, which reaches the agent's running
+iteration after its current tool call. The form shows a **Deliver to the
+current iteration** switch, with a one-line hint under it, only when the
+customer writes to an agent: **Compose** to an `agent:*` recipient, in Inbox
+and in **Agent → Mailbox**, and **Reply** in Inbox to a letter from `agent:*`.
+A reply to `plugin:*` or `system:*` and a reply in **Agent → Mailbox**, which
+the operator writes as the agent, have no switch. In a new letter the switch is
+under **No reply needed**. In a reply it is under the text. The switch is off
+in each new dialog, and `mail.send` or `mail.reply` carries its value as
+`instant`. The UI does not check who may send an instant letter. The daemon
+refuses one with `instant_not_allowed` or `instant_recipient`, and the toast
+shows its message. While the switch is on, a counter `N / 8,000` is under the
+text. It counts the trimmed text in Unicode code points, the unit of the
+daemon's limit. Over 8,000 the counter changes color and a warning line
+appears in a polite live region, so a screen reader announces it once. **Send**
+stays enabled. An instant letter has an `instant` tag first in its row in every
+box. Its card has a **Delivery** field after **State** that reads
+`instant_state`, for example `Instant · delivered to iteration <id> at <time>`.
+An empty or unknown state reads `Instant`. A change of `instant_state` sends an
+`/api/mail/ws` hint, so the open card updates without a reload.
+
+Every write shows a toast with the daemon's
 message on failure and refetches; nothing changes optimistically. The lists
 refetch on every `/api/mail/ws` hint for the mailbox's principal (every hint for
 the customer) and on every reconnect, through `useMailSocket` in

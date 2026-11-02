@@ -8,7 +8,13 @@ import { MarkdownContent } from "@/pages/tasks/TaskMarkdown";
 import { taskQueries } from "@/pages/tasks/taskQueries";
 import { mailKeys } from "./mailQueries";
 import { MailboxTaskAnswer } from "./MailboxTaskAnswer";
-import { letterActions, letterState, principalName, type MailboxMode } from "./mailboxModel";
+import {
+  deliveryText,
+  letterActions,
+  letterState,
+  principalName,
+  type MailboxMode,
+} from "./mailboxModel";
 
 export interface LetterHandlers {
   onReply: (letter: Letter) => void;
@@ -43,6 +49,26 @@ function TaskField({ letter, taskKey }: { letter: Letter; taskKey: string }) {
   return (
     <Field label="Task">
       {[taskKey, task?.title ?? carried, task?.status].filter(Boolean).join(" · ")}
+    </Field>
+  );
+}
+
+/** How the instant letter reached the agent, its iteration in monospace. */
+function DeliveryField({ letter }: { letter: Letter }) {
+  const text = deliveryText(letter);
+  const iteration = letter.instant_iteration;
+  const at = iteration ? text.indexOf(iteration) : -1;
+  return (
+    <Field label="Delivery">
+      {at < 0 ? (
+        text
+      ) : (
+        <>
+          {text.slice(0, at)}
+          <code className="font-mono">{iteration}</code>
+          {text.slice(at + iteration.length)}
+        </>
+      )}
     </Field>
   );
 }
@@ -142,6 +168,7 @@ export function MailboxLetter({
         <Field label="To">{principalName(letter.to)}</Field>
         <Field label="Received">{new Date(letter.created_at).toLocaleString()}</Field>
         <Field label="State">{letterState(letter)}</Field>
+        {letter.instant && <DeliveryField letter={letter} />}
         {taskKey && <TaskField letter={letter} taskKey={taskKey} />}
       </dl>
       {letter.in_reply_to && <ThreadLine id={letter.in_reply_to} as={as} />}

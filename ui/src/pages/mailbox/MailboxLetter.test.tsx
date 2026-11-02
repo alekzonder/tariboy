@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
-import { fireEvent, render, screen, waitFor } from "@/test/queryRender";
+import { fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
 import { fakeApi } from "@/test/api";
 import { letter } from "@/test/fixtures/mailFixtures";
 import type { Letter, MailBox, Task, TaskDetail } from "@/lib/api";
@@ -94,6 +94,34 @@ describe("MailboxLetter", () => {
     expect(screen.getByText("Bold").tagName).toBe("STRONG");
     expect(await screen.findByText("In reply to “The question”")).toBeVisible();
     expect(thread).toHaveBeenCalledWith("m0", undefined, expect.any(AbortSignal));
+  });
+
+  it("shows the Delivery of an instant letter after State, the iteration in code", () => {
+    const at = "2026-11-02T10:00:00Z";
+    show(
+      letter({
+        instant: true,
+        instant_state: "delivered",
+        instant_iteration: "dev-7",
+        instant_at: at,
+        data: { task_key: "DEV-7" },
+      }),
+      "sent",
+    );
+
+    const labels = [...document.querySelectorAll("dt")].map((dt) => dt.textContent);
+    expect(labels).toEqual(["From", "To", "Received", "State", "Delivery", "Task"]);
+    const value = screen.getByText("Delivery").nextElementSibling!;
+    expect(value.tagName).toBe("DD");
+    expect(value).toHaveTextContent(
+      `Instant · delivered to iteration dev-7 at ${new Date(at).toLocaleString()}`,
+    );
+    expect(within(value as HTMLElement).getByText("dev-7").tagName).toBe("CODE");
+  });
+
+  it("shows no Delivery for a letter without instant delivery", () => {
+    show(letter({ instant_state: "waiting" }), "sent");
+    expect(screen.queryByText("Delivery")).toBeNull();
   });
 
   it("has no actions on a sent letter", () => {

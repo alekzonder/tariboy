@@ -175,7 +175,7 @@ export default function Mailbox({
   const submit = async (values: ComposeValues) => {
     const done =
       compose?.mode === "reply"
-        ? await actions.reply(compose.letter, values.text)
+        ? await actions.reply(compose.letter, values.text, values.instant)
         : await actions.send(values);
     if (done) setCompose(null);
   };
@@ -224,6 +224,7 @@ export default function Mailbox({
       {compose && (
         <MailboxCompose
           target={compose}
+          mode={mode}
           fixedTo={fixedTo}
           recipients={recipients}
           busy={actions.busy}

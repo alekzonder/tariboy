@@ -28,11 +28,14 @@ export interface MailSendInput {
   subject?: string;
   text: string;
   notice?: boolean;
+  /** Deliver into the agent's running iteration after its current tool call. */
+  instant?: boolean;
   as?: string;
 }
 export interface MailReplyInput {
   text: string;
   ask?: boolean;
+  instant?: boolean;
   as?: string;
 }
 

@@ -30,6 +30,37 @@ export function letterState(letter: Letter): string {
   return "open";
 }
 
+/** Instant delivery is offered when the customer writes to an agent: a new
+ *  letter (always the customer's) to `agent:*`, or the customer's reply to an
+ *  agent's letter. The daemon still decides who may send one. */
+export function instantAllowed(to: string, reply: Letter | null, mode: MailboxMode): boolean {
+  if (!reply) return to.startsWith("agent:");
+  return mode === "customer" && reply.from.startsWith("agent:");
+}
+
+/** The Delivery field of an instant letter; "" for any other letter. An
+ *  unknown or missing state reads plain `Instant`. */
+export function deliveryText(letter: Letter): string {
+  if (!letter.instant) return "";
+  const iteration = letter.instant_iteration;
+  switch (letter.instant_state) {
+    case "waiting":
+      return "Instant · waiting for the agent's current tool call";
+    case "delivered":
+      return `Instant · delivered to iteration ${iteration} at ${new Date(letter.instant_at).toLocaleString()}`;
+    case "queued":
+      return "Instant · no iteration was running; the next iteration reads it";
+    case "stopped":
+      return "Instant · the agent is stopped; it reads the letter when started";
+    case "read":
+      return `Instant · read in iteration ${iteration}`;
+    case "not_delivered":
+      return "Instant · not delivered";
+    default:
+      return "Instant";
+  }
+}
+
 export interface LetterActions {
   reply: boolean;
   archive: boolean;
