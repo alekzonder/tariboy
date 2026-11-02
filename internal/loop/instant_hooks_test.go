@@ -135,6 +135,13 @@ func TestCodexLaunchLoadsInstantHooksWithoutImageSkills(t *testing.T) {
 // directory: no CODEX_HOME or XDG_CONFIG_HOME, the agent's own HOME, and no
 // new file in the agent cwd or HOME.
 func TestCodexExecAndTUILoadTheSameHooksWithoutConfigFiles(t *testing.T) {
+	// The launch inherits the daemon environment, which may already carry
+	// these keys (CI runners set XDG_CONFIG_HOME). Pin them so the check is
+	// "passed through unchanged", whatever the host has.
+	inherited := map[string]string{"CODEX_HOME": "", "XDG_CONFIG_HOME": "/inherited/xdg"}
+	for key, value := range inherited {
+		t.Setenv(key, value)
+	}
 	var launches []hookLaunch
 	var dirs []string
 	for _, interactive := range []bool{false, true} {
@@ -160,9 +167,9 @@ func TestCodexExecAndTUILoadTheSameHooksWithoutConfigFiles(t *testing.T) {
 		t.Fatalf("hooks: exec %q, tui %q", e, i)
 	}
 	for _, l := range launches {
-		for _, key := range []string{"CODEX_HOME", "XDG_CONFIG_HOME"} {
-			if v := environmentValue(l.env, key); v != "" {
-				t.Fatalf("%s = %q; want unset", key, v)
+		for key, want := range inherited {
+			if v := environmentValue(l.env, key); v != want {
+				t.Fatalf("%s = %q; want the inherited %q", key, v, want)
 			}
 		}
 	}
