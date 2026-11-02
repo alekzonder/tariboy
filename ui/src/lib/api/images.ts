@@ -20,6 +20,7 @@ export type {
   ImageProvenance,
   ImageSummary,
   ImageValidateResult,
+  ManifestRole,
 } from "../api-types.generated";
 
 // Not in /api/openapi.json: served by internal/api/server.go POST /api/image-imports.

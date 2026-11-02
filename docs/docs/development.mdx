@@ -504,7 +504,7 @@ and removes the directory afterwards. It checks three sizes against
 | --- | --- |
 | The entry chunk | 351,000 |
 | The initial JavaScript: the entry chunk and every chunk that it imports statically | 723,000 |
-| All JavaScript: every chunk, lazily loaded chunks included | 3,215,000 |
+| All JavaScript: every chunk, lazily loaded chunks included | 3,383,000 |
 
 The sizes are minified bytes before compression. Each limit is the size at
 the time the limit was set, plus 5%, rounded up to 1,000 bytes. When the code
