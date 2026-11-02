@@ -134,22 +134,25 @@ func TestSendAndReplyPassInstant(t *testing.T) {
 
 func io2() *bytes.Buffer { return &bytes.Buffer{} }
 
-// claudeHookFormats maps each Claude Code hook format to the JSON it prints
-// for the text block, built here independently of the production code.
-func claudeHookFormats(text string) map[string]map[string]any {
+// hookFormats maps each Claude Code and Codex hook format to the JSON it
+// prints for the text block, built here independently of the production code.
+func hookFormats(text string) map[string]map[string]any {
 	return map[string]map[string]any{
 		"claude-post-tool-use": {"hookSpecificOutput": map[string]any{
 			"hookEventName": "PostToolUse", "additionalContext": text}},
 		"claude-post-tool-use-failure": {"hookSpecificOutput": map[string]any{
 			"hookEventName": "PostToolUseFailure", "additionalContext": text}},
 		"claude-stop": {"decision": "block", "reason": text},
+		"codex-post-tool-use": {"hookSpecificOutput": map[string]any{
+			"hookEventName": "PostToolUse", "additionalContext": text}},
+		"codex-stop": {"decision": "block", "reason": text},
 	}
 }
 
-func TestInstantClaudeHookFormats(t *testing.T) {
+func TestInstantHookFormats(t *testing.T) {
 	const text = "# Instant messages\n\"quoted\" <b> & \\ hello\n"
 	raw, _ := json.Marshal(map[string]any{"ids": []string{"m-1"}, "text": text})
-	for format, want := range claudeHookFormats(text) {
+	for format, want := range hookFormats(text) {
 		useRecorder(t, string(raw))
 		code, out, errOut := runInstantCLI(t, instantEnv(t, true), "--format", format)
 		if code != 0 || errOut != "" {
@@ -167,8 +170,8 @@ func TestInstantClaudeHookFormats(t *testing.T) {
 	}
 }
 
-func TestInstantClaudeHookFormatsAreSilentWithoutLetters(t *testing.T) {
-	for format := range claudeHookFormats("") {
+func TestInstantHookFormatsAreSilentWithoutLetters(t *testing.T) {
+	for format := range hookFormats("") {
 		useRecorder(t, `{"ids":[],"text":""}`)
 		if code, out, errOut := runInstantCLI(t, instantEnv(t, true), "--format", format); code != 0 || out != "" || errOut != "" {
 			t.Fatalf("%s empty: code %d out %q err %q", format, code, out, errOut)
@@ -187,16 +190,18 @@ func TestInstantClaudeHookFormatsAreSilentWithoutLetters(t *testing.T) {
 	}
 }
 
-func TestInstantClaudeHookFormatTimeoutIsSilent(t *testing.T) {
+func TestInstantHookFormatTimeoutIsSilent(t *testing.T) {
 	old := newCaller
 	t.Cleanup(func() { newCaller = old })
 	newCaller = func(string) Caller { return slowCaller{} }
-	start := time.Now()
-	code, out, errOut := runInstantCLI(t, instantEnv(t, true), "--format", "claude-stop")
-	if code != 0 || out != "" || errOut != "" {
-		t.Fatalf("code %d out %q err %q", code, out, errOut)
-	}
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Fatalf("instant took %s; want the 1.5 s timeout", elapsed)
+	for _, format := range []string{"claude-stop", "codex-post-tool-use"} {
+		start := time.Now()
+		code, out, errOut := runInstantCLI(t, instantEnv(t, true), "--format", format)
+		if code != 0 || out != "" || errOut != "" {
+			t.Fatalf("%s: code %d out %q err %q", format, code, out, errOut)
+		}
+		if elapsed := time.Since(start); elapsed > 2*time.Second {
+			t.Fatalf("%s: instant took %s; want the 1.5 s timeout", format, elapsed)
+		}
 	}
 }

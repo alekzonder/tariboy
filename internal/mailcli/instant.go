@@ -58,27 +58,30 @@ func runInstant(parsed request, m mode, stdout, stderr io.Writer) int {
 }
 
 // instantFormatList names the --format values of tmail instant.
-const instantFormatList = "text, json, claude-post-tool-use, claude-post-tool-use-failure, claude-stop"
+const instantFormatList = "text, json, claude-post-tool-use, claude-post-tool-use-failure, claude-stop, codex-post-tool-use, codex-stop"
 
-// claudeHookEvents maps a Claude Code PostToolUse-style format to the hook
-// event name its hookSpecificOutput must carry.
-var claudeHookEvents = map[string]string{
+// hookContextEvents maps a PostToolUse-style hook format to the hook event
+// name its hookSpecificOutput must carry. Codex takes the same JSON as Claude
+// Code today; its formats keep their own names so either harness can change
+// its contract alone.
+var hookContextEvents = map[string]string{
 	"claude-post-tool-use":         "PostToolUse",
 	"claude-post-tool-use-failure": "PostToolUseFailure",
+	"codex-post-tool-use":          "PostToolUse",
 }
 
 func validInstantFormat(format string) bool {
 	switch format {
-	case "", "text", "json", "claude-stop":
+	case "", "text", "json", "claude-stop", "codex-stop":
 		return true
 	}
-	_, ok := claudeHookEvents[format]
+	_, ok := hookContextEvents[format]
 	return ok
 }
 
-// formatInstant renders taken letters. The claude-* formats are the JSON a
-// Claude Code hook prints: tmail builds it itself, so the hook needs no jq,
-// python or node.
+// formatInstant renders taken letters. The claude-* and codex-* formats are
+// the JSON a harness hook prints: tmail builds it itself, so the hook needs no
+// jq, python or node.
 func formatInstant(format string, res instantResult) string {
 	var v any
 	switch format {
@@ -86,11 +89,11 @@ func formatInstant(format string, res instantResult) string {
 		return res.Text
 	case "json":
 		v = res
-	case "claude-stop":
+	case "claude-stop", "codex-stop":
 		v = map[string]string{"decision": "block", "reason": res.Text}
 	default:
 		v = map[string]any{"hookSpecificOutput": map[string]string{
-			"hookEventName":     claudeHookEvents[format],
+			"hookEventName":     hookContextEvents[format],
 			"additionalContext": res.Text,
 		}}
 	}

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestOnlyClaudeHasInstantMailHooks(t *testing.T) {
+func TestOnlyClaudeAndCodexHaveInstantMailHooks(t *testing.T) {
 	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
 	for _, typ := range []string{"claude", "codex", "opencode", "cursor", "stub"} {
 		adapter, err := Get(typ)
@@ -17,7 +17,7 @@ func TestOnlyClaudeHasInstantMailHooks(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, ok := adapter.(InstantMailHooker)
-		if ok != (typ == "claude") {
+		if ok != (typ == "claude" || typ == "codex") {
 			t.Errorf("%s implements InstantMailHooker = %v", typ, ok)
 		}
 	}
@@ -34,7 +34,8 @@ type hookEntry struct {
 
 func claudeHooks(t *testing.T, tmail, dir string) (InstantMailHooks, map[string][]hookEntry) {
 	t.Helper()
-	hooks, err := claude{}.InstantMailHooks(tmail, dir)
+	// Claude ignores the codex approval mode.
+	hooks, err := claude{}.InstantMailHooks(tmail, dir, Config{CodexApproval: CodexApprovalApproveForMe})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,11 +111,86 @@ func TestClaudeInstantMailHooksQuoteTheTmailPath(t *testing.T) {
 }
 
 func TestClaudeInstantMailHooksNeedAnAbsoluteTmail(t *testing.T) {
-	if _, err := (claude{}).InstantMailHooks("tmail", "/x/claude"); err == nil {
+	if _, err := (claude{}).InstantMailHooks("tmail", "/x/claude", Config{}); err == nil {
 		t.Fatal("relative tmail accepted")
 	}
-	if _, err := (claude{}).InstantMailHooks("/bin/tmail", "rel/claude"); err == nil {
+	if _, err := (claude{}).InstantMailHooks("/bin/tmail", "rel/claude", Config{}); err == nil {
 		t.Fatal("relative plugin dir accepted")
+	}
+}
+
+// codexHookCommand returns the command of the one hook in a
+// -c hooks.EVENT=[...] value. The value is TOML; its command is a TOML basic
+// string, which json.Unmarshal reads because tariboy writes it as JSON.
+func codexHookCommand(t *testing.T, arg, event, matcher string) string {
+	t.Helper()
+	prefix := "hooks." + event + "=[{" + matcher + `hooks=[{type="command",command=`
+	suffix := ",timeout=5}]}]"
+	if !strings.HasPrefix(arg, prefix) || !strings.HasSuffix(arg, suffix) {
+		t.Fatalf("%s arg = %q; want %q...%q", event, arg, prefix, suffix)
+	}
+	var command string
+	if err := json.Unmarshal([]byte(strings.TrimSuffix(strings.TrimPrefix(arg, prefix), suffix)), &command); err != nil {
+		t.Fatalf("%s command in %q: %v", event, arg, err)
+	}
+	return command
+}
+
+func TestCodexInstantMailHooksRunTmailInstant(t *testing.T) {
+	hooks, err := codex{}.InstantMailHooks("/opt/tariboy/bin/tmail", "/agents/a/harness-hooks/codex", Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hooks.Files) != 0 {
+		t.Fatalf("files = %+v; want none: the hooks live in argv", hooks.Files)
+	}
+	if len(hooks.Args) != 5 || hooks.Args[0] != "--dangerously-bypass-hook-trust" || hooks.Args[1] != "-c" || hooks.Args[3] != "-c" {
+		t.Fatalf("args = %q", hooks.Args)
+	}
+	if c := codexHookCommand(t, hooks.Args[2], "PostToolUse", `matcher="*",`); c != "'/opt/tariboy/bin/tmail' instant --format codex-post-tool-use" {
+		t.Errorf("PostToolUse command = %q", c)
+	}
+	if c := codexHookCommand(t, hooks.Args[4], "Stop", ""); c != "'/opt/tariboy/bin/tmail' instant --format codex-stop" {
+		t.Errorf("Stop command = %q", c)
+	}
+	if hooks.MinimumVersion != "0.141.0" {
+		t.Fatalf("minimum version = %q", hooks.MinimumVersion)
+	}
+	yolo, err := codex{}.InstantMailHooks("/opt/tariboy/bin/tmail", "/x", Config{CodexApproval: CodexApprovalYolo})
+	if err != nil || strings.Join(yolo.Args, "\x00") != strings.Join(hooks.Args, "\x00") {
+		t.Fatalf("yolo hooks = %q, %v; want the default", yolo.Args, err)
+	}
+}
+
+// Codex runs a command hook through a shell; the quoted path survives it, and
+// the TOML string survives a path with quotes and backslashes.
+func TestCodexInstantMailHooksQuoteTheTmailPath(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), `it's a "dir" \x`)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	tmail := filepath.Join(dir, "tmail")
+	if err := os.WriteFile(tmail, []byte("#!/bin/sh\nprintf '%s|' \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hooks, err := codex{}.InstantMailHooks(tmail, "/x/codex", Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("/bin/sh", "-c", codexHookCommand(t, hooks.Args[4], "Stop", "")).Output()
+	if err != nil || string(out) != "instant|--format|codex-stop|" {
+		t.Fatalf("shell run = %q, %v", out, err)
+	}
+}
+
+func TestCodexInstantMailHooksAreRefused(t *testing.T) {
+	if _, err := (codex{}).InstantMailHooks("tmail", "/x/codex", Config{}); err == nil {
+		t.Fatal("relative tmail accepted")
+	}
+	// The trust bypass would let an unreviewed repository hook run outside the
+	// approve-for-me sandbox.
+	if _, err := (codex{}).InstantMailHooks("/bin/tmail", "/x/codex", Config{CodexApproval: CodexApprovalApproveForMe}); err == nil {
+		t.Fatal("approve-for-me accepted")
 	}
 }
 

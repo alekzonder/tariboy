@@ -2,6 +2,7 @@ package harness
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -34,12 +35,47 @@ type InstantMailHooks struct {
 }
 
 // InstantMailHooker is an optional Adapter interface for a harness whose hooks
-// run tmail instant. Only the claude adapter implements it.
+// run tmail instant. The claude and codex adapters implement it. cfg is the
+// launch config the adapter's Command gets.
 type InstantMailHooker interface {
-	InstantMailHooks(tmail, pluginDir string) (InstantMailHooks, error)
+	InstantMailHooks(tmail, pluginDir string, cfg Config) (InstantMailHooks, error)
 }
 
-func (claude) InstantMailHooks(tmail, pluginDir string) (InstantMailHooks, error) {
+// minimumCodexInstantHooksVersion is the oldest codex that runs PostToolUse
+// and Stop hooks given in -c overrides with --dangerously-bypass-hook-trust:
+// 0.131.0 to 0.140.0 accept the flag but do not run hooks from -c.
+const minimumCodexInstantHooksVersion = "0.141.0"
+
+// InstantMailHooks for codex passes the hooks as -c config overrides, so no
+// file lands in CODEX_HOME, the user's ~/.codex or the repository. Codex runs
+// only trusted hooks and keeps trust in the user's config.toml, so the hooks
+// need --dangerously-bypass-hook-trust. That flag also runs every unreviewed
+// user or repository hook, which in approve-for-me would run outside the
+// sandbox: there the hooks are refused.
+func (codex) InstantMailHooks(tmail, _ string, cfg Config) (InstantMailHooks, error) {
+	if !filepath.IsAbs(tmail) {
+		return InstantMailHooks{}, errors.New("instant mail hooks need an absolute tmail path")
+	}
+	if cfg.CodexApproval == CodexApprovalApproveForMe {
+		return InstantMailHooks{}, errors.New("codex approval mode approve-for-me: the hook trust bypass would let unreviewed hooks run outside the sandbox")
+	}
+	hook := func(event, matcher, format string) string {
+		// A JSON string is a valid TOML basic string.
+		command, _ := json.Marshal(shellQuote(tmail) + " instant --format " + format)
+		return fmt.Sprintf(`hooks.%s=[{%shooks=[{type="command",command=%s,timeout=%d}]}]`,
+			event, matcher, command, instantHookTimeoutSeconds)
+	}
+	return InstantMailHooks{
+		Args: []string{
+			"--dangerously-bypass-hook-trust",
+			"-c", hook("PostToolUse", `matcher="*",`, "codex-post-tool-use"),
+			"-c", hook("Stop", "", "codex-stop"),
+		},
+		MinimumVersion: minimumCodexInstantHooksVersion,
+	}, nil
+}
+
+func (claude) InstantMailHooks(tmail, pluginDir string, _ Config) (InstantMailHooks, error) {
 	if !filepath.IsAbs(tmail) || !filepath.IsAbs(pluginDir) {
 		return InstantMailHooks{}, errors.New("instant mail hooks need absolute tmail and plugin paths")
 	}
