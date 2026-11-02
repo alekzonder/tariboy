@@ -54,7 +54,15 @@ func (m *Mail) deadlineSeam() Deadlines {
 // written is what one committed write hands to the hooks.
 type written struct {
 	letters []Letter // rows written; open ones wake their recipient
+	hints   []Letter // rows whose instant state changed: a hint, no wake
+	marks   []instantMark
 	audits  []auditEvent
+}
+
+// instantMark is the flag file an instant letter creates in a running
+// iteration.
+type instantMark struct {
+	agent, iteration string
 }
 
 type auditEvent struct {
@@ -87,8 +95,13 @@ func (m *Mail) emit(w written) {
 	if pluginWake != nil && len(plugins) > 0 {
 		pluginWake(sortedKeys(plugins))
 	}
+	if rt := m.instantRuntime(); rt != nil {
+		for _, mark := range w.marks {
+			rt.MarkInstant(mark.agent, mark.iteration)
+		}
+	}
 	if event != nil {
-		for _, l := range w.letters {
+		for _, l := range append(append([]Letter(nil), w.letters...), w.hints...) {
 			event(Hint{ID: l.ID, From: l.From, To: l.To, Kind: l.Kind, TS: l.CreatedAt})
 		}
 	}

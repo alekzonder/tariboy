@@ -23,6 +23,10 @@ export function letter(over: Partial<Letter> = {}): Letter {
     dead_reason: "",
     attempts: 0,
     produced_in_iteration: "",
+    instant: false,
+    instant_state: "",
+    instant_iteration: "",
+    instant_at: "",
     ...over,
   };
 }

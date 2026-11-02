@@ -603,6 +603,8 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 	// A letter wakes exactly the agents it was sent to, feeds the mail hint
 	// socket, and a letter to a queue wakes workflow ingress.
 	c.mail.SetWakeHook(func(agents []string) { manager.WakeAgents(agents, loop.WakeMessage) })
+	// An instant letter reads the loop state and flags the running iteration.
+	c.mail.SetInstantRuntime(manager)
 	c.mail.SetEventHook(func(h mail.Hint) {
 		c.hub.Emit(events.Event{Agent: mailHintAgent(h), Type: "mail", Time: h.TS,
 			Data: map[string]any{"id": h.ID, "from": h.From, "to": h.To, "kind": h.Kind}})

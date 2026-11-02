@@ -83,7 +83,7 @@ func TestLetterJSONUsesTheFixedFieldNames(t *testing.T) {
 	}
 	want := []string{"id", "seq", "from", "to", "subject", "body", "kind", "data", "needs_reply", "in_reply_to",
 		"deadline", "created_at", "read_at", "answered_at", "answer_id", "close_note", "attempts", "dead_at",
-		"dead_reason", "produced_in_iteration"}
+		"dead_reason", "produced_in_iteration", "instant", "instant_state", "instant_iteration", "instant_at"}
 	if len(fields) != len(want) {
 		t.Fatalf("letter JSON has %d fields: %s", len(fields), raw)
 	}

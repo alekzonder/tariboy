@@ -490,6 +490,26 @@
         ],
         "type": "object"
       },
+      "AgentMailInstantSenders": {
+        "additionalProperties": false,
+        "properties": {
+          "mail_instant_senders": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "mail_instant_senders"
+        ],
+        "type": "object"
+      },
       "AgentMessagesBatch": {
         "additionalProperties": false,
         "properties": {
@@ -1483,6 +1503,13 @@
           "interval_s": {
             "type": "integer"
           },
+          "mail_instant_senders": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
           "max_idle_iterations": {
             "type": "integer"
           },
@@ -1551,6 +1578,7 @@
           "plugins",
           "messages_batch",
           "messages_max_queue",
+          "mail_instant_senders",
           "goal_enabled",
           "goal_wait_customer_timeout_s",
           "goal_delivery_cooldown_s",
@@ -3617,6 +3645,18 @@
           "in_reply_to": {
             "type": "string"
           },
+          "instant": {
+            "type": "boolean"
+          },
+          "instant_at": {
+            "type": "string"
+          },
+          "instant_iteration": {
+            "type": "string"
+          },
+          "instant_state": {
+            "type": "string"
+          },
           "kind": {
             "type": "string"
           },
@@ -3659,7 +3699,11 @@
           "attempts",
           "dead_at",
           "dead_reason",
-          "produced_in_iteration"
+          "produced_in_iteration",
+          "instant",
+          "instant_state",
+          "instant_iteration",
+          "instant_at"
         ],
         "type": "object"
       },
@@ -8591,6 +8635,13 @@
                   "interval_s": {
                     "description": "loop interval in whole seconds",
                     "type": "integer"
+                  },
+                  "mail_instant_senders": {
+                    "description": "agents allowed to send instant letters, as agent:\u003cname\u003e (default: the group lead)",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
                   },
                   "max_idle_iterations": {
                     "description": "maximum consecutive idle iterations; 0 disables",
@@ -13664,6 +13715,108 @@
           }
         },
         "summary": "Set the agent messages batch"
+      }
+    },
+    "/api/agents/{name}/messages/instant-senders": {
+      "post": {
+        "operationId": "agent.messages.instant-senders",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "agent name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reset": {
+                    "description": "clear the list: the lead of the agent's group may send",
+                    "type": "boolean"
+                  },
+                  "senders": {
+                    "description": "an allowed agent:\u003cname\u003e; an empty value sets an empty list",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/AgentMailInstantSenders"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Set the agents that may send an agent instant letters"
       }
     },
     "/api/agents/{name}/messages/max-queue": {
@@ -20474,6 +20627,10 @@
                     "description": "reply deadline: a duration such as 5m or an RFC 3339 time",
                     "type": "string"
                   },
+                  "instant": {
+                    "description": "deliver into the running iteration at its next tool call",
+                    "type": "boolean"
+                  },
                   "kind": {
                     "description": "kind (default message)",
                     "type": "string"
@@ -20957,6 +21114,10 @@
                   },
                   "ask": {
                     "description": "make the reply a request",
+                    "type": "boolean"
+                  },
+                  "instant": {
+                    "description": "deliver into the running iteration at its next tool call",
                     "type": "boolean"
                   },
                   "text": {

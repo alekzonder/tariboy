@@ -32,9 +32,10 @@ type commandHelp struct {
 }
 
 var (
-	asFlag     = flagSpec{"as", false, "Principal to act as, user:login or agent:name (operator-only; default the customer)"}
-	limitFlag  = flagSpec{"limit", false, "Most letters to list (default 100)"}
-	beforeFlag = flagSpec{"before", false, "Cursor of the next page, from the next: line or next_before"}
+	asFlag      = flagSpec{"as", false, "Principal to act as, user:login or agent:name (operator-only; default the customer)"}
+	limitFlag   = flagSpec{"limit", false, "Most letters to list (default 100)"}
+	beforeFlag  = flagSpec{"before", false, "Cursor of the next page, from the next: line or next_before"}
+	instantFlag = flagSpec{"instant", true, "Deliver into the recipient's running iteration at its next tool call (boolean, default false)"}
 )
 
 // commands is the tmail command table, in the order help lists them.
@@ -51,13 +52,16 @@ var commands = []command{
 		{"deadline", false, "Reply deadline: a duration such as 5m or an RFC 3339 time"},
 		{"notice", true, "Send a notice that needs no reply (boolean, default false)"},
 		{"data", false, "Structured data as a JSON object"},
+		instantFlag,
 		asFlag,
 	}, help: helpText["send"]},
 	{name: "reply", positional: []string{"id", "text"}, flags: []flagSpec{
 		{"text", false, "Reply text instead of positional TEXT; - reads it from stdin"},
 		{"ask", true, "Make the reply a request that needs an answer (boolean, default false)"},
+		instantFlag,
 		{"as", false, "Principal to reply as (operator-only); agent:name replies on the agent's behalf"},
 	}, help: helpText["reply"]},
+	{name: "instant", flags: []flagSpec{{"format", false, "Output format: text (default) or json"}}, help: helpText["instant"]},
 	{name: "requeue", positional: []string{"id"}, flags: []flagSpec{asFlag}, help: helpText["requeue"]},
 	{name: "close", positional: []string{"id"}, operatorOnly: true, flags: []flagSpec{{"note", false, "Archive note"}, asFlag}, help: helpText["close"]},
 	{name: "read", positional: []string{"id..."}, operatorOnly: true, flags: []flagSpec{asFlag}, help: helpText["read"]},

@@ -195,25 +195,27 @@ type ScriptControl interface {
 
 // RunSpec is the create+start request for an agent service.
 type RunSpec struct {
-	ImageRef                 string
-	Name                     string
-	Cwd                      string
-	Harness                  string
-	Model                    string
-	Effort                   string
-	Interactive              bool
-	Env                      map[string]string
-	Plugins                  []string
-	IntervalS                int
-	TimeoutS                 int
-	HardTimeoutS             int
-	OnTimeout                string
-	OnError                  string
-	MaxIdleIterations        int
-	AIStallTimeoutS          int
-	UserPrompt               string
-	MessagesBatch            int
-	MessagesMaxQueue         int
+	ImageRef          string
+	Name              string
+	Cwd               string
+	Harness           string
+	Model             string
+	Effort            string
+	Interactive       bool
+	Env               map[string]string
+	Plugins           []string
+	IntervalS         int
+	TimeoutS          int
+	HardTimeoutS      int
+	OnTimeout         string
+	OnError           string
+	MaxIdleIterations int
+	AIStallTimeoutS   int
+	UserPrompt        string
+	MessagesBatch     int
+	MessagesMaxQueue  int
+	// MailInstantSenders is nil when not set.
+	MailInstantSenders       []string
 	GoalEnabled              *bool
 	GoalWaitCustomerTimeoutS int
 	GoalDeliveryCooldownS    int

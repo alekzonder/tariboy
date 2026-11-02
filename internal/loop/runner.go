@@ -645,10 +645,19 @@ func (r *ShimRunner) Run(ctx context.Context, ag agent.Agent, trigger, iteration
 	return outcome, err
 }
 
-// closeReadNotices closes the notices an iteration rendered. A failure leaves
-// them open, so they render again: the safe direction.
+// closeReadNotices closes the notices an iteration rendered or a hook
+// delivered into it. A failure leaves them open, so they render again: the
+// safe direction.
 func (r *ShimRunner) closeReadNotices(agentName, iterationID string, ids []string) {
-	if r.cfg.Mail == nil || len(ids) == 0 {
+	if r.cfg.Mail == nil {
+		return
+	}
+	if delivered, err := r.cfg.Mail.InstantDeliveredIDs(agentName, iterationID); err != nil {
+		r.cfg.Logger.Warn("instant delivered letters", "agent", agentName, "iteration", iterationID, "err", err)
+	} else {
+		ids = append(ids, delivered...)
+	}
+	if len(ids) == 0 {
 		return
 	}
 	if _, err := r.cfg.Mail.CloseRead(agentName, ids); err != nil {
@@ -985,7 +994,7 @@ func (r *ShimRunner) writePrompt(ctx context.Context, ag agent.Agent, l agentdir
 
 // pendingMessages renders the agent's open letters (mailbox design §3), which
 // counts one attempt on each, and reads its requests awaiting a reply.
-func (r *ShimRunner) pendingMessages(ag agent.Agent) (batch, awaiting []mail.Letter) {
+func (r *ShimRunner) pendingMessages(ag agent.Agent, iterationID string) (batch, awaiting []mail.Letter) {
 	if r.cfg.Mail == nil {
 		return nil, nil
 	}
@@ -998,7 +1007,7 @@ func (r *ShimRunner) pendingMessages(ag agent.Agent) (batch, awaiting []mail.Let
 	if n <= 0 {
 		n = 10
 	}
-	if letters, err := r.cfg.Mail.RenderBatch(ag.Name, n); err != nil {
+	if letters, err := r.cfg.Mail.RenderIteration(ag.Name, iterationID, n); err != nil {
 		r.cfg.Logger.Warn("render mail batch", "agent", ag.Name, "err", err)
 	} else {
 		batch = letters
@@ -1018,7 +1027,7 @@ func (r *ShimRunner) assemblePrompt(ctx context.Context, ag agent.Agent, l agent
 	if data, err := os.ReadFile(l.ContextPath()); err == nil {
 		contextText = string(data)
 	}
-	batch, awaiting := r.pendingMessages(ag)
+	batch, awaiting := r.pendingMessages(ag, iterationID)
 
 	goal := ""
 	if in.hasCurrentGoal {
@@ -1170,7 +1179,7 @@ func (r *ShimRunner) buildLaunch(ctx context.Context, ag agent.Agent, l agentdir
 		envProxyURL = "" // Preserve original provider addresses for discovery.
 	}
 	env := BuildEnv(base, binDir, ag.Name, iterationID, l.Sock(), r.cfg.Proxy != nil, envProxyURL, proxyToken, ag.Env, secrets)
-	env, err = mergeSkillLaunchEnv(env, in.activated.Skills.Env)
+	env, err = mergeSkillLaunchEnv(env, append(slices.Clone(in.activated.Skills.Env), "TARIBOY_INSTANT_MAIL_FLAG="+l.InstantMailFlag(iterationID)))
 	if err != nil {
 		return preparedRun{}, err
 	}

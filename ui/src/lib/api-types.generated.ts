@@ -732,6 +732,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/agents/{name}/messages/instant-senders": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Set the agents that may send an agent instant letters */
+    post: operations["agent.messages.instant-senders"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/agents/{name}/messages/max-queue": {
     parameters: {
       query?: never;
@@ -3241,6 +3258,10 @@ export interface components {
       agents: components["schemas"]["AgentRow"][];
       count: number;
     };
+    AgentMailInstantSenders: {
+      mail_instant_senders: string[] | null;
+      name: string;
+    };
     AgentMessagesBatch: {
       messages_batch: number;
       name: string;
@@ -3499,6 +3520,7 @@ export interface components {
       image: string;
       interactive: boolean;
       interval_s: number;
+      mail_instant_senders: string[] | null;
       max_idle_iterations: number;
       messages_batch: number;
       messages_max_queue: number;
@@ -4020,6 +4042,10 @@ export interface components {
       from: string;
       id: string;
       in_reply_to: string;
+      instant: boolean;
+      instant_at: string;
+      instant_iteration: string;
+      instant_state: string;
       kind: string;
       needs_reply: boolean;
       produced_in_iteration: string;
@@ -5244,6 +5270,7 @@ export type AgentImageProjection = components["schemas"]["AgentImageProjection"]
 export type AgentImageStatus = components["schemas"]["AgentImageStatus"];
 export type AgentInteractiveResult = components["schemas"]["AgentInteractiveResult"];
 export type AgentListResult = components["schemas"]["AgentListResult"];
+export type AgentMailInstantSenders = components["schemas"]["AgentMailInstantSenders"];
 export type AgentMessagesBatch = components["schemas"]["AgentMessagesBatch"];
 export type AgentMessagesMaxQueue = components["schemas"]["AgentMessagesMaxQueue"];
 export type AgentModelResult = components["schemas"]["AgentModelResult"];
@@ -5605,6 +5632,8 @@ export interface operations {
           interactive?: boolean;
           /** @description loop interval in whole seconds */
           interval_s?: number;
+          /** @description agents allowed to send instant letters, as agent:<name> (default: the group lead) */
+          mail_instant_senders?: string[];
           /** @description maximum consecutive idle iterations; 0 disables */
           max_idle_iterations?: number;
           /** @description maximum messages delivered per iteration */
@@ -8108,6 +8137,57 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["AgentMessagesBatch"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "agent.messages.instant-senders": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @description clear the list: the lead of the agent's group may send */
+          reset?: boolean;
+          /** @description an allowed agent:<name>; an empty value sets an empty list */
+          senders?: string[];
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["AgentMailInstantSenders"];
           };
         };
       };
@@ -11641,6 +11721,8 @@ export interface operations {
           data?: string;
           /** @description reply deadline: a duration such as 5m or an RFC 3339 time */
           deadline?: string;
+          /** @description deliver into the running iteration at its next tool call */
+          instant?: boolean;
           /** @description kind (default message) */
           kind?: string;
           /** @description send a notice that needs no reply */
@@ -11888,6 +11970,8 @@ export interface operations {
           as?: string;
           /** @description make the reply a request */
           ask?: boolean;
+          /** @description deliver into the running iteration at its next tool call */
+          instant?: boolean;
           /** @description reply body */
           text: string;
         };

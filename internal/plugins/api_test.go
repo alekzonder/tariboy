@@ -17,10 +17,12 @@ import (
 // plugin echo.
 type capDirectory struct{}
 
-func (capDirectory) AgentExists(name string) (bool, error)          { return name == "alice", nil }
-func (capDirectory) InboxCap(string) (int, error)                   { return 2, nil }
-func (capDirectory) CustomerLogin() string                          { return "customer" }
-func (capDirectory) PluginInstalled(name string) (bool, error)      { return name == "echo", nil }
+func (capDirectory) AgentExists(name string) (bool, error) { return name == "alice", nil }
+func (capDirectory) InboxCap(string) (int, error)          { return 2, nil }
+func (capDirectory) CustomerLogin() string                 { return "customer" }
+func (capDirectory) PluginInstalled(name string) (bool, error) {
+	return name == "echo" || name == "telegram", nil
+}
 func (d capDirectory) PluginReceivesMail(name string) (bool, error) { return d.PluginInstalled(name) }
 func (capDirectory) QueueExists(string) (bool, error)               { return false, nil }
 func (capDirectory) GroupMembers(string) ([]string, bool, error)    { return nil, false, nil }
@@ -123,5 +125,19 @@ func TestRemovedPluginRoutesAnswerNotFound(t *testing.T) {
 		if rr.Code != 404 {
 			t.Fatalf("%s = %d; want 404", route, rr.Code)
 		}
+	}
+}
+
+func TestPluginMailInstantOnlyFromTelegram(t *testing.T) {
+	t.Parallel()
+	a, _, reg := newAPI(t)
+	echo, _ := reg.Mint(Identity{Name: "echo", Send: true})
+	if rr := postMail(a, echo, `{"to":"agent:alice","text":"x","instant":true}`); rr.Code != 403 || !strings.Contains(rr.Body.String(), "instant_not_allowed") {
+		t.Fatalf("echo instant = %d %s", rr.Code, rr.Body)
+	}
+	telegram, _ := reg.Mint(Identity{Name: "telegram", Send: true})
+	rr := postMail(a, telegram, `{"to":"agent:alice","text":"x","instant":true}`)
+	if rr.Code != 200 || !strings.Contains(rr.Body.String(), `"instant":true`) {
+		t.Fatalf("telegram instant = %d %s", rr.Code, rr.Body)
 	}
 }

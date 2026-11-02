@@ -22,7 +22,7 @@ type dbtx interface {
 
 const letterColumns = `seq, id, sender, recipient, subject, body, kind, data, needs_reply, in_reply_to,
 	deadline, COALESCE(idempotency_key, ''), produced_in_iteration, created_at, read_at, answered_at,
-	answer_id, close_note, attempts, dead_at, dead_reason`
+	answer_id, close_note, attempts, dead_at, dead_reason, instant, instant_state, instant_iteration, instant_at`
 
 // openSQL is the inbox condition: a letter is open until it is closed or dead.
 const openSQL = `answered_at = '' AND dead_at = ''`
@@ -37,13 +37,14 @@ type scanner interface{ Scan(dest ...any) error }
 func scanLetter(row scanner) (Letter, error) {
 	var l Letter
 	var data string
-	var needsReply int
+	var needsReply, instant int
 	if err := row.Scan(&l.Seq, &l.ID, &l.From, &l.To, &l.Subject, &l.Body, &l.Kind, &data, &needsReply,
 		&l.InReplyTo, &l.Deadline, &l.IdempotencyKey, &l.ProducedInIteration, &l.CreatedAt, &l.ReadAt,
-		&l.AnsweredAt, &l.AnswerID, &l.CloseNote, &l.Attempts, &l.DeadAt, &l.DeadReason); err != nil {
+		&l.AnsweredAt, &l.AnswerID, &l.CloseNote, &l.Attempts, &l.DeadAt, &l.DeadReason,
+		&instant, &l.InstantState, &l.InstantIteration, &l.InstantAt); err != nil {
 		return Letter{}, err
 	}
-	l.NeedsReply = needsReply != 0
+	l.NeedsReply, l.Instant = needsReply != 0, instant != 0
 	if err := json.Unmarshal([]byte(data), &l.Data); err != nil {
 		l.Data = map[string]any{}
 		return l, fmt.Errorf("%w: letter %s: %w", errDecode, l.ID, err)
@@ -125,11 +126,12 @@ func insertLetter(x dbtx, l Letter, now time.Time) (Letter, error) {
 	}
 	_, err = x.Exec(`INSERT INTO mail(seq, id, sender, recipient, subject, body, kind, data, needs_reply,
 		in_reply_to, deadline, idempotency_key, produced_in_iteration, created_at, read_at, answered_at,
-		answer_id, close_note, attempts, dead_at, dead_reason)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		answer_id, close_note, attempts, dead_at, dead_reason, instant, instant_state, instant_iteration, instant_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		l.Seq, l.ID, l.From, l.To, l.Subject, l.Body, l.Kind, string(data), boolInt(l.NeedsReply),
 		l.InReplyTo, l.Deadline, key, l.ProducedInIteration, l.CreatedAt, l.ReadAt, l.AnsweredAt,
-		l.AnswerID, l.CloseNote, l.Attempts, l.DeadAt, l.DeadReason)
+		l.AnswerID, l.CloseNote, l.Attempts, l.DeadAt, l.DeadReason,
+		boolInt(l.Instant), l.InstantState, l.InstantIteration, l.InstantAt)
 	if err != nil {
 		return Letter{}, err
 	}
@@ -142,10 +144,12 @@ func openCount(x dbtx, recipient string) (int, error) {
 	return n, err
 }
 
-// markDead closes l as dead with reason, in the caller's transaction.
+// markDead closes l as dead with reason, in the caller's transaction. An
+// instant letter not delivered or read yet becomes not_delivered.
 func markDead(x dbtx, id, reason, at string) error {
-	_, err := x.Exec(`UPDATE mail SET dead_at = ?, dead_reason = ?, answered_at = ? WHERE id = ?`,
-		at, reason, at, id)
+	_, err := x.Exec(`UPDATE mail SET dead_at = ?, dead_reason = ?, answered_at = ?,
+		instant_state = CASE WHEN instant = 1 AND instant_state NOT IN (?, ?) THEN ? ELSE instant_state END
+		WHERE id = ?`, at, reason, at, InstantDelivered, InstantRead, InstantNotDelivered, id)
 	return err
 }
 

@@ -76,6 +76,29 @@ func (d Directory) GroupMembers(group string) ([]string, bool, error) {
 	return names, true, nil
 }
 
+// InstantSenders is the agent's mail_instant_senders; an unknown agent has
+// none set.
+func (d Directory) InstantSenders(name string) ([]string, bool, error) {
+	a, err := d.agents.Get(name)
+	if errors.Is(err, agent.ErrNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return a.MailInstantSenders, a.MailInstantSenders != nil, nil
+}
+
+// GroupLead is the lead of the agent's group, or "".
+func (d Directory) GroupLead(name string) (string, error) {
+	var lead string
+	err := d.db.QueryRow(`SELECT g.lead FROM agents a JOIN groups g ON g.name = a."group" WHERE a.name = ?`, name).Scan(&lead)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return lead, err
+}
+
 func (d Directory) exists(query string, arg any) (bool, error) {
 	var n int
 	err := d.db.QueryRow(query, arg).Scan(&n)

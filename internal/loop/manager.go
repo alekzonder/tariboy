@@ -895,6 +895,7 @@ func newRunAgent(spec registry.RunSpec, name string, ref image.Ref, man image.Ma
 		UserPrompt:        spec.UserPrompt,
 		Env:               env, Plugins: resolvedPlugins,
 		MessagesBatch: orDefault(spec.MessagesBatch, 10), MessagesMaxQueue: orDefault(spec.MessagesMaxQueue, 100),
+		MailInstantSenders:       spec.MailInstantSenders,
 		GoalEnabled:              goalEnabled,
 		GoalWaitCustomerTimeoutS: orDefault(spec.GoalWaitCustomerTimeoutS, 300),
 		GoalDeliveryCooldownS:    orDefault(spec.GoalDeliveryCooldownS, 60),

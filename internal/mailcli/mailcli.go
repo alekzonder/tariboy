@@ -33,16 +33,18 @@ var stdin io.Reader = os.Stdin
 type mode struct {
 	prog        string
 	toolsSocket string
+	instantFlag string
 	socket      func() (string, error)
 }
 
 // Run dispatches mail commands to the identity-bound agent socket when one is
 // present, otherwise to the operator daemon socket.
 func Run(ctx context.Context, argv []string, getenv func(string) string, stdout, stderr io.Writer) int {
-	return run(ctx, argv, mode{prog: "tmail", toolsSocket: getenv("TARIBOY_TOOLS_SOCKET"), socket: func() (string, error) {
-		resolved, err := paths.Resolve(getenv)
-		return resolved.Socket(), err
-	}}, stdout, stderr)
+	return run(ctx, argv, mode{prog: "tmail", toolsSocket: getenv("TARIBOY_TOOLS_SOCKET"),
+		instantFlag: getenv("TARIBOY_INSTANT_MAIL_FLAG"), socket: func() (string, error) {
+			resolved, err := paths.Resolve(getenv)
+			return resolved.Socket(), err
+		}}, stdout, stderr)
 }
 
 // RunOperator runs the commands of Run in operator mode on socket whatever
@@ -75,6 +77,9 @@ func run(_ context.Context, argv []string, m mode, stdout, stderr io.Writer) int
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
+	}
+	if parsed.cmd.name == "instant" {
+		return runInstant(parsed, m, stdout, stderr)
 	}
 	if m.toolsSocket != "" {
 		if parsed.cmd.operatorOnly {

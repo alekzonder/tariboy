@@ -23,7 +23,8 @@ must therefore include it.
 | `scripts/context.sh get` / `set <text>` | read / overwrite durable working memory |
 | `scripts/goal.sh set <TASK-KEY>` | select an assigned active Goal for this iteration |
 | `tmail inbox`/`sent`/`archive`/`show` | read the mailbox |
-| `tmail send --to P …` / `tmail reply ID TEXT` | send a letter, answer one |
+| `tmail send --to P …` / `tmail reply ID TEXT` | send a letter, answer one; `--instant` sends an [instant letter](/docs/reference/mail#instant-letters) |
+| `tmail instant [--format text\|json]` | for a harness hook: print the instant letters that wait for this iteration (`POST /tools/mail/instant`) |
 | `scripts/schedule.sh add`/`ls`/`cancel` | agent-owned scheduled wake-ups |
 | `scripts/scripts.sh run`/`schedule`/`rerun`/`ls`/`runs`/`logs`/`cancel`/`rm` | local asynchronous commands and run history |
 | `tariboy assessment add --file PATH` / `ls` / `show ID` | record an [assessment](/docs/plugins/built-in/assessments) (needs `assessments`); read assessments (open to every agent) |

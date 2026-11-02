@@ -109,6 +109,10 @@ type Agent struct {
 	// iterations at whole minutes; empty means no schedule. Owned by
 	// SetSchedule (Update never touches it).
 	ScheduleRRule string
+	// MailInstantSenders is the agents that may send this agent an instant
+	// letter; nil means not set (the lead of its group may). Owned by
+	// SetMailInstantSenders (Update never touches it).
+	MailInstantSenders []string
 }
 
 // IterationStatus is the recorded outcome of an iteration; the stored column
@@ -383,14 +387,35 @@ func (s *Store) Create(a Agent) error {
 		(name, image_ref, image_digest, error_reason, cwd, harness_type, model, effort,
 		 interactive, enabled, interval_s, timeout_s, hard_timeout_s,
 		 on_timeout, on_error, user_prompt, env, plugins, messages_batch, messages_max_queue, "group", alias, notes, color,
-			 max_idle_iterations, goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, current_goal_task_key)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'')`,
+			 max_idle_iterations, goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, current_goal_task_key,
+			 mail_instant_senders)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'',?)`,
 		a.Name, a.ImageRef, a.ImageDigest, a.ErrorReason, a.Cwd, a.HarnessType, a.Model, a.Effort,
 		b2i(a.Interactive), b2i(a.Enabled), a.IntervalS, a.TimeoutS, a.HardTimeoutS,
 		a.OnTimeout, a.OnError, a.UserPrompt, string(env), string(plugins),
 		a.MessagesBatch, a.MessagesMaxQueue, a.Group, a.Alias, a.Notes, a.Color, a.MaxIdleIterations,
-		b2i(a.GoalEnabled), a.GoalWaitCustomerTimeoutS, a.GoalDeliveryCooldownS, a.AIStallTimeoutS)
+		b2i(a.GoalEnabled), a.GoalWaitCustomerTimeoutS, a.GoalDeliveryCooldownS, a.AIStallTimeoutS,
+		instantSendersValue(a.MailInstantSenders))
 	return err
+}
+
+// SetMailInstantSenders sets the agents that may send name an instant letter;
+// nil resets the setting to not set.
+func (s *Store) SetMailInstantSenders(name string, senders []string) error {
+	res, err := s.db.Exec(`UPDATE agents SET mail_instant_senders=? WHERE name=?`, instantSendersValue(senders), name)
+	if err != nil {
+		return err
+	}
+	return affected(res)
+}
+
+// instantSendersValue is the stored form: NULL for nil, a JSON array otherwise.
+func instantSendersValue(senders []string) any {
+	if senders == nil {
+		return nil
+	}
+	b, _ := json.Marshal(senders)
+	return string(b)
 }
 
 func (s *Store) Update(a Agent) error {
@@ -570,7 +595,8 @@ func (s *Store) Get(name string) (Agent, error) {
 		harness_type, model, effort, interactive, enabled, interval_s, timeout_s,
 		hard_timeout_s, on_timeout, on_error, user_prompt, env, plugins,
 		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations,
-		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key, schedule_rrule
+		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key, schedule_rrule,
+		mail_instant_senders
 		FROM agents WHERE name=?`, name)
 	return scanAgent(row)
 }
@@ -580,7 +606,8 @@ func (s *Store) List() ([]Agent, error) {
 		harness_type, model, effort, interactive, enabled, interval_s, timeout_s,
 		hard_timeout_s, on_timeout, on_error, user_prompt, env, plugins,
 		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations,
-		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key, schedule_rrule
+		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key, schedule_rrule,
+		mail_instant_senders
 		FROM agents ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -692,7 +719,8 @@ func (s *Store) ListByGroup(group string) ([]Agent, error) {
 		harness_type, model, effort, interactive, enabled, interval_s, timeout_s,
 		hard_timeout_s, on_timeout, on_error, user_prompt, env, plugins,
 		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations,
-		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key, schedule_rrule
+		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key, schedule_rrule,
+		mail_instant_senders
 		FROM agents WHERE "group"=? ORDER BY name`, group)
 	if err != nil {
 		return nil, err
@@ -1030,12 +1058,13 @@ func scanAgent(row scanner) (Agent, error) {
 	var a Agent
 	var interactive, enabled, goalEnabled int
 	var env, plugins string
+	var instantSenders sql.NullString
 	err := row.Scan(&a.Name, &a.ImageRef, &a.ImageDigest, &a.CreatedAt, &a.ErrorReason, &a.Cwd,
 		&a.HarnessType, &a.Model, &a.Effort, &interactive, &enabled, &a.IntervalS,
 		&a.TimeoutS, &a.HardTimeoutS, &a.OnTimeout, &a.OnError, &a.UserPrompt, &env, &plugins,
 		&a.MessagesBatch, &a.MessagesMaxQueue, &a.Group, &a.StatusMessage, &a.StatusUpdated, &a.Alias, &a.Notes, &a.Color,
 		&a.MaxIdleIterations, &goalEnabled, &a.GoalWaitCustomerTimeoutS, &a.GoalDeliveryCooldownS, &a.AIStallTimeoutS, &a.LastGoalDeliveryAt, &a.CurrentGoalTaskKey,
-		&a.ScheduleRRule)
+		&a.ScheduleRRule, &instantSenders)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Agent{}, ErrNotFound
 	}
@@ -1050,6 +1079,12 @@ func scanAgent(row scanner) (Agent, error) {
 	}
 	if err := json.Unmarshal([]byte(plugins), &a.Plugins); err != nil {
 		return Agent{}, fmt.Errorf("decode plugins of %s: %w", a.Name, err)
+	}
+	if instantSenders.Valid {
+		a.MailInstantSenders = []string{}
+		if err := json.Unmarshal([]byte(instantSenders.String), &a.MailInstantSenders); err != nil {
+			return Agent{}, fmt.Errorf("decode mail_instant_senders of %s: %w", a.Name, err)
+		}
 	}
 	return a, nil
 }

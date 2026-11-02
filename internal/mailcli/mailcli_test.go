@@ -402,7 +402,7 @@ func TestMailCLIHelpJSON(t *testing.T) {
 	if send.Summary == "" || !strings.HasPrefix(send.Usage, "send ") || len(send.Examples) == 0 || send.FlagHelp["to"] == "" {
 		t.Fatalf("send = %#v", send)
 	}
-	if !reflect.DeepEqual(send.Flags, []string{"as", "data", "deadline", "kind", "notice", "subject", "text", "to"}) {
+	if !reflect.DeepEqual(send.Flags, []string{"as", "data", "deadline", "instant", "kind", "notice", "subject", "text", "to"}) {
 		t.Fatalf("send flags = %q", send.Flags)
 	}
 	if !tree["close"].OperatorOnly || tree["reply"].OperatorOnly {

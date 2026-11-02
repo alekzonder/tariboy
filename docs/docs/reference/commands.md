@@ -59,6 +59,7 @@ tariboy has four command surfaces:
 | `tariboy agent kill NAME` | Kill the current iteration via its shim |
 | `tariboy agent mail clear NAME` | Delete the open letters in an agent's inbox |
 | `tariboy agent messages batch NAME VALUE` | Set the agent messages batch |
+| `tariboy agent messages instant-senders NAME` | Set the agents that may send an agent instant letters |
 | `tariboy agent messages max-queue NAME VALUE` | Set the agent messages max queue |
 | `tariboy agent model NAME` | Get or set the agent model (omit value to read); applies next iteration |
 | `tariboy agent notes get NAME` | Read the agent notes |

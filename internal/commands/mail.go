@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/api"
@@ -81,6 +83,7 @@ func mailCommands() []registry.Command {
 				{Name: "data", Flag: "data", Type: registry.JSONObject, Help: "structured data object"},
 				{Name: "deadline", Flag: "deadline", Type: registry.String, Help: "reply deadline: a duration such as 5m or an RFC 3339 time"},
 				{Name: "notice", Flag: "notice", Type: registry.Bool, Help: "send a notice that needs no reply"},
+				{Name: "instant", Flag: "instant", Type: registry.Bool, Help: "deliver into the running iteration at its next tool call"},
 			},
 			func(m *mail.Mail, as string, p registry.Request) (any, error) {
 				var data map[string]any
@@ -91,7 +94,7 @@ func mailCommands() []registry.Command {
 				}
 				letters, err := m.Send(mail.Letter{From: as, To: strings.Join(p.Strings("to"), ","),
 					Subject: p.String("subject"), Body: p.String("text"), Kind: p.Trimmed("kind"),
-					Data: data, Deadline: p.Trimmed("deadline"), NeedsReply: !p.Bool("notice")})
+					Data: data, Deadline: p.Trimmed("deadline"), NeedsReply: !p.Bool("notice"), Instant: p.Bool("instant")})
 				if err != nil {
 					return nil, err
 				}
@@ -101,11 +104,12 @@ func mailCommands() []registry.Command {
 			[]registry.Arg{idArg,
 				{Name: "text", Flag: "text", Type: registry.String, Required: true, Help: "reply body"},
 				{Name: "ask", Flag: "ask", Type: registry.Bool, Help: "make the reply a request"},
+				{Name: "instant", Flag: "instant", Type: registry.Bool, Help: "deliver into the running iteration at its next tool call"},
 			},
 			func(m *mail.Mail, as string, p registry.Request) (any, error) {
 				// A reply as an agent is the operator writing on its behalf.
 				reply, closed, err := m.Reply(mail.ReplyRequest{As: as, ID: p.Trimmed("id"), Text: p.String("text"),
-					Ask: p.Bool("ask"), OnBehalf: strings.HasPrefix(as, "agent:")})
+					Ask: p.Bool("ask"), OnBehalf: strings.HasPrefix(as, "agent:"), Instant: p.Bool("instant")})
 				if err != nil {
 					return nil, err
 				}
@@ -179,4 +183,73 @@ type AgentMessagesBatch struct {
 type AgentMessagesMaxQueue struct {
 	Name             string `json:"name"`
 	MessagesMaxQueue int    `json:"messages_max_queue"`
+}
+
+// AgentMailInstantSenders is the agents that may send an agent instant
+// letters, after agent.messages.instant-senders. Null means not set: the lead
+// of the agent's group may.
+type AgentMailInstantSenders struct {
+	Name               string   `json:"name"`
+	MailInstantSenders []string `json:"mail_instant_senders" jsonschema_extras:"nullable=true"`
+}
+
+// agentMailInstantSenders reads or sets mail_instant_senders. senders sets
+// the list (an empty list refuses every agent), reset clears it to not set,
+// and neither reads it.
+func agentMailInstantSenders() registry.Command {
+	return registry.WithResult[AgentMailInstantSenders](registry.Command{
+		Path:    "agent.messages.instant-senders",
+		Summary: "Set the agents that may send an agent instant letters",
+		Args: []registry.Arg{
+			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
+			{Name: "senders", Flag: "sender", Type: registry.String, Repeatable: true, Help: "an allowed agent:<name>; an empty value sets an empty list"},
+			{Name: "reset", Flag: "reset", Type: registry.Bool, Help: "clear the list: the lead of the agent's group may send"},
+		},
+		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/messages/instant-senders"},
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
+			if err != nil {
+				return nil, err
+			}
+			switch {
+			case p.Bool("reset"):
+				a.MailInstantSenders = nil
+			case p.Has("senders"):
+				senders, err := instantSenders(c, p.Strings("senders"))
+				if err != nil {
+					return nil, err
+				}
+				a.MailInstantSenders = senders
+			default:
+				return AgentMailInstantSenders{Name: a.Name, MailInstantSenders: a.MailInstantSenders}, nil
+			}
+			if err := agentStore(c).SetMailInstantSenders(a.Name, a.MailInstantSenders); err != nil {
+				return nil, err
+			}
+			return AgentMailInstantSenders{Name: a.Name, MailInstantSenders: a.MailInstantSenders}, nil
+		},
+	})
+}
+
+// instantSenders validates a mail_instant_senders list: each value is an
+// existing agent:<name>; empty values are dropped.
+func instantSenders(c *registry.Ctx, values []string) ([]string, error) {
+	out := []string{}
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		name, ok := strings.CutPrefix(v, "agent:")
+		if !ok {
+			return nil, api.UserError{Code: "bad_mail_instant_senders", Msg: fmt.Sprintf("instant sender %q is not an agent:<name> principal", v)}
+		}
+		if _, err := getAgent(c, name); err != nil {
+			return nil, api.UserError{Code: "bad_mail_instant_senders", Msg: fmt.Sprintf("instant sender %q is not an existing agent", v)}
+		}
+		if !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
+	return out, nil
 }
