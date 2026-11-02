@@ -3,6 +3,8 @@ import type { MailUnread } from "@/lib/api";
 import { letterTaskKey } from "@/lib/letters";
 import { letter } from "@/test/fixtures/mailFixtures";
 import {
+  deliveryText,
+  instantAllowed,
   letterActions,
   letterState,
   marksReadOnOpen,
@@ -75,6 +77,42 @@ describe("mailboxModel", () => {
     expect(marksReadOnOpen(letter(), "inbox")).toBe(true);
     expect(marksReadOnOpen(letter({ read_at: "x" }), "inbox")).toBe(false);
     expect(marksReadOnOpen(letter(), "sent")).toBe(false);
+  });
+
+  it("offers instant delivery only for the customer's letter to an agent", () => {
+    expect(instantAllowed("agent:dev", null, "customer")).toBe(true);
+    // Agent → Mailbox → Compose: a new letter is always the customer's.
+    expect(instantAllowed("agent:dev", null, "agent")).toBe(true);
+    expect(instantAllowed("", null, "customer")).toBe(false);
+    expect(instantAllowed("plugin:telegram", null, "customer")).toBe(false);
+    expect(instantAllowed("", letter({ from: "agent:dev" }), "customer")).toBe(true);
+    expect(instantAllowed("", letter({ from: "plugin:telegram" }), "customer")).toBe(false);
+    expect(instantAllowed("", letter({ from: "system:workflow" }), "customer")).toBe(false);
+    // The operator replies as the agent: agent permissions are out of scope.
+    expect(instantAllowed("", letter({ from: "agent:ops" }), "agent")).toBe(false);
+  });
+
+  it("says how an instant letter was delivered", () => {
+    const at = "2026-11-02T10:00:00Z";
+    const instant = (instant_state: string) =>
+      deliveryText(
+        letter({ instant: true, instant_state, instant_iteration: "dev-7", instant_at: at }),
+      );
+    expect(instant("waiting")).toBe("Instant · waiting for the agent's current tool call");
+    expect(instant("delivered")).toBe(
+      `Instant · delivered to iteration dev-7 at ${new Date(at).toLocaleString()}`,
+    );
+    expect(instant("queued")).toBe(
+      "Instant · no iteration was running; the next iteration reads it",
+    );
+    expect(instant("stopped")).toBe(
+      "Instant · the agent is stopped; it reads the letter when started",
+    );
+    expect(instant("read")).toBe("Instant · read in iteration dev-7");
+    expect(instant("not_delivered")).toBe("Instant · not delivered");
+    expect(instant("")).toBe("Instant");
+    expect(instant("later")).toBe("Instant");
+    expect(deliveryText(letter({ instant_state: "waiting" }))).toBe("");
   });
 
   it("counts open task questions per asking agent", () => {

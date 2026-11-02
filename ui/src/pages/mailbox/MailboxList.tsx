@@ -12,6 +12,11 @@ const EMPTY: Record<MailBox, string> = {
 function LetterTags({ letter }: { letter: Letter }) {
   return (
     <>
+      {letter.instant && (
+        <span className="shrink-0 rounded-control bg-primary/12 px-1.5 text-caption text-primary">
+          instant
+        </span>
+      )}
       {letter.kind !== "message" && (
         <span className="rounded-control bg-muted px-1.5 text-caption text-muted-foreground">
           {letter.kind}

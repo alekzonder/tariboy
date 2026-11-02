@@ -170,6 +170,59 @@ describe("Mailbox", () => {
     expect(mail.close).toHaveBeenCalledWith("req", { as: undefined });
   });
 
+  it("replies to an agent with instant delivery", async () => {
+    renderMailbox();
+    await userEvent.click(await screen.findByRole("button", { name: /Need input/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Reply" }));
+    await userEvent.type(screen.getByLabelText("Text"), "Stop");
+    const instant = screen.getByRole("switch", { name: "Deliver to the current iteration" });
+    expect(instant).toHaveAccessibleDescription(/^The agent sees this letter/);
+    await userEvent.click(instant);
+    await userEvent.click(screen.getByRole("button", { name: "Send reply" }));
+
+    await waitFor(() =>
+      expect(mail.reply).toHaveBeenCalledWith("req", {
+        text: "Stop",
+        as: undefined,
+        instant: true,
+      }),
+    );
+  });
+
+  it("offers no instant delivery in a reply to a plugin or the system", async () => {
+    for (const from of ["plugin:telegram", "system:workflow"]) {
+      boxes.inbox = [letter({ id: from, subject: `From ${from}`, from })];
+      const view = renderMailbox();
+      await userEvent.click(await screen.findByRole("button", { name: new RegExp(from) }));
+      await userEvent.click(screen.getByRole("button", { name: "Reply" }));
+      expect(screen.getByRole("button", { name: "Send reply" })).toBeVisible();
+      expect(screen.queryByRole("switch", { name: "Deliver to the current iteration" })).toBeNull();
+      view.unmount();
+    }
+  });
+
+  it("shows the new delivery state of the open letter on a mail hint", async () => {
+    boxes.sent = [
+      letter({
+        id: "fast",
+        subject: "Quick fix",
+        from: "user:customer",
+        to: "agent:dev",
+        instant: true,
+        instant_state: "waiting",
+      }),
+    ];
+    renderMailbox();
+    await userEvent.click(await screen.findByRole("radio", { name: "Sent" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Quick fix/ }));
+    const delivery = () => screen.getByText("Delivery").nextElementSibling;
+    expect(delivery()).toHaveTextContent("Instant · waiting for the agent's current tool call");
+
+    boxes.sent = [{ ...boxes.sent[0], instant_state: "read", instant_iteration: "dev-9" }];
+    await act(async () => socket.onHint?.({ from: "user:customer", to: "agent:dev" }));
+    await waitFor(() => expect(delivery()).toHaveTextContent("Instant · read in iteration dev-9"));
+  });
+
   it("refetches on a hint for its principal and ignores other agents' mail", async () => {
     renderMailbox({ as: "agent:dev", mode: "agent" });
     await screen.findByText("Need input");

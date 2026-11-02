@@ -85,10 +85,16 @@ describe("AgentMailboxTab", () => {
     expect(mail.read).toHaveBeenCalledWith(["q1"], "agent:dev");
     await userEvent.click(screen.getByRole("button", { name: "Reply" }));
     await userEvent.type(screen.getByLabelText("Text"), "On it");
+    // The operator writes as the agent: instant delivery is not offered.
+    expect(screen.queryByRole("switch", { name: "Deliver to the current iteration" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Send reply" }));
 
     await waitFor(() =>
-      expect(mail.reply).toHaveBeenCalledWith("q1", { text: "On it", as: "agent:dev" }),
+      expect(mail.reply).toHaveBeenCalledWith("q1", {
+        text: "On it",
+        as: "agent:dev",
+        instant: false,
+      }),
     );
   });
 });
