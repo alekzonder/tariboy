@@ -77,13 +77,14 @@ it.each([false, true])(
     ]);
     const agents = screen.getByRole("group", { name: "Agents" });
     expect(agents).toHaveClass("overflow-y-auto", "min-h-0");
-    for (const name of ["Home", "Tasks", "Inbox", "Library", "Settings"]) {
+    for (const name of ["Home", "Tasks", "Inbox", "Library", "Metrics", "Settings"]) {
       const link = within(sidebar).getByRole("link", { name: new RegExp(name) });
       expect(link.closest(".overflow-y-auto")).toBeNull();
     }
     const links = within(sidebar).getAllByRole("link");
-    expect(links.slice(-3).map((link) => link.textContent)).toEqual([
+    expect(links.slice(-4).map((link) => link.textContent)).toEqual([
       "Library",
+      "Metrics",
       "Settings",
       "Local · ready",
     ]);
@@ -105,6 +106,8 @@ it.each([
   ["/tasks", "Tasks"],
   ["/inbox", "Inbox"],
   ["/library/images", "Library"],
+  ["/metrics", "Metrics"],
+  ["/metrics/compare", "Metrics"],
   ["/settings/hosts", "Settings"],
 ])("marks the current navigation page at %s", (route, name) => {
   renderSidebar([], { tasks: 3, inbox: 2 }, route);
@@ -122,10 +125,10 @@ it("keeps navigation available when Agents is collapsed and closes the drawer on
   expect(screen.getByRole("button", { name: "Agents" })).toHaveAttribute("aria-expanded", "false");
   expect(screen.queryByRole("group", { name: "Agents" })).not.toBeInTheDocument();
   expect(actions.onNavigate).not.toHaveBeenCalled();
-  for (const name of ["Home", "Tasks", "Inbox", "Library", "Settings"]) {
+  for (const name of ["Home", "Tasks", "Inbox", "Library", "Metrics", "Settings"]) {
     fireEvent.click(screen.getByRole("link", { name: new RegExp(name) }));
   }
-  expect(actions.onNavigate).toHaveBeenCalledTimes(5);
+  expect(actions.onNavigate).toHaveBeenCalledTimes(6);
 });
 
 it("shows a pill only on agents that need the user, work or are off", () => {

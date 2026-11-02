@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import {
+  ChartBar,
   ChevronDown,
   ChevronRight,
   Inbox,
@@ -102,7 +103,7 @@ export function SectionsNav({
   );
 }
 
-/** Library and Settings stay at the foot of the sidebar. */
+/** Library, Metrics and Settings stay at the foot of the sidebar. */
 export function SidebarUtilityNav({
   pageHostId,
   onNavigate,
@@ -119,6 +120,13 @@ export function SidebarUtilityNav({
         icon={Library}
         active={active === "library"}
         tour={TOUR_ANCHORS.sectionImages}
+        onNavigate={onNavigate}
+      />
+      <SidebarNavItem
+        to={navPath("metrics", pageHostId)}
+        label="Metrics"
+        icon={ChartBar}
+        active={active === "metrics"}
         onNavigate={onNavigate}
       />
       <SidebarNavItem

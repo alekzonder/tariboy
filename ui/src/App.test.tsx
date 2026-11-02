@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { fetchAllAgents } from "@/lib/aggregate";
 import App from "./App";
 import { UI_VERSION } from "@/lib/onboarding/version";
+import { metricsReport } from "@/test/fixtures/apiFixtures";
 
 vi.mock("@/lib/aggregate", () => ({
   fetchAllAgents: vi.fn(),
@@ -54,7 +55,13 @@ beforeEach(() => {
           }
         : url.includes("/api/groups")
           ? { groups: [], count: 0 }
-          : { agents: [], count: 0 };
+          : url.includes("/api/metrics")
+            ? metricsReport()
+            : url.includes("/api/images")
+              ? { images: [], count: 0 }
+              : url.includes("/api/workflow-images")
+                ? { workflows: [] }
+                : { agents: [], count: 0 };
       return {
         ok: true,
         status: 200,
@@ -119,6 +126,26 @@ describe("product routing", () => {
     expect(screen.getByTestId("tasks-workspace")).toHaveAttribute("data-scope-agent", "");
     expect(screen.queryByRole("navigation", { name: "Server workspace" })).toBeNull();
     expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("opens Metrics and its compare screen by their links, with Metrics marked", async () => {
+    renderAt("/metrics?view=images&period=quarter");
+    expect(await screen.findByRole("heading", { name: "Metrics" })).toBeInTheDocument();
+    expect(await screen.findByRole("radio", { name: "Images" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Quarter" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("link", { name: "Metrics" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("opens the compare screen by its link", async () => {
+    renderAt("/metrics/compare?kind=image&name=developer&a=0.1.0&b=0.2.0");
+    expect(
+      await screen.findByRole("heading", { name: "Compare image versions" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Version A")).toHaveValue("0.1.0");
+    expect(screen.getByRole("link", { name: "Metrics" })).toHaveAttribute("aria-current", "page");
   });
 
   it("starts no tour on the first run and marks the elements the tour explains", async () => {

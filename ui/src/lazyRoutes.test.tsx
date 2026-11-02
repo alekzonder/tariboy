@@ -17,7 +17,12 @@ const gates = vi.hoisted(() => {
     });
     return { promise, release };
   };
-  return { images: gate(), console: gate() };
+  return { images: gate(), console: gate(), metrics: gate() };
+});
+
+vi.mock("@/pages/metrics/MetricsPage", async () => {
+  await gates.metrics.promise;
+  return { default: () => <h1>Metrics page</h1> };
 });
 
 vi.mock("@/pages/images/LibraryImagesPage", async () => {
@@ -72,6 +77,16 @@ describe("lazily loaded screens", () => {
 
     await act(async () => gates.images.release());
     expect(await screen.findByRole("heading", { name: "Images page" })).toBeInTheDocument();
+  });
+
+  it("loads the Metrics page on first open, with the sidebar kept", async () => {
+    renderAt("/metrics");
+
+    expect(await screen.findByText("Loading…", { selector: "[role=status]" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Metrics" })).toHaveAttribute("aria-current", "page");
+
+    await act(async () => gates.metrics.release());
+    expect(await screen.findByRole("heading", { name: "Metrics page" })).toBeInTheDocument();
   });
 
   it("keeps the agent list while an agent tab loads", async () => {
