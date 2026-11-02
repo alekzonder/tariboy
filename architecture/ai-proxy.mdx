@@ -70,7 +70,8 @@ otherwise changes the request or iteration lifecycle, and a recording failure
 is diagnostic-only.
 
 Before starting a harness, the daemon reads its selected Goal once, resolves
-the task's top-level root through Native Tasks as that agent, and stamps the
+the task's top-level root through Native Tasks (see
+[Root of a Goal in another queue](#root-of-a-goal-in-another-queue)), and stamps the
 AI-proxy lease with `task_id` and `epic_id`. All requests in the iteration are
 therefore attributed without an agent command. An iteration without a selected
 Goal remains unattributed.
@@ -80,6 +81,28 @@ An agent that creates or claims work after its iteration starts may use
 resolves its top-level root, and updates the live lease. Only later requests use
 the new attribution; already recorded requests remain unchanged. A tagged live
 lease rejects a different Goal.
+
+### Root of a Goal in another queue
+
+The `epic_id` is the real root of the task tree, also when the agent cannot
+read it. A Goal can be a child in another queue than its parent (see
+[Subtasks in another queue](/docs/tasks#subtasks-in-another-queue)). The agent
+then cannot read the parent. The daemon reads the Goal with the rights of the
+agent. A Goal that the agent cannot read, or reads only as a former workflow
+holder, is refused with `not_found`. The daemon reads the ancestors of the Goal
+with the rights of the customer. Thus the cost of the iteration goes to the
+root of the customer's project.
+
+The agent does not get the key of a root that it cannot read. In that case the
+answer of `scripts/goal.sh set` has an empty `epic_id`. Only the proxy lease
+and the recorded requests keep the real root. The operator sees it in
+`tariboy usage --group-by epic`.
+
+If the daemon cannot read an ancestor, for example because the ancestor was
+deleted or the store failed, the walk stops. The last ancestor that the daemon
+read becomes `epic_id`. The daemon writes a warning with the agent, the Goal,
+that root and the error, and the iteration starts. A cycle of parents still
+stops the iteration with an error.
 
 ## Pricing catalog and request costs
 

@@ -541,7 +541,10 @@ child under a workflow task stays flexible. The parent's status, Goal selection,
 and holder do not change. A move never changes the queue or workflow of a task.
 The `active_descendants` check on the parent counts every descendant, also a
 descendant in another queue that the caller cannot see. See
-[Subtasks in another queue](/docs/tasks#subtasks-in-another-queue).
+[Subtasks in another queue](/docs/tasks#subtasks-in-another-queue). The AI cost
+of such a child goes to the real root of its tree, also when its agent cannot
+see that root. See
+[Root of a Goal in another queue](/docs/architecture/ai-proxy#root-of-a-goal-in-another-queue).
 
 ### Binding from Compose
 

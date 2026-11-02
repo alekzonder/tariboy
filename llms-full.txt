@@ -1022,7 +1022,8 @@ otherwise changes the request or iteration lifecycle, and a recording failure
 is diagnostic-only.
 
 Before starting a harness, the daemon reads its selected Goal once, resolves
-the task's top-level root through Native Tasks as that agent, and stamps the
+the task's top-level root through Native Tasks (see
+[Root of a Goal in another queue](#root-of-a-goal-in-another-queue)), and stamps the
 AI-proxy lease with `task_id` and `epic_id`. All requests in the iteration are
 therefore attributed without an agent command. An iteration without a selected
 Goal remains unattributed.
@@ -1032,6 +1033,28 @@ An agent that creates or claims work after its iteration starts may use
 resolves its top-level root, and updates the live lease. Only later requests use
 the new attribution; already recorded requests remain unchanged. A tagged live
 lease rejects a different Goal.
+
+### Root of a Goal in another queue
+
+The `epic_id` is the real root of the task tree, also when the agent cannot
+read it. A Goal can be a child in another queue than its parent (see
+[Subtasks in another queue](/docs/tasks#subtasks-in-another-queue)). The agent
+then cannot read the parent. The daemon reads the Goal with the rights of the
+agent. A Goal that the agent cannot read, or reads only as a former workflow
+holder, is refused with `not_found`. The daemon reads the ancestors of the Goal
+with the rights of the customer. Thus the cost of the iteration goes to the
+root of the customer's project.
+
+The agent does not get the key of a root that it cannot read. In that case the
+answer of `scripts/goal.sh set` has an empty `epic_id`. Only the proxy lease
+and the recorded requests keep the real root. The operator sees it in
+`tariboy usage --group-by epic`.
+
+If the daemon cannot read an ancestor, for example because the ancestor was
+deleted or the store failed, the walk stops. The last ancestor that the daemon
+read becomes `epic_id`. The daemon writes a warning with the agent, the Goal,
+that root and the error, and the iteration starts. A cycle of parents still
+stops the iteration with an error.
 
 ## Pricing catalog and request costs
 
@@ -3118,7 +3141,7 @@ last key. A host that fails adds no results and shows no error. **Enter** opens
 the first result. ⌘K or Ctrl+K focuses the field. On a compact screen the
 field is at the top of the navigation drawer instead.
 
-The sidebar has six items:
+The sidebar has seven items:
 
 | Item | Opens |
 | --- | --- |
@@ -3127,10 +3150,12 @@ The sidebar has six items:
 | **Inbox** | `/inbox` |
 | **Agents** | nothing: it opens and closes the agent list in place |
 | **Library** | `/library/images`, with **Images**, **Workflows**, and **Sources** tabs |
+| **Metrics** | `/metrics` (see [Metrics](#metrics)) |
 | **Settings** | `/settings/hosts`, the first of the Settings pages |
 
 Home, Tasks, and Inbox stay above Agents in visual and keyboard order.
-Only the agent list scrolls. Library, Settings, and the hosts line stay at the bottom.
+Only the agent list scrolls. Library, Metrics, Settings, and the hosts line
+stay at the bottom. Metrics has no count.
 
 Settings has one flat list of seven pages. There is no index page:
 
@@ -3222,8 +3247,8 @@ archive uploads and downloads.
 
 ## Routes and host scope
 
-`/tasks`, `/inbox`, `/activity`, the Library pages, and the Settings pages
-other than Hosts show one host. They take an optional
+`/tasks`, `/inbox`, `/activity`, `/metrics`, `/metrics/compare`, the Library
+pages, and the Settings pages other than Hosts show one host. They take an optional
 `?host=<id>` (`local` is the local daemon). Without it, the page shows the
 remembered active host. A `?host=` that names another host selects it through
 the route host boundary, which shows **Connecting to host…** or **Host
@@ -3500,6 +3525,65 @@ padding, and 16 px between blocks. Settings is a centered column of at
 most `max-w-5xl`; the others use the full width. Mailbox, Work, and Terminal fill
 the page without a frame.
 
+The host Activity page has a **Metrics** link at the right end of its period
+bar. It opens `/metrics` with the same `?host=`.
+
+## Metrics
+
+The sidebar's **Metrics** item opens `/metrics`, the metrics of one host. The
+daemon computes the numbers as
+[Metrics](/docs/architecture/metrics) describes. Activity counts the work in a
+time window. Metrics counts the whole life of each task that completed in the
+period, so the two pages show different numbers for the same words.
+
+The page has these routes:
+
+| Route | Screen |
+| --- | --- |
+| `/metrics` | the host summary with the **Agents** view |
+| `/metrics?view=images` | the **Images** view |
+| `/metrics?view=workflows` | the **Workflows** view |
+| `/metrics/compare?kind=image&name=NAME&a=V1&b=V2` | two versions of one image |
+| `/metrics/compare?kind=workflow&name=NAME&a=V1&b=V2` | two versions of one workflow |
+
+Both routes take `?host=` as `/activity` does, and the period as
+`?period=week|month|quarter|custom` with `?since=` and `?until=` for Custom.
+Month is the default. `/metrics` also takes the filters `?agent=`,
+`?image=NAME[:VERSION]`, and `?workflow=NAME[:VERSION]`. A change of the
+period, a filter, the view, or a compared version replaces the history entry.
+
+`/metrics` sends one `GET /api/metrics?since=&until=[&agent=][&image=][&workflow=]`
+request for each host, period, and filter. `/metrics/compare` sends one
+request with `image=NAME` or `workflow=NAME` and shows two slices of
+`images[]` or `workflows[]`. There is no polling, because the request can take
+seconds on a large database. The window ends at the time of the load, of
+**Refresh**, or of a change of the period or a filter. **Refresh** shows
+`Updating…` while it loads and `Updated HH:MM` after. During a reload the
+previous numbers stay on the screen, dimmed. A new request cancels the
+previous one with an `AbortSignal`, and a response for an older host, period,
+or filter never replaces the current one.
+
+`/metrics` shows the total cards, the **Quality** block, a segment with
+**Agents**, **Images**, and **Workflows**, the table of the view, and **About
+these numbers**. An agent name opens
+`/agents/:hostId/:agent/activity?view=metrics` with the same window. An agent
+that is not on the host any more has no link. The Images and Workflows tables
+group the versions of one name, newest version first. **Compare versions** and
+the `⇄` button of a version row open `/metrics/compare`. From `⇄`, B is the
+version of the row and A is the nearest older version.
+
+`/metrics/compare` shows the two versions side by side with the difference
+B − A, the percentage of A, and the word `better`, `worse`, or `no change`.
+**Swap** exchanges `a` and `b`. Without versions in the URL, B is the newest
+version and A the version before it. If a version has fewer than 5 completed
+tasks (`SMALL_SAMPLE_TASKS` in `lib/metricsFormat.ts`), the page warns that
+the sample is small. The **Mixed tasks** block counts the done tasks that ran
+on more than one version. A URL without `kind` or `name` opens `/metrics`.
+
+The formatting functions, the error kinds, and the components in
+`ui/src/components/metrics/` do not depend on the page, so the agent view and
+the task panel can use them.
+
 ## Iteration tags in Activity
 
 The Runs log filters its iteration list by tag. The tag filter and the
@@ -3522,6 +3606,9 @@ from the route-selected daemon. Its selector offers **All groups**,
 summary cards, daily series, group-aware aggregate table, and recent-request
 table from one `/api/usage` response with the same filter; an older polling
 response cannot replace a newer selection.
+
+Under the page heading, the line `Cost per completed task, rework and lead time
+are in Metrics.` links **Metrics** to `/metrics` with the same `?host=`.
 
 Aggregate and recent-request rows display the group name saved with each AI
 request, using **Ungrouped** for a null snapshot. A deleted historical group
@@ -3788,7 +3875,7 @@ modules; it holds no requests of its own.
   a `Daemon` = that host).
 - One module per domain: `agents`, `iterations`, `usage`, `daemon`,
   `harnesses`, `plugins`, `scripts`, `files`, `images`, `imageSources`,
-  `groups`, `stores`, `mail`, `audit`, `tasks`, and `workflows`. Each
+  `groups`, `stores`, `mail`, `audit`, `tasks`, `workflows`, and `metrics`. Each
   module re-exports the types of its responses (see [API types](#api-types))
   and exports a factory that receives a transport bound to one host. Domain
   methods never take a target. `lib/tasks.ts` and `lib/audit.ts` keep only
@@ -3879,8 +3966,9 @@ field, the sidebar navigation and agent list, the hosts line, the "needs you"
 context, the providers, host selection, and the agent workspace frame.
 Everything else loads with `React.lazy` when it first renders:
 
-- the pages in `TerminalsRoutes` (Home, Tasks, Inbox, Activity, Images,
-  Workflows, Sources, and Settings), the host selector, and the nested image
+- the pages in `TerminalsRoutes` (Home, Tasks, Inbox, Activity, Metrics, the
+  version comparison, Images, Workflows, Sources, and Settings), the host
+  selector, and the nested image
   and settings routes of `routes.tsx`;
 - `NeedsYouLive`, which reads the counts and rows of "needs you", the task
   lookup of the search field, and the workspace manager dialog;
@@ -9575,13 +9663,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.104.0` alpha on an Apple Silicon Mac.
+This path is for the `0.105.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.104.0_aarch64.dmg`;
+- a verified `Tariboy_0.105.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -11175,7 +11263,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.104.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.105.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -11289,7 +11377,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.104.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.105.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -12000,7 +12088,10 @@ child under a workflow task stays flexible. The parent's status, Goal selection,
 and holder do not change. A move never changes the queue or workflow of a task.
 The `active_descendants` check on the parent counts every descendant, also a
 descendant in another queue that the caller cannot see. See
-[Subtasks in another queue](/docs/tasks#subtasks-in-another-queue).
+[Subtasks in another queue](/docs/tasks#subtasks-in-another-queue). The AI cost
+of such a child goes to the real root of its tree, also when its agent cannot
+see that root. See
+[Root of a Goal in another queue](/docs/architecture/ai-proxy#root-of-a-goal-in-another-queue).
 
 ### Binding from Compose
 

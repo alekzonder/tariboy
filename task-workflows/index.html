@@ -654,7 +654,10 @@ child under a workflow task stays flexible. The parent’s status, Goal selectio
 and holder do not change. A move never changes the queue or workflow of a task.
 The <code>active_descendants</code> check on the parent counts every descendant, also a
 descendant in another queue that the caller cannot see. See
-<a href="/tariboy/docs/tasks#subtasks-in-another-queue">Subtasks in another queue</a>.</p>
+<a href="/tariboy/docs/tasks#subtasks-in-another-queue">Subtasks in another queue</a>. The AI cost
+of such a child goes to the real root of its tree, also when its agent cannot
+see that root. See
+<a href="/tariboy/docs/architecture/ai-proxy#root-of-a-goal-in-another-queue">Root of a Goal in another queue</a>.</p>
 <h3 id="binding-from-compose"><a class="blume-heading-anchor" href="#binding-from-compose">Binding from Compose</a></h3>
 <p><code>tariboy compose up</code> can bind a queue with <code>task_queues.&lt;PREFIX&gt;.workflow</code>; see
 <a href="/tariboy/docs/binaries/compose#queue-workflows">Compose</a>. Compose builds Store
