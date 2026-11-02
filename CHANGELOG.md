@@ -1,3 +1,17 @@
+## [0.104.0] - 2026-11-02
+
+### Added
+
+- `tariboy metrics task KEY` and `tariboy metrics server` report task metrics: lead time, time in each status, iterations, tokens and cost, rework rounds, questions to the customer and assessment scores. The server report covers a period (30 days by default) and splits it by agent, image version and workflow version. The operator API has `metrics.task` (`GET /api/metrics/tasks/{key}`) and `metrics.server` (`GET /api/metrics`). The daemon computes the metrics on request and stores no new data.
+- A task can have a child in another queue: `ttasks create --parent KEY --queue OTHER` and `ttasks move KEY --parent OTHER-KEY`. The child keeps its own queue, key and workflow, and the rules of its queue apply.
+- The image Overview and the workflow image page show the role from `ROLE.md`. The New agent form and the first-run card show two lines of the role of the selected image. Show role opens the full text.
+
+### Changed
+
+- Write access and the read-only ancestor chain stop at a queue boundary. `ttasks show` counts only the descendants that the reader can see. The completion check still counts every descendant. Export refuses a subtree with a task in another queue (`cross_queue_subtree`).
+
+[0.104.0]: https://github.com/alekzonder/tariboy/compare/v0.103.0...v0.104.0
+
 ## [0.103.0] - 2026-11-02
 
 ### Added
