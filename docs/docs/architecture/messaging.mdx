@@ -176,6 +176,12 @@ letter. The flag uses the same `Send` path with these additions:
 - At `done`, the runner closes the notices that a hook delivered in the
   iteration, as it closes the rendered notices.
 
+The web UI and Desktop render one mailbox. Its form sets the flag with the
+**Deliver to the current iteration** switch when the customer writes to an
+agent. The list tags an instant letter `instant`, and the letter card shows a
+**Delivery** field with the `instant_state` of the letter. The
+[Web UI mailbox](/docs/architecture/web-ui#mailbox) section describes them.
+
 The [mail reference](/docs/reference/mail#instant-letters) gives the rules,
 the states, the hook command, the block format and the harness table.
 
