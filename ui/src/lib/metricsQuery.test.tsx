@@ -14,6 +14,7 @@ import {
   parseCompare,
   periodParams,
   shorterThanQuarter,
+  splitRef,
   useMetricsWindow,
 } from "./metricsQuery";
 
@@ -104,6 +105,13 @@ describe("metrics query", () => {
       workflow: "none",
     });
     expect(metricsFilters(q(""))).toEqual({ agent: "", image: "", workflow: "" });
+  });
+
+  it("splits a filter into its name and version after the last colon of the last part", () => {
+    expect(splitRef("localhost:5000/dev:1.0")).toEqual({ name: "localhost:5000/dev", version: "1.0" });
+    expect(splitRef("localhost:5000/dev")).toEqual({ name: "localhost:5000/dev", version: "" });
+    expect(splitRef("dev")).toEqual({ name: "dev", version: "" });
+    expect(splitRef("")).toEqual({ name: "", version: "" });
   });
 
   it("keeps the host and period in links to another metrics screen", () => {

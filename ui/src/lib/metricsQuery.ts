@@ -94,6 +94,14 @@ export function metricsFilters(search: URLSearchParams): MetricsFilters {
   };
 }
 
+/** `NAME[:VERSION]` as the daemon reads it: the version follows the last
+ *  colon after the last slash, so a registry port stays in the name. */
+export function splitRef(value: string): { name: string; version: string } {
+  const colon = value.lastIndexOf(":");
+  if (colon <= value.lastIndexOf("/")) return { name: value, version: "" };
+  return { name: value.slice(0, colon), version: value.slice(colon + 1) };
+}
+
 /** `?host=` and the period of the current screen, for a link to another
  *  metrics screen. */
 export function periodParams(search: URLSearchParams, window: MetricsWindow): URLSearchParams {
