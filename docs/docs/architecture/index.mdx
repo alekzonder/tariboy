@@ -11,7 +11,9 @@ sidebar:
 `tariboyd` is the long-running process at the center of the system
 (`cmd/tariboyd`, `internal/daemon`). It owns:
 
-- the **agent lifecycle** — create, start/stop the loop, run iterations, reap;
+- the **agent lifecycle** — create, start/stop the loop, run iterations, reap,
+  and remove in one of three modes (see
+  [Agent-owned tables](/docs/architecture/state-model#agent-owned-tables));
 - the **mailbox** — letters between agents, the customer, plugins and daemon components;
 - **native Tasks** — queues, recursive task trees, comments, dependencies,
   per-agent sticky goal selection, agent pools, queue triggers, events, and a

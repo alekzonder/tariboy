@@ -237,14 +237,12 @@ type ServiceControl interface {
 	Stop(name string) error
 	Restart(name string) error
 	Kill(name string) error
-	// Remove tears an agent down. force bypasses the running-guard (orthogonal to
-	// purge). When purge is false the agent's durable data is preserved — the
-	// agents DB row (left stopped), CONTEXT.md, iterations (dir + rows),
-	// audit.jsonl is kept while only the rebuildable image/bin/workdir
-	// tree is dropped, so a later up re-provisions in place. When purge is true it
-	// is a full hard delete that also cleans the agent-keyed rows the plain path
-	// leaves behind.
-	Remove(name string, force, purge bool) error
+	// Remove tears an agent down in mode. force bypasses the running-guard.
+	// RemoveModeRemove deletes the agent and keeps its history (iterations,
+	// ai_requests, CONTEXT.md, audit.jsonl); RemoveModeKeep keeps the agents
+	// row stopped with all data and drops only image/bin/workdir, so a later
+	// up re-provisions in place; RemoveModePurge deletes everything.
+	Remove(name string, force bool, mode store.RemoveMode) error
 	// Reprovision re-unpacks image into an existing agent's tree (image/bin/workdir)
 	// and restarts its loop WITHOUT touching CONTEXT.md, iterations or audit.jsonl.
 	// It is the up-side counterpart of a preserving Remove: after a data-preserving

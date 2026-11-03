@@ -135,11 +135,10 @@ export function agentsApi(t: Transport) {
     createAgent: (spec: CreateAgentSpec) => t.post<AgentRunResult>("/api/agents", spec),
     startAgent: (name: string) => t.agentPost<AgentActionResult>(name, "start"),
     // force=true kills a live agent so it can be removed at all (a plain DELETE
-    // 400s on a running/idle agent: "stop it first or use --force"). purge=true
-    // hard-deletes the DB row + durable data (iterations/audit) + whole tree, so
-    // the agent actually disappears from the list — WITHOUT purge the daemon
-    // only does a preserving reset (strips the rebuildable tree, keeps the row
-    // listed as "stopped").
+    // 400s on a running/idle agent: "stop it first or use --force"). Without
+    // purge the daemon deletes the agent and keeps its history (iterations,
+    // ai_requests, CONTEXT.md, audit.jsonl); purge=true also deletes that
+    // history and the whole agent directory.
     agentDelete: <T>(name: string, opts?: { force?: boolean; purge?: boolean }) => {
       const q = new URLSearchParams();
       if (opts?.force) q.set("force", "true");

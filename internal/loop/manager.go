@@ -1283,25 +1283,35 @@ func (m *Manager) OpenScriptLog(agentName, runID string) (io.ReadCloser, string,
 	return m.scripts.OpenScriptLog(agentName, runID)
 }
 
-// Remove tears an agent down. force only bypasses the running-guard; it is
-// orthogonal to purge. With purge=false (the data-preserving default for a plain
-// compose down) the agents DB row is kept and left stopped, together with every
-// durable artifact — CONTEXT.md, iterations (dir + rows), and audit.jsonl
-// — while only the rebuildable image/bin/workdir tree is dropped, so a later
-// Reprovision re-unpacks a (possibly new) image in place over the retained
-// history. With purge=true it is a full hard delete that also cleans the
-// agent-keyed side-table rows Store.Delete leaves behind (see PurgeAgentData).
-func (m *Manager) Remove(name string, force, purge bool) error {
+// Remove tears an agent down in mode (see store.RemoveMode). force only
+// bypasses the running-guard. Every check runs before the agent stops, so a
+// rejected remove leaves the agent as it was.
+//
+//   - RemoveModeRemove (agent rm): deletes the agents row and its settings,
+//     and keeps the history (iterations with tags, ai_requests, CONTEXT.md,
+//     audit.jsonl, iterations/); only image/bin/workdir go from the tree.
+//   - RemoveModeKeep (compose down): keeps the row stopped with all its data
+//     and drops only image/bin/workdir, so a later Reprovision re-unpacks a
+//     (possibly new) image in place over the retained history.
+//   - RemoveModePurge: deletes every registry row and the whole tree. With no
+//     agents row it still purges what a RemoveModeRemove kept.
+func (m *Manager) Remove(name string, force bool, mode store.RemoveMode) error {
+	if mode != store.RemoveModeRemove && mode != store.RemoveModeKeep && mode != store.RemoveModePurge {
+		return fmt.Errorf("unknown remove mode %q", mode)
+	}
 	release, err := m.runtimes.lockAgent(m.runtimes.baseContext(), name)
 	if err != nil {
 		return err
 	}
 	ag, err := m.cfg.Store.Get(name)
 	if err != nil {
-		release()
+		defer release()
+		if mode == store.RemoveModePurge && errors.Is(err, agent.ErrNotFound) {
+			return m.purgeLeftovers(name, err)
+		}
 		return err
 	}
-	if purge {
+	if mode != store.RemoveModeKeep {
 		if err := m.checkNoPoolMemberships(name); err != nil {
 			release()
 			return err
@@ -1318,28 +1328,35 @@ func (m *Manager) Remove(name string, force, purge bool) error {
 
 	l := agentdir.New(m.cfg.AgentsDir, name)
 	rl := l.WithRuntime(m.cfg.RuntimeDir)
-	// Runtime sockets are pure runtime, never data — drop them in either path.
+	// Runtime sockets are pure runtime, never data — drop them in every mode.
 	logCleanup(m.cfg.Log, "remove agent socket", os.Remove(rl.Sock()), "agent", name)
 	logCleanup(m.cfg.Log, "remove shim socket", os.Remove(rl.ShimSock()), "agent", name)
 
-	if !purge {
-		// Preserve: leave the agent stopped and every durable
-		// artifact intact; remove only the rebuildable tree.
+	switch mode {
+	case store.RemoveModeKeep:
 		ag.Enabled = false
 		if err := m.cfg.Store.Update(ag); err != nil {
 			return err
 		}
-		for _, d := range []string{l.ImageDir(), l.BinDir(), l.Workdir()} {
-			if err := os.RemoveAll(d); err != nil {
-				return err
-			}
+	case store.RemoveModeRemove:
+		if err := m.cfg.Store.Remove(name); err != nil {
+			return err
 		}
-		return nil
+	default:
+		return m.purgeAgent(name, l)
 	}
+	for _, d := range []string{l.ImageDir(), l.BinDir(), l.Workdir()} {
+		if err := os.RemoveAll(d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-	// Purge: hard-delete the core rows (iterations/secrets/agents), the leaked
-	// agent-keyed side-table rows, and the whole durable tree.
-	if err := m.cfg.Store.Delete(name); err != nil {
+// purgeAgent hard-deletes the core rows (iterations/secrets/agents), the
+// agent-keyed side-table rows, and the whole durable tree.
+func (m *Manager) purgeAgent(name string, l agentdir.Layout) error {
+	if err := m.cfg.Store.Delete(name); err != nil && !errors.Is(err, agent.ErrNotFound) {
 		return err
 	}
 	if err := m.cfg.Store.PurgeAgentData(name); err != nil {
@@ -1348,7 +1365,25 @@ func (m *Manager) Remove(name string, force, purge bool) error {
 	return os.RemoveAll(l.Root)
 }
 
-// checkNoPoolMemberships rejects a purge of an agent that still belongs to a
+// purgeLeftovers purges what a RemoveModeRemove kept of an agent whose row is
+// gone. With nothing left it returns notFound.
+func (m *Manager) purgeLeftovers(name string, notFound error) error {
+	// No row vouches for the name, and it becomes a path to delete.
+	if !agent.ValidName(name) {
+		return notFound
+	}
+	l := agentdir.New(m.cfg.AgentsDir, name)
+	rows, err := m.cfg.Store.HasAgentRows(name)
+	if err != nil {
+		return err
+	}
+	if _, statErr := os.Stat(l.Root); !rows && os.IsNotExist(statErr) {
+		return notFound
+	}
+	return m.purgeAgent(name, l)
+}
+
+// checkNoPoolMemberships rejects a remove or purge of an agent that still belongs to a
 // task queue agent pool. The pool members table keeps ON DELETE RESTRICT so a
 // workflow pool never empties silently; checking first keeps the agent running
 // and names what the operator must change.

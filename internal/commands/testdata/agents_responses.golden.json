@@ -408,6 +408,27 @@
     "name": "alpha"
   },
   "agent.rm": {
+    "deleted": [
+      "iterations",
+      "secrets",
+      "agent_budgets",
+      "agents",
+      "schedules",
+      "scripts",
+      "script_result_outbox",
+      "ai_requests",
+      "retention_policies",
+      "budgets",
+      "script_runs",
+      "mail (inbox)",
+      "iteration_tags",
+      "agent directory"
+    ],
+    "kept": [
+      "mail (sent)",
+      "assessments"
+    ],
+    "mode": "purge",
     "purged": true,
     "removed": "beta"
   },

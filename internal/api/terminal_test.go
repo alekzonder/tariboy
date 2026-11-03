@@ -16,6 +16,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/shim"
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/testutil"
 	"github.com/coder/websocket"
 )
@@ -33,17 +34,17 @@ type fakeTermControl struct {
 	resized    bool
 }
 
-func (f *fakeTermControl) Run(registry.RunSpec) (string, error) { return "", nil }
-func (f *fakeTermControl) Start(string) error                   { return nil }
-func (f *fakeTermControl) Stop(string) error                    { return nil }
-func (f *fakeTermControl) Restart(string) error                 { return nil }
-func (f *fakeTermControl) Kill(string) error                    { return nil }
-func (f *fakeTermControl) Remove(string, bool, bool) error      { return nil }
-func (f *fakeTermControl) Reprovision(string, string) error     { return nil }
-func (f *fakeTermControl) Exec(string, string) (string, error)  { return "", nil }
-func (f *fakeTermControl) LiveState(string) (string, error)     { return "idle", nil }
-func (f *fakeTermControl) Screen(string) (string, error)        { return "", nil }
-func (f *fakeTermControl) SendKeys(string, string) error        { return nil }
+func (f *fakeTermControl) Run(registry.RunSpec) (string, error)        { return "", nil }
+func (f *fakeTermControl) Start(string) error                          { return nil }
+func (f *fakeTermControl) Stop(string) error                           { return nil }
+func (f *fakeTermControl) Restart(string) error                        { return nil }
+func (f *fakeTermControl) Kill(string) error                           { return nil }
+func (f *fakeTermControl) Remove(string, bool, store.RemoveMode) error { return nil }
+func (f *fakeTermControl) Reprovision(string, string) error            { return nil }
+func (f *fakeTermControl) Exec(string, string) (string, error)         { return "", nil }
+func (f *fakeTermControl) LiveState(string) (string, error)            { return "idle", nil }
+func (f *fakeTermControl) Screen(string) (string, error)               { return "", nil }
+func (f *fakeTermControl) SendKeys(string, string) error               { return nil }
 func (f *fakeTermControl) SendKeysItems(string, []shim.KeyItem) error {
 	return nil
 }

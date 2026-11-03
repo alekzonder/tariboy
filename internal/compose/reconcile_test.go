@@ -344,6 +344,16 @@ func hasPurgeTrue(body any) bool {
 	return m["purge"] == "true"
 }
 
+// hasKeepTrue reports whether an agent delete body asks the daemon to keep the
+// stopped agent row for a later reprovision.
+func hasKeepTrue(body any) bool {
+	m, ok := body.(map[string]string)
+	if !ok {
+		return false
+	}
+	return m["keep"] == "true"
+}
+
 // upNoBuild is the reconciler with the local image-build step disabled, so the
 // test needs no filesystem image context.
 func upNoBuild(t *testing.T, r *Runner, f File) {

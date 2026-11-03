@@ -706,6 +706,26 @@
       "AgentRemoveResult": {
         "additionalProperties": false,
         "properties": {
+          "deleted": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "kept": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "remove",
+              "keep",
+              "purge"
+            ],
+            "type": "string"
+          },
           "purged": {
             "type": "boolean"
           },
@@ -715,7 +735,10 @@
         },
         "required": [
           "removed",
-          "purged"
+          "purged",
+          "mode",
+          "deleted",
+          "kept"
         ],
         "type": "object"
       },
@@ -9077,7 +9100,16 @@
             "name": "purge",
             "required": false,
             "schema": {
-              "description": "also delete durable data (iterations, context, audit) and leaked rows; default preserves data",
+              "description": "purge mode: also delete the history (iterations, ai_requests, context, audit, agent directory)",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "keep",
+            "required": false,
+            "schema": {
+              "description": "keep mode: keep the stopped agent and its data for a later reprovision; delete only image, bin and workdir",
               "type": "boolean"
             }
           }
@@ -9144,7 +9176,7 @@
             "description": "Typed error"
           }
         },
-        "summary": "Remove an agent (stop it first, or --force)"
+        "summary": "Remove an agent and keep its history; --purge deletes everything (stop it first, or --force)"
       },
       "get": {
         "operationId": "agent.inspect",

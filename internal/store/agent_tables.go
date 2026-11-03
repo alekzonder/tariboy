@@ -32,6 +32,12 @@ type AgentTable struct {
 	// MaskCols are blanked in a backup unless secrets are included.
 	MaskCols []string
 	Phase    Phase
+	// KeepOnRemove keeps the rows when agent rm runs without --purge: they
+	// are the agent's history.
+	KeepOnRemove bool
+	// DeletedPart and KeptPart name the rows DeleteWhere deletes and the rows
+	// it keeps, in a removal report.
+	DeletedPart, KeptPart string
 	// BackupOrder is the 1-based position in an agent backup; 0 = not backed up.
 	BackupOrder int
 }
@@ -40,14 +46,14 @@ type AgentTable struct {
 // A new table keyed by an agent needs a row here (or an exemption with a reason
 // in the schema test).
 var AgentTables = []AgentTable{
-	{Name: "iterations", Where: "agent = ?", AgentCol: "agent", OrderBy: "id", Phase: PhaseCore, BackupOrder: 2},
+	{Name: "iterations", Where: "agent = ?", AgentCol: "agent", OrderBy: "id", Phase: PhaseCore, KeepOnRemove: true, BackupOrder: 2},
 	{Name: "secrets", Where: "agent = ?", AgentCol: "agent", OrderBy: "key", MaskCols: []string{"value"}, Phase: PhaseCore, BackupOrder: 4},
 	{Name: "agent_budgets", Where: "agent_name = ?", AgentCol: "agent_name", Phase: PhaseCore},
 	{Name: "agents", Where: "name = ?", AgentCol: "name", OrderBy: "name", Phase: PhaseCore, BackupOrder: 1},
 	{Name: "schedules", Where: "agent = ?", AgentCol: "agent", OrderBy: "id", Phase: PhaseData, BackupOrder: 6},
 	{Name: "scripts", Where: "agent = ?", AgentCol: "agent", OrderBy: "id", Phase: PhaseData, BackupOrder: 7},
 	{Name: "script_result_outbox", Where: "agent = ?", AgentCol: "agent", OrderBy: "idempotency_key", Phase: PhaseData, BackupOrder: 9},
-	{Name: "ai_requests", Where: "agent = ?", AgentCol: "agent", OrderBy: "id", Phase: PhaseData, BackupOrder: 3},
+	{Name: "ai_requests", Where: "agent = ?", AgentCol: "agent", OrderBy: "id", Phase: PhaseData, KeepOnRemove: true, BackupOrder: 3},
 	{Name: "retention_policies", Where: "agent = ?", AgentCol: "agent", Phase: PhaseData},
 	{Name: "budgets", Where: "scope = ?", Scope: "agent:", Phase: PhaseData},
 	// script_runs go with their scripts by ON DELETE CASCADE.
@@ -56,7 +62,7 @@ var AgentTables = []AgentTable{
 	// deletes the letters to the agent and keeps the ones it sent, which sit
 	// in other mailboxes.
 	{Name: "mail", Where: "('agent:' || ?) IN (recipient, sender)", DeleteWhere: "recipient = 'agent:' || ?",
-		OrderBy: "seq", Phase: PhaseData, BackupOrder: 10},
+		OrderBy: "seq", Phase: PhaseData, BackupOrder: 10, DeletedPart: "inbox", KeptPart: "sent"},
 }
 
 // DeleteAgentRows deletes the agent's rows from every registry table of phase,
@@ -67,21 +73,46 @@ func DeleteAgentRows(tx *sql.Tx, name string, phase Phase) (map[string]int64, er
 		if at.Phase != phase || phase == PhaseNone {
 			continue
 		}
-		where := at.Where
-		if at.DeleteWhere != "" {
-			where = at.DeleteWhere
-		}
-		res, err := tx.Exec(`DELETE FROM `+at.Name+` WHERE `+where, at.Scope+name)
-		if err != nil {
-			return nil, err
-		}
-		n, err := res.RowsAffected()
+		n, err := deleteAgentTableRows(tx, at, name)
 		if err != nil {
 			return nil, err
 		}
 		deleted[at.Name] = n
 	}
 	return deleted, nil
+}
+
+func deleteAgentTableRows(tx *sql.Tx, at AgentTable, name string) (int64, error) {
+	where := at.Where
+	if at.DeleteWhere != "" {
+		where = at.DeleteWhere
+	}
+	res, err := tx.Exec(`DELETE FROM `+at.Name+` WHERE `+where, at.Scope+name)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// CountAgentRows counts the agent's rows that agent removal can delete, in
+// every PhaseCore and PhaseData table.
+func CountAgentRows(db *sql.DB, name string) (int64, error) {
+	var total int64
+	for _, at := range AgentTables {
+		if at.Phase == PhaseNone {
+			continue
+		}
+		where := at.Where
+		if at.DeleteWhere != "" {
+			where = at.DeleteWhere
+		}
+		var n int64
+		if err := db.QueryRow(`SELECT COUNT(*) FROM `+at.Name+` WHERE `+where, at.Scope+name).Scan(&n); err != nil {
+			return 0, err
+		}
+		total += n
+	}
+	return total, nil
 }
 
 // IterationTable is a table whose rows retention prunes with one iteration.
