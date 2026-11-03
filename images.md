@@ -131,17 +131,51 @@ the daemon starts.
 
 ### Refs, tags and identity
 
-A **ref** is the stored image content. Its identity is derived from the image
-name and the `image_version` declared in `Tariboyfile.yaml`, so rebuilding the
-same version republishes the same ref and bumping the version creates another
-one. A source with no declared version stays addressed by its archive bytes.
-A **tag** is only a pointer to a ref, held in `images/<name>/tags/<tag>`; the
-content lives once in `images/<name>/refs/<id>.tar.gz`.
+A **ref** is the stored image content. Its id, also called its digest, is the
+SHA-256 of the image content. The content lives once in
+`images/<name>/refs/<digest>.tar.gz`, and the manifest field `id` holds the same
+digest. A **tag** is only a pointer to a ref. It is held in
+`images/<name>/tags/<tag>`.
 
-Every build therefore publishes without restriction: rebuilding an existing
-ref, including `latest`, always succeeds and moves the tag. Generations that
-other tags no longer name stay on disk, so agents pinned to an earlier ref keep
-running until their next launch gate.
+The digest is the SHA-256 of this text:
+
+```
+tariboy-image-content/1
+<mode> <sha256 of body> <path>
+<mode> <sha256 of body> <path>
+...
+```
+
+- The text has one line for each archive member, `manifest.json` included.
+  The lines are sorted by path in byte order, and each line ends with a newline.
+- `<mode>` is the permission of the member as four octal digits, for example
+  `0600` or `0700`.
+- For `manifest.json`, the body is the canonical manifest: the manifest JSON
+  object without the keys `built_at`, `tag`, `digest` and `id`, encoded again
+  with sorted keys and no spaces.
+
+So every change to a skill file, a skill description, a prompt layer, the role,
+the plugins or the image name gives another digest. The same content gives the
+same digest, whatever its build time or the member order in the archive. The
+format is the same for images with and without `image_version`.
+`tariboy image inspect`, import and every read of a stored archive calculate
+the digest again. An archive whose `id` is not its content digest is refused
+with `image manifest id does not match content digest`.
+
+Archives built by earlier releases stay readable without a migration:
+
+- An archive whose `id` is `sha256(name + "\n" + image_version)` is a legacy
+  archive. Its digest stays that `id`, and its content is not checked.
+- An archive without `id` keeps the SHA-256 of its archive file as its digest.
+
+Agents pinned to a legacy digest keep running. Files and tags on disk are not
+rewritten.
+
+A build never rewrites content that is already stored under its digest. If
+the same content is already stored, the build only moves the tags. Generations
+that no tag names stay on disk, so agents pinned to an earlier ref keep running
+until their next launch gate. For the rule that applies when you rebuild one
+`image_version` with other content, see [Image versions](#image-versions).
 
 There is one build mechanism. The operator CLI, the Store build, an agent's
 own `image-creator`, and team import all publish the same way and behave
@@ -160,8 +194,8 @@ over it, or remove it. `basic` is an ordinary Store image. You can rebuild,
 export, and remove `basic:latest`, also a legacy one without provenance.
 
 A store written by an earlier release is migrated once, when the daemon starts:
-each archive keeps its content digest as its ref id, so every digest already
-pinned on an agent continues to resolve. The migration is one-way.
+each archive keeps its digest as its ref id, so every digest already pinned on
+an agent continues to resolve. The migration is one-way.
 
 ## Stores on a server
 
@@ -329,7 +363,9 @@ and one button:
 
 **Update available** shows only when the two versions are known and differ.
 This comparison cannot detect changed source bytes when `image_version` stays
-the same. Use **Build** after such a change. The **Automatic builds**
+the same. After such a change, increment `image_version` in the Store source.
+A build of the same version with other content fails with
+`image_version_conflict` (see [Rebuild a version](#rebuild-a-version)). The **Automatic builds**
 disclosure below the tables holds the interval and the images it builds. Built
 artifacts appear in **Library → Images**. Stores do not yet expose standalone
 skills or plugins.
@@ -360,6 +396,52 @@ Updates atomically replace the file while preserving its permissions, YAML
 fields, and comments; YAML formatting may change. Missing or invalid versions
 produce an error without changing the file. Old sources may omit the field
 for build compatibility, but version commands require it.
+
+### Rebuild a version
+
+One `image_version` names one content. When you rebuild an image, the build
+compares its content digest with every stored archive of the same name and the
+same `image_version`. Legacy archives are compared by their content too.
+
+- If an archive with the same content exists, the build publishes nothing new.
+  It moves the tags onto that archive.
+- If only archives with other content exist, the build fails with the error
+  code `image_version_conflict` (HTTP 409). The error names the ref, the current
+  digest and the new digest, for example:
+  `image reviewer:1.2.0 already exists with digest OLD; this build has digest NEW. Bump image_version in Tariboyfile.yaml or rebuild with --force.`
+  No file is written and no tag moves.
+- An image without `image_version` never conflicts. The tag `latest` alone
+  does not cause a conflict.
+
+To roll out a change, increment `image_version`. To replace the content of the
+version anyway, run `tariboy image build --force`, or send `force: true` to
+`POST /api/images/build`. The build then publishes the new digest and moves the
+tags onto it. The old archive stays on disk under its own digest, so agents
+pinned to it keep running. The operation log of the build gets one line:
+
+```
+image_version_forced ref=NAME:VERSION version=VERSION old_digest=OLD new_digest=NEW initiator=INITIATOR
+```
+
+When several archives are replaced, `old_digest` lists them, separated by
+commas. Read the line with `tariboy operation log ID` or `tariboy operation show
+ID`, or in **Settings → Maintenance → Operations log**. Find the build with
+`tariboy operation ls`. The log is deleted with its operation when the
+maintenance retention period ends.
+
+The same rule applies to every path that publishes an image:
+
+| Path | On a conflict |
+| --- | --- |
+| `tariboy image build`, **Build** in the Web UI, Store builds and onboarding | fails with `image_version_conflict`; `--force` is available |
+| Automatic Store builds | the build operation fails with `image_version_conflict`; the next cycle tries again; it never forces |
+| A build by an agent (`image-creator`) | the tool returns the conflict error |
+| **Build** of an editable image source (`image.source.build`) | fails with `image_version_conflict` (HTTP 409) |
+| **Import runnable image** and transfer to servers | the import fails and the tag does not move |
+| `tariboy pull` | the pull fails and the tag does not move |
+
+The `tariboy-store` server and the daemon-owned `bare:latest` always publish.
+The Web UI has no force switch. It shows the conflict error of the operation.
 
 The runnable manifest preserves `image_version`; the archive carries no tag,
 since a tag only points at a ref. Every new iteration snapshots the source
@@ -611,10 +693,28 @@ version metadata is labelled **Version not specified**.
 
 When an agent's active ref moves to another id, the launch gate stages and
 promotes it at the next iteration. The running iteration keeps its original
-prompt, version, and digest. A rebuild that does not change `image_version`
-republishes the same ref, so there is nothing new to adopt and running agents
-are undisturbed; bump the version to roll a change out. The preview is not a
-reservation: the ref can move again before launch. Cancelling an explicit
+prompt, version, and digest. A rebuild of the same content keeps the digest,
+so there is nothing new to adopt and running agents are undisturbed. Increment
+the version to roll a change out. The preview is not a reservation: the ref can
+move again before launch.
+
+At each launch gate, Tariboy also compares the copy of the image in the agent
+directory (`agents/<name>/image/`) with the archive of its pinned digest. The
+copy does not match when its `.image-digest` names another digest, when its
+`manifest.json` differs from the manifest in the archive, or when a skill in
+the copy differs from the manifest. Then Tariboy unpacks the archive again.
+It uses the same stage, validation and swap as an image activation, and it
+records the audit event `image_rematerialized` with `ref`, `digest` and
+`cause`. The iteration then starts. The agent stops only when the archive of
+the pinned digest is missing or damaged. To count these events, run:
+
+```bash
+FROM=2026-10-01T00:00:00Z TO=2026-11-01T00:00:00Z
+cat "${TARIBOY_BASE_DIR:-$HOME/.tariboy}"/agents/*/audit.jsonl \
+  | jq -c --arg from "$FROM" --arg to "$TO" 'select(.type == "image_rematerialized"
+      and .ts >= $from and .ts < $to)' \
+  | wc -l
+``` Cancelling an explicit
 pending assignment does not disable following the active ref. The preview refreshes with agent status and after UI image builds.
 
 ## Import and export
@@ -630,10 +730,15 @@ layer/hash mismatches, and compressed or expanded limit violations. Import does
 not rebuild the image. Preview, apply, assignment, and activation also validate
 plugin, runtime, skill, launcher, and harness compatibility against the
 destination daemon before publication. The import preview exposes editable **Import name** and
-**Import tag** fields. The same ref and digest are idempotent; when the ref
-already names different bytes, import atomically advances the tag and retains
-the previous archive by digest. An explicit retag receives a newly rewritten
-manifest and digest.
+**Import tag** fields. The same ref and digest are idempotent. When the ref
+already names other content, import moves the tag and keeps the previous
+archive by digest. The [image version rule](#rebuild-a-version) applies: an
+archive whose `image_version` is already stored with other content is refused
+with `image_version_conflict`. The inner archive must carry its content digest
+as `id`, so a changed member is refused. A legacy export (see
+[Refs, tags and identity](#refs-tags-and-identity)) imports with its legacy
+digest. An explicit retag receives a newly rewritten manifest and a new content
+digest.
 
 Keep the original directory and paths when future rebuilds are required. An
 exported image is portable for use, not an editable source backup.
@@ -674,7 +779,9 @@ for this operation, not source backup or persistent state.
   terminal-only behavior is runtime policy. The daemon rebuilds it on every
   start, with `image_version` set to the daemon version, so the image always
   matches the current release. A restart of the same release keeps the same
-  ref id; a new release moves the tag to a new id. Archives from earlier
+  digest; a new release moves the tag to a new digest. The daemon owns this
+  image, so its build always publishes, also over other content of the same
+  version. Archives from earlier
   releases, including legacy schema-v1 ones, stay in the store, so agents
   pinned to them continue to resolve.
 - The official Store's `basic` source explicitly declares every plugin,

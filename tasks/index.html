@@ -251,6 +251,16 @@ does not change. <code>ttasks ask</code> on a missing principal fails with
 <code>principal_not_found</code> (HTTP 400) and saves no comment. A question to a
 principal opens one wait on it, also when the question text mentions that
 principal again.</p>
+<p>An older daemon also opened waits on principals that do not exist, for example
+<code>agent:tariboy-pm.</code> with the closing dot of a sentence. No answer can resolve
+such a wait. When <code>tariboyd</code> starts, it closes each open wait on a principal
+that does not exist or that has a name a mention cannot match. It also closes
+the open question letters of that wait. The daemon log gets one <code>Info</code> record
+for each closed wait, with the task key, the wait ID, the principal and the
+reason (<code>principal_not_found</code> or <code>invalid_principal_name</code>). One more record
+gives the number of closed waits. Waits on the customer and on existing
+agents stay open, and the task status does not change. If the customer login
+is empty, all waits on <code>user:*</code> principals stay open.</p>
 <p>An enabled agent normally follows one sticky assigned task as its Goal. It
 releases that selection when the task is done, cancelled, loses assignment or
 visibility, remains in <code>wait_customer</code> beyond the agent’s configured grace

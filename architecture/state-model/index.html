@@ -18,6 +18,13 @@ work begins. When the newest point is at least the agent’s positive
 <code>error</code> with an informational <code>error_reason</code>; the loop and iteration continue.
 The next attributed request updates the timestamp and live state derives as
 <code>running</code> again. Stale requests for older or completed iterations are ignored.</p>
+<p>Before the daemon reports such a stall, it runs the stall probe. The probe
+looks for a live agent command under the harness process, such as a long
+<code>make check</code>. If it finds one, live state is <code>running</code> and the agent readers
+(<code>agent.inspect</code>, <code>agent.ps</code>, <code>agent.status.show</code>) report
+<code>state_reason: &quot;waiting for agent command&quot;</code> with no <code>error_reason</code>. The
+<code>state_reason</code> key is absent when the state has no reason. See
+<a href="/tariboy/docs/architecture/iteration-loop#stall-probe">the stall probe</a>.</p>
 <p>Reconciliation and reaping are therefore flag-independent: the daemon derives
 what <em>should</em> be running from the DB and converges to it.</p>
 <p>The loop schedule is the <code>agents.schedule_rrule</code> column: the normalized
@@ -271,6 +278,26 @@ stay.</p>
 assessment of the same iteration or task is a new row with a new id. The
 row, its axes and its violations are written in one transaction, so a failed
 write leaves no part of an assessment.</p>
+<p>Metrics and <code>assessment.ls</code> without <code>history</code> read only the latest row of
+each assessed object. The object of a row with an <code>iteration_id</code> is that
+iteration. The object of a row with an empty <code>iteration_id</code> is its
+<code>task_key</code>. The latest row of an object is the first row in this order:</p>
+<ol>
+<li><code>created_at</code>, newest first.</li>
+<li>At an equal <code>created_at</code>, <code>rubric_version</code>, latest first.</li>
+<li>At an equal <code>rubric_version</code>, <code>seq</code>, highest first.</li>
+</ol>
+<p>A <code>rubric_version</code> of the form <code>name/N</code> has a name and a number. <code>N</code> is one
+or more digits at the end, after a <code>/</code>, and <code>name</code> is not empty. The daemon
+compares the names as strings, then the numbers as numbers. Thus
+<code>iteration-review/10</code> is later than <code>iteration-review/2</code>, and
+<code>iteration-review/1</code> is later than <code>iteration-review</code>. A value of another
+form is a name without a number.</p>
+<p>The choice happens at read time and changes no row. The SQL condition is
+<code>assessment.IsLatest</code>. It checks each row against the other rows of its
+object through <code>idx_assessments_iteration</code> or <code>idx_assessments_task</code>. On a
+test database with 10,000 assessments, <code>assessment ls</code> takes about 10 ms.
+The assessment step of a metrics report over 1,000 tasks takes about 250 ms.</p>
 <p>The axes and the violations reference <code>assessments(seq)</code> with
 <code>ON DELETE CASCADE</code>. The tables have no foreign key to <code>iterations</code>, <code>tasks</code>
 or <code>agents</code>. An assessment stays after iteration retention deletes its
@@ -575,18 +602,20 @@ under the agent root; the next provisioning of that agent removes them. Generati
 <code>images/&lt;name&gt;/refs/</code>, so active and pending assignments survive a moved tag.
 Harness, model, effort, environment, CWD, context, workdir, mail, history,
 and group are not image assignment fields.</p>
-<p>Image content is addressed by ref id — derived from the image name and the
-source <code>image_version</code>, or from the archive bytes when no version is declared —
-and a tag is a pointer file naming that id. One build publishes one ref and
-moves every requested tag onto it, so a versioned tag and <code>latest</code> always agree.
-The build records where those tags pointed, then commits every source snapshot
-and provenance row in one SQLite transaction; a failure restores the tags and
-deletes only content the build introduced, never a generation an agent may be
-pinned to. There is no separate immutable mode and no publication journal:
-rebuilding any non-reserved ref is always allowed, so no build path can be
-refused for a ref that already exists. A store written before this model is
-migrated once at daemon startup, keeping each archive’s content digest as its
-ref id so pinned digests keep resolving.
+<p>Image content is addressed by ref id, the digest of its content (see “Refs,
+tags and identity” in <a href="/tariboy/docs/images#refs-tags-and-identity">Images</a>). A tag is a pointer file
+naming that id. Archives from earlier releases keep their id: either
+<code>sha256(name + &quot;\n&quot; + image_version)</code> or the archive file digest. One build
+publishes one ref and moves every requested tag onto it, so a versioned tag and
+<code>latest</code> always agree. Content stored under an id is never rewritten. A build
+of an <code>image_version</code> that is already stored with other content fails with
+<code>image_version_conflict</code> unless it is forced. The build records where those
+tags pointed, then commits every source snapshot and provenance row in one
+SQLite transaction. A failure restores the tags and deletes only content the
+build introduced, never a generation an agent may be pinned to. There is no
+publication journal. A store written before this model is migrated once at
+daemon startup, keeping each archive’s digest as its ref id so pinned digests
+keep resolving.
 Image locks keep every reader off an uncommitted generation. Ordinary,
 editable-source, agent-authored, compose, and import publication take the lock
 of the one image name they write, so publications of different names run in

@@ -27,7 +27,7 @@ must therefore include it.
 | `tmail instant [--format text\|json]` | for a harness hook: print the instant letters that wait for this iteration (`POST /tools/mail/instant`) |
 | `scripts/schedule.sh add`/`ls`/`cancel` | agent-owned scheduled wake-ups |
 | `scripts/scripts.sh run`/`schedule`/`rerun`/`ls`/`runs`/`logs`/`cancel`/`rm` | local asynchronous commands and run history |
-| `tariboy assessment add --file PATH` / `ls` / `show ID` | record an [assessment](/docs/plugins/built-in/assessments) (needs `assessments`); read assessments (open to every agent) |
+| `tariboy assessment add --file PATH` / `ls [--history]` / `show ID` | record an [assessment](/docs/plugins/built-in/assessments) (needs `assessments`); read assessments (open to every agent). `ls` returns the latest assessment of each iteration and task; `--history` returns every assessment |
 | `GET /tools/group/info`, `status`, `observe/{member}`, `POST /tools/group/loop` | group coordination; group sends are `tmail send --to group:<g>` or `agent:<member>` |
 
 `tariboy-tasks` is installed globally with the `ttasks` alias. Packaged daemons

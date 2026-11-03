@@ -272,7 +272,8 @@ has none. A host heading opens `/tasks?host=<id>`.
 An agent row shows the agent's derived state (see
 [Agent state](#agent-state)). The dot has the color of the state. On the
 right, the row shows one pill: `needs you · n` in the accent color,
-`working · 12 min` with a clock that moves each minute, `error` in the danger
+`working · 12 min` with a clock that moves each minute (or
+`working · waiting for agent command` when the state has that reason), `error` in the danger
 color with the reason in its tooltip, or a muted `off`. An idle row shows no
 pill. The row has no other state, budget, or unread-letter badge; an open
 question is in **Inbox** and its task is in **Tasks**.
@@ -1812,7 +1813,7 @@ The first state that matches wins:
 | --- | --- |
 | `error` | the agent state is `error` or `failed`, it has a `halt_reason` whose `halt_kind` is not `idle_limit`, it has an `error_reason`, or a budget is exhausted. The state carries the reason. |
 | `needs you · n` | n is more than 0 (see below) |
-| `working` | the agent state is `running`; the elapsed time starts at `current_iteration_started_at` |
+| `working` | the agent state is `running`; the elapsed time starts at `current_iteration_started_at`. The state carries the `state_reason`, such as `waiting for agent command`, when the agent has one. |
 | `off` | the agent is disabled |
 | `idle` | any other case |
 
@@ -1839,7 +1840,8 @@ The header has three lines on every tab:
    - needs you: "Waiting for you: \<status, or 'a question'\> for \<KEY\>
      (\<age\>)", or "Waiting for you: n things" when n is more than 1;
    - working: "Working on \<Goal KEY\> since \<HH:MM\> · run \<n\>", or
-     "Working since \<HH:MM\>" without a Goal task;
+     "Working since \<HH:MM\>" without a Goal task, followed by
+     " · \<state_reason\>" when the agent has one;
    - idle: "Idle. Give it a task.";
    - off: "Off. Start to let it work on tasks.";
    - error: the reason, in red.

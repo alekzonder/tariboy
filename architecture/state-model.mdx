@@ -20,6 +20,14 @@ work begins. When the newest point is at least the agent's positive
 The next attributed request updates the timestamp and live state derives as
 `running` again. Stale requests for older or completed iterations are ignored.
 
+Before the daemon reports such a stall, it runs the stall probe. The probe
+looks for a live agent command under the harness process, such as a long
+`make check`. If it finds one, live state is `running` and the agent readers
+(`agent.inspect`, `agent.ps`, `agent.status.show`) report
+`state_reason: "waiting for agent command"` with no `error_reason`. The
+`state_reason` key is absent when the state has no reason. See
+[the stall probe](/docs/architecture/iteration-loop#stall-probe).
+
 Reconciliation and reaping are therefore flag-independent: the daemon derives
 what *should* be running from the DB and converges to it.
 
@@ -286,6 +294,28 @@ An assessment is immutable. No command changes or deletes one. A second
 assessment of the same iteration or task is a new row with a new id. The
 row, its axes and its violations are written in one transaction, so a failed
 write leaves no part of an assessment.
+
+Metrics and `assessment.ls` without `history` read only the latest row of
+each assessed object. The object of a row with an `iteration_id` is that
+iteration. The object of a row with an empty `iteration_id` is its
+`task_key`. The latest row of an object is the first row in this order:
+
+1. `created_at`, newest first.
+2. At an equal `created_at`, `rubric_version`, latest first.
+3. At an equal `rubric_version`, `seq`, highest first.
+
+A `rubric_version` of the form `name/N` has a name and a number. `N` is one
+or more digits at the end, after a `/`, and `name` is not empty. The daemon
+compares the names as strings, then the numbers as numbers. Thus
+`iteration-review/10` is later than `iteration-review/2`, and
+`iteration-review/1` is later than `iteration-review`. A value of another
+form is a name without a number.
+
+The choice happens at read time and changes no row. The SQL condition is
+`assessment.IsLatest`. It checks each row against the other rows of its
+object through `idx_assessments_iteration` or `idx_assessments_task`. On a
+test database with 10,000 assessments, `assessment ls` takes about 10 ms.
+The assessment step of a metrics report over 1,000 tasks takes about 250 ms.
 
 The axes and the violations reference `assessments(seq)` with
 `ON DELETE CASCADE`. The tables have no foreign key to `iterations`, `tasks`
@@ -629,18 +659,20 @@ under the agent root; the next provisioning of that agent removes them. Generati
 Harness, model, effort, environment, CWD, context, workdir, mail, history,
 and group are not image assignment fields.
 
-Image content is addressed by ref id — derived from the image name and the
-source `image_version`, or from the archive bytes when no version is declared —
-and a tag is a pointer file naming that id. One build publishes one ref and
-moves every requested tag onto it, so a versioned tag and `latest` always agree.
-The build records where those tags pointed, then commits every source snapshot
-and provenance row in one SQLite transaction; a failure restores the tags and
-deletes only content the build introduced, never a generation an agent may be
-pinned to. There is no separate immutable mode and no publication journal:
-rebuilding any non-reserved ref is always allowed, so no build path can be
-refused for a ref that already exists. A store written before this model is
-migrated once at daemon startup, keeping each archive's content digest as its
-ref id so pinned digests keep resolving.
+Image content is addressed by ref id, the digest of its content (see "Refs,
+tags and identity" in [Images](/docs/images#refs-tags-and-identity)). A tag is a pointer file
+naming that id. Archives from earlier releases keep their id: either
+`sha256(name + "\n" + image_version)` or the archive file digest. One build
+publishes one ref and moves every requested tag onto it, so a versioned tag and
+`latest` always agree. Content stored under an id is never rewritten. A build
+of an `image_version` that is already stored with other content fails with
+`image_version_conflict` unless it is forced. The build records where those
+tags pointed, then commits every source snapshot and provenance row in one
+SQLite transaction. A failure restores the tags and deletes only content the
+build introduced, never a generation an agent may be pinned to. There is no
+publication journal. A store written before this model is migrated once at
+daemon startup, keeping each archive's digest as its ref id so pinned digests
+keep resolving.
 Image locks keep every reader off an uncommitted generation. Ordinary,
 editable-source, agent-authored, compose, and import publication take the lock
 of the one image name they write, so publications of different names run in

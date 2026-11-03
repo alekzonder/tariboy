@@ -36,7 +36,8 @@ Install only the toolchains needed for the area you are changing:
 - **Go control plane:** Go 1.26, Make, a C toolchain where required by the host.
 - **Fast checks:** ripgrep (`rg`) for the packaging secret-scan contract in
   `make backend-check` and `make check`. Install with `apt-get install ripgrep`
-  on Ubuntu or `brew install ripgrep` on macOS; the PR workflow installs it.
+  on Ubuntu or `brew install ripgrep` on macOS; the `backend-check` job of the
+  pull request workflow installs it.
 - **React UI:** Node.js and npm.
 - **Desktop native host:** Rust (minimum package version 1.77), Cargo, the Tauri
   prerequisites, and platform build tools.
@@ -176,7 +177,7 @@ smoke contracts. Its
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
 frontend target runs the UI format check, the generated API types check, UI
 typecheck, lint with the complexity and size thresholds, the unused-code check, unit tests,
-branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
+which fail when Vitest finishes fewer test files than it found, branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
 `scripts/npm-ci-locked.sh` for locked installs under `ui/`, `ui/tools/api-types/`
 and `docs/`.
@@ -196,6 +197,49 @@ After dependency preparation succeeds, the check steps do not stop at the
 first failure. Each step is timed and recorded, and the run ends with a summary
 table naming every step that failed, so one aggregate pass surfaces gofmt drift
 and a UI type error together.
+
+### Pull request CI
+
+The workflow `.github/workflows/pull-request.yml` runs for every pull request
+and for every push to `main`. It does not run `make check` as one job. It runs
+the two groups of `make check` as two jobs in parallel:
+
+| Job | Installs | Runs |
+| --- | --- | --- |
+| `backend-check` | Go from `go.mod`, a stub `codex` harness, the apt packages for `ripgrep` and the Tauri crate | `make backend-check` |
+| `frontend-check` | Node.js 22 with the npm cache of `ui/` and `docs/` | `make frontend-check` |
+
+The steps of each job are the steps of the Makefile target, so the two jobs
+together run every step of `make check`. A test in `scripts/pr_workflow_test.go`
+fails when the jobs and the `run_group` entries of the `check` recipe differ.
+To make the checks required on `main`, mark both job names, `backend-check` and
+`frontend-check`, as required status checks.
+
+The `backend-check` job uses three caches:
+
+- **apt packages.** `awalsh128/cache-apt-pkgs-action` restores the package
+  files on a cache hit and does not run `apt-get update`. On a miss, it
+  installs the packages and saves the cache. To rebuild the cache, increase
+  its `version` input.
+- **cargo.** `actions/cache` keeps the `desktop-rust-check` target directory
+  (`~/.cache/tariboy/desktop-check-target`, the default of
+  `TARIBOY_CARGO_CHECK_DIR`) and the cargo registry and git caches. The key
+  contains the Rust version of the runner and the hash of
+  `desktop/src-tauri/Cargo.lock`. When the lockfile changes, the job restores
+  the newest cache of the same Rust version and cargo compiles only the changed
+  crates. A new Rust version on the runner starts with an empty cache.
+- **staticcheck.** `actions/cache` keeps `~/.cache/staticcheck`. `setup-go`
+  caches only the Go build and module caches, so without this cache
+  `staticcheck` analyzes the standard library and every dependency on each
+  run. The key contains the hash of `go.mod`, `go.sum`, `tools.mod` and
+  `tools.sum`. When one of them changes, the job restores the newest
+  staticcheck cache. staticcheck checks the inputs of each cached entry, so an
+  old entry is never used for changed code.
+
+A pull request run can restore caches of its own branch and of `main`. The run
+on each push to `main` saves the caches that new pull requests use. A cache
+miss or a failed restore does not fail the job: it installs and compiles
+everything, as without a cache.
 
 ### Checks on a shared host
 
@@ -633,6 +677,20 @@ example `TasksWorkspace.realtime.test.tsx`. Vitest runs the files in parallel.
 Put the shared fixtures in `ui/src/test/`. Keep the `vi.hoisted` and `vi.mock`
 calls in each test file, because Vitest hoists them only in the test file
 itself.
+
+`npm test` runs `scripts/vitest-run.mjs`, which runs `vitest run` with the same
+arguments. The reporter `scripts/vitest-file-ledger.mjs` writes the number of
+test files that Vitest found and each test file that ended to a ledger file.
+The wrapper fails when Vitest finished fewer files than it found, when a signal
+stopped Vitest, or when Vitest stopped before it reported the files. The
+message names both numbers, for example
+`ui-test: vitest finished 274 of 303 test files; 29 did not run`. A successful
+run prints `ui-test: vitest finished 303 of 303 test files`. The check does not
+use the Vitest summary, because a Vitest worker that runs out of heap can stop
+the run with exit code 0 and no summary. To prevent that, `ui/vite.config.ts`
+sets `vmMemoryLimit` to 60% of the heap limit of a Node.js thread. Vitest then
+restarts a `vmThreads` worker before its heap is full. `npm run test:watch`
+runs Vitest without the wrapper and without the check.
 
 `npm run knip` runs [Knip](https://knip.dev) from `ui/knip.json`. The
 `ui-dead-code` step of `make frontend-check` runs it. It fails when it finds
@@ -1124,7 +1182,14 @@ live state:
   has a comment that says why. A test that starts `daemon.Run` waits on
   `Options.Ready` instead of polling the daemon socket.
 - **Mark independent tests with `t.Parallel()`.** Tests that use `t.Setenv`,
-  `os.Chdir`, or package-level state stay sequential.
+  `os.Chdir`, or package-level state stay sequential, also when a helper they
+  call does it. A sequential test has a comment that says why. In
+  `internal/tasks` and `internal/commands` every new test calls
+  `t.Parallel()` unless such a reason applies.
+- **`internal/commands` tests get a handler through `cmdHandler` or `h`.**
+  These helpers share one registry for the test binary. `BuildRegistry()`
+  builds the result schema of every command, so call it only in a test that
+  checks the registry itself.
 - **Tests that drive a real `tmux` have the `tmux` build tag**
   (`internal/shim/shim_tmux_test.go`). `make test` adds `-tags tmux` when
   `tmux` is installed, and `make vet` always vets them. Run them alone with

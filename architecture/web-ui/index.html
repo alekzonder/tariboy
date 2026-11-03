@@ -343,7 +343,8 @@ has none. A host heading opens <code>/tasks?host=&lt;id&gt;</code>.</p>
 <p>An agent row shows the agent’s derived state (see
 <a href="#agent-state">Agent state</a>). The dot has the color of the state. On the
 right, the row shows one pill: <code>needs you · n</code> in the accent color,
-<code>working · 12 min</code> with a clock that moves each minute, <code>error</code> in the danger
+<code>working · 12 min</code> with a clock that moves each minute (or
+<code>working · waiting for agent command</code> when the state has that reason), <code>error</code> in the danger
 color with the reason in its tooltip, or a muted <code>off</code>. An idle row shows no
 pill. The row has no other state, budget, or unread-letter badge; an open
 question is in <strong>Inbox</strong> and its task is in <strong>Tasks</strong>.</p>
@@ -2025,7 +2026,7 @@ The first state that matches wins:</p>
 </tr>
 <tr>
 <td><code>working</code></td>
-<td>the agent state is <code>running</code>; the elapsed time starts at <code>current_iteration_started_at</code></td>
+<td>the agent state is <code>running</code>; the elapsed time starts at <code>current_iteration_started_at</code>. The state carries the <code>state_reason</code>, such as <code>waiting for agent command</code>, when the agent has one.</td>
 </tr>
 <tr>
 <td><code>off</code></td>
@@ -2058,7 +2059,8 @@ agents no <code>needs you</code> pill.</p>
 <li>needs you: “Waiting for you: &lt;status, or ‘a question’&gt; for &lt;KEY&gt;
 (&lt;age&gt;)”, or “Waiting for you: n things” when n is more than 1;</li>
 <li>working: “Working on &lt;Goal KEY&gt; since &lt;HH&gt; · run &lt;n&gt;”, or
-“Working since &lt;HH&gt;” without a Goal task;</li>
+“Working since &lt;HH&gt;” without a Goal task, followed by
+“ · &lt;state_reason&gt;“ when the agent has one;</li>
 <li>idle: “Idle. Give it a task.”;</li>
 <li>off: “Off. Start to let it work on tasks.”;</li>
 <li>error: the reason, in red.</li>

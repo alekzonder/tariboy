@@ -872,7 +872,7 @@ lists with its part. <code>purged</code> is <code>true</code> only in mode <code
 <p>After mode <code>remove</code>, <code>agent inspect NAME</code> answers not found, and <code>agent ps</code>
 does not show the agent. <code>image rm</code> can then delete the image of the agent if
 no other agent uses it. <code>tariboy iteration ls NAME</code> and
-<code>GET /api/assessments?agent=NAME</code> still return the kept history.</p>
+<code>GET /api/assessments?agent=NAME&amp;history=true</code> still return the kept history.</p>
 <p>If the agent is in a task queue agent pool, modes <code>remove</code> and <code>purge</code> fail
 before the daemon stops the agent. The error names each queue and pool.</p>
 <p>An agent that you create later under the same name gets the kept history:

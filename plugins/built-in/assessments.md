@@ -61,6 +61,26 @@ The validation rules, the link rule for an iteration and a task, and the
 retention of assessments are in
 [State model](/docs/architecture/state-model#assessments).
 
+## Latest assessment
+
+A reassessment of the same iteration or task adds a new record. The earlier
+record stays. By default, `tariboy assessment ls`, `GET /tools/assessment/ls`
+and `GET /api/assessments` return only the latest record of each iteration
+and each task. The filters and `--limit` apply after that choice. Thus `ls`
+never shows a replaced record, also with `--assessor`.
+
+To get every record, give `--history` to `tariboy assessment ls`, or
+`history=true` to the routes:
+
+```bash
+tariboy assessment ls --iteration ITERATION-ID --history
+```
+
+`tariboy assessment show ID` shows any record, also a replaced one. Metrics
+use the same rule, see [Metrics](/docs/architecture/metrics#latest-assessment).
+The order that selects the latest record is in
+[State model](/docs/architecture/state-model#assessments).
+
 ## Operator access
 
 Operators read assessments with `tariboy assessment ls` and

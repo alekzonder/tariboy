@@ -71,6 +71,14 @@ PID from tmux or signals a process after reaping its leader. It does not restore
 terminal foreground ownership because it performs no further terminal I/O and
 exits immediately after recording the result.
 
+After it starts the harness, the supervisor reports the harness pid to the
+outer shim with the `harness_started` RPC on the same socket. The shim then
+reports that pid in `status` until the `harness_exited` report, and pid 0
+before and after. The daemon stall probe uses this pid. The supervisor keeps
+the harness unreaped until it exits, so the pid is not reused meanwhile. The
+report is best-effort and bounded to one second. A shim without the method
+answers with an unknown-method error, and the supervisor ignores it.
+
 After successful observation, group cleanup, and the exact leader reap, the
 supervisor captures the harness's real numeric status, writes it to an
 owner-private temporary file, and atomically renames it within the iteration's

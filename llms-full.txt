@@ -1611,6 +1611,71 @@ Loop policy is set with the `tariboy loop …` subcommands — `interval`,
 [the command reference](/docs/reference/commands#operator-commands).
 :::
 
+## Stall probe
+
+An iteration is stalled when it made no AI-proxy request for
+`ai_stall_timeout_s`. A harness often waits for a long agent command at that
+time, for example `make check`. The stall probe tells these two cases apart.
+It changes only the reported state. Restarts, `on_error`, `on_timeout`,
+`timeout_s` and `hard_timeout_s` do not change.
+
+The daemon runs the probe only for a stalled iteration:
+
+1. The daemon asks the iteration's shim for the harness pid with the `status`
+   RPC. Without tmux, the shim starts the harness and knows its pid. With
+   tmux, the pane supervisor starts the harness and reports its pid with the
+   `harness_started` RPC.
+2. The daemon reads the process table once: `/proc/<pid>/stat` and
+   `/proc/<pid>/cmdline` on Linux, the `kern.proc.all` and `kern.procargs2`
+   sysctls on macOS.
+3. The rule `proctree.AgentCommand` decides from that snapshot.
+
+A process is a live agent command when all of these are true:
+
+- It is a direct child of the harness and is not a zombie.
+- Its name is a shell: `bash`, `sh`, `zsh`, `dash` or `fish`. Harnesses run
+  tool commands through a shell.
+- No exclusion applies to it.
+
+The direct children decide, because a live shell is itself a child of the
+harness. When the shell exits, its children move to another parent.
+
+These processes are excluded:
+
+- A direct child that is not a shell. This covers MCP servers, such as `node`,
+  `npx`, `uvx`, `python` or the `tariboy` binary, and harness plugins.
+- A shell whose `-c` script is an instant mail hook command that the daemon
+  wrote for this harness. The script must be equal to the command, or start
+  with the command and a space. The commands come from the same builder that
+  writes `hooks.json` for claude and the `-c` hook arguments for codex.
+- The tmux server, the pane supervisor, the shim and the `tariboy` tool
+  bridges. They are ancestors or siblings of the harness, so the rule never
+  sees them.
+
+If the rule finds a live agent command, the state is `running` with the state
+reason `waiting for agent command`. In all other cases the state is `error`
+with the stall `error_reason`. These cases include a probe error, a probe that
+runs longer than 1 second, and a shim that reports pid 0. An older shim or
+supervisor reports pid 0.
+
+The daemon keeps each result, failures included, for 15 seconds per
+iteration. Only one probe for an agent runs at a time. `agent.ps` probes all
+stalled agents at once with one process table read, so it waits 1 second at
+most for any number of agents.
+
+The probe has these limits:
+
+- The shell name is a heuristic. A harness that keeps one shell alive between
+  commands shows `running` while that shell is alive.
+- An MCP server from the user's configuration (`.mcp.json`, `~/.claude.json`)
+  that the harness starts through a shell counts as an agent command. The
+  daemon does not write or read that configuration.
+- The hook commands are in daemon memory. After a daemon restart, an adopted
+  iteration has no hook commands, and a live hook shell counts as an agent
+  command. A hook runs for 5 seconds at most.
+- The probe works only when the daemon and the harness run on the same host
+  in the same pid namespace.
+
 ## Image capabilities
 
 Schema-v2 agents receive exactly the plugins declared by their image, including
@@ -2101,13 +2166,28 @@ old keys.
 | `rework_by_outcome` | count per outcome | The same count for each of the three outcomes. | `task_status_visits.outcome` |
 | `rejected_advances` | count | The number of `advance` requests that a check rejected. | Sum of `task_status_visits.rejected_requests` |
 | `customer_questions` | count | The number of waits for an answer of the customer. | `task_waiting_for` rows with `expected_principal` equal to `tasks.customer` |
-| `quality` | score from 0 to 100 | For each axis `image_process`, `role`, `task_fit`: `avg`, `min` and `count` of the scores. An axis without scores is `null`. Without any score, `quality` is `null`. | `assessment_axes` with `verdict = scored` of the `assessments` with the task's key |
+| `quality` | score from 0 to 100 | For each axis `image_process`, `role`, `task_fit`: `avg`, `min` and `count` of the scores. An axis without scores is `null`. Without any score, `quality` is `null`. | `assessment_axes` with `verdict = scored` of the [latest assessment](#latest-assessment) of each iteration and task with the task's key |
 | `agents[]` | | For each agent: `usage` and `images[]`, the image versions of that agent's iterations. | `ai_requests.agent` |
 | `images[]` | | The iterations, tokens and cost on each image version: `image`, `image_ref`, `image_version`, `image_digest`. | See [Image version of an iteration](#image-version-of-an-iteration) |
 | `workflows[]` | | The workflow versions of the task's visits: `name`, `version`, `digest`. Empty for a task without a workflow. | `task_status_visits.workflow_digest` → `task_workflow_images` |
 
 A task without a workflow has no visits. Its `rework_rounds` and
 `rejected_advances` are 0.
+
+### Latest assessment
+
+An assessment is never changed. A reassessment adds a new record. `quality`
+uses only the latest record of each assessed object, so the scores of a
+replaced record do not count. `tariboy assessment ls` uses the same rule, see
+[assessments](/docs/plugins/built-in/assessments#latest-assessment).
+
+- The object of an iteration assessment is its `iteration_id`.
+- The object of a task assessment, with an empty `iteration_id`, is its
+  `task_key`.
+
+An assessment of an iteration and an assessment of its task are two objects.
+The task's `quality` counts both. The rule that selects the latest record is
+in [State model](/docs/architecture/state-model#assessments).
 
 ### Questions to the customer
 
@@ -2173,7 +2253,7 @@ has two blocks:
 | `lead_time_median_s`, `lead_time_avg_s` | seconds | Median and average of `lead_time_s`. `null` without a lead time. |
 | `sum` | | Sums of `iterations`, `tokens`, `cost_usd`, `rework_rounds`, `rejected_advances`, `customer_questions` |
 | `avg` | per task | The same values divided by `tasks_done`, rounded to 2 decimal places. Not in the response when `tasks_done` is 0. |
-| `quality` | score | Per axis: average, minimum and count of all scores of the slice's tasks. `null` without scores. |
+| `quality` | score | Per axis: average, minimum and count of the scores of the slice's tasks, from the [latest assessment](#latest-assessment) of each object. `null` without scores. |
 
 ### Tasks with several agents or versions
 
@@ -2298,6 +2378,14 @@ shim's fail-closed unknown result (`-1`). The supervisor never discovers a pane
 PID from tmux or signals a process after reaping its leader. It does not restore
 terminal foreground ownership because it performs no further terminal I/O and
 exits immediately after recording the result.
+
+After it starts the harness, the supervisor reports the harness pid to the
+outer shim with the `harness_started` RPC on the same socket. The shim then
+reports that pid in `status` until the `harness_exited` report, and pid 0
+before and after. The daemon stall probe uses this pid. The supervisor keeps
+the harness unreaped until it exits, so the pid is not reused meanwhile. The
+report is best-effort and bounded to one second. A shim without the method
+answers with an unknown-method error, and the supervisor ignores it.
 
 After successful observation, group cleanup, and the exact leader reap, the
 supervisor captures the harness's real numeric status, writes it to an
@@ -2429,6 +2517,14 @@ work begins. When the newest point is at least the agent's positive
 `error` with an informational `error_reason`; the loop and iteration continue.
 The next attributed request updates the timestamp and live state derives as
 `running` again. Stale requests for older or completed iterations are ignored.
+
+Before the daemon reports such a stall, it runs the stall probe. The probe
+looks for a live agent command under the harness process, such as a long
+`make check`. If it finds one, live state is `running` and the agent readers
+(`agent.inspect`, `agent.ps`, `agent.status.show`) report
+`state_reason: "waiting for agent command"` with no `error_reason`. The
+`state_reason` key is absent when the state has no reason. See
+[the stall probe](/docs/architecture/iteration-loop#stall-probe).
 
 Reconciliation and reaping are therefore flag-independent: the daemon derives
 what *should* be running from the DB and converges to it.
@@ -2696,6 +2792,28 @@ An assessment is immutable. No command changes or deletes one. A second
 assessment of the same iteration or task is a new row with a new id. The
 row, its axes and its violations are written in one transaction, so a failed
 write leaves no part of an assessment.
+
+Metrics and `assessment.ls` without `history` read only the latest row of
+each assessed object. The object of a row with an `iteration_id` is that
+iteration. The object of a row with an empty `iteration_id` is its
+`task_key`. The latest row of an object is the first row in this order:
+
+1. `created_at`, newest first.
+2. At an equal `created_at`, `rubric_version`, latest first.
+3. At an equal `rubric_version`, `seq`, highest first.
+
+A `rubric_version` of the form `name/N` has a name and a number. `N` is one
+or more digits at the end, after a `/`, and `name` is not empty. The daemon
+compares the names as strings, then the numbers as numbers. Thus
+`iteration-review/10` is later than `iteration-review/2`, and
+`iteration-review/1` is later than `iteration-review`. A value of another
+form is a name without a number.
+
+The choice happens at read time and changes no row. The SQL condition is
+`assessment.IsLatest`. It checks each row against the other rows of its
+object through `idx_assessments_iteration` or `idx_assessments_task`. On a
+test database with 10,000 assessments, `assessment ls` takes about 10 ms.
+The assessment step of a metrics report over 1,000 tasks takes about 250 ms.
 
 The axes and the violations reference `assessments(seq)` with
 `ON DELETE CASCADE`. The tables have no foreign key to `iterations`, `tasks`
@@ -3039,18 +3157,20 @@ under the agent root; the next provisioning of that agent removes them. Generati
 Harness, model, effort, environment, CWD, context, workdir, mail, history,
 and group are not image assignment fields.
 
-Image content is addressed by ref id — derived from the image name and the
-source `image_version`, or from the archive bytes when no version is declared —
-and a tag is a pointer file naming that id. One build publishes one ref and
-moves every requested tag onto it, so a versioned tag and `latest` always agree.
-The build records where those tags pointed, then commits every source snapshot
-and provenance row in one SQLite transaction; a failure restores the tags and
-deletes only content the build introduced, never a generation an agent may be
-pinned to. There is no separate immutable mode and no publication journal:
-rebuilding any non-reserved ref is always allowed, so no build path can be
-refused for a ref that already exists. A store written before this model is
-migrated once at daemon startup, keeping each archive's content digest as its
-ref id so pinned digests keep resolving.
+Image content is addressed by ref id, the digest of its content (see "Refs,
+tags and identity" in [Images](/docs/images#refs-tags-and-identity)). A tag is a pointer file
+naming that id. Archives from earlier releases keep their id: either
+`sha256(name + "\n" + image_version)` or the archive file digest. One build
+publishes one ref and moves every requested tag onto it, so a versioned tag and
+`latest` always agree. Content stored under an id is never rewritten. A build
+of an `image_version` that is already stored with other content fails with
+`image_version_conflict` unless it is forced. The build records where those
+tags pointed, then commits every source snapshot and provenance row in one
+SQLite transaction. A failure restores the tags and deletes only content the
+build introduced, never a generation an agent may be pinned to. There is no
+publication journal. A store written before this model is migrated once at
+daemon startup, keeping each archive's digest as its ref id so pinned digests
+keep resolving.
 Image locks keep every reader off an uncommitted generation. Ordinary,
 editable-source, agent-authored, compose, and import publication take the lock
 of the one image name they write, so publications of different names run in
@@ -3387,7 +3507,8 @@ has none. A host heading opens `/tasks?host=<id>`.
 An agent row shows the agent's derived state (see
 [Agent state](#agent-state)). The dot has the color of the state. On the
 right, the row shows one pill: `needs you · n` in the accent color,
-`working · 12 min` with a clock that moves each minute, `error` in the danger
+`working · 12 min` with a clock that moves each minute (or
+`working · waiting for agent command` when the state has that reason), `error` in the danger
 color with the reason in its tooltip, or a muted `off`. An idle row shows no
 pill. The row has no other state, budget, or unread-letter badge; an open
 question is in **Inbox** and its task is in **Tasks**.
@@ -4927,7 +5048,7 @@ The first state that matches wins:
 | --- | --- |
 | `error` | the agent state is `error` or `failed`, it has a `halt_reason` whose `halt_kind` is not `idle_limit`, it has an `error_reason`, or a budget is exhausted. The state carries the reason. |
 | `needs you · n` | n is more than 0 (see below) |
-| `working` | the agent state is `running`; the elapsed time starts at `current_iteration_started_at` |
+| `working` | the agent state is `running`; the elapsed time starts at `current_iteration_started_at`. The state carries the `state_reason`, such as `waiting for agent command`, when the agent has one. |
 | `off` | the agent is disabled |
 | `idle` | any other case |
 
@@ -4954,7 +5075,8 @@ The header has three lines on every tab:
    - needs you: "Waiting for you: \<status, or 'a question'\> for \<KEY\>
      (\<age\>)", or "Waiting for you: n things" when n is more than 1;
    - working: "Working on \<Goal KEY\> since \<HH:MM\> · run \<n\>", or
-     "Working since \<HH:MM\>" without a Goal task;
+     "Working since \<HH:MM\>" without a Goal task, followed by
+     " · \<state_reason\>" when the agent has one;
    - idle: "Idle. Give it a task.";
    - off: "Off. Start to let it work on tasks.";
    - error: the reason, in red.
@@ -5762,7 +5884,7 @@ must therefore include it.
 | `tmail instant [--format text\|json]` | for a harness hook: print the instant letters that wait for this iteration (`POST /tools/mail/instant`) |
 | `scripts/schedule.sh add`/`ls`/`cancel` | agent-owned scheduled wake-ups |
 | `scripts/scripts.sh run`/`schedule`/`rerun`/`ls`/`runs`/`logs`/`cancel`/`rm` | local asynchronous commands and run history |
-| `tariboy assessment add --file PATH` / `ls` / `show ID` | record an [assessment](/docs/plugins/built-in/assessments) (needs `assessments`); read assessments (open to every agent) |
+| `tariboy assessment add --file PATH` / `ls [--history]` / `show ID` | record an [assessment](/docs/plugins/built-in/assessments) (needs `assessments`); read assessments (open to every agent). `ls` returns the latest assessment of each iteration and task; `--history` returns every assessment |
 | `GET /tools/group/info`, `status`, `observe/{member}`, `POST /tools/group/loop` | group coordination; group sends are `tmail send --to group:<g>` or `agent:<member>` |
 
 `tariboy-tasks` is installed globally with the `ttasks` alias. Packaged daemons
@@ -6095,7 +6217,7 @@ when the daemon is down.
 | `files` | `upload` base64 content to the shared server directory |
 | `loop` | `enable`, `disable`, `interval`, `timeout`, `hard-timeout`, `on-timeout`, `on-error` |
 | `mail` | the [`tmail`](/docs/reference/mail) client in operator mode: `inbox`, `sent`, `archive`, `show`, `send`, `reply`, `requeue`, `close`, `read`, `unread`, `clear` |
-| `assessment` | `ls` with `--iteration`, `--task`, `--agent`, `--assessor`, `--image`, `--image-version`, `--limit`, and `show ID`: read [assessments](/docs/plugins/built-in/assessments). `add` works only in an agent with `TARIBOY_TOOLS_SOCKET` |
+| `assessment` | `ls` with `--iteration`, `--task`, `--agent`, `--assessor`, `--image`, `--image-version`, `--limit`, `--history`, and `show ID`: read [assessments](/docs/plugins/built-in/assessments). `ls` returns the latest assessment of each iteration and task; `--history` returns every assessment. `add` works only in an agent with `TARIBOY_TOOLS_SOCKET` |
 | `group` | `create`, `assign`, `inspect`, `ls`, `rm` |
 | `plugin` | `install`, `ls`, `inspect`, `logs`, `rm` |
 | `telegram` | contributed by the running bundled plugin: `configure`, `chat setup`, `status` |
@@ -6208,7 +6330,8 @@ Install only the toolchains needed for the area you are changing:
 - **Go control plane:** Go 1.26, Make, a C toolchain where required by the host.
 - **Fast checks:** ripgrep (`rg`) for the packaging secret-scan contract in
   `make backend-check` and `make check`. Install with `apt-get install ripgrep`
-  on Ubuntu or `brew install ripgrep` on macOS; the PR workflow installs it.
+  on Ubuntu or `brew install ripgrep` on macOS; the `backend-check` job of the
+  pull request workflow installs it.
 - **React UI:** Node.js and npm.
 - **Desktop native host:** Rust (minimum package version 1.77), Cargo, the Tauri
   prerequisites, and platform build tools.
@@ -6348,7 +6471,7 @@ smoke contracts. Its
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
 frontend target runs the UI format check, the generated API types check, UI
 typecheck, lint with the complexity and size thresholds, the unused-code check, unit tests,
-branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
+which fail when Vitest finishes fewer test files than it found, branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
 `scripts/npm-ci-locked.sh` for locked installs under `ui/`, `ui/tools/api-types/`
 and `docs/`.
@@ -6368,6 +6491,49 @@ After dependency preparation succeeds, the check steps do not stop at the
 first failure. Each step is timed and recorded, and the run ends with a summary
 table naming every step that failed, so one aggregate pass surfaces gofmt drift
 and a UI type error together.
+
+### Pull request CI
+
+The workflow `.github/workflows/pull-request.yml` runs for every pull request
+and for every push to `main`. It does not run `make check` as one job. It runs
+the two groups of `make check` as two jobs in parallel:
+
+| Job | Installs | Runs |
+| --- | --- | --- |
+| `backend-check` | Go from `go.mod`, a stub `codex` harness, the apt packages for `ripgrep` and the Tauri crate | `make backend-check` |
+| `frontend-check` | Node.js 22 with the npm cache of `ui/` and `docs/` | `make frontend-check` |
+
+The steps of each job are the steps of the Makefile target, so the two jobs
+together run every step of `make check`. A test in `scripts/pr_workflow_test.go`
+fails when the jobs and the `run_group` entries of the `check` recipe differ.
+To make the checks required on `main`, mark both job names, `backend-check` and
+`frontend-check`, as required status checks.
+
+The `backend-check` job uses three caches:
+
+- **apt packages.** `awalsh128/cache-apt-pkgs-action` restores the package
+  files on a cache hit and does not run `apt-get update`. On a miss, it
+  installs the packages and saves the cache. To rebuild the cache, increase
+  its `version` input.
+- **cargo.** `actions/cache` keeps the `desktop-rust-check` target directory
+  (`~/.cache/tariboy/desktop-check-target`, the default of
+  `TARIBOY_CARGO_CHECK_DIR`) and the cargo registry and git caches. The key
+  contains the Rust version of the runner and the hash of
+  `desktop/src-tauri/Cargo.lock`. When the lockfile changes, the job restores
+  the newest cache of the same Rust version and cargo compiles only the changed
+  crates. A new Rust version on the runner starts with an empty cache.
+- **staticcheck.** `actions/cache` keeps `~/.cache/staticcheck`. `setup-go`
+  caches only the Go build and module caches, so without this cache
+  `staticcheck` analyzes the standard library and every dependency on each
+  run. The key contains the hash of `go.mod`, `go.sum`, `tools.mod` and
+  `tools.sum`. When one of them changes, the job restores the newest
+  staticcheck cache. staticcheck checks the inputs of each cached entry, so an
+  old entry is never used for changed code.
+
+A pull request run can restore caches of its own branch and of `main`. The run
+on each push to `main` saves the caches that new pull requests use. A cache
+miss or a failed restore does not fail the job: it installs and compiles
+everything, as without a cache.
 
 ### Checks on a shared host
 
@@ -6805,6 +6971,20 @@ example `TasksWorkspace.realtime.test.tsx`. Vitest runs the files in parallel.
 Put the shared fixtures in `ui/src/test/`. Keep the `vi.hoisted` and `vi.mock`
 calls in each test file, because Vitest hoists them only in the test file
 itself.
+
+`npm test` runs `scripts/vitest-run.mjs`, which runs `vitest run` with the same
+arguments. The reporter `scripts/vitest-file-ledger.mjs` writes the number of
+test files that Vitest found and each test file that ended to a ledger file.
+The wrapper fails when Vitest finished fewer files than it found, when a signal
+stopped Vitest, or when Vitest stopped before it reported the files. The
+message names both numbers, for example
+`ui-test: vitest finished 274 of 303 test files; 29 did not run`. A successful
+run prints `ui-test: vitest finished 303 of 303 test files`. The check does not
+use the Vitest summary, because a Vitest worker that runs out of heap can stop
+the run with exit code 0 and no summary. To prevent that, `ui/vite.config.ts`
+sets `vmMemoryLimit` to 60% of the heap limit of a Node.js thread. Vitest then
+restarts a `vmThreads` worker before its heap is full. `npm run test:watch`
+runs Vitest without the wrapper and without the check.
 
 `npm run knip` runs [Knip](https://knip.dev) from `ui/knip.json`. The
 `ui-dead-code` step of `make frontend-check` runs it. It fails when it finds
@@ -7296,7 +7476,14 @@ live state:
   has a comment that says why. A test that starts `daemon.Run` waits on
   `Options.Ready` instead of polling the daemon socket.
 - **Mark independent tests with `t.Parallel()`.** Tests that use `t.Setenv`,
-  `os.Chdir`, or package-level state stay sequential.
+  `os.Chdir`, or package-level state stay sequential, also when a helper they
+  call does it. A sequential test has a comment that says why. In
+  `internal/tasks` and `internal/commands` every new test calls
+  `t.Parallel()` unless such a reason applies.
+- **`internal/commands` tests get a handler through `cmdHandler` or `h`.**
+  These helpers share one registry for the test binary. `BuildRegistry()`
+  builds the result schema of every command, so call it only in a test that
+  checks the registry itself.
 - **Tests that drive a real `tmux` have the `tmux` build tag**
   (`internal/shim/shim_tmux_test.go`). `make test` adds `-tags tmux` when
   `tmux` is installed, and `make vet` always vets them. Run them alone with
@@ -7532,17 +7719,51 @@ the daemon starts.
 
 ### Refs, tags and identity
 
-A **ref** is the stored image content. Its identity is derived from the image
-name and the `image_version` declared in `Tariboyfile.yaml`, so rebuilding the
-same version republishes the same ref and bumping the version creates another
-one. A source with no declared version stays addressed by its archive bytes.
-A **tag** is only a pointer to a ref, held in `images/<name>/tags/<tag>`; the
-content lives once in `images/<name>/refs/<id>.tar.gz`.
+A **ref** is the stored image content. Its id, also called its digest, is the
+SHA-256 of the image content. The content lives once in
+`images/<name>/refs/<digest>.tar.gz`, and the manifest field `id` holds the same
+digest. A **tag** is only a pointer to a ref. It is held in
+`images/<name>/tags/<tag>`.
 
-Every build therefore publishes without restriction: rebuilding an existing
-ref, including `latest`, always succeeds and moves the tag. Generations that
-other tags no longer name stay on disk, so agents pinned to an earlier ref keep
-running until their next launch gate.
+The digest is the SHA-256 of this text:
+
+```
+tariboy-image-content/1
+<mode> <sha256 of body> <path>
+<mode> <sha256 of body> <path>
+...
+```
+
+- The text has one line for each archive member, `manifest.json` included.
+  The lines are sorted by path in byte order, and each line ends with a newline.
+- `<mode>` is the permission of the member as four octal digits, for example
+  `0600` or `0700`.
+- For `manifest.json`, the body is the canonical manifest: the manifest JSON
+  object without the keys `built_at`, `tag`, `digest` and `id`, encoded again
+  with sorted keys and no spaces.
+
+So every change to a skill file, a skill description, a prompt layer, the role,
+the plugins or the image name gives another digest. The same content gives the
+same digest, whatever its build time or the member order in the archive. The
+format is the same for images with and without `image_version`.
+`tariboy image inspect`, import and every read of a stored archive calculate
+the digest again. An archive whose `id` is not its content digest is refused
+with `image manifest id does not match content digest`.
+
+Archives built by earlier releases stay readable without a migration:
+
+- An archive whose `id` is `sha256(name + "\n" + image_version)` is a legacy
+  archive. Its digest stays that `id`, and its content is not checked.
+- An archive without `id` keeps the SHA-256 of its archive file as its digest.
+
+Agents pinned to a legacy digest keep running. Files and tags on disk are not
+rewritten.
+
+A build never rewrites content that is already stored under its digest. If
+the same content is already stored, the build only moves the tags. Generations
+that no tag names stay on disk, so agents pinned to an earlier ref keep running
+until their next launch gate. For the rule that applies when you rebuild one
+`image_version` with other content, see [Image versions](#image-versions).
 
 There is one build mechanism. The operator CLI, the Store build, an agent's
 own `image-creator`, and team import all publish the same way and behave
@@ -7561,8 +7782,8 @@ over it, or remove it. `basic` is an ordinary Store image. You can rebuild,
 export, and remove `basic:latest`, also a legacy one without provenance.
 
 A store written by an earlier release is migrated once, when the daemon starts:
-each archive keeps its content digest as its ref id, so every digest already
-pinned on an agent continues to resolve. The migration is one-way.
+each archive keeps its digest as its ref id, so every digest already pinned on
+an agent continues to resolve. The migration is one-way.
 
 ## Stores on a server
 
@@ -7730,7 +7951,9 @@ and one button:
 
 **Update available** shows only when the two versions are known and differ.
 This comparison cannot detect changed source bytes when `image_version` stays
-the same. Use **Build** after such a change. The **Automatic builds**
+the same. After such a change, increment `image_version` in the Store source.
+A build of the same version with other content fails with
+`image_version_conflict` (see [Rebuild a version](#rebuild-a-version)). The **Automatic builds**
 disclosure below the tables holds the interval and the images it builds. Built
 artifacts appear in **Library → Images**. Stores do not yet expose standalone
 skills or plugins.
@@ -7761,6 +7984,52 @@ Updates atomically replace the file while preserving its permissions, YAML
 fields, and comments; YAML formatting may change. Missing or invalid versions
 produce an error without changing the file. Old sources may omit the field
 for build compatibility, but version commands require it.
+
+### Rebuild a version
+
+One `image_version` names one content. When you rebuild an image, the build
+compares its content digest with every stored archive of the same name and the
+same `image_version`. Legacy archives are compared by their content too.
+
+- If an archive with the same content exists, the build publishes nothing new.
+  It moves the tags onto that archive.
+- If only archives with other content exist, the build fails with the error
+  code `image_version_conflict` (HTTP 409). The error names the ref, the current
+  digest and the new digest, for example:
+  `image reviewer:1.2.0 already exists with digest OLD; this build has digest NEW. Bump image_version in Tariboyfile.yaml or rebuild with --force.`
+  No file is written and no tag moves.
+- An image without `image_version` never conflicts. The tag `latest` alone
+  does not cause a conflict.
+
+To roll out a change, increment `image_version`. To replace the content of the
+version anyway, run `tariboy image build --force`, or send `force: true` to
+`POST /api/images/build`. The build then publishes the new digest and moves the
+tags onto it. The old archive stays on disk under its own digest, so agents
+pinned to it keep running. The operation log of the build gets one line:
+
+```
+image_version_forced ref=NAME:VERSION version=VERSION old_digest=OLD new_digest=NEW initiator=INITIATOR
+```
+
+When several archives are replaced, `old_digest` lists them, separated by
+commas. Read the line with `tariboy operation log ID` or `tariboy operation show
+ID`, or in **Settings → Maintenance → Operations log**. Find the build with
+`tariboy operation ls`. The log is deleted with its operation when the
+maintenance retention period ends.
+
+The same rule applies to every path that publishes an image:
+
+| Path | On a conflict |
+| --- | --- |
+| `tariboy image build`, **Build** in the Web UI, Store builds and onboarding | fails with `image_version_conflict`; `--force` is available |
+| Automatic Store builds | the build operation fails with `image_version_conflict`; the next cycle tries again; it never forces |
+| A build by an agent (`image-creator`) | the tool returns the conflict error |
+| **Build** of an editable image source (`image.source.build`) | fails with `image_version_conflict` (HTTP 409) |
+| **Import runnable image** and transfer to servers | the import fails and the tag does not move |
+| `tariboy pull` | the pull fails and the tag does not move |
+
+The `tariboy-store` server and the daemon-owned `bare:latest` always publish.
+The Web UI has no force switch. It shows the conflict error of the operation.
 
 The runnable manifest preserves `image_version`; the archive carries no tag,
 since a tag only points at a ref. Every new iteration snapshots the source
@@ -8012,10 +8281,28 @@ version metadata is labelled **Version not specified**.
 
 When an agent's active ref moves to another id, the launch gate stages and
 promotes it at the next iteration. The running iteration keeps its original
-prompt, version, and digest. A rebuild that does not change `image_version`
-republishes the same ref, so there is nothing new to adopt and running agents
-are undisturbed; bump the version to roll a change out. The preview is not a
-reservation: the ref can move again before launch. Cancelling an explicit
+prompt, version, and digest. A rebuild of the same content keeps the digest,
+so there is nothing new to adopt and running agents are undisturbed. Increment
+the version to roll a change out. The preview is not a reservation: the ref can
+move again before launch.
+
+At each launch gate, Tariboy also compares the copy of the image in the agent
+directory (`agents/<name>/image/`) with the archive of its pinned digest. The
+copy does not match when its `.image-digest` names another digest, when its
+`manifest.json` differs from the manifest in the archive, or when a skill in
+the copy differs from the manifest. Then Tariboy unpacks the archive again.
+It uses the same stage, validation and swap as an image activation, and it
+records the audit event `image_rematerialized` with `ref`, `digest` and
+`cause`. The iteration then starts. The agent stops only when the archive of
+the pinned digest is missing or damaged. To count these events, run:
+
+```bash
+FROM=2026-10-01T00:00:00Z TO=2026-11-01T00:00:00Z
+cat "${TARIBOY_BASE_DIR:-$HOME/.tariboy}"/agents/*/audit.jsonl \
+  | jq -c --arg from "$FROM" --arg to "$TO" 'select(.type == "image_rematerialized"
+      and .ts >= $from and .ts < $to)' \
+  | wc -l
+``` Cancelling an explicit
 pending assignment does not disable following the active ref. The preview refreshes with agent status and after UI image builds.
 
 ## Import and export
@@ -8031,10 +8318,15 @@ layer/hash mismatches, and compressed or expanded limit violations. Import does
 not rebuild the image. Preview, apply, assignment, and activation also validate
 plugin, runtime, skill, launcher, and harness compatibility against the
 destination daemon before publication. The import preview exposes editable **Import name** and
-**Import tag** fields. The same ref and digest are idempotent; when the ref
-already names different bytes, import atomically advances the tag and retains
-the previous archive by digest. An explicit retag receives a newly rewritten
-manifest and digest.
+**Import tag** fields. The same ref and digest are idempotent. When the ref
+already names other content, import moves the tag and keeps the previous
+archive by digest. The [image version rule](#rebuild-a-version) applies: an
+archive whose `image_version` is already stored with other content is refused
+with `image_version_conflict`. The inner archive must carry its content digest
+as `id`, so a changed member is refused. A legacy export (see
+[Refs, tags and identity](#refs-tags-and-identity)) imports with its legacy
+digest. An explicit retag receives a newly rewritten manifest and a new content
+digest.
 
 Keep the original directory and paths when future rebuilds are required. An
 exported image is portable for use, not an editable source backup.
@@ -8075,7 +8367,9 @@ for this operation, not source backup or persistent state.
   terminal-only behavior is runtime policy. The daemon rebuilds it on every
   start, with `image_version` set to the daemon version, so the image always
   matches the current release. A restart of the same release keeps the same
-  ref id; a new release moves the tag to a new id. Archives from earlier
+  digest; a new release moves the tag to a new digest. The daemon owns this
+  image, so its build always publishes, also over other content of the same
+  version. Archives from earlier
   releases, including legacy schema-v1 ones, stay in the store, so agents
   pinned to them continue to resolve.
 - The official Store's `basic` source explicitly declares every plugin,
@@ -9036,6 +9330,26 @@ The validation rules, the link rule for an iteration and a task, and the
 retention of assessments are in
 [State model](/docs/architecture/state-model#assessments).
 
+## Latest assessment
+
+A reassessment of the same iteration or task adds a new record. The earlier
+record stays. By default, `tariboy assessment ls`, `GET /tools/assessment/ls`
+and `GET /api/assessments` return only the latest record of each iteration
+and each task. The filters and `--limit` apply after that choice. Thus `ls`
+never shows a replaced record, also with `--assessor`.
+
+To get every record, give `--history` to `tariboy assessment ls`, or
+`history=true` to the routes:
+
+```bash
+tariboy assessment ls --iteration ITERATION-ID --history
+```
+
+`tariboy assessment show ID` shows any record, also a replaced one. Metrics
+use the same rule, see [Metrics](/docs/architecture/metrics#latest-assessment).
+The order that selects the latest record is in
+[State model](/docs/architecture/state-model#assessments).
+
 ## Operator access
 
 Operators read assessments with `tariboy assessment ls` and
@@ -9941,13 +10255,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.107.0` alpha on an Apple Silicon Mac.
+This path is for the `0.108.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.107.0_aarch64.dmg`;
+- a verified `Tariboy_0.108.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -10431,7 +10745,7 @@ lists with its part. `purged` is `true` only in mode `purge`. `--keep` and
 After mode `remove`, `agent inspect NAME` answers not found, and `agent ps`
 does not show the agent. `image rm` can then delete the image of the agent if
 no other agent uses it. `tariboy iteration ls NAME` and
-`GET /api/assessments?agent=NAME` still return the kept history.
+`GET /api/assessments?agent=NAME&history=true` still return the kept history.
 
 If the agent is in a task queue agent pool, modes `remove` and `purge` fail
 before the daemon stops the agent. The error names each queue and pool.
@@ -11899,7 +12213,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.107.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.108.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -12013,7 +12327,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.107.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.108.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -14589,6 +14903,17 @@ does not change. `ttasks ask` on a missing principal fails with
 `principal_not_found` (HTTP 400) and saves no comment. A question to a
 principal opens one wait on it, also when the question text mentions that
 principal again.
+
+An older daemon also opened waits on principals that do not exist, for example
+`agent:tariboy-pm.` with the closing dot of a sentence. No answer can resolve
+such a wait. When `tariboyd` starts, it closes each open wait on a principal
+that does not exist or that has a name a mention cannot match. It also closes
+the open question letters of that wait. The daemon log gets one `Info` record
+for each closed wait, with the task key, the wait ID, the principal and the
+reason (`principal_not_found` or `invalid_principal_name`). One more record
+gives the number of closed waits. Waits on the customer and on existing
+agents stay open, and the task status does not change. If the customer login
+is empty, all waits on `user:*` principals stay open.
 
 An enabled agent normally follows one sticky assigned task as its Goal. It
 releases that selection when the task is done, cancelled, loses assignment or
