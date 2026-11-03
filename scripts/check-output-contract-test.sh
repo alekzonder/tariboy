@@ -147,7 +147,7 @@ EOF
 printf '#!/bin/sh\nprintf "cargo:%%s\\n" "$*" >>%s/events\n' "$fixture" >"$fixture/bin/cargo"
 mkdir -p "$fixture/desktop/src-tauri"
 chmod +x "$fixture/bin/go" "$fixture/fake-goroot/bin/gofmt" "$fixture/bin/npm" "$fixture/bin/npx" "$fixture/bin/node" "$fixture/bin/cargo"
-for script in tariboy-tasks-e2e.sh tariboy-smoke-contract-test.sh package-alpha-contract-test.sh tariboy-branding-contract-test.sh make-clean-contract-test.sh server-install-contract-test.sh publish-docs-contract-test.sh; do
+for script in tariboy-tasks-e2e.sh tariboy-smoke-contract-test.sh package-alpha-contract-test.sh tariboy-branding-contract-test.sh make-clean-contract-test.sh server-install-contract-test.sh publish-docs-contract-test.sh ui-test-memory-gate-test.sh; do
   printf '#!/bin/sh\nexit 0\n' >"$fixture/scripts/$script"
   chmod +x "$fixture/scripts/$script"
 done
@@ -159,7 +159,11 @@ cat >"$fixture/scripts/docs-build-contract-test.sh" <<'EOF'
 #!/bin/sh
 printf 'docs:contract\n' >>../events
 EOF
-chmod +x "$fixture/scripts/check-output-contract-test.sh" "$fixture/scripts/docs-build-contract-test.sh"
+cat >"$fixture/scripts/ui-test-memory-gate.sh" <<'EOF'
+#!/bin/sh
+printf 'memory-gate\n' >>events
+EOF
+chmod +x "$fixture/scripts/check-output-contract-test.sh" "$fixture/scripts/docs-build-contract-test.sh" "$fixture/scripts/ui-test-memory-gate.sh"
 
 : >"$fixture/events"
 PATH="$fixture/bin:$PATH" make --no-print-directory -C "$fixture" GO=go backend-check
@@ -180,9 +184,10 @@ test "$(sed -n '4p' "$fixture/events")" = 'ui:npm run api-types:check'
 test "$(sed -n '5p' "$fixture/events")" = 'ui:npx tsc -b'
 test "$(sed -n '6p' "$fixture/events")" = 'ui:npm run lint'
 test "$(sed -n '7p' "$fixture/events")" = 'ui:npm run knip'
-test "$(sed -n '8p' "$fixture/events")" = 'ui:npm test'
-test "$(sed -n '9p' "$fixture/events")" = 'ui:npm run branding:check'
-test "$(sed -n '10p' "$fixture/events")" = 'ui:npm run bundle:budget'
+test "$(sed -n '8p' "$fixture/events")" = 'memory-gate'
+test "$(sed -n '9p' "$fixture/events")" = 'ui:npm test'
+test "$(sed -n '10p' "$fixture/events")" = 'ui:npm run branding:check'
+test "$(sed -n '11p' "$fixture/events")" = 'ui:npm run bundle:budget'
 echo "Check dependency preparation contract ok"
 
 # Format drift fails the aggregate without skipping the later steps.

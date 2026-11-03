@@ -115,6 +115,7 @@ smoke-contract-test:
 	./scripts/package-alpha-contract-test.sh
 	./scripts/tariboy-branding-contract-test.sh
 	bash ./scripts/check-output-contract-test.sh
+	bash ./scripts/ui-test-memory-gate-test.sh
 	./scripts/make-clean-contract-test.sh
 	./scripts/server-install-contract-test.sh
 	./scripts/publish-docs-contract-test.sh
@@ -698,6 +699,7 @@ frontend-check:
 	run_step "ui-typecheck" 'cd ui && npx tsc -b'; \
 	run_step "ui-lint"      'cd ui && npm run lint'; \
 	run_step "ui-dead-code" 'cd ui && npm run knip'; \
+	./scripts/ui-test-memory-gate.sh 9>&-; \
 	run_step "ui-test"      'cd ui && npm test'; \
 	run_step "ui-branding"  'cd ui && npm run branding:check'; \
 	run_step "ui-bundle-budget" 'cd ui && npm run bundle:budget'; \
