@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -303,5 +304,59 @@ func TestEndTmuxSessionKillsAtOnceOnCancel(t *testing.T) {
 		if call == "has-session" {
 			t.Fatalf("cancellation waited for the pane: %v", *calls)
 		}
+	}
+}
+
+func TestHarnessStartedRPCSetsStatusPIDUntilExit(t *testing.T) {
+	s := &tmuxShim{session: "managed", harnessExited: make(chan struct{})}
+	sock := serveShortSocket(t, s)
+	if st := s.Status(); st.PID != 0 {
+		t.Fatalf("pid before start = %d; want 0", st.PID)
+	}
+	if err := Dial(sock).NotifyHarnessStarted(4242); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := Dial(sock).Status(); err != nil || st.PID != 4242 {
+		t.Fatalf("status = %+v, %v; want pid 4242", st, err)
+	}
+	if err := Dial(sock).NotifyHarnessExited(); err != nil {
+		t.Fatal(err)
+	}
+	if st := s.Status(); st.PID != 0 {
+		t.Fatalf("pid after exit = %d; want 0", st.PID)
+	}
+}
+
+func TestHarnessStartedRPCUnsupportedByProcessShim(t *testing.T) {
+	sock := serveShortSocket(t, &fakeHandler{})
+	if err := Dial(sock).NotifyHarnessStarted(1); err == nil || !strings.Contains(err.Error(), "unsupported") {
+		t.Fatalf("report error = %v, want unsupported", err)
+	}
+}
+
+// The supervisor reports the pid of the harness it started.
+func TestRunTmuxSupervisorReportsHarnessPID(t *testing.T) {
+	s := &tmuxShim{session: "managed", harnessExited: make(chan struct{})}
+	sock := serveShortSocket(t, s)
+	t.Setenv(tmuxSupervisorSockEnv, sock)
+	dir := t.TempDir()
+	pidPath := filepath.Join(dir, "pid")
+	// The harness waits until the shim knows a pid, then records its own.
+	harness := []string{"/bin/sh", "-c", `printf '%s' "$$" > "$1"; sleep 0.3`, "harness", pidPath}
+	done := make(chan error, 1)
+	go func() { done <- RunTmuxSupervisor("managed", filepath.Join(dir, "status"), harness) }()
+	var reported int
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline) && reported == 0; time.Sleep(10 * time.Millisecond) {
+		reported = s.Status().PID
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := strings.TrimSpace(string(raw)); reported == 0 || strconv.Itoa(reported) != want {
+		t.Fatalf("reported pid = %d; want harness pid %s", reported, want)
 	}
 }
