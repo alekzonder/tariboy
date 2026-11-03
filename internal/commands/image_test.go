@@ -81,9 +81,15 @@ func installDisabledPlugin(t *testing.T, c *registry.Ctx, name string) {
 // HTTP disposition.
 // cmdHandler returns the command's handler behind registry.Call, so a test sees
 // the same argument binding as the daemon.
+// testRegistry is one registry for the whole test binary. BuildRegistry
+// reflects the result schema of every command, so building it per lookup made
+// the golden tests slow. Lookups only read it, so parallel tests share it.
+// Tests that check the registry itself still call BuildRegistry.
+var testRegistry = sync.OnceValue(BuildRegistry)
+
 func cmdHandler(t *testing.T, path string) func(*registry.Ctx, registry.Params) (any, error) {
 	t.Helper()
-	cmd, ok := BuildRegistry().Get(path)
+	cmd, ok := testRegistry().Get(path)
 	if !ok {
 		t.Fatalf("command %s not registered", path)
 	}
@@ -1500,7 +1506,7 @@ func TestImageDetailRejectsChangedDigest(t *testing.T) {
 			if !errors.As(err, &userErr) || userErr.Code != "image_changed" || userErr.Status != 409 {
 				t.Errorf("stale read error = %v, want image_changed 409", err)
 			}
-			registered, _ := BuildRegistry().Get(command)
+			registered, _ := testRegistry().Get(command)
 			route := strings.ReplaceAll(registered.HTTP.Path, "{ref}", "reviewer%3Alatest")
 			route = strings.ReplaceAll(route, "{path...}", "manifest.json")
 			response := httptest.NewRecorder()

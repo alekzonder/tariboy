@@ -3,6 +3,7 @@ package tasks
 import "testing"
 
 func TestFenceFor(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		text string
 		min  int
@@ -20,6 +21,7 @@ func TestFenceFor(t *testing.T) {
 }
 
 func TestCodeSpan(t *testing.T) {
+	t.Parallel()
 	for text, want := range map[string]string{
 		"user:alice": "`user:alice`",
 		"a `b` c":    "``a `b` c``",
@@ -33,6 +35,7 @@ func TestCodeSpan(t *testing.T) {
 }
 
 func TestCutBytesAndCutRunes(t *testing.T) {
+	t.Parallel()
 	if got, cut := CutBytes("aжb", 2); got != "a" || !cut {
 		t.Fatalf("CutBytes inside a rune = %q, %v", got, cut)
 	}

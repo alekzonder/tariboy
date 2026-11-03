@@ -7,6 +7,7 @@ import (
 )
 
 func TestQueueEnvSetListRemove(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	info, err := svc.SetQueueEnvInfo(ctx, actor, "dev", "LOG_LEVEL", "debug")
@@ -56,6 +57,7 @@ func TestQueueEnvSetListRemove(t *testing.T) {
 }
 
 func TestQueueEnvKeyMovesBetweenEnvAndSecrets(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	if err := svc.SetQueueSecret(ctx, actor, "DEV", "API_URL", "old-secret"); err != nil {
@@ -83,6 +85,7 @@ func TestQueueEnvKeyMovesBetweenEnvAndSecrets(t *testing.T) {
 }
 
 func TestQueueEnvIsCustomerOnlyAndAudited(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	agent := AgentActor("dev-1")
@@ -115,6 +118,7 @@ func TestQueueEnvIsCustomerOnlyAndAudited(t *testing.T) {
 }
 
 func TestQueueEnvSatisfiesRequiredSecrets(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	digest := seedBindingImage(t, svc, "flow", "1", "developers")

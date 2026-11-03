@@ -37,6 +37,7 @@ func artifactFixture(t *testing.T) (*Service, Actor, Task) {
 }
 
 func TestSetArtifactKeepsHistoryAndRecordsEventWithoutValue(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := artifactFixture(t)
 	ctx := context.Background()
 	holder := AgentActor(strings.TrimPrefix(task.Assignee, "agent:"))
@@ -88,6 +89,7 @@ func TestSetArtifactKeepsHistoryAndRecordsEventWithoutValue(t *testing.T) {
 }
 
 func TestSetArtifactValidation(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := artifactFixture(t)
 	ctx := context.Background()
 	cases := []struct {
@@ -115,6 +117,7 @@ func TestSetArtifactValidation(t *testing.T) {
 }
 
 func TestSetArtifactAuthorization(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := artifactFixture(t)
 	ctx := context.Background()
 	other := "dev-1"
@@ -144,6 +147,7 @@ func TestSetArtifactAuthorization(t *testing.T) {
 }
 
 func TestArtifactsOnFlexibleTask(t *testing.T) {
+	t.Parallel()
 	svc, actor := workflowFixture(t)
 	ctx := context.Background()
 	task, err := svc.CreateTask(ctx, actor, CreateTaskInput{Queue: "DEV", Title: "flex"})

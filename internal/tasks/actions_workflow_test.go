@@ -6,6 +6,7 @@ import (
 )
 
 func TestAgentWorkflowActionsUseTheSocketIdentityNotTheBody(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	ctx := context.Background()
 	holder, other := AgentActor("dev-1"), AgentActor("dev-2")
@@ -42,6 +43,7 @@ func TestAgentWorkflowActionsUseTheSocketIdentityNotTheBody(t *testing.T) {
 }
 
 func TestAgentWorkflowActionsReadAndAdvance(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	ctx := context.Background()
 	holder := AgentActor("dev-1")
@@ -88,6 +90,7 @@ func TestAgentWorkflowActionsReadAndAdvance(t *testing.T) {
 }
 
 func TestAgentActionRefusesOperatorOnlyWorkflowActions(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	for _, action := range []string{"workflow_move", "workflow_upgrade", "workflow_resume", "workflow_watch", "cancel", "queue_workflow_set", "queue_workflow_get", "queue_workflow_clear"} {
 		_, err := svc.AgentAction(context.Background(), AgentActor("dev-1"), action,

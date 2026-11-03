@@ -215,7 +215,7 @@ fails when the jobs and the `run_group` entries of the `check` recipe differ.
 To make the checks required on `main`, mark both job names, `backend-check` and
 `frontend-check`, as required status checks.
 
-The `backend-check` job uses two caches:
+The `backend-check` job uses three caches:
 
 - **apt packages.** `awalsh128/cache-apt-pkgs-action` restores the package
   files on a cache hit and does not run `apt-get update`. On a miss, it
@@ -228,6 +228,13 @@ The `backend-check` job uses two caches:
   `desktop/src-tauri/Cargo.lock`. When the lockfile changes, the job restores
   the newest cache of the same Rust version and cargo compiles only the changed
   crates. A new Rust version on the runner starts with an empty cache.
+- **staticcheck.** `actions/cache` keeps `~/.cache/staticcheck`. `setup-go`
+  caches only the Go build and module caches, so without this cache
+  `staticcheck` analyzes the standard library and every dependency on each
+  run. The key contains the hash of `go.mod`, `go.sum`, `tools.mod` and
+  `tools.sum`. When one of them changes, the job restores the newest
+  staticcheck cache. staticcheck checks the inputs of each cached entry, so an
+  old entry is never used for changed code.
 
 A pull request run can restore caches of its own branch and of `main`. The run
 on each push to `main` saves the caches that new pull requests use. A cache
@@ -1161,7 +1168,14 @@ live state:
   has a comment that says why. A test that starts `daemon.Run` waits on
   `Options.Ready` instead of polling the daemon socket.
 - **Mark independent tests with `t.Parallel()`.** Tests that use `t.Setenv`,
-  `os.Chdir`, or package-level state stay sequential.
+  `os.Chdir`, or package-level state stay sequential, also when a helper they
+  call does it. A sequential test has a comment that says why. In
+  `internal/tasks` and `internal/commands` every new test calls
+  `t.Parallel()` unless such a reason applies.
+- **`internal/commands` tests get a handler through `cmdHandler` or `h`.**
+  These helpers share one registry for the test binary. `BuildRegistry()`
+  builds the result schema of every command, so call it only in a test that
+  checks the registry itself.
 - **Tests that drive a real `tmux` have the `tmux` build tag**
   (`internal/shim/shim_tmux_test.go`). `make test` adds `-tags tmux` when
   `tmux` is installed, and `make vet` always vets them. Run them alone with

@@ -14,6 +14,7 @@ import (
 )
 
 func TestPendingRequestCarriesWaitSeconds(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	// runDefinition: ci.sh has no timeout (60s), branch.sh 90s, plus 30s.
@@ -38,6 +39,7 @@ func TestPendingRequestCarriesWaitSeconds(t *testing.T) {
 }
 
 func TestWaitSecondsSumsExplicitTimeouts(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	def := runDefinition()
 	def.Statuses[1].Transitions[0].Checks = []workflowfile.Check{
@@ -52,6 +54,7 @@ func TestWaitSecondsSumsExplicitTimeouts(t *testing.T) {
 }
 
 func TestAnAppliedRequestHasNoWaitSeconds(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	for _, name := range []string{"plan", "summary"} {
 		if _, err := svc.SetArtifact(context.Background(), AgentActor("dev-1"), task.Key, name, "x"); err != nil {
@@ -65,6 +68,7 @@ func TestAnAppliedRequestHasNoWaitSeconds(t *testing.T) {
 }
 
 func TestGetTransitionRequestIsScopedToTheTask(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	request, _ := advanceApprove(t, svc, actor, task)
@@ -98,6 +102,7 @@ func logFixture(t *testing.T) (*Service, Actor, Task, ScriptRun, string) {
 }
 
 func TestScriptRunLogReadsTheLog(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, run, path := logFixture(t)
 	if err := os.WriteFile(path, []byte("hello\nworld\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -116,6 +121,7 @@ func TestScriptRunLogReadsTheLog(t *testing.T) {
 }
 
 func TestScriptRunLogRefusesUnsafePaths(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, run, path := logFixture(t)
 	ctx := context.Background()
 	base := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(path))))
@@ -181,6 +187,7 @@ func TestScriptRunLogRefusesUnsafePaths(t *testing.T) {
 }
 
 func TestScriptRunLogMissingAndUnsetAreNotFound(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, run, _ := logFixture(t)
 	ctx := context.Background()
 	if _, _, err := svc.ScriptRunLog(ctx, actor, task.Key, run.ID, 0); ErrorCode(err) != "not_found" {
@@ -196,6 +203,7 @@ func TestScriptRunLogMissingAndUnsetAreNotFound(t *testing.T) {
 }
 
 func TestScriptRunLogClampsTheTail(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, run, path := logFixture(t)
 	ctx := context.Background()
 	if err := os.WriteFile(path, []byte(strings.Repeat("a", 2<<20)), 0o600); err != nil {
@@ -212,6 +220,7 @@ func TestScriptRunLogClampsTheTail(t *testing.T) {
 }
 
 func TestScriptRunLogReturnsValidUTF8(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, run, path := logFixture(t)
 	ctx := context.Background()
 	// "é-ok" is 5 bytes, then an invalid byte, then "end".
@@ -234,6 +243,7 @@ func TestScriptRunLogReturnsValidUTF8(t *testing.T) {
 }
 
 func TestScriptRunLogRedactsQueueSecrets(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, run, path := logFixture(t)
 	ctx := context.Background()
 	for key, value := range map[string]string{"GH_TOKEN": "s3cr3t-value", "SHORT": "abc", "PREFIX": "s3cr3t"} {
@@ -261,6 +271,7 @@ func TestScriptRunLogRedactsQueueSecrets(t *testing.T) {
 // is still matched. A redaction that shrinks the asked-for part must not pull
 // that lead into the result.
 func TestScriptRunLogNeverReturnsTheLead(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, run, path := logFixture(t)
 	ctx := context.Background()
 	secret := strings.Repeat("S", 50)
@@ -282,6 +293,7 @@ func TestScriptRunLogNeverReturnsTheLead(t *testing.T) {
 }
 
 func TestAgentActionsForRequestsAndRuns(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, run, path := logFixture(t)
 	ctx := context.Background()
 	holder, stranger := AgentActor("reviewer-1"), AgentActor("stranger")

@@ -47,6 +47,7 @@ func accessFixture(t *testing.T) (svc *Service, customer Actor, task Task, queue
 }
 
 func TestRunsRecordTheirHolder(t *testing.T) {
+	t.Parallel()
 	svc, customer, task, queueRun, agentRun := accessFixture(t)
 	if queueRun.Holder != "" || agentRun.Holder != "reviewer-1" {
 		t.Fatalf("holders = %q, %q", queueRun.Holder, agentRun.Holder)
@@ -65,6 +66,7 @@ func TestRunsRecordTheirHolder(t *testing.T) {
 }
 
 func TestRunLogAccess(t *testing.T) {
+	t.Parallel()
 	svc, customer, task, queueRun, agentRun := accessFixture(t)
 	ctx := context.Background()
 	read := func(actor Actor, run ScriptRun) error {
@@ -122,6 +124,7 @@ func TestRunLogAccess(t *testing.T) {
 }
 
 func TestScriptRunLogRefusesWithoutABaseDirectory(t *testing.T) {
+	t.Parallel()
 	svc, customer, task, _ := runFixture(t)
 	_, run := advanceApprove(t, svc, customer, task)
 	setLogPath(t, svc, run.ID, "/base/tasks/"+task.Key+"/runs/"+strconv.FormatInt(run.ID, 10)+"/run.log")
@@ -131,6 +134,7 @@ func TestScriptRunLogRefusesWithoutABaseDirectory(t *testing.T) {
 }
 
 func TestScriptRunLogRefusesAFifoWithoutBlocking(t *testing.T) {
+	t.Parallel()
 	svc, customer, task, run, path := logFixture(t)
 	if err := syscall.Mkfifo(path, 0o600); err != nil {
 		t.Fatal(err)
@@ -151,6 +155,7 @@ func TestScriptRunLogRefusesAFifoWithoutBlocking(t *testing.T) {
 }
 
 func TestScriptRunLogMatchesTheWorkersPathForAnyBaseSpelling(t *testing.T) {
+	t.Parallel()
 	svc, customer, task, run, path := logFixture(t)
 	if err := os.WriteFile(path, []byte("ok\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -166,6 +171,7 @@ func TestScriptRunLogMatchesTheWorkersPathForAnyBaseSpelling(t *testing.T) {
 }
 
 func TestScriptRunLogMaxBytesIsValidated(t *testing.T) {
+	t.Parallel()
 	svc, customer, task, run, path := logFixture(t)
 	ctx := context.Background()
 	if err := os.WriteFile(path, []byte("abcdef"), 0o600); err != nil {

@@ -35,6 +35,7 @@ func hasRoleField(t *testing.T, value any) bool {
 }
 
 func TestImageInspectReturnsRole(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	withRole := writeExample(t)
 	writeRole(t, withRole, "# Reviewer\n"+commandRoleMarker+"\n")
@@ -73,6 +74,7 @@ func TestImageInspectReturnsRole(t *testing.T) {
 }
 
 func TestImageBuildRejectsRoleOverLimit(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	dir := writeExample(t)
 	writeRole(t, dir, strings.Repeat("я", rolefile.LimitChars+1))
@@ -86,6 +88,7 @@ func TestImageBuildRejectsRoleOverLimit(t *testing.T) {
 }
 
 func TestImageBuildRejectsInvalidUTF8Role(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	dir := writeExample(t)
 	writeRole(t, dir, "bad \xff")
@@ -96,6 +99,7 @@ func TestImageBuildRejectsInvalidUTF8Role(t *testing.T) {
 }
 
 func TestWorkflowInspectReturnsRole(t *testing.T) {
+	t.Parallel()
 	c := workflowCtx(t)
 	dir := writeWorkflowSource(t, t.TempDir(), "1.0.0")
 	writeRole(t, dir, "# Flow\n")
@@ -125,6 +129,7 @@ func TestWorkflowInspectReturnsRole(t *testing.T) {
 }
 
 func TestWorkflowBuildRejectsRoleOverLimit(t *testing.T) {
+	t.Parallel()
 	c := workflowCtx(t)
 	dir := writeWorkflowSource(t, t.TempDir(), "1.0.0")
 	writeRole(t, dir, strings.Repeat("я", rolefile.LimitChars+1))
@@ -135,6 +140,7 @@ func TestWorkflowBuildRejectsRoleOverLimit(t *testing.T) {
 }
 
 func TestStoreBuildsCarryRole(t *testing.T) {
+	t.Parallel()
 	c := workflowCtx(t)
 	source := t.TempDir()
 	imageDir := filepath.Join(source, "images", "reviewer")

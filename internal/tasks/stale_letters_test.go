@@ -49,6 +49,7 @@ func (f *staleMail) open(l mail.Letter) bool {
 }
 
 func TestIterationEndClosesTheNoticesAboutItsGoal(t *testing.T) {
+	t.Parallel()
 	for _, status := range []string{"", "approval"} {
 		t.Run("status "+status, func(t *testing.T) {
 			svc, _, task := requestFixture(t)
@@ -85,6 +86,7 @@ func TestIterationEndClosesTheNoticesAboutItsGoal(t *testing.T) {
 }
 
 func TestCloseStaleTaskLettersClosesNoticesForWorkThatIsNotTheAgents(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		setup func(t *testing.T, svc *Service, task Task)

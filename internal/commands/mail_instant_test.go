@@ -55,6 +55,7 @@ func TestAgentMailInstantSendersSetReadReset(t *testing.T) {
 }
 
 func TestMailInstantErrorsCarryCodeAndStatus(t *testing.T) {
+	t.Parallel()
 	c, _ := mailFixture(t)
 	for _, tc := range []struct {
 		params registry.Params

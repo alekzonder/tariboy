@@ -60,6 +60,7 @@ func jsonFields(t *testing.T, v any) map[string]any {
 }
 
 func TestTaskMarshalFlexibleTaskReportsStatusAsCategory(t *testing.T) {
+	t.Parallel()
 	svc, actor := workflowFixture(t)
 	task, err := svc.CreateTask(context.Background(), actor, CreateTaskInput{Queue: "DEV", Title: "flex"})
 	if err != nil {
@@ -84,6 +85,7 @@ func TestTaskMarshalFlexibleTaskReportsStatusAsCategory(t *testing.T) {
 }
 
 func TestTaskScanFillsWorkflowFieldsAndWaitingOn(t *testing.T) {
+	t.Parallel()
 	svc, actor := workflowFixture(t)
 	const digest = "d1"
 	seedWorkflowImage(t, svc, digest)
@@ -131,6 +133,7 @@ func TestTaskScanFillsWorkflowFieldsAndWaitingOn(t *testing.T) {
 }
 
 func TestTaskJSONRoundTrip(t *testing.T) {
+	t.Parallel()
 	svc, actor := workflowFixture(t)
 	seedWorkflowImage(t, svc, "d1")
 	flexible, err := svc.CreateTask(context.Background(), actor, CreateTaskInput{Queue: "DEV", Title: "flex"})
@@ -165,6 +168,7 @@ func TestTaskJSONRoundTrip(t *testing.T) {
 // computed by the task select itself so a page of tasks costs no extra
 // queries.
 func TestTaskScanWorkflowAttentionAndStep(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	stored := storedTask(t, svc, task.Key)
@@ -258,6 +262,7 @@ func TestTaskScanWorkflowAttentionAndStep(t *testing.T) {
 // The attention summary and the step reach a list page, not only a single
 // task read.
 func TestListTasksCarriesWorkflowAttention(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	_, first := advanceApprove(t, svc, actor, task)
 	complete(t, svc, first.ID, RunCompletion{Verdict: "reject", Message: "CI is red", ExitCode: exitCode(112)})
@@ -279,6 +284,7 @@ func TestListTasksCarriesWorkflowAttention(t *testing.T) {
 // A list row marks an open workflow task that is still in its workflow's
 // initial status, so a list can show it as not started.
 func TestListTasksMarksWorkflowInitialStatus(t *testing.T) {
+	t.Parallel()
 	svc, actor, later, _ := runFixture(t)
 	fresh := mustCreateDev(t, svc, actor, "fresh")
 	page, err := svc.ListTasks(context.Background(), actor, ListFilter{Queue: "DEV"})
@@ -313,6 +319,7 @@ func TestListTasksMarksWorkflowInitialStatus(t *testing.T) {
 // outcomes, so a list can offer them without reading the workflow view; a
 // pool, script or closed status, and a flexible task, carry none.
 func TestListTasksCarriesCustomerOutcomes(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := engineFixture(t)
 	ctx := context.Background()
 	pooled := mustCreateDev(t, svc, actor, "pooled")
@@ -378,6 +385,7 @@ func TestListTasksCarriesCustomerOutcomes(t *testing.T) {
 // The task select reaches the open visit, its latest request, and its latest
 // run through indexes, so a page of tasks does not scan those tables.
 func TestTaskSelectUsesIndexes(t *testing.T) {
+	t.Parallel()
 	svc, _ := workflowFixture(t)
 	rows, err := svc.db.Query(`EXPLAIN QUERY PLAN `+taskSelect+` WHERE t.id = ?`, 1)
 	if err != nil {
@@ -406,6 +414,7 @@ func TestTaskSelectUsesIndexes(t *testing.T) {
 }
 
 func TestLoadManifestTx(t *testing.T) {
+	t.Parallel()
 	svc, _ := workflowFixture(t)
 	want := seedWorkflowImage(t, svc, "d1")
 	got, err := loadManifestTx(context.Background(), svc.db, "d1")

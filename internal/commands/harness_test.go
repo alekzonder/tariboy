@@ -11,7 +11,7 @@ import (
 
 func TestHarnessModelsRoute(t *testing.T) {
 	t.Parallel()
-	cmd, ok := BuildRegistry().Get("harness.models")
+	cmd, ok := testRegistry().Get("harness.models")
 	if !ok {
 		t.Fatal("harness.models not registered")
 	}

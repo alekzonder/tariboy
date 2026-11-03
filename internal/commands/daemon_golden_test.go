@@ -78,6 +78,7 @@ func daemonFixture(t *testing.T) *registry.Ctx {
 // Catches a typed daemon, maintenance, retention or backup response changing
 // the JSON a client sees.
 func TestDaemonResponsesMatchGolden(t *testing.T) {
+	// Sequential: daemonFixture sets PATH with t.Setenv.
 	c := daemonFixture(t)
 	empty, _, _ := ctxWithStore(t)
 	emptyPol := retention.NewStore(empty.Store)

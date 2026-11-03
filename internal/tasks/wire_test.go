@@ -8,6 +8,7 @@ import (
 // TestEveryTaskSpecBuilds reads the fields of every request, so a field type
 // the wire forms do not support panics here rather than in a command.
 func TestEveryTaskSpecBuilds(t *testing.T) {
+	t.Parallel()
 	actions, routes := map[string]bool{}, map[string]bool{}
 	for _, spec := range Specs() {
 		if actions[spec.Action] {
@@ -40,6 +41,7 @@ func TestEveryTaskSpecBuilds(t *testing.T) {
 }
 
 func TestFieldsRefuseAnUnsupportedType(t *testing.T) {
+	t.Parallel()
 	defer func() {
 		if recover() == nil {
 			t.Fatal("Fields accepted a float64 field")
@@ -53,6 +55,7 @@ func TestFieldsRefuseAnUnsupportedType(t *testing.T) {
 // TestAgentSocketKeys pins the body keys each agent tools-socket action reads.
 // The tariboy-store agent skills depend on them.
 func TestAgentSocketKeys(t *testing.T) {
+	t.Parallel()
 	want := map[string]string{
 		"list":             "queue status category priority assignee author customer group parent subtree waiting_for blocked text status_view sort limit after scope_agent by_author by_customer",
 		"ready":            "queue limit idempotency_key claim",

@@ -47,6 +47,7 @@ func pauseCommentBody(t *testing.T, svc *Service, task Task) string {
 func intp(n int) *int { return &n }
 
 func TestIdleIterationsPauseAtTheLimit(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	for i := 1; i <= 2; i++ {
 		recordEnd(t, svc, iterationEnd("dev-1", task.Key))
@@ -76,6 +77,7 @@ func TestIdleIterationsPauseAtTheLimit(t *testing.T) {
 }
 
 func TestIdleIterationsThatDoNotCount(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		setup func(t *testing.T, svc *Service, task Task) IterationEnd
@@ -132,6 +134,7 @@ func TestIdleIterationsThatDoNotCount(t *testing.T) {
 }
 
 func TestATransitionRequestDuringTheIterationResetsTheIdleCount(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	forceOpenVisit(t, svc, task, `idle_iterations = 2`)
 	_, run := advanceApprove(t, svc, actor, task)
@@ -154,6 +157,7 @@ func TestATransitionRequestDuringTheIterationResetsTheIdleCount(t *testing.T) {
 }
 
 func TestIdleIterationLimits(t *testing.T) {
+	t.Parallel()
 	t.Run("a status limit overrides the workflow limit", func(t *testing.T) {
 		svc, _, task := requestFixture(t)
 		def := requestDefinition()
@@ -180,6 +184,7 @@ func TestIdleIterationLimits(t *testing.T) {
 }
 
 func TestRejectedRequestsPauseAtTheLimit(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	forceOpenVisit(t, svc, task, `rejected_requests = 4`)
 	_, run := advanceApprove(t, svc, actor, task)
@@ -201,6 +206,7 @@ func TestRejectedRequestsPauseAtTheLimit(t *testing.T) {
 }
 
 func TestAnAppliedTransitionResetsTheCounters(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	forceOpenVisit(t, svc, task, `idle_iterations = 2, rejected_requests = 4, script_failures = 2`)
 	_, first := advanceApprove(t, svc, actor, task)
@@ -217,6 +223,7 @@ func TestAnAppliedTransitionResetsTheCounters(t *testing.T) {
 }
 
 func TestScriptFailuresPauseAtTheLimit(t *testing.T) {
+	t.Parallel()
 	setFailures := func(t *testing.T, svc *Service, task Task, n int) {
 		t.Helper()
 		forceScriptFailures(t, svc, task, n)
@@ -282,6 +289,7 @@ func TestScriptFailuresPauseAtTheLimit(t *testing.T) {
 }
 
 func TestEveryVerdictButAFailureResetsScriptFailures(t *testing.T) {
+	t.Parallel()
 	for _, verdict := range []string{"pass", "reject"} {
 		t.Run("check "+verdict, func(t *testing.T) {
 			svc, actor, task, _ := runFixture(t)
@@ -314,6 +322,7 @@ func checkHolders(t *testing.T, svc *Service, now time.Time) int {
 }
 
 func TestCheckHoldersPausesAfterTheGrace(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	if n := checkHolders(t, svc, stallStart); n != 0 || unavailableSince(t, svc, task, "developers") != "" {
 		t.Fatalf("a working holder: paused %d since %q", n, unavailableSince(t, svc, task, "developers"))
@@ -348,6 +357,7 @@ func TestCheckHoldersPausesAfterTheGrace(t *testing.T) {
 }
 
 func TestCheckHoldersClearsTheMarkWhenTheHolderCanWorkAgain(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	setAgent(t, svc, "dev-1", `enabled = 0`)
 	checkHolders(t, svc, stallStart)
@@ -364,6 +374,7 @@ func TestCheckHoldersClearsTheMarkWhenTheHolderCanWorkAgain(t *testing.T) {
 }
 
 func TestCheckHoldersWithAZeroGracePausesAtOnce(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	def := requestDefinition()
 	def.Statuses[0].Limits = &workflowfile.Limits{UnavailableGrace: "0s"}
@@ -378,6 +389,7 @@ func TestCheckHoldersWithAZeroGracePausesAtOnce(t *testing.T) {
 }
 
 func TestCheckHoldersCauses(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name, want string
 		setup      func(t *testing.T, svc *Service)
@@ -427,6 +439,7 @@ func TestCheckHoldersCauses(t *testing.T) {
 }
 
 func TestCheckHoldersIgnoresTasksOutsideAnActivePoolStatus(t *testing.T) {
+	t.Parallel()
 	setup := func(t *testing.T) (*Service, Task) {
 		t.Helper()
 		svc, _, task := requestFixture(t)
@@ -463,6 +476,7 @@ func TestCheckHoldersIgnoresTasksOutsideAnActivePoolStatus(t *testing.T) {
 }
 
 func TestANewDispatchClearsUnavailableSince(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	setAgent(t, svc, "dev-1", `enabled = 0`)
 	checkHolders(t, svc, stallStart)
@@ -486,6 +500,7 @@ func iterationBetween(agent, key string, from, to int) IterationEnd {
 }
 
 func TestAPendingCheckKeepsIterationsFromCountingIdle(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	request, _ := advanceApprove(t, svc, actor, task)
 	// The check stays pending across several iterations.
@@ -515,6 +530,7 @@ func TestAPendingCheckKeepsIterationsFromCountingIdle(t *testing.T) {
 }
 
 func TestTheHoldersQuestionKeepsIterationsFromCountingIdle(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	ctx := context.Background()
 	setClock := func(minutes int) { svc.clock = func() time.Time { return at(minutes) } }
@@ -552,6 +568,7 @@ func TestTheHoldersQuestionKeepsIterationsFromCountingIdle(t *testing.T) {
 }
 
 func TestAQuestionAnsweredWithinTheIterationIsNotIdle(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	ctx := context.Background()
 	svc.clock = func() time.Time { return at(2) }
@@ -569,6 +586,7 @@ func TestAQuestionAnsweredWithinTheIterationIsNotIdle(t *testing.T) {
 }
 
 func TestTheIterationInWhichTheAnswerArrivesIsNotIdle(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	ctx := context.Background()
 	svc.clock = func() time.Time { return at(2) }
@@ -592,6 +610,7 @@ func TestTheIterationInWhichTheAnswerArrivesIsNotIdle(t *testing.T) {
 }
 
 func TestAnIterationThatStartedBeforeAResumeIsNotIdle(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	pause(t, svc, task.Key, PauseIdleIterations, "")
 	svc.clock = func() time.Time { return at(10) }
@@ -612,6 +631,7 @@ func TestAnIterationThatStartedBeforeAResumeIsNotIdle(t *testing.T) {
 }
 
 func TestResumeReleaseRecordsResumedAt(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	pause(t, svc, task.Key, PauseIdleIterations, "")
 	svc.clock = func() time.Time { return at(10) }
@@ -624,6 +644,7 @@ func TestResumeReleaseRecordsResumedAt(t *testing.T) {
 }
 
 func TestUnavailableHolderTasksSelectsOnlyCandidates(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	other := mustCreateDev(t, svc, actor, "other")
 	ctx := context.Background()
@@ -651,6 +672,7 @@ func TestUnavailableHolderTasksSelectsOnlyCandidates(t *testing.T) {
 }
 
 func TestCheckHoldersLogsAnUnloadableManifestOnce(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	setAgent(t, svc, "dev-1", `enabled = 0`)
 	var logged strings.Builder
@@ -677,6 +699,7 @@ func TestCheckHoldersLogsAnUnloadableManifestOnce(t *testing.T) {
 }
 
 func TestAReleasedHolderCannotSetArtifacts(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	forceHolders(t, svc, task, `released = 1`)
 	if _, err := svc.SetArtifact(context.Background(), AgentActor("dev-1"), task.Key, "plan", "p"); ErrorCode(err) != "not_holder" {
@@ -685,6 +708,7 @@ func TestAReleasedHolderCannotSetArtifacts(t *testing.T) {
 }
 
 func TestAWatchOutcomeResetsScriptFailures(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	forceScriptFailures(t, svc, task, 2)
 	run := scheduleWatch(t, svc, actor, task)
@@ -702,6 +726,7 @@ func TestAWatchOutcomeResetsScriptFailures(t *testing.T) {
 // 10ns after it and within one that started 11ns after it, although the
 // RFC 3339 text of the two times has different widths.
 func TestAnAnswerWithinOneSecondFallsOnTheRightSideOfTheIteration(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	ctx := context.Background()
 	svc.clock = func() time.Time { return at(1) }

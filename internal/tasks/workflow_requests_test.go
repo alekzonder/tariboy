@@ -58,6 +58,7 @@ func setPlanAndSummary(t *testing.T, svc *Service, actor Actor, key string) {
 }
 
 func TestAdvanceAppliesATransitionWithoutChecks(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	holder := AgentActor("dev-1")
@@ -107,6 +108,7 @@ func TestAdvanceAppliesATransitionWithoutChecks(t *testing.T) {
 }
 
 func TestAdvanceByTheCustomerResolvesTheCustomerWait(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	waiting := enter(t, svc, task.Key, "approval", "ask")
@@ -129,6 +131,7 @@ func TestAdvanceByTheCustomerResolvesTheCustomerWait(t *testing.T) {
 }
 
 func TestAdvanceRefusals(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	holder := AgentActor("dev-1")
@@ -189,6 +192,7 @@ func TestAdvanceRefusals(t *testing.T) {
 }
 
 func TestAdvanceRacingRequestsApplyOnce(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	enter(t, svc, task.Key, "approval", "ask")
 	var wg sync.WaitGroup
@@ -225,6 +229,7 @@ func TestAdvanceRacingRequestsApplyOnce(t *testing.T) {
 }
 
 func TestMoveWorkflow(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	if _, err := svc.MoveWorkflow(ctx, AgentActor("dev-1"), task.Key, "approval", "skip"); ErrorCode(err) != "forbidden" || ErrorStatus(err) != 403 {
@@ -303,6 +308,7 @@ func TestMoveWorkflow(t *testing.T) {
 }
 
 func TestCancelWorkflowTask(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	if _, err := svc.CancelWorkflowTask(ctx, AgentActor("dev-1"), task.Key); ErrorCode(err) != "forbidden" {
@@ -357,6 +363,7 @@ func TestCancelWorkflowTask(t *testing.T) {
 // TestClosingAVisitCancelsItsPendingRequest closes a visit that has a pending
 // request through every caller of stopVisitScriptsTx.
 func TestClosingAVisitCancelsItsPendingRequest(t *testing.T) {
+	t.Parallel()
 	for name, closeVisit := range map[string]func(*Service, Actor, Task) error{
 		"enter a status": func(svc *Service, _ Actor, task Task) error {
 			enter(t, svc, task.Key, "approval", "ask")
@@ -388,6 +395,7 @@ func TestClosingAVisitCancelsItsPendingRequest(t *testing.T) {
 }
 
 func TestAdvanceByAgentsThatDoNotOwnTheStatus(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	ctx := context.Background()
 	unchanged := func(status string) {
@@ -431,6 +439,7 @@ func TestAdvanceByAgentsThatDoNotOwnTheStatus(t *testing.T) {
 }
 
 func TestAdvanceInAStatusTheManifestDoesNotDeclare(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	forceTask(t, svc, task, `workflow_status = 'gone'`)
 	if _, err := svc.Advance(context.Background(), actor, task.Key, AdvanceInput{Outcome: "ready"}); ErrorCode(err) != "status_unknown" || ErrorStatus(err) != 409 {
@@ -439,6 +448,7 @@ func TestAdvanceInAStatusTheManifestDoesNotDeclare(t *testing.T) {
 }
 
 func TestDispatchPendingSkipsACancelledWorkflowTask(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := requestFixture(t)
 	ctx := context.Background()
 	setAgent(t, svc, "dev-1", "enabled = 0")
@@ -486,6 +496,7 @@ func holderAsks(t *testing.T, svc *Service, task Task) {
 }
 
 func TestLeavingAPoolStatusResolvesTheHoldersQuestionsToTheCustomer(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	t.Run("advance", func(t *testing.T) {
 		svc, _, task := requestFixture(t)
@@ -555,6 +566,7 @@ func TestLeavingAPoolStatusResolvesTheHoldersQuestionsToTheCustomer(t *testing.T
 // applyTransitionTx is what a later script runner calls for a pending request:
 // the request becomes applied and the task enters the target status.
 func TestApplyTransitionAppliesAPendingRequest(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, _, task := requestFixture(t)
 	id := insertPendingRequest(t, svc, task)
@@ -593,6 +605,7 @@ func TestApplyTransitionAppliesAPendingRequest(t *testing.T) {
 // A system:workflow wait (a later pause opens one in any status) is resolved
 // whenever its status is left, whatever owns that status, and on cancel.
 func TestLeavingAnyStatusResolvesTheWorkflowsOwnWait(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	t.Run("move out of a pool status", func(t *testing.T) {
 		svc, actor, task := requestFixture(t)
@@ -632,6 +645,7 @@ func TestLeavingAnyStatusResolvesTheWorkflowsOwnWait(t *testing.T) {
 // open wait per expected principal, so the holder's own question is covered by
 // TestLeavingAPoolStatusResolvesTheHoldersQuestionsToTheCustomer.)
 func TestLeavingAPoolStatusKeepsOtherAgentsQuestions(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	t.Run("advance", func(t *testing.T) {
 		svc, _, task := requestFixture(t)
@@ -657,6 +671,7 @@ func TestLeavingAPoolStatusKeepsOtherAgentsQuestions(t *testing.T) {
 }
 
 func TestAdvanceFromGuardsTheStatusTheCallerSaw(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	holder := AgentActor("dev-1")
 	t.Run("mismatch is refused and writes nothing", func(t *testing.T) {
@@ -696,6 +711,7 @@ func TestAdvanceFromGuardsTheStatusTheCallerSaw(t *testing.T) {
 // A retried advance whose first attempt applied is refused when the new status
 // is owned by the same caller and declares the same outcome.
 func TestAdvanceRetryWithFromAppliesOnce(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	customer := workflowfile.Owner{Kind: workflowfile.OwnerCustomer}

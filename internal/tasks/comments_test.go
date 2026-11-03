@@ -27,6 +27,7 @@ func (questionDirectory) GroupMembers(string) ([]string, bool, error) { return n
 // question letter the customer already got, and a question notification the
 // outbox has not sent yet is never sent.
 func TestWaitResolutionClosesQuestionLetters(t *testing.T) {
+	t.Parallel()
 	st := storetest.Open(t)
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	svc := NewService(st.DB, "customer", func() time.Time { return now })
@@ -79,6 +80,7 @@ func TestWaitResolutionClosesQuestionLetters(t *testing.T) {
 }
 
 func TestAnswerResolvesOnlyAuthorsOpenWaitsAndMentionGrantsResponseAccess(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -150,6 +152,7 @@ func TestAnswerResolvesOnlyAuthorsOpenWaitsAndMentionGrantsResponseAccess(t *tes
 }
 
 func TestMalformedMentionRemainsPlainComment(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -168,6 +171,7 @@ func TestMalformedMentionRemainsPlainComment(t *testing.T) {
 }
 
 func TestAddCommentIdempotencyReplaysWithoutDuplicateWaitOrRevision(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -198,6 +202,7 @@ func TestAddCommentIdempotencyReplaysWithoutDuplicateWaitOrRevision(t *testing.T
 }
 
 func TestAssignedAgentCustomerQuestionTransitionsToWaitCustomer(t *testing.T) {
+	t.Parallel()
 	svc, task := assignedTask(t, "worker", StatusInProgress)
 	ctx := context.Background()
 	result, err := svc.AddComment(ctx, AgentActor("worker"), task.Key, AddCommentInput{
@@ -251,6 +256,7 @@ func TestAssignedAgentCustomerQuestionTransitionsToWaitCustomer(t *testing.T) {
 }
 
 func TestFinalCustomerAnswerReturnsWaitCustomerToInProgress(t *testing.T) {
+	t.Parallel()
 	svc, task := assignedTask(t, "worker", StatusInProgress)
 	ctx := context.Background()
 	if _, err := svc.AddComment(ctx, AgentActor("worker"), task.Key, AddCommentInput{
@@ -281,6 +287,7 @@ func TestFinalCustomerAnswerReturnsWaitCustomerToInProgress(t *testing.T) {
 }
 
 func TestCustomerAnswerTransitionsWithOtherWaitRemaining(t *testing.T) {
+	t.Parallel()
 	svc, task := assignedTask(t, "worker", StatusInProgress)
 	ctx := context.Background()
 	if _, err := svc.AddComment(ctx, AgentActor("worker"), task.Key, AddCommentInput{
@@ -300,6 +307,7 @@ func TestCustomerAnswerTransitionsWithOtherWaitRemaining(t *testing.T) {
 }
 
 func TestUnrelatedCommentDoesNotResumeManualWaitCustomer(t *testing.T) {
+	t.Parallel()
 	svc, task := assignedTask(t, "worker", StatusWaitCustomer)
 	ctx := context.Background()
 	before, err := svc.ListEvents(ctx, CustomerActor("customer"), task.Key, 0, 20)
@@ -322,6 +330,7 @@ func TestUnrelatedCommentDoesNotResumeManualWaitCustomer(t *testing.T) {
 }
 
 func TestCustomerMentionOfAssigneeResumesWaitCustomer(t *testing.T) {
+	t.Parallel()
 	svc, task := assignedTask(t, "worker", StatusWaitCustomer)
 	ctx := context.Background()
 	before, err := svc.ListEvents(ctx, CustomerActor("customer"), task.Key, 0, 20)
@@ -344,6 +353,7 @@ func TestCustomerMentionOfAssigneeResumesWaitCustomer(t *testing.T) {
 }
 
 func TestCustomerMentionOfHolderKeepsWorkflowCustomerStatus(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	if _, err := svc.MoveWorkflow(ctx, actor, task.Key, "approval", "decide now"); err != nil {
@@ -359,6 +369,7 @@ func TestCustomerMentionOfHolderKeepsWorkflowCustomerStatus(t *testing.T) {
 }
 
 func TestCustomerWaitStatusNonTransitions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                string
 		actor               Actor
@@ -469,6 +480,7 @@ func assertTaskStatus(t *testing.T, svc *Service, key, want string) TaskDetail {
 // system:tasks, because its asker could no longer send, still closes when
 // the question is answered on the task. The asker is in data.from.
 func TestQuestionLetterClosesWhateverSender(t *testing.T) {
+	t.Parallel()
 	st := storetest.Open(t)
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	svc := NewService(st.DB, "customer", func() time.Time { return now })

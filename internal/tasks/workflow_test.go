@@ -6,6 +6,7 @@ import (
 )
 
 func TestParentCompletionRequiresExplicitOverrideAndLeavesChildrenOpen(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -41,6 +42,7 @@ func TestParentCompletionRequiresExplicitOverrideAndLeavesChildrenOpen(t *testin
 }
 
 func TestBlocksCycleIsRejectedAndActiveBlockerDerivesBlocked(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -74,6 +76,7 @@ func TestBlocksCycleIsRejectedAndActiveBlockerDerivesBlocked(t *testing.T) {
 }
 
 func TestRelatedRelationIsSymmetricAndDeduplicated(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -99,6 +102,7 @@ func TestRelatedRelationIsSymmetricAndDeduplicated(t *testing.T) {
 }
 
 func TestRelationMutationUsesRevisionAndIdempotency(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -146,6 +150,7 @@ func TestRelationMutationUsesRevisionAndIdempotency(t *testing.T) {
 }
 
 func TestRelationDoesNotExposeOrPermitDeletingHiddenEndpoint(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -186,6 +191,7 @@ func TestRelationDoesNotExposeOrPermitDeletingHiddenEndpoint(t *testing.T) {
 }
 
 func TestAddRelationAppendsEventForBothEndpoints(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -214,6 +220,7 @@ func TestAddRelationAppendsEventForBothEndpoints(t *testing.T) {
 }
 
 func TestDeleteRelationAppendsEventForBothEndpoints(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -249,6 +256,7 @@ func TestDeleteRelationAppendsEventForBothEndpoints(t *testing.T) {
 }
 
 func TestRelationCarriesEndpointTitleAndStatus(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")

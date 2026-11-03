@@ -17,6 +17,7 @@ func customerPoolFixture(t *testing.T) (*Service, Actor, Task) {
 }
 
 func TestCustomerAgentPoolHoldsACustomerStatus(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := customerPoolFixture(t)
 	ctx := context.Background()
 	held := enter(t, svc, task.Key, "approval", "ask")
@@ -61,6 +62,7 @@ func TestCustomerAgentPoolHoldsACustomerStatus(t *testing.T) {
 }
 
 func TestCustomerAgentPoolChangeAppliesOnTheNextEntry(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	waiting := enter(t, svc, task.Key, "approval", "ask")
@@ -94,6 +96,7 @@ func TestCustomerAgentPoolChangeAppliesOnTheNextEntry(t *testing.T) {
 }
 
 func TestCustomerAgentPoolEnvIsChecked(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := requestFixture(t)
 	ctx := context.Background()
 	if err := svc.SetQueueSecret(ctx, actor, "DEV", CustomerAgentPoolEnv, "reviewers"); ErrorCode(err) != "invalid_secret_key" {
@@ -115,6 +118,7 @@ func TestCustomerAgentPoolEnvIsChecked(t *testing.T) {
 }
 
 func TestCustomerAgentPoolIsCheckedOnBind(t *testing.T) {
+	t.Parallel()
 	svc, actor := workflowFixture(t)
 	ctx := context.Background()
 	if err := svc.EnsureDefaultQueue(ctx); err != nil {

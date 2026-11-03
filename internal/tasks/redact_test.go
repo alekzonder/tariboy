@@ -3,6 +3,7 @@ package tasks
 import "testing"
 
 func TestRedactSecrets(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		text   string
 		values []string
@@ -27,6 +28,7 @@ func TestRedactSecrets(t *testing.T) {
 }
 
 func TestRedactSecretsFrom(t *testing.T) {
+	t.Parallel()
 	values := []string{"s3cr3t-value"}
 	// Text before start is never returned; a value that straddles start
 	// becomes one marker.

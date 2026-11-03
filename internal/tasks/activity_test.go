@@ -10,6 +10,7 @@ import (
 )
 
 func TestTaskActivitySummarizesEventsInWindow(t *testing.T) {
+	t.Parallel()
 	svc, customer, _ := engineFixture(t)
 	ctx := context.Background()
 	now := time.Date(2026, 7, 31, 9, 0, 0, 0, time.UTC)
@@ -100,6 +101,7 @@ func TestTaskActivitySummarizesEventsInWindow(t *testing.T) {
 }
 
 func TestTaskActivityMarksTasksCompletedInWindow(t *testing.T) {
+	t.Parallel()
 	svc, customer, _ := engineFixture(t)
 	now := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
 	svc.clock = func() time.Time { return now }
@@ -117,6 +119,7 @@ func TestTaskActivityMarksTasksCompletedInWindow(t *testing.T) {
 // Two events 10ns and 11ns after one second have stored text of the same
 // width, so the window bounds split them exactly.
 func TestTaskActivityWindowSplitsEventsWithinOneSecond(t *testing.T) {
+	t.Parallel()
 	svc, customer, _ := engineFixture(t)
 	ctx := context.Background()
 	second := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)

@@ -49,6 +49,7 @@ func makeBusy(t *testing.T, svc *Service, actor Actor, agent, other string) Task
 // Test 1: the incident of 2026-11-03. Without the setting a task coming back
 // to a pool goes to the free member, not to the busy previous holder.
 func TestDispatchSkipsBusyPreviousHolderByDefault(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := engineFixture(t)
 	task := mustCreateDev(t, svc, actor, "t")
 	if task.Assignee != "agent:dev-1" {
@@ -67,6 +68,7 @@ func TestDispatchSkipsBusyPreviousHolderByDefault(t *testing.T) {
 // Test 2: a free previous holder comes first, before a free member that was
 // dispatched less recently.
 func TestDispatchPrefersFreePreviousHolder(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := engineFixture(t)
 	task := mustCreateDev(t, svc, actor, "t")
 	enter(t, svc, task.Key, "review", "ready")
@@ -80,6 +82,7 @@ func TestDispatchPrefersFreePreviousHolder(t *testing.T) {
 // Test 3: with the previous holder busy, the free members are ordered by the
 // least recent dispatch in the queue, then by pool order.
 func TestDispatchBusyPreviousHolderPicksLeastRecentFreeMember(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, _ := engineFixture(t)
 	seedAgent(t, svc, "dev-3", "")
@@ -108,6 +111,7 @@ func TestDispatchBusyPreviousHolderPicksLeastRecentFreeMember(t *testing.T) {
 
 // Test 4: sticky_holder on the workflow keeps the old rule.
 func TestDispatchStickyWorkflowKeepsBusyPreviousHolder(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := engineFixtureWith(t, stickyDefinition(true, nil))
 	task := mustCreateDev(t, svc, actor, "t")
 	enter(t, svc, task.Key, "approval", "ask")
@@ -121,6 +125,7 @@ func TestDispatchStickyWorkflowKeepsBusyPreviousHolder(t *testing.T) {
 
 // Test 5: the status value replaces the workflow value both ways.
 func TestDispatchStatusStickyHolderOverridesWorkflow(t *testing.T) {
+	t.Parallel()
 	yes, no := true, false
 	for name, tc := range map[string]struct {
 		def         workflowfile.File
@@ -151,6 +156,7 @@ func TestDispatchStatusStickyHolderOverridesWorkflow(t *testing.T) {
 // Test 6: nobody is free, so the task waits unassigned; once the previous
 // holder is free again, DispatchPending gives the task to it first.
 func TestDispatchWaitsForFreeMemberThenPreviousHolder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, _ := engineFixture(t)
 	task := mustCreateDev(t, svc, actor, "t")
@@ -180,6 +186,7 @@ func TestDispatchWaitsForFreeMemberThenPreviousHolder(t *testing.T) {
 // Test 7: a move between two statuses of one pool, asked by the holder whose
 // Goal is this task, keeps the holder: its own Goal does not make it busy.
 func TestDispatchSamePoolMoveKeepsHolderWithItsGoal(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := engineFixture(t)
 	task := mustCreateDev(t, svc, actor, "t")
 	setAgent(t, svc, "dev-1", `current_goal_task_key = '`+task.Key+`'`)
@@ -192,6 +199,7 @@ func TestDispatchSamePoolMoveKeepsHolderWithItsGoal(t *testing.T) {
 
 // Test 8: a released holder is never picked, also with sticky_holder on.
 func TestDispatchStickyNeverPicksReleasedHolder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, _ := engineFixtureWith(t, stickyDefinition(true, nil))
 	task := mustCreateDev(t, svc, actor, "t")
@@ -208,6 +216,7 @@ func TestDispatchStickyNeverPicksReleasedHolder(t *testing.T) {
 
 // An upgrade enters the new image's status with the new image's sticky_holder.
 func TestUpgradeAppliesTheNewImageStickyHolder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, task := requestFixture(t)
 	def := requestDefinition()
@@ -230,6 +239,7 @@ func TestUpgradeAppliesTheNewImageStickyHolder(t *testing.T) {
 // The activity feed reads a task with workflow.dispatched events: the event
 // counts in the window and adds no agent, since system:workflow wrote it.
 func TestTaskActivityReadsDispatchedEvents(t *testing.T) {
+	t.Parallel()
 	svc, customer, _ := engineFixture(t)
 	task := mustCreateDev(t, svc, customer, "t")
 	if countEvents(t, svc, task, "workflow.dispatched") != 1 {

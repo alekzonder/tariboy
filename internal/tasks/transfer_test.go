@@ -30,6 +30,7 @@ func transferFixture(t *testing.T) (*Service, Actor, Task, Task) {
 }
 
 func TestExportImportRoundTripPreservesKeysTreeAndComments(t *testing.T) {
+	t.Parallel()
 	source, actor, root, child := transferFixture(t)
 	ctx := context.Background()
 
@@ -76,6 +77,7 @@ func TestExportImportRoundTripPreservesKeysTreeAndComments(t *testing.T) {
 }
 
 func TestImportRejectsMissingQueue(t *testing.T) {
+	t.Parallel()
 	source, actor, root, _ := transferFixture(t)
 	ctx := context.Background()
 	bundle, err := source.ExportTask(ctx, actor, root.Key)
@@ -89,6 +91,7 @@ func TestImportRejectsMissingQueue(t *testing.T) {
 }
 
 func TestImportRejectsKeyAlreadyPresent(t *testing.T) {
+	t.Parallel()
 	source, actor, root, _ := transferFixture(t)
 	ctx := context.Background()
 	bundle, err := source.ExportTask(ctx, actor, root.Key)
@@ -103,6 +106,7 @@ func TestImportRejectsKeyAlreadyPresent(t *testing.T) {
 }
 
 func TestImportRejectsAgentActor(t *testing.T) {
+	t.Parallel()
 	source, actor, root, _ := transferFixture(t)
 	ctx := context.Background()
 	bundle, err := source.ExportTask(ctx, actor, root.Key)

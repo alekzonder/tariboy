@@ -9,6 +9,7 @@ const assignedNotifications = `SELECT COUNT(*) FROM task_notification_outbox o J
 	WHERE e.task_id = ? AND o.message_type = 'task.assigned' AND o.channel = ?`
 
 func TestReassignWorkflowHandsThePoolStatusToTheChosenMember(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	setCounters(t, svc, task)
@@ -51,6 +52,7 @@ func TestReassignWorkflowHandsThePoolStatusToTheChosenMember(t *testing.T) {
 }
 
 func TestReassignWorkflowAssignsAnUnassignedTask(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := requestFixture(t)
 	ctx := context.Background()
 	// With no member free for Goal, dispatch leaves the new task unassigned.
@@ -82,6 +84,7 @@ func TestReassignWorkflowAssignsAnUnassignedTask(t *testing.T) {
 }
 
 func TestReassignWorkflowToTheHolderChangesNothing(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	got, err := svc.ReassignWorkflow(context.Background(), actor, task.Key, "dev-1")
 	if err != nil {
@@ -96,6 +99,7 @@ func TestReassignWorkflowToTheHolderChangesNothing(t *testing.T) {
 }
 
 func TestReassignedHolderIsStickyWhenTheStatusComesBack(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	if _, err := svc.ReassignWorkflow(context.Background(), actor, task.Key, "dev-2"); err != nil {
 		t.Fatal(err)
@@ -107,6 +111,7 @@ func TestReassignedHolderIsStickyWhenTheStatusComesBack(t *testing.T) {
 }
 
 func TestReassignWorkflowRefusals(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, task := requestFixture(t)
 	if _, err := svc.ReassignWorkflow(ctx, AgentActor("dev-1"), task.Key, "dev-2"); ErrorCode(err) != "forbidden" {

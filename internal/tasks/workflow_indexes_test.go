@@ -9,6 +9,7 @@ import (
 // the readers' run queries: none of them scans task_script_runs or
 // task_status_visits.
 func TestWorkflowRunQueriesUseIndexes(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	for name, tc := range map[string]struct {
 		query string

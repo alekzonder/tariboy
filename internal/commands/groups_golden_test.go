@@ -78,6 +78,7 @@ func importID(t *testing.T, value any) string {
 // the set of keys, their JSON types, and their values must match the recorded
 // responses.
 func TestGroupsResponsesMatchGolden(t *testing.T) {
+	t.Parallel()
 	c := groupsFixture(t)
 	recorder := newGoldenRecorder(t, groupsGoldenVolatile, c.BaseDir, "$BASE")
 	call := func(label, path string, params registry.Params) any {
@@ -131,6 +132,7 @@ func TestGroupsResponsesMatchGolden(t *testing.T) {
 // Catches the team export route losing the compose YAML of the typed
 // team.compose result: the archive must carry the YAML team.compose renders.
 func TestTeamExportArchivesTypedComposeYAML(t *testing.T) {
+	t.Parallel()
 	c := groupsFixture(t)
 	c.Log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	if _, err := h(t, "group.assign")(c, registry.Params{"name": "core", "agent": "lead1"}); err != nil {

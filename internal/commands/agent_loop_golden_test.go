@@ -103,6 +103,7 @@ func agentLoopFixture(t *testing.T) (*registry.Ctx, *fakeControl, string) {
 // JSON a client sees: the set of keys, their JSON types, and their values
 // must match the recorded responses.
 func TestAgentLoopResponsesMatchGolden(t *testing.T) {
+	t.Parallel()
 	c, _, cwd := agentLoopFixture(t)
 	calls := []struct {
 		label, path string

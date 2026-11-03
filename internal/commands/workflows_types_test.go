@@ -8,6 +8,7 @@ import (
 )
 
 func TestWorkflowManifestFromKeepsStickyHolder(t *testing.T) {
+	t.Parallel()
 	no := false
 	view, err := workflowManifestFrom(workflowimage.Manifest{Definition: workflowfile.File{
 		StickyHolder: true,

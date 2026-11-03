@@ -77,6 +77,7 @@ func indentOpenAPI(t *testing.T, spec []byte) []byte {
 
 // Catches a spec change committed without the updated snapshot.
 func TestOpenAPISnapshot(t *testing.T) {
+	t.Parallel()
 	got := servedOpenAPI(t)
 	if *updateOpenAPI {
 		if err := os.WriteFile(openAPISnapshot, got, 0o644); err != nil {

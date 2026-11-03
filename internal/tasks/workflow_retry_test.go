@@ -19,6 +19,7 @@ func failApprove(t *testing.T, svc *Service, actor Actor, task Task) TransitionR
 }
 
 func TestRetryTransitionRequestRunsTheChecksAgain(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	failed := failApprove(t, svc, actor, task)
@@ -56,6 +57,7 @@ func TestRetryTransitionRequestRunsTheChecksAgain(t *testing.T) {
 }
 
 func TestRetryTransitionRequestRefusals(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	t.Run("agent", func(t *testing.T) {
 		svc, actor, task, _ := runFixture(t)

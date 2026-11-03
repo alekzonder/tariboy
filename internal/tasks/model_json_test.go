@@ -6,6 +6,7 @@ import (
 )
 
 func TestTaskUnmarshalDecidesFromThePayloadNotTheReceiver(t *testing.T) {
+	t.Parallel()
 	workflow := `{"key":"DEV-1","status":"develop","category":"in_progress","workflow_digest":"d1",` +
 		`"workflow_name":"flow","workflow_version":"1.0.0","workflow_paused_reason":"x","waiting_on":"pause"}`
 	flexible := `{"key":"DEV-2","status":"open","category":"open"}`
@@ -36,6 +37,7 @@ func TestTaskUnmarshalDecidesFromThePayloadNotTheReceiver(t *testing.T) {
 }
 
 func TestTaskUnmarshalWorkflowPayloadWithoutStatusClearsReusedStatus(t *testing.T) {
+	t.Parallel()
 	task := Task{Status: StatusInProgress, Category: StatusInProgress, WorkflowStatus: "develop"}
 	if err := json.Unmarshal([]byte(`{"key":"DEV-4","workflow_digest":"d1"}`), &task); err != nil {
 		t.Fatal(err)
@@ -46,6 +48,7 @@ func TestTaskUnmarshalWorkflowPayloadWithoutStatusClearsReusedStatus(t *testing.
 }
 
 func TestTaskUnmarshalWithoutStatusKeepsStatus(t *testing.T) {
+	t.Parallel()
 	task := Task{Status: StatusInProgress, Category: StatusInProgress}
 	if err := json.Unmarshal([]byte(`{"key":"DEV-3","title":"t"}`), &task); err != nil {
 		t.Fatal(err)

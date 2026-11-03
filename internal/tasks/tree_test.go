@@ -8,6 +8,7 @@ import (
 
 // A parent in another queue is covered in cross_queue_test.go.
 func TestMoveRejectsDescendantAndReordersRoots(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -51,6 +52,7 @@ func TestMoveRejectsDescendantAndReordersRoots(t *testing.T) {
 }
 
 func TestReadyClaimUsesQueueOwnershipAndIsAtomic(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -87,6 +89,7 @@ func TestReadyClaimUsesQueueOwnershipAndIsAtomic(t *testing.T) {
 }
 
 func TestMoveRejectsHiddenParentAndBeforeTargets(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -128,6 +131,7 @@ func TestMoveRejectsHiddenParentAndBeforeTargets(t *testing.T) {
 }
 
 func TestListTasksOrdersEverySiblingSetByPriorityThenPosition(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -184,6 +188,7 @@ func TestListTasksOrdersEverySiblingSetByPriorityThenPosition(t *testing.T) {
 }
 
 func TestMoveStaysWithinPriorityBucket(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")

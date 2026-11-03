@@ -36,6 +36,7 @@ func seedScaleQueue(tb testing.TB, n int) *Service {
 // The visible set is joined in SQL, so no query binds a variable per task and
 // the SQLite variable limit (32766) does not cap the number of tasks.
 func TestListTasksScalesPast32kTasks(t *testing.T) {
+	t.Parallel()
 	svc := seedScaleQueue(t, 40000)
 	ctx := context.Background()
 	for _, actor := range []Actor{CustomerActor("customer"), AgentActor("runner")} {
@@ -74,6 +75,7 @@ func BenchmarkListTasks50k(b *testing.B) {
 // A failed read of the event sequence fails the list instead of returning
 // sequence 0, which a poller would take as a reset feed.
 func TestListTasksReturnsTheSequenceReadError(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	reader := storetest.Open(t).DB
 	if _, err := reader.Exec(`ALTER TABLE task_events RENAME TO task_events_gone`); err != nil {

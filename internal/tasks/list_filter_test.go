@@ -30,6 +30,7 @@ func assertListKeys(t *testing.T, svc *Service, actor Actor, filter ListFilter, 
 }
 
 func TestListTasksStatusMatchesWorkflowStatusAndCategory(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, _ := engineFixture(t)
 	develop := mustCreateDev(t, svc, actor, "develop")
@@ -60,6 +61,7 @@ func TestListTasksStatusMatchesWorkflowStatusAndCategory(t *testing.T) {
 }
 
 func TestListTasksFiltersByPriorityCustomerParentAndSubtree(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc := newTestService(t)
 	customer := CustomerActor("customer")
@@ -102,6 +104,7 @@ func TestListTasksFiltersByPriorityCustomerParentAndSubtree(t *testing.T) {
 }
 
 func TestListTasksSubtreeStaysInsideAgentVisibility(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc := newTestService(t)
 	customer := CustomerActor("customer")
@@ -129,6 +132,7 @@ func TestListTasksSubtreeStaysInsideAgentVisibility(t *testing.T) {
 }
 
 func TestListTasksClosedViewIncludesCancelled(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc := newTestService(t)
 	customer := CustomerActor("customer")
@@ -154,6 +158,7 @@ func TestListTasksClosedViewIncludesCancelled(t *testing.T) {
 }
 
 func TestListTasksSortsAndPagesEveryOrder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc := newTestService(t)
 	customer := CustomerActor("customer")
@@ -203,6 +208,7 @@ func TestListTasksSortsAndPagesEveryOrder(t *testing.T) {
 }
 
 func TestAgentListActionPassesFiltersAndPages(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc := newTestService(t)
 	customer := CustomerActor("customer")

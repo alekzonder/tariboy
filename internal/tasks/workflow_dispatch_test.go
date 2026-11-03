@@ -6,6 +6,7 @@ import (
 )
 
 func TestDispatchPendingAssignsOnceAMemberBecomesEligible(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, _ := engineFixture(t)
 	setAgent(t, svc, "dev-1", `enabled = 0`)
@@ -50,6 +51,7 @@ func TestDispatchPendingAssignsOnceAMemberBecomesEligible(t *testing.T) {
 }
 
 func TestDispatchPendingOrdersByPriorityAndUsesEachAgentOnce(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, _ := engineFixture(t)
 	setAgent(t, svc, "dev-1", `enabled = 0`)
@@ -71,6 +73,7 @@ func TestDispatchPendingOrdersByPriorityAndUsesEachAgentOnce(t *testing.T) {
 }
 
 func TestDispatchPendingSkipsBlockedTasks(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, _ := engineFixture(t)
 	setAgent(t, svc, "dev-1", `enabled = 0`)
@@ -99,6 +102,7 @@ func TestDispatchPendingSkipsBlockedTasks(t *testing.T) {
 }
 
 func TestDispatchPendingSkipsPausedTasks(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, _ := engineFixture(t)
 	setAgent(t, svc, "dev-1", `enabled = 0`)

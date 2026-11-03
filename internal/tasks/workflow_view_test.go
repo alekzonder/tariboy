@@ -10,6 +10,7 @@ import (
 )
 
 func TestGetWorkflowOnAFlexibleTask(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := requestFixture(t)
 	flexible, err := svc.CreateTask(context.Background(), actor, CreateTaskInput{Queue: "TASK", Title: "flex"})
 	if err != nil {
@@ -24,6 +25,7 @@ func TestGetWorkflowOnAFlexibleTask(t *testing.T) {
 }
 
 func TestGetWorkflowInAPoolStatus(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	holder := AgentActor("dev-1")
@@ -71,6 +73,7 @@ func TestGetWorkflowInAPoolStatus(t *testing.T) {
 // The checks of an outcome are also described: script, description, and the
 // resolved run mode and timeout, so a reader need not know the defaults.
 func TestGetWorkflowExposesCheckDetails(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	editManifest(t, svc, task.WorkflowDigest, func(m *workflowimage.Manifest) {
@@ -108,6 +111,7 @@ func TestGetWorkflowExposesCheckDetails(t *testing.T) {
 }
 
 func TestGetWorkflowAfterTransitions(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	holder := AgentActor("dev-1")
@@ -161,6 +165,7 @@ func TestGetWorkflowAfterTransitions(t *testing.T) {
 }
 
 func TestGetWorkflowOfACancelledTaskOffersNoExit(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	if _, err := svc.SetArtifact(ctx, AgentActor("dev-1"), task.Key, "plan", "p"); err != nil {
@@ -184,6 +189,7 @@ func TestGetWorkflowOfACancelledTaskOffersNoExit(t *testing.T) {
 }
 
 func TestGetWorkflowListsDeclaredArtifactsAndStatuses(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	editManifest(t, svc, task.WorkflowDigest, func(m *workflowimage.Manifest) { m.Definition.Artifacts[0].Description = "The plan." })
 	ctx := context.Background()
@@ -228,6 +234,7 @@ func TestGetWorkflowListsDeclaredArtifactsAndStatuses(t *testing.T) {
 // Every status is described in full, not only the current one: the stepper
 // in Desktop shows what each step needs and which script owns it.
 func TestGetWorkflowDescribesEveryStatus(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	six := 6
@@ -277,6 +284,7 @@ func TestGetWorkflowDescribesEveryStatus(t *testing.T) {
 // A visit carries its counters, so a reader can tell how close the task is
 // to a pause.
 func TestGetWorkflowVisitsCarryCounters(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	request, first := advanceApprove(t, svc, actor, task)
 	complete(t, svc, first.ID, RunCompletion{Verdict: "reject", Message: "CI is red", ExitCode: exitCode(112)})
@@ -299,6 +307,7 @@ func TestGetWorkflowVisitsCarryCounters(t *testing.T) {
 }
 
 func TestGetWorkflowWithNoDeclaredArtifactsHasEmptyLists(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	editManifest(t, svc, task.WorkflowDigest, func(m *workflowimage.Manifest) { m.Definition.Artifacts = nil })
 	view, err := svc.GetWorkflow(context.Background(), actor, task.Key)
@@ -311,6 +320,7 @@ func TestGetWorkflowWithNoDeclaredArtifactsHasEmptyLists(t *testing.T) {
 }
 
 func TestGetWorkflowInAStatusTheManifestDoesNotDeclare(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	forceTask(t, svc, task, `workflow_status = 'gone'`)
 	view, err := svc.GetWorkflow(context.Background(), actor, task.Key)
@@ -324,6 +334,7 @@ func TestGetWorkflowInAStatusTheManifestDoesNotDeclare(t *testing.T) {
 
 // A pool status shows its effective sticky_holder; other statuses show none.
 func TestGetWorkflowShowsEffectiveStickyHolder(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	no := false
 	editManifest(t, svc, task.WorkflowDigest, func(m *workflowimage.Manifest) {

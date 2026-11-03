@@ -40,6 +40,7 @@ func mustCreateDevTask(t *testing.T, svc *Service, actor Actor, title string) Ta
 }
 
 func TestSetQueueWorkflowRecordsTheTagOfTheRef(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	d1 := seedBindingImage(t, svc, "flow", "1", "developers")
@@ -68,6 +69,7 @@ func TestSetQueueWorkflowRecordsTheTagOfTheRef(t *testing.T) {
 }
 
 func TestCreateTaskFollowsTheBoundTag(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	d1 := seedBindingImage(t, svc, "flow", "1", "developers")
@@ -101,6 +103,7 @@ func TestCreateTaskFollowsTheBoundTag(t *testing.T) {
 }
 
 func TestPinnedBindingsDoNotFollow(t *testing.T) {
+	t.Parallel()
 	for _, ref := range []string{"flow:1", "digest"} {
 		t.Run(ref, func(t *testing.T) {
 			ctx := context.Background()
@@ -128,6 +131,7 @@ func TestPinnedBindingsDoNotFollow(t *testing.T) {
 }
 
 func TestFollowIsBlockedByAnEmptyPoolOrMissingSecret(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	d1 := seedBindingImage(t, svc, "flow", "1", "developers")
@@ -169,6 +173,7 @@ func TestFollowIsBlockedByAnEmptyPoolOrMissingSecret(t *testing.T) {
 }
 
 func TestFollowQueueWorkflowsMovesOnlyBindingsOfTheName(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	d1 := seedBindingImage(t, svc, "flow", "1", "developers")

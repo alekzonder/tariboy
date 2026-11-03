@@ -2,7 +2,7 @@ name: Pull request checks
 
 on:
   pull_request:
-  # A run on main saves the apt and cargo caches; pull requests can restore
+  # A run on main saves the apt, cargo and staticcheck caches; pull requests can restore
   # caches of their base branch, so a new pull request starts warm.
   push:
     branches: [main]
@@ -64,6 +64,18 @@ jobs:
           key: desktop-check-${{ runner.os }}-${{ steps.rust.outputs.version }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
           restore-keys: |
             desktop-check-${{ runner.os }}-${{ steps.rust.outputs.version }}-
+
+      # setup-go caches GOCACHE but not the staticcheck cache, so without this
+      # step staticcheck analyzes the standard library and every dependency on
+      # each run. staticcheck checks the inputs of each cached entry itself, so
+      # an older cache from restore-keys is safe.
+      - name: Cache staticcheck
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/staticcheck
+          key: staticcheck-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum', 'tools.mod', 'tools.sum') }}
+          restore-keys: |
+            staticcheck-${{ runner.os }}-
 
       - name: Run backend checks
         run: make backend-check

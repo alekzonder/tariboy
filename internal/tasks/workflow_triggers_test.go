@@ -57,6 +57,7 @@ func (d queueDirectory) QueueExists(prefix string) (bool, error) {
 // task titled by its subject; a letter to another queue, from another sender
 // or with another key creates none.
 func TestQueueTriggerFiresForQueueRecipient(t *testing.T) {
+	t.Parallel()
 	svc, operator := triggerFixture(t)
 	if _, err := svc.CreateQueue(context.Background(), operator, CreateQueueInput{Prefix: "OPS", Name: "Ops"}); err != nil {
 		t.Fatal(err)
@@ -97,6 +98,7 @@ func TestQueueTriggerFiresForQueueRecipient(t *testing.T) {
 }
 
 func TestReconcileWorkflowObservationsRecoversCommittedLetter(t *testing.T) {
+	t.Parallel()
 	svc, operator := triggerFixture(t)
 	mustCreateTrigger(t, svc, operator, "plugin:metrics")
 	sendQueueLetter(t, svc, queueLetter{ID: "durable-1", Sender: "plugin:metrics", CreatedAt: "2099-01-01T00:00:00Z",
@@ -113,6 +115,7 @@ func TestReconcileWorkflowObservationsRecoversCommittedLetter(t *testing.T) {
 }
 
 func TestReconcileWorkflowObservationsUsesCommitSequenceNotTimestampOrID(t *testing.T) {
+	t.Parallel()
 	svc, operator := triggerFixture(t)
 	mustCreateTrigger(t, svc, operator, "plugin:*")
 	at := "2099-01-01T00:00:00Z"
@@ -140,6 +143,7 @@ func TestReconcileWorkflowObservationsUsesCommitSequenceNotTimestampOrID(t *test
 }
 
 func TestTriggerActivationSequenceExcludesEarlierCommittedLetter(t *testing.T) {
+	t.Parallel()
 	svc, operator := triggerFixture(t)
 	svc.db.SetMaxOpenConns(4)
 	tx, err := svc.db.Begin()
@@ -189,6 +193,7 @@ func TestTriggerActivationSequenceExcludesEarlierCommittedLetter(t *testing.T) {
 }
 
 func TestNewTriggerAtSequenceZeroUsesCommitOrderNotExternalTimestamp(t *testing.T) {
+	t.Parallel()
 	svc, operator := triggerFixture(t)
 	clearMessages(t, svc)
 	trigger := mustCreateTrigger(t, svc, operator, "plugin:*")
@@ -205,6 +210,7 @@ func TestNewTriggerAtSequenceZeroUsesCommitOrderNotExternalTimestamp(t *testing.
 }
 
 func TestLegacyTargetWithoutActivationMarkerUsesTimestampBoundary(t *testing.T) {
+	t.Parallel()
 	created := "2026-08-07T12:00:00.000000000Z"
 	if workflowTargetEligible(10, 0, false, "2026-08-07T11:59:59.000000000Z", created) {
 		t.Fatal("legacy target accepted an event older than its creation time")
@@ -217,6 +223,7 @@ func TestLegacyTargetWithoutActivationMarkerUsesTimestampBoundary(t *testing.T) 
 // An observation's event_at comes from outside: any RFC 3339 offset is read
 // as its instant, and a value that is not a time is refused.
 func TestWorkflowObservationEventAtAcceptsAnyOffset(t *testing.T) {
+	t.Parallel()
 	svc, operator := triggerFixture(t)
 	created := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 	svc.clock = func() time.Time { return created }
@@ -246,6 +253,7 @@ func TestWorkflowObservationEventAtAcceptsAnyOffset(t *testing.T) {
 }
 
 func TestConcurrentWorkflowObservationReconcilersNeverRegressCursor(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	for i := 0; i < 20; i++ {
 		// Ids that sort against commit order, which mail never chooses.
@@ -275,6 +283,7 @@ func TestConcurrentWorkflowObservationReconcilersNeverRegressCursor(t *testing.T
 }
 
 func TestZeroTargetCursorAdvanceSerializesAgainstTargetCreation(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	if _, err := svc.CreateQueue(context.Background(), CustomerActor("customer"), CreateQueueInput{Prefix: "DEV", Name: "Development"}); err != nil {
 		t.Fatal(err)
@@ -319,6 +328,7 @@ func TestZeroTargetCursorAdvanceSerializesAgainstTargetCreation(t *testing.T) {
 }
 
 func TestQueueWorkflowTriggerCreatesFlexibleTaskIdempotently(t *testing.T) {
+	t.Parallel()
 	svc, operator := triggerFixture(t)
 	if _, err := svc.CreateQueueWorkflowTrigger(context.Background(), operator, "DEV", CreateQueueWorkflowTriggerInput{Pattern: "plugin:*", Action: "run_script"}); ErrorCode(err) != "invalid_trigger_action" {
 		t.Fatalf("invalid action error = %v", err)
@@ -359,6 +369,7 @@ func TestQueueWorkflowTriggerCreatesFlexibleTaskIdempotently(t *testing.T) {
 }
 
 func TestQueueWorkflowTriggerIsOperatorOnlyAndPersistent(t *testing.T) {
+	t.Parallel()
 	svc, operator := triggerFixture(t)
 	in := CreateQueueWorkflowTriggerInput{Pattern: "plugin:*", CorrelationKey: "issue", Action: "create_task"}
 	if _, err := svc.CreateQueueWorkflowTrigger(context.Background(), AgentActor("dev-a"), "DEV", in); ErrorCode(err) != "forbidden" {

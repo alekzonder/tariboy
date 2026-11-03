@@ -211,6 +211,7 @@ type typedCall struct {
 // agents fixture and the native Tasks service back the calls; the workflow
 // stub answers the routes that need a workflow engine.
 func TestTypedResponsesMatchOpenAPI(t *testing.T) {
+	// Sequential: daemonTypedCalls sets PATH with t.Setenv through daemonFixture.
 	c, fc, ref, _ := agentsFixture(t)
 	svc := tasks.NewService(c.Store.DB, "customer", time.Now)
 	c.Tasks = &workflowStub{TaskControl: svc}
