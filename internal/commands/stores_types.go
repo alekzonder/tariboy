@@ -18,8 +18,18 @@ type StoreImageView stores.StoreImage
 type StoreWorkflowView stores.StoreWorkflow
 
 // StoreAutoBuild is a Store's automatic refresh and build policy. An
-// interval of 0 disables it.
-type StoreAutoBuild stores.AutoBuild
+// interval of 0 disables it. Results holds the last automatic build attempt
+// of each selected image.
+type StoreAutoBuild struct {
+	IntervalMinutes int               `json:"interval_minutes"`
+	Images          []string          `json:"images"`
+	Results         []StoreAutoResult `json:"results"`
+}
+
+// StoreAutoResult is the last automatic build attempt of one Store image: when
+// it ran, the selector and image_version it built, and its error, empty after
+// a success.
+type StoreAutoResult stores.AutoResult
 
 // StoreDetail is a Store with its images, workflows and automatic build policy
 // (store.show, store.refresh, store.auto).
@@ -42,6 +52,9 @@ func storeDetail(d stores.Detail) StoreDetail {
 		Name: d.Name, Source: d.Source, Path: d.Path,
 		Images:    convertSlice(d.Images, func(i stores.StoreImage) StoreImageView { return StoreImageView(i) }),
 		Workflows: convertSlice(d.Workflows, func(w stores.StoreWorkflow) StoreWorkflowView { return StoreWorkflowView(w) }),
-		Auto:      StoreAutoBuild(d.Auto),
+		Auto: StoreAutoBuild{
+			IntervalMinutes: d.Auto.IntervalMinutes, Images: d.Auto.Images,
+			Results: convertSlice(d.Auto.Results, func(r stores.AutoResult) StoreAutoResult { return StoreAutoResult(r) }),
+		},
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	storedb "github.com/alekzonder/tariboy/internal/store"
 )
 
 // AutoBuild is a Store's periodic refresh-and-build policy. A zero interval
@@ -13,6 +15,18 @@ import (
 type AutoBuild struct {
 	IntervalMinutes int      `json:"interval_minutes"`
 	Images          []string `json:"images"`
+	// Results holds the last automatic build attempt of each selected image.
+	Results []AutoResult `json:"results"`
+}
+
+// AutoResult is the last automatic build attempt of one Store image. An empty
+// Error means the build succeeded.
+type AutoResult struct {
+	Image        string `json:"image"`
+	Selector     string `json:"selector"`
+	At           string `json:"at"`
+	ImageVersion string `json:"image_version"`
+	Error        string `json:"error"`
 }
 
 // Builder builds one Store image selector (store/image) with the default tags,
@@ -62,12 +76,22 @@ func (c *Catalog) SetAuto(ctx context.Context, name string, intervalMinutes int,
 	if err != nil {
 		return Detail{}, err
 	}
-	if _, err := c.DB.ExecContext(ctx,
-		`UPDATE image_stores SET auto_interval_minutes=?, auto_images=?, auto_last_run_at=? WHERE name=?`,
-		intervalMinutes, string(encoded), c.now().Unix(), name); err != nil {
+	results := []AutoResult{}
+	for _, result := range detail.Auto.Results {
+		if seen[result.Image] {
+			results = append(results, result)
+		}
+	}
+	encodedResults, err := json.Marshal(results)
+	if err != nil {
 		return Detail{}, err
 	}
-	detail.Auto = AutoBuild{IntervalMinutes: intervalMinutes, Images: selected}
+	if _, err := c.DB.ExecContext(ctx,
+		`UPDATE image_stores SET auto_interval_minutes=?, auto_images=?, auto_last_run_at=?, auto_results=? WHERE name=?`,
+		intervalMinutes, string(encoded), c.now().Unix(), string(encodedResults), name); err != nil {
+		return Detail{}, err
+	}
+	detail.Auto = AutoBuild{IntervalMinutes: intervalMinutes, Images: selected, Results: results}
 	return detail, nil
 }
 
@@ -102,11 +126,16 @@ func (c *Catalog) RunAutoCycle(ctx context.Context, now time.Time, build Builder
 				continue
 			}
 			selector := policy.name + "/" + image.Name
+			result := AutoResult{Image: image.Name, Selector: selector, At: storedb.FormatTime(now), ImageVersion: image.Version}
 			if err := build(ctx, selector); err != nil {
 				log.Warn("Store automatic build", "selector", selector, "err", err)
-				continue
+				result.Error = err.Error()
+			} else {
+				log.Info("Store automatic build", "selector", selector, "image_version", image.Version)
 			}
-			log.Info("Store automatic build", "selector", selector, "image_version", image.Version)
+			if err := c.recordAutoResult(ctx, policy.name, result); err != nil {
+				log.Warn("Store automatic build result", "selector", selector, "err", err)
+			}
 		}
 	}
 }
@@ -167,16 +196,46 @@ func (c *Catalog) markAutoRun(ctx context.Context, name string, now time.Time) e
 	return err
 }
 
+// recordAutoResult replaces the stored result of result.Image.
+func (c *Catalog) recordAutoResult(ctx context.Context, name string, result AutoResult) error {
+	catalogMu.Lock()
+	defer catalogMu.Unlock()
+	auto, err := c.readAuto(name)
+	if err != nil {
+		return err
+	}
+	results := auto.Results
+	replaced := false
+	for i := range results {
+		if results[i].Image == result.Image {
+			results[i], replaced = result, true
+		}
+	}
+	if !replaced {
+		results = append(results, result)
+	}
+	encoded, err := json.Marshal(results)
+	if err != nil {
+		return err
+	}
+	_, err = c.DB.ExecContext(ctx, `UPDATE image_stores SET auto_results=? WHERE name=?`, string(encoded), name)
+	return err
+}
+
 func (c *Catalog) readAuto(name string) (AutoBuild, error) {
 	if c.DB == nil {
 		return AutoBuild{}, errDatabaseUnavailable
 	}
 	var auto AutoBuild
-	var encoded string
-	if err := c.DB.QueryRow(`SELECT auto_interval_minutes,auto_images FROM image_stores WHERE name=?`, name).Scan(&auto.IntervalMinutes, &encoded); err != nil {
+	var encoded, results string
+	if err := c.DB.QueryRow(`SELECT auto_interval_minutes,auto_images,auto_results FROM image_stores WHERE name=?`, name).Scan(&auto.IntervalMinutes, &encoded, &results); err != nil {
 		return AutoBuild{}, err
 	}
 	auto.Images = decodeAutoImages(encoded)
+	auto.Results = []AutoResult{}
+	if err := json.Unmarshal([]byte(results), &auto.Results); err != nil || auto.Results == nil {
+		auto.Results = []AutoResult{}
+	}
 	return auto, nil
 }
 

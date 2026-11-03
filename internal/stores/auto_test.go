@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 func outdatedStore(t *testing.T) (*Catalog, string) {
@@ -33,7 +34,7 @@ func TestSetAutoPersistsIntervalAndSelectedImages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := AutoBuild{IntervalMinutes: 30, Images: []string{"alpha"}}
+	want := AutoBuild{IntervalMinutes: 30, Images: []string{"alpha"}, Results: []AutoResult{}}
 	if !reflect.DeepEqual(detail.Auto, want) {
 		t.Fatalf("SetAuto() auto = %#v, want %#v", detail.Auto, want)
 	}
@@ -117,5 +118,57 @@ func TestRunAutoCycleSkipsDisabledStores(t *testing.T) {
 	}, nil)
 	if len(built) != 0 {
 		t.Fatalf("disabled Store built %v", built)
+	}
+}
+
+func TestRunAutoCycleRecordsLastResultPerImage(t *testing.T) {
+	catalog, _ := outdatedStore(t)
+	now := time.Now()
+	catalog.Now = func() time.Time { return now }
+	if _, err := catalog.SetAuto(context.Background(), "team", 1, []string{"alpha", "beta"}); err != nil {
+		t.Fatal(err)
+	}
+	failAlpha := true
+	build := func(_ context.Context, selector string) error {
+		if failAlpha && selector == "team/alpha" {
+			return errors.New("Store team image alpha: skills-lock.json mismatch")
+		}
+		return nil
+	}
+	results := func() []AutoResult {
+		t.Helper()
+		detail, err := catalog.Detail(context.Background(), "team")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return detail.Auto.Results
+	}
+
+	first := now.Add(time.Minute)
+	catalog.RunAutoCycle(context.Background(), first, build, nil)
+	want := []AutoResult{
+		{Image: "alpha", Selector: "team/alpha", At: store.FormatTime(first), ImageVersion: "2.0.0", Error: "Store team image alpha: skills-lock.json mismatch"},
+		{Image: "beta", Selector: "team/beta", At: store.FormatTime(first), ImageVersion: "3.0.0"},
+	}
+	if got := results(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("results after a failure = %#v, want %#v", got, want)
+	}
+
+	failAlpha = false
+	second := now.Add(2 * time.Minute)
+	catalog.RunAutoCycle(context.Background(), second, build, nil)
+	want = []AutoResult{
+		{Image: "alpha", Selector: "team/alpha", At: store.FormatTime(second), ImageVersion: "2.0.0"},
+		{Image: "beta", Selector: "team/beta", At: store.FormatTime(second), ImageVersion: "3.0.0"},
+	}
+	if got := results(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("results after a success = %#v, want %#v", got, want)
+	}
+
+	if _, err := catalog.SetAuto(context.Background(), "team", 1, []string{"beta"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := results(); !reflect.DeepEqual(got, want[1:]) {
+		t.Fatalf("results after deselecting alpha = %#v, want %#v", got, want[1:])
 	}
 }

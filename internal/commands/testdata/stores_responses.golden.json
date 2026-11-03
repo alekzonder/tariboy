@@ -9,7 +9,8 @@
       "images": [
         "reviewer"
       ],
-      "interval_minutes": 45
+      "interval_minutes": 45,
+      "results": []
     },
     "images": [
       {
@@ -42,7 +43,8 @@
   "store.auto off": {
     "auto": {
       "images": [],
-      "interval_minutes": 0
+      "interval_minutes": 0,
+      "results": []
     },
     "images": [
       {
@@ -83,7 +85,8 @@
   "store.refresh": {
     "auto": {
       "images": [],
-      "interval_minutes": 0
+      "interval_minutes": 0,
+      "results": []
     },
     "images": [
       {
@@ -119,7 +122,8 @@
   "store.show": {
     "auto": {
       "images": [],
-      "interval_minutes": 0
+      "interval_minutes": 0,
+      "results": []
     },
     "images": [
       {

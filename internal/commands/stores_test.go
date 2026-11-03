@@ -309,7 +309,7 @@ func TestStoreAutoCommandPersistsPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantAuto := map[string]any{"interval_minutes": float64(45), "images": []any{"reviewer"}}
+	wantAuto := map[string]any{"interval_minutes": float64(45), "images": []any{"reviewer"}, "results": []any{}}
 	if got := jsonObject(t, set)["auto"]; !reflect.DeepEqual(got, wantAuto) {
 		t.Fatalf("store.auto = %#v, want %#v", got, wantAuto)
 	}
