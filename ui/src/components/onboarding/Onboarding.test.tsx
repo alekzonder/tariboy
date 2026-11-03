@@ -5,6 +5,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { OnboardingProvider } from "./OnboardingProvider";
 import { HelpMenu } from "./HelpMenu";
+import { useTourTarget } from "./useTourTarget";
 import { TOUR_ANCHORS, TOUR_STEPS, type TourAnchor } from "@/lib/onboarding/tour";
 import { UI_VERSION } from "@/lib/onboarding/version";
 import { readKey, storageKeys } from "@/lib/storage";
@@ -212,6 +213,27 @@ describe("onboarding tour", () => {
       await waitFor(() => expect(sidebar[call]).toHaveBeenCalledWith(arg));
     },
   );
+
+  it.each([
+    ["/metrics", "/metrics"],
+    ["/metrics/compare", "/metrics/compare"],
+    ["/app-settings", "/tasks"],
+  ])("shows a sidebar step on %s at %s", async (start, expected) => {
+    const hosts = TOUR_STEPS.find((step) => step.title === "Hosts");
+    if (!hosts?.sidebar || hosts.route) throw new Error("Hosts is a sidebar step without a page");
+    function Step() {
+      useTourTarget(hosts!, () => {});
+      return null;
+    }
+    render(
+      <MemoryRouter initialEntries={[start]}>
+        <Step />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByTestId("location")).toHaveTextContent(expected);
+  });
 
   it("closes with Escape, records the version and goes back", async () => {
     renderTour();

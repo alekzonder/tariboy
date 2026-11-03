@@ -148,6 +148,18 @@ describe("product routing", () => {
     expect(screen.getByRole("link", { name: "Metrics" })).toHaveAttribute("aria-current", "page");
   });
 
+  it.each(["/metrics", "/metrics/compare"])(
+    "gives %s the console titlebar: the sidebar toggle and the global search",
+    async (path) => {
+      renderAt(path);
+      const titlebar = screen.getByTestId("app-titlebar");
+      expect(within(titlebar).getByRole("button", { name: "Hide agents" })).toBeInTheDocument();
+      expect(
+        await within(titlebar).findByRole("combobox", { name: "Search agents and tasks" }),
+      ).toBeVisible();
+    },
+  );
+
   it("starts no tour on the first run and marks the elements the tour explains", async () => {
     localStorage.removeItem("onboarding:state:v1");
     renderAt("/tasks");
@@ -402,6 +414,18 @@ describe("compact screens", () => {
     // The wide layout's saved state is not touched by the drawer.
     expect(localStorage.getItem("terminals:sidebar:v1")).toBeNull();
   });
+
+  it.each(["/metrics", "/metrics/compare"])(
+    "opens the navigation drawer from the menu button on %s",
+    async (path) => {
+      renderAt(path);
+      const titlebar = screen.getByTestId("app-titlebar");
+      fireEvent.click(within(titlebar).getByRole("button", { name: "Open menu" }));
+      const drawer = await screen.findByRole("dialog", { name: "Navigation" });
+      fireEvent.click(within(drawer).getByRole("link", { name: "Tasks" }));
+      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/tasks"));
+    },
+  );
 
   it("closes the drawer on Back", async () => {
     function Back() {

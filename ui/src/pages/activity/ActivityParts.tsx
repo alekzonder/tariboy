@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { ACTIVITY_PERIODS, type ActivityPeriod, type ActivityWindow } from "@/lib/activityPeriod";
 import type { TaskActivityAgent, TaskActivityRow, TaskActivityTotals } from "@/lib/api";
-import { fmtDateTime } from "@/lib/time";
+import { fmtDateTime, fmtPeriod } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
 const fmtUSD = (usd: number) => `$${usd.toFixed(2)}`;
@@ -71,7 +71,7 @@ export function ActivityPeriodBar<P extends string = ActivityPeriod>({
         </span>
       ) : (
         <span className="text-xs text-muted-foreground">
-          {fmtDateTime(window.since)} – {fmtDateTime(window.until)}
+          {fmtPeriod(window.since, window.until)}
         </span>
       )}
     </div>
