@@ -276,7 +276,7 @@ lists with its part. `purged` is `true` only in mode `purge`. `--keep` and
 After mode `remove`, `agent inspect NAME` answers not found, and `agent ps`
 does not show the agent. `image rm` can then delete the image of the agent if
 no other agent uses it. `tariboy iteration ls NAME` and
-`GET /api/assessments?agent=NAME` still return the kept history.
+`GET /api/assessments?agent=NAME&history=true` still return the kept history.
 
 If the agent is in a task queue agent pool, modes `remove` and `purge` fail
 before the daemon stops the agent. The error names each queue and pool.

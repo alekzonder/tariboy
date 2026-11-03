@@ -46,6 +46,7 @@ func assessmentTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 	return c, []typedCall{
 		{"GET", "/api/assessments", "/api/assessments", nil},
 		{"GET", "/api/assessments", "/api/assessments?iteration=it-dev&agent=dev&assessor=judge&image=developer:latest&image_version=1.0.0&limit=5", nil},
+		{"GET", "/api/assessments", "/api/assessments?history=true", nil},
 		{"GET", "/api/assessments/{id}", "/api/assessments/" + id, nil},
 	}
 }
@@ -92,5 +93,42 @@ func TestAssessmentCommandsReadOnly(t *testing.T) {
 	}
 	if n != 2 {
 		t.Fatalf("%d assessment commands; want ls and show", n)
+	}
+}
+
+func TestAssessmentLsHistory(t *testing.T) {
+	t.Parallel()
+	c, first := assessmentFixture(t)
+	five := 5
+	again, err := c.Assessments.Add("judge", "it-judge", assessment.AssessmentInput{
+		RubricVersion: "rubric-1", IterationID: "it-dev", Summary: "again",
+		Axes: []assessment.AssessmentAxis{
+			{Axis: assessment.AxisImageProcess, Verdict: assessment.VerdictScored, Score: &five},
+			{Axis: assessment.AxisRole, Verdict: assessment.VerdictNotApplicable},
+			{Axis: assessment.AxisTaskFit, Verdict: assessment.VerdictNotApplicable},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		params registry.Params
+		want   []string
+	}{
+		{registry.Params{}, []string{again.Assessment.ID}},
+		{registry.Params{"history": false}, []string{again.Assessment.ID}},
+		{registry.Params{"history": true}, []string{again.Assessment.ID, first}},
+	} {
+		list, err := h(t, "assessment.ls")(c, tc.params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, a := range list.(assessment.AssessmentList).Assessments {
+			got = append(got, a.ID)
+		}
+		if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+			t.Errorf("ls %v = %v; want %v", tc.params, got, tc.want)
+		}
 	}
 }

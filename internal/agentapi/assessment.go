@@ -58,6 +58,14 @@ func (s *Server) assessmentLs(w http.ResponseWriter, r *http.Request) {
 		}
 		body["limit"] = n
 	}
+	if v := q.Get("history"); v != "" {
+		history, err := strconv.ParseBool(v)
+		if err != nil {
+			api.WriteErr(w, http.StatusBadRequest, "invalid_assessment", "history must be true or false")
+			return
+		}
+		body["history"] = history
+	}
 	s.assessmentRun(w, r, "ls", body)
 }
 

@@ -41,7 +41,9 @@ func exec(t *testing.T, st *store.Store, q string, args ...any) {
 //     another iteration with the same digest);
 //   - DEV-3: a development workflow task (0.10.1) still in implement;
 //   - it-x: an iteration of carol on developer 2.0.0 without a task.
-func newFixture(t *testing.T) *Reader {
+//
+// Each extra function then adds its own rows.
+func newFixture(t *testing.T, extra ...func(*store.Store)) *Reader {
 	t.Helper()
 	st := storetest.Open(t)
 	exec(t, st, `INSERT INTO task_queues(prefix, name, created_at, updated_at) VALUES ('DEV', 'Dev', ?, ?)`, ts(1, 0, 0), ts(1, 0, 0))
@@ -94,8 +96,11 @@ func newFixture(t *testing.T) *Reader {
 			VALUES (1, ?, 'agent:alice', 1, ?, ?)`, w[0], w[1], w[1])
 	}
 
-	assess := func(seq int, key string, axes map[string]any) {
-		exec(t, st, `INSERT INTO assessments(seq, id, created_at, task_key) VALUES (?, ?, ?, ?)`, seq, "as-"+key+string(rune('a'+seq)), ts(1, 17, 0), key)
+	// The two assessments of DEV-1 assess its two iterations: two objects,
+	// so metrics count both.
+	assess := func(seq int, key, iteration string, axes map[string]any) {
+		exec(t, st, `INSERT INTO assessments(seq, id, created_at, task_key, iteration_id) VALUES (?, ?, ?, ?, ?)`,
+			seq, "as-"+key+string(rune('a'+seq)), ts(1, 17, 0), key, iteration)
 		for axis, score := range axes {
 			if score == nil {
 				exec(t, st, `INSERT INTO assessment_axes(assessment_seq, axis, verdict) VALUES (?, ?, 'not_applicable')`, seq, axis)
@@ -104,8 +109,8 @@ func newFixture(t *testing.T) *Reader {
 			exec(t, st, `INSERT INTO assessment_axes(assessment_seq, axis, verdict, score) VALUES (?, ?, 'scored', ?)`, seq, axis, score)
 		}
 	}
-	assess(1, "DEV-1", map[string]any{"image_process": 80, "role": 90, "task_fit": 70})
-	assess(2, "DEV-1", map[string]any{"image_process": 60, "role": nil, "task_fit": 50})
+	assess(1, "DEV-1", "it-1a", map[string]any{"image_process": 80, "role": 90, "task_fit": 70})
+	assess(2, "DEV-1", "it-1b", map[string]any{"image_process": 60, "role": nil, "task_fit": 50})
 
 	iteration := func(id, agent, version, digest, started string) {
 		exec(t, st, `INSERT INTO iterations(id, agent, trigger, status, started_at, image_ref, image_version, image_digest)
@@ -131,6 +136,9 @@ func newFixture(t *testing.T) *Reader {
 	request("it-2b", "alice", "sha2", "OLD-7", ts(2, 3, 30), 20, 0, 0, 0, 0.40)
 	request("it-3", "bob", "sha1", "DEV-3", ts(3, 1, 1), 5, 0, 0, 0, 0.05)
 	request("it-x", "carol", "sha2", nil, ts(4, 0, 1), 1, 0, 0, 0, 1.00)
+	for _, add := range extra {
+		add(st)
+	}
 	return New(st.Reader(), func() time.Time { return fixtureNow })
 }
 

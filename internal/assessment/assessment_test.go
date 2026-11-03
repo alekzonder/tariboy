@@ -321,6 +321,9 @@ func TestListFilters(t *testing.T) {
 		"version only":     {AssessmentFilter{ImageVersion: "2.0.0"}, []string{a2}},
 		"limit":            {AssessmentFilter{Limit: 2}, []string{a3, a2}},
 	} {
+		// a3 replaces a1 (both assess it-dev); the filters run over the
+		// whole history. latest_test.go covers the default.
+		tc.filter.History = true
 		if got := ids(tc.filter); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%s: %v; want %v", name, got, tc.want)
 		}

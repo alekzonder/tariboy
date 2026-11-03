@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/assessment"
 	"github.com/alekzonder/tariboy/internal/store"
 )
 
@@ -157,8 +158,10 @@ func load(ctx context.Context, tx *sql.Tx, cond string, args []any, fallbackVers
 			d.tasks[id].questions = n
 			return nil
 		}},
+		// Only the latest assessment of each iteration and task counts: a
+		// reassessment replaces the earlier record (assessment.IsLatest).
 		{`SELECT a.task_key, x.axis, x.score FROM assessments a JOIN assessment_axes x ON x.assessment_seq = a.seq
-			WHERE x.verdict = 'scored' AND a.task_key IN (` + keys + `)`, keyArgs, func(r *sql.Rows) error {
+			WHERE x.verdict = 'scored' AND a.task_key IN (` + keys + `) AND ` + assessment.IsLatest, keyArgs, func(r *sql.Rows) error {
 			var key, axis string
 			var score int64
 			if err := r.Scan(&key, &axis, &score); err != nil {

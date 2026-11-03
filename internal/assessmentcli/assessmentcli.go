@@ -27,8 +27,9 @@ var newCaller = func(socket string) Caller { return client.New(socket) }
 
 const usage = `Usage:
   tariboy assessment add --file PATH        record an assessment (agent tools socket only; PATH - reads stdin)
-  tariboy assessment ls [filters] [--limit N]
+  tariboy assessment ls [filters] [--limit N] [--history]
       filters: --iteration ID --task KEY --agent NAME --assessor NAME --image REF --image-version VERSION
+      lists the latest assessment of each iteration and task; --history lists every assessment
   tariboy assessment show ID
 
 Every command accepts --json to print the daemon's result as is.
@@ -120,6 +121,11 @@ func request(args []string, agent bool, stdin io.Reader, stderr io.Writer) (meth
 	case "ls":
 		query := map[string]string{}
 		for i := 0; i < len(rest); i += 2 {
+			if rest[i] == "--history" { // the one flag without a value
+				query["history"] = "true"
+				i-- // the loop step skips one argument only
+				continue
+			}
 			key, ok := lsFlags[rest[i]]
 			if !ok || i+1 >= len(rest) {
 				return fail("assessment ls: unknown flag or missing value %q\n%s", rest[i], usage)

@@ -1203,7 +1203,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List assessments, newest first */
+    /** List the latest assessment of each iteration and task, newest first */
     get: operations["assessment.ls"];
     put?: never;
     post?: never;
@@ -9655,6 +9655,7 @@ export interface operations {
         image?: string;
         image_version?: string;
         limit?: number;
+        history?: boolean;
       };
       header?: never;
       path?: never;
