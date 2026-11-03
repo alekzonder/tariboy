@@ -22,16 +22,20 @@ package assessment
 // internal/assessment/testdata/measure.sql embeds it.
 //
 // It is a correlated NOT EXISTS rather than a window over the table: each
-// row is checked through idx_assessments_iteration or idx_assessments_task,
-// so ls with a limit reads few rows, and the rubric expressions run only on
-// an equal created_at.
+// row is checked through idx_assessments_iteration_created or
+// idx_assessments_task_iteration_created, so ls with a limit reads few rows.
+// later starts with b.created_at >= a.created_at, so the check searches only
+// the records from a's created_at on, and b.seq <> a.seq skips a itself:
+// the rubric expressions run only on another record with an equal created_at.
 var IsLatest = `CASE WHEN a.iteration_id <> ''
 	THEN NOT EXISTS (SELECT 1 FROM assessments b WHERE b.iteration_id = a.iteration_id AND ` + later + `)
 	ELSE NOT EXISTS (SELECT 1 FROM assessments b WHERE b.iteration_id = '' AND b.task_key = a.task_key AND ` + later + `) END`
 
 // later is true when record b of an object is later than record a. The row
-// values compare element by element, left to right.
-var later = `(b.created_at > a.created_at OR (b.created_at = a.created_at
+// values compare element by element, left to right. The first two terms
+// change no result: a later record never has an earlier created_at, and a
+// record is never later than itself.
+var later = `b.created_at >= a.created_at AND b.seq <> a.seq AND (b.created_at > a.created_at OR (b.created_at = a.created_at
 		AND (` + rubricName("b") + `, ` + rubricNumber("b") + `, b.seq) > (` + rubricName("a") + `, ` + rubricNumber("a") + `, a.seq)))`
 
 // rubricHead is rubric_version of alias t without its trailing digits.

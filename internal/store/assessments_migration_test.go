@@ -58,3 +58,27 @@ func TestAssessmentsCascadeOnlyWithinAnAssessment(t *testing.T) {
 		}
 	}
 }
+
+// TestAssessmentsLatestIndexes checks the indexes that the latest-record
+// subquery (assessment.IsLatest) searches by range on created_at. They
+// replace idx_assessments_iteration and idx_assessments_task, their prefixes.
+func TestAssessmentsLatestIndexes(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	for name, want := range map[string]string{
+		"idx_assessments_iteration_created":      "iteration_id,created_at",
+		"idx_assessments_task_iteration_created": "task_key,iteration_id,created_at",
+		"idx_assessments_iteration":              "",
+		"idx_assessments_task":                   "",
+	} {
+		var got string
+		err := s.DB.QueryRow(`SELECT COALESCE(group_concat(name, ','), '') FROM
+			(SELECT name FROM pragma_index_info(?) ORDER BY seqno)`, name).Scan(&got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("index %s has columns %q, want %q", name, got, want)
+		}
+	}
+}

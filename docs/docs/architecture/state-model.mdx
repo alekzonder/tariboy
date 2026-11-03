@@ -313,9 +313,15 @@ form is a name without a number.
 
 The choice happens at read time and changes no row. The SQL condition is
 `assessment.IsLatest`. It checks each row against the other rows of its
-object through `idx_assessments_iteration` or `idx_assessments_task`. On a
-test database with 10,000 assessments, `assessment ls` takes about 10 ms.
-The assessment step of a metrics report over 1,000 tasks takes about 250 ms.
+object. An iteration row uses `idx_assessments_iteration_created`
+(`iteration_id`, `created_at`). A task row uses
+`idx_assessments_task_iteration_created` (`task_key`, `iteration_id`,
+`created_at`). The check reads only the rows of the object from the
+`created_at` of the row on, and it skips the row itself. The same two indexes
+serve the `--iteration` and `--task` filters of `assessment ls` and the task
+filter of the metrics report. On a test database with 10,000 assessments,
+`assessment ls` takes about 4 to 9 ms. A metrics report over 1,000 tasks
+takes about 155 ms.
 
 The axes and the violations reference `assessments(seq)` with
 `ON DELETE CASCADE`. The tables have no foreign key to `iterations`, `tasks`
