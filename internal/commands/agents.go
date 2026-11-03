@@ -766,20 +766,39 @@ func agentLifecycle(path, summary string, verb AgentAction) registry.Command {
 func agentRm() registry.Command {
 	return registry.WithResult[AgentRemoveResult](registry.Command{
 		Path:    "agent.rm",
-		Summary: "Remove an agent (stop it first, or --force)",
+		Summary: "Remove an agent and keep its history; --purge deletes everything (stop it first, or --force)",
+		Help: "Modes:\n" +
+			"  default  delete the agent, its settings (secrets, budgets, schedules, scripts) and inbox letters;\n" +
+			"           keep its history: iterations with tags, ai_requests, iterations/, CONTEXT.md,\n" +
+			"           audit.jsonl, assessments and the letters it sent. An agent created later under\n" +
+			"           the same name gets this history; run with --purge for a clean start.\n" +
+			"  --keep   keep the stopped agent and all its data, delete only image/, bin/ and workdir/\n" +
+			"           (compose down uses it; compose up then re-provisions the agent).\n" +
+			"  --purge  delete the agent and all its data, also what an earlier default rm kept.\n" +
+			"The answer lists what the mode deleted and what it kept.",
 		Args: []registry.Arg{
 			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
 			{Name: "force", Flag: "force", Short: "f", Type: registry.Bool, Help: "kill and remove even if running"},
-			{Name: "purge", Flag: "purge", Type: registry.Bool, Help: "also delete durable data (iterations, context, audit) and leaked rows; default preserves data"},
+			{Name: "purge", Flag: "purge", Type: registry.Bool, Help: "purge mode: also delete the history (iterations, ai_requests, context, audit, agent directory)"},
+			{Name: "keep", Flag: "keep", Type: registry.Bool, Help: "keep mode: keep the stopped agent and its data for a later reprovision; delete only image, bin and workdir"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "DELETE", Path: "/api/agents/{name}"},
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
-			force := p.Bool("force")
-			purge := p.Bool("purge")
-			if err := c.Control.Remove(p.String("name"), force, purge); err != nil {
+			mode := store.RemoveModeRemove
+			switch {
+			case p.Bool("keep") && p.Bool("purge"):
+				return nil, api.UserError{Code: "bad_args", Msg: "--keep and --purge exclude each other"}
+			case p.Bool("keep"):
+				mode = store.RemoveModeKeep
+			case p.Bool("purge"):
+				mode = store.RemoveModePurge
+			}
+			if err := c.Control.Remove(p.String("name"), p.Bool("force"), mode); err != nil {
 				return nil, api.UserError{Code: "rm_failed", Msg: err.Error()}
 			}
-			return AgentRemoveResult{Removed: p.String("name"), Purged: purge}, nil
+			deleted, kept := store.RemovalReport(mode)
+			return AgentRemoveResult{Removed: p.String("name"), Purged: mode == store.RemoveModePurge,
+				Mode: AgentRemoveMode(mode), Deleted: deleted, Kept: kept}, nil
 		},
 	})
 }

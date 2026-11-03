@@ -90,12 +90,15 @@ func (r *Runner) Down(f File, volumes bool) error {
 		}
 		r.logf("removing agent %s (purge=%v)", name, volumes)
 		q := map[string]string{"force": "true"}
-		// Mirror the group --volumes semantics onto agents: a plain down preserves
-		// each agent's data (row + CONTEXT.md + iterations + audit), while
-		// down --volumes purges it. Without volumes, down keeps everything so a
-		// later up re-provisions in place over the retained history.
+		// Mirror the group --volumes semantics onto agents: a plain down keeps
+		// each agent's stopped row and data (keep=true), so a later up
+		// re-provisions in place over the retained history, while
+		// down --volumes purges it. A daemon older than keep ignores it and
+		// keeps the row as before.
 		if volumes {
 			q["purge"] = "true"
+		} else {
+			q["keep"] = "true"
 		}
 		if _, err := r.call.Call("DELETE", "/api/agents/"+name, q); err != nil {
 			return fmt.Errorf("remove agent %s: %w", name, err)

@@ -19,6 +19,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/shim"
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
@@ -400,7 +401,7 @@ func TestRemoveClosesEarlyBoundToolsSocket(t *testing.T) {
 	if code, _, err := toolsCall(l.Sock(), "GET", "/tools/whoami", ""); err != nil || code != http.StatusOK {
 		t.Fatalf("early bound tools socket: code=%d err=%v", code, err)
 	}
-	if err := m.Remove("quiet", true, false); err != nil {
+	if err := m.Remove("quiet", true, store.RemoveModeRemove); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := toolsCall(l.Sock(), "GET", "/tools/whoami", ""); err == nil {

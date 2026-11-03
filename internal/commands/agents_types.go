@@ -2,6 +2,7 @@ package commands
 
 import (
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/invopop/jsonschema"
 )
 
@@ -177,9 +178,22 @@ type AgentActionResult struct {
 	Action AgentAction `json:"action"`
 }
 
+// AgentRemoveMode is the agent rm mode: remove (default), keep or purge.
+type AgentRemoveMode string
+
+func (AgentRemoveMode) JSONSchemaExtend(s *jsonschema.Schema) {
+	s.Enum = []any{AgentRemoveMode(store.RemoveModeRemove), AgentRemoveMode(store.RemoveModeKeep), AgentRemoveMode(store.RemoveModePurge)}
+}
+
 type AgentRemoveResult struct {
 	Removed string `json:"removed"`
-	Purged  bool   `json:"purged"`
+	// Purged is true in mode purge; kept for older clients.
+	Purged bool            `json:"purged"`
+	Mode   AgentRemoveMode `json:"mode"`
+	// Deleted and Kept name the tables and agent paths the mode deleted and
+	// kept; a partly deleted table appears in both with its part.
+	Deleted []string `json:"deleted"`
+	Kept    []string `json:"kept"`
 }
 
 type AgentStateResult struct {

@@ -1634,7 +1634,7 @@ func TestManagerRunProvisionsAndStops(t *testing.T) {
 	if st, _ := m.LiveState("smoke"); st != "stopped" {
 		t.Fatalf("after stop LiveState = %q, want stopped", st)
 	}
-	if err := m.Remove("smoke", false, true); err != nil {
+	if err := m.Remove("smoke", false, store.RemoveModePurge); err != nil {
 		t.Fatal(err)
 	}
 	if ok, _ := as.Exists("smoke"); ok {
@@ -3142,7 +3142,7 @@ func TestRemovePreserveThenPurge(t *testing.T) {
 	wantPreservedRows := leakedRowCount(t, s, name)
 
 	// --- Preserve (plain down): keep data, drop only the rebuildable tree. ---
-	if err := m.Remove(name, true, false); err != nil {
+	if err := m.Remove(name, true, store.RemoveModeKeep); err != nil {
 		t.Fatalf("preserve remove: %v", err)
 	}
 	if ok, _ := as.Exists(name); !ok {
@@ -3172,7 +3172,7 @@ func TestRemovePreserveThenPurge(t *testing.T) {
 	}
 
 	// --- Purge (down --volumes): hard-delete everything + leaked rows. ---
-	if err := m.Remove(name, true, true); err != nil {
+	if err := m.Remove(name, true, store.RemoveModePurge); err != nil {
 		t.Fatalf("purge remove: %v", err)
 	}
 	if ok, _ := as.Exists(name); ok {
@@ -3221,7 +3221,7 @@ func TestRemovePurgeRejectsPoolMemberBeforeStopping(t *testing.T) {
 	}
 	l := agentdir.New(agentsDir, name)
 
-	err = m.Remove(name, true, true)
+	err = m.Remove(name, true, store.RemoveModePurge)
 	if err == nil {
 		t.Fatal("purge remove of a pool member succeeded")
 	}
@@ -3274,7 +3274,7 @@ func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
 	// A second image version to swap onto.
 	buildBasic2(t, m.cfg.ImgStore)
 
-	if err := m.Remove(name, true, false); err != nil {
+	if err := m.Remove(name, true, store.RemoveModeKeep); err != nil {
 		t.Fatalf("preserve remove: %v", err)
 	}
 	if _, err := os.Stat(l.ImageDir()); !os.IsNotExist(err) {

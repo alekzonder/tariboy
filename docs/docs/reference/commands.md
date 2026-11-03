@@ -68,7 +68,7 @@ tariboy has four command surfaces:
 | `tariboy agent pull NAME PATH` | Read a base64 file from an agent's cwd (used by 'cp') |
 | `tariboy agent reprovision NAME` | Re-unpack an agent's image tree in place and restart its loop, keeping its data |
 | `tariboy agent restart NAME` | Restart an agent and run one iteration now |
-| `tariboy agent rm NAME` | Remove an agent (stop it first, or --force) |
+| `tariboy agent rm NAME` | Remove an agent and keep its history; --purge deletes everything (stop it first, or --force) |
 | `tariboy agent run IMAGE` | Create an agent from an image (image:tag); starts stopped — enable with 'agent start' |
 | `tariboy agent screen NAME` | Capture the interactive screen (tmux capture-pane) |
 | `tariboy agent send-keys NAME` | Send keys into the interactive session (raw items, or a line+Enter) |
@@ -257,6 +257,45 @@ down:
 `tariboy update` updates only an installer-managed `linux-x86_64` or
 `linux-aarch64` installation
 and is described in [Remote hosts](/docs/remote-hosts#update-a-host-from-its-own-shell).
+
+### Removing an agent
+
+`tariboy agent rm NAME` has three modes. A running agent needs `--force`.
+
+| Mode | Command | The daemon deletes | The daemon keeps |
+| --- | --- | --- | --- |
+| `remove` | `agent rm NAME` | the agent row, secrets, budgets, schedules, scripts and their runs, the script result outbox, the retention policy, the letters in the inbox, `image/`, `bin/`, `workdir/` | iterations with their tags, `ai_requests`, `iterations/`, `CONTEXT.md`, `audit.jsonl`, assessments, the letters that the agent sent |
+| `keep` | `agent rm NAME --keep` | `image/`, `bin/`, `workdir/` | the stopped agent row (`enabled=false`) and all other data |
+| `purge` | `agent rm NAME --purge` | all rows of the agent and the agent directory | assessments, the letters that the agent sent |
+
+The answer gives the mode in `mode` and lists what the mode deleted and kept
+in `deleted` and `kept`. A partly deleted table, such as `mail`, is in both
+lists with its part. `purged` is `true` only in mode `purge`. `--keep` and
+`--purge` together fail with `bad_args`, and the agent does not change.
+
+After mode `remove`, `agent inspect NAME` answers not found, and `agent ps`
+does not show the agent. `image rm` can then delete the image of the agent if
+no other agent uses it. `tariboy iteration ls NAME` and
+`GET /api/assessments?agent=NAME` still return the kept history.
+
+If the agent is in a task queue agent pool, modes `remove` and `purge` fail
+before the daemon stops the agent. The error names each queue and pool.
+
+An agent that you create later under the same name gets the kept history:
+`CONTEXT.md`, `audit.jsonl`, and the iterations. For a clean start, run
+`tariboy agent rm NAME --purge` first. `--purge` also works when only the kept
+history of a removed agent is left. If nothing of the agent is left, it
+answers not found.
+
+An older daemon left a removed agent as a stopped row. Run
+`tariboy agent rm NAME` again to delete that row.
+
+`tariboy compose down` uses mode `keep`, and `compose down --volumes` uses
+mode `purge`. A daemon older than mode `keep` ignores `keep` and keeps the row
+as before. An older compose client sends no `keep`. Then a new daemon deletes
+the agent in mode `remove`, and the next `compose up` creates the agent again
+with its kept history. Secrets, budgets and schedules that you set outside the
+compose file are then lost. Update the CLI and the daemon together.
 
 ### Iteration tags
 

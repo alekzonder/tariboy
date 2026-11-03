@@ -140,6 +140,9 @@ func TestDownRemovesAgentsAndGroups(t *testing.T) {
 	if body := bodyFor(fc, "DELETE /api/agents/scout"); !hasPurgeTrue(body) {
 		t.Fatalf("expected purge=true in agent delete body when Down(f, true), got %#v", body)
 	}
+	if body := bodyFor(fc, "DELETE /api/agents/scout"); hasKeepTrue(body) {
+		t.Fatalf("expected keep NOT true when Down(f, true), got %#v", body)
+	}
 	if countCalls(fc, "DELETE /api/groups/research-team") != 1 {
 		t.Fatalf("group not removed: %v", fc.calls)
 	}
@@ -175,6 +178,11 @@ func TestDownWithoutVolumesKeepsData(t *testing.T) {
 	// Data-preserving default: agents deleted WITHOUT purge, so their history stays.
 	if body := bodyFor(fc, "DELETE /api/agents/scout"); hasPurgeTrue(body) {
 		t.Fatalf("expected purge NOT true when Down(f, false), got %#v", body)
+	}
+	// keep=true asks the daemon to keep the stopped agent row, so a later up
+	// re-provisions it; a plain agent rm without keep deletes the row.
+	if body := bodyFor(fc, "DELETE /api/agents/scout"); !hasKeepTrue(body) {
+		t.Fatalf("expected keep=true in agent delete body when Down(f, false), got %#v", body)
 	}
 	if countCalls(fc, "DELETE /api/groups/research-team") != 1 {
 		t.Fatalf("group not removed: %v", fc.calls)

@@ -26,7 +26,7 @@ type fakeControl struct {
 	ran           registry.RunSpec
 	stopped       string
 	removed       string
-	purged        bool
+	removeMode    store.RemoveMode
 	reprovisioned string
 	reprovImage   string
 	itemsSent     []shim.KeyItem
@@ -51,9 +51,9 @@ func (f *fakeControl) Start(string) error   { return nil }
 func (f *fakeControl) Stop(n string) error  { f.stopped = n; return nil }
 func (f *fakeControl) Restart(string) error { return nil }
 func (f *fakeControl) Kill(string) error    { return nil }
-func (f *fakeControl) Remove(n string, _, purge bool) error {
+func (f *fakeControl) Remove(n string, _ bool, mode store.RemoveMode) error {
 	f.removed = n
-	f.purged = purge
+	f.removeMode = mode
 	return nil
 }
 func (f *fakeControl) Reprovision(n, img string) error {
@@ -561,16 +561,16 @@ func TestAgentStopAndRm(t *testing.T) {
 	if fc.removed != "smoke" {
 		t.Fatalf("rm not routed: %q", fc.removed)
 	}
-	// Default rm preserves data (purge=false).
-	if fc.purged {
-		t.Fatalf("rm defaulted to purge; must preserve unless --purge given")
+	// Default rm removes the agent and keeps its history.
+	if fc.removeMode != store.RemoveModeRemove {
+		t.Fatalf("rm mode = %q, want remove", fc.removeMode)
 	}
 	// --purge routes through as a hard delete.
 	if _, err := h(t, "agent.rm")(c, registry.Params{"name": "smoke", "force": true, "purge": true}); err != nil {
 		t.Fatal(err)
 	}
-	if !fc.purged {
-		t.Fatalf("rm --purge did not route purge=true")
+	if fc.removeMode != store.RemoveModePurge {
+		t.Fatalf("rm --purge mode = %q, want purge", fc.removeMode)
 	}
 	// reprovision routes name + image through to Control.Reprovision.
 	if _, err := h(t, "agent.reprovision")(c, registry.Params{"name": "smoke", "image": "img:v2"}); err != nil {

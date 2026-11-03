@@ -646,6 +646,32 @@ func (s *Store) Delete(name string) error {
 	return nil
 }
 
+// Remove deletes the agent row and its settings in one transaction, and keeps
+// its history: the store.AgentTables marked KeepOnRemove (iterations with
+// their tags, ai_requests) and the letters the agent sent.
+func (s *Store) Remove(name string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	deleted, err := store.DeleteRemovableAgentRows(tx, name)
+	if err != nil {
+		return err
+	}
+	if deleted["agents"] == 0 {
+		return ErrNotFound
+	}
+	return tx.Commit()
+}
+
+// HasAgentRows reports whether any registry table still holds rows of the
+// agent that removal can delete, with or without its agents row.
+func (s *Store) HasAgentRows(name string) (bool, error) {
+	n, err := store.CountAgentRows(s.db, name)
+	return n > 0, err
+}
+
 // PurgeAgentData deletes every agent-keyed row Delete leaves behind, so a real
 // (purge) remove leaves nothing orphaned: the store.PhaseData tables of
 // store.AgentTables, keyed by the agent name (subscriptions/schedules/
@@ -676,7 +702,7 @@ type PoolMembership struct {
 
 // PoolMemberships lists the task queue agent pools that hold the agent,
 // ordered by queue and pool. task_agent_pool_members references agents with
-// ON DELETE RESTRICT, so a purge Remove checks this before it stops the agent.
+// ON DELETE RESTRICT, so a remove or purge checks this before it stops the agent.
 func (s *Store) PoolMemberships(name string) ([]PoolMembership, error) {
 	rows, err := s.db.Query(`SELECT p.queue_prefix, p.name
 		FROM task_agent_pool_members m JOIN task_agent_pools p ON p.id = m.pool_id

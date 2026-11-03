@@ -70,7 +70,7 @@ export interface paths {
     get: operations["agent.inspect"];
     put?: never;
     post?: never;
-    /** Remove an agent (stop it first, or --force) */
+    /** Remove an agent and keep its history; --purge deletes everything (stop it first, or --force) */
     delete: operations["agent.rm"];
     options?: never;
     head?: never;
@@ -3314,6 +3314,10 @@ export interface components {
       path: string;
     };
     AgentRemoveResult: {
+      deleted: string[];
+      kept: string[];
+      /** @enum {string} */
+      mode: "remove" | "keep" | "purge";
       purged: boolean;
       removed: string;
     };
@@ -5883,6 +5887,7 @@ export interface operations {
       query?: {
         force?: boolean;
         purge?: boolean;
+        keep?: boolean;
       };
       header?: never;
       path: {

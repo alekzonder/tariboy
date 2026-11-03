@@ -13,7 +13,7 @@ var agentKeyedExempt = map[string]string{
 	"assessments":             "historical quality evidence keyed by a snapshot of the agent name",
 	"events":                  "audit log: kept after the agent is removed",
 	"eval_results":            "eval history keyed by image and iteration: kept for image quality reports",
-	"task_agent_pool_members": "tasks own pool membership (FK RESTRICT to agents; a purge Remove rejects a pool member first)",
+	"task_agent_pool_members": "tasks own pool membership (FK RESTRICT to agents; a remove or purge rejects a pool member first)",
 	"task_queue_owners":       "tasks own queue ownership",
 	"task_reminders":          "tasks own reminder lifecycle",
 	"task_workflow_holders":   "tasks own workflow holders (cascade from tasks)",
