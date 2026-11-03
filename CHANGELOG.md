@@ -1,3 +1,26 @@
+## [0.107.0] - 2026-11-03
+
+### Added
+
+- Codex agents with the mail capability get instant letters through PostToolUse and Stop hooks, in `codex exec` and in the TUI. This needs Codex 0.141.0 or newer. In the approve-for-me approval mode, the runner loads no hooks and logs a warning, and the letter waits for the next iteration.
+- OpenCode agents with the mail capability get instant letters through a Tariboy plugin after each successful tool call. This needs OpenCode 1.19.5 or newer. A turn that ends without a successful tool call does not get the letter. The letter waits for the next successful call or prompt.
+- The agent Activity tab has a Metrics view under More. The task panel has a Metrics section before Details. The section is collapsed, and it loads the task metrics only while it is open.
+- Workflowfile.yaml has the `sticky_holder` setting on the root and on a pool status. The status value replaces the root value. Every holder assignment records a `workflow.dispatched` task event with the reason. `workflow get` shows the effective value of each pool status.
+
+### Changed
+
+- A task that comes back to a pool status goes to its previous holder only when that holder is free. Otherwise the least recently dispatched free member gets it. If no member is free, the task waits for the next dispatch pass. Before, the previous holder always got the task. To keep the old behavior, set `sticky_holder: true`. Images built before this release read the setting as false.
+- `agent rm NAME` without `--purge` deletes the agent and its settings, and keeps its history. Before, it answered `removed` but kept a stopped agent, so `image rm` failed with `image_in_use`. `compose down` without `--volumes` uses the new `keep` mode, so `compose up` provisions the agent again. The answer has the new fields `mode`, `deleted` and `kept`.
+
+### Fixed
+
+- A task mention ends before trailing punctuation, so `@agent:tariboy-pm.` mentions `agent:tariboy-pm`. A mention of a principal that does not exist opens no wait. `ttasks ask` to a principal that does not exist fails with `principal_not_found` and saves no comment.
+- An OpenCode agent with a plugin no longer rebuilds its image skills bridge in each iteration.
+- `/metrics` and `/metrics/compare` show the sidebar toggle and global search, and the navigation drawer opens on a phone. The period bar shows the date at both ends. On narrow screens, the toolbar and the card labels fit the screen. On the compare page, the Change arrow follows the sign of B - A.
+- On a phone, a deep task key and its queue marker stay visible in the task tree.
+
+[0.107.0]: https://github.com/alekzonder/tariboy/compare/v0.106.0...v0.107.0
+
 ## [0.106.0] - 2026-11-02
 
 ### Added
