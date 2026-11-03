@@ -86,6 +86,7 @@ func TestAnswerResolvesOnlyAuthorsOpenWaitsAndMentionGrantsResponseAccess(t *tes
 	task, _ := svc.CreateTask(ctx, customer, CreateTaskInput{
 		Queue: "ASK", Title: "decision", Assignee: "requester",
 	})
+	seedAgent(t, svc, "alice", "")
 
 	question, err := svc.AddComment(ctx, AgentActor("requester"), task.Key, AddCommentInput{
 		Body: "Need input from @agent:alice and @user:customer",
@@ -172,6 +173,7 @@ func TestAddCommentIdempotencyReplaysWithoutDuplicateWaitOrRevision(t *testing.T
 	customer := CustomerActor("customer")
 	_, _ = svc.CreateQueue(ctx, customer, CreateQueueInput{Prefix: "ASK", Name: "Ask"})
 	task, _ := svc.CreateTask(ctx, customer, CreateTaskInput{Queue: "ASK", Title: "question"})
+	seedAgent(t, svc, "alice", "")
 
 	first, err := svc.AddComment(ctx, customer, task.Key, AddCommentInput{
 		Body: "@agent:alice need input", IdempotencyKey: "comment-1",
@@ -425,6 +427,10 @@ func assignedTask(t *testing.T, assignee, status string) (*Service, Task) {
 	t.Helper()
 	svc := newTestService(t)
 	ctx := context.Background()
+	// Mentions open waits only on agents that exist.
+	for _, name := range []string{assignee, "reviewer", "other"} {
+		seedAgent(t, svc, name, "")
+	}
 	customer := CustomerActor("customer")
 	if _, err := svc.CreateQueue(ctx, customer, CreateQueueInput{Prefix: "ASK", Name: "Questions"}); err != nil {
 		t.Fatal(err)

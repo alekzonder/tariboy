@@ -244,6 +244,13 @@ sent as `system:tasks` closes too. A notification whose recipient no longer
 exists is marked failed in the outbox with `last_error` and is not retried. A workflow outcome that resolves the customer's open wait
 closes its question letters with `task-outcome:<status>`.
 
+A `task.question` goes only to a principal that exists: a registered agent, or
+the customer login. A mention ends at the last letter or digit of the name, so
+punctuation after it is not part of the principal. A comment that mentions a
+missing principal sends no letter, and `ttasks ask` on a missing principal
+fails with `principal_not_found`. See
+[Questions and notifications](/docs/tasks#questions-and-notifications).
+
 A task letter names its task in the subject, the key and then the title, for
 example `Question on DEV-1: Ship the release`. Its `data` carries `task_key`
 and `task_title`. The title is the one the task had when the letter was sent.

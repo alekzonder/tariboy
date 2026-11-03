@@ -91,6 +91,7 @@ func (s *TaskService) agentAsk(ctx context.Context, actor Actor, in *AskRequest)
 	}
 	return s.AddComment(ctx, actor, in.Key, AddCommentInput{
 		Body: "@" + principal + "\n\n" + in.Body, IdempotencyKey: in.IdempotencyKey,
+		askPrincipal: principal,
 	})
 }
 

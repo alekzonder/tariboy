@@ -450,6 +450,9 @@ type DeleteRelationInput struct {
 type AddCommentInput struct {
 	Body           string `json:"body"`
 	IdempotencyKey string `json:"idempotency_key"`
+	// askPrincipal is the principal an explicit question asks. It must exist;
+	// the comment then waits on it whatever its body mentions.
+	askPrincipal string
 }
 
 type CommentResult struct {
