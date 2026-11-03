@@ -177,7 +177,7 @@ smoke contracts. Its
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
 frontend target runs the UI format check, the generated API types check, UI
 typecheck, lint with the complexity and size thresholds, the unused-code check, unit tests,
-branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
+which fail when Vitest finishes fewer test files than it found, branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
 `scripts/npm-ci-locked.sh` for locked installs under `ui/`, `ui/tools/api-types/`
 and `docs/`.
@@ -677,6 +677,20 @@ example `TasksWorkspace.realtime.test.tsx`. Vitest runs the files in parallel.
 Put the shared fixtures in `ui/src/test/`. Keep the `vi.hoisted` and `vi.mock`
 calls in each test file, because Vitest hoists them only in the test file
 itself.
+
+`npm test` runs `scripts/vitest-run.mjs`, which runs `vitest run` with the same
+arguments. The reporter `scripts/vitest-file-ledger.mjs` writes the number of
+test files that Vitest found and each test file that ended to a ledger file.
+The wrapper fails when Vitest finished fewer files than it found, when a signal
+stopped Vitest, or when Vitest stopped before it reported the files. The
+message names both numbers, for example
+`ui-test: vitest finished 274 of 303 test files; 29 did not run`. A successful
+run prints `ui-test: vitest finished 303 of 303 test files`. The check does not
+use the Vitest summary, because a Vitest worker that runs out of heap can stop
+the run with exit code 0 and no summary. To prevent that, `ui/vite.config.ts`
+sets `vmMemoryLimit` to 60% of the heap limit of a Node.js thread. Vitest then
+restarts a `vmThreads` worker before its heap is full. `npm run test:watch`
+runs Vitest without the wrapper and without the check.
 
 `npm run knip` runs [Knip](https://knip.dev) from `ui/knip.json`. The
 `ui-dead-code` step of `make frontend-check` runs it. It fails when it finds
