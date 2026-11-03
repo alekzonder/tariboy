@@ -7,6 +7,7 @@ package shim
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -346,5 +347,95 @@ func TestTmuxOperationsPreservePrefixedSession(t *testing.T) {
 	out, err := exec.Command("tmux", "capture-pane", "-p", "-t", "=image-creator-sam:").Output()
 	if err != nil || !strings.Contains(string(out), "DECOY") || strings.Contains(string(out), "WRONG") || strings.Contains(string(out), "FINISH") {
 		t.Fatalf("decoy affected: %q, %v", out, err)
+	}
+}
+
+// A new iteration starts right after the previous shim wrote result.json,
+// with the same session name and the same agent RPC socket. The previous pane
+// supervisor still reports harness_exited on that socket after its harness
+// dies; the new shim must not take that report as its own and end its session.
+func TestTmuxRapidRestartIgnoresPreviousSupervisorReport(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux unavailable")
+	}
+	root, err := os.MkdirTemp("/tmp", "tariboy-rr-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_TMPDIR", root)
+	t.Cleanup(func() { _ = exec.Command("tmux", "kill-server").Run() })
+	bin := buildShimBinary(t, root)
+	session, sock := "rr", filepath.Join(root, "s.sock")
+	start := func(name string, harness ...string) (string, *exec.Cmd, chan error) {
+		iter := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Join(iter, "logs"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		args := append([]string{"--iteration-dir", iter, "--agent", session, "--iteration-id", name, "--tmux-session", session, "--shim-sock", sock, "--"}, harness...)
+		cmd := exec.Command(bin, args...)
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- cmd.Wait() }()
+		t.Cleanup(func() { _ = cmd.Process.Kill() })
+		return iter, cmd, done
+	}
+	readResult := func(iter string) IterationResult {
+		t.Helper()
+		var res IterationResult
+		data, err := os.ReadFile(filepath.Join(iter, "result.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(data, &res); err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+
+	// The old harness ignores HUP and TERM, so its supervisor reports exit
+	// only after SIGKILL, seconds after the old shim wrote its result.
+	oldIter, oldCmd, oldDone := start("old", "/bin/sh", "-c", `trap '' HUP TERM; sleep 100`)
+	if !testutil.WaitFor(3*time.Second, func() bool { return TmuxHasSession(session) }) {
+		t.Fatal("old session did not start")
+	}
+	time.Sleep(500 * time.Millisecond)
+	if err := oldCmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-oldDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("old shim did not exit after SIGTERM")
+	}
+	if res := readResult(oldIter); res.ExitCode != -1 {
+		t.Fatalf("old exit = %d; want -1 (supervisor still running)", res.ExitCode)
+	}
+
+	marker := filepath.Join(root, "finish")
+	newIter, _, newDone := start("new", "/bin/sh", "-c", `while [ ! -e "$1" ]; do sleep 0.1; done`, "harness", marker)
+	oldStatus := filepath.Join(oldIter, "logs", tmuxExitStatusFilename)
+	if !testutil.WaitFor(8*time.Second, func() bool { _, err := os.Stat(oldStatus); return err == nil }) {
+		t.Fatal("old supervisor did not record its status")
+	}
+	// Longer than tmuxPaneCloseWait: a shim fooled by the old report has
+	// killed its session by now.
+	time.Sleep(2 * time.Second)
+	if err := os.WriteFile(marker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-newDone:
+	case <-time.After(15 * time.Second):
+		t.Fatal("new shim did not finish")
+	}
+	res := readResult(newIter)
+	shimLog, _ := os.ReadFile(filepath.Join(newIter, "logs", "shim.log"))
+	if res.ExitCode != 0 || strings.Contains(string(shimLog), "category=missing") ||
+		!strings.Contains(string(shimLog), "WARN ignore harness_exited from another supervisor") {
+		t.Fatalf("new iteration exit = %d; want 0 and the old report ignored\nshim.log:\n%s", res.ExitCode, shimLog)
 	}
 }

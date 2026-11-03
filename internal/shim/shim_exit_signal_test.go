@@ -101,10 +101,10 @@ func serveShortSocket(t *testing.T, h Handler) string {
 }
 
 func TestHarnessExitedRPCClosesWaitChannelOnce(t *testing.T) {
-	s := &tmuxShim{session: "managed", harnessExited: make(chan struct{})}
+	s := &tmuxShim{session: "managed", supervisorToken: "run", harnessExited: make(chan struct{})}
 	sock := serveShortSocket(t, s)
 	for i := 0; i < 2; i++ {
-		if err := Dial(sock).NotifyHarnessExited(); err != nil {
+		if err := Dial(sock).NotifyHarnessExited("run"); err != nil {
 			t.Fatalf("report %d: %v", i, err)
 		}
 	}
@@ -117,19 +117,20 @@ func TestHarnessExitedRPCClosesWaitChannelOnce(t *testing.T) {
 
 func TestHarnessExitedRPCUnsupportedByProcessShim(t *testing.T) {
 	sock := serveShortSocket(t, &fakeHandler{})
-	if err := Dial(sock).NotifyHarnessExited(); err == nil || !strings.Contains(err.Error(), "unsupported") {
+	if err := Dial(sock).NotifyHarnessExited("run"); err == nil || !strings.Contains(err.Error(), "unsupported") {
 		t.Fatalf("report error = %v, want unsupported", err)
 	}
 }
 
 func TestRunTmuxSupervisorReportsExitAfterStatusAndHidesSocket(t *testing.T) {
-	s := &tmuxShim{session: "managed", harnessExited: make(chan struct{})}
+	s := &tmuxShim{session: "managed", supervisorToken: "run", harnessExited: make(chan struct{})}
 	sock := serveShortSocket(t, s)
 	t.Setenv(tmuxSupervisorSockEnv, sock)
+	t.Setenv(tmuxSupervisorTokenEnv, "run")
 	dir := t.TempDir()
 	statusPath := filepath.Join(dir, "status")
 	envPath := filepath.Join(dir, "harness-env")
-	harness := []string{"/bin/sh", "-c", `printf '%s' "${` + tmuxSupervisorSockEnv + `-unset}" > "$1"; exit 3`, "harness", envPath}
+	harness := []string{"/bin/sh", "-c", `printf '%s' "${` + tmuxSupervisorSockEnv + `-unset}${` + tmuxSupervisorTokenEnv + `-unset}" > "$1"; exit 3`, "harness", envPath}
 	if err := RunTmuxSupervisor("managed", statusPath, harness); err != nil {
 		t.Fatal(err)
 	}
@@ -141,8 +142,8 @@ func TestRunTmuxSupervisorReportsExitAfterStatusAndHidesSocket(t *testing.T) {
 	if status, err := readTmuxExitStatus(statusPath); err != nil || status != 3 {
 		t.Fatalf("status = %d, %v; want 3", status, err)
 	}
-	if env, err := os.ReadFile(envPath); err != nil || string(env) != "unset" {
-		t.Fatalf("harness saw %s = %q, %v; want it removed", tmuxSupervisorSockEnv, env, err)
+	if env, err := os.ReadFile(envPath); err != nil || string(env) != "unsetunset" {
+		t.Fatalf("harness saw %s, %s = %q, %v; want both removed", tmuxSupervisorSockEnv, tmuxSupervisorTokenEnv, env, err)
 	}
 }
 
@@ -172,12 +173,12 @@ func TestRunTmuxEndsOnSupervisorReportWithoutFallbackTick(t *testing.T) {
 			return exec.Command("/bin/sh", "-c", "printf @42")
 		case "new-window":
 			// Run the pane command with the window environment, as tmux would.
-			if len(args) != 6 || args[1] != "-e" {
+			if len(args) != 8 || args[1] != "-e" || args[3] != "-e" {
 				t.Errorf("new-window args = %#v", args)
 				return exec.Command("/bin/false")
 			}
-			supervisor = exec.Command("/bin/sh", "-c", args[5])
-			supervisor.Env = append(os.Environ(), args[2])
+			supervisor = exec.Command("/bin/sh", "-c", args[7])
+			supervisor.Env = append(os.Environ(), args[2], args[4])
 			if err := supervisor.Start(); err != nil {
 				t.Errorf("start supervisor: %v", err)
 			}
@@ -308,18 +309,18 @@ func TestEndTmuxSessionKillsAtOnceOnCancel(t *testing.T) {
 }
 
 func TestHarnessStartedRPCSetsStatusPIDUntilExit(t *testing.T) {
-	s := &tmuxShim{session: "managed", harnessExited: make(chan struct{})}
+	s := &tmuxShim{session: "managed", supervisorToken: "run", harnessExited: make(chan struct{})}
 	sock := serveShortSocket(t, s)
 	if st := s.Status(); st.PID != 0 {
 		t.Fatalf("pid before start = %d; want 0", st.PID)
 	}
-	if err := Dial(sock).NotifyHarnessStarted(4242); err != nil {
+	if err := Dial(sock).NotifyHarnessStarted(4242, "run"); err != nil {
 		t.Fatal(err)
 	}
 	if st, err := Dial(sock).Status(); err != nil || st.PID != 4242 {
 		t.Fatalf("status = %+v, %v; want pid 4242", st, err)
 	}
-	if err := Dial(sock).NotifyHarnessExited(); err != nil {
+	if err := Dial(sock).NotifyHarnessExited("run"); err != nil {
 		t.Fatal(err)
 	}
 	if st := s.Status(); st.PID != 0 {
@@ -329,16 +330,17 @@ func TestHarnessStartedRPCSetsStatusPIDUntilExit(t *testing.T) {
 
 func TestHarnessStartedRPCUnsupportedByProcessShim(t *testing.T) {
 	sock := serveShortSocket(t, &fakeHandler{})
-	if err := Dial(sock).NotifyHarnessStarted(1); err == nil || !strings.Contains(err.Error(), "unsupported") {
+	if err := Dial(sock).NotifyHarnessStarted(1, "run"); err == nil || !strings.Contains(err.Error(), "unsupported") {
 		t.Fatalf("report error = %v, want unsupported", err)
 	}
 }
 
 // The supervisor reports the pid of the harness it started.
 func TestRunTmuxSupervisorReportsHarnessPID(t *testing.T) {
-	s := &tmuxShim{session: "managed", harnessExited: make(chan struct{})}
+	s := &tmuxShim{session: "managed", supervisorToken: "run", harnessExited: make(chan struct{})}
 	sock := serveShortSocket(t, s)
 	t.Setenv(tmuxSupervisorSockEnv, sock)
+	t.Setenv(tmuxSupervisorTokenEnv, "run")
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "pid")
 	// The harness waits until the shim knows a pid, then records its own.
@@ -358,5 +360,50 @@ func TestRunTmuxSupervisorReportsHarnessPID(t *testing.T) {
 	}
 	if want := strings.TrimSpace(string(raw)); reported == 0 || strconv.Itoa(reported) != want {
 		t.Fatalf("reported pid = %d; want harness pid %s", reported, want)
+	}
+}
+
+// The RPC socket belongs to the agent, not to one shim run: a pane supervisor
+// left over from the previous iteration reports on the socket of the next
+// shim. Only reports with this run's token change the shim's state.
+func TestTmuxShimIgnoresForeignSupervisorReport(t *testing.T) {
+	iter := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(iter, "logs"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	s := &tmuxShim{session: "managed", iterationDir: iter, supervisorToken: "mine", harnessExited: make(chan struct{})}
+	sock := serveShortSocket(t, s)
+	for _, token := range []string{"previous", ""} {
+		if err := Dial(sock).NotifyHarnessStarted(4242, token); err == nil {
+			t.Fatalf("start report with token %q accepted", token)
+		}
+		if err := Dial(sock).NotifyHarnessExited(token); err == nil {
+			t.Fatalf("exit report with token %q accepted", token)
+		}
+	}
+	select {
+	case <-s.harnessExited:
+		t.Fatal("a foreign exit report closed the wait channel")
+	default:
+	}
+	if st := s.Status(); st.PID != 0 {
+		t.Fatalf("a foreign start report set pid %d", st.PID)
+	}
+	if log, _ := os.ReadFile(filepath.Join(iter, "logs", "shim.log")); !strings.Contains(string(log), "WARN ignore harness_exited from another supervisor") {
+		t.Fatalf("shim.log = %q; want the ignored report", log)
+	}
+	if err := Dial(sock).NotifyHarnessStarted(4242, "mine"); err != nil {
+		t.Fatal(err)
+	}
+	if st := s.Status(); st.PID != 4242 {
+		t.Fatalf("pid = %d; want 4242", st.PID)
+	}
+	if err := Dial(sock).NotifyHarnessExited("mine"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-s.harnessExited:
+	default:
+		t.Fatal("own exit report did not close the wait channel")
 	}
 }

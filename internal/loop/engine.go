@@ -378,6 +378,12 @@ func (e *Engine) tryMessage(ctx context.Context) {
 		w.block(e.newTimer)
 		return
 	}
+	// A failed iteration closes no letter; without a retry they wait for the
+	// next publish. on_error=stop halts the loop and returns TickErrorHalt.
+	if (result == TickRestarted || result == TickError) && e.hasPending() {
+		w.backoff(e.newTimer)
+		return
+	}
 	w.clear()
 }
 

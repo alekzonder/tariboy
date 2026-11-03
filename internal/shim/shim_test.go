@@ -1382,7 +1382,10 @@ func TestRunTmuxCreatesHarnessWindowAfterSettingSessionHistoryLimit(t *testing.T
 				t.Fatal(err)
 			}
 			wantCommand := shellJoin(tmuxSupervisorCommand(executable, opts.TmuxSession, filepath.Join(dir, "logs", tmuxExitStatusFilename), opts.HarnessArgv))
-			if !reflect.DeepEqual(call, []string{"new-window", "-e", tmuxSupervisorSockEnv + "=" + filepath.Join(dir, "shim.sock"), "-t", "=managed-history:", wantCommand}) {
+			if len(call) != 8 || !strings.HasPrefix(call[4], tmuxSupervisorTokenEnv+"=") || len(call[4]) != len(tmuxSupervisorTokenEnv)+1+32 {
+				t.Fatalf("new-window args = %#v, want a 32-hex-digit supervisor token", call)
+			}
+			if !reflect.DeepEqual(call, []string{"new-window", "-e", tmuxSupervisorSockEnv + "=" + filepath.Join(dir, "shim.sock"), "-e", call[4], "-t", "=managed-history:", wantCommand}) {
 				t.Fatalf("new-window args = %#v, want harness command byte-identical to prior new-session command", call)
 			}
 		case "pipe-pane":
