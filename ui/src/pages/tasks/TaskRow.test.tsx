@@ -5,6 +5,7 @@ import type { Queue, Task } from "@/lib/api";
 import type { VisibleTaskRow } from "@/lib/taskTree";
 import {
   moveTaskColumn,
+  PHONE_TASK_QUERY,
   readTaskColumnLayout,
   resetTaskColumns,
   setTaskColumnWidth,
@@ -123,11 +124,18 @@ describe("task table columns", () => {
 
     const column = screen.getByText("IMPROVE-136").parentElement!;
     expect(column.style.width).toBe(`${TASK_COLUMNS.key}px`);
-    // The indents are capped, so they cannot push the key out of the column.
-    const indents = [...column.children].filter(
-      (child) => (child as HTMLElement).style.width === "14px",
-    );
-    expect(indents).toHaveLength(6);
+    // The indent is capped at six levels of 20px, so it cannot push the key
+    // out of the column; with its 6px gap the one span makes 120px.
+    const indents = column.querySelectorAll("[data-key-indent]");
+    expect(indents).toHaveLength(1);
+    expect(indents[0]).toHaveAttribute("aria-hidden", "true");
+    expect(indents[0]).toHaveClass("shrink-0");
+    expect((indents[0] as HTMLElement).style.width).toBe("114px");
+  });
+
+  it("has no indent at the root", () => {
+    renderRow("agent");
+    expect(document.querySelector("[data-key-indent]")).toBeNull();
   });
 
   it("carries a duration in the agent table and an agent instead of a queue in the all table", () => {
@@ -576,6 +584,30 @@ describe("a child from another queue", () => {
     expect(marker.parentElement).toBe(key.parentElement);
   });
 
+  it("keeps the marker and the key in a phone's 96px column at depth 6", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === PHONE_TASK_QUERY,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    try {
+      renderPlaced({ depth: 6, crossQueue: true, parentQueue: "TARI" });
+
+      const key = screen.getByText("TARIDESIGN-2");
+      const column = key.parentElement!;
+      // Three phone levels of 6px: a 12px span and its 6px gap.
+      const indent = column.querySelector<HTMLElement>("[data-key-indent]")!;
+      expect(indent.style.width).toBe("12px");
+      expect(column.querySelectorAll("[data-key-indent]")).toHaveLength(1);
+      expect(within(column).getByRole("img", { name: /^Queue TARIDESIGN/ }).parentElement).toBe(
+        column,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("has no marker in the parent's queue or at the root", () => {
     renderPlaced({ crossQueue: false, parentQueue: "TARIDESIGN" });
     expect(screen.queryByRole("img", { name: /^Queue / })).toBeNull();
@@ -666,7 +698,9 @@ describe("the link to a parent in another queue", () => {
     expect(button).toHaveClass("min-h-6", "min-w-6");
     const text = button.querySelector("[data-parent-link-text]");
     expect(text).toHaveTextContent("in TARI-1");
-    expect(text).toHaveClass("hidden", "sm:inline");
+    // Visually hidden, not removed: a screen reader still reads it.
+    expect(text).toHaveClass("sr-only", "sm:not-sr-only");
+    expect(text).not.toHaveClass("hidden");
     expect(within(button).getByText("TARI-1")).toHaveClass("font-mono");
   });
 
@@ -675,6 +709,27 @@ describe("the link to a parent in another queue", () => {
 
     expect(screen.queryByRole("button", { name: "Open parent task TARI-1" })).toBeNull();
     expect(screen.getByTitle("You cannot open this task")).toHaveTextContent("in TARI-1");
+  });
+
+  it("names the parent to a screen reader on a phone when it cannot be opened", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === PHONE_TASK_QUERY,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    try {
+      renderPlaced({ depth: 0, orphaned: true, parentLink: { ...link, canOpen: false } });
+
+      const text = screen
+        .getByTitle("You cannot open this task")
+        .querySelector("[data-parent-link-text]");
+      expect(text).toHaveTextContent("in TARI-1");
+      expect(text).toHaveClass("sr-only", "sm:not-sr-only");
+      expect(text).not.toHaveClass("hidden");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("is absent without a link", () => {

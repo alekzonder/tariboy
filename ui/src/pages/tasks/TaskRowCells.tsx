@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PriorityTag, StatusPill } from "@/components/ui/status";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { TONE_TEXT, taskTone } from "@/lib/statusTone";
 import {
@@ -24,8 +25,8 @@ import {
 } from "@/lib/tasks";
 import { queueMarkerLabel, type TaskParentLink, type VisibleTaskRow } from "@/lib/taskTree";
 import QueueMarker from "./QueueMarker";
-import type { TaskColumnId } from "./taskColumnLayout";
-import { INDENT_PX, MAX_INDENT_DEPTH } from "./taskColumns";
+import { PHONE_TASK_QUERY, type TaskColumnId } from "./taskColumnLayout";
+import { keyIndentPx } from "./taskColumns";
 import { formatTaskDuration, formatTaskTime } from "./taskTime";
 
 const priorityLabels = {
@@ -104,15 +105,21 @@ function PriorityCell({ row, style, readOnly, onPriorityChange }: TaskRowCellPro
 }
 
 function KeyCell({ row, style, expanded, onToggle, queues }: TaskRowCellProps) {
+  const phone = useMediaQuery(PHONE_TASK_QUERY);
   return (
     <span
       data-column="key"
       style={style}
       className="z-2 flex shrink-0 items-center gap-1.5 overflow-hidden"
     >
-      {Array.from({ length: Math.min(row.depth, MAX_INDENT_DEPTH) }, (_, level) => (
-        <span key={level} aria-hidden="true" className="shrink-0" style={{ width: INDENT_PX }} />
-      ))}
+      {row.depth > 0 && (
+        <span
+          data-key-indent
+          aria-hidden="true"
+          className="shrink-0"
+          style={{ width: keyIndentPx(row.depth, phone) }}
+        />
+      )}
       <button
         type="button"
         className="grid size-4 shrink-0 place-items-center text-muted-foreground opacity-65 disabled:opacity-0"
@@ -136,7 +143,8 @@ function KeyCell({ row, style, expanded, onToggle, queues }: TaskRowCellProps) {
 }
 
 /** `in KEY` after the title of a root whose parent is in another queue. On a
- *  phone only the icon stays, on a 24px target. */
+ *  phone only the icon shows, on a 24px target; the text stays for a screen
+ *  reader. */
 function ParentLink({
   link,
   onOpenTask,
@@ -147,7 +155,7 @@ function ParentLink({
   const content = (
     <>
       <CornerLeftUp aria-hidden="true" className="size-3" />
-      <span data-parent-link-text className="hidden sm:inline">
+      <span data-parent-link-text className="sr-only sm:not-sr-only">
         in <span className="font-mono">{link.key}</span>
       </span>
     </>
