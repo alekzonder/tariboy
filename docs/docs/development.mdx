@@ -286,11 +286,13 @@ manual changes inside `node_modules` or changes to npm configuration, such as
 `.npmrc` or install flags. Those changes are outside the fingerprint.
 Deleting `node_modules` also forces installation on the next run.
 
-Three scripts stay outside `full-check` deliberately and are run by hand:
+Four scripts stay outside `full-check` deliberately and are run by hand:
 `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` require a
 disposable SSH host (the first also requires explicit consent to destroying its
-data), and `scripts/check-alpha-artifacts.sh` is a release gate that takes a
-release directory as its argument. The Rust host tests and clippy are outside
+data), `scripts/check-alpha-artifacts.sh` is a release gate that takes a
+release directory as its argument, and
+`scripts/desktop-build-script-relocation-check.sh` checks the desktop build
+script against a shared cache; see [Rust desktop host](#rust-desktop-host). The Rust host tests and clippy are outside
 both targets as well; see [Rust desktop host](#rust-desktop-host).
 
 The individual targets remain callable on their own, so running `make vet` or
@@ -824,6 +826,20 @@ directory, `~/.cache/tariboy/desktop-check-target`, which
 `TARIBOY_CARGO_CHECK_DIR` changes. The first run with an empty target directory
 takes several minutes; later runs are incremental. A worktree without
 `desktop/dist` compiles against an empty stub frontend.
+
+Because the target directory is shared, cargo can reuse a build script that
+another worktree compiled, after that worktree is removed. So
+`desktop/src-tauri/build.rs` must not compile a worktree path into itself: it
+reads `CARGO_MANIFEST_DIR` with `std::env::var` at run time, not with `env!`.
+Run `scripts/desktop-build-script-relocation-check.sh [REV]` by hand when you
+change `build.rs`. It exports `REV` (default `HEAD`) into two temporary trees
+with a temporary `TARIBOY_CARGO_CHECK_DIR`, and runs `desktop-rust-check` in the
+first tree, then in the second tree after the first is removed. Then it changes
+`internal/version/version.go` in the second tree and checks that the build
+script emits the new `TARIBOY_VERSION`. It does not touch the live target
+directory. It compiles the crate from scratch, so it takes several minutes and
+several gigabytes of disk under `TMPDIR`, which it removes on exit. It holds the
+same host check slot as `make check`.
 
 Neither entry point runs the Rust tests or clippy. Run them yourself when
 changing `desktop/src-tauri`:
