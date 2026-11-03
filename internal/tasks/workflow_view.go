@@ -58,6 +58,9 @@ type StatusView struct {
 	Watch            *WatchView       `json:"watch,omitempty"`
 	Transitions      []TransitionView `json:"transitions,omitempty"`
 	Limits           *LimitsView      `json:"limits,omitempty"` // the effective limits; nil for a terminal status
+	// StickyHolder is the effective sticky_holder of a pool status; nil for
+	// every other status.
+	StickyHolder *bool `json:"sticky_holder,omitempty" jsonschema:"description=For a pool status: the previous holder gets the task back however busy it is"`
 }
 
 // TransitionView is one way out of a status: the outcome, its target, and
@@ -109,6 +112,10 @@ func statusView(manifest workflowimage.Manifest, status workflowfile.Status) Sta
 	limits := manifest.Definition.StatusLimits(status.ID)
 	view.Limits = &LimitsView{IdleIterations: limits.IdleIterations, RejectedRequests: limits.RejectedRequests,
 		ScriptFailures: limits.ScriptFailures, UnavailableGrace: limits.UnavailableGrace.String()}
+	if status.Owner.Kind == workflowfile.OwnerPool {
+		sticky := manifest.Definition.StatusStickyHolder(status.ID)
+		view.StickyHolder = &sticky
+	}
 	return view
 }
 

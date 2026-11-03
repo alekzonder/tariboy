@@ -221,6 +221,9 @@ func (v *validator) status(f *File, i int, ids map[string]int, artifacts map[str
 	s := &f.Statuses[i]
 	p := fmt.Sprintf("statuses[%d]", i)
 	targetsKnown := true
+	if s.StickyHolder != nil && (s.Terminal || s.Owner.Kind != OwnerPool) {
+		v.add("sticky_holder_not_pool", p+".sticky_holder", "sticky_holder is allowed only on a pool status, not on %q", s.ID)
+	}
 
 	if s.Terminal {
 		if s.Owner.Kind != "" {

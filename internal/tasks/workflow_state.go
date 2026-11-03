@@ -97,18 +97,28 @@ func applyState(task *Task, state taskState) error {
 }
 
 // pickStateHolderTx dispatches the holder of a pool status into state.Holder
-// when the state picks one; it stays "" when no member is eligible.
+// when the state picks one and records the workflow.dispatched event; it stays
+// "" when no member is chosen. sticky_holder comes from the task's pinned
+// manifest for state.Status.
 func (s *WorkflowEngine) pickStateHolderTx(ctx context.Context, tx *sql.Tx, task Task, state *taskState) error {
 	if !state.picksHolder() {
 		return nil
 	}
-	agent, err := pickHolderTx(ctx, tx, task, state.Pool, nil)
-	if err != nil || agent == "" {
+	manifest, err := loadManifestTx(ctx, tx, task.WorkflowDigest)
+	if err != nil {
 		return err
 	}
-	if err := s.recordHolderTx(ctx, tx, task, state.Pool, agent); err != nil {
+	sticky := manifest.Definition.StatusStickyHolder(state.Status)
+	pick, err := pickHolderTx(ctx, tx, task, state.Pool, sticky, nil)
+	if err != nil || pick.Agent == "" {
 		return err
 	}
-	state.Holder = agentPrincipal(agent)
+	if err := s.recordHolderTx(ctx, tx, task, state.Pool, pick.Agent); err != nil {
+		return err
+	}
+	if err := appendDispatchedEventTx(ctx, tx, task, state.Status, state.Pool, sticky, pick, s.now()); err != nil {
+		return err
+	}
+	state.Holder = agentPrincipal(pick.Agent)
 	return nil
 }

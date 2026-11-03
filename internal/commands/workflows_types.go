@@ -138,6 +138,7 @@ type WorkflowImageStatus struct {
 	Watch        *WorkflowImageWatch       `json:"watch,omitempty"`
 	Transitions  []WorkflowImageTransition `json:"transitions,omitempty"`
 	Limits       *WorkflowImageLimits      `json:"limits,omitempty"`
+	StickyHolder *bool                     `json:"sticky_holder,omitempty" jsonschema:"description=Overrides the workflow sticky_holder for this pool status"`
 	Terminal     bool                      `json:"terminal,omitempty"`
 	Cancelled    bool                      `json:"cancelled,omitempty"`
 }
@@ -152,6 +153,7 @@ type WorkflowImageDefinition struct {
 	Env             map[string]string       `json:"env,omitempty"`
 	Limits          *WorkflowImageLimits    `json:"limits,omitempty"`
 	WatchSpacing    string                  `json:"watch_spacing,omitempty"`
+	StickyHolder    bool                    `json:"sticky_holder,omitempty" jsonschema:"description=The previous holder of a pool gets the task back however busy it is; a status may override it"`
 	Artifacts       []WorkflowImageArtifact `json:"artifacts,omitempty"`
 	Sources         []WorkflowImageSource   `json:"sources,omitempty"`
 	Statuses        []WorkflowImageStatus   `json:"statuses"`

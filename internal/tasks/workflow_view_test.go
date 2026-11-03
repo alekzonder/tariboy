@@ -321,3 +321,34 @@ func TestGetWorkflowInAStatusTheManifestDoesNotDeclare(t *testing.T) {
 		t.Fatalf("view = %#v", view)
 	}
 }
+
+// A pool status shows its effective sticky_holder; other statuses show none.
+func TestGetWorkflowShowsEffectiveStickyHolder(t *testing.T) {
+	svc, actor, task := requestFixture(t)
+	no := false
+	editManifest(t, svc, task.WorkflowDigest, func(m *workflowimage.Manifest) {
+		m.Definition.StickyHolder = true
+		m.Definition.Statuses[1].StickyHolder = &no
+	})
+	view, err := svc.GetWorkflow(context.Background(), actor, task.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	develop, review, approval := view.Statuses[0], view.Statuses[1], view.Statuses[2]
+	if develop.StickyHolder == nil || !*develop.StickyHolder {
+		t.Fatalf("develop sticky_holder = %v, want true from the workflow", develop.StickyHolder)
+	}
+	if review.StickyHolder == nil || *review.StickyHolder {
+		t.Fatalf("review sticky_holder = %v, want false from the status", review.StickyHolder)
+	}
+	if approval.StickyHolder != nil {
+		t.Fatalf("customer status sticky_holder = %v, want none", *approval.StickyHolder)
+	}
+	statuses := jsonFields(t, view)["statuses"].([]any)
+	if got := statuses[1].(map[string]any)["sticky_holder"]; got != false {
+		t.Fatalf("review JSON sticky_holder = %v, want false", got)
+	}
+	if _, ok := statuses[2].(map[string]any)["sticky_holder"]; ok {
+		t.Fatal("customer status JSON has sticky_holder")
+	}
+}

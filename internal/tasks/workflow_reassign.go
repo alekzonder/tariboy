@@ -14,7 +14,8 @@ import (
 // ReassignWorkflow hands the current pool status of a workflow task to name, a
 // member of that pool the customer chose. Customer only. The old holder's
 // questions to the customer are resolved and the visit's stall counters reset;
-// the new holder becomes the sticky holder of the pool. Reassigning to the
+// the new holder becomes the previous holder of the pool, which pickHolderTx
+// prefers when the task comes back to the pool. Reassigning to the
 // current holder changes nothing.
 func (s *WorkflowEngine) ReassignWorkflow(ctx context.Context, actor Actor, key, name string) (Task, error) {
 	if err := requireWorkflowOperator(actor); err != nil {

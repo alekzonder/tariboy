@@ -32,10 +32,14 @@ type File struct {
 	Env             map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
 	Limits          *Limits           `yaml:"limits,omitempty" json:"limits,omitempty"`
 	WatchSpacing    string            `yaml:"watch_spacing,omitempty" json:"watch_spacing,omitempty"`
-	Artifacts       []Artifact        `yaml:"artifacts,omitempty" json:"artifacts,omitempty"`
-	Sources         []Source          `yaml:"sources,omitempty" json:"sources,omitempty"`
-	Statuses        []Status          `yaml:"statuses" json:"statuses"`
-	Dir             string            `yaml:"-" json:"-"` // directory holding the manifest
+	// StickyHolder gives a task back to the pool's previous holder when it
+	// enters a pool status, however busy that holder is. A status may
+	// override it. Absent means false.
+	StickyHolder bool       `yaml:"sticky_holder,omitempty" json:"sticky_holder,omitempty"`
+	Artifacts    []Artifact `yaml:"artifacts,omitempty" json:"artifacts,omitempty"`
+	Sources      []Source   `yaml:"sources,omitempty" json:"sources,omitempty"`
+	Statuses     []Status   `yaml:"statuses" json:"statuses"`
+	Dir          string     `yaml:"-" json:"-"` // directory holding the manifest
 }
 
 type Limits struct {
@@ -65,8 +69,11 @@ type Status struct {
 	Watch        *Watch       `yaml:"watch,omitempty" json:"watch,omitempty"`
 	Transitions  []Transition `yaml:"transitions,omitempty" json:"transitions,omitempty"`
 	Limits       *Limits      `yaml:"limits,omitempty" json:"limits,omitempty"`
-	Terminal     bool         `yaml:"terminal,omitempty" json:"terminal,omitempty"`
-	Cancelled    bool         `yaml:"cancelled,omitempty" json:"cancelled,omitempty"`
+	// StickyHolder overrides File.StickyHolder for this status. Only a pool
+	// status may set it; nil means the file value applies.
+	StickyHolder *bool `yaml:"sticky_holder,omitempty" json:"sticky_holder,omitempty"`
+	Terminal     bool  `yaml:"terminal,omitempty" json:"terminal,omitempty"`
+	Cancelled    bool  `yaml:"cancelled,omitempty" json:"cancelled,omitempty"`
 }
 
 // Watch is the script that owns a script status. Description is one line of

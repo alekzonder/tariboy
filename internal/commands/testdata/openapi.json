@@ -5981,6 +5981,10 @@
             "description": "pool:NAME, customer, script, or empty for a terminal status",
             "type": "string"
           },
+          "sticky_holder": {
+            "description": "For a pool status: the previous holder gets the task back however busy it is",
+            "type": "boolean"
+          },
           "terminal": {
             "type": "boolean"
           },
@@ -8001,6 +8005,10 @@
             },
             "type": "array"
           },
+          "sticky_holder": {
+            "description": "The previous holder of a pool gets the task back however busy it is; a status may override it",
+            "type": "boolean"
+          },
           "watch_spacing": {
             "type": "string"
           },
@@ -8230,6 +8238,10 @@
           },
           "owner": {
             "$ref": "#/components/schemas/WorkflowImageOwner"
+          },
+          "sticky_holder": {
+            "description": "Overrides the workflow sticky_holder for this pool status",
+            "type": "boolean"
           },
           "terminal": {
             "type": "boolean"

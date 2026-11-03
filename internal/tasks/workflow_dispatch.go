@@ -36,32 +36,79 @@ const holderUnavailableCauseSQL = `CASE
 		WHEN m.agent IS NULL THEN '` + causeLeftPool + `'
 		ELSE '' END`
 
+// Why pickHolderTx chose its agent, as the workflow.dispatched event names it.
+const (
+	dispatchSticky         = "sticky"
+	dispatchPreviousHolder = "previous_holder"
+	dispatchFreeMember     = "free_member"
+)
+
+// holderPick is the result of pickHolderTx. Agent is "" when nobody was chosen.
+type holderPick struct {
+	Agent               string
+	Reason              string // dispatchSticky, dispatchPreviousHolder, or dispatchFreeMember
+	PreviousHolder      string // the pool's previous holder: a member, not released; or ""
+	HolderFree          bool   // the chosen agent is a free member
+	FreeMemberAvailable bool   // a free member other than the chosen agent exists
+}
+
 // pickHolderTx chooses the agent for a task entering or waiting in a status
-// owned by pool. The task's previous holder for the pool wins while it is still
-// a member, whatever it is doing, unless the customer released it: a released
-// holder is neither sticky nor eligible for this task and pool until another
-// agent replaces its row or an operator move clears it. Otherwise the first
-// eligible member wins:
-// enabled, not on the bare image, Goal enabled, not halted, with no current Goal, with
-// no other assigned task that Goal could select, and not in busy; ties go to the member dispatched least recently in this queue,
-// then to pool order. It returns "" when nobody is eligible.
-func pickHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool string, busy map[string]bool) (string, error) {
-	var holder string
+// owned by pool. A member is free when it can work, has Goal enabled, has no
+// current Goal other than this task, has no other assigned task that Goal
+// could select, and is not in busy. The pool's previous holder, while it is
+// still a member and not released, wins when sticky is set, whatever it is
+// doing, and otherwise only when it is free. Without it the first free member
+// wins: ties go to the member dispatched least recently in this queue, then to
+// pool order. A released holder is neither sticky nor free for this task and
+// pool until another agent replaces its row or an operator move clears it.
+// Agent is "" when nobody is chosen; a later DispatchPending pass applies the
+// same rule again.
+func pickHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool string, sticky bool, busy map[string]bool) (holderPick, error) {
+	var pick holderPick
 	err := tx.QueryRowContext(ctx, `
 		SELECT h.agent FROM task_workflow_holders h
 		JOIN task_agent_pools p ON p.queue_prefix = ? AND p.name = h.pool
 		JOIN task_agent_pool_members m ON m.pool_id = p.id AND m.agent = h.agent
-		WHERE h.task_id = ? AND h.pool = ? AND h.released = 0`, task.Queue, task.ID, pool).Scan(&holder)
-	if err == nil {
-		return holder, nil
+		WHERE h.task_id = ? AND h.pool = ? AND h.released = 0`, task.Queue, task.ID, pool).Scan(&pick.PreviousHolder)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return holderPick{}, err
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return "", err
+	free, err := freeMembersTx(ctx, tx, task, pool, busy)
+	if err != nil {
+		return holderPick{}, err
 	}
-	// The assigned-work test is the one taskgoal's reconcileAgent selects a
-	// Goal by, read in this transaction: current_goal_task_key is filled only
-	// after the reconciler runs, so without it one free agent would collect
-	// every new task.
+	isFree := func(name string) bool {
+		for _, f := range free {
+			if f == name {
+				return true
+			}
+		}
+		return false
+	}
+	switch {
+	case pick.PreviousHolder != "" && sticky:
+		pick.Agent, pick.Reason = pick.PreviousHolder, dispatchSticky
+	case pick.PreviousHolder != "" && isFree(pick.PreviousHolder):
+		pick.Agent, pick.Reason = pick.PreviousHolder, dispatchPreviousHolder
+	case len(free) > 0:
+		pick.Agent, pick.Reason = free[0], dispatchFreeMember
+	}
+	pick.HolderFree = pick.Agent != "" && isFree(pick.Agent)
+	for _, f := range free {
+		if f != pick.Agent {
+			pick.FreeMemberAvailable = true
+		}
+	}
+	return pick, nil
+}
+
+// freeMembersTx returns the free members of pool for task in dispatch order.
+// The assigned-work test is the one taskgoal's reconcileAgent selects a Goal
+// by, read in this transaction: current_goal_task_key is filled only after the
+// reconciler runs, so without it one free agent would collect every new task.
+// A current Goal on this task itself does not make its holder busy: the holder
+// asked for a move between two statuses of one pool.
+func freeMembersTx(ctx context.Context, tx *sql.Tx, task Task, pool string, busy map[string]bool) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT m.agent
 		FROM task_agent_pools p
@@ -69,7 +116,7 @@ func pickHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool string, busy 
 		JOIN agents a ON a.name = m.agent
 		WHERE p.queue_prefix = ? AND p.name = ?
 		  AND (`+holderUnavailableCauseSQL+`) = '' AND a.goal_enabled = 1
-		  AND a.current_goal_task_key = ''
+		  AND a.current_goal_task_key IN ('', ?)
 		  AND NOT EXISTS (
 			SELECT 1 FROM task_workflow_holders r
 			WHERE r.task_id = ? AND r.pool = p.name AND r.agent = m.agent AND r.released = 1
@@ -86,21 +133,33 @@ func pickHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool string, busy 
 			JOIN tasks ht ON ht.id = h.task_id
 			WHERE h.agent = m.agent AND ht.queue_prefix = p.queue_prefix
 		), ''), m.position`,
-		task.Queue, pool, agent.IdleStopPrefix, agent.IdleStopPrefix, task.ID, task.ID)
+		task.Queue, pool, agent.IdleStopPrefix, agent.IdleStopPrefix, task.Key, task.ID, task.ID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer rows.Close()
+	var free []string
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return "", err
+			return nil, err
 		}
 		if !busy[name] {
-			return name, nil
+			free = append(free, name)
 		}
 	}
-	return "", rows.Err()
+	return free, rows.Err()
+}
+
+// appendDispatchedEventTx records the workflow.dispatched event of pick: the
+// agent dispatched into a pool status and why.
+func appendDispatchedEventTx(ctx context.Context, tx *sql.Tx, task Task, statusID, pool string, sticky bool, pick holderPick, now string) error {
+	_, err := appendEventTx(ctx, tx, task, "workflow.dispatched", Actor{Principal: workflowActor}, map[string]any{
+		"status": statusID, "pool": pool, "agent": pick.Agent, "reason": pick.Reason, "sticky_holder": sticky,
+		"previous_holder": pick.PreviousHolder, "holder_free": pick.HolderFree,
+		"free_member_available": pick.FreeMemberAvailable,
+	}, now)
+	return err
 }
 
 // recordHolderTx records name as the task's holder for pool, dispatched now,
@@ -188,17 +247,18 @@ func (s *WorkflowEngine) dispatchTask(ctx context.Context, id int64, busy map[st
 	if !ok || status.Terminal || status.Owner.Kind != workflowfile.OwnerPool {
 		return "", nil
 	}
-	name, err := pickHolderTx(ctx, tx, task, status.Owner.Pool, busy)
-	if err != nil || name == "" {
+	sticky := manifest.Definition.StatusStickyHolder(status.ID)
+	pick, err := pickHolderTx(ctx, tx, task, status.Owner.Pool, sticky, busy)
+	if err != nil || pick.Agent == "" {
 		return "", err
 	}
 	now := s.now()
-	if err := s.recordHolderTx(ctx, tx, task, status.Owner.Pool, name); err != nil {
+	if err := s.recordHolderTx(ctx, tx, task, status.Owner.Pool, pick.Agent); err != nil {
 		return "", err
 	}
 	previousAssignee, previousCategory := task.Assignee, task.Status
 	state := stateIn(task, status)
-	state.Holder = agentPrincipal(name)
+	state.Holder = agentPrincipal(pick.Agent)
 	if err := applyState(&task, state); err != nil {
 		return "", err
 	}
@@ -208,8 +268,11 @@ func (s *WorkflowEngine) dispatchTask(ctx context.Context, id int64, busy map[st
 	if err := recordAssignmentTx(ctx, tx, task, previousAssignee, now); err != nil {
 		return "", err
 	}
+	if err := appendDispatchedEventTx(ctx, tx, task, status.ID, status.Owner.Pool, sticky, pick, now); err != nil {
+		return "", err
+	}
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
-	return name, nil
+	return pick.Agent, nil
 }
