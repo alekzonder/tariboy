@@ -15,6 +15,12 @@ import {
 import { agentPool, customerView, poolView, workflowTask } from "@/test/fixtures/workflowFixtures";
 import { fakeApi } from "@/test/api";
 
+// No test here reads or types into the description or comment editor, and
+// loading TipTap costs each file about a second; the editor has its own tests.
+vi.mock("./TaskMarkdownEditor", () => ({
+  default: () => <div data-testid="rich-editor-stub" />,
+}));
+
 const api = vi.hoisted(() => ({
   getTaskWorkflow: vi.fn(),
   resumeTaskWorkflow: vi.fn(),

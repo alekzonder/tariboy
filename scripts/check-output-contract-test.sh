@@ -147,7 +147,7 @@ EOF
 printf '#!/bin/sh\nprintf "cargo:%%s\\n" "$*" >>%s/events\n' "$fixture" >"$fixture/bin/cargo"
 mkdir -p "$fixture/desktop/src-tauri"
 chmod +x "$fixture/bin/go" "$fixture/fake-goroot/bin/gofmt" "$fixture/bin/npm" "$fixture/bin/npx" "$fixture/bin/node" "$fixture/bin/cargo"
-for script in tariboy-tasks-e2e.sh tariboy-smoke-contract-test.sh package-alpha-contract-test.sh tariboy-branding-contract-test.sh make-clean-contract-test.sh server-install-contract-test.sh publish-docs-contract-test.sh ui-test-memory-gate-test.sh; do
+for script in tariboy-tasks-e2e.sh tariboy-smoke-contract-test.sh package-alpha-contract-test.sh tariboy-branding-contract-test.sh make-clean-contract-test.sh server-install-contract-test.sh publish-docs-contract-test.sh ui-test-memory-gate-test.sh docs-build-cache-test.sh; do
   printf '#!/bin/sh\nexit 0\n' >"$fixture/scripts/$script"
   chmod +x "$fixture/scripts/$script"
 done
@@ -157,13 +157,17 @@ exit 0
 EOF
 cat >"$fixture/scripts/docs-build-contract-test.sh" <<'EOF'
 #!/bin/sh
-printf 'docs:contract\n' >>../events
+printf 'docs:contract\n' >>events
 EOF
 cat >"$fixture/scripts/ui-test-memory-gate.sh" <<'EOF'
 #!/bin/sh
 printf 'memory-gate\n' >>events
 EOF
-chmod +x "$fixture/scripts/check-output-contract-test.sh" "$fixture/scripts/docs-build-contract-test.sh" "$fixture/scripts/ui-test-memory-gate.sh"
+cat >"$fixture/scripts/docs-build-cached.sh" <<'EOF'
+#!/bin/sh
+printf 'docs:cached-build\n' >>events
+EOF
+chmod +x "$fixture/scripts/check-output-contract-test.sh" "$fixture/scripts/docs-build-contract-test.sh" "$fixture/scripts/ui-test-memory-gate.sh" "$fixture/scripts/docs-build-cached.sh"
 
 : >"$fixture/events"
 PATH="$fixture/bin:$PATH" make --no-print-directory -C "$fixture" GO=go backend-check
@@ -188,6 +192,7 @@ test "$(sed -n '8p' "$fixture/events")" = 'memory-gate'
 test "$(sed -n '9p' "$fixture/events")" = 'ui:npm test'
 test "$(sed -n '10p' "$fixture/events")" = 'ui:npm run branding:check'
 test "$(sed -n '11p' "$fixture/events")" = 'ui:npm run bundle:budget'
+test "$(sed -n '12p' "$fixture/events")" = 'docs:cached-build'
 echo "Check dependency preparation contract ok"
 
 # Format drift fails the aggregate without skipping the later steps.

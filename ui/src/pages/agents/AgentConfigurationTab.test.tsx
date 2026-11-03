@@ -296,7 +296,41 @@ const section = (title: string) => screen.getByRole("region", { name: title });
 const querySection = (title: string) => screen.queryByRole("region", { name: title });
 const saveRow = () => screen.getByRole("region", { name: "Save settings" });
 const save = () => fireEvent.click(within(saveRow()).getByRole("button", { name: "Save changes" }));
-const ready = () => screen.findByLabelText("Minutes between runs");
+// The section of each field the tests use. A label query on the whole page
+// walks every element of this large form, so field() searches only the section
+// the field belongs to; a field in another section fails the query.
+const FIELD_SECTION: Record<string, string> = {
+  "Coding tool": "Model",
+  Model: "Model",
+  "Working directory": "Working folder",
+  "Minutes between runs": "Autopilot",
+  "Stop a run after (minutes)": "Autopilot",
+  Day: "Spending limit",
+  Week: "Spending limit",
+  Schedule: "Schedule and timeouts",
+  "Hard timeout": "Schedule and timeouts",
+  "On timeout": "Schedule and timeouts",
+  "On error": "Schedule and timeouts",
+  "Maximum idle iterations": "Schedule and timeouts",
+  "AI inactivity timeout": "Schedule and timeouts",
+  "Hour budget": "Hour budget (USD)",
+  "Mail: letters per iteration": "Mail",
+  "Mail: maximum open inbox": "Mail",
+  "Secret key": "Environment",
+  "Secret value": "Environment",
+  "Current goal task": "Goal",
+};
+// The section is found by its heading: a text query is much cheaper than a
+// role query, which computes the accessible name of every element. It also
+// finds a section inside the closed Advanced disclosure.
+const sectionByHeading = (title: string) =>
+  screen.getByText(title, { selector: "h3, h4" }).closest("section")!;
+const field = (label: string) =>
+  within(sectionByHeading(FIELD_SECTION[label])).getByLabelText(label);
+const ready = async () => {
+  await screen.findByText("Autopilot", { selector: "h3" });
+  return field("Minutes between runs");
+};
 const advancedTrigger = () => screen.getByRole("button", { name: /^Advanced/ });
 const openAdvanced = async () => {
   const trigger = await screen.findByRole("button", { name: /^Advanced/ });
@@ -304,13 +338,10 @@ const openAdvanced = async () => {
 };
 const changeFolder = async () => {
   fireEvent.click(await screen.findByRole("button", { name: "Change…" }));
-  return screen.getByLabelText("Working directory");
+  return field("Working directory");
 };
-// A group is labelled by its heading, so "Model" names the group and its field.
-const control = (label: string) =>
-  screen.getAllByLabelText(label).find((element) => element.tagName !== "SECTION")!;
 const type = (label: string, value: string) =>
-  fireEvent.change(control(label), { target: { value } });
+  fireEvent.change(field(label), { target: { value } });
 
 // --- The acceptance scenario and the shared save mechanic --------------------
 
@@ -333,7 +364,7 @@ it("saves a model, an interval and a day budget with the same requests as before
   expect(body("/budget")).toEqual({ hour_usd: "1", day_usd: "3", week_usd: "0", month_usd: "0" });
   expect(server.calls.every((c) => c.url.startsWith("https://remote.example/"))).toBe(true);
   expect(within(saveRow()).queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Minutes between runs")).toHaveValue("5");
+  expect(field("Minutes between runs")).toHaveValue("5");
 });
 
 it("shows four groups, then Advanced closed, About and Danger, in the narrow tab page", async () => {
@@ -351,7 +382,7 @@ it("shows four groups, then Advanced closed, About and Danger, in the narrow tab
     "Danger",
   ]);
   expect(advancedTrigger()).toHaveAttribute("aria-expanded", "false");
-  expect(screen.getByLabelText("Hard timeout")).not.toBeVisible();
+  expect(field("Hard timeout")).not.toBeVisible();
 });
 
 it("has Settings search without master switch, run actions, Changed only or section chips", async () => {
@@ -408,10 +439,10 @@ it("counts unsaved changes inside Advanced and keeps them while it is closed", a
   expect(within(section("Schedule and timeouts")).getByText("Changed")).toBeInTheDocument();
   expect(advancedTrigger()).toHaveTextContent("1 unsaved change");
   fireEvent.click(advancedTrigger());
-  expect(screen.getByLabelText("Hard timeout")).not.toBeVisible();
+  expect(field("Hard timeout")).not.toBeVisible();
   expect(saveRow()).toHaveTextContent("1 unsaved change in Advanced");
   await openAdvanced();
-  expect(screen.getByLabelText("Hard timeout")).toHaveValue("300");
+  expect(field("Hard timeout")).toHaveValue("300");
 });
 
 it("resets every change on every section without writing", async () => {
@@ -422,8 +453,8 @@ it("resets every change on every section without writing", async () => {
   await openAdvanced();
   type("Hour budget", "9");
   fireEvent.click(within(saveRow()).getByRole("button", { name: "Reset" }));
-  expect(screen.getByLabelText("Stop a run after (minutes)")).toHaveValue("1");
-  expect(screen.getByLabelText("Hour budget")).toHaveValue(1);
+  expect(field("Stop a run after (minutes)")).toHaveValue("1");
+  expect(field("Hour budget")).toHaveValue(1);
   expect(server.writes()).toEqual([]);
 });
 
@@ -439,7 +470,7 @@ it("stops at a failed write, reports it at the field, and keeps the unsent chang
   expect(within(section("Working folder")).getByRole("alert")).toHaveTextContent(
     "directory does not exist",
   );
-  expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/missing");
+  expect(field("Working directory")).toHaveValue("/srv/missing");
   expect(saveRow()).toHaveTextContent("2 unsaved changes in Working folder, Autopilot");
 });
 
@@ -452,13 +483,13 @@ it("opens Advanced at a field whose write failed and keeps the unsent drafts", a
   type("Mail: letters per iteration", "20");
   fireEvent.click(advancedTrigger());
   save();
-  const field = await screen.findByLabelText("Hard timeout");
+  const failed = await screen.findByLabelText("Hard timeout");
   expect(server.writes()).toEqual(["POST loop/hard-timeout"]);
   expect(within(section("Schedule and timeouts")).getByRole("alert")).toHaveTextContent(
     "hard timeout too short",
   );
-  await waitFor(() => expect(field).toHaveFocus());
-  expect(screen.getByLabelText("Mail: letters per iteration")).toHaveValue(20);
+  await waitFor(() => expect(failed).toHaveFocus());
+  expect(field("Mail: letters per iteration")).toHaveValue(20);
   expect(saveRow()).toHaveTextContent("2 unsaved changes in Advanced");
 });
 
@@ -471,8 +502,8 @@ it("sends nothing while a change is invalid and focuses it inside an opened Adva
   fireEvent.click(advancedTrigger());
   type("Minutes between runs", "2");
   save();
-  const field = await screen.findByLabelText("Mail: letters per iteration");
-  await waitFor(() => expect(field).toHaveFocus());
+  const invalid = await screen.findByLabelText("Mail: letters per iteration");
+  await waitFor(() => expect(invalid).toHaveFocus());
   expect(within(section("Mail")).getByRole("alert")).toHaveTextContent(/positive whole number/);
   expect(server.writes()).toEqual([]);
 });
@@ -499,7 +530,7 @@ it("offers the operator coding tools and keeps an agent's out-of-list harness", 
   fakeServer({ view: { harness: "stub" } });
   render(tree());
   await ready();
-  const options = within(screen.getByLabelText("Coding tool"))
+  const options = within(field("Coding tool"))
     .getAllByRole("option")
     .map((o) => o.textContent);
   expect(options).toEqual(["claude", "codex", "opencode", "cursor", "stub"]);
@@ -513,9 +544,9 @@ it("shows a positive interval as Also every N minutes and the timeout in minutes
   render(tree());
   await ready();
   expect(screen.getByRole("radio", { name: "Also every" })).toBeChecked();
-  expect(screen.getByLabelText("Minutes between runs")).toHaveValue("30");
-  expect(screen.getByLabelText("Minutes between runs")).toBeEnabled();
-  expect(screen.getByLabelText("Stop a run after (minutes)")).toHaveValue("120");
+  expect(field("Minutes between runs")).toHaveValue("30");
+  expect(field("Minutes between runs")).toBeEnabled();
+  expect(field("Stop a run after (minutes)")).toHaveValue("120");
 });
 
 it("runs only on demand with interval 0 and remembers 30 minutes for the second radio", async () => {
@@ -523,8 +554,8 @@ it("runs only on demand with interval 0 and remembers 30 minutes for the second 
   render(tree());
   await ready();
   expect(screen.getByRole("radio", { name: "Only when given tasks or messages" })).toBeChecked();
-  expect(screen.getByLabelText("Minutes between runs")).toBeDisabled();
-  expect(screen.getByLabelText("Minutes between runs")).toHaveValue("30");
+  expect(field("Minutes between runs")).toBeDisabled();
+  expect(field("Minutes between runs")).toHaveValue("30");
   fireEvent.click(screen.getByRole("radio", { name: "Also every" }));
   save();
   await waitFor(() => expect(server.writes()).toEqual(["POST loop/interval"]));
@@ -538,8 +569,8 @@ it("turns Autopilot off with the first radio and sends interval 0", async () => 
   render(tree());
   await ready();
   fireEvent.click(screen.getByRole("radio", { name: "Only when given tasks or messages" }));
-  expect(screen.getByLabelText("Minutes between runs")).toBeDisabled();
-  expect(screen.getByLabelText("Minutes between runs")).toHaveValue("10");
+  expect(field("Minutes between runs")).toBeDisabled();
+  expect(field("Minutes between runs")).toHaveValue("10");
   save();
   await waitFor(() => expect(server.writes()).toEqual(["POST loop/interval"]));
   expect(server.calls.find((c) => c.path.endsWith("/loop/interval"))?.body).toEqual({ value: 0 });
@@ -561,10 +592,10 @@ it("keeps an emptied minutes box and blocks Save with its reason", async () => {
   await ready();
   type("Minutes between runs", "");
   expect(screen.getByRole("radio", { name: "Also every" })).toBeChecked();
-  expect(screen.getByLabelText("Minutes between runs")).toHaveValue("");
+  expect(field("Minutes between runs")).toHaveValue("");
   save();
   expect(await screen.findByText("Enter the minutes between runs.")).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByLabelText("Minutes between runs")).toHaveFocus());
+  await waitFor(() => expect(field("Minutes between runs")).toHaveFocus());
   expect(server.writes()).toEqual([]);
 });
 
@@ -575,8 +606,8 @@ it("can enable timed runs again after typing a zero interval", async () => {
   type("Minutes between runs", "0");
   fireEvent.click(screen.getByRole("radio", { name: "Also every" }));
   expect(screen.getByRole("radio", { name: "Also every" })).toBeChecked();
-  expect(screen.getByLabelText("Minutes between runs")).toBeEnabled();
-  expect(screen.getByLabelText("Minutes between runs")).toHaveValue("30");
+  expect(field("Minutes between runs")).toBeEnabled();
+  expect(field("Minutes between runs")).toHaveValue("30");
 });
 
 it.each([
@@ -589,7 +620,7 @@ it.each([
   type(label, "-0.5");
   save();
   expect(await screen.findByText(error)).toBeInTheDocument();
-  expect(screen.getByLabelText(label)).toHaveValue("-0.5");
+  expect(field(label)).toHaveValue("-0.5");
   expect(server.writes()).toEqual([]);
 });
 
@@ -766,7 +797,7 @@ it("refreshes the image projection on status and build events without replacing 
   state = pending("c:3");
   act(() => notifyImagesChanged());
   expect(await screen.findByRole("link", { name: "c:3" })).toBeInTheDocument();
-  expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/draft");
+  expect(field("Working directory")).toHaveValue("/srv/draft");
 });
 
 // --- Working folder -------------------------------------------------------------
@@ -777,7 +808,7 @@ it("edits a stopped agent's working folder in place with suggestions from its ro
   render(tree(remote, "worker", null, refresh));
   await ready();
   expect(within(section("Working folder")).getByText("/srv/old")).toBeInTheDocument();
-  expect(screen.getByLabelText("Working directory")).not.toBeVisible();
+  expect(field("Working directory")).not.toBeVisible();
   const input = await changeFolder();
   expect(input).toHaveValue("/srv/old");
   fireEvent.change(input, { target: { value: "/srv/new" } });
@@ -788,7 +819,7 @@ it("edits a stopped agent's working folder in place with suggestions from its ro
   const write = server.calls.find((c) => c.method === "POST" && c.path.endsWith("/cwd"))!;
   expect(write.body).toEqual({ value: "/srv/new" });
   expect(write.headers).toMatchObject({ Authorization: "Bearer secret" });
-  await waitFor(() => expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/new"));
+  await waitFor(() => expect(field("Working directory")).toHaveValue("/srv/new"));
 });
 
 it("keeps the working folder read-only while the agent is active", async () => {
@@ -828,7 +859,7 @@ it("keeps drafts when the route host is re-rendered or a reconnect fails", async
   rerender(tree({ ...remote, baseURL: "https://moved.example" }));
   await waitFor(() => expect(unreachable).toHaveBeenCalled());
   await act(async () => {});
-  expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/new");
+  expect(field("Working directory")).toHaveValue("/srv/new");
   expect(screen.getByText("worker:v1")).toBeInTheDocument();
 });
 
@@ -934,7 +965,7 @@ it("rejects an empty Week without saving the other edits", async () => {
   type("Model", "opus");
   save();
   expect(await screen.findByText("Enter zero or a positive amount.")).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByLabelText("Week")).toHaveFocus());
+  await waitFor(() => expect(field("Week")).toHaveFocus());
   expect(server.writes()).toEqual([]);
 });
 
@@ -945,7 +976,7 @@ it("keeps Week after a rejected budget save", async () => {
   type("Week", "7");
   save();
   expect(await screen.findByText("budget rejected")).toBeVisible();
-  expect(screen.getByLabelText("Week")).toHaveValue(7);
+  expect(field("Week")).toHaveValue(7);
   expect(saveRow()).toHaveTextContent("1 unsaved change in Spending limit");
   expect(server.writes()).toEqual(["POST budget"]);
 });
@@ -988,7 +1019,7 @@ it.each([false, true])(
     if (open) await openAdvanced();
     searchSettings("hard timeout");
     expect(advancedTrigger()).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByLabelText("Hard timeout")).toBeVisible();
+    expect(field("Hard timeout")).toBeVisible();
     clearSearch();
     expect(advancedTrigger()).toHaveAttribute("aria-expanded", String(open));
     expect(section("Model")).toBeVisible();
@@ -1005,17 +1036,17 @@ it("preserves drafts and mounted editors through search and disclosure changes, 
   fireEvent.change(await changeFolder(), { target: { value: "/srv/new" } });
   await openAdvanced();
   type("Hard timeout", "300");
-  const editor = screen.getByLabelText("Hard timeout");
-  const folder = screen.getByLabelText("Working directory");
+  const editor = field("Hard timeout");
+  const folder = field("Working directory");
   searchSettings("Model");
   expect(editor).toBeInTheDocument();
   expect(editor).not.toBeVisible();
   clearSearch();
-  expect(screen.getByLabelText("Hard timeout")).toBe(editor);
+  expect(field("Hard timeout")).toBe(editor);
   expect(editor).toHaveValue("300");
-  expect(screen.getByLabelText("Working directory")).toBe(folder);
-  expect(control("Model")).toHaveValue("opus");
-  expect(screen.getByLabelText("Week")).toHaveValue(9);
+  expect(field("Working directory")).toBe(folder);
+  expect(field("Model")).toHaveValue("opus");
+  expect(field("Week")).toHaveValue(9);
   searchSettings("nothing matches");
   expect(screen.getByText("No settings match your search.")).toBeVisible();
   expect(within(saveRow()).getByRole("button", { name: "Save changes" })).toBeVisible();
@@ -1029,7 +1060,7 @@ it("preserves drafts and mounted editors through search and disclosure changes, 
     "POST budget",
   ]);
   clearSearch();
-  expect(screen.getByLabelText("Week")).toHaveValue(9);
+  expect(field("Week")).toHaveValue(9);
 });
 
 it("temporarily opens the matching folder editor and restores it when cleared", async () => {
@@ -1037,7 +1068,7 @@ it("temporarily opens the matching folder editor and restores it when cleared", 
   render(tree());
   await ready();
   searchSettings("working directory");
-  expect(screen.getByLabelText("Working directory")).toBeVisible();
+  expect(field("Working directory")).toBeVisible();
   clearSearch();
   expect(screen.queryByRole("textbox", { name: "Working directory" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Change…" })).toBeVisible();
@@ -1048,10 +1079,10 @@ it("keeps intermediate minutes text when its section is hidden by search", async
   render(tree());
   await ready();
   type("Minutes between runs", "1.");
-  const minutes = screen.getByLabelText("Minutes between runs");
+  const minutes = field("Minutes between runs");
   searchSettings("Model");
   clearSearch();
-  expect(screen.getByLabelText("Minutes between runs")).toBe(minutes);
+  expect(field("Minutes between runs")).toBe(minutes);
   expect(minutes).toHaveValue("1.");
 });
 
@@ -1066,7 +1097,7 @@ it("ignores whitespace and secret values when searching", async () => {
   expect(querySection("Environment")).not.toBeInTheDocument();
   expect(screen.getByText("No settings match your search.")).toBeVisible();
   clearSearch();
-  expect(screen.getByLabelText("Secret value")).toHaveValue("unique-secret-123");
+  expect(field("Secret value")).toHaveValue("unique-secret-123");
   searchSettings("   ");
   expect(section("Model")).toBeVisible();
   expect(section("Environment")).toBeVisible();
@@ -1081,7 +1112,7 @@ it("clears a filter and reveals an invalid hidden field on Save", async () => {
   type("Mail: letters per iteration", "0");
   searchSettings("Model");
   save();
-  await waitFor(() => expect(screen.getByLabelText("Mail: letters per iteration")).toHaveFocus());
+  await waitFor(() => expect(field("Mail: letters per iteration")).toHaveFocus());
   expect(screen.getByRole("searchbox", { name: "Search settings" })).toHaveValue("");
   expect(section("Mail")).toBeVisible();
   expect(advancedTrigger()).toHaveAttribute("aria-expanded", "true");
@@ -1096,8 +1127,8 @@ it("reveals a hidden failed server field and keeps its draft", async () => {
   type("Working directory", "/srv/missing");
   searchSettings("Model");
   save();
-  await waitFor(() => expect(screen.getByLabelText("Working directory")).toHaveFocus());
-  expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/missing");
+  await waitFor(() => expect(field("Working directory")).toHaveFocus());
+  expect(field("Working directory")).toHaveValue("/srv/missing");
   expect(section("Working folder")).toBeVisible();
   expect(server.writes()).toEqual(["POST cwd"]);
 });
@@ -1109,7 +1140,7 @@ it("renders the current Goal task read-only with its help", async () => {
   render(tree());
   await openAdvanced();
   expect(await screen.findByLabelText("Current goal task")).toHaveValue("DEV-7");
-  expect(screen.getByLabelText("Current goal task")).toBeDisabled();
+  expect(field("Current goal task")).toBeDisabled();
 });
 
 it("saves the mail limits with Save", async () => {
@@ -1309,7 +1340,7 @@ it("builds and saves a weekly schedule, then clears it with None", async () => {
     value: "RRULE:FREQ=WEEKLY;BYDAY=MO;BYHOUR=8;BYMINUTE=0;BYSECOND=0",
   });
 
-  fireEvent.change(screen.getByLabelText("Schedule"), { target: { value: "none" } });
+  fireEvent.change(field("Schedule"), { target: { value: "none" } });
   save();
   await waitFor(() =>
     expect(server.calls.filter((c) => c.path.endsWith("/loop/schedule"))).toHaveLength(2),
