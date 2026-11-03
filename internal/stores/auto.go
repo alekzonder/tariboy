@@ -204,13 +204,16 @@ func (c *Catalog) recordAutoResult(ctx context.Context, name string, result Auto
 	if err != nil {
 		return err
 	}
-	results := []AutoResult{}
-	for _, existing := range auto.Results {
-		if existing.Image != result.Image {
-			results = append(results, existing)
+	results := auto.Results
+	replaced := false
+	for i := range results {
+		if results[i].Image == result.Image {
+			results[i], replaced = result, true
 		}
 	}
-	results = append(results, result)
+	if !replaced {
+		results = append(results, result)
+	}
 	encoded, err := json.Marshal(results)
 	if err != nil {
 		return err
