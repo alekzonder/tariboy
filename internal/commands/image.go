@@ -83,6 +83,13 @@ func imageBuild() registry.Command {
 
 // runImageBuild builds the image of params; ctx is the operation's context.
 func runImageBuild(ctx context.Context, c *registry.Ctx, params imageBuildParams, log *operations.Log) (ImageBuildResult, error) {
+	if params.selector != "" && params.initiator == autoBuildInitiator {
+		result, err := runAutoBuild(ctx, c, params, log)
+		if err != nil {
+			return ImageBuildResult{}, autoBuildError(params.selector, err)
+		}
+		return result, nil
+	}
 	var locks imageBuildLocks
 	if params.selector != "" {
 		log.Printf("prepare Store image %s", params.selector)
@@ -149,8 +156,10 @@ type imageBuildParams struct {
 	selector, name, path    string
 	tags                    []string
 	repositoryID, gitCommit string
-	force                   bool
-	initiator               string
+	// lockDigest is set only by an automatic Store build.
+	lockDigest string
+	force      bool
+	initiator  string
 }
 
 // parseImageBuildParams checks the request parameters of image.build. It
@@ -198,6 +207,8 @@ func resolveImageBuildName(name string, tags []string) (string, []string, error)
 type imageBuildLocks struct {
 	restore, restoreStore func() error
 	install               func(dir string) error
+	// verify, when set, checks the installed skills before the freeze.
+	verify func() error
 }
 
 // imageBuildSource is the frozen source an image is built from.
@@ -251,6 +262,12 @@ func freezeImageSource(c *registry.Ctx, params imageBuildParams, locks imageBuil
 	} else if locks.restore != nil {
 		log.Printf("restore the skills locks")
 		if err := locks.restore(); err != nil {
+			return imageBuildSource{}, cleanup, storeError(err)
+		}
+	}
+	if locks.verify != nil {
+		log.Printf("verify the installed skills against skills-lock.json")
+		if err := locks.verify(); err != nil {
 			return imageBuildSource{}, cleanup, storeError(err)
 		}
 	}
@@ -343,7 +360,7 @@ func publishImage(c *registry.Ctx, params imageBuildParams, source imageBuildSou
 		defer tx.Rollback()
 		provenanceStore := imageprovenance.Store{DB: c.Store.DB}
 		for _, ref := range refs {
-			if _, err := source.snapshots.CaptureFrozenTx(context.Background(), tx, ref.String(), man.Digest, params.name, source.frozen, imagesource.Provenance{RepositoryID: params.repositoryID, GitCommit: params.gitCommit}); err != nil {
+			if _, err := source.snapshots.CaptureFrozenTx(context.Background(), tx, ref.String(), man.Digest, params.name, source.frozen, imagesource.Provenance{RepositoryID: params.repositoryID, GitCommit: params.gitCommit, LockDigest: params.lockDigest}); err != nil {
 				return restore("provenance_failed", err)
 			}
 			if err := provenanceStore.UpsertTx(tx, imageprovenance.Record{Ref: ref.String(), Digest: man.Digest, SourceCWD: source.sourceCWD, BuiltAt: man.BuiltAt}); err != nil {
