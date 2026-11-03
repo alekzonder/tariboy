@@ -94,7 +94,8 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   with the complexity and size thresholds (`complexity`, `max-lines`,
   `max-lines-per-function`, `max-params`, `max-depth`, `max-nested-callbacks`),
   unused files, exports, types and dependencies (Knip),
-  unit tests, branding, the UI bundle budget for the entry chunk, the initial
+  unit tests (`ui-test` fails and names both numbers when vitest finishes
+  fewer test files than it found), branding, the UI bundle budget for the entry chunk, the initial
   JavaScript and all JavaScript, and the documentation
   `doctor` plus `build`. Before
   checking, they download Go
