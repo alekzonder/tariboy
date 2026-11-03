@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -10,7 +11,9 @@ import (
 	"strings"
 )
 
-var mentionRE = regexp.MustCompile(`@((?:agent|user):[A-Za-z0-9][A-Za-z0-9._-]*)`)
+// mentionRE matches a principal mention. The name starts and ends with a
+// letter or digit, so a sentence's closing punctuation is not part of it.
+var mentionRE = regexp.MustCompile(`@((?:agent|user):[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)`)
 
 func (s *TaskService) AddComment(ctx context.Context, actor Actor, key string, in AddCommentInput) (CommentResult, error) {
 	if err := validateActor(actor); err != nil {
@@ -39,6 +42,10 @@ func (s *TaskService) AddComment(ctx context.Context, actor Actor, key string, i
 	if err := requireRespond(ctx, tx, actor, task); err != nil {
 		return CommentResult{}, err
 	}
+	mentions, err := s.commentMentionsTx(ctx, tx, body, in.askPrincipal)
+	if err != nil {
+		return CommentResult{}, err
+	}
 	now := s.now()
 	result, err := tx.ExecContext(ctx, `
 		INSERT INTO task_comments(task_id, author, body, created_at, updated_at)
@@ -56,7 +63,6 @@ func (s *TaskService) AddComment(ctx context.Context, actor Actor, key string, i
 		return CommentResult{}, err
 	}
 
-	mentions := s.parseMentions(body)
 	created, err := createMentionWaitsTx(ctx, tx, task, actor, mentions, commentID, now)
 	if err != nil {
 		return CommentResult{}, err
@@ -261,6 +267,54 @@ func (s *TaskService) parseMentions(body string) []string {
 		out = append(out, principal)
 	}
 	return out
+}
+
+// commentMentionsTx returns the existing principals a comment asks: the
+// explicit question's principal first, then each existing principal the body
+// mentions. A missing explicit principal is an error; a missing mention is
+// plain text.
+func (s *TaskService) commentMentionsTx(ctx context.Context, tx *sql.Tx, body, ask string) ([]string, error) {
+	out := []string{}
+	if ask != "" {
+		exists, err := s.principalExistsTx(ctx, tx, ask)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, &Error{
+				Status: http.StatusBadRequest, Code: "principal_not_found",
+				Msg: "asked principal does not exist", Data: map[string]any{"principal": ask},
+			}
+		}
+		out = append(out, ask)
+	}
+	for _, principal := range s.parseMentions(body) {
+		if principal == ask {
+			continue
+		}
+		exists, err := s.principalExistsTx(ctx, tx, principal)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			out = append(out, principal)
+		}
+	}
+	return out, nil
+}
+
+// principalExistsTx reports whether an agent principal names a registered
+// agent, or a user principal names the customer.
+func (s *TaskService) principalExistsTx(ctx context.Context, tx *sql.Tx, principal string) (bool, error) {
+	if name, ok := strings.CutPrefix(principal, "agent:"); ok {
+		var exists int
+		err := tx.QueryRowContext(ctx, `SELECT 1 FROM agents WHERE name = ?`, name).Scan(&exists)
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return err == nil, err
+	}
+	return strings.HasPrefix(principal, "user:") && principal == userPrincipal(s.customer), nil
 }
 
 func upsertWait(
