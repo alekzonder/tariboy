@@ -177,7 +177,9 @@ smoke contracts. Its
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
 frontend target runs the UI format check, the generated API types check, UI
 typecheck, lint with the complexity and size thresholds, the unused-code check, unit tests,
-which fail when Vitest finishes fewer test files than it found, branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
+which fail when Vitest finishes fewer test files than it found, branding, the bundle budget, and the documentation checks. The documentation
+step restores the last build from a host cache when no input of the site
+changed; see [Documentation build cache](#documentation-build-cache). Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
 `scripts/npm-ci-locked.sh` for locked installs under `ui/`, `ui/tools/api-types/`
 and `docs/`.
@@ -1105,10 +1107,12 @@ cd docs
 npm ci
 ```
 
-The `docs` step of `make check` then runs `npm run doctor`, `npm run build`, and
-the GitHub Pages URL contract on every pass, so documentation is validated
-whenever navigation, MDX, links, or contributor instructions change. Run the
-build commands and contract directly when iterating on a docs-only change:
+The `docs` step of `make check` then runs `scripts/docs-build-cached.sh` and
+the GitHub Pages URL contract on every pass. The script runs `npm run doctor`
+and `npm run build` when an input of the site changed since the last build on
+this host. Otherwise it restores `docs/dist` from a cache. The contract always
+runs. Run the build commands and contract directly when iterating on a
+docs-only change:
 
 ```bash
 cd docs
@@ -1116,6 +1120,43 @@ npm run doctor
 npm run build
 ../scripts/docs-build-contract-test.sh
 ```
+
+### Documentation build cache
+
+`scripts/docs-build-cached.sh` keeps the output of successful builds in a
+cache directory that all worktrees of the host share. The cache key is a
+SHA-256 hash of these inputs:
+
+- Every file and symbolic link under `docs/`, by its relative path and its
+  content. The key does not include `docs/node_modules`, `docs/dist`, and
+  `docs/.blume`. It includes `package.json`, `package-lock.json` (and thus the
+  Blume version), `blume.config.ts`, `docs/superpowers/`, and files that git
+  does not track.
+- The output of `node --version` and `npm --version`.
+- The content of the script itself.
+
+A build reads no other files that change its output. `npm run doctor` reads
+the same inputs, so a cache hit skips it too. If `blume.config.ts` contains
+`lastModified`, Blume reads the git history. The script then always builds,
+stores nothing, and prints `docs: lastModified is set, cache disabled`.
+
+On a cache hit, the script replaces `docs/dist` with the stored copy and prints
+`docs: cache hit KEY, doctor and build skipped`. On a miss, it runs
+`npm run doctor` and `npm run build`. If both succeed, it stores `docs/dist`
+under the key. A failed doctor or build fails the step and stores nothing.
+
+The cache directory is `$TARIBOY_DOCS_CACHE_DIR`. Its default is
+`${XDG_CACHE_HOME:-$HOME/.cache}/tariboy/docs-build`. Each entry is about
+13 MB, and the script keeps the 8 newest entries. If the script cannot write
+to the directory, the build still passes with a warning.
+
+Use `TARIBOY_DOCS_REBUILD=1 make check` (or `make frontend-check`) to build
+the site and replace the cache entry. Use it after manual changes inside
+`docs/node_modules` or after changes to the npm configuration, because the key
+does not include them. In CI, each runner starts with an empty cache, so the
+step always builds. `make docs` does not use the cache.
+`scripts/docs-build-cache-test.sh`, part of `smoke-contract-test`, is the
+contract of the cache.
 
 Publish the production build to GitHub Pages with:
 

@@ -97,7 +97,14 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   unit tests (`ui-test` fails and names both numbers when vitest finishes
   fewer test files than it found), branding, the UI bundle budget for the entry chunk, the initial
   JavaScript and all JavaScript, and the documentation
-  `doctor` plus `build`. Before
+  `doctor` plus `build`. The `docs` step runs `scripts/docs-build-cached.sh`:
+  it skips `doctor` and `build` and restores `docs/dist` from a host cache when
+  no input of the site changed. The key covers every file under `docs/` except
+  `node_modules`, `dist` and `.blume`, and the Node.js and npm versions. The
+  cache is in `$TARIBOY_DOCS_CACHE_DIR`, by default
+  `~/.cache/tariboy/docs-build`. Use `TARIBOY_DOCS_REBUILD=1 make check` to
+  force a rebuild; see "Documentation build cache" in
+  `docs/docs/development.mdx`. Before
   checking, they download Go
   modules and install locked UI and documentation dependencies with `npm ci`
   when the saved fingerprint is missing or differs. The fingerprint covers
@@ -244,7 +251,9 @@ Keep the ownership model clear:
   execution history.
 
 Documentation changes are verified by the `docs` step of `make check`, which
-runs `npm run doctor` and `npm run build` under `docs/`. Run those two commands
+runs `npm run doctor` and `npm run build` under `docs/`, or restores the last
+build from the host cache when no file under `docs/` changed (see
+"Documentation build cache" in `docs/docs/development.mdx`). Run those two commands
 directly when iterating on a docs-only change and you do not want the rest of
 `check`:
 
