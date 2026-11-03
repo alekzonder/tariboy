@@ -116,6 +116,7 @@ smoke-contract-test:
 	./scripts/tariboy-branding-contract-test.sh
 	bash ./scripts/check-output-contract-test.sh
 	bash ./scripts/ui-test-memory-gate-test.sh
+	bash ./scripts/docs-build-cache-test.sh
 	./scripts/make-clean-contract-test.sh
 	./scripts/server-install-contract-test.sh
 	./scripts/publish-docs-contract-test.sh
@@ -703,7 +704,7 @@ frontend-check:
 	run_step "ui-test"      'cd ui && npm test'; \
 	run_step "ui-branding"  'cd ui && npm run branding:check'; \
 	run_step "ui-bundle-budget" 'cd ui && npm run bundle:budget'; \
-	run_step "docs"         'cd docs && npm run doctor && npm run build && ../scripts/docs-build-contract-test.sh'; \
+	run_step "docs"         './scripts/docs-build-cached.sh && ./scripts/docs-build-contract-test.sh'; \
 	summarize frontend-check
 
 check:
