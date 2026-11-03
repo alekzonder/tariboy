@@ -637,18 +637,20 @@ under the agent root; the next provisioning of that agent removes them. Generati
 Harness, model, effort, environment, CWD, context, workdir, mail, history,
 and group are not image assignment fields.
 
-Image content is addressed by ref id — derived from the image name and the
-source `image_version`, or from the archive bytes when no version is declared —
-and a tag is a pointer file naming that id. One build publishes one ref and
-moves every requested tag onto it, so a versioned tag and `latest` always agree.
-The build records where those tags pointed, then commits every source snapshot
-and provenance row in one SQLite transaction; a failure restores the tags and
-deletes only content the build introduced, never a generation an agent may be
-pinned to. There is no separate immutable mode and no publication journal:
-rebuilding any non-reserved ref is always allowed, so no build path can be
-refused for a ref that already exists. A store written before this model is
-migrated once at daemon startup, keeping each archive's content digest as its
-ref id so pinned digests keep resolving.
+Image content is addressed by ref id, the digest of its content (see "Refs,
+tags and identity" in [Images](/docs/images#refs-tags-and-identity)). A tag is a pointer file
+naming that id. Archives from earlier releases keep their id: either
+`sha256(name + "\n" + image_version)` or the archive file digest. One build
+publishes one ref and moves every requested tag onto it, so a versioned tag and
+`latest` always agree. Content stored under an id is never rewritten. A build
+of an `image_version` that is already stored with other content fails with
+`image_version_conflict` unless it is forced. The build records where those
+tags pointed, then commits every source snapshot and provenance row in one
+SQLite transaction. A failure restores the tags and deletes only content the
+build introduced, never a generation an agent may be pinned to. There is no
+publication journal. A store written before this model is migrated once at
+daemon startup, keeping each archive's digest as its ref id so pinned digests
+keep resolving.
 Image locks keep every reader off an uncommitted generation. Ordinary,
 editable-source, agent-authored, compose, and import publication take the lock
 of the one image name they write, so publications of different names run in
