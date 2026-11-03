@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -214,5 +215,40 @@ func TestCheckMinimumVersion(t *testing.T) {
 		if (err == nil) != ok {
 			t.Errorf("%q: err = %v; want ok %v", output, err, ok)
 		}
+	}
+}
+
+// Commands is what the stall probe compares a hook shell against, so it must
+// hold exactly the commands hooks.json runs.
+func TestClaudeInstantMailHooksCommandsMatchHooksJSON(t *testing.T) {
+	hooks, events := claudeHooks(t, "/opt/tariboy/bin/tmail", "/agents/a/harness-hooks/claude")
+	var written []string
+	for _, entries := range events {
+		for _, e := range entries {
+			for _, h := range e.Hooks {
+				written = append(written, h.Command)
+			}
+		}
+	}
+	assertSameCommands(t, hooks.Commands, written)
+}
+
+func TestCodexInstantMailHooksCommandsMatchArgs(t *testing.T) {
+	hooks, err := codex{}.InstantMailHooks("/opt/tariboy/bin/tmail", "/x", Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	written := []string{
+		codexHookCommand(t, hooks.Args[2], "PostToolUse", `matcher="*",`),
+		codexHookCommand(t, hooks.Args[4], "Stop", ""),
+	}
+	assertSameCommands(t, hooks.Commands, written)
+}
+
+func assertSameCommands(t *testing.T, got, want []string) {
+	t.Helper()
+	got, want = slices.Sorted(slices.Values(got)), slices.Sorted(slices.Values(want))
+	if len(want) == 0 || !slices.Equal(got, want) {
+		t.Fatalf("Commands = %q; want %q", got, want)
 	}
 }

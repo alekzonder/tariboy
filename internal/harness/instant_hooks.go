@@ -28,12 +28,20 @@ const instantHookTimeoutSeconds = 5
 // InstantMailHooks is the harness plugin that delivers instant letters into a
 // running iteration. The daemon writes Files under the plugin directory and
 // appends Args to the harness argv. ConfigPlugin is the plugin URL that
-// OpenCode loads from its configuration overlay.
+// OpenCode loads from its configuration overlay. Commands are the shell
+// commands the hooks run; the stall probe does not count a hook shell as an
+// agent command.
 type InstantMailHooks struct {
 	Files          []agentdir.BridgeFile
 	Args           []string
 	ConfigPlugin   string
 	MinimumVersion string
+	Commands       []string
+}
+
+// instantHookCommand is the shell command of one instant mail hook.
+func instantHookCommand(tmail, format string) string {
+	return shellQuote(tmail) + " instant --format " + format
 }
 
 // InstantMailHooker is an optional Adapter interface for a harness whose hooks
@@ -61,20 +69,20 @@ func (codex) InstantMailHooks(tmail, _ string, cfg Config) (InstantMailHooks, er
 	if cfg.CodexApproval == CodexApprovalApproveForMe {
 		return InstantMailHooks{}, errors.New("codex approval mode approve-for-me: the hook trust bypass would let unreviewed hooks run outside the sandbox")
 	}
+	var commands []string
 	hook := func(event, matcher, format string) string {
+		commands = append(commands, instantHookCommand(tmail, format))
 		// A JSON string is a valid TOML basic string.
-		command, _ := json.Marshal(shellQuote(tmail) + " instant --format " + format)
+		command, _ := json.Marshal(commands[len(commands)-1])
 		return fmt.Sprintf(`hooks.%s=[{%shooks=[{type="command",command=%s,timeout=%d}]}]`,
 			event, matcher, command, instantHookTimeoutSeconds)
 	}
-	return InstantMailHooks{
-		Args: []string{
-			"--dangerously-bypass-hook-trust",
-			"-c", hook("PostToolUse", `matcher="*",`, "codex-post-tool-use"),
-			"-c", hook("Stop", "", "codex-stop"),
-		},
-		MinimumVersion: minimumCodexInstantHooksVersion,
-	}, nil
+	args := []string{
+		"--dangerously-bypass-hook-trust",
+		"-c", hook("PostToolUse", `matcher="*",`, "codex-post-tool-use"),
+		"-c", hook("Stop", "", "codex-stop"),
+	}
+	return InstantMailHooks{Args: args, MinimumVersion: minimumCodexInstantHooksVersion, Commands: commands}, nil
 }
 
 func (claude) InstantMailHooks(tmail, pluginDir string, _ Config) (InstantMailHooks, error) {
@@ -88,10 +96,12 @@ func (claude) InstantMailHooks(tmail, pluginDir string, _ Config) (InstantMailHo
 	if err != nil {
 		return InstantMailHooks{}, err
 	}
+	var commands []string
 	command := func(format string) []map[string]any {
+		commands = append(commands, instantHookCommand(tmail, format))
 		return []map[string]any{{
 			"type": "command", "timeout": instantHookTimeoutSeconds,
-			"command": shellQuote(tmail) + " instant --format " + format,
+			"command": commands[len(commands)-1],
 		}}
 	}
 	hooks, err := generatedJSON("hooks/hooks.json", map[string]any{"hooks": map[string]any{
@@ -106,6 +116,7 @@ func (claude) InstantMailHooks(tmail, pluginDir string, _ Config) (InstantMailHo
 		Files:          []agentdir.BridgeFile{manifest, hooks},
 		Args:           []string{"--plugin-dir", pluginDir},
 		MinimumVersion: minimumClaudeInstantHooksVersion,
+		Commands:       commands,
 	}, nil
 }
 
