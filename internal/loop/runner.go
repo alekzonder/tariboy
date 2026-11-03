@@ -1185,7 +1185,7 @@ func (r *ShimRunner) buildLaunch(ctx context.Context, ag agent.Agent, l agentdir
 	}
 	mask := ""
 	if adapter.Type() == "opencode" {
-		env, cwd, mask, err = r.prepareOpenCode(ctx, l, cwd, env, in.activated.Skills.Env, ag.Model, proxyURL, proxyToken)
+		env, cwd, mask, err = r.prepareOpenCode(ctx, ag, l, adapter, in.bare, cwd, env, in.activated.Skills.Env, proxyURL, proxyToken)
 		if err != nil {
 			return preparedRun{}, err
 		}

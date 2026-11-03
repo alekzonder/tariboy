@@ -58,7 +58,7 @@ func runInstant(parsed request, m mode, stdout, stderr io.Writer) int {
 }
 
 // instantFormatList names the --format values of tmail instant.
-const instantFormatList = "text, json, claude-post-tool-use, claude-post-tool-use-failure, claude-stop, codex-post-tool-use, codex-stop"
+const instantFormatList = "text, json, claude-post-tool-use, claude-post-tool-use-failure, claude-stop, codex-post-tool-use, codex-stop, opencode-tool-after"
 
 // hookContextEvents maps a PostToolUse-style hook format to the hook event
 // name its hookSpecificOutput must carry. Codex takes the same JSON as Claude
@@ -72,21 +72,25 @@ var hookContextEvents = map[string]string{
 
 func validInstantFormat(format string) bool {
 	switch format {
-	case "", "text", "json", "claude-stop", "codex-stop":
+	case "", "text", "json", "claude-stop", "codex-stop", "opencode-tool-after":
 		return true
 	}
 	_, ok := hookContextEvents[format]
 	return ok
 }
 
-// formatInstant renders taken letters. The claude-* and codex-* formats are
-// the JSON a harness hook prints: tmail builds it itself, so the hook needs no
-// jq, python or node.
+// formatInstant renders taken letters. opencode-tool-after is plain text the
+// OpenCode plugin appends to a tool result. The claude-* and codex-* formats
+// are the JSON a harness hook prints: tmail builds it itself, so the hook needs
+// no jq, python or node.
 func formatInstant(format string, res instantResult) string {
 	var v any
 	switch format {
 	case "", "text":
 		return res.Text
+	case "opencode-tool-after":
+		// The OpenCode plugin appends this to the tool result as is.
+		return "\n\n" + res.Text
 	case "json":
 		v = res
 	case "claude-stop", "codex-stop":

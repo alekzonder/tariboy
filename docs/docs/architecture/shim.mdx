@@ -23,9 +23,13 @@ hooks in both modes: `PostToolUse`, `PostToolUseFailure` and `Stop`, in a
 plugin under `<base-dir>/agents/<name>/harness-hooks/claude/`. Codex 0.141.0
 or newer in the `yolo` approval mode gets `PostToolUse` and `Stop` in both
 modes, as `-c` overrides with `--dangerously-bypass-hook-trust` in its argv.
-The hooks run inside the harness, so the shim does not change for them, and
-it never types a letter into the tmux session. OpenCode, an older Claude Code,
-an older codex and codex in `approve-for-me` get an
+OpenCode 1.19.5 or newer gets one plugin in both modes,
+`<base-dir>/agents/<name>/harness-hooks/opencode/tariboy-instant-mail.js`,
+from the configuration overlay. Its hook `tool.execute.after` runs after each
+successful tool call. The hooks run inside the harness, so the shim does not
+change for them, and it never types a letter into the tmux session. An older
+Claude Code, an older codex, an older OpenCode and codex in `approve-for-me`
+get an
 [instant letter](/docs/reference/mail#harness-support) in the next iteration.
 A long tool call holds the letter until the call ends, and the hooks do not
 stop model output that has no tool call.

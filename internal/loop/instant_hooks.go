@@ -6,23 +6,23 @@ import (
 	"github.com/alekzonder/tariboy/internal/harness"
 )
 
-// instantHooksArgs writes the harness plugin whose hooks run tmail instant and
-// returns the args that load it. It loads the plugin only for a harness with
-// such hooks (claude, codex), a non-bare image and an agent with the mail
-// capability. cfg is the config the adapter's Command got. A missing tmail, an
-// old harness, a mode the adapter refuses or a failed write only logs a
-// warning: the iteration starts without the hooks and the letter reaches the
-// next prompt. The hooks call the absolute tmail path, so a PATH change in the
-// agent shell prologue does not affect them.
-func (r *ShimRunner) instantHooksArgs(ag agent.Agent, l agentdir.Layout, adapter harness.Adapter, env []string, cwd string, cfg harness.Config) []string {
+// instantHooks writes the harness plugin whose hooks run tmail instant and
+// returns it. It loads the plugin only for a harness with such hooks (claude,
+// codex, opencode), a non-bare image and an agent with the mail capability.
+// cfg is the config the adapter's Command got. A missing tmail, an old or
+// unreadable harness version, a mode the adapter refuses or a failed write
+// only logs a warning: the iteration starts without the hooks and the letter
+// reaches the next prompt. The hooks call the absolute tmail path, so a PATH
+// change in the agent shell prologue does not affect them.
+func (r *ShimRunner) instantHooks(ag agent.Agent, l agentdir.Layout, adapter harness.Adapter, env []string, cwd string, cfg harness.Config) (harness.InstantMailHooks, bool) {
 	hooker, ok := adapter.(harness.InstantMailHooker)
 	if !ok || cfg.Bare || !hasMailPlugin(ag.Plugins) {
-		return nil
+		return harness.InstantMailHooks{}, false
 	}
-	warn := func(reason string, err error) []string {
+	warn := func(reason string, err error) (harness.InstantMailHooks, bool) {
 		r.cfg.Logger.Warn("instant mail hooks not loaded; instant letters wait for the next iteration",
 			"agent", ag.Name, "harness", adapter.Type(), "reason", reason, "err", err)
-		return nil
+		return harness.InstantMailHooks{}, false
 	}
 	tmail, err := harness.FindExecutable("tmail", env, cwd)
 	if err != nil {
@@ -43,6 +43,17 @@ func (r *ShimRunner) instantHooksArgs(ag agent.Agent, l agentdir.Layout, adapter
 	if err := agentdir.WritePluginFiles(dir, hooks.Files); err != nil {
 		return warn("write hooks", err)
 	}
+	return hooks, true
+}
+
+// instantHooksArgs returns the argv that loads the instant mail hooks.
+// OpenCode loads its plugin from the configuration overlay instead, which
+// prepareOpenCode builds.
+func (r *ShimRunner) instantHooksArgs(ag agent.Agent, l agentdir.Layout, adapter harness.Adapter, env []string, cwd string, cfg harness.Config) []string {
+	if adapter.Type() == "opencode" {
+		return nil
+	}
+	hooks, _ := r.instantHooks(ag, l, adapter, env, cwd, cfg)
 	return hooks.Args
 }
 

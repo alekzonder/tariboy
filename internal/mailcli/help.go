@@ -37,12 +37,13 @@ var helpText = map[string]commandHelp{
 			"TEXT may be given with --text instead; a TEXT of - reads it from stdin. In operator mode, --as agent:NAME replies on the agent's behalf.",
 		"ID  Letter id (required)\nTEXT  Reply text, or - for stdin (required unless --text is given)",
 		"tmail reply m-20261026T104200Z-000007 'Done: the bucket is created.'\ntmail reply m-20261026T104200Z-000007 'Which region?' --ask"},
-	"instant": {"Print the instant letters that wait for the running iteration", "instant [--format text|json|claude-post-tool-use|claude-post-tool-use-failure|claude-stop|codex-post-tool-use|codex-stop]",
+	"instant": {"Print the instant letters that wait for the running iteration", "instant [--format text|json|claude-post-tool-use|claude-post-tool-use-failure|claude-stop|codex-post-tool-use|codex-stop|opencode-tool-after]",
 		"For harness hooks after each tool call. Without the flag file named by TARIBOY_INSTANT_MAIL_FLAG it exits at once without calling the daemon. " +
 			"Otherwise it takes the waiting instant letters once and prints them in the form of the prompt's Messages section; --format json prints {\"ids\":[...],\"text\":\"...\"}. " +
 			"The claude-* formats print the JSON of a Claude Code hook: claude-post-tool-use and claude-post-tool-use-failure put the text in hookSpecificOutput.additionalContext, " +
 			"claude-stop prints {\"decision\":\"block\",\"reason\":TEXT}. " +
 			"The codex-* formats print the JSON of a Codex hook: codex-post-tool-use as claude-post-tool-use, codex-stop as claude-stop. " +
+			"opencode-tool-after prints a blank line, then the text, for the OpenCode plugin to append to a tool result. " +
 			"No letters, an error, a 1.5 s timeout or operator mode print nothing and exit 0.",
 		"", "tmail instant\ntmail instant --format json\ntmail instant --format claude-stop"},
 	"requeue": {"Return one of your dead letters to the inbox", "requeue ID",

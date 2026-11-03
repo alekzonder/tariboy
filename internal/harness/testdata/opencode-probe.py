@@ -15,6 +15,8 @@ elif sys.argv[1:]==['models','--verbose']:
         if config.get('enabled_providers') and provider not in config['enabled_providers']: continue
         print(provider+'/'+model)
         print(json.dumps({'id':model,'providerID':provider,'api':{'id':model,'url':'https://api.kimi.ai/coding/v1' if provider.startswith('kimi') else 'https://api.anthropic.com/v1','npm':sdk},'options':{}}))
+elif sys.argv[1:]==['--version']:
+    print(os.environ.get('TEST_OPENCODE_VERSION','1.19.5'))
 elif sys.argv[1]=='run':
     open('created','w').close()
     print(json.dumps(config))

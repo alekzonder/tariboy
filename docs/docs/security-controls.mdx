@@ -93,7 +93,18 @@ OpenCode retains its own API-key environment and authentication files; the
 proxy forwards those credentials to the bound provider without persisting
 them in the lease. OAuth and external OpenCode plugins are unsupported because
 their transport hooks can bypass the configured SDK address, so preparation
-rejects them. The complete temporary `OPENCODE_CONFIG_CONTENT` value is masked
+rejects them. The check has no exception: it refuses a plugin from the user
+configuration, the project, `OPENCODE_CONFIG_DIR` and the original
+`OPENCODE_CONFIG_CONTENT`. Tariboy adds its own
+[instant mail plugin](/docs/reference/mail#harness-support) to the overlay
+only after the check passed. The plugin file is in the agent directory,
+`<base-dir>/agents/<name>/harness-hooks/opencode/`, with mode `0700` on the
+directory. The plugin only adds `tmail instant` output to tool results, and
+model requests still go to the proxy addresses of the overlay. Tariboy writes
+nothing into `~/.config/opencode` and does not change `HOME` or
+`XDG_CONFIG_HOME`. opencode itself installs the npm package
+`@opencode-ai/plugin` into its configuration directories when a plugin is
+loaded, also into `~/.config/opencode`. The complete temporary `OPENCODE_CONFIG_CONTENT` value is masked
 in launch logs and audit, and probe output is never included in failures.
 The handoff file remains owner-only and excluded from diagnostics.
 

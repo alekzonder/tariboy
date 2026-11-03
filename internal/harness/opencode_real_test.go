@@ -91,7 +91,7 @@ func TestOpenCodeRealProxy(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			defer cancel()
-			env, routes, err := PrepareOpenCodeProxy(ctx, executable, work, env, "kimi-code-plan-global/k3", server.URL+"/_tariboy/"+token)
+			env, routes, err := PrepareOpenCodeProxy(ctx, executable, work, env, "kimi-code-plan-global/k3", server.URL+"/_tariboy/"+token, "")
 			if err != nil {
 				t.Fatal(err)
 			}
