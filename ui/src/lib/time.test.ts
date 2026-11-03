@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fmtDateTime, relativeTime } from "./time";
+import { fmtDateTime, fmtPeriod, relativeTime } from "./time";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -38,6 +38,38 @@ describe("fmtDateTime", () => {
 
   it("returns junk input unchanged", () => {
     expect(fmtDateTime("not a date")).toBe("not a date");
+  });
+});
+
+describe("fmtPeriod", () => {
+  const at = (year: number, month: number, day: number, h: number, m: number) =>
+    new Date(year, month - 1, day, h, m).toISOString();
+  const year = new Date().getFullYear();
+
+  it("dates both ends, also an end dated today", () => {
+    const today = new Date();
+    today.setHours(11, 25, 0, 0);
+    const end = `${pad(today.getMonth() + 1)}-${pad(today.getDate())} 11:25`;
+    const start = new Date(today);
+    start.setHours(8, 5, 0, 0);
+    const begin = `${pad(start.getMonth() + 1)}-${pad(start.getDate())} 08:05`;
+    expect(fmtPeriod(start.toISOString(), today.toISOString())).toBe(`${begin} – ${end}`);
+  });
+
+  it("leaves the year out when both ends are in the current year", () => {
+    expect(fmtPeriod(at(year, 1, 5, 9, 3), at(year, 2, 7, 14, 30))).toBe(
+      "01-05 09:03 – 02-07 14:30",
+    );
+  });
+
+  it("gives both ends the year when one end is in another year", () => {
+    expect(fmtPeriod(at(year - 1, 12, 20, 9, 3), at(year, 1, 2, 14, 30))).toBe(
+      `${year - 1}-12-20 09:03 – ${year}-01-02 14:30`,
+    );
+  });
+
+  it("returns an unparseable end unchanged", () => {
+    expect(fmtPeriod("junk", at(year, 2, 7, 14, 30))).toBe("junk – 02-07 14:30");
   });
 });
 

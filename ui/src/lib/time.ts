@@ -23,6 +23,22 @@ export function fmtDateTime(iso: string): string {
   return sameYear ? md : `${d.getFullYear()}-${md}`;
 }
 
+/** A period `since – until` with the date and time at both ends:
+ *  `MM-DD HH:MM`, or `YYYY-MM-DD HH:MM` at both ends when either end is not
+ *  in the current year (local time). An unparseable end is shown as given. */
+export function fmtPeriod(since: string, until: string): string {
+  const ends = [new Date(since), new Date(until)];
+  const year = new Date().getFullYear();
+  const withYear = ends.some((d) => !Number.isNaN(d.getTime()) && d.getFullYear() !== year);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const [a, b] = ends.map((d, i) => {
+    if (Number.isNaN(d.getTime())) return i === 0 ? since : until;
+    const md = `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return withYear ? `${d.getFullYear()}-${md}` : md;
+  });
+  return `${a} – ${b}`;
+}
+
 /** How long ago `iso` was, from `now`: "just now", "5 min ago", "3 h ago",
  *  "2 d ago", or the local date (`YYYY-MM-DD`) after 30 days. "—" when `iso`
  *  is not a time. */

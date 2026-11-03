@@ -529,7 +529,10 @@ an optional end as local times; without an end it runs to now, and a missing
 or reversed range shows an error in the period bar. The period and the selected
 view live in the URL query (`?period=hour|day|today|week|month|custom`,
 `?since=`/`?until=` for Custom, `?view=`), so a view is shareable and survives
-a reload; a change replaces the history entry.
+a reload; a change replaces the history entry. The period bar shows the period
+as `MM-DD HH:MM – MM-DD HH:MM` in local time, with the date at both ends, also
+for an end dated today. When either end is not in the current year, both ends
+show the year: `YYYY-MM-DD HH:MM`. The Metrics pages use the same period bar.
 
 In labels an iteration is a **run**: the cards, the table headers, and the
 views say **Runs**. API and URL names keep `iteration`.
