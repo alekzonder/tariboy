@@ -4649,6 +4649,14 @@ export interface components {
     StoreAutoBuild: {
       images: string[];
       interval_minutes: number;
+      results: components["schemas"]["StoreAutoResult"][];
+    };
+    StoreAutoResult: {
+      at: string;
+      error: string;
+      image: string;
+      image_version: string;
+      selector: string;
     };
     StoreDetail: {
       auto: components["schemas"]["StoreAutoBuild"];
@@ -5482,6 +5490,7 @@ export type SourceRun = components["schemas"]["SourceRun"];
 export type StatusView = components["schemas"]["StatusView"];
 export type StatusVisit = components["schemas"]["StatusVisit"];
 export type StoreAutoBuild = components["schemas"]["StoreAutoBuild"];
+export type StoreAutoResult = components["schemas"]["StoreAutoResult"];
 export type StoreDetail = components["schemas"]["StoreDetail"];
 export type StoreImageView = components["schemas"]["StoreImageView"];
 export type StoreRemoveResult = components["schemas"]["StoreRemoveResult"];

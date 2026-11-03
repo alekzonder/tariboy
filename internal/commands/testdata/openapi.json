@@ -6077,11 +6077,46 @@
           },
           "interval_minutes": {
             "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/StoreAutoResult"
+            },
+            "type": "array"
           }
         },
         "required": [
           "interval_minutes",
-          "images"
+          "images",
+          "results"
+        ],
+        "type": "object"
+      },
+      "StoreAutoResult": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "image_version": {
+            "type": "string"
+          },
+          "selector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "image",
+          "selector",
+          "at",
+          "image_version",
+          "error"
         ],
         "type": "object"
       },
