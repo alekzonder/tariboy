@@ -3,6 +3,8 @@ package shim
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +35,12 @@ const (
 	// supervisor, which reports harness exit there. It is set only on the
 	// harness window and removed from the harness environment.
 	tmuxSupervisorSockEnv = "TARIBOY_SHIM_SUPERVISOR_SOCK"
+	// tmuxSupervisorTokenEnv carries the random token of this shim run. The
+	// socket path is shared by all iterations of an agent, so a supervisor
+	// left over from the previous iteration can reach the next shim; the
+	// token lets the shim reject its reports. Like the socket, it is removed
+	// from the harness environment.
+	tmuxSupervisorTokenEnv = "TARIBOY_SHIM_SUPERVISOR_TOKEN"
 	// tmuxSessionPollInterval is the fallback has-session check for a session
 	// that ends without a supervisor exit report.
 	tmuxSessionPollInterval = 10 * time.Second
@@ -335,14 +343,20 @@ func runTmux(ctx context.Context, o Options, fallback time.Duration) error {
 	if err != nil {
 		return fmt.Errorf("resolve shim executable: %w", err)
 	}
+	token, err := newSupervisorToken()
+	if err != nil {
+		logShim(o.IterationDir, "ERROR %v", err)
+		return err
+	}
 	// Bind the control socket before the tmux session exists: a session
 	// without live control must fail its launch rather than run a harness the
 	// daemon can neither kill nor reattach.
 	s := &tmuxShim{
-		session:       o.TmuxSession,
-		iterationDir:  o.IterationDir,
-		startedAt:     formatTime(time.Now()),
-		harnessExited: make(chan struct{}),
+		session:         o.TmuxSession,
+		iterationDir:    o.IterationDir,
+		startedAt:       formatTime(time.Now()),
+		supervisorToken: token,
+		harnessExited:   make(chan struct{}),
 	}
 	sockPath := o.sockPath()
 	stopRPC, err := serveRPC(sockPath, s)
@@ -374,7 +388,7 @@ func runTmux(ctx context.Context, o Options, fallback time.Duration) error {
 		logShim(o.IterationDir, "ERROR tmux set-option session=%s: %v", o.TmuxSession, err)
 		return fmt.Errorf("tmux set-option: %w", err)
 	}
-	if err := execCommand("tmux", "new-window", "-e", tmuxSupervisorSockEnv+"="+sockPath, "-t", tmuxPaneTarget(o.TmuxSession), cmdStr).Run(); err != nil {
+	if err := execCommand("tmux", "new-window", "-e", tmuxSupervisorSockEnv+"="+sockPath, "-e", tmuxSupervisorTokenEnv+"="+token, "-t", tmuxPaneTarget(o.TmuxSession), cmdStr).Run(); err != nil {
 		logShim(o.IterationDir, "ERROR tmux new-window session=%s: %v", o.TmuxSession, err)
 		return fmt.Errorf("tmux new-window: %w", err)
 	}
@@ -702,20 +716,50 @@ type tmuxShim struct {
 	// 0 before that report and after harness_exited. The supervisor keeps the
 	// harness unreaped until it exits, so the pid is not reused meanwhile.
 	harnessPID int
+	// supervisorToken is the random token of this shim run, given to its
+	// pane supervisor. Reports with another token come from a supervisor of
+	// an earlier run on the same agent socket.
+	supervisorToken string
+}
+
+var errForeignSupervisor = errors.New("report from another supervisor")
+
+func newSupervisorToken() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("supervisor token: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// ownReport reports whether token is this run's; a foreign report is logged.
+func (s *tmuxShim) ownReport(method, token string) bool {
+	if s.supervisorToken != "" && token == s.supervisorToken {
+		return true
+	}
+	logShim(s.iterationDir, "WARN ignore %s from another supervisor", method)
+	return false
 }
 
 // HarnessExited records the pane supervisor's exit report. Repeated reports
 // are harmless.
-func (s *tmuxShim) HarnessExited() {
+func (s *tmuxShim) HarnessExited(token string) error {
+	if !s.ownReport(MethodHarnessExited, token) {
+		return errForeignSupervisor
+	}
 	s.mu.Lock()
 	s.harnessPID = 0
 	s.mu.Unlock()
 	s.harnessExitOnce.Do(func() { close(s.harnessExited) })
+	return nil
 }
 
 // HarnessStarted records the harness pid from the pane supervisor. A report
 // after the exit report is ignored.
-func (s *tmuxShim) HarnessStarted(pid int) {
+func (s *tmuxShim) HarnessStarted(pid int, token string) error {
+	if !s.ownReport(MethodHarnessStarted, token) {
+		return errForeignSupervisor
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	select {
@@ -723,6 +767,7 @@ func (s *tmuxShim) HarnessStarted(pid int) {
 	default:
 		s.harnessPID = pid
 	}
+	return nil
 }
 
 func (s *tmuxShim) SetHardDeadline(deadline string) error {
@@ -824,8 +869,9 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 	defer signal.Stop(events)
 
 	exitSock := os.Getenv(tmuxSupervisorSockEnv)
+	token := os.Getenv(tmuxSupervisorTokenEnv)
 	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Env = envWithout(os.Environ(), tmuxSupervisorSockEnv)
+	cmd.Env = envWithout(envWithout(os.Environ(), tmuxSupervisorSockEnv), tmuxSupervisorTokenEnv)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdinFD := int(os.Stdin.Fd())
@@ -843,7 +889,7 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 		return fmt.Errorf("start harness: %w", err)
 	}
 	pid := cmd.Process.Pid
-	notifyHarnessStarted(exitSock, pid)
+	notifyHarnessStarted(exitSock, token, pid)
 	reaped := false
 	defer func() {
 		if retErr == nil || reaped {
@@ -910,7 +956,7 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 	if err := writeTmuxExitStatus(statusPath, waitStatusExitCode(status)); err != nil {
 		return err
 	}
-	notifyHarnessExited(exitSock)
+	notifyHarnessExited(exitSock, token)
 	return nil
 }
 
@@ -918,7 +964,7 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 // so it stops waiting for the session to end. The report is best-effort: an
 // unreachable socket or an older shim without the method leaves the shim on
 // its has-session fallback, which still ends the wait.
-func notifyHarnessExited(sock string) {
+func notifyHarnessExited(sock, token string) {
 	if sock == "" {
 		return
 	}
@@ -927,13 +973,13 @@ func notifyHarnessExited(sock string) {
 		return
 	}
 	client.Timeout = tmuxExitNotifyTimeout
-	_ = client.NotifyHarnessExited() // best-effort; the shim's has-session fallback ends its wait
+	_ = client.NotifyHarnessExited(token) // best-effort; the shim's has-session fallback ends its wait
 }
 
 // notifyHarnessStarted tells the outer shim the harness pid for the stall
 // probe. The report is best-effort: without it the shim reports pid 0 and the
 // probe keeps the stalled state.
-func notifyHarnessStarted(sock string, pid int) {
+func notifyHarnessStarted(sock, token string, pid int) {
 	if sock == "" {
 		return
 	}
@@ -942,7 +988,7 @@ func notifyHarnessStarted(sock string, pid int) {
 		return
 	}
 	client.Timeout = tmuxExitNotifyTimeout
-	_ = client.NotifyHarnessStarted(pid) // best-effort; an older shim answers -32601
+	_ = client.NotifyHarnessStarted(pid, token) // best-effort; an older shim answers -32601
 }
 
 // envWithout returns base without any key= entry.

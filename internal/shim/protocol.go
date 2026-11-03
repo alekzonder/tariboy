@@ -45,6 +45,8 @@ const (
 	// MethodHarnessExited is sent by the tmux pane supervisor after it records
 	// the harness exit status. A shim without the method answers -32601; the
 	// supervisor ignores that and the shim's has-session fallback applies.
+	// Both supervisor reports carry the token of the shim run that started
+	// the pane; a shim rejects a report with another token (-32602).
 	MethodHarnessExited = "harness_exited"
 	// MethodHarnessStarted is sent by the tmux pane supervisor after it starts
 	// the harness, with the harness pid. The shim reports that pid in Status
@@ -129,11 +131,13 @@ type HardDeadlineSetter interface{ SetHardDeadline(string) error }
 
 // HarnessExitNotifier is implemented by shims that wait for the tmux pane
 // supervisor's harness exit report.
-type HarnessExitNotifier interface{ HarnessExited() }
+type HarnessExitNotifier interface{ HarnessExited(token string) error }
 
 // HarnessStartNotifier is implemented by shims whose harness the tmux pane
 // supervisor starts, so only the supervisor knows its pid.
-type HarnessStartNotifier interface{ HarnessStarted(pid int) }
+type HarnessStartNotifier interface {
+	HarnessStarted(pid int, token string) error
+}
 
 // AttachParams carries the initial terminal size for a streaming attach.
 type AttachParams struct {
@@ -289,7 +293,13 @@ func dispatch(h Handler, req Request) (any, *RPCError) {
 		if !ok {
 			return nil, &RPCError{Code: -32601, Message: "harness exit report unsupported"}
 		}
-		n.HarnessExited()
+		var p struct {
+			Token string `json:"token"`
+		}
+		_ = json.Unmarshal(req.Params, &p) // absent params leave an empty token, which the shim rejects
+		if err := n.HarnessExited(p.Token); err != nil {
+			return nil, &RPCError{Code: -32602, Message: err.Error()}
+		}
 		return map[string]bool{"ok": true}, nil
 	case MethodHarnessStarted:
 		n, ok := h.(HarnessStartNotifier)
@@ -297,7 +307,8 @@ func dispatch(h Handler, req Request) (any, *RPCError) {
 			return nil, &RPCError{Code: -32601, Message: "harness start report unsupported"}
 		}
 		var p struct {
-			PID int `json:"pid"`
+			PID   int    `json:"pid"`
+			Token string `json:"token"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil || p.PID <= 0 {
 			if err == nil {
@@ -305,7 +316,9 @@ func dispatch(h Handler, req Request) (any, *RPCError) {
 			}
 			return nil, &RPCError{Code: -32602, Message: err.Error()}
 		}
-		n.HarnessStarted(p.PID)
+		if err := n.HarnessStarted(p.PID, p.Token); err != nil {
+			return nil, &RPCError{Code: -32602, Message: err.Error()}
+		}
 		return map[string]bool{"ok": true}, nil
 	default:
 		return nil, &RPCError{Code: -32601, Message: "unknown method " + req.Method}
@@ -400,13 +413,15 @@ func (c *Client) Status() (StatusResult, error) {
 func (c *Client) Kill() error { return c.call(MethodKill, nil, nil) }
 
 // NotifyHarnessExited reports that the tmux pane supervisor recorded the
-// harness exit status.
-func (c *Client) NotifyHarnessExited() error { return c.call(MethodHarnessExited, nil, nil) }
+// harness exit status. token identifies the shim run that started the pane.
+func (c *Client) NotifyHarnessExited(token string) error {
+	return c.call(MethodHarnessExited, map[string]string{"token": token}, nil)
+}
 
 // NotifyHarnessStarted reports the pid of the harness that the tmux pane
-// supervisor started.
-func (c *Client) NotifyHarnessStarted(pid int) error {
-	return c.call(MethodHarnessStarted, map[string]int{"pid": pid}, nil)
+// supervisor started. token identifies the shim run that started the pane.
+func (c *Client) NotifyHarnessStarted(pid int, token string) error {
+	return c.call(MethodHarnessStarted, map[string]any{"pid": pid, "token": token}, nil)
 }
 
 func (c *Client) Screen() (string, error) {

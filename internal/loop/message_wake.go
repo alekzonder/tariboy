@@ -7,6 +7,16 @@ import (
 
 const messageRetryDelay = time.Second
 
+// A message iteration that ends in an error is retried after
+// messageErrorRetryBase, doubled after each further error up to
+// messageErrorRetryMax. Each retry shows the letters again, so a lasting
+// failure (a provider outage) spends a letter's five attempts over about
+// fifteen minutes instead of five seconds.
+const (
+	messageErrorRetryBase = 30 * time.Second
+	messageErrorRetryMax  = 10 * time.Minute
+)
+
 const (
 	messageWakeIdle uint32 = iota
 	messageWakeQueued
@@ -35,6 +45,10 @@ type messageWake struct {
 	blocked bool
 	retry   loopTimer
 	retryC  <-chan time.Time
+	// delay is the next retry delay; errorDelay is the last error backoff,
+	// zero when the last attempt did not fail.
+	delay      time.Duration
+	errorDelay time.Duration
 }
 
 func newMessageWake() *messageWake {
@@ -108,7 +122,11 @@ func (w *messageWake) armRetry(newTimer func(time.Duration) loopTimer) {
 	if w.retry != nil {
 		return
 	}
-	w.retry = newTimer(messageRetryDelay)
+	delay := w.delay
+	if delay == 0 {
+		delay = messageRetryDelay
+	}
+	w.retry = newTimer(delay)
 	w.retryC = w.retry.C()
 }
 
@@ -133,11 +151,29 @@ func (w *messageWake) retryArmed() bool { return w.retry != nil }
 // block records that the pending messages could not launch and arms a retry.
 func (w *messageWake) block(newTimer func(time.Duration) loopTimer) {
 	w.blocked = true
+	w.delay = 0
+	w.armRetry(newTimer)
+}
+
+// backoff records that an attempt ran and failed with messages still pending,
+// and arms a retry after the next error delay.
+func (w *messageWake) backoff(newTimer func(time.Duration) loopTimer) {
+	switch {
+	case w.errorDelay == 0:
+		w.errorDelay = messageErrorRetryBase
+	case 2*w.errorDelay > messageErrorRetryMax:
+		w.errorDelay = messageErrorRetryMax
+	default:
+		w.errorDelay *= 2
+	}
+	w.blocked = true
+	w.delay = w.errorDelay
 	w.armRetry(newTimer)
 }
 
 // clear settles an attempt that ran or found nothing pending.
 func (w *messageWake) clear() {
+	w.delay, w.errorDelay = 0, 0
 	w.blocked = false
 	w.finish()
 	w.stopRetry()

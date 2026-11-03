@@ -30,6 +30,16 @@ The loop is driven three ways, all requiring the agent to be **enabled**:
 - **Message** — a letter sent to the agent nudges the loop to start an
   iteration now (only while the agent's inbox holds open letters).
 
+A message iteration can end with an error (`harness_error`, or a launch that
+failed). Open letters then stay open. If the agent still has open letters and
+`on_error` is not `stop`, the loop starts a new message iteration after a
+delay. The first delay is 30 seconds. Each further error doubles the delay, up
+to 10 minutes. An iteration that does not fail resets the delay to 30 seconds.
+Each iteration shows a letter again and counts one more attempt. The prompt
+shows a letter at most five times. The next iteration marks it as a dead
+letter. With a lasting failure, this happens about 15.5 minutes after the
+first attempt. A new letter does not shorten a delay that is already running.
+
 Loop policy is per-agent: `interval`, `timeout` (soft), `hard-timeout`,
 `on_timeout` and `on_error` (e.g. `restart`). An iteration ends when it signals
 completion, exits, or reaches an enforced deadline. A `timeout` or

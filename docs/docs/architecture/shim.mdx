@@ -87,6 +87,20 @@ private logs directory. It then reports the exit to the outer shim with the
 to the harness window, and the supervisor removes it from the harness
 environment. The report is best-effort and bounded to one second.
 
+The socket path belongs to the agent, not to one iteration. A supervisor can
+outlive its shim: the shim writes `result.json` and exits, and the daemon
+starts the next iteration on the same socket. The old supervisor then reports
+to the new shim. For this reason, each shim run creates a random token of 16
+bytes and gives it to its own harness window in
+`TARIBOY_SHIM_SUPERVISOR_TOKEN`, next to the socket path. The supervisor
+removes the token from the harness environment and sends it with
+`harness_started` and `harness_exited`. The shim accepts a report only with its
+own token. It rejects any other report with an error and writes
+`WARN ignore harness_exited from another supervisor` (or `harness_started`) to
+`shim.log`. A supervisor from an older shim build sends no token, so the new
+shim rejects its reports. The shim then ends its wait with the `has-session`
+fallback.
+
 The outer shim waits for the first of three events: the supervisor's exit
 report, its own cancellation, or a fallback `tmux has-session` check every ten
 seconds that finds the session gone. The fallback covers a session killed from
