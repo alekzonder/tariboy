@@ -71,6 +71,18 @@ func (e *EffectiveLimits) apply(l *Limits) {
 	}
 }
 
+// StatusStickyHolder resolves sticky_holder for one status: the status's own
+// value when it sets one, otherwise the workflow value. Both absent is false.
+// An unknown status ID yields the workflow value.
+func (f *File) StatusStickyHolder(statusID string) bool {
+	for i := range f.Statuses {
+		if f.Statuses[i].ID == statusID && f.Statuses[i].StickyHolder != nil {
+			return *f.Statuses[i].StickyHolder
+		}
+	}
+	return f.StickyHolder
+}
+
 // EffectiveWatchSpacing is the least time between the starts of two watch
 // runs of this workflow: watch_spacing, or DefaultWatchSpacing when it is
 // absent or does not parse. Validate reports a value that does not parse.

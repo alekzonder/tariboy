@@ -204,8 +204,8 @@ func (s *WorkflowEngine) ResumeWorkflow(ctx context.Context, actor Actor, key, d
 			return Task{}, err
 		}
 	}
-	// The previous holder is sticky unless released; otherwise this is the
-	// dispatch of entering the status.
+	// This is the dispatch of entering the status: the previous holder comes
+	// first by pickHolderTx's rule unless released.
 	state := stateIn(task, status)
 	if err := s.pickStateHolderTx(ctx, tx, task, &state); err != nil {
 		return Task{}, err

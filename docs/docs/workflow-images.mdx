@@ -47,7 +47,9 @@ for the stored manifest.
 ## `Workflowfile.yaml`
 
 The loader is strict: an unknown field is an error, and a second YAML document
-is an error.
+is an error. Thus a daemon that is older than a field rejects a
+`Workflowfile.yaml` that uses it. For example, daemon v0.106.0 rejects
+`sticky_holder`; see [Dispatch](/docs/task-workflows#dispatch).
 
 ```yaml
 schema_version: 1
@@ -138,6 +140,7 @@ statuses:
 | `env` | no | Non-secret environment defaults for scripts. A name matches `^[A-Za-z_][A-Za-z0-9_]*$` and must not start with `TARIBOY_`. |
 | `limits` | no | Workflow-wide defaults; see [Limits](#limits). |
 | `watch_spacing` | no | Least time between the starts of two watch runs of this workflow, from `1s` to `10m`; default `5s`. See [Watch scripts](/docs/task-workflows#watch-scripts). |
+| `sticky_holder` | no | `true` gives a task that comes back to a pool status to the previous holder of that pool, however busy that agent is. Default `false`: the previous holder gets the task first only when it is free. A pool status can override it. See [Dispatch](/docs/task-workflows#dispatch). |
 | `sources` | no | Queue-level scripts that create tasks; see [Sources](#sources). |
 
 Status IDs, outcome names (`on`), artifact names, and pool names match
@@ -153,6 +156,7 @@ Status IDs, outcome names (`on`), artifact names, and pool names match
 | `watch` | script | `script`, `every`, `timeout`, and `description` of the watch script. |
 | `transitions` | non-terminal | List of `on`, `to`, and, for pool statuses, `requires` and `checks`. |
 | `limits` | non-terminal | Per-status overrides of the workflow limits. |
+| `sticky_holder` | pool | `true` or `false`. Replaces the root `sticky_holder` for this status. Without it, the status uses the root value. |
 | `terminal` | terminal | `true`. A terminal status has no owner, transitions, watch, instructions, or limits. |
 | `cancelled` | terminal | `true` when the result counts as cancelled rather than done. Allowed only on a terminal status. |
 
@@ -260,6 +264,7 @@ then code.
 | `watch_missing` | A `script` status has no `watch`. |
 | `watch_not_allowed` | A status that is not `script` has a `watch`. |
 | `instructions_not_allowed` | A `script` status has `instructions`. |
+| `sticky_holder_not_pool` | A `customer`, `script`, or terminal status sets `sticky_holder`, also to `false`. |
 | `transitions_missing` | A non-terminal status has no transition. |
 | `outcome_invalid` | An outcome name does not match the identifier rule. |
 | `outcome_duplicate` | An outcome is used twice in one status. |

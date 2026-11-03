@@ -62,6 +62,12 @@ func seedEngineImage(t *testing.T, svc *Service, def workflowfile.File) string {
 // and reviewers [reviewer-1]; every agent starts eligible.
 func engineFixture(t *testing.T) (*Service, Actor, string) {
 	t.Helper()
+	return engineFixtureWith(t, engineDefinition())
+}
+
+// engineFixtureWith is engineFixture with def as the bound workflow.
+func engineFixtureWith(t *testing.T, def workflowfile.File) (*Service, Actor, string) {
+	t.Helper()
 	svc, actor := workflowFixture(t)
 	if err := svc.EnsureDefaultQueue(context.Background()); err != nil {
 		t.Fatal(err)
@@ -69,7 +75,7 @@ func engineFixture(t *testing.T) (*Service, Actor, string) {
 	enableAgents(t, svc)
 	mustRebindPool(t, svc, actor, "developers", []string{"dev-1", "dev-2"}, 0)
 	mustRebindPool(t, svc, actor, "reviewers", []string{"reviewer-1"}, 0)
-	digest := seedEngineImage(t, svc, engineDefinition())
+	digest := seedEngineImage(t, svc, def)
 	if _, err := svc.SetQueueWorkflow(context.Background(), actor, "DEV", "development:0.1.0", 0); err != nil {
 		t.Fatal(err)
 	}
@@ -230,8 +236,10 @@ func TestQueueTriggerTaskPinsTheBinding(t *testing.T) {
 	}
 }
 
+// The previous holder wins whatever it is doing only with sticky_holder on;
+// TestDispatchSkipsBusyPreviousHolderByDefault covers the default.
 func TestEnterPoolStatusReassignsPreviousHolderEvenWithAnotherGoal(t *testing.T) {
-	svc, actor, _ := engineFixture(t)
+	svc, actor, _ := engineFixtureWith(t, stickyDefinition(true, nil))
 	task := mustCreateDev(t, svc, actor, "t")
 	if task.Assignee != "agent:dev-1" {
 		t.Fatalf("initial assignee = %q", task.Assignee)

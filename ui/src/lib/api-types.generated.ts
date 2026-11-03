@@ -4622,6 +4622,8 @@ export interface components {
       limits?: components["schemas"]["LimitsView"];
       /** @description pool:NAME, customer, script, or empty for a terminal status */
       owner: string;
+      /** @description For a pool status: the previous holder gets the task back however busy it is */
+      sticky_holder?: boolean;
       terminal: boolean;
       transitions?: components["schemas"]["TransitionView"][];
       watch?: components["schemas"]["WatchView"];
@@ -5119,6 +5121,8 @@ export interface components {
       schema_version: number;
       sources?: components["schemas"]["WorkflowImageSource"][];
       statuses: components["schemas"]["WorkflowImageStatus"][];
+      /** @description The previous holder of a pool gets the task back however busy it is; a status may override it */
+      sticky_holder?: boolean;
       watch_spacing?: string;
       workflow_version: string;
     };
@@ -5178,6 +5182,8 @@ export interface components {
       instructions?: string;
       limits?: components["schemas"]["WorkflowImageLimits"];
       owner: components["schemas"]["WorkflowImageOwner"];
+      /** @description Overrides the workflow sticky_holder for this pool status */
+      sticky_holder?: boolean;
       terminal?: boolean;
       transitions?: components["schemas"]["WorkflowImageTransition"][];
       watch?: components["schemas"]["WorkflowImageWatch"];
