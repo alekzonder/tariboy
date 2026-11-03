@@ -19,7 +19,7 @@
     "lint": "oxlint . --deny-warnings",
     "knip": "knip --production --include files && knip",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "node scripts/vitest-run.mjs",
     "test:tasks-browser": "playwright test -c playwright.tasks.config.ts",
     "test:images-browser": "playwright test -c playwright.images.config.ts",
     "test:responsive-browser": "playwright test -c playwright.responsive.config.ts",

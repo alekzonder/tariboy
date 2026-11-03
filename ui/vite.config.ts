@@ -27,7 +27,9 @@ export default defineConfig({
     pool: "vmThreads",
     // Workspace tests render whole pages and pass 5 s when agents share a host.
     testTimeout: 20_000,
-    reporters: ["agent"],
+    // vitest-file-ledger lets `npm test` (scripts/vitest-run.mjs) fail a run
+    // that finished fewer test files than vitest found.
+    reporters: ["agent", "./scripts/vitest-file-ledger.mjs"],
     setupFiles: ["./src/test/setup.ts"],
   },
 });
