@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 
 	"github.com/alekzonder/tariboy/internal/refstore"
+	"github.com/alekzonder/tariboy/internal/rolefile"
 )
 
 // Store is an on-disk image store rooted at Dir (paths.ImagesDir()).
@@ -218,6 +219,10 @@ func (s *Store) install(ref Ref, id, tmpName string) error {
 	if err := os.MkdirAll(contentDir, 0o700); err != nil {
 		return err
 	}
+	// An id names its content, so content already stored under it stays.
+	if _, err := os.Stat(s.contentPath(ref.Name, id)); err == nil {
+		return s.SetTag(ref, id)
+	}
 	if err := os.Rename(tmpName, s.contentPath(ref.Name, id)); err != nil {
 		return fmt.Errorf("publish image %s: %w", ref.String(), err)
 	}
@@ -325,11 +330,15 @@ func inspectArchive(archivePath string, ref Ref) (Manifest, error) {
 		return Manifest{}, fmt.Errorf("archive image %s does not match %s", m.Name, ref.String())
 	}
 	m.Tag = ref.Tag
-	if m.ID != "" {
-		m.Digest = m.ID
-		return m, nil
-	}
-	digest, err := fileDigest(archivePath)
+	digest, err := archiveDigest(m, func() (map[string]portableImageMember, error) {
+		archive, err := os.Open(archivePath)
+		if err != nil {
+			return nil, err
+		}
+		defer archive.Close()
+		members, _, err := readImageMembers(archive)
+		return members, err
+	}, func() (string, error) { return fileDigest(archivePath) })
 	if err != nil {
 		return Manifest{}, fmt.Errorf("digest image %s: %w", ref.String(), err)
 	}
@@ -351,19 +360,22 @@ func fileDigest(path string) (string, error) {
 }
 
 // ValidateArchive verifies a staged archive before callers publish it at ref.
+// The role is checked first, so a bad role reports itself rather than the
+// digest mismatch it also causes.
 func ValidateArchive(archivePath string, ref Ref) (Manifest, error) {
-	m, err := inspectArchive(archivePath, ref)
-	if err != nil || m.Role == nil {
-		return m, err
-	}
 	data, err := readFileFromTar(archivePath, "manifest.json")
 	if err != nil {
 		return Manifest{}, err
 	}
-	if err := validatePortableRole(m.Role, data); err != nil {
-		return Manifest{}, err
+	var roleOnly struct {
+		Role *rolefile.Role `json:"role"`
 	}
-	return m, nil
+	if json.Unmarshal(data, &roleOnly) == nil {
+		if err := validatePortableRole(roleOnly.Role, data); err != nil {
+			return Manifest{}, err
+		}
+	}
+	return inspectArchive(archivePath, ref)
 }
 
 func readFileFromTar(archive, want string) ([]byte, error) {

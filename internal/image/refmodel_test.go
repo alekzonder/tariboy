@@ -46,9 +46,6 @@ func TestRebuildingAnExistingRefMovesItsTags(t *testing.T) {
 	if first.Digest != second.Digest {
 		t.Fatalf("same image_version produced two ids: %s and %s", first.Digest, second.Digest)
 	}
-	if want := RefID(ref.Name, "1.0.0"); second.Digest != want {
-		t.Fatalf("ref id = %s, want %s", second.Digest, want)
-	}
 	current, err := store.Inspect(ref)
 	if err != nil {
 		t.Fatal(err)
@@ -131,6 +128,7 @@ func TestMigrateAdoptsLegacyLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	archive = legacyArchive(t, archive)
 	legacyDigest := sha256.Sum256(archive)
 	legacyID := hex.EncodeToString(legacyDigest[:])
 
@@ -182,13 +180,13 @@ func TestMigrateAdoptsLegacyLayout(t *testing.T) {
 			t.Fatalf("%s survived migration: %v", gone, err)
 		}
 	}
-	// A rebuild after migration adopts the version-derived id.
+	// A rebuild after migration adopts the content id.
 	rebuilt, err := BuildV2(versionedSource(t, "1.0.0", "rebuilt\n"), imagefile.ResolveRoots{}, ref, store, func() time.Time { return time.Unix(2, 0) }, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rebuilt.Digest != RefID(ref.Name, "1.0.0") {
-		t.Fatalf("rebuilt id = %s, want %s", rebuilt.Digest, RefID(ref.Name, "1.0.0"))
+	if rebuilt.Digest == legacyID || rebuilt.Digest != rebuilt.ID {
+		t.Fatalf("rebuilt id = %s, want a new content id", rebuilt.Digest)
 	}
 	if _, err := store.InspectPinned(ref, legacyID); err != nil {
 		t.Fatalf("migrated generation lost after rebuild: %v", err)

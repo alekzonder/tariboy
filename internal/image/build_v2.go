@@ -182,7 +182,7 @@ func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *St
 	if err != nil {
 		return Manifest{}, err
 	}
-	manifest := Manifest{SchemaVersion: 2, ImageVersion: src.ImageVersion, ID: RefID(ref.Name, src.ImageVersion), Name: ref.Name, Tag: ref.Tag, BuiltAt: storetime.FormatTime(clock()), Plugins: prepared.plugins, Skills: manifestSkills(prepared.skills), PromptTemplateSHA256: prepared.template.SHA256}
+	manifest := Manifest{SchemaVersion: 2, ImageVersion: src.ImageVersion, Name: ref.Name, Tag: ref.Tag, BuiltAt: storetime.FormatTime(clock()), Plugins: prepared.plugins, Skills: manifestSkills(prepared.skills), PromptTemplateSHA256: prepared.template.SHA256}
 	if manifest.Plugins == nil {
 		manifest.Plugins = []ManifestPlugin{}
 	}
@@ -196,12 +196,47 @@ func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *St
 	if err != nil {
 		return Manifest{}, err
 	}
-	manifest.Digest = digest
+	manifest.ID, manifest.Digest = digest, digest
 	return manifest, nil
 }
 
 func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, layers map[string][]byte, skills []agentskills.Prepared, archiveOut *[]byte) (string, error) {
 	if err := checkRef(ref); err != nil {
+		return "", err
+	}
+	templateJSON, err := json.MarshalIndent(template, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	members := []portableImageMember{{name: "manifest.json", mode: 0o600}, {name: "prompt/template.json", mode: 0o600, body: templateJSON}}
+	for _, entry := range template.Entries {
+		if entry.Kind == "file" {
+			members = append(members, portableImageMember{name: entry.ArchivePath, mode: 0o600, body: layers[entry.ArchivePath]})
+		}
+	}
+	for _, skill := range skills {
+		for _, file := range skill.Files {
+			mode := int64(0o600)
+			if file.Executable {
+				mode = 0o700
+			}
+			members = append(members, portableImageMember{name: skill.Metadata.ArchiveRoot + "/" + file.RelativePath, mode: mode, body: file.Body})
+		}
+	}
+	// The id is the digest of everything else, so it is computed with the
+	// manifest that does not carry it yet.
+	man.ID = ""
+	if members[0].body, err = marshalV2Manifest(man); err != nil {
+		return "", err
+	}
+	byName := make(map[string]portableImageMember, len(members))
+	for _, member := range members {
+		byName[member.name] = member
+	}
+	if man.ID, err = contentDigest(byName); err != nil {
+		return "", err
+	}
+	if members[0].body, err = marshalV2Manifest(man); err != nil {
 		return "", err
 	}
 	stageDir := s.refs().NameDir(ref.Name)
@@ -216,54 +251,10 @@ func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, l
 	defer os.Remove(tmpName)
 	gz := gzip.NewWriter(tmp)
 	tw := tar.NewWriter(gz)
-	manifestJSON, err := json.MarshalIndent(struct {
-		SchemaVersion        int                    `json:"schema_version"`
-		ImageVersion         string                 `json:"image_version,omitempty"`
-		ID                   string                 `json:"id,omitempty"`
-		Name                 string                 `json:"name"`
-		BuiltAt              string                 `json:"built_at"`
-		Plugins              []ManifestPlugin       `json:"plugins"`
-		Skills               []agentskills.Metadata `json:"skills"`
-		PromptTemplateSHA256 string                 `json:"prompt_template_sha256"`
-		Role                 *rolefile.Role         `json:"role,omitempty"`
-	}{man.SchemaVersion, man.ImageVersion, man.ID, man.Name, man.BuiltAt, man.Plugins, man.Skills, man.PromptTemplateSHA256, man.Role}, "", "  ")
-	if err != nil {
-		tmp.Close()
-		return "", err
-	}
-	templateJSON, err := json.MarshalIndent(template, "", "  ")
-	if err != nil {
-		tmp.Close()
-		return "", err
-	}
-	if err := writeTarFile(tw, "manifest.json", manifestJSON); err != nil {
-		tmp.Close()
-		return "", err
-	}
-	if err := writeTarFile(tw, "prompt/template.json", templateJSON); err != nil {
-		tmp.Close()
-		return "", err
-	}
-	for _, entry := range template.Entries {
-		if entry.Kind != "file" {
-			continue
-		}
-		if err := writeTarFile(tw, entry.ArchivePath, layers[entry.ArchivePath]); err != nil {
+	for _, member := range members {
+		if err := writeTarFileMode(tw, member.name, member.body, member.mode); err != nil {
 			tmp.Close()
 			return "", err
-		}
-	}
-	for _, skill := range skills {
-		for _, file := range skill.Files {
-			name := skill.Metadata.ArchiveRoot + "/" + file.RelativePath
-			mode := int64(0o600)
-			if file.Executable {
-				mode = 0o700
-			}
-			if err := writeTarFileMode(tw, name, file.Body, mode); err != nil {
-				tmp.Close()
-				return "", err
-			}
 		}
 	}
 	if err := tw.Close(); err != nil {
@@ -278,6 +269,20 @@ func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, l
 		return "", err
 	}
 	return s.publishArchive(ref, tmpName, archiveOut)
+}
+
+func marshalV2Manifest(man Manifest) ([]byte, error) {
+	return json.MarshalIndent(struct {
+		SchemaVersion        int                    `json:"schema_version"`
+		ImageVersion         string                 `json:"image_version,omitempty"`
+		ID                   string                 `json:"id,omitempty"`
+		Name                 string                 `json:"name"`
+		BuiltAt              string                 `json:"built_at"`
+		Plugins              []ManifestPlugin       `json:"plugins"`
+		Skills               []agentskills.Metadata `json:"skills"`
+		PromptTemplateSHA256 string                 `json:"prompt_template_sha256"`
+		Role                 *rolefile.Role         `json:"role,omitempty"`
+	}{man.SchemaVersion, man.ImageVersion, man.ID, man.Name, man.BuiltAt, man.Plugins, man.Skills, man.PromptTemplateSHA256, man.Role}, "", "  ")
 }
 
 func sha256hex(b []byte) string {

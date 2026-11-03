@@ -32,7 +32,7 @@ func TestEnsureBareSeedsImage(t *testing.T) {
 	if man.Name != "bare" || man.Tag != "latest" {
 		t.Fatalf("ref = %s:%s, want bare:latest", man.Name, man.Tag)
 	}
-	if man.ImageVersion != version.Version || man.Digest != RefID(BareRef.Name, version.Version) {
+	if man.ImageVersion != version.Version || man.Digest == "" || man.Digest != man.ID {
 		t.Fatalf("image_version=%q id=%q, want the daemon release %q", man.ImageVersion, man.Digest, version.Version)
 	}
 	if man.Harness.Type != "" || len(man.Env) != 0 || len(man.RequiresSecrets) != 0 || len(man.Plugins) != 0 {
@@ -114,7 +114,7 @@ func TestEnsureBareMovesPreviousRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if man.Digest != RefID(BareRef.Name, version.Version) {
+	if man.ImageVersion != version.Version || man.Digest == previous.Digest {
 		t.Fatalf("bare:latest = %s, want release %s", man.Digest, version.Version)
 	}
 	if pinned, err := s.InspectPinned(BareRef, previous.Digest); err != nil || pinned.ImageVersion != "0.0.1" {

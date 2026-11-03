@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
@@ -494,7 +493,7 @@ func TestBuildV2ArchiveReturnsPublishedBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(archive, published) || manifest.Digest != fmt.Sprintf("%x", sha256.Sum256(archive)) {
+	if !bytes.Equal(archive, published) || manifest.Digest == "" || manifest.Digest != manifest.ID {
 		t.Fatalf("returned archive does not match published %s", manifest.Digest)
 	}
 }
