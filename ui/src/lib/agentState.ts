@@ -27,7 +27,7 @@ export interface AgentNeeds {
 export type AgentState =
   | { kind: "error"; reason: string }
   | { kind: "needs"; needs: AgentNeeds }
-  | { kind: "working"; since?: string }
+  | { kind: "working"; since?: string; reason?: string }
   | { kind: "off" }
   | { kind: "idle" };
 
@@ -61,7 +61,7 @@ export function agentNeeds(host: HostNeeds | undefined, agentName: string): Agen
 
 type StateSource = Pick<
   AgentRow,
-  "state" | "enabled" | "halt_kind" | "halt_reason" | "error_reason"
+  "state" | "enabled" | "halt_kind" | "halt_reason" | "error_reason" | "state_reason"
 > & {
   budget?: { exhausted?: string[] | null };
 };
@@ -86,7 +86,10 @@ export function deriveAgentState({
 }: {
   agent: AgentRow;
   status?:
-    | (Pick<AgentStatus, "state" | "enabled" | "halt_kind" | "halt_reason" | "error_reason"> & {
+    | (Pick<
+        AgentStatus,
+        "state" | "enabled" | "halt_kind" | "halt_reason" | "error_reason" | "state_reason"
+      > & {
         budget?: { exhausted?: string[] | null };
       })
     | null;
@@ -97,9 +100,11 @@ export function deriveAgentState({
   if (reason) return { kind: "error", reason };
   if (needs.count > 0) return { kind: "needs", needs };
   if (source.state === "running") {
-    return agent.current_iteration_started_at
-      ? { kind: "working", since: agent.current_iteration_started_at }
-      : { kind: "working" };
+    return {
+      kind: "working",
+      ...(agent.current_iteration_started_at && { since: agent.current_iteration_started_at }),
+      ...(source.state_reason && { reason: source.state_reason }),
+    };
   }
   if (source.enabled === false) return { kind: "off" };
   return { kind: "idle" };

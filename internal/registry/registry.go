@@ -279,7 +279,18 @@ type IterationTimeoutExtension struct {
 // AgentStateControl computes an agent's live state from a row the caller has
 // already read, so a list does not read every agent again.
 type AgentStateControl interface {
-	LiveStateOf(a agent.Agent) string
+	LiveStatusOf(a agent.Agent) LiveStatus
+	// LiveStatuses is LiveStatusOf for a list; it probes every stalled agent
+	// at once, so the list waits for one probe timeout at most.
+	LiveStatuses(agents []agent.Agent) []LiveStatus
+}
+
+// LiveStatus is an agent's live state with the reason for it, when the state
+// has one beyond itself, such as a stalled iteration that waits for an agent
+// command.
+type LiveStatus struct {
+	State  string
+	Reason string
 }
 
 // LoopConfigControl is the live-runtime half of persisted loop settings.

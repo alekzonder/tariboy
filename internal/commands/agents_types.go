@@ -27,6 +27,10 @@ type AgentHalt struct {
 	ErrorReason string `json:"error_reason,omitempty"`
 	HaltKind    string `json:"halt_kind,omitempty"`
 	HaltReason  string `json:"halt_reason,omitempty"`
+	// StateReason explains the state when it has a reason beyond itself:
+	// "waiting for agent command" while a running iteration without AI-proxy
+	// requests waits for a live agent command.
+	StateReason string `json:"state_reason,omitempty"`
 }
 
 // AgentView is one agent's full configuration (agent.inspect).

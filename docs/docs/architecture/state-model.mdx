@@ -20,6 +20,14 @@ work begins. When the newest point is at least the agent's positive
 The next attributed request updates the timestamp and live state derives as
 `running` again. Stale requests for older or completed iterations are ignored.
 
+Before the daemon reports such a stall, it runs the stall probe. The probe
+looks for a live agent command under the harness process, such as a long
+`make check`. If it finds one, live state is `running` and the agent readers
+(`agent.inspect`, `agent.ps`, `agent.status.show`) report
+`state_reason: "waiting for agent command"` with no `error_reason`. The
+`state_reason` key is absent when the state has no reason. See
+[the stall probe](/docs/architecture/iteration-loop#stall-probe).
+
 Reconciliation and reaping are therefore flag-independent: the daemon derives
 what *should* be running from the DB and converges to it.
 

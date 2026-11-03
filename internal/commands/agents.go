@@ -34,17 +34,29 @@ func budgetView(b aiproxy.AgentBudgetStatus) AgentBudget {
 	}
 }
 
-// liveStateOf avoids a second read of the agent row when the control can
+// liveStatusOf avoids a second read of the agent row when the control can
 // compute the state from the row already in hand.
-func liveStateOf(c *registry.Ctx, a agent.Agent) string {
-	if sc, ok := c.Control.(registry.AgentStateControl); ok {
-		return sc.LiveStateOf(a)
-	}
-	state, _ := c.Control.LiveState(a.Name)
-	return state
+func liveStatusOf(c *registry.Ctx, a agent.Agent) registry.LiveStatus {
+	return liveStatuses(c, []agent.Agent{a})[0]
 }
 
-func agentView(c *registry.Ctx, a agent.Agent, state string) (AgentView, error) {
+// liveStatuses lets the control probe every stalled agent of a list at once.
+func liveStatuses(c *registry.Ctx, list []agent.Agent) []registry.LiveStatus {
+	if sc, ok := c.Control.(registry.AgentStateControl); ok {
+		if len(list) == 1 {
+			return []registry.LiveStatus{sc.LiveStatusOf(list[0])}
+		}
+		return sc.LiveStatuses(list)
+	}
+	out := make([]registry.LiveStatus, len(list))
+	for i, a := range list {
+		out[i].State, _ = c.Control.LiveState(a.Name)
+	}
+	return out
+}
+
+func agentView(c *registry.Ctx, a agent.Agent, status registry.LiveStatus) (AgentView, error) {
+	state := status.State
 	budget, err := agentBudgetView(c, a.Name)
 	if err != nil {
 		return AgentView{}, err
@@ -64,18 +76,20 @@ func agentView(c *registry.Ctx, a agent.Agent, state string) (AgentView, error) 
 		AIStallTimeoutS:   a.AIStallTimeoutS,
 		Schedule:          a.ScheduleRRule, ScheduleNextAt: scheduleNextAt(a),
 		Budget:    budget,
-		AgentHalt: agentHalt(a, state),
+		AgentHalt: agentHalt(a, status),
 	}, nil
 }
 
 // agentHalt derives the halt keys of every agent reader, so the idle-prefix
 // test lives in exactly one place. error_reason is the persisted reason, or a
-// derived AI-stall reason while the agent is in error.
-func agentHalt(a agent.Agent, state string) AgentHalt {
-	var h AgentHalt
+// derived AI-stall reason while the agent is in error. state_reason is the
+// reason of the live state, such as a stalled iteration that waits for an
+// agent command.
+func agentHalt(a agent.Agent, status registry.LiveStatus) AgentHalt {
+	h := AgentHalt{StateReason: status.Reason}
 	if a.ErrorReason != "" {
 		h.ErrorReason = a.ErrorReason
-	} else if state == "error" && a.AIStallTimeoutS > 0 {
+	} else if status.State == "error" && a.AIStallTimeoutS > 0 {
 		h.ErrorReason = fmt.Sprintf("agent stalled - no AI-proxy requests for %d seconds", a.AIStallTimeoutS)
 	}
 	h.HaltKind, h.HaltReason = a.HaltReason()
@@ -482,10 +496,11 @@ func agentPs() registry.Command {
 				return nil, err
 			}
 			rows := make([]AgentRow, 0, len(list))
-			for _, a := range list {
-				state := liveStateOf(c, a)
+			statuses := liveStatuses(c, list)
+			for i, a := range list {
+				status := statuses[i]
 				rows = append(rows, AgentRow{
-					Name: a.Name, Image: a.ImageRef, State: state,
+					Name: a.Name, Image: a.ImageRef, State: status.State,
 					Alias:   a.Alias,
 					Harness: a.HarnessType, Enabled: a.Enabled, Group: a.Group,
 					Color: a.Color, Cwd: a.Cwd, TimeoutS: a.TimeoutS,
@@ -500,7 +515,7 @@ func agentPs() registry.Command {
 					Budget:                    budgetView(budgets[a.Name]),
 					CurrentIterationStartedAt: times[a.Name].Running,
 					LastIterationAt:           times[a.Name].Last,
-					AgentHalt:                 agentHalt(a, state),
+					AgentHalt:                 agentHalt(a, status),
 				})
 			}
 			return AgentListResult{Agents: rows, Count: len(rows)}, nil
@@ -607,7 +622,7 @@ func agentStatus() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			state, _ := c.Control.LiveState(a.Name)
+			status := liveStatusOf(c, a)
 			its, _ := agentStore(c).ListIterations(a.Name)
 			last, lastID := "", ""
 			if n := len(its); n > 0 {
@@ -618,14 +633,14 @@ func agentStatus() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			out := AgentStatus{Name: a.Name, State: state, Enabled: a.Enabled,
+			out := AgentStatus{Name: a.Name, State: status.State, Enabled: a.Enabled,
 				Iterations: len(its), LastIteration: last, LastIterationID: lastID,
 				StatusMessage: a.StatusMessage, StatusUpdated: a.StatusUpdated,
 				MessagesPending: messagesPending, MessagesMaxQueue: a.MessagesMaxQueue,
 				MessagesQueueFull: messagesPending >= a.MessagesMaxQueue,
 				ServerNow:         store.FormatTime(time.Now()),
 				Budget:            budget,
-				AgentHalt:         agentHalt(a, state)}
+				AgentHalt:         agentHalt(a, status)}
 			for i := len(its) - 1; i >= 0; i-- {
 				it := its[i]
 				if it.Status != agent.IterationRunning {
@@ -685,8 +700,7 @@ func agentInspect() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			state, _ := c.Control.LiveState(a.Name)
-			v, err := agentView(c, a, state)
+			v, err := agentView(c, a, liveStatusOf(c, a))
 			if err != nil {
 				return nil, err
 			}

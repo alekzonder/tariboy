@@ -65,11 +65,15 @@ function needsSentence({ count, first }: AgentNeeds, now: Date): string {
   return `Waiting for you: ${what} for ${first.key}${age ? ` (${age})` : ""}`;
 }
 
-function workingSentence(since: string | undefined, goalTaskKey: string, runs: number): string {
+function workingSentence(
+  { since, reason }: { since?: string; reason?: string },
+  goalTaskKey: string,
+  runs: number,
+): string {
   const time = since ? clock(since) : "";
   const head = goalTaskKey ? `Working on ${goalTaskKey}` : "Working";
   const run = goalTaskKey && runs > 0 ? ` · run ${runs}` : "";
-  return `${head}${time ? ` since ${time}` : ""}${run}`;
+  return `${head}${time ? ` since ${time}` : ""}${run}${reason ? ` · ${reason}` : ""}`;
 }
 
 /** The header's one sentence: what the agent does, or what it waits for. */
@@ -81,7 +85,7 @@ export function headerSentence(
     case "needs":
       return needsSentence(state.needs, now);
     case "working":
-      return workingSentence(state.since, goalTaskKey, runs);
+      return workingSentence(state, goalTaskKey, runs);
     case "idle":
       return "Idle. Give it a task.";
     case "off":

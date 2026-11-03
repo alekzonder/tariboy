@@ -3354,6 +3354,7 @@ export interface components {
       schedule: string;
       schedule_next_at: string;
       state: string;
+      state_reason?: string;
       timeout_s: number;
     };
     AgentRunResult: {
@@ -3456,6 +3457,7 @@ export interface components {
       name: string;
       server_now: string;
       state: string;
+      state_reason?: string;
       status_message: string;
       status_updated: string;
     };
@@ -3537,6 +3539,7 @@ export interface components {
       schedule: string;
       schedule_next_at: string;
       state: string;
+      state_reason?: string;
       timeout_s: number;
       user_prompt: string;
     };

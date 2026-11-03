@@ -381,6 +381,71 @@ Loop policy is set with the `tariboy loop …` subcommands — `interval`,
 [the command reference](/docs/reference/commands#operator-commands).
 :::
 
+## Stall probe
+
+An iteration is stalled when it made no AI-proxy request for
+`ai_stall_timeout_s`. A harness often waits for a long agent command at that
+time, for example `make check`. The stall probe tells these two cases apart.
+It changes only the reported state. Restarts, `on_error`, `on_timeout`,
+`timeout_s` and `hard_timeout_s` do not change.
+
+The daemon runs the probe only for a stalled iteration:
+
+1. The daemon asks the iteration's shim for the harness pid with the `status`
+   RPC. Without tmux, the shim starts the harness and knows its pid. With
+   tmux, the pane supervisor starts the harness and reports its pid with the
+   `harness_started` RPC.
+2. The daemon reads the process table once: `/proc/<pid>/stat` and
+   `/proc/<pid>/cmdline` on Linux, the `kern.proc.all` and `kern.procargs2`
+   sysctls on macOS.
+3. The rule `proctree.AgentCommand` decides from that snapshot.
+
+A process is a live agent command when all of these are true:
+
+- It is a direct child of the harness and is not a zombie.
+- Its name is a shell: `bash`, `sh`, `zsh`, `dash` or `fish`. Harnesses run
+  tool commands through a shell.
+- No exclusion applies to it.
+
+The direct children decide, because a live shell is itself a child of the
+harness. When the shell exits, its children move to another parent.
+
+These processes are excluded:
+
+- A direct child that is not a shell. This covers MCP servers, such as `node`,
+  `npx`, `uvx`, `python` or the `tariboy` binary, and harness plugins.
+- A shell whose `-c` script is an instant mail hook command that the daemon
+  wrote for this harness. The script must be equal to the command, or start
+  with the command and a space. The commands come from the same builder that
+  writes `hooks.json` for claude and the `-c` hook arguments for codex.
+- The tmux server, the pane supervisor, the shim and the `tariboy` tool
+  bridges. They are ancestors or siblings of the harness, so the rule never
+  sees them.
+
+If the rule finds a live agent command, the state is `running` with the state
+reason `waiting for agent command`. In all other cases the state is `error`
+with the stall `error_reason`. These cases include a probe error, a probe that
+runs longer than 1 second, and a shim that reports pid 0. An older shim or
+supervisor reports pid 0.
+
+The daemon keeps each result, failures included, for 15 seconds per
+iteration. Only one probe for an agent runs at a time. `agent.ps` probes all
+stalled agents at once with one process table read, so it waits 1 second at
+most for any number of agents.
+
+The probe has these limits:
+
+- The shell name is a heuristic. A harness that keeps one shell alive between
+  commands shows `running` while that shell is alive.
+- An MCP server from the user's configuration (`.mcp.json`, `~/.claude.json`)
+  that the harness starts through a shell counts as an agent command. The
+  daemon does not write or read that configuration.
+- The hook commands are in daemon memory. After a daemon restart, an adopted
+  iteration has no hook commands, and a live hook shell counts as an agent
+  command. A hook runs for 5 seconds at most.
+- The probe works only when the daemon and the harness run on the same host
+  in the same pid namespace.
+
 ## Image capabilities
 
 Schema-v2 agents receive exactly the plugins declared by their image, including

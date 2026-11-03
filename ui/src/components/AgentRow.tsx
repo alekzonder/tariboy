@@ -12,6 +12,7 @@ function pillText(state: AgentState, now: Date): string {
     case "needs":
       return `needs you · ${state.needs.count}`;
     case "working": {
+      if (state.reason) return `working · ${state.reason}`;
       const time = state.since ? elapsed(state.since, now) : "";
       return time ? `working · ${time}` : "working";
     }

@@ -36,6 +36,9 @@ type fakeControl struct {
 	extendID      string
 	live          string // LiveState return; defaults to "idle"
 	liveByName    int    // LiveState calls, which read the agent row again
+	reason        string // LiveStatusOf reason with live
+	liveOf        int    // LiveStatusOf calls outside LiveStatuses
+	liveLists     int    // LiveStatuses calls
 	refreshed     []string
 }
 
@@ -69,11 +72,21 @@ func (f *fakeControl) LiveState(string) (string, error) {
 	}
 	return "idle", nil
 }
-func (f *fakeControl) LiveStateOf(agent.Agent) string {
+func (f *fakeControl) LiveStatusOf(agent.Agent) registry.LiveStatus {
+	f.liveOf++
 	if f.live != "" {
-		return f.live
+		return registry.LiveStatus{State: f.live, Reason: f.reason}
 	}
-	return "idle"
+	return registry.LiveStatus{State: "idle"}
+}
+func (f *fakeControl) LiveStatuses(agents []agent.Agent) []registry.LiveStatus {
+	f.liveLists++
+	out := make([]registry.LiveStatus, len(agents))
+	for i, a := range agents {
+		out[i] = f.LiveStatusOf(a)
+	}
+	f.liveOf -= len(agents)
+	return out
 }
 func (f *fakeControl) Screen(string) (string, error) { return "", nil }
 func (f *fakeControl) SendKeys(string, string) error { return nil }
@@ -236,7 +249,7 @@ func TestAgentViewReportsDerivedAIStallReason(t *testing.T) {
 	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	a := agent.Agent{Name: "worker", AIStallTimeoutS: 300}
-	got, err := agentView(c, a, "error")
+	got, err := agentView(c, a, registry.LiveStatus{State: "error"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,12 +258,60 @@ func TestAgentViewReportsDerivedAIStallReason(t *testing.T) {
 	}
 
 	a.ErrorReason = "halted: boom"
-	got, err = agentView(c, a, "error")
+	got, err = agentView(c, a, registry.LiveStatus{State: "error"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.ErrorReason != "halted: boom" {
 		t.Fatalf("persisted error reason = %q", got.ErrorReason)
+	}
+}
+
+// A stalled iteration that waits for an agent command is running with a
+// state reason in every agent reader, and has no derived error reason.
+func TestAgentReadersReportStateReason(t *testing.T) {
+	t.Parallel()
+	c, as, fc := ctxWithStore(t)
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, AIStallTimeoutS: 300}); err != nil {
+		t.Fatal(err)
+	}
+	fc.live, fc.reason = "running", "waiting for agent command"
+	results := map[string]any{}
+	for _, path := range []string{"agent.inspect", "agent.ps", "agent.status.show"} {
+		res, err := h(t, path)(c, registry.Params{"name": "worker"})
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		results[path] = res
+	}
+	halts := map[string]AgentHalt{
+		"agent.inspect": results["agent.inspect"].(AgentView).AgentHalt,
+		"agent.ps":      results["agent.ps"].(AgentListResult).Agents[0].AgentHalt,
+		"agent.status":  results["agent.status.show"].(AgentStatus).AgentHalt,
+	}
+	for path, halt := range halts {
+		if halt.StateReason != "waiting for agent command" || halt.ErrorReason != "" {
+			t.Errorf("%s halt = %+v; want the state reason and no error reason", path, halt)
+		}
+	}
+	if fc.liveByName != 0 {
+		t.Fatalf("readers read the agent row again through LiveState %d times", fc.liveByName)
+	}
+	data, _ := json.Marshal(results["agent.inspect"])
+	if !strings.Contains(string(data), `"state_reason":"waiting for agent command"`) {
+		t.Fatalf("agent.inspect JSON lacks state_reason: %s", data)
+	}
+
+	fc.live, fc.reason = "error", ""
+	res, err := h(t, "agent.inspect")(c, registry.Params{"name": "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := res.(AgentView); v.StateReason != "" || v.ErrorReason != "agent stalled - no AI-proxy requests for 300 seconds" {
+		t.Fatalf("stalled agent without a command = %+v", v.AgentHalt)
+	}
+	if data, _ := json.Marshal(res); strings.Contains(string(data), "state_reason") {
+		t.Fatalf("state_reason present without a reason: %s", data)
 	}
 }
 
@@ -695,8 +756,9 @@ func TestAgentPsReadsStateAndBudgetWithoutPerAgentQueries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fc.liveByName != 0 {
-		t.Fatalf("agent.ps called LiveState %d times, want 0", fc.liveByName)
+	if fc.liveByName != 0 || fc.liveOf != 0 || fc.liveLists != 1 {
+		t.Fatalf("agent.ps called LiveState %d, LiveStatusOf %d and LiveStatuses %d times; want one LiveStatuses",
+			fc.liveByName, fc.liveOf, fc.liveLists)
 	}
 	rows := res.(AgentListResult).Agents
 	for _, row := range rows {
