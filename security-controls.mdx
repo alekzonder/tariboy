@@ -93,7 +93,25 @@ OpenCode retains its own API-key environment and authentication files; the
 proxy forwards those credentials to the bound provider without persisting
 them in the lease. OAuth and external OpenCode plugins are unsupported because
 their transport hooks can bypass the configured SDK address, so preparation
-rejects them. The complete temporary `OPENCODE_CONFIG_CONTENT` value is masked
+rejects them. The check has no exception: it refuses a plugin from the user
+configuration, the project, `OPENCODE_CONFIG_DIR` and the original
+`OPENCODE_CONFIG_CONTENT`. Tariboy adds its own
+[instant mail plugin](/docs/reference/mail#harness-support) to the overlay
+only after the check passed. The plugin file is in the agent directory,
+`<base-dir>/agents/<name>/harness-hooks/opencode/`, with mode `0700` on the
+directory. The plugin only adds `tmail instant` output to tool results, and
+model requests still go to the proxy addresses of the overlay. Tariboy writes
+nothing into `~/.config/opencode` and does not change `HOME` or
+`XDG_CONFIG_HOME`. opencode itself installs the npm package
+`@opencode-ai/plugin` into its configuration directories when a plugin is
+loaded, also into `~/.config/opencode` and the image skills bridge. The
+integrity check of an OpenCode skills bridge skips only these install entries
+at the bridge root: `node_modules/`, `package.json`, `package-lock.json`,
+`bun.lock` and `.gitignore`. Without this exception, each install made the
+bridge invalid, and the next iteration rebuilt it and waited for the install
+again. The check still covers the modes and contents of the skills, the
+generated files and each other entry. Bridges of other harnesses have no
+exception. The complete temporary `OPENCODE_CONFIG_CONTENT` value is masked
 in launch logs and audit, and probe output is never included in failures.
 The handoff file remains owner-only and excluded from diagnostics.
 
@@ -149,6 +167,18 @@ Each daemon chooses how its Codex agents run commands:
 
 The mode is per daemon, applies to every Codex agent on it, and takes effect
 from the next iteration. Other harnesses are unaffected.
+
+The mode also controls the
+[instant mail hooks](/docs/reference/mail#harness-support) of Codex:
+
+- In `yolo`, the runner starts Codex with `--dangerously-bypass-hook-trust`
+  so that the Tariboy hooks run without trust in `~/.codex/config.toml`. The
+  flag also runs every other enabled hook without review: unreviewed hooks in
+  `~/.codex/config.toml` and the hooks of a trusted repository in `.codex/`.
+  A hook gets no more access than a `yolo` command already has.
+- In `approve-for-me`, the runner does not add the flag or the hooks. A hook
+  runs outside the sandbox, so the flag would let an unreviewed repository
+  hook escape it. Instant letters then wait for the next iteration.
 
 ## Local and remote files
 
@@ -310,7 +340,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.106.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.107.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

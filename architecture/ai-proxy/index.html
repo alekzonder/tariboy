@@ -205,7 +205,10 @@ than selecting OpenAI from the model name.</p>
 probes, unresolved models, external OpenCode plugins, OAuth credentials, model
 transport overrides, and incompatible transports fail preparation. Inline
 <code>OPENCODE_CONFIG_CONTENT</code> must be a JSON object; JSONC configuration files
-remain supported by OpenCode. No direct-provider fallback is installed.</p>
+remain supported by OpenCode. No direct-provider fallback is installed. After
+the probes pass, Tariboy can add its own
+<a href="/tariboy/docs/reference/mail#harness-support">instant mail plugin</a> to the overlay.
+The probes never see it, and it does not change the provider addresses.</p>
 <p>Requests use the ordinary usage, budget, attribution, and full transcript path.
 OpenAI-compatible streams request final usage. Provider routes survive daemon
 handoff with the lease and disappear when it is revoked. This accounts for new

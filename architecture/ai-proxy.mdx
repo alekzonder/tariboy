@@ -210,7 +210,10 @@ Supported transports are `@ai-sdk/openai`, `@ai-sdk/openai-compatible`, and
 probes, unresolved models, external OpenCode plugins, OAuth credentials, model
 transport overrides, and incompatible transports fail preparation. Inline
 `OPENCODE_CONFIG_CONTENT` must be a JSON object; JSONC configuration files
-remain supported by OpenCode. No direct-provider fallback is installed.
+remain supported by OpenCode. No direct-provider fallback is installed. After
+the probes pass, Tariboy can add its own
+[instant mail plugin](/docs/reference/mail#harness-support) to the overlay.
+The probes never see it, and it does not change the provider addresses.
 
 Requests use the ordinary usage, budget, attribution, and full transcript path.
 OpenAI-compatible streams request final usage. Provider routes survive daemon

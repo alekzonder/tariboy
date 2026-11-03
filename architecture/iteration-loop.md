@@ -204,8 +204,37 @@ interactive argv get it, after the image skill bridge. The hooks
 `PostToolUse`, `PostToolUseFailure` and `Stop` call that absolute `tmail`
 path. If `tmail` is missing, the version is older or unrecognized, or the write
 fails, the runner logs a warning and starts the iteration without the hooks.
-The [mail reference](/docs/reference/mail#harness-support) gives the hook
-output and the limits.
+
+A codex agent with the same conditions gets the hooks too, but the runner
+writes no file for them. If `codex --version` gives `0.141.0` or newer and the
+daemon codex approval mode is `yolo`, the runner appends
+`--dangerously-bypass-hook-trust` and two `-c hooks.<event>=...` overrides
+to the harness argv: `PostToolUse` and `Stop`, each with the absolute `tmail`
+path. Both `codex exec` and the codex TUI get the same arguments. The runner
+does not set `CODEX_HOME` or change `HOME`. In `approve-for-me`, with an
+older or unrecognized version, or without `tmail`, the runner logs a warning
+and starts the iteration without the hooks. The
+[mail reference](/docs/reference/mail#harness-support) gives the hook output
+and the limits.
+
+For an OpenCode agent with the `mail` capability on a non-bare image, the
+runner loads the instant mail plugin during the OpenCode preparation. After
+the agent shell snapshot, it finds `tmail` and `opencode` on the final `PATH`
+and runs `opencode --version`. If the version is `1.19.5` or newer, it writes
+`<base-dir>/agents/<name>/harness-hooks/opencode/tariboy-instant-mail.js`.
+After both routing probes pass, it adds the `file://` URL of that file to the
+`plugin` key of `OPENCODE_CONFIG_CONTENT`. The probes never see this plugin,
+so they still refuse every other plugin. The batch and the interactive mode
+run the same command with the same overlay. If `tmail` is missing, the version
+is older or unrecognized, or the write fails, the runner logs a warning and
+starts the iteration without the plugin.
+
+With a plugin, OpenCode installs `@opencode-ai/plugin` into each of its
+configuration directories before it starts. The first start after an OpenCode
+update can take about 70 seconds longer. Without network access, each start
+waits about 72 seconds until an install succeeds. The routing probes have a
+timeout of 20 seconds, and this wait does not affect them, because they run
+without the plugin.
 
 Before starting the shim, the runner checks the adapter's actual executable
 against this final environment. For a non-bare image it also resolves `python3`
@@ -266,7 +295,10 @@ an image is promoted or an iteration row is created. The bridge contains copied
 skill bytes and generated adapter metadata; it never links back to the image or
 source tree. Publication is owner-only and atomic. The current adapter contract
 version is `2`. A complete bridge is reused across iterations and daemon
-restarts, while an incomplete or modified cache is rebuilt. A preparation or
+restarts, while an incomplete or modified cache is rebuilt. An OpenCode bridge
+stays valid with the `@opencode-ai/plugin` install entries that OpenCode adds
+at its root (`node_modules/`, `package.json`, `package-lock.json`, `bun.lock`,
+`.gitignore`), so the install does not cause a rebuild. A preparation or
 harness-support failure leaves the previous image active and records the
 pending-image error. Because no iteration row exists yet, such a failure also
 halts the loop and records its cause in the agent's `error_reason`, which the

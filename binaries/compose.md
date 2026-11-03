@@ -21,7 +21,10 @@ tariboy compose down --volumes  # also drop the shared/agent data
 Verbs: `up`, `down`, `build`, `ps`, `status`, `start`/`stop`/`restart`/`kill`,
 `rm`, `exec`, `logs`. Flags include `-f/--file`, `-v/--volumes`, `--no-start`,
 `--tail`. `compose down` then `up` preserves data by default; `--volumes` is the
-purge path. `down`, `stop` and `kill` skip a member that is absent on the
+purge path. A plain `down` removes each agent in mode `keep`: the stopped
+agent row stays, so `up` re-provisions it. `compose rm` removes a stopped agent
+in mode `remove`: the agent is gone, and its history stays. See
+[Removing an agent](/docs/reference/commands#removing-an-agent). `down`, `stop` and `kill` skip a member that is absent on the
 daemon, so a partly present project still cleans up; any other error still
 fails the command. `start` and `restart` of an absent member fail.
 

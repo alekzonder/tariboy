@@ -239,6 +239,21 @@ mentioned principal's next comment resolves only its own open wait. This makes
 “where is my answer required?” directly filterable for both agents and the
 customer.
 
+A mentioned name starts and ends with a letter or a digit. A dot, `_` or `-`
+inside the name is part of the name. Punctuation after the name is not part of
+it, so `@agent:worker.` and `(@agent:worker)` both mention `agent:worker`, and
+`@agent:a.b` mentions `agent:a.b`.
+
+A mention opens a wait only on a principal that exists. An agent principal
+exists when the daemon has an agent with that name. A user principal exists
+when its login is the customer login. A comment that mentions a missing
+principal is saved as plain text: it opens no wait, the `mentions` of its
+`task.comment_added` event do not list that principal, and the task status
+does not change. `ttasks ask` on a missing principal fails with
+`principal_not_found` (HTTP 400) and saves no comment. A question to a
+principal opens one wait on it, also when the question text mentions that
+principal again.
+
 An enabled agent normally follows one sticky assigned task as its Goal. It
 releases that selection when the task is done, cancelled, loses assignment or
 visibility, remains in `wait_customer` beyond the agent's configured grace

@@ -37,7 +37,9 @@ the files the manifest names. A <code>.git</code> directory is skipped. A file n
 for the stored manifest.</p>
 <h2 id="workflowfileyaml"><a class="blume-heading-anchor" href="#workflowfileyaml"><code>Workflowfile.yaml</code></a></h2>
 <p>The loader is strict: an unknown field is an error, and a second YAML document
-is an error.</p>
+is an error. Thus a daemon that is older than a field rejects a
+<code>Workflowfile.yaml</code> that uses it. For example, daemon v0.106.0 rejects
+<code>sticky_holder</code>; see <a href="/tariboy/docs/task-workflows#dispatch">Dispatch</a>.</p>
 <pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;overflow-x:auto" tabindex="0" data-language="yaml" data-icon><svg aria-hidden="true" class="blume-lang-icon" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="m0 .97 4.111 6.453v4.09h2.638v-4.09L11.053.969H8.214L5.58 5.125 2.965.969Zm12.093.024-4.47 10.544h2.114l.97-2.345h4.775l.804 2.345h2.26L14.255.994Zm1.133 2.225 1.463 3.87h-3.096zm3.06 9.475v10.29H24v-2.199h-5.454v-8.091zm-12.175.002v10.335h2.217v-7.129l2.32 4.792h1.746l2.4-4.96v7.295h2.127V12.696h-2.904L9.44 17.37l-2.455-4.674Z"></path></svg><code><span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">schema_version</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span></span>
 <span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">development</span></span>
 <span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">workflow_version</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0.1.0</span></span>
@@ -171,6 +173,11 @@ is an error.</p>
 <td>Least time between the starts of two watch runs of this workflow, from <code>1s</code> to <code>10m</code>; default <code>5s</code>. See <a href="/tariboy/docs/task-workflows#watch-scripts">Watch scripts</a>.</td>
 </tr>
 <tr>
+<td><code>sticky_holder</code></td>
+<td>no</td>
+<td><code>true</code> gives a task that comes back to a pool status to the previous holder of that pool, however busy that agent is. Default <code>false</code>: the previous holder gets the task first only when it is free. A pool status can override it. See <a href="/tariboy/docs/task-workflows#dispatch">Dispatch</a>.</td>
+</tr>
+<tr>
 <td><code>sources</code></td>
 <td>no</td>
 <td>Queue-level scripts that create tasks; see <a href="#sources">Sources</a>.</td>
@@ -218,6 +225,11 @@ is an error.</p>
 <td><code>limits</code></td>
 <td>non-terminal</td>
 <td>Per-status overrides of the workflow limits.</td>
+</tr>
+<tr>
+<td><code>sticky_holder</code></td>
+<td>pool</td>
+<td><code>true</code> or <code>false</code>. Replaces the root <code>sticky_holder</code> for this status. Without it, the status uses the root value.</td>
 </tr>
 <tr>
 <td><code>terminal</code></td>
@@ -449,6 +461,10 @@ then code.</p>
 <tr>
 <td><code>instructions_not_allowed</code></td>
 <td>A <code>script</code> status has <code>instructions</code>.</td>
+</tr>
+<tr>
+<td><code>sticky_holder_not_pool</code></td>
+<td>A <code>customer</code>, <code>script</code>, or terminal status sets <code>sticky_holder</code>, also to <code>false</code>.</td>
 </tr>
 <tr>
 <td><code>transitions_missing</code></td>

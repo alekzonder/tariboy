@@ -377,6 +377,18 @@ dead with reason <code>attempts</code>.</li>
 <td><code>claude-stop</code></td>
 <td><code>{"decision":"block","reason":TEXT}</code></td>
 </tr>
+<tr>
+<td><code>codex-post-tool-use</code></td>
+<td>The same as <code>claude-post-tool-use</code></td>
+</tr>
+<tr>
+<td><code>codex-stop</code></td>
+<td>The same as <code>claude-stop</code></td>
+</tr>
+<tr>
+<td><code>opencode-tool-after</code></td>
+<td>A blank line, then <code>TEXT</code>, for the OpenCode plugin to add to the tool result</td>
+</tr>
 </tbody>
 </table></div>
 <p><code>TEXT</code> is the block below. <code>tmail</code> builds the JSON itself, so a hook needs no
@@ -434,16 +446,18 @@ AI proxy does not change requests.</p>
 </tr>
 <tr>
 <td>codex</td>
-<td>next iteration</td>
-<td>next iteration</td>
+<td>hook</td>
+<td>hook</td>
 </tr>
 <tr>
 <td>opencode</td>
-<td>next iteration</td>
-<td>next iteration</td>
+<td>plugin, after a successful tool call</td>
+<td>plugin, after a successful tool call</td>
 </tr>
 </tbody>
 </table></div>
+<p>A turn that ends without a tool call does not get the letter in opencode. The
+letter stays <code>waiting</code>, and the next prompt reads it.</p>
 <p>For claude, the daemon writes a plugin with three hooks into
 <code>&lt;base-dir&gt;/agents/&lt;name&gt;/harness-hooks/claude/</code>. It passes the plugin with
 one more <code>--plugin-dir</code> flag, after the plugin of the image skills. The
@@ -475,10 +489,49 @@ tool call. The <code>Stop</code> hook stops the end of the turn, and the model c
 with the letters. Each hook calls the absolute path of <code>tmail</code> that the daemon
 finds on the <code>PATH</code> of the iteration, and has a timeout of 5 seconds. The
 agent shell prologue therefore cannot change which <code>tmail</code> runs.</p>
+<p>For codex, the daemon writes no file. It adds the two hooks to the codex
+command as <code>-c</code> configuration overrides, which codex reads as one more
+configuration layer. <code>CODEX_HOME</code>, <code>HOME</code> and <code>XDG_CONFIG_HOME</code> do not change,
+and no file goes into <code>~/.codex</code> or the working directory. The interactive
+mode and the batch mode (<code>codex exec</code>) get the same arguments:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>--dangerously-bypass-hook-trust</span></span>
+<span class="line"><span>-c hooks.PostToolUse=[{matcher="*",hooks=[{type="command",command="'/path/to/tmail' instant --format codex-post-tool-use",timeout=5}]}]</span></span>
+<span class="line"><span>-c hooks.Stop=[{hooks=[{type="command",command="'/path/to/tmail' instant --format codex-stop",timeout=5}]}]</span></span></code></pre>
+<div class="blume-table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>Codex event</th>
+<th>Command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PostToolUse</code>, every tool</td>
+<td><code>tmail instant --format codex-post-tool-use</code></td>
+</tr>
+<tr>
+<td><code>Stop</code></td>
+<td><code>tmail instant --format codex-stop</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Codex runs <code>PostToolUse</code> also after a failed tool call. It has no separate
+failure event. Codex runs only trusted hooks, and it keeps the trust in the
+<code>config.toml</code> of the user. <code>--dangerously-bypass-hook-trust</code> lets the hooks
+run without that trust, for this run only. The flag also runs every other
+enabled hook without review: the hooks in <code>~/.codex/config.toml</code> and the hooks
+of a trusted repository. Codex shows a warning about the flag in the
+<code>codex exec</code> event stream and on the TUI screen. The warning does not stop the
+iteration. The <a href="/tariboy/docs/security-controls#codex-approval-mode">Codex approval mode</a>
+section gives the security effect.</p>
 <p>The daemon connects the hooks only when all of these are true:</p>
 <ul>
-<li>The harness is claude, version <code>2.1.227</code> or newer. The daemon runs
-<code>claude --version</code> before each iteration.</li>
+<li>The harness is claude, version <code>2.1.227</code> or newer, or codex, version
+<code>0.141.0</code> or newer. The daemon runs <code>claude --version</code> or <code>codex --version</code>
+before each iteration. A version that the daemon cannot read counts as too
+old.</li>
+<li>For codex, the daemon codex approval mode is <code>yolo</code>. In <code>approve-for-me</code>,
+the trust bypass would let an unreviewed hook run outside the sandbox.</li>
 <li>The image is not bare, and the agent has the <code>mail</code> capability (or its old
 name <code>messages</code>).</li>
 <li><code>tmail</code> is on the <code>PATH</code> of the iteration.</li>
@@ -487,8 +540,53 @@ name <code>messages</code>).</li>
 starts without the hooks. Except for a missing capability or another harness,
 the daemon log has a warning. An instant letter then stays <code>waiting</code> or
 <code>queued</code>, the next iteration reads it, and its state becomes <code>read</code>. The same
-is true for codex and opencode, which have no hooks yet. The limits that stay
-with a hook:</p>
+is true for a harness without hooks.</p>
+<p>For opencode, the daemon writes the plugin file
+<code>&lt;base-dir&gt;/agents/&lt;name&gt;/harness-hooks/opencode/tariboy-instant-mail.js</code>. It
+adds the <code>file://</code> URL of that file to the <code>plugin</code> key of the configuration
+overlay in <code>OPENCODE_CONFIG_CONTENT</code>. It adds the key after its checks of the
+proxy routing, so these checks still refuse every other plugin. The daemon
+writes nothing into the working directory, into <code>~/.config/opencode</code> or into
+the directory of the image skills, and it does not change <code>HOME</code> or
+<code>XDG_CONFIG_HOME</code>. The batch mode and the interactive mode run the same
+<code>opencode run</code> command with the same overlay.</p>
+<p>The plugin has one hook, <code>tool.execute.after</code>. After each successful tool call,
+it does these steps:</p>
+<ol>
+<li>If the file in <code>TARIBOY_INSTANT_MAIL_FLAG</code> does not exist, it stops. It
+starts no process.</li>
+<li>It runs the absolute path of <code>tmail</code> with <code>instant --format opencode-tool-after</code>. It uses <code>Bun.spawn</code>, the process API of the runtime
+inside opencode, so the agent needs no <code>node</code>, <code>bun</code>, <code>jq</code> or <code>python</code>.</li>
+<li>If <code>tmail</code> exits 0 and prints text, the plugin adds the text to the end of
+the tool result. The model reads it in the next request.</li>
+</ol>
+<p>If <code>tmail</code> fails, runs longer than 5 seconds or prints only to standard error,
+the tool result does not change. The plugin writes nothing to standard error.
+opencode does not call the hook after a failed tool call, so the letter waits
+for the next successful call or for the next prompt.</p>
+<p>The daemon connects the opencode plugin when all of these are true:</p>
+<ul>
+<li>The harness is opencode, version <code>1.19.5</code> or newer. The daemon runs
+<code>opencode --version</code> before each iteration. A version that the daemon cannot
+read counts as too old.</li>
+<li>The image is not bare, and the agent has the <code>mail</code> capability (or its old
+name <code>messages</code>). The image skills are not necessary.</li>
+<li><code>tmail</code> is on the <code>PATH</code> of the iteration, after the agent shell scripts ran.</li>
+</ul>
+<p>With any plugin, opencode installs the npm package <code>@opencode-ai/plugin</code> into
+each of its configuration directories, also into <code>~/.config/opencode</code>, and
+waits for the install before it starts. opencode does this itself, and it has
+no setting to turn the install off. If the package is already there, the start
+takes no extra time. The first start after a new opencode version installs the
+package of that version. With network access, this took 13 to 70 seconds on a
+test host. Without network access, the install fails after about 72 seconds,
+and opencode then starts with the plugin. Each later start waits again, until
+an install succeeds. No timer of the daemon stops an iteration in this time,
+unless the agent has a timeout shorter than the wait. The image skills bridge
+of the agent is one of these configuration directories. Tariboy keeps the
+bridge with the installed package, so the install does not repeat in each
+iteration.</p>
+<p>The limits that stay with a hook or a plugin:</p>
 <ul>
 <li>A long tool call holds the letter until the call ends. Nothing stops model
 output that has no tool call.</li>
@@ -496,6 +594,10 @@ output that has no tool call.</li>
 waits for the next prompt.</li>
 <li>A failure to create the flag file is logged. The next iteration reads the
 letter.</li>
+<li>Codex does not document hooks in <code>-c</code> overrides or the trust bypass as a
+stable interface. If a newer codex changes them, the hooks do not run and
+the next iteration reads the letter. The version check finds only an older
+codex.</li>
 </ul>
 <h2 id="agent-settings"><a class="blume-heading-anchor" href="#agent-settings">Agent settings</a></h2>
 <div class="blume-table-scroll" tabindex="0"><table>

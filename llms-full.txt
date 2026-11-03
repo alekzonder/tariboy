@@ -368,7 +368,9 @@ Source: https://alekzonder.github.io/tariboy/architecture
 `tariboyd` is the long-running process at the center of the system
 (`cmd/tariboyd`, `internal/daemon`). It owns:
 
-- the **agent lifecycle** — create, start/stop the loop, run iterations, reap;
+- the **agent lifecycle** — create, start/stop the loop, run iterations, reap,
+  and remove in one of three modes (see
+  [Agent-owned tables](/docs/architecture/state-model#agent-owned-tables));
 - the **mailbox** — letters between agents, the customer, plugins and daemon components;
 - **native Tasks** — queues, recursive task trees, comments, dependencies,
   per-agent sticky goal selection, agent pools, queue triggers, events, and a
@@ -1162,7 +1164,10 @@ Supported transports are `@ai-sdk/openai`, `@ai-sdk/openai-compatible`, and
 probes, unresolved models, external OpenCode plugins, OAuth credentials, model
 transport overrides, and incompatible transports fail preparation. Inline
 `OPENCODE_CONFIG_CONTENT` must be a JSON object; JSONC configuration files
-remain supported by OpenCode. No direct-provider fallback is installed.
+remain supported by OpenCode. No direct-provider fallback is installed. After
+the probes pass, Tariboy can add its own
+[instant mail plugin](/docs/reference/mail#harness-support) to the overlay.
+The probes never see it, and it does not change the provider addresses.
 
 Requests use the ordinary usage, budget, attribution, and full transcript path.
 OpenAI-compatible streams request final usage. Provider routes survive daemon
@@ -1429,8 +1434,37 @@ interactive argv get it, after the image skill bridge. The hooks
 `PostToolUse`, `PostToolUseFailure` and `Stop` call that absolute `tmail`
 path. If `tmail` is missing, the version is older or unrecognized, or the write
 fails, the runner logs a warning and starts the iteration without the hooks.
-The [mail reference](/docs/reference/mail#harness-support) gives the hook
-output and the limits.
+
+A codex agent with the same conditions gets the hooks too, but the runner
+writes no file for them. If `codex --version` gives `0.141.0` or newer and the
+daemon codex approval mode is `yolo`, the runner appends
+`--dangerously-bypass-hook-trust` and two `-c hooks.<event>=...` overrides
+to the harness argv: `PostToolUse` and `Stop`, each with the absolute `tmail`
+path. Both `codex exec` and the codex TUI get the same arguments. The runner
+does not set `CODEX_HOME` or change `HOME`. In `approve-for-me`, with an
+older or unrecognized version, or without `tmail`, the runner logs a warning
+and starts the iteration without the hooks. The
+[mail reference](/docs/reference/mail#harness-support) gives the hook output
+and the limits.
+
+For an OpenCode agent with the `mail` capability on a non-bare image, the
+runner loads the instant mail plugin during the OpenCode preparation. After
+the agent shell snapshot, it finds `tmail` and `opencode` on the final `PATH`
+and runs `opencode --version`. If the version is `1.19.5` or newer, it writes
+`<base-dir>/agents/<name>/harness-hooks/opencode/tariboy-instant-mail.js`.
+After both routing probes pass, it adds the `file://` URL of that file to the
+`plugin` key of `OPENCODE_CONFIG_CONTENT`. The probes never see this plugin,
+so they still refuse every other plugin. The batch and the interactive mode
+run the same command with the same overlay. If `tmail` is missing, the version
+is older or unrecognized, or the write fails, the runner logs a warning and
+starts the iteration without the plugin.
+
+With a plugin, OpenCode installs `@opencode-ai/plugin` into each of its
+configuration directories before it starts. The first start after an OpenCode
+update can take about 70 seconds longer. Without network access, each start
+waits about 72 seconds until an install succeeds. The routing probes have a
+timeout of 20 seconds, and this wait does not affect them, because they run
+without the plugin.
 
 Before starting the shim, the runner checks the adapter's actual executable
 against this final environment. For a non-bare image it also resolves `python3`
@@ -1491,7 +1525,10 @@ an image is promoted or an iteration row is created. The bridge contains copied
 skill bytes and generated adapter metadata; it never links back to the image or
 source tree. Publication is owner-only and atomic. The current adapter contract
 version is `2`. A complete bridge is reused across iterations and daemon
-restarts, while an incomplete or modified cache is rebuilt. A preparation or
+restarts, while an incomplete or modified cache is rebuilt. An OpenCode bridge
+stays valid with the `@opencode-ai/plugin` install entries that OpenCode adds
+at its root (`node_modules/`, `package.json`, `package-lock.json`, `bun.lock`,
+`.gitignore`), so the install does not cause a rebuild. A preparation or
 harness-support failure leaves the previous image active and records the
 pending-image error. Because no iteration row exists yet, such a failure also
 halts the loop and records its cause in the agent's `error_reason`, which the
@@ -1843,8 +1880,20 @@ letter. The flag uses the same `Send` path with these additions:
   the hook JSON itself (`--format claude-post-tool-use`,
   `claude-post-tool-use-failure`, `claude-stop`). The letter text reaches the
   model only as hook output. A long tool call holds the letter, and model
-  output without a tool call is not stopped. Codex, OpenCode and an older
-  Claude Code read the letter in the next iteration.
+  output without a tool call is not stopped.
+- Codex 0.141.0 or newer in the `yolo` approval mode runs `tmail instant` from
+  the hooks `PostToolUse` and `Stop` in both modes (`--format
+  codex-post-tool-use`, `codex-stop`). The runner passes the hooks as `-c`
+  overrides with `--dangerously-bypass-hook-trust`, so no file goes into
+  `CODEX_HOME`, `~/.codex` or the repository.
+- OpenCode 1.19.5 or newer runs `tmail instant --format opencode-tool-after`
+  from a Tariboy plugin with the hook `tool.execute.after`, in both modes. The
+  plugin adds the printed text to the result of each successful tool call.
+  OpenCode does not call the hook after a failed tool call, and it has no hook
+  at the end of a turn. In these cases the letter stays `waiting` for the next
+  successful call or the next prompt.
+- An older Claude Code, an older codex, an older OpenCode and codex in
+  `approve-for-me` read the letter in the next iteration.
 - At `done`, the runner closes the notices that a hook delivered in the
   iteration, as it closes the rendered notices.
 
@@ -1903,6 +1952,13 @@ customer alike. The asker is matched by `data.from`, so a question the outbox
 sent as `system:tasks` closes too. A notification whose recipient no longer
 exists is marked failed in the outbox with `last_error` and is not retried. A workflow outcome that resolves the customer's open wait
 closes its question letters with `task-outcome:<status>`.
+
+A `task.question` goes only to a principal that exists: a registered agent, or
+the customer login. A mention ends at the last letter or digit of the name, so
+punctuation after it is not part of the principal. A comment that mentions a
+missing principal sends no letter, and `ttasks ask` on a missing principal
+fails with `principal_not_found`. See
+[Questions and notifications](/docs/tasks#questions-and-notifications).
 
 A task letter names its task in the subject, the key and then the title, for
 example `Question on DEV-1: Ship the release`. Its `data` carries `task_key`
@@ -2192,9 +2248,16 @@ The harness gets the environment of its iteration through the shim unchanged,
 including `TARIBOY_INSTANT_MAIL_FLAG`. A harness hook uses it to run
 `tmail instant` after each tool call. Claude Code 2.1.227 or newer gets these
 hooks in both modes: `PostToolUse`, `PostToolUseFailure` and `Stop`, in a
-plugin under `<base-dir>/agents/<name>/harness-hooks/claude/`. The hooks run
-inside the harness, so the shim does not change for them, and it never types
-a letter into the tmux session. Codex, OpenCode and an older Claude Code get an
+plugin under `<base-dir>/agents/<name>/harness-hooks/claude/`. Codex 0.141.0
+or newer in the `yolo` approval mode gets `PostToolUse` and `Stop` in both
+modes, as `-c` overrides with `--dangerously-bypass-hook-trust` in its argv.
+OpenCode 1.19.5 or newer gets one plugin in both modes,
+`<base-dir>/agents/<name>/harness-hooks/opencode/tariboy-instant-mail.js`,
+from the configuration overlay. Its hook `tool.execute.after` runs after each
+successful tool call. The hooks run inside the harness, so the shim does not
+change for them, and it never types a letter into the tmux session. An older
+Claude Code, an older codex, an older OpenCode and codex in `approve-for-me`
+get an
 [instant letter](/docs/reference/mail#harness-support) in the next iteration.
 A long tool call holds the letter until the call ends, and the hooks do not
 stop model output that has no tool call.
@@ -2467,17 +2530,40 @@ that ran it.
 The tables whose rows belong to one agent are listed once, in
 `store.AgentTables` in `internal/store/agent_tables.go`. Each row gives the
 table's scoping condition, the removal step that deletes it, and its place in
-an agent backup. `agent.Store.Delete` deletes the core rows (the agent,
-its iterations, secrets and AI budget) in one transaction, and
-`PurgeAgentData` deletes the side-table rows in a second one. Agent backup
-and restore use the rows with a backup position. Iteration retention deletes
-the tables in `store.IterationTables`.
+an agent backup. `KeepOnRemove` marks the agent history: `iterations` and
+`ai_requests`. Agent backup and restore use the rows with a backup position.
+Iteration retention deletes the tables in `store.IterationTables`.
+
+`store.RemoveMode` selects what `Manager.Remove` deletes:
+
+| Mode | Caller | Rows | Agent directory |
+| --- | --- | --- | --- |
+| `remove` | `agent rm NAME`, `compose rm` | `agent.Store.Remove` deletes every registry row without `KeepOnRemove`, in one transaction | deletes `image/`, `bin/`, `workdir/` |
+| `keep` | `compose down` | keeps all rows, sets `enabled=false` on the agent row | deletes `image/`, `bin/`, `workdir/` |
+| `purge` | `agent rm NAME --purge`, the UI, `compose down --volumes` | `agent.Store.Delete` deletes the core rows, then `PurgeAgentData` deletes the side-table rows | deletes the whole directory |
+
+`iteration_tags` and `script_runs` go with their parent rows by
+`ON DELETE CASCADE`. `store.CascadeParent` names them. `assessments` reference
+the agent by value, and no mode deletes them. The `mail` row deletes only the
+letters to the agent, so the letters that the agent sent stay with their
+recipients. `store.RemovalReport` builds the `deleted` and `kept` lists of the
+`agent rm` answer from the same registry.
+
+A `purge` remove also works without an agent row. It then deletes what an
+earlier `remove` kept: the registry rows and the agent directory. A valid
+agent name is required, because the name becomes a path.
+
+Iteration retention reads only the agents in the `agents` table. It does not
+prune the kept iterations of a removed agent. After a `remove`,
+`iteration ls` still reads the iterations, but `iteration tag` commands answer
+not found, because they need the agent row.
 
 `task_agent_pool_members` references `agents` with `ON DELETE RESTRICT`. The
 tasks service owns pool membership, and agent removal does not change it. A
-purge remove of an agent that is in a task queue agent pool fails before the
-daemon stops the agent. The error names each queue and pool. Remove the agent
-from the pool in the queue settings, then delete the agent.
+`remove` or `purge` of an agent that is in a task queue agent pool fails before
+the daemon stops the agent. The error names each queue and pool. Remove the
+agent from the pool in the queue settings, then delete the agent. Mode `keep`
+does not check pools, because it keeps the agent row.
 
 A new table with an `agent`, `agent_name` or `produced_by_agent` column, or a
 foreign key to a registry table without `ON DELETE CASCADE`, needs a registry
@@ -2855,8 +2941,9 @@ retention removes the directory of every task it deletes.
 
 Migration `0060` adds `task_workflow_holders.released` (default `0`): the
 customer's `release` decision sets it on the holder's row, which makes that
-agent neither sticky nor eligible for the task in that pool until another agent
-replaces the row or an operator move deletes it. Migration `0061` adds
+agent neither the previous holder nor free for the task in that pool, with
+either value of `sticky_holder`, until another agent replaces the row or an
+operator move deletes it. Migration `0061` adds
 `task_workflow_holders.unavailable_since` (default empty): when the holder was
 first seen unable to work, cleared by every dispatch, which the daemon compares
 with the `unavailable_grace` limit. `tasks.workflow_paused_reason` is now set: a
@@ -2918,6 +3005,13 @@ without touching the filesystem; a unique index on name and version keeps one
 digest per published version. The daemon reconciles the table with the stored
 content at startup: it inserts missing rows and deletes rows whose content is
 gone. See [Workflow images](/docs/workflow-images).
+
+The `sticky_holder` setting of a workflow and of its pool statuses lives only
+in that manifest JSON, in the parsed definition. No migration adds a column for
+it. A manifest without the field, such as one built before the setting
+existed, reads as `false`. Dispatch reads the value from the manifest of the
+digest that the task pins. See
+[Dispatch](/docs/task-workflows#dispatch).
 
 Directories left under `<base-dir>/store/versions/` by an older release are
 untouched legacy data. Current daemons neither read nor refresh them.
@@ -3550,7 +3644,10 @@ an optional end as local times; without an end it runs to now, and a missing
 or reversed range shows an error in the period bar. The period and the selected
 view live in the URL query (`?period=hour|day|today|week|month|custom`,
 `?since=`/`?until=` for Custom, `?view=`), so a view is shareable and survives
-a reload; a change replaces the history entry.
+a reload; a change replaces the history entry. The period bar shows the period
+as `MM-DD HH:MM – MM-DD HH:MM` in local time, with the date at both ends, also
+for an end dated today. When either end is not in the current year, both ends
+show the year: `YYYY-MM-DD HH:MM`. The Metrics pages use the same period bar.
 
 In labels an iteration is a **run**: the cards, the table headers, and the
 views say **Runs**. API and URL names keep `iteration`.
@@ -3578,13 +3675,15 @@ The agent tab is one view for every user. Under the cards it shows:
   opens the task panel in place, over the Activity tab; the tab and the URL
   do not change;
 - the cost chart for the period, from `getAgentUsage`;
-- a **More** segment with three views:
+- a **More** segment with four views:
   - **Runs log** (default): the iteration audit view, the same component as
     **Diagnostics → Full audit**, limited to runs that started in the period, with
     the tag filter below;
   - **Usage**: the agent's AI usage over the period; task and epic keys open
     the task panel in place;
-  - **Status history**: only the status messages from the period.
+  - **Status history**: only the status messages from the period;
+  - **Metrics** (`?view=metrics`): the metrics of the agent's completed tasks
+    in the period. [Metrics](#metrics) describes this view.
 
 An old `?view=iterations`, `?view=usage`, or `?view=status` link opens the
 matching More view, and an old `?iteration=` link opens the Runs log. The host
@@ -3649,6 +3748,10 @@ version of the row and A is the nearest older version.
 
 `/metrics/compare` shows the two versions side by side with the difference
 B − A, the percentage of A, and the word `better`, `worse`, or `no change`.
+An arrow before the word shows the sign of B − A: up for an increase, down
+for a decrease, and a dash for zero. The word gives the color of the arrow and
+the word: green for `better`, red for `worse`, gray for `no change`. A metric
+without a better direction, such as **Tasks done**, has no arrow and no word.
 **Swap** exchanges `a` and `b`. Without versions in the URL, B is the newest
 version and A the version before it. If a version has fewer than 5 completed
 tasks (`SMALL_SAMPLE_TASKS` in `lib/metricsFormat.ts`), the page warns that
@@ -3656,8 +3759,57 @@ the sample is small. The **Mixed tasks** block counts the done tasks that ran
 on more than one version. A URL without `kind` or `name` opens `/metrics`.
 
 The formatting functions, the error kinds, and the components in
-`ui/src/components/metrics/` do not depend on the page, so the agent view and
-the task panel can use them.
+`ui/src/components/metrics/` do not depend on the page. The agent view and
+the task panel use them too.
+
+### Agent metrics
+
+**Activity → More → Metrics** of an agent (`?view=metrics`) sends one
+`GET /api/metrics?agent=NAME&since=&until=` request for the period of the tab.
+The view loads as its own chunk when you select it. The window of the tab
+moves every minute, but the window of this view does not move by itself. It
+ends at the time of the load, of a period change, or of **Refresh**. The view
+shows the task cards of the `total` slice without the AI usage group, the
+**Quality** block, and the **Images** and **Workflows** tables. **Open in
+Metrics** opens `/metrics?host=&agent=NAME` with the same window. Week and
+Month keep their names. Today and Custom go as a custom range. An empty
+period shows `No completed tasks of this agent in this period.` For Today
+and Week, it also shows **Show month**. An invalid custom range sends no
+request, because the period bar of the tab already shows the error.
+
+### Task metrics
+
+`TaskDetailBody` has a **Metrics** section before **Details**, in Tasks, in
+the Work tab of an agent, and in a task that opens from a letter. The section
+is closed by default. Its open state is the WebView localStorage record
+`tasks:metrics-open:v1`. The section sends `GET /api/metrics/tasks/{key}`
+only while it is open: when you open it, when a task opens with the section
+open, and on its refresh button (`Refresh metrics`). The content loads as its
+own chunk at the first open. After the load, the header shows a short line,
+for example `$1.24 · 12 runs · 2 rework`.
+
+The open section shows these parts:
+
+1. The summary: lead time, cost, runs, tokens, rework rounds by outcome,
+   rejected advances, questions to the customer, and the start and completion
+   times. An open task shows `Not done yet` as its lead time. A task without
+   a workflow shows `0` rework rounds and rejected advances with a hint.
+2. **Time by status**: a bar of plain blocks and a list with the time and the
+   share of each status, longest first. The current status shows
+   `current, still counting`.
+3. **Agents**: a table in its own horizontal scroller. The **Agent** column
+   stays at the left edge.
+4. **Versions**: the image and workflow versions of the task. If the task ran
+   on two or more versions of one image or workflow, a
+   **Compare these versions** link opens `/metrics/compare` for the quarter.
+5. **Quality**.
+
+A task that the daemon does not know shows
+`Metrics are not available for this task.` An older daemon without the
+metrics routes shows `This host runs an older daemon without metrics.`
+Other errors show the error text with **Retry**. A refresh keeps the previous
+numbers on the screen, dimmed, with `Updating…`. A response for another task
+or host never replaces the current one.
 
 ## Iteration tags in Activity
 
@@ -4233,6 +4385,7 @@ All tasks view).
 | `tasks:new-task-queue:v1` | local | new task form, Work tab composer | JSON last queue per server | none |
 | `tasks:new-task-queue-by-agent:v1` | local | Work tab composer | JSON last queue per server and agent | `TASK` |
 | `tasks:queue-filter:v1` | session | task queue filter | queue prefix | none |
+| `tasks:metrics-open:v1` | local | task Metrics section | `open` or `closed` | `closed` |
 | `tariboy_store_token` | session | Store UI | Store bearer token | none |
 
 ### Image change notifications
@@ -4360,12 +4513,13 @@ advance, request polling, pause, retry, and confirmation operations.
    of `taskQueries.detail`, so a failed reread shows
    `Could not load subtasks.` with **Retry** (`refetch`) in place of the list.
 4. The comments and their existing answer controls.
-5. Details, collapsed: author, customer, queue, group, blocked, parent (a
+5. Metrics, collapsed by default (see [Task metrics](#task-metrics)).
+6. Details, collapsed: author, customer, queue, group, blocked, parent (a
    button from `TaskDetailParent.tsx` when `detail.parent` is set), then
    `TaskDetailProperties` and dependencies.
-6. Workflow, collapsed: the status graph, artifact editing and history, runs,
+7. Workflow, collapsed: the status graph, artifact editing and history, runs,
    logs, visits, and operator actions. Destructive confirmations still apply.
-7. History, collapsed by default.
+8. History, collapsed by default.
 
 The header's `Subtask of` line (`TaskParentLine`), the Parent field, and the
 Subtasks rows open another task in the same sheet through `onOpenTask`.
@@ -5247,7 +5401,11 @@ Other compact rules:
   Columns menu, the column move grips and the resize handles are hidden. The
   saved column
   layout `tasks:columns:v1` is not changed; priority stays in the task's
-  detail.
+  detail. The 96px `Key` column indents the tree 6px per level, for 3 levels
+  at most, so a queue marker and the start of the key stay visible at any
+  depth. Wider screens keep 20px per level, for 6 levels at most. The
+  `in KEY` text of a parent link is visually hidden, but a screen reader still
+  reads it.
 - Dialogs keep a 16px margin on each side, and two-column dialogs and editors
   (the workspace manager, the image source editor) stack.
 
@@ -5719,7 +5877,10 @@ tariboy compose down --volumes  # also drop the shared/agent data
 Verbs: `up`, `down`, `build`, `ps`, `status`, `start`/`stop`/`restart`/`kill`,
 `rm`, `exec`, `logs`. Flags include `-f/--file`, `-v/--volumes`, `--no-start`,
 `--tail`. `compose down` then `up` preserves data by default; `--volumes` is the
-purge path. `down`, `stop` and `kill` skip a member that is absent on the
+purge path. A plain `down` removes each agent in mode `keep`: the stopped
+agent row stays, so `up` re-provisions it. `compose rm` removes a stopped agent
+in mode `remove`: the agent is gone, and its history stays. See
+[Removing an agent](/docs/reference/commands#removing-an-agent). `down`, `stop` and `kill` skip a member that is absent on the
 daemon, so a partly present project still cleans up; any other error still
 fails the command. `start` and `restart` of an absent member fail.
 
@@ -9780,13 +9941,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.106.0` alpha on an Apple Silicon Mac.
+This path is for the `0.107.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.106.0_aarch64.dmg`;
+- a verified `Tariboy_0.107.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -10062,7 +10223,7 @@ tariboy has four command surfaces:
 | `tariboy agent pull NAME PATH` | Read a base64 file from an agent's cwd (used by 'cp') |
 | `tariboy agent reprovision NAME` | Re-unpack an agent's image tree in place and restart its loop, keeping its data |
 | `tariboy agent restart NAME` | Restart an agent and run one iteration now |
-| `tariboy agent rm NAME` | Remove an agent (stop it first, or --force) |
+| `tariboy agent rm NAME` | Remove an agent and keep its history; --purge deletes everything (stop it first, or --force) |
 | `tariboy agent run IMAGE` | Create an agent from an image (image:tag); starts stopped — enable with 'agent start' |
 | `tariboy agent screen NAME` | Capture the interactive screen (tmux capture-pane) |
 | `tariboy agent send-keys NAME` | Send keys into the interactive session (raw items, or a line+Enter) |
@@ -10251,6 +10412,45 @@ down:
 `tariboy update` updates only an installer-managed `linux-x86_64` or
 `linux-aarch64` installation
 and is described in [Remote hosts](/docs/remote-hosts#update-a-host-from-its-own-shell).
+
+### Removing an agent
+
+`tariboy agent rm NAME` has three modes. A running agent needs `--force`.
+
+| Mode | Command | The daemon deletes | The daemon keeps |
+| --- | --- | --- | --- |
+| `remove` | `agent rm NAME` | the agent row, secrets, budgets, schedules, scripts and their runs, the script result outbox, the retention policy, the letters in the inbox, `image/`, `bin/`, `workdir/` | iterations with their tags, `ai_requests`, `iterations/`, `CONTEXT.md`, `audit.jsonl`, assessments, the letters that the agent sent |
+| `keep` | `agent rm NAME --keep` | `image/`, `bin/`, `workdir/` | the stopped agent row (`enabled=false`) and all other data |
+| `purge` | `agent rm NAME --purge` | all rows of the agent and the agent directory | assessments, the letters that the agent sent |
+
+The answer gives the mode in `mode` and lists what the mode deleted and kept
+in `deleted` and `kept`. A partly deleted table, such as `mail`, is in both
+lists with its part. `purged` is `true` only in mode `purge`. `--keep` and
+`--purge` together fail with `bad_args`, and the agent does not change.
+
+After mode `remove`, `agent inspect NAME` answers not found, and `agent ps`
+does not show the agent. `image rm` can then delete the image of the agent if
+no other agent uses it. `tariboy iteration ls NAME` and
+`GET /api/assessments?agent=NAME` still return the kept history.
+
+If the agent is in a task queue agent pool, modes `remove` and `purge` fail
+before the daemon stops the agent. The error names each queue and pool.
+
+An agent that you create later under the same name gets the kept history:
+`CONTEXT.md`, `audit.jsonl`, and the iterations. For a clean start, run
+`tariboy agent rm NAME --purge` first. `--purge` also works when only the kept
+history of a removed agent is left. If nothing of the agent is left, it
+answers not found.
+
+An older daemon left a removed agent as a stopped row. Run
+`tariboy agent rm NAME` again to delete that row.
+
+`tariboy compose down` uses mode `keep`, and `compose down --volumes` uses
+mode `purge`. A daemon older than mode `keep` ignores `keep` and keeps the row
+as before. An older compose client sends no `keep`. Then a new daemon deletes
+the agent in mode `remove`, and the next `compose up` creates the agent again
+with its kept history. Secrets, budgets and schedules that you set outside the
+compose file are then lost. Update the CLI and the daemon together.
 
 ### Iteration tags
 
@@ -10722,6 +10922,9 @@ each tool call. Run it in agent mode:
 | `claude-post-tool-use` | `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":TEXT}}` |
 | `claude-post-tool-use-failure` | The same, with `"hookEventName":"PostToolUseFailure"` |
 | `claude-stop` | `{"decision":"block","reason":TEXT}` |
+| `codex-post-tool-use` | The same as `claude-post-tool-use` |
+| `codex-stop` | The same as `claude-stop` |
+| `opencode-tool-after` | A blank line, then `TEXT`, for the OpenCode plugin to add to the tool result |
 
 `TEXT` is the block below. `tmail` builds the JSON itself, so a hook needs no
 `jq`, `python` or `node`.
@@ -10773,8 +10976,11 @@ AI proxy does not change requests.
 | Harness | Interactive | Batch |
 | --- | --- | --- |
 | claude | hook | hook |
-| codex | next iteration | next iteration |
-| opencode | next iteration | next iteration |
+| codex | hook | hook |
+| opencode | plugin, after a successful tool call | plugin, after a successful tool call |
+
+A turn that ends without a tool call does not get the letter in opencode. The
+letter stays `waiting`, and the next prompt reads it.
 
 For claude, the daemon writes a plugin with three hooks into
 `<base-dir>/agents/<name>/harness-hooks/claude/`. It passes the plugin with
@@ -10793,10 +10999,41 @@ with the letters. Each hook calls the absolute path of `tmail` that the daemon
 finds on the `PATH` of the iteration, and has a timeout of 5 seconds. The
 agent shell prologue therefore cannot change which `tmail` runs.
 
+For codex, the daemon writes no file. It adds the two hooks to the codex
+command as `-c` configuration overrides, which codex reads as one more
+configuration layer. `CODEX_HOME`, `HOME` and `XDG_CONFIG_HOME` do not change,
+and no file goes into `~/.codex` or the working directory. The interactive
+mode and the batch mode (`codex exec`) get the same arguments:
+
+```text
+--dangerously-bypass-hook-trust
+-c hooks.PostToolUse=[{matcher="*",hooks=[{type="command",command="'/path/to/tmail' instant --format codex-post-tool-use",timeout=5}]}]
+-c hooks.Stop=[{hooks=[{type="command",command="'/path/to/tmail' instant --format codex-stop",timeout=5}]}]
+```
+
+| Codex event | Command |
+| --- | --- |
+| `PostToolUse`, every tool | `tmail instant --format codex-post-tool-use` |
+| `Stop` | `tmail instant --format codex-stop` |
+
+Codex runs `PostToolUse` also after a failed tool call. It has no separate
+failure event. Codex runs only trusted hooks, and it keeps the trust in the
+`config.toml` of the user. `--dangerously-bypass-hook-trust` lets the hooks
+run without that trust, for this run only. The flag also runs every other
+enabled hook without review: the hooks in `~/.codex/config.toml` and the hooks
+of a trusted repository. Codex shows a warning about the flag in the
+`codex exec` event stream and on the TUI screen. The warning does not stop the
+iteration. The [Codex approval mode](/docs/security-controls#codex-approval-mode)
+section gives the security effect.
+
 The daemon connects the hooks only when all of these are true:
 
-- The harness is claude, version `2.1.227` or newer. The daemon runs
-  `claude --version` before each iteration.
+- The harness is claude, version `2.1.227` or newer, or codex, version
+  `0.141.0` or newer. The daemon runs `claude --version` or `codex --version`
+  before each iteration. A version that the daemon cannot read counts as too
+  old.
+- For codex, the daemon codex approval mode is `yolo`. In `approve-for-me`,
+  the trust bypass would let an unreviewed hook run outside the sandbox.
 - The image is not bare, and the agent has the `mail` capability (or its old
   name `messages`).
 - `tmail` is on the `PATH` of the iteration.
@@ -10805,8 +11042,58 @@ If a condition is false, or the daemon cannot write the plugin, the iteration
 starts without the hooks. Except for a missing capability or another harness,
 the daemon log has a warning. An instant letter then stays `waiting` or
 `queued`, the next iteration reads it, and its state becomes `read`. The same
-is true for codex and opencode, which have no hooks yet. The limits that stay
-with a hook:
+is true for a harness without hooks.
+
+For opencode, the daemon writes the plugin file
+`<base-dir>/agents/<name>/harness-hooks/opencode/tariboy-instant-mail.js`. It
+adds the `file://` URL of that file to the `plugin` key of the configuration
+overlay in `OPENCODE_CONFIG_CONTENT`. It adds the key after its checks of the
+proxy routing, so these checks still refuse every other plugin. The daemon
+writes nothing into the working directory, into `~/.config/opencode` or into
+the directory of the image skills, and it does not change `HOME` or
+`XDG_CONFIG_HOME`. The batch mode and the interactive mode run the same
+`opencode run` command with the same overlay.
+
+The plugin has one hook, `tool.execute.after`. After each successful tool call,
+it does these steps:
+
+1. If the file in `TARIBOY_INSTANT_MAIL_FLAG` does not exist, it stops. It
+   starts no process.
+2. It runs the absolute path of `tmail` with `instant --format
+   opencode-tool-after`. It uses `Bun.spawn`, the process API of the runtime
+   inside opencode, so the agent needs no `node`, `bun`, `jq` or `python`.
+3. If `tmail` exits 0 and prints text, the plugin adds the text to the end of
+   the tool result. The model reads it in the next request.
+
+If `tmail` fails, runs longer than 5 seconds or prints only to standard error,
+the tool result does not change. The plugin writes nothing to standard error.
+opencode does not call the hook after a failed tool call, so the letter waits
+for the next successful call or for the next prompt.
+
+The daemon connects the opencode plugin when all of these are true:
+
+- The harness is opencode, version `1.19.5` or newer. The daemon runs
+  `opencode --version` before each iteration. A version that the daemon cannot
+  read counts as too old.
+- The image is not bare, and the agent has the `mail` capability (or its old
+  name `messages`). The image skills are not necessary.
+- `tmail` is on the `PATH` of the iteration, after the agent shell scripts ran.
+
+With any plugin, opencode installs the npm package `@opencode-ai/plugin` into
+each of its configuration directories, also into `~/.config/opencode`, and
+waits for the install before it starts. opencode does this itself, and it has
+no setting to turn the install off. If the package is already there, the start
+takes no extra time. The first start after a new opencode version installs the
+package of that version. With network access, this took 13 to 70 seconds on a
+test host. Without network access, the install fails after about 72 seconds,
+and opencode then starts with the plugin. Each later start waits again, until
+an install succeeds. No timer of the daemon stops an iteration in this time,
+unless the agent has a timeout shorter than the wait. The image skills bridge
+of the agent is one of these configuration directories. Tariboy keeps the
+bridge with the installed package, so the install does not repeat in each
+iteration.
+
+The limits that stay with a hook or a plugin:
 
 - A long tool call holds the letter until the call ends. Nothing stops model
   output that has no tool call.
@@ -10814,6 +11101,10 @@ with a hook:
   waits for the next prompt.
 - A failure to create the flag file is logged. The next iteration reads the
   letter.
+- Codex does not document hooks in `-c` overrides or the trust bypass as a
+  stable interface. If a newer codex changes them, the hooks do not run and
+  the next iteration reads the letter. The version check finds only an older
+  codex.
 
 ## Agent settings
 
@@ -11361,7 +11652,25 @@ OpenCode retains its own API-key environment and authentication files; the
 proxy forwards those credentials to the bound provider without persisting
 them in the lease. OAuth and external OpenCode plugins are unsupported because
 their transport hooks can bypass the configured SDK address, so preparation
-rejects them. The complete temporary `OPENCODE_CONFIG_CONTENT` value is masked
+rejects them. The check has no exception: it refuses a plugin from the user
+configuration, the project, `OPENCODE_CONFIG_DIR` and the original
+`OPENCODE_CONFIG_CONTENT`. Tariboy adds its own
+[instant mail plugin](/docs/reference/mail#harness-support) to the overlay
+only after the check passed. The plugin file is in the agent directory,
+`<base-dir>/agents/<name>/harness-hooks/opencode/`, with mode `0700` on the
+directory. The plugin only adds `tmail instant` output to tool results, and
+model requests still go to the proxy addresses of the overlay. Tariboy writes
+nothing into `~/.config/opencode` and does not change `HOME` or
+`XDG_CONFIG_HOME`. opencode itself installs the npm package
+`@opencode-ai/plugin` into its configuration directories when a plugin is
+loaded, also into `~/.config/opencode` and the image skills bridge. The
+integrity check of an OpenCode skills bridge skips only these install entries
+at the bridge root: `node_modules/`, `package.json`, `package-lock.json`,
+`bun.lock` and `.gitignore`. Without this exception, each install made the
+bridge invalid, and the next iteration rebuilt it and waited for the install
+again. The check still covers the modes and contents of the skills, the
+generated files and each other entry. Bridges of other harnesses have no
+exception. The complete temporary `OPENCODE_CONFIG_CONTENT` value is masked
 in launch logs and audit, and probe output is never included in failures.
 The handoff file remains owner-only and excluded from diagnostics.
 
@@ -11417,6 +11726,18 @@ Each daemon chooses how its Codex agents run commands:
 
 The mode is per daemon, applies to every Codex agent on it, and takes effect
 from the next iteration. Other harnesses are unaffected.
+
+The mode also controls the
+[instant mail hooks](/docs/reference/mail#harness-support) of Codex:
+
+- In `yolo`, the runner starts Codex with `--dangerously-bypass-hook-trust`
+  so that the Tariboy hooks run without trust in `~/.codex/config.toml`. The
+  flag also runs every other enabled hook without review: unreviewed hooks in
+  `~/.codex/config.toml` and the hooks of a trusted repository in `.codex/`.
+  A hook gets no more access than a `yolo` command already has.
+- In `approve-for-me`, the runner does not add the flag or the hooks. A hook
+  runs outside the sandbox, so the flag would let an unreviewed repository
+  hook escape it. Instant letters then wait for the next iteration.
 
 ## Local and remote files
 
@@ -11578,7 +11899,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.106.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.107.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -11692,7 +12013,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.106.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.107.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -12422,24 +12743,98 @@ holder is recorded per task and pool, `assignee` becomes `agent:<name>`, and the
 usual assignment notification is sent. From there Goal wakes the agent as for
 any assigned task.
 
-1. **The sticky rule.** If the task already had a holder for this pool and that
-   agent is still a member, the same agent is assigned again, whatever it is
-   doing. It keeps its worktree and context across a loop such as `draft` to
-   `review` and back to `draft`.
-2. **Otherwise an eligible member.** A new holder must be enabled, have its
-   loop and Goal enabled, not be halted, have no current Goal, and have no
-   other assigned `open` or `in_progress` task that Goal could select (a task
-   that is manually blocked, or blocked by an unfinished task, does not count).
-   Ties go to the member dispatched least recently in this queue, then to pool
-   order.
-3. **Nobody eligible.** The task waits in category `open` with an empty
-   assignee. The daemon retries when a task changes, when an agent finishes an
-   iteration, and every minute. Pool membership is read at dispatch time; there
-   is no frozen snapshot. A task that is manually blocked, or has an unfinished
-   blocker, is not assigned until it is free.
+A member is **free** when it is enabled, has its loop and Goal enabled, is not
+halted, has no current Goal other than this task, and has no other assigned
+`open` or `in_progress` task that Goal could select. A task that is manually
+blocked, or blocked by an unfinished task, does not count. The task's own key
+as the current Goal does not make its holder busy. Thus a holder that moves the
+task between two statuses of one pool keeps it.
+
+The **previous holder** is the agent that last held the task for this pool,
+while it is still a member and the customer did not release it.
+
+1. **The previous holder.** The setting `sticky_holder` of the status decides
+   this step:
+   - With `sticky_holder: true`, the previous holder gets the task again,
+     whatever it is doing. It keeps its worktree and context across a loop
+     such as `draft` to `review` and back to `draft`.
+   - With `sticky_holder: false`, the default, the previous holder gets the
+     task first only if it is free.
+2. **Otherwise a free member.** Ties go to the member dispatched least recently
+   in this queue, then to pool order.
+3. **Nobody free.** The task waits in category `open` with an empty assignee.
+   The daemon retries when a task changes, when an agent finishes an
+   iteration, and every minute. Each retry applies the same rules, so the
+   previous holder gets the task first once it is free. Pool membership is
+   read at dispatch time; there is no frozen snapshot. A task that is manually
+   blocked, or has an unfinished blocker, is not assigned until it is free.
 
 One pass assigns at most one task to each agent, in priority and creation order,
 so a single free agent does not collect every waiting task.
+
+A released holder is never the previous holder and is not free for this task in
+this pool, with either value of `sticky_holder`. See `release` under
+[Pauses](#pauses).
+
+### The `sticky_holder` setting
+
+`sticky_holder` is a boolean in `Workflowfile.yaml` on two levels: the root of
+the file and a pool status. The status value replaces the root value. Without
+both, the value is `false`.
+
+```yaml
+schema_version: 1
+name: development
+workflow_version: 0.11.0
+initial_status: backlog
+sticky_holder: false        # the workflow level; false by default
+statuses:
+  - id: draft
+    owner: {pool: writers}
+    sticky_holder: true     # the status level replaces the workflow level
+  - id: implement
+    owner: {pool: developers}   # uses the workflow value, false
+```
+
+A `customer`, `script`, or terminal status that sets `sticky_holder` fails
+validation with `sticky_holder_not_pool`. A pool that replaces the customer
+(see [A pool in place of the customer](#a-pool-in-place-of-the-customer)) uses
+the root value. `workflow get` shows the effective value of each pool status as
+`sticky_holder` in `statuses[]`.
+
+The value is stored in the image manifest (`task_workflow_images.manifest`).
+An image built before this setting has no field, and the daemon reads it as
+`false`. Thus, after a daemon update, such an image dispatches without the
+sticky rule: a task goes to a free member when its previous holder is busy.
+Without the sticky rule a new holder can get a task that another agent started.
+The new holder has no worktree or context of the previous holder. It continues
+from the artifacts, for example `branch`.
+
+Compatibility: daemon v0.106.0 and older decode `Workflowfile.yaml` strictly.
+They refuse a file with `sticky_holder` in `workflow build` and in a workflow
+image import. Images that they already installed keep the sticky rule always.
+
+### The `workflow.dispatched` event
+
+Each holder assignment on entering a pool status, in a dispatch pass, and on
+`workflow resume --decision release` records the task event
+`workflow.dispatched` in the same transaction. The author is `system:workflow`.
+No event is recorded when nobody is free.
+
+| Field | Meaning |
+| --- | --- |
+| `status` | The pool status. |
+| `pool` | The pool. |
+| `agent` | The agent that got the task. |
+| `reason` | `sticky` (the sticky rule), `previous_holder` (the free previous holder), or `free_member` (a free member). |
+| `sticky_holder` | The effective `sticky_holder` of the status. |
+| `previous_holder` | The previous holder, or an empty string. |
+| `holder_free` | `true` if the chosen agent was free. |
+| `free_member_available` | `true` if another member of the pool was free. |
+
+The share of assignments to a busy agent while another member was free is the
+number of events with `holder_free: false` and `free_member_available: true`,
+divided by the number of events.
 
 ### Changing the holder
 
@@ -12468,8 +12863,10 @@ In one transaction the command:
 - resolves the open questions the previous holder asked the customer;
 - resets the idle iterations and rejected requests of the current visit, so
   the previous holder's stall counters cannot pause the task under the new one;
-- records the new agent as the task's holder for the pool, so the sticky rule
-  gives the task back to it when the task returns to a status of that pool;
+- records the new agent as the task's holder for the pool. When the task
+  returns to a status of that pool, the agent gets it again by the
+  [dispatch](#dispatch) rules: always with `sticky_holder: true`, and first if
+  it is free with `sticky_holder: false`;
 - sets `assignee` to `agent:<name>`, records `workflow.reassigned` (`status`,
   `pool`, `from`, `to`, `actor`), and sends the usual assignment notification.
 
@@ -13030,9 +13427,12 @@ The `--reason` is optional. The daemon, in one transaction:
    `from_digest`, `to_digest`, the `status` the task left, `actor`, and
    `reason`.
 
-Artifacts and pool holders stay. A holder of a pool the new version also uses
-gets the task back (the sticky rule), so an agent finds its `branch` and
-`pull_request` artifacts and does not open a second branch or pull request. The
+Artifacts and pool holders stay. The new status dispatches with the
+`sticky_holder` of the new version. A holder of a pool the new version also uses
+gets the task back by the [dispatch](#dispatch) rules: always with
+`sticky_holder: true`, and first if it is free with `sticky_holder: false`.
+Whichever agent gets the task finds the `branch` and `pull_request` artifacts
+and does not open a second branch or pull request. The
 statuses of the new version set their own artifacts again; until then an old
 value stays visible. Work outside the daemon, such as a branch or an open pull
 request, is not undone.
@@ -13279,8 +13679,9 @@ no pause:
 - a holder whose Goal is disabled: it can work, so `holder_unavailable` does
   not fire, and with no Goal it runs no iterations that count;
 - a holder busy with another Goal, for example after a `continue` kept it as
-  the sticky holder while it had moved on: its iterations run with the other
-  task as their Goal, so they do not count for this one.
+  the holder while it had moved on, or after the sticky rule
+  (`sticky_holder: true`) gave the task back to it: its iterations run with
+  the other task as their Goal, so they do not count for this one.
 
 **What a pause does.** The task keeps its workflow status and its assignee.
 Its category becomes `wait_customer` with `waiting_on: pause`, and
@@ -13354,7 +13755,7 @@ ttasks cancel DEV-ab12
 | Decision | Effect |
 | --- | --- |
 | `continue` | Resolves the pause wait, zeroes the visit's counters, clears the reason, and records `workflow.resumed` with the decision. In a pool status the same holder continues and the category returns to `in_progress` (a task blocked by another task stays `open` until unblocked; a holder that has left the pool is replaced by normal dispatch). In a script status the watch runs again at once. In a customer status the customer is asked again with a fresh wait. |
-| `release` | Pool statuses only; any other status answers `invalid_decision`. Marks the holder's row `released`, so that agent is neither sticky nor eligible for this task in this pool, resolves the pause, zeroes the counters, and dispatches the task as on entering the status. Another eligible member receives it and its holder row replaces the released one. With no other eligible member the task is `open` and unassigned, and later dispatch passes do not hand it back to the released agent. The released agent keeps read access until the task is moved. |
+| `release` | Pool statuses only; any other status answers `invalid_decision`. Marks the holder's row `released`, so that agent is neither the previous holder nor free for this task in this pool, with either value of `sticky_holder`. Then it resolves the pause, zeroes the counters, and dispatches the task as on entering the status, with a `workflow.dispatched` event. Another free member receives it and its holder row replaces the released one. With no other free member the task is `open` and unassigned, and later dispatch passes do not hand it back to the released agent. The released agent keeps read access until the task is moved. |
 | `ttasks cancel` | Closes the task as `cancelled`; see [Operator move, retry, and cancel](#operator-move-retry-and-cancel). It records no `workflow.resumed` event. |
 
 An operator `workflow move` also ends a pause: it resolves the wait, records
@@ -13519,7 +13920,8 @@ Events recorded on a workflow task: `workflow.transition_requested`,
 message), `workflow.transition_failed` (with the reason and log path),
 `workflow.script_run` (every run that ended, with its state, verdict, and exit
 code), `workflow.script_failed` (a failed watch run), `workflow.moved`,
-`workflow.upgraded`,
+`workflow.upgraded`, `workflow.dispatched` (see
+[The `workflow.dispatched` event](#the-workflowdispatched-event)),
 `workflow.cancelled`, `workflow.paused`, `workflow.resumed`, and `artifact.set`.
 A task created by a source also records `workflow.source_item` with the source,
 the key, and the run id. A failed source run records the queue event
@@ -14173,6 +14575,21 @@ mentioned principal's next comment resolves only its own open wait. This makes
 “where is my answer required?” directly filterable for both agents and the
 customer.
 
+A mentioned name starts and ends with a letter or a digit. A dot, `_` or `-`
+inside the name is part of the name. Punctuation after the name is not part of
+it, so `@agent:worker.` and `(@agent:worker)` both mention `agent:worker`, and
+`@agent:a.b` mentions `agent:a.b`.
+
+A mention opens a wait only on a principal that exists. An agent principal
+exists when the daemon has an agent with that name. A user principal exists
+when its login is the customer login. A comment that mentions a missing
+principal is saved as plain text: it opens no wait, the `mentions` of its
+`task.comment_added` event do not list that principal, and the task status
+does not change. `ttasks ask` on a missing principal fails with
+`principal_not_found` (HTTP 400) and saves no comment. A question to a
+principal opens one wait on it, also when the question text mentions that
+principal again.
+
 An enabled agent normally follows one sticky assigned task as its Goal. It
 releases that selection when the task is done, cancelled, loses assignment or
 visibility, remains in `wait_customer` beyond the agent's configured grace
@@ -14677,7 +15094,9 @@ for the stored manifest.
 ## `Workflowfile.yaml`
 
 The loader is strict: an unknown field is an error, and a second YAML document
-is an error.
+is an error. Thus a daemon that is older than a field rejects a
+`Workflowfile.yaml` that uses it. For example, daemon v0.106.0 rejects
+`sticky_holder`; see [Dispatch](/docs/task-workflows#dispatch).
 
 ```yaml
 schema_version: 1
@@ -14768,6 +15187,7 @@ statuses:
 | `env` | no | Non-secret environment defaults for scripts. A name matches `^[A-Za-z_][A-Za-z0-9_]*$` and must not start with `TARIBOY_`. |
 | `limits` | no | Workflow-wide defaults; see [Limits](#limits). |
 | `watch_spacing` | no | Least time between the starts of two watch runs of this workflow, from `1s` to `10m`; default `5s`. See [Watch scripts](/docs/task-workflows#watch-scripts). |
+| `sticky_holder` | no | `true` gives a task that comes back to a pool status to the previous holder of that pool, however busy that agent is. Default `false`: the previous holder gets the task first only when it is free. A pool status can override it. See [Dispatch](/docs/task-workflows#dispatch). |
 | `sources` | no | Queue-level scripts that create tasks; see [Sources](#sources). |
 
 Status IDs, outcome names (`on`), artifact names, and pool names match
@@ -14783,6 +15203,7 @@ Status IDs, outcome names (`on`), artifact names, and pool names match
 | `watch` | script | `script`, `every`, `timeout`, and `description` of the watch script. |
 | `transitions` | non-terminal | List of `on`, `to`, and, for pool statuses, `requires` and `checks`. |
 | `limits` | non-terminal | Per-status overrides of the workflow limits. |
+| `sticky_holder` | pool | `true` or `false`. Replaces the root `sticky_holder` for this status. Without it, the status uses the root value. |
 | `terminal` | terminal | `true`. A terminal status has no owner, transitions, watch, instructions, or limits. |
 | `cancelled` | terminal | `true` when the result counts as cancelled rather than done. Allowed only on a terminal status. |
 
@@ -14890,6 +15311,7 @@ then code.
 | `watch_missing` | A `script` status has no `watch`. |
 | `watch_not_allowed` | A status that is not `script` has a `watch`. |
 | `instructions_not_allowed` | A `script` status has `instructions`. |
+| `sticky_holder_not_pool` | A `customer`, `script`, or terminal status sets `sticky_holder`, also to `false`. |
 | `transitions_missing` | A non-terminal status has no transition. |
 | `outcome_invalid` | An outcome name does not match the identifier rule. |
 | `outcome_duplicate` | An outcome is used twice in one status. |

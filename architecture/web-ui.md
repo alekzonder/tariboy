@@ -529,7 +529,10 @@ an optional end as local times; without an end it runs to now, and a missing
 or reversed range shows an error in the period bar. The period and the selected
 view live in the URL query (`?period=hour|day|today|week|month|custom`,
 `?since=`/`?until=` for Custom, `?view=`), so a view is shareable and survives
-a reload; a change replaces the history entry.
+a reload; a change replaces the history entry. The period bar shows the period
+as `MM-DD HH:MM – MM-DD HH:MM` in local time, with the date at both ends, also
+for an end dated today. When either end is not in the current year, both ends
+show the year: `YYYY-MM-DD HH:MM`. The Metrics pages use the same period bar.
 
 In labels an iteration is a **run**: the cards, the table headers, and the
 views say **Runs**. API and URL names keep `iteration`.
@@ -557,13 +560,15 @@ The agent tab is one view for every user. Under the cards it shows:
   opens the task panel in place, over the Activity tab; the tab and the URL
   do not change;
 - the cost chart for the period, from `getAgentUsage`;
-- a **More** segment with three views:
+- a **More** segment with four views:
   - **Runs log** (default): the iteration audit view, the same component as
     **Diagnostics → Full audit**, limited to runs that started in the period, with
     the tag filter below;
   - **Usage**: the agent's AI usage over the period; task and epic keys open
     the task panel in place;
-  - **Status history**: only the status messages from the period.
+  - **Status history**: only the status messages from the period;
+  - **Metrics** (`?view=metrics`): the metrics of the agent's completed tasks
+    in the period. [Metrics](#metrics) describes this view.
 
 An old `?view=iterations`, `?view=usage`, or `?view=status` link opens the
 matching More view, and an old `?iteration=` link opens the Runs log. The host
@@ -628,6 +633,10 @@ version of the row and A is the nearest older version.
 
 `/metrics/compare` shows the two versions side by side with the difference
 B − A, the percentage of A, and the word `better`, `worse`, or `no change`.
+An arrow before the word shows the sign of B − A: up for an increase, down
+for a decrease, and a dash for zero. The word gives the color of the arrow and
+the word: green for `better`, red for `worse`, gray for `no change`. A metric
+without a better direction, such as **Tasks done**, has no arrow and no word.
 **Swap** exchanges `a` and `b`. Without versions in the URL, B is the newest
 version and A the version before it. If a version has fewer than 5 completed
 tasks (`SMALL_SAMPLE_TASKS` in `lib/metricsFormat.ts`), the page warns that
@@ -635,8 +644,57 @@ the sample is small. The **Mixed tasks** block counts the done tasks that ran
 on more than one version. A URL without `kind` or `name` opens `/metrics`.
 
 The formatting functions, the error kinds, and the components in
-`ui/src/components/metrics/` do not depend on the page, so the agent view and
-the task panel can use them.
+`ui/src/components/metrics/` do not depend on the page. The agent view and
+the task panel use them too.
+
+### Agent metrics
+
+**Activity → More → Metrics** of an agent (`?view=metrics`) sends one
+`GET /api/metrics?agent=NAME&since=&until=` request for the period of the tab.
+The view loads as its own chunk when you select it. The window of the tab
+moves every minute, but the window of this view does not move by itself. It
+ends at the time of the load, of a period change, or of **Refresh**. The view
+shows the task cards of the `total` slice without the AI usage group, the
+**Quality** block, and the **Images** and **Workflows** tables. **Open in
+Metrics** opens `/metrics?host=&agent=NAME` with the same window. Week and
+Month keep their names. Today and Custom go as a custom range. An empty
+period shows `No completed tasks of this agent in this period.` For Today
+and Week, it also shows **Show month**. An invalid custom range sends no
+request, because the period bar of the tab already shows the error.
+
+### Task metrics
+
+`TaskDetailBody` has a **Metrics** section before **Details**, in Tasks, in
+the Work tab of an agent, and in a task that opens from a letter. The section
+is closed by default. Its open state is the WebView localStorage record
+`tasks:metrics-open:v1`. The section sends `GET /api/metrics/tasks/{key}`
+only while it is open: when you open it, when a task opens with the section
+open, and on its refresh button (`Refresh metrics`). The content loads as its
+own chunk at the first open. After the load, the header shows a short line,
+for example `$1.24 · 12 runs · 2 rework`.
+
+The open section shows these parts:
+
+1. The summary: lead time, cost, runs, tokens, rework rounds by outcome,
+   rejected advances, questions to the customer, and the start and completion
+   times. An open task shows `Not done yet` as its lead time. A task without
+   a workflow shows `0` rework rounds and rejected advances with a hint.
+2. **Time by status**: a bar of plain blocks and a list with the time and the
+   share of each status, longest first. The current status shows
+   `current, still counting`.
+3. **Agents**: a table in its own horizontal scroller. The **Agent** column
+   stays at the left edge.
+4. **Versions**: the image and workflow versions of the task. If the task ran
+   on two or more versions of one image or workflow, a
+   **Compare these versions** link opens `/metrics/compare` for the quarter.
+5. **Quality**.
+
+A task that the daemon does not know shows
+`Metrics are not available for this task.` An older daemon without the
+metrics routes shows `This host runs an older daemon without metrics.`
+Other errors show the error text with **Retry**. A refresh keeps the previous
+numbers on the screen, dimmed, with `Updating…`. A response for another task
+or host never replaces the current one.
 
 ## Iteration tags in Activity
 
@@ -1212,6 +1270,7 @@ All tasks view).
 | `tasks:new-task-queue:v1` | local | new task form, Work tab composer | JSON last queue per server | none |
 | `tasks:new-task-queue-by-agent:v1` | local | Work tab composer | JSON last queue per server and agent | `TASK` |
 | `tasks:queue-filter:v1` | session | task queue filter | queue prefix | none |
+| `tasks:metrics-open:v1` | local | task Metrics section | `open` or `closed` | `closed` |
 | `tariboy_store_token` | session | Store UI | Store bearer token | none |
 
 ### Image change notifications
@@ -1339,12 +1398,13 @@ advance, request polling, pause, retry, and confirmation operations.
    of `taskQueries.detail`, so a failed reread shows
    `Could not load subtasks.` with **Retry** (`refetch`) in place of the list.
 4. The comments and their existing answer controls.
-5. Details, collapsed: author, customer, queue, group, blocked, parent (a
+5. Metrics, collapsed by default (see [Task metrics](#task-metrics)).
+6. Details, collapsed: author, customer, queue, group, blocked, parent (a
    button from `TaskDetailParent.tsx` when `detail.parent` is set), then
    `TaskDetailProperties` and dependencies.
-6. Workflow, collapsed: the status graph, artifact editing and history, runs,
+7. Workflow, collapsed: the status graph, artifact editing and history, runs,
    logs, visits, and operator actions. Destructive confirmations still apply.
-7. History, collapsed by default.
+8. History, collapsed by default.
 
 The header's `Subtask of` line (`TaskParentLine`), the Parent field, and the
 Subtasks rows open another task in the same sheet through `onOpenTask`.
@@ -2226,7 +2286,11 @@ Other compact rules:
   Columns menu, the column move grips and the resize handles are hidden. The
   saved column
   layout `tasks:columns:v1` is not changed; priority stays in the task's
-  detail.
+  detail. The 96px `Key` column indents the tree 6px per level, for 3 levels
+  at most, so a queue marker and the start of the key stay visible at any
+  depth. Wider screens keep 20px per level, for 6 levels at most. The
+  `in KEY` text of a parent link is visually hidden, but a screen reader still
+  reads it.
 - Dialogs keep a 16px margin on each side, and two-column dialogs and editors
   (the workspace manager, the image source editor) stack.
 

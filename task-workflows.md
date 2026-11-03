@@ -560,24 +560,98 @@ holder is recorded per task and pool, `assignee` becomes `agent:<name>`, and the
 usual assignment notification is sent. From there Goal wakes the agent as for
 any assigned task.
 
-1. **The sticky rule.** If the task already had a holder for this pool and that
-   agent is still a member, the same agent is assigned again, whatever it is
-   doing. It keeps its worktree and context across a loop such as `draft` to
-   `review` and back to `draft`.
-2. **Otherwise an eligible member.** A new holder must be enabled, have its
-   loop and Goal enabled, not be halted, have no current Goal, and have no
-   other assigned `open` or `in_progress` task that Goal could select (a task
-   that is manually blocked, or blocked by an unfinished task, does not count).
-   Ties go to the member dispatched least recently in this queue, then to pool
-   order.
-3. **Nobody eligible.** The task waits in category `open` with an empty
-   assignee. The daemon retries when a task changes, when an agent finishes an
-   iteration, and every minute. Pool membership is read at dispatch time; there
-   is no frozen snapshot. A task that is manually blocked, or has an unfinished
-   blocker, is not assigned until it is free.
+A member is **free** when it is enabled, has its loop and Goal enabled, is not
+halted, has no current Goal other than this task, and has no other assigned
+`open` or `in_progress` task that Goal could select. A task that is manually
+blocked, or blocked by an unfinished task, does not count. The task's own key
+as the current Goal does not make its holder busy. Thus a holder that moves the
+task between two statuses of one pool keeps it.
+
+The **previous holder** is the agent that last held the task for this pool,
+while it is still a member and the customer did not release it.
+
+1. **The previous holder.** The setting `sticky_holder` of the status decides
+   this step:
+   - With `sticky_holder: true`, the previous holder gets the task again,
+     whatever it is doing. It keeps its worktree and context across a loop
+     such as `draft` to `review` and back to `draft`.
+   - With `sticky_holder: false`, the default, the previous holder gets the
+     task first only if it is free.
+2. **Otherwise a free member.** Ties go to the member dispatched least recently
+   in this queue, then to pool order.
+3. **Nobody free.** The task waits in category `open` with an empty assignee.
+   The daemon retries when a task changes, when an agent finishes an
+   iteration, and every minute. Each retry applies the same rules, so the
+   previous holder gets the task first once it is free. Pool membership is
+   read at dispatch time; there is no frozen snapshot. A task that is manually
+   blocked, or has an unfinished blocker, is not assigned until it is free.
 
 One pass assigns at most one task to each agent, in priority and creation order,
 so a single free agent does not collect every waiting task.
+
+A released holder is never the previous holder and is not free for this task in
+this pool, with either value of `sticky_holder`. See `release` under
+[Pauses](#pauses).
+
+### The `sticky_holder` setting
+
+`sticky_holder` is a boolean in `Workflowfile.yaml` on two levels: the root of
+the file and a pool status. The status value replaces the root value. Without
+both, the value is `false`.
+
+```yaml
+schema_version: 1
+name: development
+workflow_version: 0.11.0
+initial_status: backlog
+sticky_holder: false        # the workflow level; false by default
+statuses:
+  - id: draft
+    owner: {pool: writers}
+    sticky_holder: true     # the status level replaces the workflow level
+  - id: implement
+    owner: {pool: developers}   # uses the workflow value, false
+```
+
+A `customer`, `script`, or terminal status that sets `sticky_holder` fails
+validation with `sticky_holder_not_pool`. A pool that replaces the customer
+(see [A pool in place of the customer](#a-pool-in-place-of-the-customer)) uses
+the root value. `workflow get` shows the effective value of each pool status as
+`sticky_holder` in `statuses[]`.
+
+The value is stored in the image manifest (`task_workflow_images.manifest`).
+An image built before this setting has no field, and the daemon reads it as
+`false`. Thus, after a daemon update, such an image dispatches without the
+sticky rule: a task goes to a free member when its previous holder is busy.
+Without the sticky rule a new holder can get a task that another agent started.
+The new holder has no worktree or context of the previous holder. It continues
+from the artifacts, for example `branch`.
+
+Compatibility: daemon v0.106.0 and older decode `Workflowfile.yaml` strictly.
+They refuse a file with `sticky_holder` in `workflow build` and in a workflow
+image import. Images that they already installed keep the sticky rule always.
+
+### The `workflow.dispatched` event
+
+Each holder assignment on entering a pool status, in a dispatch pass, and on
+`workflow resume --decision release` records the task event
+`workflow.dispatched` in the same transaction. The author is `system:workflow`.
+No event is recorded when nobody is free.
+
+| Field | Meaning |
+| --- | --- |
+| `status` | The pool status. |
+| `pool` | The pool. |
+| `agent` | The agent that got the task. |
+| `reason` | `sticky` (the sticky rule), `previous_holder` (the free previous holder), or `free_member` (a free member). |
+| `sticky_holder` | The effective `sticky_holder` of the status. |
+| `previous_holder` | The previous holder, or an empty string. |
+| `holder_free` | `true` if the chosen agent was free. |
+| `free_member_available` | `true` if another member of the pool was free. |
+
+The share of assignments to a busy agent while another member was free is the
+number of events with `holder_free: false` and `free_member_available: true`,
+divided by the number of events.
 
 ### Changing the holder
 
@@ -606,8 +680,10 @@ In one transaction the command:
 - resolves the open questions the previous holder asked the customer;
 - resets the idle iterations and rejected requests of the current visit, so
   the previous holder's stall counters cannot pause the task under the new one;
-- records the new agent as the task's holder for the pool, so the sticky rule
-  gives the task back to it when the task returns to a status of that pool;
+- records the new agent as the task's holder for the pool. When the task
+  returns to a status of that pool, the agent gets it again by the
+  [dispatch](#dispatch) rules: always with `sticky_holder: true`, and first if
+  it is free with `sticky_holder: false`;
 - sets `assignee` to `agent:<name>`, records `workflow.reassigned` (`status`,
   `pool`, `from`, `to`, `actor`), and sends the usual assignment notification.
 
@@ -1168,9 +1244,12 @@ The `--reason` is optional. The daemon, in one transaction:
    `from_digest`, `to_digest`, the `status` the task left, `actor`, and
    `reason`.
 
-Artifacts and pool holders stay. A holder of a pool the new version also uses
-gets the task back (the sticky rule), so an agent finds its `branch` and
-`pull_request` artifacts and does not open a second branch or pull request. The
+Artifacts and pool holders stay. The new status dispatches with the
+`sticky_holder` of the new version. A holder of a pool the new version also uses
+gets the task back by the [dispatch](#dispatch) rules: always with
+`sticky_holder: true`, and first if it is free with `sticky_holder: false`.
+Whichever agent gets the task finds the `branch` and `pull_request` artifacts
+and does not open a second branch or pull request. The
 statuses of the new version set their own artifacts again; until then an old
 value stays visible. Work outside the daemon, such as a branch or an open pull
 request, is not undone.
@@ -1417,8 +1496,9 @@ no pause:
 - a holder whose Goal is disabled: it can work, so `holder_unavailable` does
   not fire, and with no Goal it runs no iterations that count;
 - a holder busy with another Goal, for example after a `continue` kept it as
-  the sticky holder while it had moved on: its iterations run with the other
-  task as their Goal, so they do not count for this one.
+  the holder while it had moved on, or after the sticky rule
+  (`sticky_holder: true`) gave the task back to it: its iterations run with
+  the other task as their Goal, so they do not count for this one.
 
 **What a pause does.** The task keeps its workflow status and its assignee.
 Its category becomes `wait_customer` with `waiting_on: pause`, and
@@ -1492,7 +1572,7 @@ ttasks cancel DEV-ab12
 | Decision | Effect |
 | --- | --- |
 | `continue` | Resolves the pause wait, zeroes the visit's counters, clears the reason, and records `workflow.resumed` with the decision. In a pool status the same holder continues and the category returns to `in_progress` (a task blocked by another task stays `open` until unblocked; a holder that has left the pool is replaced by normal dispatch). In a script status the watch runs again at once. In a customer status the customer is asked again with a fresh wait. |
-| `release` | Pool statuses only; any other status answers `invalid_decision`. Marks the holder's row `released`, so that agent is neither sticky nor eligible for this task in this pool, resolves the pause, zeroes the counters, and dispatches the task as on entering the status. Another eligible member receives it and its holder row replaces the released one. With no other eligible member the task is `open` and unassigned, and later dispatch passes do not hand it back to the released agent. The released agent keeps read access until the task is moved. |
+| `release` | Pool statuses only; any other status answers `invalid_decision`. Marks the holder's row `released`, so that agent is neither the previous holder nor free for this task in this pool, with either value of `sticky_holder`. Then it resolves the pause, zeroes the counters, and dispatches the task as on entering the status, with a `workflow.dispatched` event. Another free member receives it and its holder row replaces the released one. With no other free member the task is `open` and unassigned, and later dispatch passes do not hand it back to the released agent. The released agent keeps read access until the task is moved. |
 | `ttasks cancel` | Closes the task as `cancelled`; see [Operator move, retry, and cancel](#operator-move-retry-and-cancel). It records no `workflow.resumed` event. |
 
 An operator `workflow move` also ends a pause: it resolves the wait, records
@@ -1657,7 +1737,8 @@ Events recorded on a workflow task: `workflow.transition_requested`,
 message), `workflow.transition_failed` (with the reason and log path),
 `workflow.script_run` (every run that ended, with its state, verdict, and exit
 code), `workflow.script_failed` (a failed watch run), `workflow.moved`,
-`workflow.upgraded`,
+`workflow.upgraded`, `workflow.dispatched` (see
+[The `workflow.dispatched` event](#the-workflowdispatched-event)),
 `workflow.cancelled`, `workflow.paused`, `workflow.resumed`, and `artifact.set`.
 A task created by a source also records `workflow.source_item` with the source,
 the key, and the run id. A failed source run records the queue event

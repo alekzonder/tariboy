@@ -88,7 +88,25 @@ OpenCode retains its own API-key environment and authentication files; the
 proxy forwards those credentials to the bound provider without persisting
 them in the lease. OAuth and external OpenCode plugins are unsupported because
 their transport hooks can bypass the configured SDK address, so preparation
-rejects them. The complete temporary <code>OPENCODE_CONFIG_CONTENT</code> value is masked
+rejects them. The check has no exception: it refuses a plugin from the user
+configuration, the project, <code>OPENCODE_CONFIG_DIR</code> and the original
+<code>OPENCODE_CONFIG_CONTENT</code>. Tariboy adds its own
+<a href="/tariboy/docs/reference/mail#harness-support">instant mail plugin</a> to the overlay
+only after the check passed. The plugin file is in the agent directory,
+<code>&lt;base-dir&gt;/agents/&lt;name&gt;/harness-hooks/opencode/</code>, with mode <code>0700</code> on the
+directory. The plugin only adds <code>tmail instant</code> output to tool results, and
+model requests still go to the proxy addresses of the overlay. Tariboy writes
+nothing into <code>~/.config/opencode</code> and does not change <code>HOME</code> or
+<code>XDG_CONFIG_HOME</code>. opencode itself installs the npm package
+<code>@opencode-ai/plugin</code> into its configuration directories when a plugin is
+loaded, also into <code>~/.config/opencode</code> and the image skills bridge. The
+integrity check of an OpenCode skills bridge skips only these install entries
+at the bridge root: <code>node_modules/</code>, <code>package.json</code>, <code>package-lock.json</code>,
+<code>bun.lock</code> and <code>.gitignore</code>. Without this exception, each install made the
+bridge invalid, and the next iteration rebuilt it and waited for the install
+again. The check still covers the modes and contents of the skills, the
+generated files and each other entry. Bridges of other harnesses have no
+exception. The complete temporary <code>OPENCODE_CONFIG_CONTENT</code> value is masked
 in launch logs and audit, and probe output is never included in failures.
 The handoff file remains owner-only and excluded from diagnostics.</p>
 <p>This routing controls ordinary harness requests, not arbitrary network commands
@@ -140,6 +158,18 @@ downloads inside an iteration may fail in this mode.</li>
 </ul>
 <p>The mode is per daemon, applies to every Codex agent on it, and takes effect
 from the next iteration. Other harnesses are unaffected.</p>
+<p>The mode also controls the
+<a href="/tariboy/docs/reference/mail#harness-support">instant mail hooks</a> of Codex:</p>
+<ul>
+<li>In <code>yolo</code>, the runner starts Codex with <code>--dangerously-bypass-hook-trust</code>
+so that the Tariboy hooks run without trust in <code>~/.codex/config.toml</code>. The
+flag also runs every other enabled hook without review: unreviewed hooks in
+<code>~/.codex/config.toml</code> and the hooks of a trusted repository in <code>.codex/</code>.
+A hook gets no more access than a <code>yolo</code> command already has.</li>
+<li>In <code>approve-for-me</code>, the runner does not add the flag or the hooks. A hook
+runs outside the sandbox, so the flag would let an unreviewed repository
+hook escape it. Instant letters then wait for the next iteration.</li>
+</ul>
 <h2 id="local-and-remote-files"><a class="blume-heading-anchor" href="#local-and-remote-files">Local and remote files</a></h2>
 <p>Local data defaults to <code>~/.tariboy</code>; runtime files default to
 <code>~/.tariboyd</code>. Remote binaries live in versioned directories under
@@ -284,7 +314,7 @@ remove it. See <a href="/tariboy/docs/images#the-default-store">Images</a>.</p>
 start. An explicit <code>onboarding.retry</code> (<code>POST /api/onboarding/retry</code>) still
 runs the routine.</p>
 <h2 id="alpha-signing-and-gatekeeper"><a class="blume-heading-anchor" href="#alpha-signing-and-gatekeeper">Alpha signing and Gatekeeper</a></h2>
-<p><code>0.106.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
+<p><code>0.107.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
 <code>SHA256SUMS</code> before opening it. If Gatekeeper blocks it, Control-click only the
 named <code>/Applications/Tariboy.app</code>, choose <strong>Open</strong>, and confirm.
 If Control-click Open is unavailable, use <strong>System Settings → Privacy &amp;

@@ -171,8 +171,20 @@ letter. The flag uses the same `Send` path with these additions:
   the hook JSON itself (`--format claude-post-tool-use`,
   `claude-post-tool-use-failure`, `claude-stop`). The letter text reaches the
   model only as hook output. A long tool call holds the letter, and model
-  output without a tool call is not stopped. Codex, OpenCode and an older
-  Claude Code read the letter in the next iteration.
+  output without a tool call is not stopped.
+- Codex 0.141.0 or newer in the `yolo` approval mode runs `tmail instant` from
+  the hooks `PostToolUse` and `Stop` in both modes (`--format
+  codex-post-tool-use`, `codex-stop`). The runner passes the hooks as `-c`
+  overrides with `--dangerously-bypass-hook-trust`, so no file goes into
+  `CODEX_HOME`, `~/.codex` or the repository.
+- OpenCode 1.19.5 or newer runs `tmail instant --format opencode-tool-after`
+  from a Tariboy plugin with the hook `tool.execute.after`, in both modes. The
+  plugin adds the printed text to the result of each successful tool call.
+  OpenCode does not call the hook after a failed tool call, and it has no hook
+  at the end of a turn. In these cases the letter stays `waiting` for the next
+  successful call or the next prompt.
+- An older Claude Code, an older codex, an older OpenCode and codex in
+  `approve-for-me` read the letter in the next iteration.
 - At `done`, the runner closes the notices that a hook delivered in the
   iteration, as it closes the rendered notices.
 
@@ -231,6 +243,13 @@ customer alike. The asker is matched by `data.from`, so a question the outbox
 sent as `system:tasks` closes too. A notification whose recipient no longer
 exists is marked failed in the outbox with `last_error` and is not retried. A workflow outcome that resolves the customer's open wait
 closes its question letters with `task-outcome:<status>`.
+
+A `task.question` goes only to a principal that exists: a registered agent, or
+the customer login. A mention ends at the last letter or digit of the name, so
+punctuation after it is not part of the principal. A comment that mentions a
+missing principal sends no letter, and `ttasks ask` on a missing principal
+fails with `principal_not_found`. See
+[Questions and notifications](/docs/tasks#questions-and-notifications).
 
 A task letter names its task in the subject, the key and then the title, for
 example `Question on DEV-1: Ship the release`. Its `data` carries `task_key`

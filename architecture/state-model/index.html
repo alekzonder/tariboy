@@ -103,16 +103,59 @@ that ran it.</p>
 <p>The tables whose rows belong to one agent are listed once, in
 <code>store.AgentTables</code> in <code>internal/store/agent_tables.go</code>. Each row gives the
 table’s scoping condition, the removal step that deletes it, and its place in
-an agent backup. <code>agent.Store.Delete</code> deletes the core rows (the agent,
-its iterations, secrets and AI budget) in one transaction, and
-<code>PurgeAgentData</code> deletes the side-table rows in a second one. Agent backup
-and restore use the rows with a backup position. Iteration retention deletes
-the tables in <code>store.IterationTables</code>.</p>
+an agent backup. <code>KeepOnRemove</code> marks the agent history: <code>iterations</code> and
+<code>ai_requests</code>. Agent backup and restore use the rows with a backup position.
+Iteration retention deletes the tables in <code>store.IterationTables</code>.</p>
+<p><code>store.RemoveMode</code> selects what <code>Manager.Remove</code> deletes:</p>
+<div class="blume-table-scroll" tabIndex="0"><table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Caller</th>
+<th>Rows</th>
+<th>Agent directory</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>remove</code></td>
+<td><code>agent rm NAME</code>, <code>compose rm</code></td>
+<td><code>agent.Store.Remove</code> deletes every registry row without <code>KeepOnRemove</code>, in one transaction</td>
+<td>deletes <code>image/</code>, <code>bin/</code>, <code>workdir/</code></td>
+</tr>
+<tr>
+<td><code>keep</code></td>
+<td><code>compose down</code></td>
+<td>keeps all rows, sets <code>enabled=false</code> on the agent row</td>
+<td>deletes <code>image/</code>, <code>bin/</code>, <code>workdir/</code></td>
+</tr>
+<tr>
+<td><code>purge</code></td>
+<td><code>agent rm NAME --purge</code>, the UI, <code>compose down --volumes</code></td>
+<td><code>agent.Store.Delete</code> deletes the core rows, then <code>PurgeAgentData</code> deletes the side-table rows</td>
+<td>deletes the whole directory</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>iteration_tags</code> and <code>script_runs</code> go with their parent rows by
+<code>ON DELETE CASCADE</code>. <code>store.CascadeParent</code> names them. <code>assessments</code> reference
+the agent by value, and no mode deletes them. The <code>mail</code> row deletes only the
+letters to the agent, so the letters that the agent sent stay with their
+recipients. <code>store.RemovalReport</code> builds the <code>deleted</code> and <code>kept</code> lists of the
+<code>agent rm</code> answer from the same registry.</p>
+<p>A <code>purge</code> remove also works without an agent row. It then deletes what an
+earlier <code>remove</code> kept: the registry rows and the agent directory. A valid
+agent name is required, because the name becomes a path.</p>
+<p>Iteration retention reads only the agents in the <code>agents</code> table. It does not
+prune the kept iterations of a removed agent. After a <code>remove</code>,
+<code>iteration ls</code> still reads the iterations, but <code>iteration tag</code> commands answer
+not found, because they need the agent row.</p>
 <p><code>task_agent_pool_members</code> references <code>agents</code> with <code>ON DELETE RESTRICT</code>. The
 tasks service owns pool membership, and agent removal does not change it. A
-purge remove of an agent that is in a task queue agent pool fails before the
-daemon stops the agent. The error names each queue and pool. Remove the agent
-from the pool in the queue settings, then delete the agent.</p>
+<code>remove</code> or <code>purge</code> of an agent that is in a task queue agent pool fails before
+the daemon stops the agent. The error names each queue and pool. Remove the
+agent from the pool in the queue settings, then delete the agent. Mode <code>keep</code>
+does not check pools, because it keeps the agent row.</p>
 <p>A new table with an <code>agent</code>, <code>agent_name</code> or <code>produced_by_agent</code> column, or a
 foreign key to a registry table without <code>ON DELETE CASCADE</code>, needs a registry
 row or an exemption with a reason in <code>agentKeyedExempt</code>. Otherwise the schema
@@ -446,8 +489,9 @@ keep their run directories, counted by the running worker, and nightly
 retention removes the directory of every task it deletes.</p>
 <p>Migration <code>0060</code> adds <code>task_workflow_holders.released</code> (default <code>0</code>): the
 customer’s <code>release</code> decision sets it on the holder’s row, which makes that
-agent neither sticky nor eligible for the task in that pool until another agent
-replaces the row or an operator move deletes it. Migration <code>0061</code> adds
+agent neither the previous holder nor free for the task in that pool, with
+either value of <code>sticky_holder</code>, until another agent replaces the row or an
+operator move deletes it. Migration <code>0061</code> adds
 <code>task_workflow_holders.unavailable_since</code> (default empty): when the holder was
 first seen unable to work, cleared by every dispatch, which the daemon compares
 with the <code>unavailable_grace</code> limit. <code>tasks.workflow_paused_reason</code> is now set: a
@@ -502,6 +546,12 @@ without touching the filesystem; a unique index on name and version keeps one
 digest per published version. The daemon reconciles the table with the stored
 content at startup: it inserts missing rows and deletes rows whose content is
 gone. See <a href="/tariboy/docs/workflow-images">Workflow images</a>.</p>
+<p>The <code>sticky_holder</code> setting of a workflow and of its pool statuses lives only
+in that manifest JSON, in the parsed definition. No migration adds a column for
+it. A manifest without the field, such as one built before the setting
+existed, reads as <code>false</code>. Dispatch reads the value from the manifest of the
+digest that the task pins. See
+<a href="/tariboy/docs/task-workflows#dispatch">Dispatch</a>.</p>
 <p>Directories left under <code>&lt;base-dir&gt;/store/versions/</code> by an older release are
 untouched legacy data. Current daemons neither read nor refresh them.</p>
 <p>Each agent row owns an active image ref/digest and a separate pending

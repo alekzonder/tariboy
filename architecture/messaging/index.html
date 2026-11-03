@@ -224,8 +224,19 @@ file, so a <code>Stop</code> hook cannot continue a finished iteration.</li>
 the hook JSON itself (<code>--format claude-post-tool-use</code>,
 <code>claude-post-tool-use-failure</code>, <code>claude-stop</code>). The letter text reaches the
 model only as hook output. A long tool call holds the letter, and model
-output without a tool call is not stopped. Codex, OpenCode and an older
-Claude Code read the letter in the next iteration.</li>
+output without a tool call is not stopped.</li>
+<li>Codex 0.141.0 or newer in the <code>yolo</code> approval mode runs <code>tmail instant</code> from
+the hooks <code>PostToolUse</code> and <code>Stop</code> in both modes (<code>--format codex-post-tool-use</code>, <code>codex-stop</code>). The runner passes the hooks as <code>-c</code>
+overrides with <code>--dangerously-bypass-hook-trust</code>, so no file goes into
+<code>CODEX_HOME</code>, <code>~/.codex</code> or the repository.</li>
+<li>OpenCode 1.19.5 or newer runs <code>tmail instant --format opencode-tool-after</code>
+from a Tariboy plugin with the hook <code>tool.execute.after</code>, in both modes. The
+plugin adds the printed text to the result of each successful tool call.
+OpenCode does not call the hook after a failed tool call, and it has no hook
+at the end of a turn. In these cases the letter stays <code>waiting</code> for the next
+successful call or the next prompt.</li>
+<li>An older Claude Code, an older codex, an older OpenCode and codex in
+<code>approve-for-me</code> read the letter in the next iteration.</li>
 <li>At <code>done</code>, the runner closes the notices that a hook delivered in the
 iteration, as it closes the rendered notices.</li>
 </ul>
@@ -335,6 +346,12 @@ customer alike. The asker is matched by <code>data.from</code>, so a question th
 sent as <code>system:tasks</code> closes too. A notification whose recipient no longer
 exists is marked failed in the outbox with <code>last_error</code> and is not retried. A workflow outcome that resolves the customer’s open wait
 closes its question letters with <code>task-outcome:&lt;status&gt;</code>.</p>
+<p>A <code>task.question</code> goes only to a principal that exists: a registered agent, or
+the customer login. A mention ends at the last letter or digit of the name, so
+punctuation after it is not part of the principal. A comment that mentions a
+missing principal sends no letter, and <code>ttasks ask</code> on a missing principal
+fails with <code>principal_not_found</code>. See
+<a href="/tariboy/docs/tasks#questions-and-notifications">Questions and notifications</a>.</p>
 <p>A task letter names its task in the subject, the key and then the title, for
 example <code>Question on DEV-1: Ship the release</code>. Its <code>data</code> carries <code>task_key</code>
 and <code>task_title</code>. The title is the one the task had when the letter was sent.

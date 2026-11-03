@@ -10,7 +10,9 @@ blume-panel-tabs pre.astro-code{background:0 0!important;border:0!important;bord
 <p><code>tariboyd</code> is the long-running process at the center of the system
 (<code>cmd/tariboyd</code>, <code>internal/daemon</code>). It owns:</p>
 <ul>
-<li>the <strong>agent lifecycle</strong> — create, start/stop the loop, run iterations, reap;</li>
+<li>the <strong>agent lifecycle</strong> — create, start/stop the loop, run iterations, reap,
+and remove in one of three modes (see
+<a href="/tariboy/docs/architecture/state-model#agent-owned-tables">Agent-owned tables</a>);</li>
 <li>the <strong>mailbox</strong> — letters between agents, the customer, plugins and daemon components;</li>
 <li><strong>native Tasks</strong> — queues, recursive task trees, comments, dependencies,
 per-agent sticky goal selection, agent pools, queue triggers, events, and a

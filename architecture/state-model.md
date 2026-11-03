@@ -120,17 +120,40 @@ that ran it.
 The tables whose rows belong to one agent are listed once, in
 `store.AgentTables` in `internal/store/agent_tables.go`. Each row gives the
 table's scoping condition, the removal step that deletes it, and its place in
-an agent backup. `agent.Store.Delete` deletes the core rows (the agent,
-its iterations, secrets and AI budget) in one transaction, and
-`PurgeAgentData` deletes the side-table rows in a second one. Agent backup
-and restore use the rows with a backup position. Iteration retention deletes
-the tables in `store.IterationTables`.
+an agent backup. `KeepOnRemove` marks the agent history: `iterations` and
+`ai_requests`. Agent backup and restore use the rows with a backup position.
+Iteration retention deletes the tables in `store.IterationTables`.
+
+`store.RemoveMode` selects what `Manager.Remove` deletes:
+
+| Mode | Caller | Rows | Agent directory |
+| --- | --- | --- | --- |
+| `remove` | `agent rm NAME`, `compose rm` | `agent.Store.Remove` deletes every registry row without `KeepOnRemove`, in one transaction | deletes `image/`, `bin/`, `workdir/` |
+| `keep` | `compose down` | keeps all rows, sets `enabled=false` on the agent row | deletes `image/`, `bin/`, `workdir/` |
+| `purge` | `agent rm NAME --purge`, the UI, `compose down --volumes` | `agent.Store.Delete` deletes the core rows, then `PurgeAgentData` deletes the side-table rows | deletes the whole directory |
+
+`iteration_tags` and `script_runs` go with their parent rows by
+`ON DELETE CASCADE`. `store.CascadeParent` names them. `assessments` reference
+the agent by value, and no mode deletes them. The `mail` row deletes only the
+letters to the agent, so the letters that the agent sent stay with their
+recipients. `store.RemovalReport` builds the `deleted` and `kept` lists of the
+`agent rm` answer from the same registry.
+
+A `purge` remove also works without an agent row. It then deletes what an
+earlier `remove` kept: the registry rows and the agent directory. A valid
+agent name is required, because the name becomes a path.
+
+Iteration retention reads only the agents in the `agents` table. It does not
+prune the kept iterations of a removed agent. After a `remove`,
+`iteration ls` still reads the iterations, but `iteration tag` commands answer
+not found, because they need the agent row.
 
 `task_agent_pool_members` references `agents` with `ON DELETE RESTRICT`. The
 tasks service owns pool membership, and agent removal does not change it. A
-purge remove of an agent that is in a task queue agent pool fails before the
-daemon stops the agent. The error names each queue and pool. Remove the agent
-from the pool in the queue settings, then delete the agent.
+`remove` or `purge` of an agent that is in a task queue agent pool fails before
+the daemon stops the agent. The error names each queue and pool. Remove the
+agent from the pool in the queue settings, then delete the agent. Mode `keep`
+does not check pools, because it keeps the agent row.
 
 A new table with an `agent`, `agent_name` or `produced_by_agent` column, or a
 foreign key to a registry table without `ON DELETE CASCADE`, needs a registry
@@ -508,8 +531,9 @@ retention removes the directory of every task it deletes.
 
 Migration `0060` adds `task_workflow_holders.released` (default `0`): the
 customer's `release` decision sets it on the holder's row, which makes that
-agent neither sticky nor eligible for the task in that pool until another agent
-replaces the row or an operator move deletes it. Migration `0061` adds
+agent neither the previous holder nor free for the task in that pool, with
+either value of `sticky_holder`, until another agent replaces the row or an
+operator move deletes it. Migration `0061` adds
 `task_workflow_holders.unavailable_since` (default empty): when the holder was
 first seen unable to work, cleared by every dispatch, which the daemon compares
 with the `unavailable_grace` limit. `tasks.workflow_paused_reason` is now set: a
@@ -571,6 +595,13 @@ without touching the filesystem; a unique index on name and version keeps one
 digest per published version. The daemon reconciles the table with the stored
 content at startup: it inserts missing rows and deletes rows whose content is
 gone. See [Workflow images](/docs/workflow-images).
+
+The `sticky_holder` setting of a workflow and of its pool statuses lives only
+in that manifest JSON, in the parsed definition. No migration adds a column for
+it. A manifest without the field, such as one built before the setting
+existed, reads as `false`. Dispatch reads the value from the manifest of the
+digest that the task pins. See
+[Dispatch](/docs/task-workflows#dispatch).
 
 Directories left under `<base-dir>/store/versions/` by an older release are
 untouched legacy data. Current daemons neither read nor refresh them.

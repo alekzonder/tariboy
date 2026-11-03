@@ -17,7 +17,10 @@ auto-starts if it is down.</p>
 <p>Verbs: <code>up</code>, <code>down</code>, <code>build</code>, <code>ps</code>, <code>status</code>, <code>start</code>/<code>stop</code>/<code>restart</code>/<code>kill</code>,
 <code>rm</code>, <code>exec</code>, <code>logs</code>. Flags include <code>-f/--file</code>, <code>-v/--volumes</code>, <code>--no-start</code>,
 <code>--tail</code>. <code>compose down</code> then <code>up</code> preserves data by default; <code>--volumes</code> is the
-purge path. <code>down</code>, <code>stop</code> and <code>kill</code> skip a member that is absent on the
+purge path. A plain <code>down</code> removes each agent in mode <code>keep</code>: the stopped
+agent row stays, so <code>up</code> re-provisions it. <code>compose rm</code> removes a stopped agent
+in mode <code>remove</code>: the agent is gone, and its history stays. See
+<a href="/tariboy/docs/reference/commands#removing-an-agent">Removing an agent</a>. <code>down</code>, <code>stop</code> and <code>kill</code> skip a member that is absent on the
 daemon, so a partly present project still cleans up; any other error still
 fails the command. <code>start</code> and <code>restart</code> of an absent member fail.</p>
 <p>Compose owns agent runtime choices: harness, model, effort, interactive and loop

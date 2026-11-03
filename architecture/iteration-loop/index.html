@@ -225,9 +225,35 @@ version is <code>2.1.227</code> or newer, it writes the plugin
 interactive argv get it, after the image skill bridge. The hooks
 <code>PostToolUse</code>, <code>PostToolUseFailure</code> and <code>Stop</code> call that absolute <code>tmail</code>
 path. If <code>tmail</code> is missing, the version is older or unrecognized, or the write
-fails, the runner logs a warning and starts the iteration without the hooks.
-The <a href="/tariboy/docs/reference/mail#harness-support">mail reference</a> gives the hook
-output and the limits.</p>
+fails, the runner logs a warning and starts the iteration without the hooks.</p>
+<p>A codex agent with the same conditions gets the hooks too, but the runner
+writes no file for them. If <code>codex --version</code> gives <code>0.141.0</code> or newer and the
+daemon codex approval mode is <code>yolo</code>, the runner appends
+<code>--dangerously-bypass-hook-trust</code> and two <code>-c hooks.&lt;event&gt;=...</code> overrides
+to the harness argv: <code>PostToolUse</code> and <code>Stop</code>, each with the absolute <code>tmail</code>
+path. Both <code>codex exec</code> and the codex TUI get the same arguments. The runner
+does not set <code>CODEX_HOME</code> or change <code>HOME</code>. In <code>approve-for-me</code>, with an
+older or unrecognized version, or without <code>tmail</code>, the runner logs a warning
+and starts the iteration without the hooks. The
+<a href="/tariboy/docs/reference/mail#harness-support">mail reference</a> gives the hook output
+and the limits.</p>
+<p>For an OpenCode agent with the <code>mail</code> capability on a non-bare image, the
+runner loads the instant mail plugin during the OpenCode preparation. After
+the agent shell snapshot, it finds <code>tmail</code> and <code>opencode</code> on the final <code>PATH</code>
+and runs <code>opencode --version</code>. If the version is <code>1.19.5</code> or newer, it writes
+<code>&lt;base-dir&gt;/agents/&lt;name&gt;/harness-hooks/opencode/tariboy-instant-mail.js</code>.
+After both routing probes pass, it adds the <code>file://</code> URL of that file to the
+<code>plugin</code> key of <code>OPENCODE_CONFIG_CONTENT</code>. The probes never see this plugin,
+so they still refuse every other plugin. The batch and the interactive mode
+run the same command with the same overlay. If <code>tmail</code> is missing, the version
+is older or unrecognized, or the write fails, the runner logs a warning and
+starts the iteration without the plugin.</p>
+<p>With a plugin, OpenCode installs <code>@opencode-ai/plugin</code> into each of its
+configuration directories before it starts. The first start after an OpenCode
+update can take about 70 seconds longer. Without network access, each start
+waits about 72 seconds until an install succeeds. The routing probes have a
+timeout of 20 seconds, and this wait does not affect them, because they run
+without the plugin.</p>
 <p>Before starting the shim, the runner checks the adapter’s actual executable
 against this final environment. For a non-bare image it also resolves <code>python3</code>
 there and supplies that absolute interpreter path to the packaged skill
@@ -279,7 +305,10 @@ an image is promoted or an iteration row is created. The bridge contains copied
 skill bytes and generated adapter metadata; it never links back to the image or
 source tree. Publication is owner-only and atomic. The current adapter contract
 version is <code>2</code>. A complete bridge is reused across iterations and daemon
-restarts, while an incomplete or modified cache is rebuilt. A preparation or
+restarts, while an incomplete or modified cache is rebuilt. An OpenCode bridge
+stays valid with the <code>@opencode-ai/plugin</code> install entries that OpenCode adds
+at its root (<code>node_modules/</code>, <code>package.json</code>, <code>package-lock.json</code>, <code>bun.lock</code>,
+<code>.gitignore</code>), so the install does not cause a rebuild. A preparation or
 harness-support failure leaves the previous image active and records the
 pending-image error. Because no iteration row exists yet, such a failure also
 halts the loop and records its cause in the agent’s <code>error_reason</code>, which the
