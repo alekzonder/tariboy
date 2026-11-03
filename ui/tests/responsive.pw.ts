@@ -269,6 +269,87 @@ test("the task Metrics section works on a 320 px sheet", async ({ page }) => {
   await expectFits(page, `/tasks?task=${taskKey}`, taskMetricsReady);
 });
 
+async function createTask(
+  request: APIRequestContext,
+  queue: string,
+  name: string,
+  parentKey = "",
+): Promise<string> {
+  const response = await request.post(`${daemonURL}/api/tasks`, {
+    data: {
+      queue,
+      idempotency_key: `responsive-deep-${name}`,
+      title: `Deep tree ${name}`,
+      parent_key: parentKey,
+    },
+  });
+  const envelope = await response.json();
+  expect(envelope.ok, JSON.stringify(envelope)).toBe(true);
+  return envelope.result.key as string;
+}
+
+// A MOB chain of depths 0–5 and, at depth 6, a child from another queue: its
+// row carries a queue marker.
+async function ensureDeepTree(request: APIRequestContext) {
+  await request.post(`${daemonURL}/api/task-queues`, {
+    data: { prefix: "MOBDEEP", name: "Deep tree" },
+  });
+  const chain = [await createTask(request, "MOB", "0")];
+  for (let depth = 1; depth <= 5; depth += 1)
+    chain.push(await createTask(request, "MOB", String(depth), chain.at(-1)));
+  return { chain, deep: await createTask(request, "MOBDEEP", "6", chain.at(-1)) };
+}
+
+test("a deep cross-queue key fits its column", async ({ page, request }) => {
+  const { chain, deep } = await ensureDeepTree(request);
+  await page.goto(`${fixture}/tasks`);
+  for (const key of chain) {
+    await expect(page.getByTestId(`task-row-${key}`)).toBeVisible();
+    const expand = page.getByRole("button", { name: `Expand ${key}` });
+    if (await expand.isVisible()) await expand.click();
+  }
+  const row = page.getByTestId(`task-row-${deep}`);
+  await expect(row).toBeVisible();
+
+  const box = await row.locator("[data-column=key]").evaluate((column) => {
+    const rect = (element: Element | Range) => element.getBoundingClientRect();
+    const marker = column.querySelector("[role=img]")!;
+    const key = column.querySelector(".font-mono")!;
+    const firstFour = document.createRange();
+    firstFour.setStart(key.firstChild!, 0);
+    firstFour.setEnd(key.firstChild!, 4);
+    return {
+      column: rect(column).toJSON() as DOMRect,
+      marker: rect(marker).toJSON() as DOMRect,
+      key: rect(key).toJSON() as DOMRect,
+      firstFour: rect(firstFour).toJSON() as DOMRect,
+    };
+  });
+  console.log(
+    `${test.info().project.name}: Key column ${box.column.left}–${box.column.right}, ` +
+      `marker ${box.marker.left}–${box.marker.right}, key at +${box.key.left - box.column.left}px`,
+  );
+  if (process.env.RESPONSIVE_SHOTS) {
+    await row.screenshot({
+      path: `${process.env.RESPONSIVE_SHOTS}/${test.info().project.name}_deep_row.png`,
+    });
+  }
+
+  if (page.viewportSize()!.width < 640) {
+    expect(box.column.width).toBe(96);
+    expect(box.marker.left).toBeGreaterThanOrEqual(box.column.left);
+    expect(box.marker.right).toBeLessThanOrEqual(box.column.right);
+    // Four characters and the ellipsis after them (one more character wide).
+    const charWidth = box.firstFour.width / 4;
+    expect(box.firstFour.left).toBeGreaterThanOrEqual(box.column.left);
+    expect(box.firstFour.right + charWidth).toBeLessThanOrEqual(box.key.right + 0.5);
+    expect(box.key.right).toBeLessThanOrEqual(box.column.right);
+  } else {
+    // As before: six levels of 20px, the chevron, the marker and their gaps.
+    expect(box.key.left - box.column.left).toBe(20 * 6 + 16 + 6 + 12 + 6);
+  }
+});
+
 // The tops of the direct children of every visible [data-toolbar]: a toolbar
 // that wrapped has children on two rows.
 async function toolbarRows(page: Page) {

@@ -2279,7 +2279,11 @@ Other compact rules:
   Columns menu, the column move grips and the resize handles are hidden. The
   saved column
   layout `tasks:columns:v1` is not changed; priority stays in the task's
-  detail.
+  detail. The 96px `Key` column indents the tree 6px per level, for 3 levels
+  at most, so a queue marker and the start of the key stay visible at any
+  depth. Wider screens keep 20px per level, for 6 levels at most. The
+  `in KEY` text of a parent link is visually hidden, but a screen reader still
+  reads it.
 - Dialogs keep a 16px margin on each side, and two-column dialogs and editors
   (the workspace manager, the image source editor) stack.
 
