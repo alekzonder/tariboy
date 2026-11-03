@@ -2,13 +2,20 @@ name: Pull request checks
 
 on:
   pull_request:
+  # A run on main saves the apt and cargo caches; pull requests can restore
+  # caches of their base branch, so a new pull request starts warm.
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
+# `make check` runs `make backend-check` and `make frontend-check` in sequence.
+# The two jobs run the same two groups in parallel, and each installs only the
+# toolchains its group needs.
 jobs:
-  check:
-    name: make check
+  backend-check:
+    name: backend-check
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -20,15 +27,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            ui/package-lock.json
-            docs/package-lock.json
-
       # Loop tests use a fake spawner but still validate the selected harness exists.
       - name: Provide Codex test harness
         run: |
@@ -38,12 +36,54 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       # desktop-rust-check compiles the Tauri crate, which links the native
-      # GTK/WebKit libraries through pkg-config.
+      # GTK/WebKit libraries through pkg-config; smoke-contract needs ripgrep.
+      # On a cache hit the action restores the package files without
+      # apt-get update. Bump `version` to rebuild the cache.
       - name: Install check dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ripgrep libwebkit2gtk-4.1-dev libxdo-dev \
-            libssl-dev libayatana-appindicator3-dev librsvg2-dev
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
+        with:
+          packages: ripgrep libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          version: 1
 
-      - name: Run checks
-        run: make check
+      - name: Read Rust toolchain version
+        id: rust
+        run: |
+          echo "version=$(rustc --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+
+      # The first path is the default TARIBOY_CARGO_CHECK_DIR of
+      # desktop-rust-check in the Makefile. A target directory of another Rust
+      # version does not speed up the build, so restore-keys keep the version.
+      - name: Cache desktop cargo check
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/tariboy/desktop-check-target
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: desktop-check-${{ runner.os }}-${{ steps.rust.outputs.version }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            desktop-check-${{ runner.os }}-${{ steps.rust.outputs.version }}-
+
+      - name: Run backend checks
+        run: make backend-check
+
+  frontend-check:
+    name: frontend-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            ui/package-lock.json
+            docs/package-lock.json
+
+      - name: Run frontend checks
+        run: make frontend-check

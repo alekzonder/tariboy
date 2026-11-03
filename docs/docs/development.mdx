@@ -36,7 +36,8 @@ Install only the toolchains needed for the area you are changing:
 - **Go control plane:** Go 1.26, Make, a C toolchain where required by the host.
 - **Fast checks:** ripgrep (`rg`) for the packaging secret-scan contract in
   `make backend-check` and `make check`. Install with `apt-get install ripgrep`
-  on Ubuntu or `brew install ripgrep` on macOS; the PR workflow installs it.
+  on Ubuntu or `brew install ripgrep` on macOS; the `backend-check` job of the
+  pull request workflow installs it.
 - **React UI:** Node.js and npm.
 - **Desktop native host:** Rust (minimum package version 1.77), Cargo, the Tauri
   prerequisites, and platform build tools.
@@ -196,6 +197,42 @@ After dependency preparation succeeds, the check steps do not stop at the
 first failure. Each step is timed and recorded, and the run ends with a summary
 table naming every step that failed, so one aggregate pass surfaces gofmt drift
 and a UI type error together.
+
+### Pull request CI
+
+The workflow `.github/workflows/pull-request.yml` runs for every pull request
+and for every push to `main`. It does not run `make check` as one job. It runs
+the two groups of `make check` as two jobs in parallel:
+
+| Job | Installs | Runs |
+| --- | --- | --- |
+| `backend-check` | Go from `go.mod`, a stub `codex` harness, the apt packages for `ripgrep` and the Tauri crate | `make backend-check` |
+| `frontend-check` | Node.js 22 with the npm cache of `ui/` and `docs/` | `make frontend-check` |
+
+The steps of each job are the steps of the Makefile target, so the two jobs
+together run every step of `make check`. A test in `scripts/pr_workflow_test.go`
+fails when the jobs and the `run_group` entries of the `check` recipe differ.
+To make the checks required on `main`, mark both job names, `backend-check` and
+`frontend-check`, as required status checks.
+
+The `backend-check` job uses two caches:
+
+- **apt packages.** `awalsh128/cache-apt-pkgs-action` restores the package
+  files on a cache hit and does not run `apt-get update`. On a miss, it
+  installs the packages and saves the cache. To rebuild the cache, increase
+  its `version` input.
+- **cargo.** `actions/cache` keeps the `desktop-rust-check` target directory
+  (`~/.cache/tariboy/desktop-check-target`, the default of
+  `TARIBOY_CARGO_CHECK_DIR`) and the cargo registry and git caches. The key
+  contains the Rust version of the runner and the hash of
+  `desktop/src-tauri/Cargo.lock`. When the lockfile changes, the job restores
+  the newest cache of the same Rust version and cargo compiles only the changed
+  crates. A new Rust version on the runner starts with an empty cache.
+
+A pull request run can restore caches of its own branch and of `main`. The run
+on each push to `main` saves the caches that new pull requests use. A cache
+miss or a failed restore does not fail the job: it installs and compiles
+everything, as without a cache.
 
 ### Checks on a shared host
 
