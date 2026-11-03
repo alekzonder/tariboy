@@ -87,6 +87,13 @@ describe("storage key registry", () => {
     expect(readKey(storageKeys.terminalsServerOrder)).toEqual({ version: 1, ids: ["a"] });
   });
 
+  it("keeps the task Metrics section closed until it is opened once", () => {
+    expect(readKey(storageKeys.taskMetricsOpen)).toBe("closed");
+    expect(writeKey(storageKeys.taskMetricsOpen, "open")).toBe(true);
+    expect(localStorage.getItem("tasks:metrics-open:v1")).toBe("open");
+    expect(readKey(storageKeys.taskMetricsOpen)).toBe("open");
+  });
+
   it("keeps each key in its own area", () => {
     writeKey(storageKeys.storeToken, "secret");
     expect(sessionStorage.getItem("tariboy_store_token")).toBe("secret");

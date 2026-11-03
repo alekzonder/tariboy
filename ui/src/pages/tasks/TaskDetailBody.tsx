@@ -12,6 +12,7 @@ import { TaskRelationsSection } from "./TaskRelationsSection";
 import { TaskHistorySection } from "./TaskHistorySection";
 import { TaskParentField } from "./TaskDetailParent";
 import { TaskDetailSubtasks } from "./TaskSubtasksSection";
+import { TaskMetricsSection } from "./TaskMetricsSection";
 import type { useTaskDetailDraft } from "./useTaskDetailDraft";
 import type { useTaskDetailRelations } from "./useTaskDetailRelations";
 import type { TaskDetailProps } from "./TaskDetailTypes";
@@ -134,6 +135,7 @@ export function TaskDetailBody({
         onDirtyChange={setCommentDirty}
         onUploadingChange={setUploadingComment}
       />
+      <TaskMetricsSection key={task.key} task={task} />
       <Collapsed label="Details">
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2.25">
           <Meta label="Author" value={task.author} />

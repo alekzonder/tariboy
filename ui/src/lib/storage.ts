@@ -116,6 +116,8 @@ export const storageKeys = {
   newTaskQueue: jsonKey("local", "tasks:new-task-queue:v1", 1),
   newTaskQueueByAgent: jsonKey("local", "tasks:new-task-queue-by-agent:v1", 1),
   taskQueueFilter: stringKey("session", "tasks:queue-filter:v1", 1),
+  /** Whether the Metrics section of a task is open; closed until opened once. */
+  taskMetricsOpen: oneOfKey("tasks:metrics-open:v1", 1, ["open", "closed"], "closed"),
   storeToken: stringKey("session", "tariboy_store_token", null),
 };
 
