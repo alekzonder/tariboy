@@ -23,7 +23,7 @@ when the daemon is down.
 | `files` | `upload` base64 content to the shared server directory |
 | `loop` | `enable`, `disable`, `interval`, `timeout`, `hard-timeout`, `on-timeout`, `on-error` |
 | `mail` | the [`tmail`](/docs/reference/mail) client in operator mode: `inbox`, `sent`, `archive`, `show`, `send`, `reply`, `requeue`, `close`, `read`, `unread`, `clear` |
-| `assessment` | `ls` with `--iteration`, `--task`, `--agent`, `--assessor`, `--image`, `--image-version`, `--limit`, and `show ID`: read [assessments](/docs/plugins/built-in/assessments). `add` works only in an agent with `TARIBOY_TOOLS_SOCKET` |
+| `assessment` | `ls` with `--iteration`, `--task`, `--agent`, `--assessor`, `--image`, `--image-version`, `--limit`, `--history`, and `show ID`: read [assessments](/docs/plugins/built-in/assessments). `ls` returns the latest assessment of each iteration and task; `--history` returns every assessment. `add` works only in an agent with `TARIBOY_TOOLS_SOCKET` |
 | `group` | `create`, `assign`, `inspect`, `ls`, `rm` |
 | `plugin` | `install`, `ls`, `inspect`, `logs`, `rm` |
 | `telegram` | contributed by the running bundled plugin: `configure`, `chat setup`, `status` |

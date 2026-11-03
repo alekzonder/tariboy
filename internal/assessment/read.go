@@ -45,7 +45,8 @@ func (s *Service) Get(id string) (AssessmentShowResult, error) {
 	return AssessmentShowResult{Assessment: Assessment{AssessmentRecord: rec, Violations: violations}}, nil
 }
 
-// List returns the assessments that match f, newest first.
+// List returns the assessments that match f, newest first: without
+// f.History only the latest assessment of each iteration and task.
 func (s *Service) List(f AssessmentFilter) (AssessmentList, error) {
 	limit := f.Limit
 	switch {
@@ -56,6 +57,9 @@ func (s *Service) List(f AssessmentFilter) (AssessmentList, error) {
 	}
 	var where []string
 	var args []any
+	if !f.History {
+		where = append(where, `(`+IsLatest+`)`)
+	}
 	for _, c := range []struct{ column, value string }{
 		{"iteration_id", f.Iteration}, {"task_key", f.Task}, {"subject_agent", f.Agent},
 		{"assessor_agent", f.Assessor}, {"image_ref", f.Image}, {"image_version", f.ImageVersion},

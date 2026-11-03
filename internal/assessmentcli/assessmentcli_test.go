@@ -110,10 +110,11 @@ func TestAddSendsTheFileToTheToolsSocket(t *testing.T) {
 }
 
 func TestLsBuildsTheQueryInBothModes(t *testing.T) {
-	args := []string{"ls", "--iteration", "it-dev", "--task", "DEV-1", "--agent", "dev", "--assessor", "judge",
+	// --history takes no value and may stand between the other flags.
+	args := []string{"ls", "--iteration", "it-dev", "--history", "--task", "DEV-1", "--agent", "dev", "--assessor", "judge",
 		"--image", "developer:latest", "--image-version", "0.23.1", "--limit", "5"}
 	query := map[string]string{"iteration": "it-dev", "task": "DEV-1", "agent": "dev", "assessor": "judge",
-		"image": "developer:latest", "image_version": "0.23.1", "limit": "5"}
+		"image": "developer:latest", "image_version": "0.23.1", "limit": "5", "history": "true"}
 	for _, tc := range []struct{ tools, route, socket string }{
 		{"/run/tools.sock", "/tools/assessment/ls", "/run/tools.sock"},
 		{"", "/api/assessments", "/run/daemon.sock"},
@@ -180,7 +181,7 @@ func TestErrorsAndUsage(t *testing.T) {
 		}
 	}
 	code, out, _ := run(t, "", "", "--help")
-	if code != 0 || !strings.Contains(out, "tariboy assessment add --file PATH") {
+	if code != 0 || !strings.Contains(out, "tariboy assessment add --file PATH") || !strings.Contains(out, "[--history]") {
 		t.Fatalf("help: code %d %q", code, out)
 	}
 }

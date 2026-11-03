@@ -294,6 +294,7 @@ type toolBody struct {
 	Image        string `json:"image"`
 	ImageVersion string `json:"image_version"`
 	Limit        int    `json:"limit"`
+	History      bool   `json:"history"`
 }
 
 // AgentAction runs one /tools/assessment/<action> call of agent: add (as the
@@ -312,7 +313,7 @@ func (s *Service) AgentAction(agent, iterationID, action string, body map[string
 		return s.Add(agent, iterationID, in.AssessmentInput)
 	case "ls":
 		return s.List(AssessmentFilter{Iteration: in.Iteration, Task: in.Task, Agent: in.Agent, Assessor: in.Assessor,
-			Image: in.Image, ImageVersion: in.ImageVersion, Limit: in.Limit})
+			Image: in.Image, ImageVersion: in.ImageVersion, Limit: in.Limit, History: in.History})
 	case "show":
 		return s.Get(in.ID)
 	}

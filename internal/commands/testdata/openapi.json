@@ -16749,6 +16749,15 @@
               "description": "most assessments to return (default 100, at most 1000)",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "history",
+            "required": false,
+            "schema": {
+              "description": "return every assessment, also the ones a later assessment of the same iteration or task replaced",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -16813,7 +16822,7 @@
             "description": "Typed error"
           }
         },
-        "summary": "List assessments, newest first"
+        "summary": "List the latest assessment of each iteration and task, newest first"
       }
     },
     "/api/assessments/{id}": {

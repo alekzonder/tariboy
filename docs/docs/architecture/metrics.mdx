@@ -49,13 +49,28 @@ old keys.
 | `rework_by_outcome` | count per outcome | The same count for each of the three outcomes. | `task_status_visits.outcome` |
 | `rejected_advances` | count | The number of `advance` requests that a check rejected. | Sum of `task_status_visits.rejected_requests` |
 | `customer_questions` | count | The number of waits for an answer of the customer. | `task_waiting_for` rows with `expected_principal` equal to `tasks.customer` |
-| `quality` | score from 0 to 100 | For each axis `image_process`, `role`, `task_fit`: `avg`, `min` and `count` of the scores. An axis without scores is `null`. Without any score, `quality` is `null`. | `assessment_axes` with `verdict = scored` of the `assessments` with the task's key |
+| `quality` | score from 0 to 100 | For each axis `image_process`, `role`, `task_fit`: `avg`, `min` and `count` of the scores. An axis without scores is `null`. Without any score, `quality` is `null`. | `assessment_axes` with `verdict = scored` of the [latest assessment](#latest-assessment) of each iteration and task with the task's key |
 | `agents[]` | | For each agent: `usage` and `images[]`, the image versions of that agent's iterations. | `ai_requests.agent` |
 | `images[]` | | The iterations, tokens and cost on each image version: `image`, `image_ref`, `image_version`, `image_digest`. | See [Image version of an iteration](#image-version-of-an-iteration) |
 | `workflows[]` | | The workflow versions of the task's visits: `name`, `version`, `digest`. Empty for a task without a workflow. | `task_status_visits.workflow_digest` → `task_workflow_images` |
 
 A task without a workflow has no visits. Its `rework_rounds` and
 `rejected_advances` are 0.
+
+### Latest assessment
+
+An assessment is never changed. A reassessment adds a new record. `quality`
+uses only the latest record of each assessed object, so the scores of a
+replaced record do not count. `tariboy assessment ls` uses the same rule, see
+[assessments](/docs/plugins/built-in/assessments#latest-assessment).
+
+- The object of an iteration assessment is its `iteration_id`.
+- The object of a task assessment, with an empty `iteration_id`, is its
+  `task_key`.
+
+An assessment of an iteration and an assessment of its task are two objects.
+The task's `quality` counts both. The rule that selects the latest record is
+in [State model](/docs/architecture/state-model#assessments).
 
 ### Questions to the customer
 
@@ -121,7 +136,7 @@ has two blocks:
 | `lead_time_median_s`, `lead_time_avg_s` | seconds | Median and average of `lead_time_s`. `null` without a lead time. |
 | `sum` | | Sums of `iterations`, `tokens`, `cost_usd`, `rework_rounds`, `rejected_advances`, `customer_questions` |
 | `avg` | per task | The same values divided by `tasks_done`, rounded to 2 decimal places. Not in the response when `tasks_done` is 0. |
-| `quality` | score | Per axis: average, minimum and count of all scores of the slice's tasks. `null` without scores. |
+| `quality` | score | Per axis: average, minimum and count of the scores of the slice's tasks, from the [latest assessment](#latest-assessment) of each object. `null` without scores. |
 
 ### Tasks with several agents or versions
 

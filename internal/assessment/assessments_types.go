@@ -119,7 +119,9 @@ type AssessmentInput struct {
 }
 
 // AssessmentFilter selects the assessments of List. Empty fields match
-// everything; Limit defaults to 100 and is at most 1000.
+// everything; Limit defaults to 100 and is at most 1000. Without History,
+// List takes only the latest assessment of each iteration and task
+// (IsLatest) and then applies the other fields.
 type AssessmentFilter struct {
 	Iteration    string
 	Task         string
@@ -128,4 +130,5 @@ type AssessmentFilter struct {
 	Image        string
 	ImageVersion string
 	Limit        int
+	History      bool
 }

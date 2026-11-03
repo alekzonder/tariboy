@@ -56,6 +56,24 @@ func TestAssessmentAddNeedsTheCapability(t *testing.T) {
 	}
 }
 
+func TestAssessmentLsPassesHistory(t *testing.T) {
+	var calls []assessmentCall
+	s := assessmentServer([]string{"whoami"}, &calls, nil)
+	for query, want := range map[string]any{"": nil, "?history=true": true, "?history=1": true, "?history=false": false} {
+		calls = nil
+		if rec := serve(s, "GET", "/tools/assessment/ls"+query, ""); rec.Code != http.StatusOK {
+			t.Fatalf("ls%s = %d %s", query, rec.Code, rec.Body.String())
+		}
+		if len(calls) != 1 || calls[0].body["history"] != want {
+			t.Errorf("ls%s body = %+v; want history %v", query, calls, want)
+		}
+	}
+	calls = nil
+	if rec := serve(s, "GET", "/tools/assessment/ls?history=yes", ""); rec.Code != http.StatusBadRequest || len(calls) != 0 {
+		t.Fatalf("ls?history=yes = %d %s, calls %v; want 400", rec.Code, rec.Body.String(), calls)
+	}
+}
+
 func TestAssessmentAddScrubsIdentity(t *testing.T) {
 	var calls []assessmentCall
 	s := assessmentServer([]string{"whoami", "loop", "mail", "assessments"}, &calls, nil)
