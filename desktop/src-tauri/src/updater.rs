@@ -146,6 +146,9 @@ impl<P> UpdateState<P> {
         }
     }
 
+    // UpdateView is the small state value every method returns by value; boxing
+    // only the error side of this private helper would gain nothing.
+    #[allow(clippy::result_large_err)]
     fn begin_install(&self) -> Result<(P, UpdateView), UpdateView> {
         let mut inner = self.inner.lock().unwrap();
         if inner.view.phase == "ready" {

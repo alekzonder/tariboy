@@ -124,10 +124,13 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
 - Individual targets still exist and may be called directly while iterating
   (`make vet`, `make e2e`, and the rest). `make fmt` is not a check: it rewrites
   files, and only `fmt-check` is part of `make check`.
-- Three scripts stay outside `full-check` and are run by hand:
+- Four scripts stay outside `full-check` and are run by hand:
   `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` need a
-  disposable SSH host, and `scripts/check-alpha-artifacts.sh` is a release gate
-  taking a release directory argument. Rust host tests (`cargo test`,
+  disposable SSH host, `scripts/check-alpha-artifacts.sh` is a release gate
+  taking a release directory argument, and
+  `scripts/desktop-build-script-relocation-check.sh` checks
+  `desktop-rust-check` with a shared cache after a worktree is removed; run it
+  when changing `desktop/src-tauri/build.rs`. Rust host tests (`cargo test`,
   `cargo clippy --all-targets -- -D warnings` under `desktop/src-tauri`) are
   outside both targets too; run them when changing that crate. Both targets
   compile it with `cargo check`.

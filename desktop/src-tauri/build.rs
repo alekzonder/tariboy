@@ -20,8 +20,11 @@ fn main() {
         println!("cargo:rerun-if-changed=src/task_notifications.m");
     }
 
-    let source =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../internal/version/version.go");
+    // Read the manifest dir at run time, not with env!: env! bakes the worktree
+    // path into the build script binary, and the shared desktop-rust-check
+    // target dir reuses that binary in other worktrees after this one is gone.
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+    let source = std::path::Path::new(&manifest_dir).join("../../internal/version/version.go");
     let go_source =
         std::fs::read_to_string(&source).expect("read ../../internal/version/version.go");
     let source_version = go_source
