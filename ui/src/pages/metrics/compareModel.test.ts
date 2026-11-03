@@ -86,26 +86,53 @@ describe("changeOf", () => {
   it("shows B minus A with a percent of A and a verdict", () => {
     expect(changeOf(row("Cost per task", 2.33, 2.75))).toEqual({
       text: "+$0.42 (+18%)",
+      direction: "up",
       verdict: "worse",
     });
     expect(changeOf(row("Lead time, median", 54_600, 43_200))).toEqual({
       text: "−3h 10m (−21%)",
+      direction: "down",
       verdict: "better",
     });
     expect(changeOf(row("Quality: Role", 70, 80))).toMatchObject({ verdict: "better" });
-    expect(changeOf(row("Runs per task", 2, 2))).toEqual({ text: "0 (0%)", verdict: "no change" });
+    expect(changeOf(row("Runs per task", 2, 2))).toEqual({
+      text: "0 (0%)",
+      direction: "none",
+      verdict: "no change",
+    });
+  });
+
+  it("gives the arrow the sign of B − A, whatever the verdict", () => {
+    const pick = (label: string, a: number, b: number) => {
+      const change = changeOf(row(label, a, b))!;
+      return [change.direction, change.verdict];
+    };
+    expect(pick("Quality: Role", 70, 80)).toEqual(["up", "better"]);
+    expect(pick("Quality: Role", 80, 70)).toEqual(["down", "worse"]);
+    expect(pick("Cost per task", 2, 3)).toEqual(["up", "worse"]);
+    expect(pick("Cost per task", 3, 2)).toEqual(["down", "better"]);
+    expect(pick("Cost per task", 2, 2)).toEqual(["none", "no change"]);
   });
 
   it("shows a zero cost change as dollars", () => {
     expect(changeOf(row("Cost per task", 1.37, 1.37))).toEqual({
       text: "$0.00 (0%)",
+      direction: "none",
       verdict: "no change",
     });
   });
 
   it("gives no percent from zero and no verdict for a count without direction", () => {
-    expect(changeOf(row("Runs per task", 0, 0.5))).toEqual({ text: "+0.5", verdict: "worse" });
-    expect(changeOf(row("Tasks done", 4, 6))).toEqual({ text: "+2 (+50%)", verdict: null });
+    expect(changeOf(row("Runs per task", 0, 0.5))).toEqual({
+      text: "+0.5",
+      direction: "up",
+      verdict: "worse",
+    });
+    expect(changeOf(row("Tasks done", 4, 6))).toEqual({
+      text: "+2 (+50%)",
+      direction: "up",
+      verdict: null,
+    });
   });
 });
 

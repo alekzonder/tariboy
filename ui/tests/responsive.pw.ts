@@ -151,6 +151,117 @@ test("the Metrics toolbar stays one row on a desktop", async ({ page }) => {
   for (const bar of bars) expect(bar.rows, bar.label).toBe(1);
 });
 
+// The page itself never scrolls sideways, whatever its content does.
+async function expectTabPageFits(page: Page) {
+  const tabPage = page.getByTestId("tab-page");
+  const sizes = await tabPage.evaluate((el) => [el.scrollWidth, el.clientWidth]);
+  expect(
+    sizes[0],
+    `tab-page scrollWidth ${sizes[0]} > clientWidth ${sizes[1]}`,
+  ).toBeLessThanOrEqual(sizes[1]);
+}
+
+// A second native host with a long name, so the toolbar shows Host.
+async function addLongHost(page: Page) {
+  await page.addInitScript(() => {
+    Object.assign(window, {
+      __TEST_HOSTS__: [
+        {
+          id: "build-server",
+          label: "build-server-in-the-far-datacenter-with-a-very-long-name",
+          kind: "ssh",
+          ssh_alias: "build",
+          remote_install_dir: "",
+          remote_port: 0,
+          https_base_url: "",
+          last_daemon_version: "",
+          state: "disconnected",
+          base_url: "",
+          local_port: 0,
+          phase: "",
+          platform: "",
+          arch: "",
+          prerequisites: [],
+          message: "",
+        },
+      ],
+    });
+  });
+}
+
+const metricsReady = async (p: Page) => {
+  await expect(p.getByText("Tasks done").filter({ visible: true }).first()).toBeVisible();
+};
+
+// The narrow cases run once, at the widths the metrics review names.
+test.describe("metrics on a narrow window", () => {
+  test.beforeEach(() => {
+    test.skip(test.info().project.name !== "phone-360", "one run sets its own widths");
+  });
+
+  for (const width of [360, 768]) {
+    test(`/metrics with two hosts and a filter fits at ${width} px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await addLongHost(page);
+      await fakeMetrics(page);
+      await expectFits(page, "/metrics?agent=alice", async (p) => {
+        await metricsReady(p);
+        await expect(p.getByRole("combobox", { name: "Host" })).toBeVisible();
+        await expect(p.getByRole("button", { name: "Clear filters" })).toBeVisible();
+      });
+      await expectTabPageFits(page);
+    });
+
+    test(`a long card label shows in full at ${width} px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await fakeMetrics(page);
+      await page.goto(`${fixture}/metrics`);
+      const label = page.getByText("Rejected advances per task", { exact: true }).first();
+      await expect(label).toBeVisible();
+      const cut = await label.evaluate((el) => el.scrollWidth > el.clientWidth);
+      expect(cut, "the label is cut").toBe(false);
+      await expect(label).toBeInViewport({ ratio: 1 });
+    });
+  }
+
+  test("every period button and the Custom dates show in full at 360 px", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await fakeMetrics(page);
+    await page.goto(`${fixture}/metrics?agent=alice`);
+    await metricsReady(page);
+    const periods = page.getByRole("group", { name: "Period" });
+    await periods.getByRole("button", { name: "Custom" }).click();
+    for (const name of ["Quarter", "Custom"])
+      await expect(periods.getByRole("button", { name })).toBeInViewport({ ratio: 1 });
+    for (const name of ["From", "To"])
+      await expect(page.getByLabel(name, { exact: true })).toBeInViewport({ ratio: 1 });
+    expect(await overflowing(page)).toEqual([]);
+    await expectTabPageFits(page);
+  });
+
+  test("/metrics/compare with the same version twice fits at 360 px", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await fakeMetrics(page);
+    await expectFits(page, "/metrics/compare?kind=image&name=developer&a=0.23.2&b=0.23.2", (p) =>
+      expect(p.getByText("Choose a different version.")).toBeVisible(),
+    );
+    await expectTabPageFits(page);
+  });
+
+  test.describe("dark", () => {
+    test.use({ colorScheme: "dark" });
+    for (const route of ["/metrics?agent=alice", "/metrics/compare?kind=image&name=developer"]) {
+      test(`${route} fits at 360 px in the dark theme`, async ({ page }) => {
+        await page.setViewportSize({ width: 360, height: 800 });
+        await addLongHost(page);
+        await fakeMetrics(page);
+        await expectFits(page, route, metricsReady);
+        await expectTabPageFits(page);
+      });
+    }
+  });
+});
+
 test("task detail fits the window", async ({ page }) => {
   await expectFits(page, `/tasks?task=${taskKey}`);
   await expect(page.getByText(taskKey).first()).toBeVisible();

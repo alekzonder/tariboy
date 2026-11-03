@@ -14,9 +14,12 @@ import { Known } from "./Unknown";
 
 function Card({ label, value, detail }: { label: string; value: ReactNode; detail?: ReactNode }) {
   return (
-    <div data-card={label} className="min-w-0 rounded border p-3">
-      <div className="truncate text-xs text-muted-foreground">{label}</div>
-      <div data-value className="mt-1 font-mono text-lg">
+    <div
+      data-card={label}
+      className="row-span-3 grid min-w-0 grid-rows-subgrid gap-y-1 rounded border p-3"
+    >
+      <div className="text-xs break-words text-muted-foreground">{label}</div>
+      <div data-value className="font-mono text-lg">
         {value}
       </div>
       {detail !== undefined && (

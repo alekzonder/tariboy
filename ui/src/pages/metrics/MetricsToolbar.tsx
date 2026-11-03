@@ -156,8 +156,10 @@ function FilterSelects({
 
 const CLEARED: MetricsFilters = { agent: "", image: "", workflow: "" };
 
-/** The one row above the numbers: host, period and filters. Below 1280 px
- *  the filters sit behind Filters (N), so the row never wraps on a desktop. */
+/** The row above the numbers: host, period and filters. Below 1280 px the
+ *  filters sit behind Filters (N), so the row never wraps on a desktop.
+ *  Below 640 px the period takes a first row of its own; up to 1024 px the
+ *  row wraps when it does not fit. */
 export function MetricsToolbar({
   hostControl,
   window,
@@ -182,10 +184,12 @@ export function MetricsToolbar({
       role="toolbar"
       aria-label="Metrics filters"
       data-toolbar
-      className="relative flex flex-nowrap items-center gap-2"
+      className="relative flex flex-wrap items-center gap-2 lg:flex-nowrap"
     >
-      {hostControl && <div className="flex shrink-0 items-center">{hostControl}</div>}
-      <div className="scrollbar-none min-w-0 shrink overflow-x-auto">
+      {hostControl && (
+        <div className="flex min-w-0 shrink items-center *:min-w-0 *:shrink">{hostControl}</div>
+      )}
+      <div className="max-sm:order-first max-sm:basis-full sm:scrollbar-none sm:min-w-0 sm:shrink sm:overflow-x-auto">
         <ActivityPeriodBar
           window={window}
           onPeriod={onPeriod}

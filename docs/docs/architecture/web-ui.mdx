@@ -633,6 +633,10 @@ version of the row and A is the nearest older version.
 
 `/metrics/compare` shows the two versions side by side with the difference
 B − A, the percentage of A, and the word `better`, `worse`, or `no change`.
+An arrow before the word shows the sign of B − A: up for an increase, down
+for a decrease, and a dash for zero. The word gives the color of the arrow and
+the word: green for `better`, red for `worse`, gray for `no change`. A metric
+without a better direction, such as **Tasks done**, has no arrow and no word.
 **Swap** exchanges `a` and `b`. Without versions in the URL, B is the newest
 version and A the version before it. If a version has fewer than 5 completed
 tasks (`SMALL_SAMPLE_TASKS` in `lib/metricsFormat.ts`), the page warns that
