@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestOnlyClaudeAndCodexHaveInstantMailHooks(t *testing.T) {
+func TestOnlyClaudeCodexAndOpenCodeHaveInstantMailHooks(t *testing.T) {
 	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
 	for _, typ := range []string{"claude", "codex", "opencode", "cursor", "stub"} {
 		adapter, err := Get(typ)
@@ -17,7 +17,7 @@ func TestOnlyClaudeAndCodexHaveInstantMailHooks(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, ok := adapter.(InstantMailHooker)
-		if ok != (typ == "claude" || typ == "codex") {
+		if ok != (typ == "claude" || typ == "codex" || typ == "opencode") {
 			t.Errorf("%s implements InstantMailHooker = %v", typ, ok)
 		}
 	}

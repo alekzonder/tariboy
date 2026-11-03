@@ -243,6 +243,20 @@ func syncBridgeTreeWith(root string, syncPath func(string) error) error {
 	})
 }
 
+// openCodeInstallFiles are the root entries opencode itself writes into each
+// config directory, the skills bridge included, when it installs
+// @opencode-ai/plugin for a loaded plugin. Validation of an opencode bridge
+// skips them only at the bridge root, so the install no longer forces a
+// rebuild, and the next iteration's install wait, every time. Skills,
+// generated files and every other entry keep their integrity and mode checks.
+var openCodeInstallFiles = map[string]bool{
+	"node_modules":      true,
+	"package.json":      true,
+	"package-lock.json": true,
+	"bun.lock":          true,
+	".gitignore":        true,
+}
+
 func validatePublishedBridge(finalDir string, expected []agentskills.Metadata, plan BridgePlan) error {
 	digest, contractVersion, harness, err := bridgeIdentity(finalDir)
 	if err != nil {
@@ -286,7 +300,11 @@ func validatePublishedBridge(finalDir string, expected []agentskills.Metadata, p
 	if rootInfo.IsDir() && rootInfo.Mode().Perm() != 0o700 {
 		return errors.New("image bridge directory has invalid mode")
 	}
-	err = safefs.WalkRegular(finalDir, safefs.WalkOptions{Dirs: true}, func(rel string, _ fs.DirEntry, info fs.FileInfo) error {
+	skip := func(rel string) bool {
+		_, isGenerated := generated[rel]
+		return harness == "opencode" && openCodeInstallFiles[rel] && !isGenerated
+	}
+	err = safefs.WalkRegular(finalDir, safefs.WalkOptions{Dirs: true, Skip: skip}, func(rel string, _ fs.DirEntry, info fs.FileInfo) error {
 		if info.IsDir() {
 			if info.Mode().Perm() != 0o700 {
 				return errors.New("image bridge directory has invalid mode")

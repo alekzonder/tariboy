@@ -26,7 +26,9 @@ var openCodeURLVariable = regexp.MustCompile(`\$\{([^}]+)\}`)
 
 // PrepareOpenCodeProxy keeps OpenCode's own credential sources and overlays only
 // iteration routing. Resolved debug output is never copied: it masks API keys.
-func PrepareOpenCodeProxy(ctx context.Context, executable, cwd string, env []string, model, proxyURL string) ([]string, map[string]aiproxy.ProviderRoute, error) {
+// A non-empty plugin, the Tariboy instant mail plugin URL, is added to the
+// overlay after the routing checks.
+func PrepareOpenCodeProxy(ctx context.Context, executable, cwd string, env []string, model, proxyURL, plugin string) ([]string, map[string]aiproxy.ProviderRoute, error) {
 	if proxyURL == "" {
 		return nil, nil, errors.New("OpenCode requires an iteration proxy")
 	}
@@ -84,6 +86,16 @@ func PrepareOpenCodeProxy(ctx context.Context, executable, cwd string, env []str
 	finalModels, selectionErr := openCodeModels(final, model)
 	if selectionErr != nil || !maps.EqualFunc(selected, finalModels, slices.Equal[[]string]) || !openCodeRoutesApplied(final, ids, selected, proxyURL) {
 		return nil, nil, errors.New("OpenCode did not apply iteration proxy configuration")
+	}
+	if plugin != "" {
+		// After the probes, which reject every plugin they see: only this one
+		// joins. A probe with a plugin also waits for OpenCode to install
+		// @opencode-ai/plugin, which offline outlasts the probe timeout.
+		inline["plugin"] = []string{plugin}
+		if body, err = json.Marshal(inline); err != nil || len(body) >= maxArgStrLen-64 {
+			return nil, nil, errors.New("OpenCode inline configuration is too large")
+		}
+		env = replaceOpenCodeEnv(env, "OPENCODE_CONFIG_CONTENT", string(body))
 	}
 	return env, routes, nil
 }

@@ -27,16 +27,18 @@ const instantHookTimeoutSeconds = 5
 
 // InstantMailHooks is the harness plugin that delivers instant letters into a
 // running iteration. The daemon writes Files under the plugin directory and
-// appends Args to the harness argv.
+// appends Args to the harness argv. ConfigPlugin is the plugin URL that
+// OpenCode loads from its configuration overlay.
 type InstantMailHooks struct {
 	Files          []agentdir.BridgeFile
 	Args           []string
+	ConfigPlugin   string
 	MinimumVersion string
 }
 
 // InstantMailHooker is an optional Adapter interface for a harness whose hooks
-// run tmail instant. The claude and codex adapters implement it. cfg is the
-// launch config the adapter's Command gets.
+// run tmail instant. The claude, codex and opencode adapters implement it.
+// cfg is the launch config the adapter's Command gets.
 type InstantMailHooker interface {
 	InstantMailHooks(tmail, pluginDir string, cfg Config) (InstantMailHooks, error)
 }

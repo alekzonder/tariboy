@@ -177,7 +177,13 @@ letter. The flag uses the same `Send` path with these additions:
   codex-post-tool-use`, `codex-stop`). The runner passes the hooks as `-c`
   overrides with `--dangerously-bypass-hook-trust`, so no file goes into
   `CODEX_HOME`, `~/.codex` or the repository.
-- OpenCode, an older Claude Code, an older codex and codex in
+- OpenCode 1.19.5 or newer runs `tmail instant --format opencode-tool-after`
+  from a Tariboy plugin with the hook `tool.execute.after`, in both modes. The
+  plugin adds the printed text to the result of each successful tool call.
+  OpenCode does not call the hook after a failed tool call, and it has no hook
+  at the end of a turn. In these cases the letter stays `waiting` for the next
+  successful call or the next prompt.
+- An older Claude Code, an older codex, an older OpenCode and codex in
   `approve-for-me` read the letter in the next iteration.
 - At `done`, the runner closes the notices that a hook delivered in the
   iteration, as it closes the rendered notices.

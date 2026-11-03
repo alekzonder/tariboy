@@ -205,3 +205,20 @@ func TestInstantHookFormatTimeoutIsSilent(t *testing.T) {
 		}
 	}
 }
+
+func TestInstantOpenCodeToolAfterFormat(t *testing.T) {
+	const text = "# Instant messages\n\"quoted\" <b> & \\ hello\n"
+	raw, _ := json.Marshal(map[string]any{"ids": []string{"m-1"}, "text": text})
+	useRecorder(t, string(raw))
+	code, out, errOut := runInstantCLI(t, instantEnv(t, true), "--format", "opencode-tool-after")
+	if code != 0 || errOut != "" || out != "\n\n"+text {
+		t.Fatalf("code %d out %q err %q; want the text after a blank line", code, out, errOut)
+	}
+	useRecorder(t, `{"ids":[],"text":""}`)
+	if code, out, errOut := runInstantCLI(t, instantEnv(t, true), "--format", "opencode-tool-after"); code != 0 || out != "" || errOut != "" {
+		t.Fatalf("empty: code %d out %q err %q", code, out, errOut)
+	}
+	if code, out, errOut := runInstantCLI(t, instantEnv(t, false), "--format", "opencode-tool-after"); code != 0 || out != "" || errOut != "" {
+		t.Fatalf("no flag: code %d out %q err %q", code, out, errOut)
+	}
+}

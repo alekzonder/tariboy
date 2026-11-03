@@ -27,7 +27,7 @@ func TestOpenCodeProxyPreservesConfigAndRoutesSelectedModels(t *testing.T) {
 	t.Parallel()
 	executable, env := openCodeFixture(t, `{"model":"kimi-code-plan-global/k3","small_model":"other/small","agent":{"review":{"model":"other/small"}},"skills":{"paths":["/image/skills"]}}`)
 	env = append(env, `OPENCODE_CONFIG_CONTENT={"theme":"test","provider":{"kimi-code-plan-global":{"options":{"apiKey":"keep-private","baseURL":"https://original.example/v1"}}}}`, "OPENCODE_CONFIG_DIR=/image")
-	got, routes, err := PrepareOpenCodeProxy(context.Background(), executable, t.TempDir(), env, "kimi-code-plan-global/k3", "http://127.0.0.1:1234/_tariboy/token")
+	got, routes, err := PrepareOpenCodeProxy(context.Background(), executable, t.TempDir(), env, "kimi-code-plan-global/k3", "http://127.0.0.1:1234/_tariboy/token", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestOpenCodeProxyFailsClosed(t *testing.T) {
 			if tc.ignore {
 				env = append(env, "TEST_IGNORE_OVERLAY=1")
 			}
-			_, _, err := PrepareOpenCodeProxy(context.Background(), executable, t.TempDir(), env, tc.model, "http://127.0.0.1:1234/_tariboy/token")
+			_, _, err := PrepareOpenCodeProxy(context.Background(), executable, t.TempDir(), env, tc.model, "http://127.0.0.1:1234/_tariboy/token", "")
 			if err == nil {
 				t.Fatal("unsafe configuration accepted")
 			}
@@ -86,7 +86,7 @@ func TestOpenCodeProxyFailsClosed(t *testing.T) {
 func TestOpenCodeProxyRejectsInlineOAuth(t *testing.T) {
 	executable, env := openCodeFixture(t, `{"model":"kimi-code-plan-global/k3"}`)
 	env = append(env, `OPENCODE_AUTH_CONTENT={"kimi-code-plan-global":{"type":"oauth","access":"private-access","refresh":"private-refresh"}}`)
-	_, _, err := PrepareOpenCodeProxy(context.Background(), executable, t.TempDir(), env, "", "http://127.0.0.1:1234/_tariboy/token")
+	_, _, err := PrepareOpenCodeProxy(context.Background(), executable, t.TempDir(), env, "", "http://127.0.0.1:1234/_tariboy/token", "")
 	if err == nil {
 		t.Fatal("inline OAuth can bypass SDK baseURL")
 	}
@@ -174,7 +174,7 @@ func TestOpenCodeAuthFilesStayUnchanged(t *testing.T) {
 func TestOpenCodeProxyVerifiesFinalModelSelections(t *testing.T) {
 	executable, env := openCodeFixture(t, `{"model":"kimi-code-plan-global/k3"}`)
 	env = append(env, "TEST_CHANGE_FINAL_MODEL=1")
-	_, _, err := PrepareOpenCodeProxy(context.Background(), executable, t.TempDir(), env, "", "http://127.0.0.1:1234/_tariboy/token")
+	_, _, err := PrepareOpenCodeProxy(context.Background(), executable, t.TempDir(), env, "", "http://127.0.0.1:1234/_tariboy/token", "")
 	if err == nil {
 		t.Fatal("changed final auxiliary model accepted without its route")
 	}
@@ -260,5 +260,64 @@ func TestOpenCodeRoutesResolveURLVariablesFromLaunchEnvironment(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func openCodeOverlay(t *testing.T, env []string) map[string]any {
+	t.Helper()
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(openCodeEnv(env, "OPENCODE_CONFIG_CONTENT")), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
+
+// The Tariboy plugin joins the overlay only after both probes: the probes
+// still reject any plugin they see, so a plugin cannot reach the overlay any
+// other way.
+func TestOpenCodeProxyAddsTariboyPluginAfterTheProbes(t *testing.T) {
+	const plugin = "file:///agents/a/harness-hooks/opencode/tariboy-instant-mail.js"
+	executable, env := openCodeFixture(t, `{"model":"kimi-code-plan-global/k3"}`)
+	withPlugin, routes, err := PrepareOpenCodeProxy(context.Background(), executable, t.TempDir(), env, "", "http://127.0.0.1:1234/_tariboy/token", plugin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	without, routesWithout, err := PrepareOpenCodeProxy(context.Background(), executable, t.TempDir(), env, "", "http://127.0.0.1:1234/_tariboy/token", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(routes) != 1 || routes["kimi-code-plan-global"] != routesWithout["kimi-code-plan-global"] {
+		t.Fatalf("routes = %+v; want %+v", routes, routesWithout)
+	}
+	cfg := openCodeOverlay(t, withPlugin)
+	plugins, _ := cfg["plugin"].([]any)
+	if len(plugins) != 1 || plugins[0] != plugin {
+		t.Fatalf("plugin = %v; want only %s", cfg["plugin"], plugin)
+	}
+	delete(cfg, "plugin")
+	base := openCodeOverlay(t, without)
+	if _, ok := base["plugin"]; ok {
+		t.Fatal("overlay without the Tariboy plugin has a plugin key")
+	}
+	a, _ := json.Marshal(cfg)
+	b, _ := json.Marshal(base)
+	if string(a) != string(b) {
+		t.Fatalf("overlay changed beyond the plugin key:\n%s\n%s", a, b)
+	}
+}
+
+func TestOpenCodeProxyStillRejectsExternalPluginsWithTariboyPlugin(t *testing.T) {
+	for name, tc := range map[string]struct{ config, inline string }{
+		"user or project config": {config: `{"model":"kimi-code-plan-global/k3","plugin":["unsafe-routing"]}`},
+		"inline overlay":         {config: `{"model":"kimi-code-plan-global/k3"}`, inline: `{"plugin":["file:///tmp/unsafe-routing.js"]}`},
+	} {
+		executable, env := openCodeFixture(t, tc.config)
+		if tc.inline != "" {
+			env = append(env, "OPENCODE_CONFIG_CONTENT="+tc.inline)
+		}
+		_, _, err := PrepareOpenCodeProxy(context.Background(), executable, t.TempDir(), env, "", "http://127.0.0.1:1234/_tariboy/token", "file:///agents/a/harness-hooks/opencode/tariboy-instant-mail.js")
+		if err == nil || err.Error() != "OpenCode external plugins are not supported by iteration proxy routing" {
+			t.Fatalf("%s: err = %v; want the external plugin error", name, err)
+		}
 	}
 }

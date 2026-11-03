@@ -269,6 +269,7 @@ each tool call. Run it in agent mode:
 | `claude-stop` | `{"decision":"block","reason":TEXT}` |
 | `codex-post-tool-use` | The same as `claude-post-tool-use` |
 | `codex-stop` | The same as `claude-stop` |
+| `opencode-tool-after` | A blank line, then `TEXT`, for the OpenCode plugin to add to the tool result |
 
 `TEXT` is the block below. `tmail` builds the JSON itself, so a hook needs no
 `jq`, `python` or `node`.
@@ -321,7 +322,10 @@ AI proxy does not change requests.
 | --- | --- | --- |
 | claude | hook | hook |
 | codex | hook | hook |
-| opencode | next iteration | next iteration |
+| opencode | plugin, after a successful tool call | plugin, after a successful tool call |
+
+A turn that ends without a tool call does not get the letter in opencode. The
+letter stays `waiting`, and the next prompt reads it.
 
 For claude, the daemon writes a plugin with three hooks into
 `<base-dir>/agents/<name>/harness-hooks/claude/`. It passes the plugin with
@@ -383,8 +387,58 @@ If a condition is false, or the daemon cannot write the plugin, the iteration
 starts without the hooks. Except for a missing capability or another harness,
 the daemon log has a warning. An instant letter then stays `waiting` or
 `queued`, the next iteration reads it, and its state becomes `read`. The same
-is true for opencode, which has no hooks yet. The limits that stay with a
-hook:
+is true for a harness without hooks.
+
+For opencode, the daemon writes the plugin file
+`<base-dir>/agents/<name>/harness-hooks/opencode/tariboy-instant-mail.js`. It
+adds the `file://` URL of that file to the `plugin` key of the configuration
+overlay in `OPENCODE_CONFIG_CONTENT`. It adds the key after its checks of the
+proxy routing, so these checks still refuse every other plugin. The daemon
+writes nothing into the working directory, into `~/.config/opencode` or into
+the directory of the image skills, and it does not change `HOME` or
+`XDG_CONFIG_HOME`. The batch mode and the interactive mode run the same
+`opencode run` command with the same overlay.
+
+The plugin has one hook, `tool.execute.after`. After each successful tool call,
+it does these steps:
+
+1. If the file in `TARIBOY_INSTANT_MAIL_FLAG` does not exist, it stops. It
+   starts no process.
+2. It runs the absolute path of `tmail` with `instant --format
+   opencode-tool-after`. It uses `Bun.spawn`, the process API of the runtime
+   inside opencode, so the agent needs no `node`, `bun`, `jq` or `python`.
+3. If `tmail` exits 0 and prints text, the plugin adds the text to the end of
+   the tool result. The model reads it in the next request.
+
+If `tmail` fails, runs longer than 5 seconds or prints only to standard error,
+the tool result does not change. The plugin writes nothing to standard error.
+opencode does not call the hook after a failed tool call, so the letter waits
+for the next successful call or for the next prompt.
+
+The daemon connects the opencode plugin when all of these are true:
+
+- The harness is opencode, version `1.19.5` or newer. The daemon runs
+  `opencode --version` before each iteration. A version that the daemon cannot
+  read counts as too old.
+- The image is not bare, and the agent has the `mail` capability (or its old
+  name `messages`). The image skills are not necessary.
+- `tmail` is on the `PATH` of the iteration, after the agent shell scripts ran.
+
+With any plugin, opencode installs the npm package `@opencode-ai/plugin` into
+each of its configuration directories, also into `~/.config/opencode`, and
+waits for the install before it starts. opencode does this itself, and it has
+no setting to turn the install off. If the package is already there, the start
+takes no extra time. The first start after a new opencode version installs the
+package of that version. With network access, this took 13 to 70 seconds on a
+test host. Without network access, the install fails after about 72 seconds,
+and opencode then starts with the plugin. Each later start waits again, until
+an install succeeds. No timer of the daemon stops an iteration in this time,
+unless the agent has a timeout shorter than the wait. The image skills bridge
+of the agent is one of these configuration directories. Tariboy keeps the
+bridge with the installed package, so the install does not repeat in each
+iteration.
+
+The limits that stay with a hook or a plugin:
 
 - A long tool call holds the letter until the call ends. Nothing stops model
   output that has no tool call.

@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/harness"
@@ -64,7 +65,9 @@ func (b *openCodeShellOutput) Write(p []byte) (int, error) {
 	return b.buf.Write(p)
 }
 
-func (r *ShimRunner) prepareOpenCode(ctx context.Context, l agentdir.Layout, cwd string, env, skillEnv []string, model, proxyURL, proxyToken string) ([]string, string, string, error) {
+// prepareOpenCode also writes the instant mail plugin of an eligible agent and
+// adds it to the configuration overlay, the same for both modes.
+func (r *ShimRunner) prepareOpenCode(ctx context.Context, ag agent.Agent, l agentdir.Layout, adapter harness.Adapter, bare bool, cwd string, env, skillEnv []string, proxyURL, proxyToken string) ([]string, string, string, error) {
 	binder, ok := r.cfg.Proxy.(interface {
 		RegisterProviderRoutes(string, map[string]aiproxy.ProviderRoute) error
 	})
@@ -83,7 +86,8 @@ func (r *ShimRunner) prepareOpenCode(ctx context.Context, l agentdir.Layout, cwd
 	if err != nil {
 		return nil, "", "", errors.New("OpenCode executable not found after shell preparation")
 	}
-	env, routes, err := harness.PrepareOpenCodeProxy(ctx, executable, cwd, env, model, proxyURL)
+	plugin, _ := r.instantHooks(ag, l, adapter, env, cwd, harness.Config{Bare: bare})
+	env, routes, err := harness.PrepareOpenCodeProxy(ctx, executable, cwd, env, ag.Model, proxyURL, plugin.ConfigPlugin)
 	if err != nil {
 		return nil, "", "", err
 	}
