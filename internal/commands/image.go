@@ -53,6 +53,7 @@ func imageBuild() registry.Command {
 			{Name: "path", Flag: "path", Type: registry.String, Help: "Tariboyfile.yaml or its directory"},
 			{Name: "repository-id", Flag: "repository-id", Type: registry.String, Help: "source repository ID"},
 			{Name: "git-commit", Flag: "git-commit", Type: registry.String, Help: "source Git commit"},
+			{Name: "force", Flag: "force", Type: registry.Bool, Help: "publish even when the image_version already exists with other content; the old archive stays under its digest"},
 		}, operationStartArgs()...),
 		HTTP:  &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/images/build"},
 		Local: buildLocal("/api/images/build"),
@@ -137,6 +138,9 @@ func (params imageBuildParams) record() map[string]string {
 			out[key] = value
 		}
 	}
+	if params.force {
+		out["force"] = "true"
+	}
 	return out
 }
 
@@ -145,6 +149,8 @@ type imageBuildParams struct {
 	selector, name, path    string
 	tags                    []string
 	repositoryID, gitCommit string
+	force                   bool
+	initiator               string
 }
 
 // parseImageBuildParams checks the request parameters of image.build. It
@@ -156,6 +162,8 @@ func parseImageBuildParams(p registry.Params) (imageBuildParams, error) {
 		path:         p.String("path"),
 		repositoryID: strings.TrimSpace(p.String("repository-id")),
 		gitCommit:    strings.TrimSpace(p.String("git-commit")),
+		force:        p.Bool("force"),
+		initiator:    p.String("initiator"),
 	}
 	if params.selector != "" && strings.TrimSpace(params.path) != "" {
 		return imageBuildParams{}, api.UserError{Code: "bad_source", Msg: "source and path are mutually exclusive", Status: http.StatusBadRequest}
@@ -272,6 +280,15 @@ func freezeImageSource(c *registry.Ctx, params imageBuildParams, locks imageBuil
 	return imageBuildSource{sourceCWD: sourceCWD, snapshots: snapshotStore, frozen: frozen, parsed: parsed, refs: refs, defaultTags: defaultTags}, cleanup, nil
 }
 
+// versionConflict maps an image.VersionConflictError to its API error.
+func versionConflict(err error) (api.UserError, bool) {
+	var conflict *image.VersionConflictError
+	if !errors.As(err, &conflict) {
+		return api.UserError{}, false
+	}
+	return api.UserError{Code: "image_version_conflict", Msg: conflict.Error(), Status: http.StatusConflict}, true
+}
+
 // publishImage builds the image from source, moves every requested tag onto
 // it and records its provenance in one transaction. A failure restores the
 // previous images.
@@ -300,11 +317,17 @@ func publishImage(c *registry.Ctx, params imageBuildParams, source imageBuildSou
 		}
 		// One build produces one ref; every requested tag is moved onto it,
 		// so a versioned tag and latest always name the same content.
-		man, err := image.BuildV2(source.parsed, imagefile.ResolveRoots{Plugins: pluginsDir, SourceSkills: source.frozen.SourceSkills}, refs[0], store, clock, resolver)
+		man, replaced, err := image.BuildV2Publish(source.parsed, imagefile.ResolveRoots{Plugins: pluginsDir, SourceSkills: source.frozen.SourceSkills}, refs[0], store, clock, resolver, image.PublishOptions{Force: params.force})
+		if ue, ok := versionConflict(err); ok {
+			return ue // a refused version publishes nothing, so there is nothing to restore
+		}
 		if err != nil {
 			return restore("build_failed", err)
 		}
 		log.Printf("built %s digest %s, %d layers", refs[0], man.Digest, len(man.Layers))
+		if len(replaced) > 0 {
+			log.Printf("image_version_forced ref=%s:%s version=%s old_digest=%s new_digest=%s initiator=%s", man.Name, man.ImageVersion, man.ImageVersion, strings.Join(replaced, ","), man.Digest, params.initiator)
+		}
 		for _, ref := range refs[1:] {
 			log.Printf("tag %s", ref)
 			if err := store.SetTag(ref, man.Digest); err != nil {

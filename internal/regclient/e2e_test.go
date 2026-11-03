@@ -16,7 +16,7 @@ import (
 )
 
 // buildImage writes a minimal Tariboyfile + prompt, builds it into imagesDir,
-// and returns the built ref + digest.
+// and returns the built ref and the sha256 of its archive.
 func buildImage(t *testing.T, imagesDir string) (image.Ref, string) {
 	t.Helper()
 	src := t.TempDir()
@@ -36,11 +36,15 @@ func buildImage(t *testing.T, imagesDir string) (image.Ref, string) {
 		t.Fatal(err)
 	}
 	st := &image.Store{Dir: imagesDir}
-	man, err := image.BuildV2(imgFile, imagefile.ResolveRoots{}, ref, st, time.Now, nil)
-	if err != nil {
+	if _, err := image.BuildV2(imgFile, imagefile.ResolveRoots{}, ref, st, time.Now, nil); err != nil {
 		t.Fatalf("image.Build: %v", err)
 	}
-	return ref, man.Digest
+	// The registry addresses transfers by the sha256 of the archive file.
+	archive, err := st.ArchiveBytes(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ref, sha256hex(archive)
 }
 
 // caFileFor writes the httptest server's cert as a PEM the client can trust.
@@ -98,7 +102,7 @@ func TestStoreRoundTripOverTLS(t *testing.T) {
 	// The pulled image is a valid image store entry (manifest parses, schema ok).
 	dst := &image.Store{Dir: dstImages}
 	man, err := dst.Inspect(ref)
-	if err != nil || man.Digest != digest {
+	if err != nil || man.Digest == "" || man.Digest != man.ID {
 		t.Fatalf("pulled Inspect = %+v, err=%v", man, err)
 	}
 }

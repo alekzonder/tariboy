@@ -103,7 +103,7 @@ func TestEnsureBareReplacesLegacyV1(t *testing.T) {
 // replaced by this release's generation, and the earlier one is kept.
 func TestEnsureBareMovesPreviousRelease(t *testing.T) {
 	s := &Store{Dir: t.TempDir()}
-	previous, err := buildV2(&imagefile.V2{SchemaVersion: 2, ImageVersion: "0.0.1", Plugins: []imagefile.V2Plugin{}, Prompts: []imagefile.PromptEntry{}}, imagefile.ResolveRoots{}, BareRef, s, bareFixedClock, nil, nil)
+	previous, _, err := buildV2(&imagefile.V2{SchemaVersion: 2, ImageVersion: "0.0.1", Plugins: []imagefile.V2Plugin{}, Prompts: []imagefile.PromptEntry{}}, imagefile.ResolveRoots{}, BareRef, s, bareFixedClock, nil, nil, PublishOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
