@@ -255,6 +255,12 @@ func buildTasks(ctx context.Context, proc *process, c *coreParts) (*taskParts, e
 	if err := tasks.MigrateLegacyKeys(st.DB, time.Now); err != nil {
 		return nil, fmt.Errorf("migrate task keys: %w", err)
 	}
+	// openStore has resolved the customer login, no startup step changes the
+	// agents table, and nothing serves requests yet, so the waits on missing
+	// principals are known and no new wait can race with their closing.
+	if _, err := tasks.CloseOrphanWaits(ctx, st.DB, c.customerLogin, time.Now, log); err != nil {
+		log.Error("close waits on missing principals", "err", err)
+	}
 	taskService := tasks.NewService(st.DB, c.customerLogin, time.Now)
 	taskService.SetReader(st.Reader())
 	taskHub := tasks.NewHub(taskService)
