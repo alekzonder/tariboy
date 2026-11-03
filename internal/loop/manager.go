@@ -30,6 +30,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/plugins"
+	"github.com/alekzonder/tariboy/internal/proctree"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/script"
@@ -75,6 +76,10 @@ type ManagerConfig struct {
 	Spawner            Spawner
 	RunnerFactory      func(agent.Agent) IterationRunner
 	ConnectShim        func(string) (*shim.Client, error)
+	// ReadProcs and StallProbeTimeout are the stall probe seams. Nil uses
+	// proctree.Read; zero uses defaultStallProbeTimeout.
+	ReadProcs         func(roots []int) ([]proctree.Proc, error)
+	StallProbeTimeout time.Duration
 	// BeforeRestartLaunch is a test seam invoked before a post-adoption
 	// interactive Restart attempts to acquire its launch gate.
 	BeforeRestartLaunch func()
@@ -183,6 +188,8 @@ type Manager struct {
 	// iteration adopted after a daemon restart reports no Goal.
 	goalsMu sync.Mutex
 	goals   map[string]iterationGoal
+	// stall holds the per-agent hook commands and stall probe cache.
+	stall stallProbes
 }
 
 // iterationGoal is the Goal one iteration runs with and when it was read.
@@ -257,6 +264,12 @@ func NewManager(cfg ManagerConfig) *Manager {
 	}
 	if cfg.KillTmuxSession == nil {
 		cfg.KillTmuxSession = tmuxKillSession
+	}
+	if cfg.ReadProcs == nil {
+		cfg.ReadProcs = proctree.Read
+	}
+	if cfg.StallProbeTimeout <= 0 {
+		cfg.StallProbeTimeout = defaultStallProbeTimeout
 	}
 	if cfg.ConnectShim == nil {
 		cfg.ConnectShim = shim.Connect
@@ -385,6 +398,7 @@ func (m *Manager) runnerFor(ag agent.Agent) IterationRunner {
 		RecordCursorUsage: m.cfg.RecordCursorUsage, CodexApproval: m.cfg.CodexApproval,
 		CurrentGoal: m.cfg.CurrentGoal, WorkflowGoals: m.cfg.WorkflowGoals, Tasks: m.cfg.Tasks,
 		GoalRead: m.noteIterationGoal, CloseStaleTaskLetters: m.cfg.CloseStaleTaskLetters,
+		HookCommands: m.noteHookCommands,
 	})
 }
 
@@ -1532,14 +1546,21 @@ func (m *Manager) LiveState(name string) (string, error) {
 
 // LiveStateOf is LiveState for an agent row the caller has already read.
 func (m *Manager) LiveStateOf(a agent.Agent) string {
+	return m.LiveStatusOf(a).State
+}
+
+// liveStateWithoutProbe is the live state before the stall probe. stalled is
+// the iteration whose AI-proxy activity is older than the stall timeout; its
+// state is "error" until the probe finds a live agent command.
+func (m *Manager) liveStateWithoutProbe(a agent.Agent) (state, stalled string) {
 	name := a.Name
 	// Master switch wins: a disabled agent is "stopped" regardless of a stale
 	// error_reason.
 	if !a.Enabled {
-		return "stopped"
+		return "stopped", ""
 	}
 	if a.ErrorReason != "" {
-		return "error"
+		return "error", ""
 	}
 	if iterationID := m.runtimes.currentIterationID(name); iterationID != "" {
 		it, err := m.cfg.Store.GetIteration(name, iterationID)
@@ -1550,16 +1571,16 @@ func (m *Manager) LiveStateOf(a agent.Agent) string {
 			}
 			if at, err := store.ParseTime(last); err == nil &&
 				m.cfg.Clock().Sub(at) >= time.Duration(a.AIStallTimeoutS)*time.Second {
-				return "error"
+				return "error", iterationID
 			}
 		}
-		return "running"
+		return "running", ""
 	}
 	if m.hasLiveIterationOnDisk(name) {
-		return "running"
+		return "running", ""
 	}
 	// Enabled but nothing executing (loop on-waiting or loop off) → idle.
-	return "idle"
+	return "idle", ""
 }
 
 // hasLiveIterationOnDisk reports whether a shim socket exists for the agent's

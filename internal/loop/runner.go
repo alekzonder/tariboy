@@ -445,6 +445,10 @@ type RunnerConfig struct {
 	// with ("" for none) and when it was read; the manager reports it when the
 	// iteration ends.
 	GoalRead func(agent, iterationID, key string, at time.Time)
+	// HookCommands, if set, hears the instant mail hook commands an
+	// iteration's harness runs (nil without hooks); the stall probe does not
+	// count those hook shells as agent commands.
+	HookCommands func(agent, iterationID string, commands []string)
 	// CloseStaleTaskLetters, if set, closes the agent's task notices that are
 	// not its work now before the prompt renders its letters.
 	CloseStaleTaskLetters func(ctx context.Context, agent string) (int, error)
@@ -1194,7 +1198,11 @@ func (r *ShimRunner) buildLaunch(ctx context.Context, ag agent.Agent, l agentdir
 	if err != nil {
 		return preparedRun{}, err
 	}
-	hargv = append(hargv, r.instantHooksArgs(ag, l, adapter, env, cwd, hcfg)...)
+	hooks := r.launchInstantHooks(ag, l, adapter, env, cwd, hcfg)
+	hargv = append(hargv, hooks.Args...)
+	if r.cfg.HookCommands != nil {
+		r.cfg.HookCommands(ag.Name, iterationID, hooks.Commands)
+	}
 	if adapter.Type() == "opencode" {
 		hargv = append([]string{"/bin/sh", "-c", `umask "$1"; shift; exec "$@"`, "tariboy-opencode", mask}, hargv...)
 	} else {

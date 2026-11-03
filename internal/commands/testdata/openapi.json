@@ -834,6 +834,9 @@
           "state": {
             "type": "string"
           },
+          "state_reason": {
+            "type": "string"
+          },
           "timeout_s": {
             "type": "integer"
           }
@@ -1263,6 +1266,9 @@
           "state": {
             "type": "string"
           },
+          "state_reason": {
+            "type": "string"
+          },
           "status_message": {
             "type": "string"
           },
@@ -1570,6 +1576,9 @@
             "type": "string"
           },
           "state": {
+            "type": "string"
+          },
+          "state_reason": {
             "type": "string"
           },
           "timeout_s": {

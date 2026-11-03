@@ -139,6 +139,25 @@ describe("deriveAgentState", () => {
     ).toEqual({ kind: "working", since: "2026-10-30T10:00:00Z" });
   });
 
+  it("carries the state reason of a running agent", () => {
+    expect(
+      deriveAgentState({
+        agent: agent({ state: "running", state_reason: "waiting for agent command" }),
+        needs: none,
+      }),
+    ).toEqual({ kind: "working", reason: "waiting for agent command" });
+    const status = {
+      state: "running",
+      enabled: true,
+      state_reason: "waiting for agent command",
+      budget: { exhausted: [] },
+    };
+    expect(deriveAgentState({ agent: agent({ state: "running" }), status, needs: none })).toEqual({
+      kind: "working",
+      reason: "waiting for agent command",
+    });
+  });
+
   it("prefers the fresher status over the row", () => {
     const status = { state: "running", enabled: true, budget: { exhausted: [] } };
     expect(deriveAgentState({ agent: agent({ state: "idle" }), status, needs: none }).kind).toBe(

@@ -49,6 +49,8 @@ type hookLaunch struct {
 	bin    string
 	log    string
 	files  bool
+	// commands is what the runner reported to HookCommands for the iteration.
+	commands []string
 }
 
 // launchWithHooks prepares one iteration of a hook-eligible agent after edit
@@ -68,6 +70,13 @@ func launchHooks(t *testing.T, version string, tmail bool, skills harness.SkillL
 	var logs bytes.Buffer
 	r.cfg.Logger = slog.New(slog.NewTextHandler(&logs, nil))
 	r.cfg.CodexApproval = func() string { return codexApproval }
+	var commands []string
+	r.cfg.HookCommands = func(agentName, iterationID string, c []string) {
+		if agentName != ag.Name || iterationID != "path-agent-1" {
+			t.Errorf("hook commands for %s/%s", agentName, iterationID)
+		}
+		commands = c
+	}
 	ag.Plugins = []string{"mail"}
 	if edit != nil {
 		edit(&ag)
@@ -84,7 +93,24 @@ func launchHooks(t *testing.T, version string, tmail bool, skills harness.SkillL
 			files = true
 		}
 	}
-	return hookLaunch{argv: prep.shimArgv, env: prep.env, prompt: string(prompt), l: l, bin: bin, log: logs.String(), files: files}
+	return hookLaunch{argv: prep.shimArgv, env: prep.env, prompt: string(prompt), l: l, bin: bin, log: logs.String(), files: files, commands: commands}
+}
+
+// The stall probe gets the same hook commands that hooks.json runs.
+func TestClaudeLaunchReportsInstantHookCommands(t *testing.T) {
+	got := launchWithHooks(t, "2.1.316", true, nil, nil)
+	tmail := "'" + filepath.Join(got.bin, "tmail") + "' instant --format "
+	want := []string{tmail + "claude-post-tool-use", tmail + "claude-post-tool-use-failure", tmail + "claude-stop"}
+	if c := slices.Sorted(slices.Values(got.commands)); !slices.Equal(c, want) {
+		t.Fatalf("hook commands = %q; want %q", c, want)
+	}
+}
+
+func TestLaunchWithoutHooksReportsNoHookCommands(t *testing.T) {
+	got := launchWithHooks(t, "2.1.316", false, nil, nil)
+	if len(got.commands) != 0 {
+		t.Fatalf("hook commands = %q; want none without tmail", got.commands)
+	}
 }
 
 // codexHookArgs returns the argv items from --dangerously-bypass-hook-trust

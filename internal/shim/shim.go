@@ -698,12 +698,31 @@ type tmuxShim struct {
 	// harnessWindow is set once the harness window exists; Kill before that
 	// returns errHarnessNotStarted.
 	harnessWindow bool
+	// harnessPID is the pid the pane supervisor reported in harness_started,
+	// 0 before that report and after harness_exited. The supervisor keeps the
+	// harness unreaped until it exits, so the pid is not reused meanwhile.
+	harnessPID int
 }
 
 // HarnessExited records the pane supervisor's exit report. Repeated reports
 // are harmless.
 func (s *tmuxShim) HarnessExited() {
+	s.mu.Lock()
+	s.harnessPID = 0
+	s.mu.Unlock()
 	s.harnessExitOnce.Do(func() { close(s.harnessExited) })
+}
+
+// HarnessStarted records the harness pid from the pane supervisor. A report
+// after the exit report is ignored.
+func (s *tmuxShim) HarnessStarted(pid int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	select {
+	case <-s.harnessExited:
+	default:
+		s.harnessPID = pid
+	}
 }
 
 func (s *tmuxShim) SetHardDeadline(deadline string) error {
@@ -719,7 +738,7 @@ func (s *tmuxShim) SetHardDeadline(deadline string) error {
 func (s *tmuxShim) Status() StatusResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return StatusResult{Running: !s.finished, PID: 0, StartedAt: s.startedAt}
+	return StatusResult{Running: !s.finished, PID: s.harnessPID, StartedAt: s.startedAt}
 }
 
 func (s *tmuxShim) Kill() error {
@@ -824,6 +843,7 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 		return fmt.Errorf("start harness: %w", err)
 	}
 	pid := cmd.Process.Pid
+	notifyHarnessStarted(exitSock, pid)
 	reaped := false
 	defer func() {
 		if retErr == nil || reaped {
@@ -908,6 +928,21 @@ func notifyHarnessExited(sock string) {
 	}
 	client.Timeout = tmuxExitNotifyTimeout
 	_ = client.NotifyHarnessExited() // best-effort; the shim's has-session fallback ends its wait
+}
+
+// notifyHarnessStarted tells the outer shim the harness pid for the stall
+// probe. The report is best-effort: without it the shim reports pid 0 and the
+// probe keeps the stalled state.
+func notifyHarnessStarted(sock string, pid int) {
+	if sock == "" {
+		return
+	}
+	client, err := ConnectTimeout(sock, tmuxExitNotifyTimeout)
+	if err != nil {
+		return
+	}
+	client.Timeout = tmuxExitNotifyTimeout
+	_ = client.NotifyHarnessStarted(pid) // best-effort; an older shim answers -32601
 }
 
 // envWithout returns base without any key= entry.

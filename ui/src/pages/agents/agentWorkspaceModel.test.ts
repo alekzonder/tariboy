@@ -127,6 +127,16 @@ describe("headerSentence", () => {
     expect(headerSentence({ kind: "working" }, ctx)).toBe("Working");
   });
 
+  it("names the state reason while working", () => {
+    const since = new Date(2026, 9, 30, 9, 5).toISOString();
+    expect(
+      headerSentence(
+        { kind: "working", since, reason: "waiting for agent command" },
+        { goalTaskKey: "DEV-2", runs: 14, now },
+      ),
+    ).toBe("Working on DEV-2 since 09:05 · run 14 · waiting for agent command");
+  });
+
   it.each([
     [{ kind: "idle" }, "Idle. Give it a task."],
     [{ kind: "off" }, "Off. Start to let it work on tasks."],

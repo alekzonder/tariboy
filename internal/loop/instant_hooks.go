@@ -46,15 +46,15 @@ func (r *ShimRunner) instantHooks(ag agent.Agent, l agentdir.Layout, adapter har
 	return hooks, true
 }
 
-// instantHooksArgs returns the argv that loads the instant mail hooks.
+// launchInstantHooks returns the instant mail hooks whose Args load them.
 // OpenCode loads its plugin from the configuration overlay instead, which
-// prepareOpenCode builds.
-func (r *ShimRunner) instantHooksArgs(ag agent.Agent, l agentdir.Layout, adapter harness.Adapter, env []string, cwd string, cfg harness.Config) []string {
+// prepareOpenCode builds, and runs tmail without a shell.
+func (r *ShimRunner) launchInstantHooks(ag agent.Agent, l agentdir.Layout, adapter harness.Adapter, env []string, cwd string, cfg harness.Config) harness.InstantMailHooks {
 	if adapter.Type() == "opencode" {
-		return nil
+		return harness.InstantMailHooks{}
 	}
 	hooks, _ := r.instantHooks(ag, l, adapter, env, cwd, cfg)
-	return hooks.Args
+	return hooks
 }
 
 // hasMailPlugin reports whether plugins hold mail, or messages, its name in

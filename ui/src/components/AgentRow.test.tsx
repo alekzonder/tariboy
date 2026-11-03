@@ -15,6 +15,11 @@ describe("AgentRow", () => {
     [{ kind: "needs", needs: { count: 2 } }, "needs you · 2", "attention"],
     [{ kind: "working", since: "2026-10-30T12:18:00Z" }, "working · 12 min", "live"],
     [{ kind: "working" }, "working", "live"],
+    [
+      { kind: "working", since: "2026-10-30T12:18:00Z", reason: "waiting for agent command" },
+      "working · waiting for agent command",
+      "live",
+    ],
     [{ kind: "error", reason: "boom" }, "error", "danger"],
     [{ kind: "off" }, "off", "quiet"],
   ] as const)("shows the pill of %o", (agentState, text, tone) => {
