@@ -11,29 +11,31 @@ function Value({ row, side }: { row: CompareRow; side: "a" | "b" }) {
   return <Unknown reason={reason ?? UNKNOWN_REASON.change} />;
 }
 
-/** The change and its verdict word; the icon's color repeats the word. */
+const ARROW = { up: ArrowUp, down: ArrowDown, none: Minus };
+
+/** The change and its verdict word: the arrow follows the sign of B − A,
+ *  the color of arrow and word follows the verdict. */
 function Change({ row }: { row: CompareRow }) {
   if (row.note) return null;
   const change = changeOf(row);
   if (!change) return <Unknown reason={UNKNOWN_REASON.change} />;
   const { verdict } = change;
-  const Icon = verdict === "better" ? ArrowDown : verdict === "worse" ? ArrowUp : Minus;
+  const Icon = ARROW[change.direction];
   return (
     <>
       <span>{change.text}</span>
       {verdict && (
         <>
           {" "}
-          <span className="inline-flex items-center gap-0.5 font-sans font-medium">
-            <Icon
-              aria-hidden="true"
-              className={cn(
-                "size-3",
-                verdict === "better" && "text-status-running",
-                verdict === "worse" && "text-destructive",
-                verdict === "no change" && "text-muted-foreground",
-              )}
-            />
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 font-sans font-medium",
+              verdict === "better" && "text-status-running",
+              verdict === "worse" && "text-destructive",
+              verdict === "no change" && "text-muted-foreground",
+            )}
+          >
+            <Icon aria-hidden="true" className="size-3" />
             {verdict}
           </span>
         </>

@@ -155,8 +155,11 @@ export function fmtCell(row: CompareRow, side: "a" | "b"): string {
 
 export type Verdict = "better" | "worse" | "no change";
 
-/** B − A with its percent of A, and the verdict; null when a side is unknown. */
-export function changeOf(row: CompareRow): { text: string; verdict: Verdict | null } | null {
+/** B − A with its percent of A, its sign as a direction, and the verdict;
+ *  null when a side is unknown. */
+export function changeOf(
+  row: CompareRow,
+): { text: string; direction: "up" | "down" | "none"; verdict: Verdict | null } | null {
   if (row.note || row.a === null || row.b === null) return null;
   const diff = row.b - row.a;
   const sign = diff > 0 ? "+" : diff < 0 ? "−" : "";
@@ -168,7 +171,8 @@ export function changeOf(row: CompareRow): { text: string; verdict: Verdict | nu
     if (diff === 0) verdict = "no change";
     else verdict = diff < 0 === (row.better === "lower") ? "better" : "worse";
   }
-  return { text: amount + percent, verdict };
+  const direction = diff > 0 ? "up" : diff < 0 ? "down" : "none";
+  return { text: amount + percent, direction, verdict };
 }
 
 /** The warning that the samples are too small to trust, or null. */

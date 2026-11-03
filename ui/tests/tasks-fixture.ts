@@ -25,7 +25,8 @@ const internals: TauriInternals = {
           message: "",
         };
       case "hosts_list":
-        return [];
+        // A test adds native hosts with page.addInitScript.
+        return (window as { __TEST_HOSTS__?: unknown[] }).__TEST_HOSTS__ ?? [];
       case "plugin:event|listen":
         eventID += 1;
         return eventID;
