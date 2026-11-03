@@ -6,6 +6,7 @@ import (
 )
 
 func TestAgentActionBindsAuthorAndEnforcesQueueAccess(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -40,6 +41,7 @@ func TestAgentActionBindsAuthorAndEnforcesQueueAccess(t *testing.T) {
 }
 
 func TestAgentAskSeparatesMentionFromMarkdownBody(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	if _, err := svc.CreateQueue(ctx, CustomerActor("customer"), CreateQueueInput{
@@ -71,6 +73,7 @@ func TestAgentAskSeparatesMentionFromMarkdownBody(t *testing.T) {
 // give itself work or a window into the queue: the report is unassigned, ungrouped, and
 // invisible to its author afterwards. Triage belongs to whoever owns the queue.
 func TestAgentActionFilesUnassignedReportWithoutQueueVisibility(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -143,6 +146,7 @@ func TestAgentActionFilesUnassignedReportWithoutQueueVisibility(t *testing.T) {
 }
 
 func TestAgentActionAssignsCrossQueueRootWithoutQueueVisibility(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -177,6 +181,7 @@ func TestAgentActionAssignsCrossQueueRootWithoutQueueVisibility(t *testing.T) {
 }
 
 func TestAgentActionCrossQueueAssignmentReportsCreatorAccessAccurately(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -224,6 +229,7 @@ func TestAgentActionCrossQueueAssignmentReportsCreatorAccessAccurately(t *testin
 }
 
 func TestAgentActionAppliesPriority(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -283,6 +289,7 @@ func TestAgentActionAppliesPriority(t *testing.T) {
 }
 
 func TestAgentActionCreateAndUpdatePreservePullRequestAndWaitCustomer(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := AgentActor("alice")
@@ -314,6 +321,7 @@ func TestAgentActionCreateAndUpdatePreservePullRequestAndWaitCustomer(t *testing
 }
 
 func TestAgentActionUpdateClearsExplicitManualBlockReason(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")

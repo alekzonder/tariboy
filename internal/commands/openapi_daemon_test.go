@@ -17,6 +17,7 @@ import (
 // the socket and the objects its scenario created. The variables carry no
 // TARIBOY_ prefix because TestMain clears those.
 func TestDaemonOpenAPIContract(t *testing.T) {
+	t.Parallel()
 	sock := os.Getenv("OPENAPI_E2E_SOCKET")
 	if sock == "" {
 		t.Skip("set OPENAPI_E2E_SOCKET to the socket of an isolated daemon")

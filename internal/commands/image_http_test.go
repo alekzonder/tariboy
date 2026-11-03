@@ -12,7 +12,7 @@ import (
 // commands that DO carry an HTTPRoute).
 func routed(t *testing.T, path string) func(*registry.Ctx, registry.Params) (any, error) {
 	t.Helper()
-	cmd, ok := BuildRegistry().Get(path)
+	cmd, ok := testRegistry().Get(path)
 	if !ok {
 		t.Fatalf("command %s not registered", path)
 	}
@@ -43,7 +43,7 @@ func TestImageRoutesRegistered(t *testing.T) {
 		{"image.source.validate", "POST", "/api/image-sources/{name}/validate"},
 		{"image.source.build", "POST", "/api/image-sources/{name}/build"},
 	} {
-		cmd, ok := BuildRegistry().Get(tc.path)
+		cmd, ok := testRegistry().Get(tc.path)
 		if !ok {
 			t.Fatalf("%s not registered", tc.path)
 		}

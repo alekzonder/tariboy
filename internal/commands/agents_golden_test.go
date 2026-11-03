@@ -85,6 +85,7 @@ func agentsFixture(t *testing.T) (*registry.Ctx, *fakeControl, image.Ref, image.
 // Catches a typed agents response changing the JSON a client sees: the set of
 // keys, their JSON types, and their values must match the recorded responses.
 func TestAgentsResponsesMatchGolden(t *testing.T) {
+	t.Parallel()
 	c, fc, ref, manifest := agentsFixture(t)
 	type call struct {
 		label, path string

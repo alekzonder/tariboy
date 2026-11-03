@@ -9,6 +9,7 @@ import (
 // Each row is a row of the category table in
 // docs/docs/task-workflows.mdx#status-and-category.
 func TestDeriveCategory(t *testing.T) {
+	t.Parallel()
 	const holder, other = "agent:h", "agent:o"
 	pool := workflowfile.OwnerPool
 	for _, tc := range []struct {
@@ -48,6 +49,7 @@ func TestDeriveCategory(t *testing.T) {
 // Entering a status and resuming a pause share one holder rule: a paused or
 // blocked pool status picks nobody, which once differed between the two.
 func TestPicksHolderOnlyForAnUnpausedUnblockedPoolStatus(t *testing.T) {
+	t.Parallel()
 	status := workflowfile.Status{ID: "build", Owner: workflowfile.Owner{Kind: workflowfile.OwnerPool, Pool: "dev"}}
 	for _, tc := range []struct {
 		name  string

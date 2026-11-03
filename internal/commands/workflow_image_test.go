@@ -323,6 +323,7 @@ func TestWorkflowBuildErrors(t *testing.T) {
 
 // A build that moves latest moves a queue bound by latest, before any task.
 func TestWorkflowBuildMovesQueueBoundByTag(t *testing.T) {
+	t.Parallel()
 	c := workflowCtx(t)
 	svc := tasks.NewService(c.Store.DB, "customer", time.Now)
 	images := workflowImageStore(c)

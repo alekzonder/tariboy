@@ -6,6 +6,7 @@ import (
 )
 
 func TestHubReplayFiltersAgentVisibilityAndResumesAfterSequence(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	hub := NewHub(svc)
 	svc.SetHub(hub)
@@ -36,6 +37,7 @@ func TestHubReplayFiltersAgentVisibilityAndResumesAfterSequence(t *testing.T) {
 }
 
 func TestHubSignalsSubscribersAfterCommittedMutation(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	hub := NewHub(svc)
 	svc.SetHub(hub)

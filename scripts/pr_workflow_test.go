@@ -145,6 +145,7 @@ func checkBackendJob(t *testing.T, root string, job workflowJob) {
 		{Uses: aptCacheAction},
 		{Run: rustVersionRun},
 		{Uses: cacheAction},
+		{Uses: cacheAction},
 		{Run: "make backend-check"},
 	})
 	if got := job.Steps[1].With.GoVersionFile; got != "go.mod" {
@@ -173,6 +174,23 @@ func checkBackendJob(t *testing.T, root string, job workflowJob) {
 	}
 	if !strings.Contains(cargo.RestoreKeys, "${{ steps.rust.outputs.version }}") {
 		t.Errorf("cargo cache restore-keys %q must stay within one Rust version", cargo.RestoreKeys)
+	}
+	checkStaticcheckCache(t, job.Steps[6])
+}
+
+// The staticcheck cache keeps the analysis of the standard library and the
+// dependencies, which setup-go's GOCACHE does not hold.
+func checkStaticcheckCache(t *testing.T, step workflowStep) {
+	t.Helper()
+	cache := step.With
+	if got := strings.Fields(cache.Path); !slices.Equal(got, []string{"~/.cache/staticcheck"}) {
+		t.Errorf("staticcheck cache paths = %v, want [~/.cache/staticcheck]", got)
+	}
+	if want := "staticcheck-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum', 'tools.mod', 'tools.sum') }}"; cache.Key != want {
+		t.Errorf("staticcheck cache key = %q, want %q", cache.Key, want)
+	}
+	if want := "staticcheck-${{ runner.os }}-\n"; cache.RestoreKeys != want {
+		t.Errorf("staticcheck cache restore-keys = %q, want %q", cache.RestoreKeys, want)
 	}
 }
 

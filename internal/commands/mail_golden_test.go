@@ -104,6 +104,7 @@ func mailGoldenCalls(ids mailFixtureIDs) []mailGoldenCall {
 // Catches a typed mail response changing the JSON a client sees: the set of
 // keys, their JSON types, and their values must match the recorded responses.
 func TestMailResponsesMatchGolden(t *testing.T) {
+	t.Parallel()
 	c, ids := mailFixture(t)
 	recorder := newGoldenRecorder(t, map[string]bool{})
 	for _, call := range mailGoldenCalls(ids) {
@@ -117,6 +118,7 @@ func TestMailResponsesMatchGolden(t *testing.T) {
 }
 
 func TestMailErrorsCarryTheirCodes(t *testing.T) {
+	t.Parallel()
 	c, ids := mailFixture(t)
 	for _, tc := range []struct {
 		path   string

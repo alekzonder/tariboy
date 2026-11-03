@@ -94,6 +94,7 @@ func mustRebindPool(t *testing.T, svc *Service, actor Actor, pool string, agents
 }
 
 func TestRebindAgentPoolIsRevisionedAuditedAndIdempotent(t *testing.T) {
+	t.Parallel()
 	svc, actor := workflowFixture(t)
 	if _, err := svc.RebindAgentPool(context.Background(), AgentActor("dev-1"), "DEV", "developers", []string{"dev-1"}, 0, "agent-rebind"); ErrorCode(err) != "forbidden" {
 		t.Fatalf("agent rebind error = %v; want forbidden", err)
@@ -137,6 +138,7 @@ func TestRebindAgentPoolIsRevisionedAuditedAndIdempotent(t *testing.T) {
 }
 
 func TestGetAndListAgentPools(t *testing.T) {
+	t.Parallel()
 	svc, actor := workflowFixture(t)
 	reviewers := mustRebindPool(t, svc, actor, "reviewers", []string{"reviewer-1"}, 0)
 	developers := mustRebindPool(t, svc, actor, "developers", []string{"dev-2", "dev-1"}, 0)
@@ -157,6 +159,7 @@ func TestGetAndListAgentPools(t *testing.T) {
 }
 
 func TestQueueWorkflowBindingRules(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	if _, err := svc.SetQueueWorkflow(ctx, actor, "DEV", "flow", 0); ErrorCode(err) != "workflow_unavailable" {
@@ -260,6 +263,7 @@ func TestQueueWorkflowBindingRules(t *testing.T) {
 }
 
 func TestRebindAgentPoolKeepsBoundPoolsNonEmpty(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	seedBindingImage(t, svc, "flow", "1", "developers")
@@ -287,6 +291,7 @@ func TestRebindAgentPoolKeepsBoundPoolsNonEmpty(t *testing.T) {
 // A pool an older version uses stays non-empty while a task pinned to that
 // version is open, even after the queue is rebound to a version without it.
 func TestRebindAgentPoolKeepsPoolsOfPinnedVersionsNonEmpty(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	d1 := seedBindingImage(t, svc, "flow", "1", "developers", "reviewers")
@@ -315,6 +320,7 @@ func TestRebindAgentPoolKeepsPoolsOfPinnedVersionsNonEmpty(t *testing.T) {
 // Binding the digest already bound is a no-op even with the revision the
 // original bind used, so a retry of a successful bind succeeds.
 func TestSetQueueWorkflowRetryOfTheSameDigestIsANoOp(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	seedBindingImage(t, svc, "flow", "1", "developers")
@@ -333,6 +339,7 @@ func TestSetQueueWorkflowRetryOfTheSameDigestIsANoOp(t *testing.T) {
 }
 
 func TestDeleteAgentPoolIsRevisionedAuditedAndIdempotent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	other := mustRebindPool(t, svc, actor, "other", []string{"dev-1", "dev-2"}, 0)
@@ -384,6 +391,7 @@ func TestDeleteAgentPoolIsRevisionedAuditedAndIdempotent(t *testing.T) {
 }
 
 func TestDeleteAgentPoolRefusesAPoolInUse(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, task := requestFixture(t)
 	refused := func(pool string) {

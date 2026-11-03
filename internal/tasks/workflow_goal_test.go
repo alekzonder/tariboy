@@ -13,6 +13,7 @@ import (
 // A holder that hands its task to a customer status is released by the goal
 // reconciler at once, so dispatch can give it other work.
 func TestHolderIsFreeOnceItsTaskWaitsInACustomerStatus(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, task := tasks.RequestFixture(t)
 	db := tasks.ServiceDB(svc)

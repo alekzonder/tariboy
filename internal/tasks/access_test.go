@@ -16,6 +16,7 @@ func taskKeys(tasks []Task) map[string]Task {
 }
 
 func TestAncestorAssignmentExposesAllDescendantsWithoutSiblingBranches(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -90,6 +91,8 @@ func TestAncestorAssignmentExposesAllDescendantsWithoutSiblingBranches(t *testin
 	}
 }
 
+// Sequential: it checks a 2 s time limit, so it must not share the CPU with
+// the parallel tests of the package.
 func TestListTasksLoadsDeepVisibleTreePromptly(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
@@ -146,6 +149,7 @@ func TestListTasksLoadsDeepVisibleTreePromptly(t *testing.T) {
 }
 
 func TestGroupVisibilityTracksCurrentMembership(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")

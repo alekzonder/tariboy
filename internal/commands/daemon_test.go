@@ -143,7 +143,7 @@ func TestBuildRegistryOmitsRetiredCommandAndRoute(t *testing.T) {
 
 func TestUsageGroupFilterHelpDescribesFunctionalFilter(t *testing.T) {
 	t.Parallel()
-	cmd, ok := BuildRegistry().Get("usage")
+	cmd, ok := testRegistry().Get("usage")
 	if !ok {
 		t.Fatal("usage command not registered")
 	}

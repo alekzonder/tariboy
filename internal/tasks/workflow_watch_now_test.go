@@ -9,6 +9,7 @@ import (
 )
 
 func TestRunWatchNowCreatesAPendingWatchRun(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	// A quiet watch waits for every before its next run.
@@ -35,6 +36,7 @@ func TestRunWatchNowCreatesAPendingWatchRun(t *testing.T) {
 }
 
 func TestRunWatchNowRefusals(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	t.Run("agent", func(t *testing.T) {
 		svc, _, task := watchFixture(t)

@@ -27,6 +27,7 @@ func requeueFixture(t *testing.T) (*Service, Actor, Task) {
 }
 
 func TestRequeueWorkflowTaskToAQueueWithoutWorkflow(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requeueFixture(t)
 	ctx := context.Background()
 	if _, err := svc.AddComment(ctx, actor, task.Key, AddCommentInput{Body: "context to keep"}); err != nil {
@@ -77,6 +78,7 @@ func TestRequeueWorkflowTaskToAQueueWithoutWorkflow(t *testing.T) {
 }
 
 func TestRequeueWorkflowTaskToAnotherWorkflowQueue(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requeueFixture(t)
 	moved, err := svc.RequeueTask(context.Background(), actor, task.Key, RequeueInput{Queue: "OPS"})
 	if err != nil {
@@ -92,6 +94,7 @@ func TestRequeueWorkflowTaskToAnotherWorkflowQueue(t *testing.T) {
 }
 
 func TestRequeueFlexibleTaskToAWorkflowQueue(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := requeueFixture(t)
 	ctx := context.Background()
 	flexible, err := svc.CreateTask(ctx, actor, CreateTaskInput{Queue: "TASK", Title: "flex", Priority: "P1"})
@@ -112,6 +115,7 @@ func TestRequeueFlexibleTaskToAWorkflowQueue(t *testing.T) {
 }
 
 func TestRequeueRefusals(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requeueFixture(t)
 	ctx := context.Background()
 	parent, err := svc.CreateTask(ctx, actor, CreateTaskInput{Queue: "TASK", Title: "parent"})

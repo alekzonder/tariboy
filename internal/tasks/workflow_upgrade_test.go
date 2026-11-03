@@ -20,6 +20,7 @@ func upgradeFixture(t *testing.T) (*Service, Actor, Task, string) {
 }
 
 func TestUpgradeWorkflowRestartsTheTaskAtTheQueueVersion(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, d2 := upgradeFixture(t)
 	ctx := context.Background()
 	d1 := task.WorkflowDigest
@@ -82,6 +83,7 @@ func TestUpgradeWorkflowRestartsTheTaskAtTheQueueVersion(t *testing.T) {
 }
 
 func TestUpgradeWorkflowRefusals(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, d2 := upgradeFixture(t)
 	ctx := context.Background()
 	flexible, err := svc.CreateTask(ctx, actor, CreateTaskInput{Queue: "TASK", Title: "flex"})

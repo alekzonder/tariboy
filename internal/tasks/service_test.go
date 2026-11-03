@@ -18,6 +18,7 @@ func newTestService(t *testing.T) *Service {
 }
 
 func TestNormalizePullRequest(t *testing.T) {
+	t.Parallel()
 	for _, bad := range []string{"github.com/o/r/pull/1", "ftp://example.test/1", "https://u:p@example.test/1"} {
 		if _, err := NormalizePullRequest(bad); ErrorCode(err) != "invalid_pull_request" {
 			t.Fatalf("%q: %v", bad, err)
@@ -30,6 +31,7 @@ func TestNormalizePullRequest(t *testing.T) {
 }
 
 func TestCreateTaskPullRequestValidatesPersistsAndReplays(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := CustomerActor("customer")
@@ -71,6 +73,7 @@ func TestCreateTaskPullRequestValidatesPersistsAndReplays(t *testing.T) {
 }
 
 func TestUpdateTaskPullRequestUsesRevisionAndEvents(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := CustomerActor("customer")
@@ -139,6 +142,7 @@ func TestUpdateTaskPullRequestUsesRevisionAndEvents(t *testing.T) {
 }
 
 func TestUpdateTaskAcceptsWaitCustomer(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := CustomerActor("customer")
@@ -159,6 +163,7 @@ func TestUpdateTaskAcceptsWaitCustomer(t *testing.T) {
 }
 
 func TestUpdateTaskPullRequestKeepsStatus(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := CustomerActor("customer")
@@ -175,6 +180,7 @@ func TestUpdateTaskPullRequestKeepsStatus(t *testing.T) {
 }
 
 func TestCreateTaskPullRequestKeepsStatus(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := CustomerActor("customer")
@@ -187,6 +193,7 @@ func TestCreateTaskPullRequestKeepsStatus(t *testing.T) {
 }
 
 func TestCreateTaskAllocatesPermanentQueueKeyAndInheritsQueue(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -240,6 +247,7 @@ func TestCreateTaskAllocatesPermanentQueueKeyAndInheritsQueue(t *testing.T) {
 }
 
 func TestCreateTaskInQueueWithoutWorkflowKeepsLegacyBehavior(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := CustomerActor("customer")
@@ -266,6 +274,7 @@ func TestCreateTaskInQueueWithoutWorkflowKeepsLegacyBehavior(t *testing.T) {
 }
 
 func TestCreateQueueRejectsInvalidPrefixAndNonCustomer(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 
@@ -280,6 +289,7 @@ func TestCreateQueueRejectsInvalidPrefixAndNonCustomer(t *testing.T) {
 }
 
 func TestUpdateQueueRollsBackOwnersWhenRevisionGuardUpdatesNoRow(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -316,6 +326,7 @@ func TestUpdateQueueRollsBackOwnersWhenRevisionGuardUpdatesNoRow(t *testing.T) {
 }
 
 func TestQueueMutationsAppendEventsAndNudgeHub(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	hub := NewHub(svc)
 	svc.SetHub(hub)
@@ -364,6 +375,7 @@ func TestQueueMutationsAppendEventsAndNudgeHub(t *testing.T) {
 }
 
 func TestCreateTaskIdempotencyReplaysOriginalWithoutAllocatingAnotherKey(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -395,6 +407,7 @@ func TestCreateTaskIdempotencyReplaysOriginalWithoutAllocatingAnotherKey(t *test
 }
 
 func TestListTasksStatusViewsPreserveVisibilityAndFlattenExcludedParents(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -456,6 +469,7 @@ func TestListTasksStatusViewsPreserveVisibilityAndFlattenExcludedParents(t *test
 }
 
 func TestListTasksExplicitStatusIsAuthoritativeWithoutStatusView(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -509,6 +523,7 @@ func TestListTasksExplicitStatusIsAuthoritativeWithoutStatusView(t *testing.T) {
 }
 
 func TestListTasksUsesStableCursorPagination(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -541,6 +556,7 @@ func TestListTasksUsesStableCursorPagination(t *testing.T) {
 }
 
 func TestCreateTaskDefaultsAndValidatesPriority(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -570,6 +586,7 @@ func TestCreateTaskDefaultsAndValidatesPriority(t *testing.T) {
 }
 
 func TestUpdateTaskPriorityUsesRevisionGuard(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -611,6 +628,7 @@ func TestUpdateTaskPriorityUsesRevisionGuard(t *testing.T) {
 }
 
 func TestListTasksFilterByTextMatchesTaskKey(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -661,6 +679,7 @@ func TestListTasksFilterByTextMatchesTaskKey(t *testing.T) {
 
 // SQLite's own LOWER and LIKE fold only ASCII, so non-Latin text must still match in any case.
 func TestListTasksFilterByTextIsCaseInsensitiveForUnicode(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -694,6 +713,7 @@ func TestListTasksFilterByTextIsCaseInsensitiveForUnicode(t *testing.T) {
 // children even though a root it files itself would be invisible. Detaching a child hands
 // it out of that subtree, and the counts on the root say how big the subtree has grown.
 func TestSubtreeAccessSurvivesAuthorshipNarrowingAndDetach(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -771,6 +791,7 @@ func TestSubtreeAccessSurvivesAuthorshipNarrowingAndDetach(t *testing.T) {
 }
 
 func TestEnsureDefaultQueueCreatesTaskQueueOnce(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -797,6 +818,7 @@ func TestEnsureDefaultQueueCreatesTaskQueueOnce(t *testing.T) {
 }
 
 func TestEnsureDefaultQueueKeepsExistingTaskQueue(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -818,6 +840,7 @@ func TestEnsureDefaultQueueKeepsExistingTaskQueue(t *testing.T) {
 }
 
 func TestStartedAtRecordsTheFirstMoveToInProgress(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := CustomerActor("customer")

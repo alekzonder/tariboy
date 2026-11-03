@@ -27,6 +27,7 @@ func mentionTask(t *testing.T) (*Service, Task) {
 func waitPrincipalsOf(result CommentResult) []string { return waitPrincipals(result.CreatedWaits) }
 
 func TestCommentMentionStopsBeforeTrailingPunctuation(t *testing.T) {
+	t.Parallel()
 	marks := []string{".", ",", ":", ";", "!", "?", ")", "]", "}", `"`, "'", "»", "”", "’", "`"}
 	for _, mark := range marks {
 		t.Run(mark, func(t *testing.T) {
@@ -45,6 +46,7 @@ func TestCommentMentionStopsBeforeTrailingPunctuation(t *testing.T) {
 }
 
 func TestCommentMentionAtSentenceEndOpensWaitOnName(t *testing.T) {
+	t.Parallel()
 	svc, task := mentionTask(t)
 	seedAgent(t, svc, "tariboy-pm", "")
 	result, err := svc.AddComment(context.Background(), CustomerActor("customer"), task.Key,
@@ -58,6 +60,7 @@ func TestCommentMentionAtSentenceEndOpensWaitOnName(t *testing.T) {
 }
 
 func TestCommentMentionKeepsInnerDot(t *testing.T) {
+	t.Parallel()
 	svc, task := mentionTask(t)
 	seedAgent(t, svc, "a.b", "")
 	result, err := svc.AddComment(context.Background(), CustomerActor("customer"), task.Key,
@@ -71,6 +74,7 @@ func TestCommentMentionKeepsInnerDot(t *testing.T) {
 }
 
 func TestCommentMentionOfMissingAgentCreatesNoWait(t *testing.T) {
+	t.Parallel()
 	svc, task := mentionTask(t)
 	ctx := context.Background()
 	customer := CustomerActor("customer")
@@ -100,6 +104,7 @@ func TestCommentMentionOfMissingAgentCreatesNoWait(t *testing.T) {
 }
 
 func TestAskMissingPrincipalReturnsPrincipalNotFound(t *testing.T) {
+	t.Parallel()
 	for _, principal := range []string{"agent:ghost", "ghost", "user:other"} {
 		t.Run(principal, func(t *testing.T) {
 			svc, task := mentionTask(t)
@@ -127,6 +132,7 @@ func TestAskMissingPrincipalReturnsPrincipalNotFound(t *testing.T) {
 // The asked principal is also the mention in the question's body: the
 // question opens one wait on it, not two.
 func TestAskExistingAgentOpensOneWait(t *testing.T) {
+	t.Parallel()
 	svc, task := mentionTask(t)
 	seedAgent(t, svc, "reviewer", "")
 	ctx := context.Background()

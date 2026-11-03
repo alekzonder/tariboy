@@ -82,7 +82,7 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   frontend- or documentation-only changes. Run `make check`, which runs both,
   for mixed changes or whenever ownership is unclear. The pull request
   workflow runs `backend-check` and `frontend-check` as two parallel jobs with
-  apt and cargo caches; see "Pull request CI" in
+  apt, cargo and staticcheck caches; see "Pull request CI" in
   `docs/docs/development.mdx`. Backend checks cover
   `fmt-check`, `go vet`, `staticcheck`, the `gocyclo` complexity threshold,
   Go unit tests, the desktop crate compile (`desktop-rust-check`, `cargo

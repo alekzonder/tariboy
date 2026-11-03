@@ -51,6 +51,7 @@ func assessmentTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 }
 
 func TestAssessmentCommandsReadOnly(t *testing.T) {
+	t.Parallel()
 	c, id := assessmentFixture(t)
 	list, err := h(t, "assessment.ls")(c, registry.Params{"task": "", "agent": "dev"})
 	if err != nil {

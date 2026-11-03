@@ -14,6 +14,7 @@ func childKeys(children []Task) []string {
 }
 
 func TestGetTaskChildrenHideOtherQueueChildFromReader(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	detail, err := tr.svc.GetTask(ctx, tr.lead, tr.parent.Key)
@@ -35,6 +36,7 @@ func TestGetTaskChildrenHideOtherQueueChildFromReader(t *testing.T) {
 }
 
 func TestGetTaskChildrenIncludeClosedInTreeOrder(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	urgent, err := tr.svc.CreateTask(ctx, tr.customer, CreateTaskInput{ParentKey: tr.parent.Key, Title: "urgent", Priority: PriorityP0})
@@ -67,6 +69,7 @@ func TestGetTaskChildrenIncludeClosedInTreeOrder(t *testing.T) {
 }
 
 func TestGetTaskParentHiddenFromChildQueueOwner(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	detail, err := tr.svc.GetTask(ctx, tr.designer, tr.kid.Key)
@@ -85,6 +88,7 @@ func TestGetTaskParentHiddenFromChildQueueOwner(t *testing.T) {
 }
 
 func TestGetTaskParentVisibleToReader(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	detail, err := tr.svc.GetTask(ctx, tr.writer, tr.kid.Key)

@@ -20,6 +20,7 @@ func requireSecrets(t *testing.T, svc *Service, digest string, names ...string) 
 }
 
 func TestSetQueueSecretInfoReturnsTheStoredTime(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	info, err := svc.SetQueueSecretInfo(ctx, actor, "dev", "GH_TOKEN", "s3cr3t-value")
@@ -36,6 +37,7 @@ func TestSetQueueSecretInfoReturnsTheStoredTime(t *testing.T) {
 }
 
 func TestQueueSecretsSetListRemove(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	if err := svc.SetQueueSecret(ctx, actor, "DEV", "ZED_TOKEN", "first"); err != nil {
@@ -69,6 +71,7 @@ func TestQueueSecretsSetListRemove(t *testing.T) {
 }
 
 func TestQueueSecretsValidation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	for _, tc := range []struct {
@@ -110,6 +113,7 @@ func TestQueueSecretsValidation(t *testing.T) {
 }
 
 func TestQueueSecretsAreCustomerOnly(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	if err := svc.SetQueueSecret(ctx, actor, "DEV", "GH_TOKEN", "v"); err != nil {
@@ -133,6 +137,7 @@ func TestQueueSecretsAreCustomerOnly(t *testing.T) {
 }
 
 func TestQueueSecretEventsNameTheKeyOnly(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	if err := svc.SetQueueSecret(ctx, actor, "DEV", "GH_TOKEN", "hunter2-value"); err != nil {
@@ -155,6 +160,7 @@ func TestQueueSecretEventsNameTheKeyOnly(t *testing.T) {
 }
 
 func TestSetQueueWorkflowRequiresItsSecrets(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	digest := seedBindingImage(t, svc, "flow", "1", "developers")
@@ -200,6 +206,7 @@ func TestSetQueueWorkflowRequiresItsSecrets(t *testing.T) {
 }
 
 func TestQueueWorkflowSecretsMayComeFromTheGlobalEnv(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	digest := seedBindingImage(t, svc, "flow", "1", "developers")
@@ -264,6 +271,7 @@ func TestQueueWorkflowSecretsMayComeFromTheGlobalEnv(t *testing.T) {
 }
 
 func TestQueueSecretsInGlobalEnvOfAnUnboundQueueIsEmpty(t *testing.T) {
+	t.Parallel()
 	svc, actor := workflowFixture(t)
 	svc.SetGlobalEnv(func() ([]string, error) { return []string{"GH_TOKEN=global"}, nil })
 	names, err := svc.QueueSecretsInGlobalEnv(context.Background(), actor, "DEV")
@@ -273,6 +281,7 @@ func TestQueueSecretsInGlobalEnvOfAnUnboundQueueIsEmpty(t *testing.T) {
 }
 
 func TestSetQueueWorkflowReportsPoolsBeforeSecrets(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)
 	digest := seedBindingImage(t, svc, "flow", "1", "developers")

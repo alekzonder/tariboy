@@ -10,6 +10,7 @@ import (
 // can be split back into one chat per agent. The author rides in data.from
 // because source stays "system:tasks" for the bus fan-out author exclusion.
 func TestNotificationOutboxRecordsItsAuthor(t *testing.T) {
+	t.Parallel()
 	svc, task := assignedTask(t, "worker", StatusInProgress)
 	if _, err := svc.AddComment(context.Background(), AgentActor("worker"), task.Key, AddCommentInput{
 		Body: "@user:customer choose one", IdempotencyKey: "ask-1",

@@ -14,6 +14,7 @@ var randomKeyRE = regexp.MustCompile(`^KEYS-[23456789abcdefghjkmnpqrstuvwxyz]{4}
 var randomKeyPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]*-[23456789abcdefghjkmnpqrstuvwxyz]{4}$`)
 
 func TestCreateTaskGeneratesRandomLowercaseKeys(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := CustomerActor("customer")
@@ -37,6 +38,7 @@ func TestCreateTaskGeneratesRandomLowercaseKeys(t *testing.T) {
 }
 
 func TestGetTaskAcceptsAnyKeyCasing(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := CustomerActor("customer")
@@ -65,6 +67,7 @@ func TestGetTaskAcceptsAnyKeyCasing(t *testing.T) {
 }
 
 func TestMigrateLegacyKeysRewritesKeysAndKeepsOldOnesResolvable(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := CustomerActor("customer")
@@ -126,6 +129,7 @@ func TestMigrateLegacyKeysRewritesKeysAndKeepsOldOnesResolvable(t *testing.T) {
 }
 
 func TestMigrateLegacyKeysKeepsLaterAllDigitRandomKeys(t *testing.T) {
+	t.Parallel()
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := CustomerActor("customer")

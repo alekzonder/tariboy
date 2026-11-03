@@ -166,6 +166,7 @@ func imagesStableSizes(t *testing.T, value any) any {
 // the set of keys, their JSON types, and their values must match the recorded
 // responses.
 func TestImagesResponsesMatchGolden(t *testing.T) {
+	t.Parallel()
 	c, dirs := imagesFixture(t)
 	imagesSetupAgents(t, c)
 	resolvedRoot, err := filepath.EvalSymlinks(dirs.root)

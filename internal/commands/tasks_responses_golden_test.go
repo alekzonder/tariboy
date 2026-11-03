@@ -56,6 +56,7 @@ func tasksFixture(t *testing.T) (*registry.Ctx, *tasks.Service) {
 // event, pool and trigger commands; the workflow stub answers
 // the commands that need a workflow engine.
 func TestTasksResponsesMatchGolden(t *testing.T) {
+	t.Parallel()
 	c, svc := tasksFixture(t)
 	recorder := newGoldenRecorder(t, tasksGoldenVolatile)
 	run := func(call tasksGoldenCall) any {

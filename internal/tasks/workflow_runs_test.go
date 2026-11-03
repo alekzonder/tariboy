@@ -111,6 +111,7 @@ func advanceApprove(t *testing.T, svc *Service, actor Actor, task Task) (Transit
 }
 
 func TestAdvanceWithChecksRecordsAPendingRequestAndTheFirstRun(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	request, run := advanceApprove(t, svc, actor, task)
@@ -152,6 +153,7 @@ func TestAdvanceWithChecksRecordsAPendingRequestAndTheFirstRun(t *testing.T) {
 }
 
 func TestCompleteScriptRunPassRunsTheNextCheckThenApplies(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, goals := runFixture(t)
 	ctx := context.Background()
 	request, first := advanceApprove(t, svc, actor, task)
@@ -220,6 +222,7 @@ func TestCompleteScriptRunPassRunsTheNextCheckThenApplies(t *testing.T) {
 }
 
 func TestCompleteScriptRunPassAfterARequiredArtifactVanishedFailsTheRequest(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	if _, err := svc.SetArtifact(context.Background(), actor, task.Key, "plan", "p"); err != nil {
 		t.Fatal(err)
@@ -242,6 +245,7 @@ func TestCompleteScriptRunPassAfterARequiredArtifactVanishedFailsTheRequest(t *t
 }
 
 func TestCompleteScriptRunRejectClosesTheRequest(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, goals := runFixture(t)
 	request, first := advanceApprove(t, svc, actor, task)
 	forceScriptFailures(t, svc, task, 2)
@@ -275,6 +279,7 @@ func TestCompleteScriptRunRejectClosesTheRequest(t *testing.T) {
 }
 
 func TestCompleteScriptRunFailureClosesTheRequestWithTheLog(t *testing.T) {
+	t.Parallel()
 	for _, verdict := range []string{"failure", "outcome", "quiet"} {
 		t.Run(verdict, func(t *testing.T) {
 			svc, actor, task, goals := runFixture(t)
@@ -301,6 +306,7 @@ func TestCompleteScriptRunFailureClosesTheRequestWithTheLog(t *testing.T) {
 }
 
 func TestCompleteScriptRunRefusesAnUnknownVerdict(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	_, first := advanceApprove(t, svc, actor, task)
 	if err := svc.CompleteScriptRun(context.Background(), first.ID, RunCompletion{Verdict: "maybe"}); err == nil {
@@ -312,6 +318,7 @@ func TestCompleteScriptRunRefusesAnUnknownVerdict(t *testing.T) {
 }
 
 func TestCompleteScriptRunTwiceIsANoOp(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	request, first := advanceApprove(t, svc, actor, task)
 	complete(t, svc, first.ID, RunCompletion{Verdict: "reject", Message: "no"})
@@ -332,6 +339,7 @@ func TestCompleteScriptRunTwiceIsANoOp(t *testing.T) {
 }
 
 func TestCompleteScriptRunBoundsTheMessage(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	request, first := advanceApprove(t, svc, actor, task)
 	long := strings.Repeat("я", 3000) // 6000 bytes
@@ -346,6 +354,7 @@ func TestCompleteScriptRunBoundsTheMessage(t *testing.T) {
 }
 
 func TestClaimScriptRun(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	_, first := advanceApprove(t, svc, actor, task)
@@ -374,6 +383,7 @@ func TestClaimScriptRun(t *testing.T) {
 }
 
 func TestLeavingTheStatusStopsItsRuns(t *testing.T) {
+	t.Parallel()
 	t.Run("a move cancels a pending check and its request", func(t *testing.T) {
 		svc, actor, task, _ := runFixture(t)
 		request, first := advanceApprove(t, svc, actor, task)
@@ -468,6 +478,7 @@ func scheduleWatch(t *testing.T, svc *Service, actor Actor, task Task) ScriptRun
 }
 
 func TestEnteringAScriptStatusSchedulesItsWatch(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	now := svc.clock().UTC()
@@ -506,6 +517,7 @@ func TestEnteringAScriptStatusSchedulesItsWatch(t *testing.T) {
 }
 
 func TestScheduleDueWatchesSkipsPausedAndClosedTasks(t *testing.T) {
+	t.Parallel()
 	svc, _, task := watchFixture(t)
 	ctx := context.Background()
 	forceTask(t, svc, task, `workflow_paused_reason = 'hold'`)
@@ -519,6 +531,7 @@ func TestScheduleDueWatchesSkipsPausedAndClosedTasks(t *testing.T) {
 }
 
 func TestWatchQuietReschedulesAfterEvery(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	run := scheduleWatch(t, svc, actor, task)
 	forceScriptFailures(t, svc, task, 2)
@@ -537,6 +550,7 @@ func TestWatchQuietReschedulesAfterEvery(t *testing.T) {
 }
 
 func TestWatchFailureCountsAndReschedules(t *testing.T) {
+	t.Parallel()
 	for _, verdict := range []string{"failure", "pass", "reject"} {
 		t.Run(verdict, func(t *testing.T) {
 			svc, actor, task := watchFixture(t)
@@ -557,6 +571,7 @@ func TestWatchFailureCountsAndReschedules(t *testing.T) {
 }
 
 func TestWatchOutcomeAppliesTheTransition(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	run := scheduleWatch(t, svc, actor, task)
 	complete(t, svc, run.ID, RunCompletion{Verdict: "outcome", Outcome: "merged", Message: "merged as 9f2c1e7",
@@ -588,6 +603,7 @@ func TestWatchOutcomeAppliesTheTransition(t *testing.T) {
 }
 
 func TestWatchUndeclaredOutcomeIsAFailure(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	run := scheduleWatch(t, svc, actor, task)
 	complete(t, svc, run.ID, RunCompletion{Verdict: "outcome", Outcome: "exploded", ExitCode: exitCode(0)})
@@ -597,6 +613,7 @@ func TestWatchUndeclaredOutcomeIsAFailure(t *testing.T) {
 }
 
 func TestLeavingAScriptStatusStopsTheWatch(t *testing.T) {
+	t.Parallel()
 	t.Run("move cancels a pending watch run", func(t *testing.T) {
 		svc, actor, task := watchFixture(t)
 		run := scheduleWatch(t, svc, actor, task)
@@ -639,6 +656,7 @@ func TestLeavingAScriptStatusStopsTheWatch(t *testing.T) {
 }
 
 func TestAdvanceWithChecksWaitsForAStoppingRun(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	run := scheduleWatch(t, svc, actor, task)
@@ -664,6 +682,7 @@ func TestAdvanceWithChecksWaitsForAStoppingRun(t *testing.T) {
 }
 
 func TestRecoverScriptRuns(t *testing.T) {
+	t.Parallel()
 	t.Run("an interrupted check fails its request", func(t *testing.T) {
 		svc, actor, task, _ := runFixture(t)
 		ctx := context.Background()
@@ -723,6 +742,7 @@ func TestRecoverScriptRuns(t *testing.T) {
 }
 
 func TestRecoverScriptRunsToleratesARunItCannotInterrupt(t *testing.T) {
+	t.Parallel()
 	t.Run("check", func(t *testing.T) {
 		svc, actor, broken, _ := runFixture(t)
 		ctx := context.Background()
@@ -798,6 +818,7 @@ func TestRecoverScriptRunsToleratesARunItCannotInterrupt(t *testing.T) {
 }
 
 func TestForceInterruptReschedulesAWatchOfAnOpenVisit(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	run := scheduleWatch(t, svc, actor, task)
@@ -820,6 +841,7 @@ func TestForceInterruptReschedulesAWatchOfAnOpenVisit(t *testing.T) {
 }
 
 func TestForceInterruptLeavesAClosedVisitUnscheduled(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	run := scheduleWatch(t, svc, actor, task)
@@ -840,6 +862,7 @@ func TestForceInterruptLeavesAClosedVisitUnscheduled(t *testing.T) {
 }
 
 func TestInterruptedCheckWithoutAManifestStillFailsItsRequest(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	// At the limit a loadable manifest would pause; without one there is no
@@ -870,6 +893,7 @@ func TestInterruptedCheckWithoutAManifestStillFailsItsRequest(t *testing.T) {
 }
 
 func TestRunningScriptRunsCarryTheirPID(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	_, first := advanceApprove(t, svc, actor, task)
@@ -898,6 +922,7 @@ func TestRunningScriptRunsCarryTheirPID(t *testing.T) {
 }
 
 func TestPendingRunJobs(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	if err := svc.SetQueueSecret(ctx, actor, "DEV", "GH_TOKEN", "s3cr3t-value"); err != nil {
@@ -974,6 +999,7 @@ func TestPendingRunJobs(t *testing.T) {
 }
 
 func TestPendingRunJobsCarryWatchSpacing(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	scheduleWatch(t, svc, actor, task)
@@ -991,6 +1017,7 @@ func TestPendingRunJobsCarryWatchSpacing(t *testing.T) {
 }
 
 func TestWatchSnapshotCarriesTheOpenVisit(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	visitOf := func() (int64, string) {
@@ -1031,6 +1058,7 @@ func TestWatchSnapshotCarriesTheOpenVisit(t *testing.T) {
 }
 
 func TestScriptRunsAreReadable(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	_, first := advanceApprove(t, svc, actor, task)
@@ -1062,6 +1090,7 @@ func TestScriptRunsAreReadable(t *testing.T) {
 }
 
 func TestIsTaskDirKey(t *testing.T) {
+	t.Parallel()
 	for key, want := range map[string]bool{
 		"DEV-1": true, "a.b": true,
 		"": false, ".": false, "..": false, "a/b": false, `a\b`: false, "/abs": false, "../x": false,
@@ -1073,6 +1102,7 @@ func TestIsTaskDirKey(t *testing.T) {
 }
 
 func TestRunJobNeverMarshalsSecretsOrEnv(t *testing.T) {
+	t.Parallel()
 	raw, err := json.Marshal(RunJob{
 		WorkflowEnv:  map[string]string{"REPO": "env-value-1"},
 		QueueSecrets: map[string]string{"GH_TOKEN": "secret-value-1"},
@@ -1086,6 +1116,7 @@ func TestRunJobNeverMarshalsSecretsOrEnv(t *testing.T) {
 }
 
 func TestQuietWatchRunsLeaveNoEventAndOnlyTheNewestAreKept(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	at := svc.clock()
@@ -1124,6 +1155,7 @@ func TestQuietWatchRunsLeaveNoEventAndOnlyTheNewestAreKept(t *testing.T) {
 // itself is stored as cancelled with verdict quiet: it keeps its event and is
 // never pruned as a quiet run.
 func TestACancelledQuietWatchRunIsNotTreatedAsQuiet(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	cancelled := scheduleWatch(t, svc, actor, task)
@@ -1157,6 +1189,7 @@ func TestACancelledQuietWatchRunIsNotTreatedAsQuiet(t *testing.T) {
 }
 
 func TestPendingRunJobsSkipsARunWhoseJobCannotBeBuilt(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	other := enter(t, svc, mustCreateDev(t, svc, actor, "other").Key, "merge", "approved")
@@ -1177,6 +1210,7 @@ func TestPendingRunJobsSkipsARunWhoseJobCannotBeBuilt(t *testing.T) {
 }
 
 func TestCompleteScriptRunStoresFinishedAtInUTC(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	_, first := advanceApprove(t, svc, actor, task)
 	finished := time.Date(2026, 7, 31, 14, 0, 2, 10, time.FixedZone("CEST", 2*60*60))
@@ -1188,6 +1222,7 @@ func TestCompleteScriptRunStoresFinishedAtInUTC(t *testing.T) {
 }
 
 func TestCompleteScriptRunRefusesAMissingFinishTime(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	request, first := advanceApprove(t, svc, actor, task)
 	events := len(taskEvents(t, svc, task))
@@ -1207,6 +1242,7 @@ func TestCompleteScriptRunRefusesAMissingFinishTime(t *testing.T) {
 }
 
 func TestUndeclaredArtifactNameIsBounded(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	request, first := advanceApprove(t, svc, actor, task)
 	name := strings.Repeat("ж", 100) // 200 bytes
@@ -1223,6 +1259,7 @@ func TestUndeclaredArtifactNameIsBounded(t *testing.T) {
 }
 
 func TestAgentCheckWithoutAnAgentAssignee(t *testing.T) {
+	t.Parallel()
 	svc, customer, task, queueRun, _ := logFixture(t)
 	ctx := context.Background()
 	// The customer took the task over before the agent check was created.
@@ -1258,6 +1295,7 @@ func TestAgentCheckWithoutAnAgentAssignee(t *testing.T) {
 // The assignee is cleared, yet its holder row lets it read the task's workflow
 // data; it gains no write, and an agent with no holder row still sees nothing.
 func TestHoldersKeepReadAccessToTheirTask(t *testing.T) {
+	t.Parallel()
 	svc, customer, task, _ := runFixture(t)
 	ctx := context.Background()
 	def := runDefinition()

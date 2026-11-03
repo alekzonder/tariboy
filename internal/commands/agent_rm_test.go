@@ -94,6 +94,7 @@ func runAgent(t *testing.T, c *registry.Ctx, name, ref string) {
 // answered "removed" but kept the agents row, so image rm of the agent's image
 // answered image_in_use.
 func TestAgentRmDefaultFreesTheImage(t *testing.T) {
+	t.Parallel()
 	c, _ := rmFixture(t)
 	runAgent(t, c, "solo-agent", "solo:latest")
 	runAgent(t, c, "first", "shared:latest")
@@ -117,6 +118,7 @@ func TestAgentRmDefaultFreesTheImage(t *testing.T) {
 // TestAgentRmDefaultKeepsHistoryReadable proves the history a plain agent rm
 // keeps stays readable through the API after the agent is gone.
 func TestAgentRmDefaultKeepsHistoryReadable(t *testing.T) {
+	t.Parallel()
 	c, as := rmFixture(t)
 	runAgent(t, c, "dev", "solo:latest")
 	for _, it := range []agent.Iteration{

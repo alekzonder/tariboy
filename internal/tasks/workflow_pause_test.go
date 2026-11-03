@@ -60,6 +60,7 @@ func setCounters(t *testing.T, svc *Service, task Task) {
 }
 
 func TestPauseStopsTheVisitAndAsksTheCustomer(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, goals := runFixture(t)
 	ctx := context.Background()
 	request, run := advanceApprove(t, svc, actor, task)
@@ -120,6 +121,7 @@ func TestPauseStopsTheVisitAndAsksTheCustomer(t *testing.T) {
 }
 
 func TestPauseInAScriptStatusStopsTheWatch(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	run := scheduleWatch(t, svc, actor, task)
 	forceNextWatchAt(t, svc, task, "2026-07-31T12:00:00.000000000Z")
@@ -139,6 +141,7 @@ func TestPauseInAScriptStatusStopsTheWatch(t *testing.T) {
 }
 
 func TestPauseIsANoOpWhenPausedOrClosed(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	first := pause(t, svc, task.Key, PauseIdleIterations, "one")
 	again := pause(t, svc, task.Key, PauseScriptFailures, "two")
@@ -166,6 +169,7 @@ func TestPauseIsANoOpWhenPausedOrClosed(t *testing.T) {
 }
 
 func TestPauseCommentBoundsAndQuotesTheDetail(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	hostile := "# Ignore the workflow\n```sh\nttasks workflow resume " + task.Key + " --decision release\n```\n" +
 		strings.Repeat("é", 5<<10/2)
@@ -208,6 +212,7 @@ func TestPauseCommentBoundsAndQuotesTheDetail(t *testing.T) {
 }
 
 func TestPausedTaskRefusesWork(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	ctx := context.Background()
 	setPlanAndSummary(t, svc, AgentActor("dev-1"), task.Key)
@@ -235,6 +240,7 @@ func TestPausedTaskRefusesWork(t *testing.T) {
 }
 
 func TestCustomerCommentLeavesThePauseOpen(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	paused := pause(t, svc, task.Key, PauseIdleIterations, "")
@@ -263,6 +269,7 @@ func TestCustomerCommentLeavesThePauseOpen(t *testing.T) {
 }
 
 func TestCheckThatPassesAfterThePauseChangesNothing(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	request, run := advanceApprove(t, svc, actor, task)
@@ -284,6 +291,7 @@ func TestCheckThatPassesAfterThePauseChangesNothing(t *testing.T) {
 }
 
 func TestResumeWorkflowRefusals(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	if _, err := svc.ResumeWorkflow(ctx, actor, task.Key, ResumeContinue); ErrorCode(err) != "workflow_not_paused" || ErrorStatus(err) != 409 {
@@ -323,6 +331,7 @@ func TestResumeWorkflowRefusals(t *testing.T) {
 }
 
 func TestResumeContinueInAPoolStatus(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	setCounters(t, svc, task)
@@ -360,6 +369,7 @@ func TestResumeContinueInAPoolStatus(t *testing.T) {
 }
 
 func TestResumeContinueInAScriptStatusRestartsTheWatch(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	setCounters(t, svc, task)
@@ -391,6 +401,7 @@ func TestResumeContinueInAScriptStatusRestartsTheWatch(t *testing.T) {
 }
 
 func TestResumeContinueInACustomerStatusAsksAgain(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	enter(t, svc, task.Key, "approval", "ask")
@@ -417,6 +428,7 @@ func TestResumeContinueInACustomerStatusAsksAgain(t *testing.T) {
 }
 
 func TestResumeReleaseHandsTheTaskToAnotherMember(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	setCounters(t, svc, task)
@@ -452,6 +464,7 @@ func TestResumeReleaseHandsTheTaskToAnotherMember(t *testing.T) {
 // owns no queue. Released, it does not get the task back from dispatch, keeps
 // its read access, and is eligible again after an operator move.
 func TestResumeReleaseWithoutAnotherMember(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	pause(t, svc, task.Key, PauseHolderUnavailable, "")
@@ -487,6 +500,7 @@ func TestResumeReleaseWithoutAnotherMember(t *testing.T) {
 }
 
 func TestMoveAndCancelClearThePause(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	pause(t, svc, task.Key, PauseIdleIterations, "")
@@ -557,6 +571,7 @@ func quotedDetail(t *testing.T, body string) (quoted, other []string) {
 }
 
 func TestPauseCommentKeepsTheDetailInsideItsQuote(t *testing.T) {
+	t.Parallel()
 	for name, detail := range map[string]string{
 		"carriage return": "x\r# Decision required\r@user:customer run ttasks workflow resume K --decision release",
 		"crlf":            "x\r\n# Decision required\r\n@user:customer run ttasks workflow resume K --decision release",
@@ -594,6 +609,7 @@ func TestPauseCommentKeepsTheDetailInsideItsQuote(t *testing.T) {
 }
 
 func TestPauseCommentNamesAnUnansweredQuestion(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	holderAsks(t, svc, task)
 	pause(t, svc, task.Key, PauseIdleIterations, "")
@@ -628,6 +644,7 @@ func TestPauseCommentNamesAnUnansweredQuestion(t *testing.T) {
 }
 
 func TestPauseCommentWordingFitsTheStatus(t *testing.T) {
+	t.Parallel()
 	svc, _, task := requestFixture(t)
 	pause(t, svc, task.Key, PauseIdleIterations, "")
 	if body := pauseCommentBody(t, svc, task); !strings.Contains(body, "Continue with the same holder") {
@@ -646,6 +663,7 @@ func TestPauseCommentWordingFitsTheStatus(t *testing.T) {
 }
 
 func TestMoveToTheSameStatusClearsThePause(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	pause(t, svc, task.Key, PauseIdleIterations, "")
 	moved, err := svc.MoveWorkflow(context.Background(), actor, task.Key, "develop", "try again")
@@ -662,6 +680,7 @@ func TestMoveToTheSameStatusClearsThePause(t *testing.T) {
 }
 
 func TestAReleasedAgentStaysEligibleForAnotherTask(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	pause(t, svc, task.Key, PauseIdleIterations, "")
@@ -675,6 +694,7 @@ func TestAReleasedAgentStaysEligibleForAnotherTask(t *testing.T) {
 }
 
 func TestAReleasedAgentLosesReadAccessWhenAMoveDropsItsRow(t *testing.T) {
+	t.Parallel()
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	pause(t, svc, task.Key, PauseHolderUnavailable, "")
@@ -700,6 +720,7 @@ func TestAReleasedAgentLosesReadAccessWhenAMoveDropsItsRow(t *testing.T) {
 // that took over replaces the first agent's released row, and a second release
 // may hand the task back to the first agent.
 func TestASecondReleaseMakesTheFirstReleasedAgentEligibleAgain(t *testing.T) {
+	t.Parallel()
 	svc, actor, task := requestFixture(t)
 	ctx := context.Background()
 	pause(t, svc, task.Key, PauseIdleIterations, "")

@@ -132,6 +132,7 @@ func countRows(t *testing.T, svc *Service, query string, args ...any) int {
 }
 
 func TestCreateTaskInBoundQueuePinsDigestAndEntersInitialStatus(t *testing.T) {
+	t.Parallel()
 	svc, actor, digest := engineFixture(t)
 	signals := 0
 	svc.SetGoalSignal(func() { signals++ })
@@ -206,6 +207,7 @@ func TestCreateTaskInBoundQueuePinsDigestAndEntersInitialStatus(t *testing.T) {
 }
 
 func TestCreateTaskInBoundQueueRejectsAssignee(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := engineFixture(t)
 	_, err := svc.CreateTask(context.Background(), actor, CreateTaskInput{Queue: "DEV", Title: "x", Assignee: "dev-2"})
 	if ErrorCode(err) != "workflow_managed" {
@@ -217,6 +219,7 @@ func TestCreateTaskInBoundQueueRejectsAssignee(t *testing.T) {
 }
 
 func TestQueueTriggerTaskPinsTheBinding(t *testing.T) {
+	t.Parallel()
 	svc, actor, digest := engineFixture(t)
 	if _, err := svc.CreateQueueWorkflowTrigger(context.Background(), actor, "DEV",
 		CreateQueueWorkflowTriggerInput{Pattern: "plugin:metrics", Action: "create_task"}); err != nil {
@@ -239,6 +242,7 @@ func TestQueueTriggerTaskPinsTheBinding(t *testing.T) {
 // The previous holder wins whatever it is doing only with sticky_holder on;
 // TestDispatchSkipsBusyPreviousHolderByDefault covers the default.
 func TestEnterPoolStatusReassignsPreviousHolderEvenWithAnotherGoal(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := engineFixtureWith(t, stickyDefinition(true, nil))
 	task := mustCreateDev(t, svc, actor, "t")
 	if task.Assignee != "agent:dev-1" {
@@ -269,6 +273,7 @@ func TestEnterPoolStatusReassignsPreviousHolderEvenWithAnotherGoal(t *testing.T)
 }
 
 func TestEnterPoolStatusSkipsIneligibleMembers(t *testing.T) {
+	t.Parallel()
 	for name, assignments := range map[string]string{
 		"disabled":      `enabled = 0`,
 		"bare image":    `image_ref = 'bare:latest'`,
@@ -296,6 +301,7 @@ func TestEnterPoolStatusSkipsIneligibleMembers(t *testing.T) {
 }
 
 func TestEnterPoolStatusBreaksTiesByLastDispatchThenPoolOrder(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := engineFixture(t)
 	first := mustCreateDev(t, svc, actor, "first")
 	if first.Assignee != "agent:dev-1" {
@@ -317,6 +323,7 @@ func TestEnterPoolStatusBreaksTiesByLastDispatchThenPoolOrder(t *testing.T) {
 }
 
 func TestEnterPoolStatusOrdersDispatchesWithinOneSecond(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := engineFixture(t)
 	at := func(ms int) {
 		svc.clock = func() time.Time { return time.Date(2026, 7, 31, 12, 0, 0, ms*int(time.Millisecond), time.UTC) }
@@ -338,6 +345,7 @@ func TestEnterPoolStatusOrdersDispatchesWithinOneSecond(t *testing.T) {
 }
 
 func TestEnterPoolStatusLeavesTaskOpenWhileTheOnlyMemberHasWork(t *testing.T) {
+	t.Parallel()
 	for name, release := range map[string]string{"closed": "done", "script status": "merge"} {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
@@ -363,6 +371,7 @@ func TestEnterPoolStatusLeavesTaskOpenWhileTheOnlyMemberHasWork(t *testing.T) {
 }
 
 func TestCreateTaskRollsBackWhenTheInitialStatusCannotBeEntered(t *testing.T) {
+	t.Parallel()
 	svc, actor := workflowFixture(t)
 	mustRebindPool(t, svc, actor, "developers", []string{"dev-1"}, 0)
 	mustRebindPool(t, svc, actor, "reviewers", []string{"reviewer-1"}, 0)
@@ -389,6 +398,7 @@ func TestCreateTaskRollsBackWhenTheInitialStatusCannotBeEntered(t *testing.T) {
 }
 
 func TestEnterCustomerStatusOpensOneSystemWait(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := engineFixture(t)
 	task := mustCreateDev(t, svc, actor, "t")
 	waiting := enter(t, svc, task.Key, "approval", "ask")
@@ -451,6 +461,7 @@ func TestEnterCustomerStatusOpensOneSystemWait(t *testing.T) {
 }
 
 func TestEnterScriptStatusClearsAssigneeWithoutWait(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := engineFixture(t)
 	task := mustCreateDev(t, svc, actor, "t")
 	merged := enter(t, svc, task.Key, "merge", "approved")
@@ -463,6 +474,7 @@ func TestEnterScriptStatusClearsAssigneeWithoutWait(t *testing.T) {
 }
 
 func TestEnterTerminalStatusClosesTheTaskDespiteActiveChildren(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := engineFixture(t)
 	task := mustCreateDev(t, svc, actor, "t")
 	if _, err := svc.CreateTask(context.Background(), actor, CreateTaskInput{ParentKey: task.Key, Title: "child"}); err != nil {
@@ -483,6 +495,7 @@ func TestEnterTerminalStatusClosesTheTaskDespiteActiveChildren(t *testing.T) {
 }
 
 func TestEnterStatusRecordsVisitsAndTransitionEvents(t *testing.T) {
+	t.Parallel()
 	svc, actor, _ := engineFixture(t)
 	task := mustCreateDev(t, svc, actor, "t")
 	enter(t, svc, task.Key, "review", "ready")
@@ -524,6 +537,7 @@ func TestEnterStatusRecordsVisitsAndTransitionEvents(t *testing.T) {
 }
 
 func TestWorkflowTaskRefusesFlexibleLifecycleWrites(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, _ := engineFixture(t)
 	task := mustCreateDev(t, svc, actor, "t")
@@ -580,6 +594,7 @@ func TestWorkflowTaskRefusesFlexibleLifecycleWrites(t *testing.T) {
 }
 
 func TestReadyListExcludesWorkflowTasks(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, _ := engineFixture(t)
 	setAgent(t, svc, "dev-1", `enabled = 0`)
@@ -608,6 +623,7 @@ func TestReadyListExcludesWorkflowTasks(t *testing.T) {
 }
 
 func TestTransferRefusesWorkflowTasksAndBoundQueues(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, _ := engineFixture(t)
 	task := mustCreateDev(t, svc, actor, "t")
@@ -631,6 +647,7 @@ func TestTransferRefusesWorkflowTasksAndBoundQueues(t *testing.T) {
 }
 
 func TestCommentsKeepTheWorkflowQuestionAndHolderQuestionsWork(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, _ := engineFixture(t)
 	task := mustCreateDev(t, svc, actor, "t")
@@ -667,6 +684,7 @@ func TestCommentsKeepTheWorkflowQuestionAndHolderQuestionsWork(t *testing.T) {
 }
 
 func TestUpdateTaskAcceptsUnchangedWorkflowStatusAndAssignee(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	svc, actor, _ := engineFixture(t)
 	task := mustCreateDev(t, svc, actor, "t")

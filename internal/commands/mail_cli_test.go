@@ -9,6 +9,7 @@ import (
 // so the mail.* registry commands serve HTTP only and stay out of the CLI
 // help and the generated operator table.
 func TestMailRegistryCommandsAreHTTPOnly(t *testing.T) {
+	t.Parallel()
 	r := BuildRegistry()
 	n := 0
 	for _, c := range r.Commands() {

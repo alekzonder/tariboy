@@ -98,6 +98,7 @@ func closureLines(out string) []string {
 }
 
 func TestCloseOrphanWaitsClosesWaitsOnMissingAgents(t *testing.T) {
+	t.Parallel()
 	f := newOrphanFixture(t, "customer")
 	ids := []int64{
 		f.insertWait(t, "agent:tariboy-pm."),
@@ -130,6 +131,7 @@ func TestCloseOrphanWaitsClosesWaitsOnMissingAgents(t *testing.T) {
 }
 
 func TestCloseOrphanWaitsKeepsExistingPrincipals(t *testing.T) {
+	t.Parallel()
 	f := newOrphanFixture(t, "customer")
 	seedAgent(t, f.svc, "worker", "")
 	agentWait := f.insertWait(t, "agent:worker")
@@ -146,6 +148,7 @@ func TestCloseOrphanWaitsKeepsExistingPrincipals(t *testing.T) {
 }
 
 func TestCloseOrphanWaitsKeepsCustomerWithNonMentionLogin(t *testing.T) {
+	t.Parallel()
 	for _, login := range []string{"john.doe@corp", "иван"} {
 		f := newOrphanFixture(t, login)
 		id := f.insertWait(t, "user:"+login)
@@ -157,6 +160,7 @@ func TestCloseOrphanWaitsKeepsCustomerWithNonMentionLogin(t *testing.T) {
 }
 
 func TestCloseOrphanWaitsKeepsExistingAgentWithNonMentionName(t *testing.T) {
+	t.Parallel()
 	f := newOrphanFixture(t, "customer")
 	seedAgent(t, f.svc, "worker-", "")
 	id := f.insertWait(t, "agent:worker-")
@@ -166,6 +170,7 @@ func TestCloseOrphanWaitsKeepsExistingAgentWithNonMentionName(t *testing.T) {
 }
 
 func TestCloseOrphanWaitsLogsEachClosure(t *testing.T) {
+	t.Parallel()
 	f := newOrphanFixture(t, "customer")
 	dotted := f.insertWait(t, "agent:tariboy-pm.")
 	missing := f.insertWait(t, "agent:worker")
@@ -192,6 +197,7 @@ func TestCloseOrphanWaitsLogsEachClosure(t *testing.T) {
 }
 
 func TestCloseOrphanWaitsIsIdempotent(t *testing.T) {
+	t.Parallel()
 	f := newOrphanFixture(t, "customer")
 	id := f.insertWait(t, "agent:worker")
 	if n, _ := f.run(t); n != 1 {
@@ -214,6 +220,7 @@ func TestCloseOrphanWaitsIsIdempotent(t *testing.T) {
 }
 
 func TestCloseOrphanWaitsKeepsUserWaitsWithoutCustomerLogin(t *testing.T) {
+	t.Parallel()
 	f := newOrphanFixture(t, "customer")
 	userWait := f.insertWait(t, "user:customer")
 	otherWait := f.insertWait(t, "user:bob")
@@ -235,6 +242,7 @@ func TestCloseOrphanWaitsKeepsUserWaitsWithoutCustomerLogin(t *testing.T) {
 }
 
 func TestCloseOrphanWaitsKeepsTaskStatus(t *testing.T) {
+	t.Parallel()
 	f := newOrphanFixture(t, "customer")
 	ctx := context.Background()
 	current, err := f.svc.GetTask(ctx, CustomerActor("customer"), f.task.Key)

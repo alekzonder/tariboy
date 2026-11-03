@@ -146,6 +146,7 @@ func addGoldenSchedule(t *testing.T, c *registry.Ctx) {
 // client sees: the set of keys, their JSON types, and their values must match
 // the recorded responses.
 func TestWorkflowsResponsesMatchGolden(t *testing.T) {
+	t.Parallel()
 	c := workflowCtx(t)
 	recorder := newGoldenRecorder(t, workflowsGoldenVolatile, c.BaseDir, "$BASE")
 	call := func(c *registry.Ctx, label, path string, params registry.Params) {

@@ -297,7 +297,7 @@ func TestStoreAutoCommandPersistsPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	command, ok := BuildRegistry().Get("store.auto")
+	command, ok := testRegistry().Get("store.auto")
 	if !ok {
 		t.Fatal("missing store.auto")
 	}

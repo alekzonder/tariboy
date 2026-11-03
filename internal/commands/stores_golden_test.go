@@ -24,6 +24,7 @@ func storesFixture(t *testing.T) (*registry.Ctx, imagesFixtureDirs) {
 // Catches a typed stores response changing the JSON a client sees: the set of
 // keys, their JSON types, and their values must match the recorded responses.
 func TestStoresResponsesMatchGolden(t *testing.T) {
+	t.Parallel()
 	c, dirs := storesFixture(t)
 	calls := []struct {
 		label, path string

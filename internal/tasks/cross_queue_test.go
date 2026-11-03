@@ -53,6 +53,7 @@ func newCrossQueueTree(t *testing.T) crossQueueTree {
 }
 
 func TestCrossQueueChildHiddenFromParentQueueOwner(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	if _, err := tr.svc.GetTask(ctx, tr.lead, tr.kid.Key); ErrorCode(err) != "not_found" {
@@ -73,6 +74,7 @@ func TestCrossQueueChildHiddenFromParentQueueOwner(t *testing.T) {
 }
 
 func TestCrossQueueParentHiddenFromChildQueueOwner(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	detail, err := tr.svc.GetTask(ctx, tr.designer, tr.kid.Key)
@@ -88,6 +90,7 @@ func TestCrossQueueParentHiddenFromChildQueueOwner(t *testing.T) {
 }
 
 func TestCrossQueueChildAuthorReadsOnly(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	detail, err := tr.svc.GetTask(ctx, tr.writer, tr.kid.Key)
@@ -108,6 +111,7 @@ func TestCrossQueueChildAuthorReadsOnly(t *testing.T) {
 }
 
 func TestCrossQueueChildAssigneeWritesAndSeesNoParent(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	forceTask(t, tr.svc, tr.kid, `assignee = 'agent:dev'`)
@@ -122,6 +126,7 @@ func TestCrossQueueChildAssigneeWritesAndSeesNoParent(t *testing.T) {
 }
 
 func TestCrossQueueShowCountsVisibleDescendantsCompletionCountsAll(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	detail, err := tr.svc.GetTask(ctx, tr.lead, tr.parent.Key)
@@ -146,6 +151,7 @@ func TestCrossQueueShowCountsVisibleDescendantsCompletionCountsAll(t *testing.T)
 }
 
 func TestCreateChildInAnotherQueueByItsOwner(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	forceTask(t, tr.svc, tr.parent, `assignee = 'agent:designer', group_name = 'tari'`)
@@ -174,6 +180,7 @@ func TestCreateChildInAnotherQueueByItsOwner(t *testing.T) {
 }
 
 func TestCreateChildInAnotherQueueIsFiledByAnOutsider(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	child, err := tr.svc.CreateTask(ctx, tr.writer, CreateTaskInput{ParentKey: tr.parent.Key, Queue: "DESIGN", Title: "filed"})
@@ -221,6 +228,7 @@ func TestCreateChildInAnotherQueueIsFiledByAnOutsider(t *testing.T) {
 }
 
 func TestCreateChildInAnotherQueueWithAssigneeOrGroupByAnOutsider(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	child, err := tr.svc.CreateTask(ctx, tr.writer, CreateTaskInput{
@@ -240,6 +248,7 @@ func TestCreateChildInAnotherQueueWithAssigneeOrGroupByAnOutsider(t *testing.T) 
 }
 
 func TestCreateChildInAnotherQueueNeedsWriteOnParent(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	// The designer runs DESIGN but cannot write the TARI parent.
@@ -256,6 +265,7 @@ func TestCreateChildInAnotherQueueNeedsWriteOnParent(t *testing.T) {
 }
 
 func TestCrossQueueChildFollowsItsOwnQueueWorkflow(t *testing.T) {
+	t.Parallel()
 	svc, customer, devTask := requestFixture(t)
 	ctx := context.Background()
 	if _, err := svc.CreateQueue(ctx, customer, CreateQueueInput{Prefix: "TARI", Name: "Tari"}); err != nil {
@@ -297,6 +307,7 @@ func TestCrossQueueChildFollowsItsOwnQueueWorkflow(t *testing.T) {
 }
 
 func TestMoveUnderParentInAnotherQueueKeepsQueueAndKey(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	loose, err := tr.svc.CreateTask(ctx, tr.customer, CreateTaskInput{Queue: "DESIGN", Title: "loose", Group: "art"})
@@ -329,6 +340,7 @@ func TestMoveUnderParentInAnotherQueueKeepsQueueAndKey(t *testing.T) {
 }
 
 func TestMoveUnderParentInAnotherQueueChecksAccessAndCustomer(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	loose, err := tr.svc.CreateTask(ctx, tr.customer, CreateTaskInput{Queue: "DESIGN", Title: "loose"})
@@ -346,6 +358,7 @@ func TestMoveUnderParentInAnotherQueueChecksAccessAndCustomer(t *testing.T) {
 }
 
 func TestMoveBeforeTaskAcrossQueues(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	loose, err := tr.svc.CreateTask(ctx, tr.customer, CreateTaskInput{Queue: "DESIGN", Title: "loose"})
@@ -367,6 +380,7 @@ func TestMoveBeforeTaskAcrossQueues(t *testing.T) {
 }
 
 func TestDetachFromParentInAnotherQueueNeedsWriteOnParent(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	if _, err := tr.svc.MoveTask(ctx, tr.designer, tr.kid.Key, MoveInput{Revision: tr.kid.Revision}); ErrorCode(err) != "not_found" {
@@ -398,6 +412,7 @@ func TestDetachFromParentInAnotherQueueNeedsWriteOnParent(t *testing.T) {
 }
 
 func TestExportRefusesSubtreeWithAnotherQueue(t *testing.T) {
+	t.Parallel()
 	tr := newCrossQueueTree(t)
 	ctx := context.Background()
 	_, err := tr.svc.ExportTask(ctx, tr.customer, tr.parent.Key)

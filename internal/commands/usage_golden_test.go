@@ -99,6 +99,7 @@ func usageFixture(t *testing.T) *registry.Ctx {
 // Catches a typed usage, budget, audit log or iteration response changing
 // the JSON a client sees.
 func TestUsageResponsesMatchGolden(t *testing.T) {
+	t.Parallel()
 	c := usageFixture(t)
 	empty, _, _ := ctxWithStore(t)
 	window := registry.Params{"since": "2026-07-06T00:00:00Z", "until": "2026-07-07T00:00:00Z"}

@@ -20,7 +20,7 @@ import (
 
 func callCommand(t *testing.T, c *registry.Ctx, path string, params registry.Params) (any, error) {
 	t.Helper()
-	cmd, ok := BuildRegistry().Get(path)
+	cmd, ok := testRegistry().Get(path)
 	if !ok {
 		t.Fatalf("command %s not registered", path)
 	}
@@ -60,6 +60,7 @@ func operationLogText(t *testing.T, c *registry.Ctx, id int64) string {
 }
 
 func TestImageBuildAnswersWithRunningOperation(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	result, err := callCommand(t, c, "image.build", registry.Params{"name": "demo", "path": writeExample(t), "initiator": "ui"})
 	if err != nil {
@@ -82,6 +83,7 @@ func TestImageBuildAnswersWithRunningOperation(t *testing.T) {
 }
 
 func TestImageBuildLogsTheFailingStep(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "Tariboyfile.yaml"), []byte("schema_version: 2\nprompts: [\n"), 0o600); err != nil {
@@ -107,6 +109,7 @@ func TestImageBuildLogsTheFailingStep(t *testing.T) {
 }
 
 func TestImageBuildRejectsBadArgumentsWithoutOperation(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	_, err := callCommand(t, c, "image.build", registry.Params{"name": "demo"})
 	var ue api.UserError
@@ -127,6 +130,7 @@ func TestImageBuildRejectsBadArgumentsWithoutOperation(t *testing.T) {
 }
 
 func TestWorkflowBuildLogsValidationErrors(t *testing.T) {
+	t.Parallel()
 	c := workflowCtx(t)
 	dir := writeWorkflowSource(t, t.TempDir(), "1.0.0")
 	if err := os.Remove(filepath.Join(dir, "statuses", "work.md")); err != nil {
@@ -146,6 +150,7 @@ func TestWorkflowBuildLogsValidationErrors(t *testing.T) {
 }
 
 func TestOperationListPagesNewestFirst(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	for range 3 {
 		if _, err := callCommand(t, c, "image.build", registry.Params{"name": "demo", "path": writeExample(t), "wait": true}); err != nil {
@@ -169,6 +174,7 @@ func TestOperationListPagesNewestFirst(t *testing.T) {
 }
 
 func TestOperationLogReadsFromOffset(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	if _, err := callCommand(t, c, "image.build", registry.Params{"name": "demo", "path": writeExample(t), "wait": true}); err != nil {
 		t.Fatal(err)
@@ -218,6 +224,7 @@ func (f *fakeOperationCaller) Call(method, route string, body any) (json.RawMess
 }
 
 func TestBuildLocalPrintsLogThenResult(t *testing.T) {
+	t.Parallel()
 	layers := 2
 	fake := &fakeOperationCaller{
 		logs:  []string{"parse x\n", "succeeded\n"},
@@ -240,6 +247,7 @@ func TestBuildLocalPrintsLogThenResult(t *testing.T) {
 }
 
 func TestBuildLocalFailsWithOperationError(t *testing.T) {
+	t.Parallel()
 	fake := &fakeOperationCaller{logs: []string{"failed\n"}, final: Operation{ID: 7, Status: operations.StatusFailed, ErrorCode: "bad_imagefile", ErrorMessage: "line 2"}}
 	c := &registry.Ctx{Out: &bytes.Buffer{}, ErrOut: &bytes.Buffer{}}
 	_, err := runBuildLocal(c, registry.Request{Ctx: context.Background(), Params: registry.Params{}}, fake, "/api/images/build")
@@ -250,6 +258,7 @@ func TestBuildLocalFailsWithOperationError(t *testing.T) {
 }
 
 func TestBuildLocalDetachPrintsOnlyTheID(t *testing.T) {
+	t.Parallel()
 	fake := &fakeOperationCaller{}
 	var out bytes.Buffer
 	c := &registry.Ctx{Out: &out, ErrOut: &bytes.Buffer{}}

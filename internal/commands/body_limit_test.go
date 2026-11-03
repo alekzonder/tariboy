@@ -10,6 +10,7 @@ import (
 // Text editors save a whole file as a JSON string, so their routes must accept
 // the largest file they can open even when JSON escapes every byte.
 func TestTextFileSaveRoutesFitEscapedMaxFile(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		limit   int64
 		maxFile int64

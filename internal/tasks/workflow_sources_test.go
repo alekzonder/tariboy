@@ -98,6 +98,7 @@ func sourceRunRow(t *testing.T, svc *Service, id int64) (state, verdict, message
 }
 
 func TestCompleteSourceRunRefusesAMissingFinishTime(t *testing.T) {
+	t.Parallel()
 	svc, _ := sourceFixture(t)
 	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	id := startSource(t, svc, sourceJobs(t, svc, now)[0], now)
@@ -115,6 +116,7 @@ func TestCompleteSourceRunRefusesAMissingFinishTime(t *testing.T) {
 }
 
 func TestSourceJobsScheduleOneRunAtATime(t *testing.T) {
+	t.Parallel()
 	svc, _ := sourceFixture(t)
 	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	jobs := sourceJobs(t, svc, now)
@@ -143,6 +145,7 @@ func TestSourceJobsScheduleOneRunAtATime(t *testing.T) {
 }
 
 func TestSourceItemsCreateOneTaskPerKey(t *testing.T) {
+	t.Parallel()
 	svc, _ := sourceFixture(t)
 	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	job := sourceJobs(t, svc, now)[0]
@@ -203,6 +206,7 @@ func TestSourceItemsCreateOneTaskPerKey(t *testing.T) {
 }
 
 func TestSourceRunWithAnInvalidItemCreatesNothing(t *testing.T) {
+	t.Parallel()
 	svc, _ := sourceFixture(t)
 	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	id := startSource(t, svc, sourceJobs(t, svc, now)[0], now)
@@ -230,6 +234,7 @@ func TestSourceRunWithAnInvalidItemCreatesNothing(t *testing.T) {
 }
 
 func TestSourceStopsWhenTheQueueIsUnbound(t *testing.T) {
+	t.Parallel()
 	svc, actor := sourceFixture(t)
 	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	id := startSource(t, svc, sourceJobs(t, svc, now)[0], now)
@@ -253,6 +258,7 @@ func TestSourceStopsWhenTheQueueIsUnbound(t *testing.T) {
 }
 
 func TestRecoverSourceRunsInterruptsRunningRuns(t *testing.T) {
+	t.Parallel()
 	svc, _ := sourceFixture(t)
 	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	id := startSource(t, svc, sourceJobs(t, svc, now)[0], now)
@@ -280,6 +286,7 @@ func TestRecoverSourceRunsInterruptsRunningRuns(t *testing.T) {
 }
 
 func TestSourceKeepsOnlyTheNewestQuietRuns(t *testing.T) {
+	t.Parallel()
 	svc, _ := sourceFixture(t)
 	at := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	for i := 0; i < workflowViewRuns+5; i++ {
@@ -299,6 +306,7 @@ func TestSourceKeepsOnlyTheNewestQuietRuns(t *testing.T) {
 }
 
 func TestListQueueSourcesAndLog(t *testing.T) {
+	t.Parallel()
 	svc, actor := sourceFixture(t)
 	base := t.TempDir()
 	svc.SetRunBaseDir(base)
@@ -354,6 +362,7 @@ func TestListQueueSourcesAndLog(t *testing.T) {
 }
 
 func TestQueueSourceRunLogReadsARunningRun(t *testing.T) {
+	t.Parallel()
 	svc, actor := sourceFixture(t)
 	base := t.TempDir()
 	svc.SetRunBaseDir(base)
