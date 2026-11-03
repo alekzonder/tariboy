@@ -1,3 +1,26 @@
+## [0.108.0] - 2026-11-03
+
+### Added
+
+- `tariboy assessment ls --history`, and `history=true` on `GET /tools/assessment/ls` and `GET /api/assessments`, return every assessment record, also replaced ones.
+- When an iteration makes no AI proxy request for longer than its stall timeout, the daemon looks at the harness process tree. If a shell command of the agent still runs, the agent state is `running` with `state_reason` "waiting for agent command", not an error. `agent ps` and the web UI show this reason.
+- The tmux shim reports the harness pid in its status.
+- `tariboy image build --force`, and `force: true` on `POST /api/images/build`, publish an image when its `image_version` is already stored with other content. The build moves the tags to the new digest. The old archive stays under its own digest, so agents pinned to it keep running. The operation log of the build gets one `image_version_forced` line with the old and the new digest.
+- At each launch gate, Tariboy compares the copy of the image in the agent directory with the archive of its pinned digest. If they do not match, Tariboy unpacks the archive again, records the audit event `image_rematerialized` with `ref`, `digest` and `cause`, and starts the iteration. The agent stops only when that archive is missing or damaged.
+
+### Changed
+
+- Metrics, `tariboy assessment ls` and `GET /api/assessments` count only the latest assessment of each iteration and each task. Before, metrics added the scores of a reassessment and of the earlier record. Filters and `--limit` apply after the choice of the latest record. Use `--history` to get every record.
+- The digest (id) of a new image is the SHA-256 of its content: every archive member and the manifest without `built_at`, `tag`, `digest` and `id`. Before, it came from the image name and `image_version`. `tariboy image inspect`, import and every read of a stored archive calculate the digest again. They refuse an archive whose `id` is not its content digest. The same content gives the same digest, so a rebuild without changes only moves the tags.
+- A build of an `image_version` that is already stored with other content fails with `image_version_conflict` (HTTP 409) and writes nothing. Before, the rebuild always published. The same rule applies to Store builds, automatic Store builds, `image-creator`, the build of an editable image source, import and `tariboy pull`. Automatic Store builds never force. To roll out a change, increment `image_version`. The `tariboy-store` server and the daemon-owned `bare:latest` always publish.
+- Archives from earlier releases stay readable without a migration. An archive whose `id` is `sha256(name + "\n" + image_version)` keeps that `id` as its digest, and its content is not checked. An archive without `id` keeps the SHA-256 of its archive file. Agents pinned to these digests keep running, and no file or tag on disk is rewritten. A legacy export imports with its legacy digest.
+
+### Fixed
+
+- At start, `tariboyd` closes open waits on principals that do not exist, for example `agent:tariboy-pm.` with a closing dot. It also closes their question letters and logs each closure. Waits on the customer and on existing agents stay open. The task status does not change.
+
+[0.108.0]: https://github.com/alekzonder/tariboy/compare/v0.107.0...v0.108.0
+
 ## [0.107.0] - 2026-11-03
 
 ### Added
