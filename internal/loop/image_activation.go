@@ -1,6 +1,7 @@
 package loop
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -150,9 +151,24 @@ func (m *Manager) activateCurrentImage(ag *agent.Agent, l agentdir.Layout, curre
 			return activatedImage{}, err
 		}
 	}
-	skills, err := m.prepareImageSkillBridge(*ag, manifest, l.ImageDir())
+	cause, err := m.imageCopyMismatch(*ag, l, activeRef)
 	if err != nil {
 		return activatedImage{}, err
+	}
+	var skills harness.SkillLaunchConfig
+	if cause == "" {
+		skills, err = m.prepareImageSkillBridge(*ag, manifest, l.ImageDir())
+		if errors.Is(err, agentdir.ErrImageCopyMismatch) {
+			cause, err = err.Error(), nil
+		}
+		if err != nil {
+			return activatedImage{}, err
+		}
+	}
+	if cause != "" {
+		if skills, err = m.rematerializeImage(*ag, l, cause); err != nil {
+			return activatedImage{}, err
+		}
 	}
 	if recoveredSwap {
 		if err := agentdir.WriteShims(l, *ag); err != nil {
@@ -164,6 +180,49 @@ func (m *Manager) activateCurrentImage(ag *agent.Agent, l agentdir.Layout, curre
 		}
 	}
 	return activatedImage{PromptTemplateSHA256: manifest.PromptTemplateSHA256, ImageVersion: manifest.ImageVersion, Skills: skills}, nil
+}
+
+// imageCopyMismatch names why the agent's image/ copy is not the archive of
+// its pinned digest, or returns "" when it is. A copy unpacked before digests
+// were recorded has no .image-digest and is judged by its manifest alone.
+func (m *Manager) imageCopyMismatch(ag agent.Agent, l agentdir.Layout, ref image.Ref) (string, error) {
+	if digest, err := os.ReadFile(filepath.Join(l.ImageDir(), ".image-digest")); err == nil && strings.TrimSpace(string(digest)) != ag.ImageDigest {
+		return fmt.Sprintf("image copy digest %s is not the pinned %s", strings.TrimSpace(string(digest)), ag.ImageDigest), nil
+	}
+	want, err := m.cfg.ImgStore.PinnedManifestBytes(ref, ag.ImageDigest)
+	if err != nil {
+		return "", err
+	}
+	if got, err := os.ReadFile(filepath.Join(l.ImageDir(), "manifest.json")); err != nil || !bytes.Equal(got, want) {
+		return "image copy manifest does not match the pinned archive", nil
+	}
+	return "", nil
+}
+
+// rematerializeImage unpacks the agent's pinned archive again through the
+// pending-image stage, validate and swap, and records image_rematerialized.
+// The ref, digest and plugins stay, so the database and shims are unchanged.
+// It fails, and the agent stops, when the archive is missing or damaged.
+func (m *Manager) rematerializeImage(ag agent.Agent, l agentdir.Layout, cause string) (harness.SkillLaunchConfig, error) {
+	staged, err := m.stagePendingImage(ag, l, agent.ImageAssignment{Ref: ag.ImageRef, Digest: ag.ImageDigest})
+	if staged.dir != "" {
+		defer os.RemoveAll(staged.dir)
+	}
+	if err != nil {
+		return harness.SkillLaunchConfig{}, fmt.Errorf("rematerialize image %s@%s (%s): %w", ag.ImageRef, ag.ImageDigest, cause, err)
+	}
+	commit, _, err := agentdir.SwapImage(l, staged.dir)
+	if err != nil {
+		return harness.SkillLaunchConfig{}, err
+	}
+	commit()
+	m.logger().Warn("image copy rematerialized", "agent", ag.Name, "ref", ag.ImageRef, "digest", ag.ImageDigest, "cause", cause)
+	if m.cfg.AuditFor != nil {
+		if rec := m.cfg.AuditFor(ag.Name); rec != nil {
+			rec.Record("image_rematerialized", "system", "", map[string]any{"ref": ag.ImageRef, "digest": ag.ImageDigest, "cause": cause})
+		}
+	}
+	return staged.skills, nil
 }
 
 // stagedImage is a pending image unpacked and validated beside image/.

@@ -440,6 +440,19 @@ func (s *Store) InspectPinned(ref Ref, id string) (Manifest, error) {
 	return manifest, err
 }
 
+// PinnedManifestBytes returns manifest.json of the archive stored under id as
+// it is in the archive. It does not verify the archive; InspectPinned does.
+func (s *Store) PinnedManifestBytes(ref Ref, id string) ([]byte, error) {
+	if !refstore.IsID(id) {
+		return nil, errors.New("invalid pinned image id")
+	}
+	body, err := readFileFromTar(s.contentPath(ref.Name, id), "manifest.json")
+	if err != nil {
+		return nil, fmt.Errorf("pinned image %s@%s is unavailable: %w", ref.String(), id, err)
+	}
+	return body, nil
+}
+
 func (s *Store) inspectPinnedArchive(ref Ref, id string) (Manifest, string, error) {
 	if !refstore.IsID(id) {
 		return Manifest{}, "", errors.New("invalid pinned image id")
