@@ -104,7 +104,14 @@ model requests still go to the proxy addresses of the overlay. Tariboy writes
 nothing into `~/.config/opencode` and does not change `HOME` or
 `XDG_CONFIG_HOME`. opencode itself installs the npm package
 `@opencode-ai/plugin` into its configuration directories when a plugin is
-loaded, also into `~/.config/opencode`. The complete temporary `OPENCODE_CONFIG_CONTENT` value is masked
+loaded, also into `~/.config/opencode` and the image skills bridge. The
+integrity check of an OpenCode skills bridge skips only these install entries
+at the bridge root: `node_modules/`, `package.json`, `package-lock.json`,
+`bun.lock` and `.gitignore`. Without this exception, each install made the
+bridge invalid, and the next iteration rebuilt it and waited for the install
+again. The check still covers the modes and contents of the skills, the
+generated files and each other entry. Bridges of other harnesses have no
+exception. The complete temporary `OPENCODE_CONFIG_CONTENT` value is masked
 in launch logs and audit, and probe output is never included in failures.
 The handoff file remains owner-only and excluded from diagnostics.
 

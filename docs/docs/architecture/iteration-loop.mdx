@@ -295,7 +295,10 @@ an image is promoted or an iteration row is created. The bridge contains copied
 skill bytes and generated adapter metadata; it never links back to the image or
 source tree. Publication is owner-only and atomic. The current adapter contract
 version is `2`. A complete bridge is reused across iterations and daemon
-restarts, while an incomplete or modified cache is rebuilt. A preparation or
+restarts, while an incomplete or modified cache is rebuilt. An OpenCode bridge
+stays valid with the `@opencode-ai/plugin` install entries that OpenCode adds
+at its root (`node_modules/`, `package.json`, `package-lock.json`, `bun.lock`,
+`.gitignore`), so the install does not cause a rebuild. A preparation or
 harness-support failure leaves the previous image active and records the
 pending-image error. Because no iteration row exists yet, such a failure also
 halts the loop and records its cause in the agent's `error_reason`, which the

@@ -433,7 +433,10 @@ package of that version. With network access, this took 13 to 70 seconds on a
 test host. Without network access, the install fails after about 72 seconds,
 and opencode then starts with the plugin. Each later start waits again, until
 an install succeeds. No timer of the daemon stops an iteration in this time,
-unless the agent has a timeout shorter than the wait.
+unless the agent has a timeout shorter than the wait. The image skills bridge
+of the agent is one of these configuration directories. Tariboy keeps the
+bridge with the installed package, so the install does not repeat in each
+iteration.
 
 The limits that stay with a hook or a plugin:
 

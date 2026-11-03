@@ -390,3 +390,122 @@ func TestPrepareImageBridgeRetriesTakenBackupName(t *testing.T) {
 		t.Fatalf("the occupied name was disturbed: %v", err)
 	}
 }
+
+// addOpenCodeInstallFiles writes what opencode installs into each config
+// directory when it loads a plugin: @opencode-ai/plugin with its manifest,
+// lock files and .gitignore, owned by opencode with its own modes.
+func addOpenCodeInstallFiles(t *testing.T, root string) {
+	t.Helper()
+	pkg := filepath.Join(root, "node_modules", "@opencode-ai", "plugin")
+	if err := os.MkdirAll(pkg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{
+		"node_modules/@opencode-ai/plugin/index.js": "export {}\n",
+		"package.json":      "{\"dependencies\":{}}\n",
+		"package-lock.json": "{}\n",
+		"bun.lock":          "{}\n",
+		".gitignore":        "node_modules\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(name)), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestOpenCodeBridgeIgnoresOpenCodeInstallFilesAtRoot(t *testing.T) {
+	t.Parallel()
+	source, expected := bridgeFixture(t)
+	l := New(t.TempDir(), "worker")
+	finalDir, _ := l.ImageBridgeDir(strings.Repeat("e", 64), "1", "opencode")
+	plan := BridgePlan{SkillDestination: "skills", Files: []BridgeFile{{Path: "opencode.json", Body: []byte("{}\n"), Mode: 0o600}}}
+	if err := PrepareImageBridge(source, finalDir, expected, plan); err != nil {
+		t.Fatal(err)
+	}
+	addOpenCodeInstallFiles(t, finalDir)
+	if err := validatePublishedBridge(finalDir, expected, plan); err != nil {
+		t.Fatalf("opencode install files made the bridge invalid: %v", err)
+	}
+	manifestPath := filepath.Join(finalDir, "bridge-manifest.json")
+	before, err := os.Stat(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := PrepareImageBridge(source, finalDir, expected, plan); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(manifestPath)
+	if err != nil || !os.SameFile(before, after) {
+		t.Fatalf("bridge with opencode install files was rebuilt: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(finalDir, "node_modules", "@opencode-ai", "plugin", "index.js")); err != nil {
+		t.Fatalf("opencode install files were removed: %v", err)
+	}
+}
+
+func TestOpenCodeBridgeStillRejectsOtherChanges(t *testing.T) {
+	t.Parallel()
+	source, expected := bridgeFixture(t)
+	plan := BridgePlan{SkillDestination: "skills", Files: []BridgeFile{{Path: "opencode.json", Body: []byte("{}\n"), Mode: 0o600}}}
+	for name, change := range map[string]func(t *testing.T, root string){
+		"extra root file": func(t *testing.T, root string) {
+			if err := os.WriteFile(filepath.Join(root, "extra.txt"), []byte("x"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"install file below the root": func(t *testing.T, root string) {
+			if err := os.WriteFile(filepath.Join(root, "skills", "package.json"), []byte("{}"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"node_modules below the root": func(t *testing.T, root string) {
+			addOpenCodeInstallFiles(t, filepath.Join(root, "skills", "review"))
+		},
+		"changed skill file": func(t *testing.T, root string) {
+			if err := os.WriteFile(filepath.Join(root, "skills", "review", "SKILL.md"), []byte("tampered"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"skill directory mode": func(t *testing.T, root string) {
+			if err := os.Chmod(filepath.Join(root, "skills", "review"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"generated file mode": func(t *testing.T, root string) {
+			if err := os.Chmod(filepath.Join(root, "opencode.json"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			l := New(t.TempDir(), "worker")
+			finalDir, _ := l.ImageBridgeDir(strings.Repeat("f", 64), "1", "opencode")
+			if err := PrepareImageBridge(source, finalDir, expected, plan); err != nil {
+				t.Fatal(err)
+			}
+			addOpenCodeInstallFiles(t, finalDir)
+			change(t, finalDir)
+			if err := validatePublishedBridge(finalDir, expected, plan); err == nil {
+				t.Fatal("changed opencode bridge validated")
+			}
+		})
+	}
+}
+
+func TestNonOpenCodeBridgeRejectsOpenCodeInstallFiles(t *testing.T) {
+	t.Parallel()
+	source, expected := bridgeFixture(t)
+	for _, harness := range []string{"claude", "codex"} {
+		l := New(t.TempDir(), "worker")
+		finalDir, _ := l.ImageBridgeDir(strings.Repeat("a", 64), "1", harness)
+		plan := BridgePlan{SkillDestination: "skills"}
+		if err := PrepareImageBridge(source, finalDir, expected, plan); err != nil {
+			t.Fatal(err)
+		}
+		addOpenCodeInstallFiles(t, finalDir)
+		if err := validatePublishedBridge(finalDir, expected, plan); err == nil {
+			t.Fatalf("%s bridge accepted opencode install files", harness)
+		}
+	}
+}
