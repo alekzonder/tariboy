@@ -5,14 +5,17 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/storesvc"
 )
 
@@ -196,5 +199,59 @@ func TestPullRejectsMissingDigest(t *testing.T) {
 	// And it must not be retrievable from the local store.
 	if (&image.Store{Dir: dst}).Exists(ref) {
 		t.Fatal("rejected pull must not be locally retrievable")
+	}
+}
+
+// buildVersioned builds demo:latest declaring image_version 1.0.0 with prompt
+// body into imagesDir and returns its archive bytes.
+func buildVersioned(t *testing.T, imagesDir, body string) (image.Ref, []byte) {
+	t.Helper()
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "Tariboyfile.yaml"),
+		[]byte("schema_version: 2\nimage_version: 1.0.0\nplugins: []\nskills: []\nprompts:\n  - file: ./task.md\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := imagefile.ParseV2(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := image.Ref{Name: "demo", Tag: "latest"}
+	store := &image.Store{Dir: imagesDir}
+	if _, err := image.BuildV2(parsed, imagefile.ResolveRoots{}, ref, store, time.Now, nil); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := store.ArchiveBytes(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ref, archive
+}
+
+func TestPullRefusesConflictingImageVersion(t *testing.T) {
+	dst := t.TempDir()
+	ref, want := buildVersioned(t, dst, "local\n")
+	_, remote := buildVersioned(t, t.TempDir(), "remote\n")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Tariboy-Digest", sha256hex(remote))
+		_, _ = w.Write(remote)
+	}))
+	defer srv.Close()
+	client, err := NewClient(srv.URL, "rw", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var conflict *image.VersionConflictError
+	if _, err := Pull(context.Background(), dst, ref, client); !errors.As(err, &conflict) {
+		t.Fatalf("Pull err = %v, want VersionConflictError", err)
+	}
+	got, err := (&image.Store{Dir: dst}).ArchiveBytes(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatal("conflicting pull moved the tag")
 	}
 }

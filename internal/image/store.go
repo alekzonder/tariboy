@@ -10,10 +10,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/alekzonder/tariboy/internal/refstore"
+	"github.com/alekzonder/tariboy/internal/rolefile"
+	storetime "github.com/alekzonder/tariboy/internal/store"
 )
 
 // Store is an on-disk image store rooted at Dir (paths.ImagesDir()).
@@ -23,16 +28,17 @@ import (
 //	<dir>/<name>/refs/<id>.tar.gz   the image content, addressed by ref id
 //	<dir>/<name>/tags/<tag>         one line naming the id that tag points at
 //
-// A tag is only a pointer. Building writes the content of its ref id and moves
-// the requested tags onto it, so every ref can be rebuilt at any time and by
-// any caller. Agents and the operator CLI share this one mechanism.
+// A tag is only a pointer. Building writes the content under its content
+// digest (see contentDigest) and moves the requested tags onto it. Content
+// stored under an id is never rewritten. Rebuilding an image_version that
+// already exists with other content is refused with VersionConflictError
+// unless the caller forces it. Agents and the operator CLI share this one
+// mechanism.
 type Store struct{ Dir string }
 
-// RefID derives a ref's identity from its image name and the image_version
-// declared in Tariboyfile.yaml. Rebuilding the same version rewrites the same
-// ref; bumping the version creates another one, so a pinned agent keeps the
-// generation it was assigned. An image that declares no version has no derived
-// id and stays content-addressed by its archive bytes.
+// RefID is the id older releases derived from an image name and its
+// image_version. New builds no longer write it; it only recognises those
+// legacy archives, whose digest stays this id.
 func RefID(name, imageVersion string) string {
 	if imageVersion == "" {
 		return ""
@@ -129,7 +135,7 @@ func (s *Store) SetTag(ref Ref, id string) error {
 }
 
 // InstallArchive publishes validated archive bytes as the content of their ref
-// and moves ref onto it. Existing content of the same id is replaced.
+// and moves ref onto it under the image_version rule of publish, unforced.
 func (s *Store) InstallArchive(ref Ref, archive []byte) (Manifest, error) {
 	manifest, _, err := validatePortableArchive(archive, ref)
 	if err != nil {
@@ -146,17 +152,150 @@ func (s *Store) installValidated(ref Ref, archive []byte, manifest Manifest) (Ma
 		return Manifest{}, err
 	}
 	defer os.Remove(tmpName)
-	if err := s.install(ref, manifest.Digest, tmpName); err != nil {
+	id, _, err := s.publish(ref, manifest, tmpName, PublishOptions{})
+	if err != nil {
 		return Manifest{}, err
 	}
+	manifest.Digest = id
 	return manifest, nil
 }
 
 // PublishArchiveFile publishes an already staged archive file, checking only
 // its manifest identity, and consumes the file. Callers holding untrusted
 // bytes use InstallArchive, which applies the full portable contract.
-func (s *Store) PublishArchiveFile(ref Ref, path string) (string, error) {
-	return s.publishArchive(ref, path, nil)
+func (s *Store) PublishArchiveFile(ref Ref, path string, opts PublishOptions) (string, error) {
+	id, _, err := s.publishArchive(ref, path, nil, opts)
+	return id, err
+}
+
+// PublishOptions changes how publish treats an image_version that already
+// exists with other content.
+type PublishOptions struct {
+	// Force publishes the new content anyway and moves the tags onto it.
+	// Archives of the same version stay on disk under their own digests.
+	Force bool
+}
+
+// VersionConflictError refuses to publish content under an image_version that
+// already exists here with other content.
+type VersionConflictError struct {
+	Ref     string // name:image_version
+	Version string
+	Current string // digest of the content this version has now
+	New     string // digest of the refused content
+}
+
+func (e *VersionConflictError) Error() string {
+	return fmt.Sprintf("image %s already exists with digest %s; this build has digest %s. Bump image_version in Tariboyfile.yaml or rebuild with --force.", e.Ref, e.Current, e.New)
+}
+
+// publish stores the staged archive tmpName, whose validated manifest is
+// manifest, and moves ref onto it. It returns the id ref now points at and,
+// for a forced publish, the ids of the same image_version it replaced.
+//
+// An image_version that already has an archive with the same content reuses
+// that archive, legacy ones included, and writes nothing. One with other
+// content is a VersionConflictError unless opts.Force is set. An image
+// without image_version never conflicts.
+func (s *Store) publish(ref Ref, manifest Manifest, tmpName string, opts PublishOptions) (string, []string, error) {
+	if err := checkRef(ref); err != nil {
+		return "", nil, err
+	}
+	id := manifest.Digest
+	var replaced []string
+	if manifest.ImageVersion != "" {
+		existing, err := s.versionArchives(ref.Name, manifest.ImageVersion)
+		if err != nil {
+			return "", nil, err
+		}
+		content, err := fileContentDigest(tmpName)
+		if err != nil {
+			return "", nil, fmt.Errorf("digest image %s: %w", ref.String(), err)
+		}
+		for _, archive := range existing {
+			if archive.content == content {
+				return archive.id, nil, s.SetTag(ref, archive.id)
+			}
+		}
+		if len(existing) > 0 && !opts.Force {
+			return "", nil, &VersionConflictError{Ref: ref.Name + ":" + manifest.ImageVersion, Version: manifest.ImageVersion, Current: s.currentVersionID(ref.Name, manifest.ImageVersion, existing), New: id}
+		}
+		for _, archive := range existing {
+			replaced = append(replaced, archive.id)
+		}
+	}
+	// Only a forced legacy archive can reuse the id of other content: legacy
+	// ids name a version, not content. It replaces that file as before.
+	overwrite := opts.Force && slices.Contains(replaced, id)
+	return id, replaced, s.install(ref, id, tmpName, overwrite)
+}
+
+// versionArchive is one stored archive of an image_version: its id and the
+// digest of its content, empty when the archive cannot be read.
+type versionArchive struct {
+	id, content, builtAt string
+}
+
+// versionArchives lists the stored archives of name that declare version.
+func (s *Store) versionArchives(name, version string) ([]versionArchive, error) {
+	entries, err := os.ReadDir(s.refs().RefsDir(name))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []versionArchive
+	for _, entry := range entries {
+		id, ok := strings.CutSuffix(entry.Name(), ".tar.gz")
+		if !ok || !refstore.IsID(id) {
+			continue
+		}
+		path := s.contentPath(name, id)
+		var m Manifest
+		if body, err := readFileFromTar(path, "manifest.json"); err != nil || json.Unmarshal(body, &m) != nil || m.ImageVersion != version {
+			continue
+		}
+		// An unreadable archive keeps an empty content digest: it matches
+		// nothing, so it conflicts rather than being replaced silently.
+		content, _ := fileContentDigest(path)
+		out = append(out, versionArchive{id: id, content: content, builtAt: m.BuiltAt})
+	}
+	return out, nil
+}
+
+// currentVersionID names the archive a conflict reports as current: the one
+// the tag named after the version points at, else the latest built.
+func (s *Store) currentVersionID(name, version string, archives []versionArchive) string {
+	if id, err := s.refs().Resolve(name, version); err == nil {
+		for _, archive := range archives {
+			if archive.id == id {
+				return id
+			}
+		}
+	}
+	current := archives[0]
+	for _, archive := range archives[1:] {
+		later, laterErr := storetime.ParseInputTime(archive.builtAt)
+		earlier, earlierErr := storetime.ParseInputTime(current.builtAt)
+		if laterErr == nil && (earlierErr != nil || later.After(earlier)) {
+			current = archive
+		}
+	}
+	return current.id
+}
+
+func fileContentDigest(path string) (string, error) {
+	archive, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer archive.Close()
+	members, _, err := readImageMembers(archive)
+	if err != nil {
+		return "", err
+	}
+	return contentDigest(members)
 }
 
 // RetagArchive publishes a runnable archive under another image name by
@@ -206,8 +345,9 @@ func (s *Store) stageBytes(ref Ref, kind string, archive []byte) (string, error)
 	return tmpName, nil
 }
 
-// install moves staged content into place and advances ref onto it.
-func (s *Store) install(ref Ref, id, tmpName string) error {
+// install moves staged content into place and advances ref onto it. Content
+// already stored under id stays unless overwrite is set.
+func (s *Store) install(ref Ref, id, tmpName string, overwrite bool) error {
 	if err := checkRef(ref); err != nil {
 		return err
 	}
@@ -217,6 +357,9 @@ func (s *Store) install(ref Ref, id, tmpName string) error {
 	contentDir := s.refs().RefsDir(ref.Name)
 	if err := os.MkdirAll(contentDir, 0o700); err != nil {
 		return err
+	}
+	if _, err := os.Stat(s.contentPath(ref.Name, id)); err == nil && !overwrite {
+		return s.SetTag(ref, id)
 	}
 	if err := os.Rename(tmpName, s.contentPath(ref.Name, id)); err != nil {
 		return fmt.Errorf("publish image %s: %w", ref.String(), err)
@@ -235,32 +378,35 @@ func RetagArchiveBytes(source, target Ref, archive []byte) ([]byte, Manifest, er
 	if err != nil {
 		return nil, Manifest{}, fmt.Errorf("validate imported image: %w", err)
 	}
+	var fields map[string]any
+	if err := json.Unmarshal(parsed.members["manifest.json"].body, &fields); err != nil {
+		return nil, Manifest{}, err
+	}
+	fields["name"] = target.Name
+	delete(fields, "tag")
+	delete(fields, "digest")
+	delete(fields, "id")
+	// The new name changes the content, so the archive gets the content id
+	// of its new form, whatever id class the source had.
+	manifestMember := parsed.members["manifest.json"]
+	if manifestMember.body, err = json.MarshalIndent(fields, "", "  "); err != nil {
+		return nil, Manifest{}, err
+	}
+	members := maps.Clone(parsed.members)
+	members["manifest.json"] = manifestMember
+	if fields["id"], err = contentDigest(members); err != nil {
+		return nil, Manifest{}, err
+	}
+	if manifestMember.body, err = json.MarshalIndent(fields, "", "  "); err != nil {
+		return nil, Manifest{}, err
+	}
+	members["manifest.json"] = manifestMember
 	var out bytes.Buffer
 	gz := gzip.NewWriter(&out)
 	tw := tar.NewWriter(gz)
 	for _, name := range parsed.order {
-		member := parsed.members[name]
-		body := member.body
-		if name == "manifest.json" {
-			var fields map[string]any
-			if err := json.Unmarshal(body, &fields); err != nil {
-				return nil, Manifest{}, err
-			}
-			fields["name"] = target.Name
-			delete(fields, "tag")
-			delete(fields, "digest")
-			imageVersion, _ := fields["image_version"].(string)
-			if id := RefID(target.Name, imageVersion); id != "" {
-				fields["id"] = id
-			} else {
-				delete(fields, "id")
-			}
-			body, err = json.MarshalIndent(fields, "", "  ")
-			if err != nil {
-				return nil, Manifest{}, err
-			}
-		}
-		if err := writeTarFileMode(tw, name, body, member.mode); err != nil {
+		member := members[name]
+		if err := writeTarFileMode(tw, name, member.body, member.mode); err != nil {
 			return nil, Manifest{}, err
 		}
 	}
@@ -294,6 +440,19 @@ func (s *Store) InspectPinned(ref Ref, id string) (Manifest, error) {
 	return manifest, err
 }
 
+// PinnedManifestBytes returns manifest.json of the archive stored under id as
+// it is in the archive. It does not verify the archive; InspectPinned does.
+func (s *Store) PinnedManifestBytes(ref Ref, id string) ([]byte, error) {
+	if !refstore.IsID(id) {
+		return nil, errors.New("invalid pinned image id")
+	}
+	body, err := readFileFromTar(s.contentPath(ref.Name, id), "manifest.json")
+	if err != nil {
+		return nil, fmt.Errorf("pinned image %s@%s is unavailable: %w", ref.String(), id, err)
+	}
+	return body, nil
+}
+
 func (s *Store) inspectPinnedArchive(ref Ref, id string) (Manifest, string, error) {
 	if !refstore.IsID(id) {
 		return Manifest{}, "", errors.New("invalid pinned image id")
@@ -325,11 +484,15 @@ func inspectArchive(archivePath string, ref Ref) (Manifest, error) {
 		return Manifest{}, fmt.Errorf("archive image %s does not match %s", m.Name, ref.String())
 	}
 	m.Tag = ref.Tag
-	if m.ID != "" {
-		m.Digest = m.ID
-		return m, nil
-	}
-	digest, err := fileDigest(archivePath)
+	digest, err := archiveDigest(m, func() (map[string]portableImageMember, error) {
+		archive, err := os.Open(archivePath)
+		if err != nil {
+			return nil, err
+		}
+		defer archive.Close()
+		members, _, err := readImageMembers(archive)
+		return members, err
+	}, func() (string, error) { return fileDigest(archivePath) })
 	if err != nil {
 		return Manifest{}, fmt.Errorf("digest image %s: %w", ref.String(), err)
 	}
@@ -351,19 +514,22 @@ func fileDigest(path string) (string, error) {
 }
 
 // ValidateArchive verifies a staged archive before callers publish it at ref.
+// The role is checked first, so a bad role reports itself rather than the
+// digest mismatch it also causes.
 func ValidateArchive(archivePath string, ref Ref) (Manifest, error) {
-	m, err := inspectArchive(archivePath, ref)
-	if err != nil || m.Role == nil {
-		return m, err
-	}
 	data, err := readFileFromTar(archivePath, "manifest.json")
 	if err != nil {
 		return Manifest{}, err
 	}
-	if err := validatePortableRole(m.Role, data); err != nil {
-		return Manifest{}, err
+	var roleOnly struct {
+		Role *rolefile.Role `json:"role"`
 	}
-	return m, nil
+	if json.Unmarshal(data, &roleOnly) == nil {
+		if err := validatePortableRole(roleOnly.Role, data); err != nil {
+			return Manifest{}, err
+		}
+	}
+	return inspectArchive(archivePath, ref)
 }
 
 func readFileFromTar(archive, want string) ([]byte, error) {
@@ -393,27 +559,25 @@ func readFileFromTar(archive, want string) ([]byte, error) {
 	return nil, fmt.Errorf("%s not found in %s", want, archive)
 }
 
-// publishArchive validates staged content, stores it under its ref id and
-// moves ref onto it. There is no no-clobber mode: rebuilding is always allowed.
-func (s *Store) publishArchive(ref Ref, tmpName string, archiveOut *[]byte) (string, error) {
+// publishArchive validates staged content and publishes it through publish:
+// content is stored under its id, never rewritten, and an image_version that
+// exists with other content conflicts unless opts.Force is set. archiveOut
+// receives the bytes ref now points at.
+func (s *Store) publishArchive(ref Ref, tmpName string, archiveOut *[]byte, opts PublishOptions) (string, []string, error) {
 	manifest, err := ValidateArchive(tmpName, ref)
 	if err != nil {
-		return "", fmt.Errorf("validate image %s: %w", ref.String(), err)
+		return "", nil, fmt.Errorf("validate image %s: %w", ref.String(), err)
 	}
-	var archive []byte
+	id, replaced, err := s.publish(ref, manifest, tmpName, opts)
+	if err != nil {
+		return "", nil, err
+	}
 	if archiveOut != nil {
-		archive, err = os.ReadFile(tmpName)
-		if err != nil {
-			return "", err
+		if *archiveOut, err = os.ReadFile(s.contentPath(ref.Name, id)); err != nil {
+			return "", nil, err
 		}
 	}
-	if err := s.install(ref, manifest.Digest, tmpName); err != nil {
-		return "", err
-	}
-	if archiveOut != nil {
-		*archiveOut = archive
-	}
-	return manifest.Digest, nil
+	return id, replaced, nil
 }
 
 func writeTarFile(tw *tar.Writer, name string, data []byte) error {

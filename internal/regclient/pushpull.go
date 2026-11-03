@@ -98,7 +98,7 @@ func Pull(ctx context.Context, imagesDir string, ref image.Ref, c *Client) (*Pul
 	if err != nil {
 		return nil, fmt.Errorf("pulled archive failed inspect (corrupt or unsupported schema): %w", err)
 	}
-	if _, err := (&image.Store{Dir: imagesDir}).PublishArchiveFile(ref, tmpName); err != nil {
+	if _, err := (&image.Store{Dir: imagesDir}).PublishArchiveFile(ref, tmpName, image.PublishOptions{}); err != nil {
 		return nil, err
 	}
 	return &PullResult{Name: m.Name, Tag: m.Tag, Digest: got, Pulled: true}, nil

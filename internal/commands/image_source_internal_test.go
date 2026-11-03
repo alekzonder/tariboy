@@ -2,12 +2,15 @@ package commands
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagesource"
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -108,5 +111,28 @@ func TestImageSourceBuildRejectsDisabledExternalPlugin(t *testing.T) {
 
 	if _, err := registry.Call(c, context.Background(), imageSourceBuild(), registry.Params{"name": "reviewer", "tag": "v1"}); err == nil || !strings.Contains(err.Error(), `unknown plugin "widget"`) {
 		t.Fatalf("image source build error = %v", err)
+	}
+}
+
+func TestImageSourceBuildRefusesConflictingImageVersion(t *testing.T) {
+	t.Parallel()
+	c := localCtx(t)
+	sources := imageSourceStore(c)
+	if _, err := sources.Create(imagesource.CreateRequest{Name: "reviewer", Prompt: "Review the task."}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sources.WriteFile("reviewer", "Tariboyfile.yaml", []byte("schema_version: 2\nimage_version: 1.0.0\nprompts:\n  - file: ./PROMPT.md\n")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.Call(c, context.Background(), imageSourceBuild(), registry.Params{"name": "reviewer"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sources.WriteFile("reviewer", "PROMPT.md", []byte("Review the task twice.")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := registry.Call(c, context.Background(), imageSourceBuild(), registry.Params{"name": "reviewer"})
+	var ue api.UserError
+	if !errors.As(err, &ue) || ue.Code != "image_version_conflict" || ue.Status != http.StatusConflict {
+		t.Fatalf("err = %#v, want image_version_conflict with status 409", err)
 	}
 }

@@ -30,6 +30,9 @@ func imageSnapshotStore(c *registry.Ctx) *imagesnapshot.Store {
 }
 
 func imageSourceUserError(err error) (api.UserError, bool) {
+	if conflict, ok := versionConflict(err); ok {
+		return conflict, true
+	}
 	switch {
 	case errors.Is(err, imagesource.ErrInvalidName):
 		return api.UserError{Code: "bad_source", Msg: err.Error(), Status: http.StatusBadRequest}, true

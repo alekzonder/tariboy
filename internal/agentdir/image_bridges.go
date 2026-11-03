@@ -149,10 +149,22 @@ func validateBridgePlan(plan BridgePlan) (string, map[string]BridgeFile, error) 
 	return destination, generated, nil
 }
 
+// ErrImageCopyMismatch marks a bridge failure caused by an agent's image copy
+// whose skills differ from the manifest it is prepared for. The copy can be
+// unpacked again from its archive.
+var ErrImageCopyMismatch = errors.New("image copy does not match its manifest")
+
+// copyMismatch keeps the text of err and matches ErrImageCopyMismatch.
+type copyMismatch struct{ error }
+
+func (copyMismatch) Is(target error) bool { return target == ErrImageCopyMismatch }
+
+func (e copyMismatch) Unwrap() error { return e.error }
+
 func compareSkillMetadata(prepared agentskills.Prepared, expected agentskills.Metadata) error {
 	meta := prepared.Metadata
 	if meta.Name != expected.Name || meta.Description != expected.Description || meta.ArchiveRoot != expected.ArchiveRoot || meta.FileCount != expected.FileCount || meta.Size != expected.Size || meta.TreeSHA256 != expected.TreeSHA256 {
-		return fmt.Errorf("skill %q does not match image manifest", expected.Name)
+		return copyMismatch{fmt.Errorf("skill %q does not match image manifest", expected.Name)}
 	}
 	return nil
 }
@@ -163,7 +175,7 @@ func prepareSourceSkills(imageSkillsDir string, expected []agentskills.Metadata)
 		return nil, err
 	}
 	if len(entries) != len(expected) {
-		return nil, errors.New("canonical image skill directory does not match manifest")
+		return nil, copyMismatch{errors.New("canonical image skill directory does not match manifest")}
 	}
 	prepared := make([]agentskills.Prepared, 0, len(expected))
 	seen := make(map[string]bool, len(expected))
@@ -184,7 +196,7 @@ func prepareSourceSkills(imageSkillsDir string, expected []agentskills.Metadata)
 	}
 	for _, entry := range entries {
 		if !entry.IsDir() || !seen[entry.Name()] {
-			return nil, fmt.Errorf("unexpected canonical image skill member %q", entry.Name())
+			return nil, copyMismatch{fmt.Errorf("unexpected canonical image skill member %q", entry.Name())}
 		}
 	}
 	return prepared, nil

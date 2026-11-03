@@ -19748,6 +19748,10 @@
                     "description": "CLI: print only the operation id and do not follow its log",
                     "type": "boolean"
                   },
+                  "force": {
+                    "description": "publish even when the image_version already exists with other content; the old archive stays under its digest",
+                    "type": "boolean"
+                  },
                   "git-commit": {
                     "description": "source Git commit",
                     "type": "string"

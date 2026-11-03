@@ -1,8 +1,11 @@
 package loop
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -1373,4 +1376,253 @@ func TestActiveCodexImageSkillBridgeNeedsNoPluginProbe(t *testing.T) {
 			t.Fatalf("Codex bridge contains %s: %v", unwanted, err)
 		}
 	}
+}
+
+// skillAgent is an agent provisioned from a one-skill image declaring
+// image_version 1.0.0, with a fake claude harness so activation builds a
+// skill bridge.
+type skillAgent struct {
+	m        *Manager
+	ag       agent.Agent
+	l        agentdir.Layout
+	images   *image.Store
+	ref      image.Ref
+	recorder *captureRecorder
+}
+
+func newSkillAgent(t *testing.T, install func(images *image.Store, ref image.Ref, archive []byte) string) skillAgent {
+	t.Helper()
+	base := t.TempDir()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
+	as := agent.NewStore(db)
+	images := &image.Store{Dir: filepath.Join(base, "images")}
+	source := t.TempDir()
+	skillDir := filepath.Join(source, "skills", "review")
+	if err := os.MkdirAll(skillDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: review\ndescription: Review changes.\n---\nBODY\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ref := image.Ref{Name: "reviewer", Tag: "latest"}
+	staging := &image.Store{Dir: t.TempDir()}
+	if _, err := image.BuildV2(&imagefile.V2{
+		SchemaVersion: 2, ImageVersion: "1.0.0", Dir: source, Skills: []imagefile.SkillEntry{{Dir: "./skills/review"}},
+	}, imagefile.ResolveRoots{}, ref, staging, time.Now, nil); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := staging.ArchiveBytes(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := install(images, ref, archive)
+	harnessBin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(harnessBin, "claude"), []byte("#!/bin/sh\necho '2.1.227 (Claude Code)'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ag := agent.Agent{Name: "worker", ImageRef: ref.String(), ImageDigest: digest, HarnessType: "claude", Env: map[string]string{"PATH": harnessBin}}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	agentsDir := filepath.Join(base, "agents")
+	l := agentdir.New(agentsDir, ag.Name)
+	if err := agentdir.Provision(l, ag, images, ref); err != nil {
+		t.Fatal(err)
+	}
+	recorder := &captureRecorder{}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: agentsDir, Store: as, ImgStore: images, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), AuditFor: func(string) Recorder { return recorder }}}
+	return skillAgent{m: m, ag: ag, l: l, images: images, ref: ref, recorder: recorder}
+}
+
+func installArchive(t *testing.T) func(*image.Store, image.Ref, []byte) string {
+	return func(images *image.Store, ref image.Ref, archive []byte) string {
+		manifest, err := images.InstallArchive(ref, archive)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return manifest.Digest
+	}
+}
+
+func (s skillAgent) events(typ string) []capturedEvent {
+	s.recorder.mu.Lock()
+	defer s.recorder.mu.Unlock()
+	var out []capturedEvent
+	for _, event := range s.recorder.events {
+		if event.typ == typ {
+			out = append(out, event)
+		}
+	}
+	return out
+}
+
+func TestActivationRematerializesImageCopyThatDoesNotMatchItsDigest(t *testing.T) {
+	t.Parallel()
+	for name, spoil := range map[string]func(t *testing.T, s skillAgent){
+		// The incident: the copy kept a manifest the pinned archive no longer has.
+		"manifest": func(t *testing.T, s skillAgent) {
+			path := filepath.Join(s.l.ImageDir(), "manifest.json")
+			body, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, bytes.Replace(body, []byte("Review changes."), []byte("Review other changes."), 1), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		// A skill file changed and no published bridge hides it.
+		"skill": func(t *testing.T, s skillAgent) {
+			if err := os.WriteFile(filepath.Join(s.l.ImageDir(), "skills", "review", "SKILL.md"), []byte("---\nname: review\ndescription: Review changes.\n---\nOTHER\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.RemoveAll(s.l.ImageBridgesDir()); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := newSkillAgent(t, installArchive(t))
+			if _, err := s.m.activatePendingImage(&s.ag); err != nil {
+				t.Fatal(err)
+			}
+			spoil(t, s)
+			if _, err := s.m.activatePendingImage(&s.ag); err != nil {
+				t.Fatalf("activation stopped on a spoiled copy: %v", err)
+			}
+			body, err := os.ReadFile(filepath.Join(s.l.ImageDir(), "skills", "review", "SKILL.md"))
+			if err != nil || !strings.Contains(string(body), "BODY") {
+				t.Fatalf("skill copy = %q, %v, want the archive's", body, err)
+			}
+			manifest, err := os.ReadFile(filepath.Join(s.l.ImageDir(), "manifest.json"))
+			if err != nil || bytes.Contains(manifest, []byte("other changes")) {
+				t.Fatalf("manifest copy = %q, %v, want the archive's", manifest, err)
+			}
+			events := s.events("image_rematerialized")
+			if len(events) != 1 || events[0].source != "system" || events[0].data["ref"] != s.ref.String() || events[0].data["digest"] != s.ag.ImageDigest || events[0].data["cause"] == "" {
+				t.Fatalf("image_rematerialized events = %+v", events)
+			}
+			if _, err := s.m.activatePendingImage(&s.ag); err != nil || len(s.events("image_rematerialized")) != 1 {
+				t.Fatalf("a matching copy was rematerialized again: %v", err)
+			}
+		})
+	}
+}
+
+func TestActivationStopsWhenPinnedArchiveIsGone(t *testing.T) {
+	t.Parallel()
+	s := newSkillAgent(t, installArchive(t))
+	if err := os.WriteFile(filepath.Join(s.l.ImageDir(), "manifest.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(s.images.Dir, s.ref.Name, "refs", s.ag.ImageDigest+".tar.gz")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.m.activatePendingImage(&s.ag); err == nil {
+		t.Fatal("activation succeeded without the pinned archive")
+	}
+	if events := s.events("image_rematerialized"); len(events) != 0 {
+		t.Fatalf("image_rematerialized events = %+v", events)
+	}
+}
+
+// TestAgentOnLegacyImageLaunchesUnchanged covers an agent pinned to an archive
+// built before ids were content digests: its id is RefID(name, version).
+func TestAgentOnLegacyImageLaunchesUnchanged(t *testing.T) {
+	t.Parallel()
+	s := newSkillAgent(t, func(images *image.Store, ref image.Ref, archive []byte) string {
+		id := image.RefID(ref.Name, "1.0.0")
+		legacy := rewriteManifestID(t, archive, id)
+		refs := filepath.Join(images.Dir, ref.Name, "refs")
+		if err := os.MkdirAll(refs, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(refs, id+".tar.gz"), legacy, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := images.SetTag(ref, id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	})
+	if s.ag.ImageDigest != image.RefID(s.ref.Name, "1.0.0") {
+		t.Fatalf("agent digest = %s, want the legacy id", s.ag.ImageDigest)
+	}
+	readCopy := func() (string, string, time.Time) {
+		t.Helper()
+		digest, err := os.ReadFile(filepath.Join(s.l.ImageDir(), ".image-digest"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifest, err := os.ReadFile(filepath.Join(s.l.ImageDir(), "manifest.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Stat(s.l.ImageDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(digest), string(manifest), info.ModTime()
+	}
+	digestBefore, manifestBefore, mtimeBefore := readCopy()
+	if _, err := s.m.activatePendingImage(&s.ag); err != nil {
+		t.Fatalf("agent on a legacy image did not launch: %v", err)
+	}
+	digestAfter, manifestAfter, mtimeAfter := readCopy()
+	if digestAfter != digestBefore || manifestAfter != manifestBefore || !mtimeAfter.Equal(mtimeBefore) {
+		t.Fatal("activation changed the copy of a legacy image")
+	}
+	if events := s.events("image_rematerialized"); len(events) != 0 {
+		t.Fatalf("image_rematerialized events = %+v", events)
+	}
+}
+
+// rewriteManifestID sets the manifest id of a runnable archive.
+func rewriteManifestID(t *testing.T, archive []byte, id string) []byte {
+	t.Helper()
+	in, err := gzip.NewReader(bytes.NewReader(archive))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	gz := gzip.NewWriter(&out)
+	tw := tar.NewWriter(gz)
+	tr := tar.NewReader(in)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(tr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if header.Name == "manifest.json" {
+			var fields map[string]any
+			if err := json.Unmarshal(body, &fields); err != nil {
+				t.Fatal(err)
+			}
+			fields["id"] = id
+			if body, err = json.MarshalIndent(fields, "", "  "); err != nil {
+				t.Fatal(err)
+			}
+		}
+		copied := *header
+		copied.Size = int64(len(body))
+		if err := tw.WriteHeader(&copied); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write(body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return out.Bytes()
 }

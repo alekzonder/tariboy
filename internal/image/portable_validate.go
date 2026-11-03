@@ -146,8 +146,14 @@ func readPortableMembers(archive []byte) (map[string]portableImageMember, []stri
 	if int64(len(archive)) > MaxPortableImageCompressed {
 		return nil, nil, errors.New("image archive exceeds compressed size limit")
 	}
+	return readImageMembers(bytes.NewReader(archive))
+}
+
+// readImageMembers is readPortableMembers without the compressed size limit,
+// which bounds only archives that cross a host boundary.
+func readImageMembers(archive io.Reader) (map[string]portableImageMember, []string, error) {
 	noteArchivePass()
-	gz, err := gzip.NewReader(bytes.NewReader(archive))
+	gz, err := gzip.NewReader(archive)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -227,13 +233,49 @@ func validatePortableMembers(archive []byte, members map[string]portableImageMem
 			}
 		}
 	}
-	if manifest.ID != "" {
-		manifest.Digest = manifest.ID
-		return manifest, nil
+	digest, err := archiveDigest(manifest, func() (map[string]portableImageMember, error) { return members, nil }, func() (string, error) {
+		sum := sha256.Sum256(archive)
+		return hex.EncodeToString(sum[:]), nil
+	})
+	if err != nil {
+		return Manifest{}, err
 	}
-	sum := sha256.Sum256(archive)
-	manifest.Digest = hex.EncodeToString(sum[:])
+	manifest.Digest = digest
 	return manifest, nil
+}
+
+// isLegacyVersionID reports an archive built before ids were content digests:
+// its id is RefID(name, image_version) and says nothing about its content.
+func isLegacyVersionID(manifest Manifest) bool {
+	return manifest.ImageVersion != "" && manifest.ID == RefID(manifest.Name, manifest.ImageVersion)
+}
+
+// archiveDigest decides the digest of an archive by its manifest id:
+//
+//   - no id (schema v1 and old unversioned v2): the sha256 of the archive file;
+//   - id == RefID(name, image_version): the legacy id, as built;
+//   - any other id: the content digest, which must equal the id.
+//
+// members and fileDigest are called only for the class that needs them.
+func archiveDigest(manifest Manifest, members func() (map[string]portableImageMember, error), fileDigest func() (string, error)) (string, error) {
+	switch {
+	case manifest.ID == "":
+		return fileDigest()
+	case isLegacyVersionID(manifest):
+		return manifest.ID, nil
+	}
+	parsed, err := members()
+	if err != nil {
+		return "", err
+	}
+	digest, err := contentDigest(parsed)
+	if err != nil {
+		return "", err
+	}
+	if digest != manifest.ID {
+		return "", errors.New("image manifest id does not match content digest")
+	}
+	return digest, nil
 }
 
 func ValidatePortableArchive(archive []byte, ref Ref) (Manifest, error) {
@@ -260,9 +302,6 @@ func validateV2PortableMembers(manifestBody []byte, members map[string]portableI
 		if err := imagefile.ValidateImageVersion(strict.ImageVersion); err != nil {
 			return err
 		}
-	}
-	if strict.ID != "" && strict.ID != RefID(ref.Name, strict.ImageVersion) {
-		return errors.New("invalid schema-v2 manifest id")
 	}
 	if _, err := store.ParseInputTime(strict.BuiltAt); err != nil {
 		return errors.New("invalid schema-v2 manifest built_at")

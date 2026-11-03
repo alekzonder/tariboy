@@ -11266,6 +11266,8 @@ export interface operations {
         "application/json": {
           /** @description CLI: print only the operation id and do not follow its log */
           detach?: boolean;
+          /** @description publish even when the image_version already exists with other content; the old archive stays under its digest */
+          force?: boolean;
           /** @description source Git commit */
           "git-commit"?: string;
           /** @description who started the operation, as the operations list shows it: ui, cli, compose, auto or onboarding */

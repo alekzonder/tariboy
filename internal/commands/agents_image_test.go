@@ -50,7 +50,9 @@ func TestAgentImageProjection(t *testing.T) {
 					t.Fatal(err)
 				}
 				spec := &imagefile.V2{SchemaVersion: 2, ImageVersion: version, Dir: src, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}
-				manifest, err := image.BuildV2(spec, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
+				// "same version" rebuilds 1.0.0 with other content, which
+				// only a forced build publishes.
+				manifest, _, err := image.BuildV2Publish(spec, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil, image.PublishOptions{Force: true})
 				if err != nil {
 					t.Fatal(err)
 				}

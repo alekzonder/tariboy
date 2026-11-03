@@ -14,11 +14,13 @@ var BareRef = Ref{Name: "bare", Tag: "latest"}
 // EnsureBare rebuilds bare:latest on every daemon start. The daemon owns the
 // image, so it always matches this release's image contract, whatever an
 // earlier release left in the store. Its image_version is the daemon version:
-// a restart of one release rewrites the same id, and a new release moves the
-// tag to a new id while earlier archives stay for agents pinned to them.
+// a restart of one release reuses the archive of the same content, and a new
+// release moves the tag to a new id while earlier archives stay for agents
+// pinned to them. The build is forced: the daemon owns this image, so a
+// development build that changes its content under one version replaces it.
 func EnsureBare(s *Store, clock func() time.Time) error {
 	return WithRefLock(BareRef.Name, func() error {
-		_, err := buildV2(&imagefile.V2{SchemaVersion: 2, ImageVersion: version.Version, Plugins: []imagefile.V2Plugin{}, Prompts: []imagefile.PromptEntry{}}, imagefile.ResolveRoots{}, BareRef, s, clock, nil, nil)
+		_, _, err := buildV2(&imagefile.V2{SchemaVersion: 2, ImageVersion: version.Version, Plugins: []imagefile.V2Plugin{}, Prompts: []imagefile.PromptEntry{}}, imagefile.ResolveRoots{}, BareRef, s, clock, nil, nil, PublishOptions{Force: true})
 		return err
 	})
 }

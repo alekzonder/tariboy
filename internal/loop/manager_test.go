@@ -659,6 +659,9 @@ func buildContractInvalidImage(t *testing.T, st *image.Store, name string) {
 				t.Fatal(err)
 			}
 			manifest["plugins"] = []map[string]string{{"name": "loop"}}
+			// The edit changes the content; without an id the archive is
+			// addressed by its file digest instead.
+			delete(manifest, "id")
 			body, err = json.Marshal(manifest)
 			if err != nil {
 				t.Fatal(err)

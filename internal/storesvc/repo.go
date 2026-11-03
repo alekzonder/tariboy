@@ -90,7 +90,9 @@ func (r *Repo) Put(ref image.Ref, body io.Reader, claimed string) (string, error
 	if _, err := image.ValidateArchive(tmpName, ref); err != nil {
 		return "", fmt.Errorf("%w: %v", ErrInvalidArchive, err)
 	}
-	if _, err := r.img.PublishArchiveFile(ref, tmpName); err != nil {
+	// A push always publishes and moves the tag, so the store server forces
+	// past the image_version rule.
+	if _, err := r.img.PublishArchiveFile(ref, tmpName, image.PublishOptions{Force: true}); err != nil {
 		return "", err
 	}
 	return got, nil

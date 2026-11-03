@@ -23,7 +23,7 @@ func TestPublishWithDotRefWritesNothingOutsideStore(t *testing.T) {
 		if _, err := store.stageBytes(ref, "install", []byte("x")); err == nil {
 			t.Errorf("stageBytes(%v) succeeded", ref)
 		}
-		if err := store.install(ref, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", filepath.Join(parent, "missing")); err == nil {
+		if err := store.install(ref, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", filepath.Join(parent, "missing"), false); err == nil {
 			t.Errorf("install(%v) succeeded", ref)
 		}
 		entries, err := os.ReadDir(parent)

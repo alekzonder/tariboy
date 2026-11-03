@@ -162,27 +162,35 @@ func ValidateV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver plugin
 }
 
 // BuildV2 is the one schema-v2 build mechanism. Operators, agents, Store
-// sources and team imports all publish through it, and it may always rebuild a
-// ref that already exists. Callers that accept a user-supplied ref screen it
-// with BuildRefs or IsReserved first.
+// sources and team imports all publish through it. It stores the archive under
+// its content digest; a rebuild of an image_version that exists with other
+// content fails with VersionConflictError (see Store.publish). Callers that
+// accept a user-supplied ref screen it with BuildRefs or IsReserved first.
 func BuildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver) (Manifest, error) {
-	return buildV2(src, roots, ref, store, clock, resolver, nil)
+	manifest, _, err := buildV2(src, roots, ref, store, clock, resolver, nil, PublishOptions{})
+	return manifest, err
+}
+
+// BuildV2Publish builds through BuildV2 under opts and also returns the ids of
+// the same image_version a forced build replaced.
+func BuildV2Publish(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver, opts PublishOptions) (Manifest, []string, error) {
+	return buildV2(src, roots, ref, store, clock, resolver, nil, opts)
 }
 
 // BuildV2Archive builds through BuildV2 and also returns the published archive
 // bytes, so a caller can move other tags onto the same content.
 func BuildV2Archive(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver) (Manifest, []byte, error) {
 	var archive []byte
-	manifest, err := buildV2(src, roots, ref, store, clock, resolver, &archive)
+	manifest, _, err := buildV2(src, roots, ref, store, clock, resolver, &archive, PublishOptions{})
 	return manifest, archive, err
 }
 
-func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver, archiveOut *[]byte) (Manifest, error) {
+func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver, archiveOut *[]byte, opts PublishOptions) (Manifest, []string, error) {
 	prepared, err := prepareV2(src, roots, resolver)
 	if err != nil {
-		return Manifest{}, err
+		return Manifest{}, nil, err
 	}
-	manifest := Manifest{SchemaVersion: 2, ImageVersion: src.ImageVersion, ID: RefID(ref.Name, src.ImageVersion), Name: ref.Name, Tag: ref.Tag, BuiltAt: storetime.FormatTime(clock()), Plugins: prepared.plugins, Skills: manifestSkills(prepared.skills), PromptTemplateSHA256: prepared.template.SHA256}
+	manifest := Manifest{SchemaVersion: 2, ImageVersion: src.ImageVersion, Name: ref.Name, Tag: ref.Tag, BuiltAt: storetime.FormatTime(clock()), Plugins: prepared.plugins, Skills: manifestSkills(prepared.skills), PromptTemplateSHA256: prepared.template.SHA256}
 	if manifest.Plugins == nil {
 		manifest.Plugins = []ManifestPlugin{}
 	}
@@ -190,33 +198,89 @@ func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *St
 		manifest.Skills = []agentskills.Metadata{}
 	}
 	if manifest.Role, err = rolefile.Read(src.Dir); err != nil {
-		return Manifest{}, err
+		return Manifest{}, nil, err
 	}
-	digest, err := store.writeV2Archive(ref, manifest, prepared.template, prepared.layers, prepared.skills, archiveOut)
+	digest, replaced, err := store.writeV2Archive(ref, manifest, prepared.template, prepared.layers, prepared.skills, archiveOut, opts)
 	if err != nil {
-		return Manifest{}, err
+		return Manifest{}, nil, err
 	}
-	manifest.Digest = digest
-	return manifest, nil
+	manifest.ID, manifest.Digest = digest, digest
+	return manifest, replaced, nil
 }
 
-func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, layers map[string][]byte, skills []agentskills.Prepared, archiveOut *[]byte) (string, error) {
+func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, layers map[string][]byte, skills []agentskills.Prepared, archiveOut *[]byte, opts PublishOptions) (string, []string, error) {
 	if err := checkRef(ref); err != nil {
-		return "", err
+		return "", nil, err
+	}
+	templateJSON, err := json.MarshalIndent(template, "", "  ")
+	if err != nil {
+		return "", nil, err
+	}
+	members := []portableImageMember{{name: "manifest.json", mode: 0o600}, {name: "prompt/template.json", mode: 0o600, body: templateJSON}}
+	for _, entry := range template.Entries {
+		if entry.Kind == "file" {
+			members = append(members, portableImageMember{name: entry.ArchivePath, mode: 0o600, body: layers[entry.ArchivePath]})
+		}
+	}
+	for _, skill := range skills {
+		for _, file := range skill.Files {
+			mode := int64(0o600)
+			if file.Executable {
+				mode = 0o700
+			}
+			members = append(members, portableImageMember{name: skill.Metadata.ArchiveRoot + "/" + file.RelativePath, mode: mode, body: file.Body})
+		}
+	}
+	// The id is the digest of everything else, so it is computed with the
+	// manifest that does not carry it yet.
+	man.ID = ""
+	if members[0].body, err = marshalV2Manifest(man); err != nil {
+		return "", nil, err
+	}
+	byName := make(map[string]portableImageMember, len(members))
+	for _, member := range members {
+		byName[member.name] = member
+	}
+	if man.ID, err = contentDigest(byName); err != nil {
+		return "", nil, err
+	}
+	if members[0].body, err = marshalV2Manifest(man); err != nil {
+		return "", nil, err
 	}
 	stageDir := s.refs().NameDir(ref.Name)
 	if err := os.MkdirAll(stageDir, 0o700); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	tmp, err := os.CreateTemp(stageDir, "."+ref.Tag+"-*.tmp")
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName)
 	gz := gzip.NewWriter(tmp)
 	tw := tar.NewWriter(gz)
-	manifestJSON, err := json.MarshalIndent(struct {
+	for _, member := range members {
+		if err := writeTarFileMode(tw, member.name, member.body, member.mode); err != nil {
+			tmp.Close()
+			return "", nil, err
+		}
+	}
+	if err := tw.Close(); err != nil {
+		tmp.Close()
+		return "", nil, err
+	}
+	if err := gz.Close(); err != nil {
+		tmp.Close()
+		return "", nil, err
+	}
+	if err := tmp.Close(); err != nil {
+		return "", nil, err
+	}
+	return s.publishArchive(ref, tmpName, archiveOut, opts)
+}
+
+func marshalV2Manifest(man Manifest) ([]byte, error) {
+	return json.MarshalIndent(struct {
 		SchemaVersion        int                    `json:"schema_version"`
 		ImageVersion         string                 `json:"image_version,omitempty"`
 		ID                   string                 `json:"id,omitempty"`
@@ -227,57 +291,6 @@ func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, l
 		PromptTemplateSHA256 string                 `json:"prompt_template_sha256"`
 		Role                 *rolefile.Role         `json:"role,omitempty"`
 	}{man.SchemaVersion, man.ImageVersion, man.ID, man.Name, man.BuiltAt, man.Plugins, man.Skills, man.PromptTemplateSHA256, man.Role}, "", "  ")
-	if err != nil {
-		tmp.Close()
-		return "", err
-	}
-	templateJSON, err := json.MarshalIndent(template, "", "  ")
-	if err != nil {
-		tmp.Close()
-		return "", err
-	}
-	if err := writeTarFile(tw, "manifest.json", manifestJSON); err != nil {
-		tmp.Close()
-		return "", err
-	}
-	if err := writeTarFile(tw, "prompt/template.json", templateJSON); err != nil {
-		tmp.Close()
-		return "", err
-	}
-	for _, entry := range template.Entries {
-		if entry.Kind != "file" {
-			continue
-		}
-		if err := writeTarFile(tw, entry.ArchivePath, layers[entry.ArchivePath]); err != nil {
-			tmp.Close()
-			return "", err
-		}
-	}
-	for _, skill := range skills {
-		for _, file := range skill.Files {
-			name := skill.Metadata.ArchiveRoot + "/" + file.RelativePath
-			mode := int64(0o600)
-			if file.Executable {
-				mode = 0o700
-			}
-			if err := writeTarFileMode(tw, name, file.Body, mode); err != nil {
-				tmp.Close()
-				return "", err
-			}
-		}
-	}
-	if err := tw.Close(); err != nil {
-		tmp.Close()
-		return "", err
-	}
-	if err := gz.Close(); err != nil {
-		tmp.Close()
-		return "", err
-	}
-	if err := tmp.Close(); err != nil {
-		return "", err
-	}
-	return s.publishArchive(ref, tmpName, archiveOut)
 }
 
 func sha256hex(b []byte) string {

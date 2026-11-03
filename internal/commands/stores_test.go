@@ -208,22 +208,22 @@ func TestImageBuildStoreSelectorUpdatesExistingVersionTag(t *testing.T) {
 	t.Setenv("PATH", tools+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("NPX_LOG", logPath)
 
-	result, err := cmdHandler(t, "image.build")(c, registry.Params{"source": "team/reviewer"})
+	// The declared image_version is unchanged and the content differs, so
+	// only a forced store build moves both tags onto the new content.
+	result, err := cmdHandler(t, "image.build")(c, registry.Params{"source": "team/reviewer", "force": true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	updated := result.(ImageBuildResult).Digest
-	if updated == "" {
-		t.Fatalf("build result = %#v", result)
+	if updated == "" || updated == before.Digest || before.Digest != beforeLatest.Digest {
+		t.Fatalf("build result = %#v, before %s / %s", result, before.Digest, beforeLatest.Digest)
 	}
-	// The declared image_version is unchanged, so the store build republishes
-	// the same ref and both tags keep naming it with the new content.
 	current, err := imageStore(c).Inspect(ref)
-	if err != nil || current.Digest != before.Digest || current.Digest != updated {
+	if err != nil || current.Digest != updated {
 		t.Fatalf("version ref = %#v, err %v", current, err)
 	}
 	currentLatest, err := imageStore(c).Inspect(latest)
-	if err != nil || currentLatest.Digest != beforeLatest.Digest || currentLatest.Digest != updated {
+	if err != nil || currentLatest.Digest != updated {
 		t.Fatalf("latest ref = %#v, err %v", currentLatest, err)
 	}
 	if prompt, err := imageStore(c).RenderPrompt(ref); err != nil || strings.Contains(prompt, "old image") {

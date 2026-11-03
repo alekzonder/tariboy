@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -1436,48 +1437,87 @@ func TestImageBuildDuringIterationPreservesActiveAndAdvancesNext(t *testing.T) {
 // TestImageBuildWithoutVersionBumpKeepsRefID records the identity rule: the
 // ref id comes from name and image_version, so rebuilding the same version
 // republishes the same ref instead of creating another generation.
-func TestImageBuildWithoutVersionBumpKeepsRefID(t *testing.T) {
-	t.Parallel()
-	c := localCtx(t)
-	src := t.TempDir()
-	write := func(prompt string) {
-		t.Helper()
-		if err := os.WriteFile(filepath.Join(src, "Tariboyfile.yaml"), []byte("schema_version: 2\nimage_version: 1.0.0\nprompts:\n  - file: ./prompt.md\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(src, "prompt.md"), []byte(prompt), 0o600); err != nil {
-			t.Fatal(err)
-		}
+// writeVersionedPrompt writes a Tariboyfile.yaml declaring image_version 1.0.0
+// with prompt as its only layer.
+func writeVersionedPrompt(t *testing.T, src, prompt string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(src, "Tariboyfile.yaml"), []byte("schema_version: 2\nimage_version: 1.0.0\nprompts:\n  - file: ./prompt.md\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	build := func() ImageBuildResult {
-		t.Helper()
-		result, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "path": src})
+	if err := os.WriteFile(filepath.Join(src, "prompt.md"), []byte(prompt), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertTagsAt(t *testing.T, c *registry.Ctx, digest, prompt string) {
+	t.Helper()
+	for _, tag := range []string{"1.0.0", "latest"} {
+		ref := image.Ref{Name: "reviewer", Tag: tag}
+		got, err := imageStore(c).Inspect(ref)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return result.(ImageBuildResult)
+		rendered, err := imageStore(c).RenderPrompt(ref)
+		if err != nil || got.Digest != digest || !strings.Contains(rendered, prompt) {
+			t.Fatalf("%s = %s %q (%v), want %s with %s", ref, got.Digest, rendered, err, digest, prompt)
+		}
 	}
-	write("FIRST")
-	first := build()
-	write("SECOND")
-	second := build()
-	if first.Digest != second.Digest {
-		t.Fatalf("same image_version produced %v and %v", first.Digest, second.Digest)
-	}
-	versioned, err := imageStore(c).Inspect(image.Ref{Name: "reviewer", Tag: "1.0.0"})
+}
+
+func TestImageBuildSameVersionOtherContentConflicts(t *testing.T) {
+	t.Parallel()
+	c := localCtx(t)
+	src := t.TempDir()
+	writeVersionedPrompt(t, src, "FIRST")
+	result, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "path": src})
 	if err != nil {
 		t.Fatal(err)
 	}
-	latest, err := imageStore(c).Inspect(image.Ref{Name: "reviewer", Tag: "latest"})
+	first := result.(ImageBuildResult)
+	writeVersionedPrompt(t, src, "SECOND")
+	_, err = cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "path": src})
+	var ue api.UserError
+	if !errors.As(err, &ue) || ue.Code != "image_version_conflict" || ue.Status != http.StatusConflict {
+		t.Fatalf("err = %#v, want image_version_conflict with status 409", err)
+	}
+	for _, want := range []string{"reviewer:1.0.0", first.Digest, "image_version", "--force"} {
+		if !strings.Contains(ue.Msg, want) {
+			t.Fatalf("message %q does not name %q", ue.Msg, want)
+		}
+	}
+	assertTagsAt(t, c, first.Digest, "FIRST")
+}
+
+func TestImageBuildForceReplacesVersionAndLogsEvent(t *testing.T) {
+	t.Parallel()
+	c := localCtx(t)
+	src := t.TempDir()
+	writeVersionedPrompt(t, src, "FIRST")
+	result, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "path": src})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if versioned.Digest != second.Digest || latest.Digest != second.Digest {
-		t.Fatalf("tags = %s and %s, want %v", versioned.Digest, latest.Digest, second.Digest)
+	first := result.(ImageBuildResult)
+	writeVersionedPrompt(t, src, "SECOND")
+	started, err := callCommand(t, c, "image.build", registry.Params{"name": "reviewer", "path": src, "force": true, "initiator": "cli", "wait": true})
+	if err != nil {
+		t.Fatal(err)
 	}
-	prompt, err := imageStore(c).RenderPrompt(image.Ref{Name: "reviewer", Tag: "latest"})
-	if err != nil || !strings.Contains(prompt, "SECOND") {
-		t.Fatalf("republished prompt = %q, %v", prompt, err)
+	op := started.(OperationStarted).Operation
+	if op.Params["force"] != "true" {
+		t.Fatalf("operation params = %v, want force=true", op.Params)
+	}
+	second := op.ImageResult.Digest
+	if second == first.Digest {
+		t.Fatal("forced build kept the old digest")
+	}
+	assertTagsAt(t, c, second, "SECOND")
+	if _, err := imageStore(c).InspectPinned(image.Ref{Name: "reviewer", Tag: "1.0.0"}, first.Digest); err != nil {
+		t.Fatalf("old archive lost: %v", err)
+	}
+	want := "image_version_forced ref=reviewer:1.0.0 version=1.0.0 old_digest=" + first.Digest + " new_digest=" + second + " initiator=cli"
+	if log := operationLogText(t, c, op.ID); !strings.Contains(log, want) {
+		t.Fatalf("operation log %q does not contain %q", log, want)
 	}
 }
 
