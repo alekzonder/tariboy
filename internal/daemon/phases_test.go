@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/image"
@@ -15,6 +16,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 // phaseOptions are daemon options for a phase test rooted in a seeded base.
@@ -136,6 +138,44 @@ func TestBuildTasksSeedsDefaultQueueAndBareImage(t *testing.T) {
 	}
 	if !tk.images.Exists(image.BareRef) {
 		t.Fatal("bare image not seeded")
+	}
+}
+
+// Startup closes the waits an older daemon opened on a principal that does
+// not exist, such as a mention that kept the sentence's closing dot.
+func TestBuildTasksClosesWaitsOnMissingPrincipals(t *testing.T) {
+	t.Parallel()
+	proc, c, _ := phaseCore(t, phaseOptions(t))
+	ctx := context.Background()
+	svc := tasks.NewService(c.st.DB, c.customerLogin, time.Now)
+	customer := tasks.CustomerActor(c.customerLogin)
+	if _, err := svc.CreateQueue(ctx, customer, tasks.CreateQueueInput{Prefix: "ORP", Name: "Orphans"}); err != nil {
+		t.Fatal(err)
+	}
+	task, err := svc.CreateTask(ctx, customer, tasks.CreateTaskInput{Queue: "ORP", Title: "orphans"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	comment, err := svc.AddComment(ctx, customer, task.Key, tasks.AddCommentInput{Body: "question"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.st.DB.Exec(`
+		INSERT INTO task_waiting_for(task_id, expected_principal, requesting_principal,
+			requesting_comment_id, requested_at)
+		VALUES (?, 'agent:tariboy-pm.', 'agent:asker', ?, '2026-11-03T09:00:00Z')`,
+		task.ID, comment.Comment.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildTasks(ctx, proc, c); err != nil {
+		t.Fatal(err)
+	}
+	var open int
+	if err := c.st.DB.QueryRow(`SELECT COUNT(*) FROM task_waiting_for WHERE resolved_at = ''`).Scan(&open); err != nil {
+		t.Fatal(err)
+	}
+	if open != 0 {
+		t.Fatalf("open waits after start = %d, want 0", open)
 	}
 }
 

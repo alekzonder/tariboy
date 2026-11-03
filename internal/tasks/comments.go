@@ -11,9 +11,16 @@ import (
 	"strings"
 )
 
-// mentionRE matches a principal mention. The name starts and ends with a
-// letter or digit, so a sentence's closing punctuation is not part of it.
-var mentionRE = regexp.MustCompile(`@((?:agent|user):[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)`)
+// principalPattern matches a mentionable principal. The name starts and
+// ends with a letter or digit, so a sentence's closing punctuation is not
+// part of it.
+const principalPattern = `(?:agent|user):[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?`
+
+// mentionRE matches a principal mention in a comment body.
+var mentionRE = regexp.MustCompile(`@(` + principalPattern + `)`)
+
+// principalNameRE matches a whole principal that a mention can name.
+var principalNameRE = regexp.MustCompile(`^` + principalPattern + `$`)
 
 func (s *TaskService) AddComment(ctx context.Context, actor Actor, key string, in AddCommentInput) (CommentResult, error) {
 	if err := validateActor(actor); err != nil {
@@ -306,15 +313,21 @@ func (s *TaskService) commentMentionsTx(ctx context.Context, tx *sql.Tx, body, a
 // principalExistsTx reports whether an agent principal names a registered
 // agent, or a user principal names the customer.
 func (s *TaskService) principalExistsTx(ctx context.Context, tx *sql.Tx, principal string) (bool, error) {
+	return principalExists(ctx, tx, s.customer, principal)
+}
+
+// principalExists reports whether an agent principal names a registered
+// agent, or a user principal names customer.
+func principalExists(ctx context.Context, q queryer, customer, principal string) (bool, error) {
 	if name, ok := strings.CutPrefix(principal, "agent:"); ok {
 		var exists int
-		err := tx.QueryRowContext(ctx, `SELECT 1 FROM agents WHERE name = ?`, name).Scan(&exists)
+		err := q.QueryRowContext(ctx, `SELECT 1 FROM agents WHERE name = ?`, name).Scan(&exists)
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
 		return err == nil, err
 	}
-	return strings.HasPrefix(principal, "user:") && principal == userPrincipal(s.customer), nil
+	return strings.HasPrefix(principal, "user:") && principal == userPrincipal(customer), nil
 }
 
 func upsertWait(

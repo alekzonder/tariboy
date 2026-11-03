@@ -254,6 +254,17 @@ does not change. `ttasks ask` on a missing principal fails with
 principal opens one wait on it, also when the question text mentions that
 principal again.
 
+An older daemon also opened waits on principals that do not exist, for example
+`agent:tariboy-pm.` with the closing dot of a sentence. No answer can resolve
+such a wait. When `tariboyd` starts, it closes each open wait on a principal
+that does not exist or that has a name a mention cannot match. It also closes
+the open question letters of that wait. The daemon log gets one `Info` record
+for each closed wait, with the task key, the wait ID, the principal and the
+reason (`principal_not_found` or `invalid_principal_name`). One more record
+gives the number of closed waits. Waits on the customer and on existing
+agents stay open, and the task status does not change. If the customer login
+is empty, all waits on `user:*` principals stay open.
+
 An enabled agent normally follows one sticky assigned task as its Goal. It
 releases that selection when the task is done, cancelled, loses assignment or
 visibility, remains in `wait_customer` beyond the agent's configured grace
