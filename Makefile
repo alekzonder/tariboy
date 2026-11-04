@@ -697,7 +697,7 @@ frontend-check:
 	@$(STEP_RUNNER); \
 	run_step "ui-fmt-check" 'cd ui && npm run fmt:check'; \
 	run_step "ui-api-types" 'cd ui && npm run api-types:check'; \
-	run_step "ui-typecheck" 'cd ui && npx tsc -b'; \
+	run_step "ui-typecheck" 'cd ui && npx tsc -b --checkers 1'; \
 	run_step "ui-lint"      'cd ui && npm run lint'; \
 	run_step "ui-dead-code" 'cd ui && npm run knip'; \
 	./scripts/ui-test-memory-gate.sh 9>&-; \
