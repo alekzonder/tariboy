@@ -45,7 +45,7 @@ run_gate TARIBOY_UI_TEST_MEM_POLL=1 TARIBOY_UI_TEST_MEM_WAIT_TIMEOUT=30
 elapsed=$(($(date +%s) - start))
 wait
 [ "$code" -eq 0 ] || fail "low memory exited $code"
-grep -Fq 'memory gate: waiting for MemAvailable >= 3000 MB before ui-test (now 1000 MB, limit 30s)' "$out" || fail "no waiting line"
+grep -Fq 'memory gate: waiting for MemAvailable >= 1700 MB before ui-test (now 1000 MB, limit 30s)' "$out" || fail "no waiting line"
 grep -Eq 'memory gate: MemAvailable 4000 MB after [0-9]+s, starting ui-test' "$out" || fail "no starting line"
 [ "$elapsed" -ge 2 ] || fail "low memory did not wait (${elapsed}s)"
 
@@ -59,7 +59,7 @@ run_gate TARIBOY_UI_TEST_MIN_MEM_MB=0
 set_mem 1024000
 run_gate TARIBOY_UI_TEST_MEM_POLL=1 TARIBOY_UI_TEST_MEM_WAIT_TIMEOUT=2
 [ "$code" -eq 0 ] || fail "time limit exited $code"
-grep -Fq 'memory gate: MemAvailable 1000 MB is still below 3000 MB after 2s; running ui-test anyway' "$out" || fail "no time limit warning"
+grep -Fq 'memory gate: MemAvailable 1000 MB is still below 1700 MB after 2s; running ui-test anyway' "$out" || fail "no time limit warning"
 
 # No MemAvailable (macOS has no /proc/meminfo): one line, no wait.
 rm -f -- "$meminfo"
