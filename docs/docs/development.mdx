@@ -266,7 +266,8 @@ they can use all memory and disk. The fast checks therefore limit themselves:
   through `TARIBOY_VITEST_MAX_WORKERS`, and passes `--jobs N` to
   `desktop-rust-check`. Without `TARIBOY_AGENT` or `CHECK_JOBS`, nothing
   changes. Set `CHECK_JOBS=N` yourself to override the default.
-- **Memory gate.** `ui-test` uses about 4.1 GB of memory at its peak. Before
+- **Memory gate.** With two workers, `ui-test` uses about 1.5 GB of memory at
+  its peak. Before
   that step, `frontend-check` runs `scripts/ui-test-memory-gate.sh`. The
   script reads `MemAvailable` from `/proc/meminfo`. If the value is 3000 MB
   or more, the script prints nothing and `ui-test` starts at once. If the
@@ -540,8 +541,9 @@ cd ui
 npm ci
 ```
 
-`make check` then covers `npm run fmt:check`, `npm run api-types:check`, `npx tsc -b`, `npm run lint`, `npm run knip`,
-`npm test`, `npm run branding:check`, and `npm run bundle:budget`. `make full-check` adds `npm run test:tasks-browser`
+`make check` then covers `npm run fmt:check`, `npm run api-types:check`, `npx tsc -b --checkers 1`, `npm run lint`,
+`npm run knip`, `npm test`, `npm run branding:check`, and `npm run bundle:budget`. The type check uses one checker
+thread, because the default parallel checkers use about 0.4 GB more memory on a shared host. `make full-check` adds `npm run test:tasks-browser`
 and `npm run test:images-browser`, and builds the desktop bundle through its
 desktop step. Run any of them directly under `ui/` while iterating:
 
@@ -711,8 +713,11 @@ message names both numbers, for example
 run prints `ui-test: vitest finished 303 of 303 test files`. The check does not
 use the Vitest summary, because a Vitest worker that runs out of heap can stop
 the run with exit code 0 and no summary. To prevent that, `ui/vite.config.ts`
-sets `vmMemoryLimit` to 60% of the heap limit of a Node.js thread. Vitest then
-restarts a `vmThreads` worker before its heap is full. `npm run test:watch`
+sets `vmMemoryLimit` to 336 MiB. Vitest then restarts a `vmThreads` worker
+before its heap is full. The limit is absolute and does not depend on the heap
+limit of Node.js. A share of the heap limit let each worker keep more than
+1 GB of test files on a host with a large heap. With 336 MiB, the peak of
+`npm test` is about the number of workers × 336 MiB + 0.6 to 0.9 GB. `npm run test:watch`
 runs Vitest without the wrapper and without the check.
 
 `npm run knip` runs [Knip](https://knip.dev) from `ui/knip.json`. The
