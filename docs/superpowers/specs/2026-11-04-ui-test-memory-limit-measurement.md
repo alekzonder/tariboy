@@ -30,7 +30,7 @@ are not part of `make check`.
 | CI `ui-typecheck` peak | 1263 MB | 886 MB | -0.38 GB (-30 %) |
 | CI `ui-typecheck` time | 4.4 s | 4.0 s | no change |
 | CI `make frontend-check` peak | 8073 MB | 3633 MB | -4.4 GB (-55 %) |
-| CI `frontend-check` job time | 152 s (median of 3 `main` runs) | 180 s, 139 s (two attempts) | +18 %, -9 % |
+| CI `frontend-check` job time | 152 s (median of 3 `main` runs) | 180 s (median of 180, 139, 185 s) | +28 s (+18 %) |
 
 Every `ui-test` run finished all test files:
 `ui-test: vitest finished 303 of 303 test files`. The check of an incomplete
@@ -112,6 +112,7 @@ v22.23.4 and 4 vitest workers.
 | Before, job time | `1f11b165` | [run 41721412649](https://github.com/alekzonder/tariboy/actions/runs/41721412649/job/126214852327): 136 s |
 | After, job time | `454d0d11` (the change without the measurement) | [run 41776977786, attempt 1](https://github.com/alekzonder/tariboy/actions/runs/41776977786/job/126399499106): 180 s |
 | After, job time | `454d0d11`, the job run again | [run 41776977786, attempt 2](https://github.com/alekzonder/tariboy/actions/runs/41776977786/job/126400584714): 139 s |
+| After, job time | `3d63d2e3` (the change and the first version of this report) | [run 41777646420](https://github.com/alekzonder/tariboy/actions/runs/41777646420/job/126401616416): 185 s |
 
 The job time is `completedAt - startedAt` of the job from
 `gh run view RUN --json jobs`. The measured runs are slower than a normal run,
@@ -189,19 +190,23 @@ Host `make check`: 460 s against 452 and 441 s, which is +2 % and +4 %. The
 `ui-test` step is 19 to 21 s slower. The `test` and `docs` steps are 2 to
 4 s faster, inside the host noise.
 
-CI `frontend-check` job: the two attempts on the same commit took
-180 s and 139 s against the median of 152 s on `main` (136 to 163 s). The
-first attempt is 18 % slower, the second is 9 % faster. The `ui-test` step
-took 122 s and 90 s in these attempts, 121 s in the measured run, and 78 to
-99 s in the three `main` runs. The spread between runners of the same
-commit (41 s) is larger than the change, so the CI runs do not show a
-reliable slowdown. The `ui-typecheck` step took 3 to 4 s before and after.
+CI `frontend-check` job: three runs after the change took 180, 139 and
+185 s, median 180 s. The three `main` runs took 136, 163 and 152 s, median
+152 s. The job is 28 s (18 %) slower, which is more than the 5 % limit. The
+`ui-test` step explains the difference: 122, 90 and 126 s after the change
+(121 s in the measured run) against 78, 99 and 98 s on `main`. The other
+steps, `npm ci` and `ui-typecheck` (3 to 4 s) did not change. One attempt
+(139 s, `ui-test` 90 s) was faster than `main`, so the runner noise is large,
+but two of three runs and the measured run show the slowdown.
 
 On the host, `ui-test` is slower in all four runs after the change (222 to
-230 s against 204 to 211 s). The cause is the smaller limit. Vitest restarts
+230 s against 204 to 211 s). The cause on the host and in CI is the smaller
+limit. Vitest restarts
 a `vmThreads` worker each time its heap passes 336 MiB, and every new worker
-loads `jsdom`, the setup file and the shared modules again. The task keeps
-336 MiB. A larger value trades memory for time.
+loads `jsdom`, the setup file and the shared modules again. In CI, with 4
+workers, the `ui-test` time grows by 20 to 25 s. On the host, with 2
+workers, it grows by 17 to 21 s. This report did not count the restarts.
+The task keeps 336 MiB. A larger value trades memory for time.
 
 ## Appendix: measurement files
 
