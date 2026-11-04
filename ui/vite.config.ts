@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 import { fsAllow } from "./vite.fsAllow";
+import { vitestMaxWorkers } from "./vite.workers";
 
 // Shared dev/test config: `npm run dev` in a browser and the vitest suite. It no
 // longer emits the shipped bundle — the desktop target (vite.desktop.config.ts)
@@ -22,8 +23,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    // make check lowers this for agents that share one host.
-    maxWorkers: Number(process.env.TARIBOY_VITEST_MAX_WORKERS) || 4,
+    // make check lowers this for agents that share one host. The minimum is 2:
+    // one vmThreads worker runs every file in one VM context, and the run fails.
+    maxWorkers: vitestMaxWorkers(process.env.TARIBOY_VITEST_MAX_WORKERS, console.warn),
     pool: "vmThreads",
     // A vmThreads worker keeps every test file it ran in its heap. Vitest
     // restarts it once the heap passes vmMemoryLimit, checked after each file.
@@ -34,6 +36,9 @@ export default defineConfig({
     // each worker held that much, so the run peaked at 3.4 to 3.7 GB with two
     // workers. 336 MiB keeps every file running and bounds the peak at about
     // workers × 336 MiB + 0.6 to 0.9 GB on every host and Node.js version.
+    // Each restart costs about 0.8 s. 512 MiB halves the restarts, but `make
+    // check` on the host then peaks at 1.66 GB of anon memory, not 1.29 GB:
+    // docs/superpowers/specs/2026-11-04-ui-test-vm-memory-limit-tuning.md.
     vmMemoryLimit: 336 * 1024 * 1024,
     // Workspace tests render whole pages and pass 5 s when agents share a host.
     testTimeout: 20_000,

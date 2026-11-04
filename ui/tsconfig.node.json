@@ -21,5 +21,12 @@
     "strict": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "vite.desktop.config.ts", "vite.store.config.ts", "vite.fsAllow.ts"]
+  "include": [
+    "vite.config.ts",
+    "vite.desktop.config.ts",
+    "vite.store.config.ts",
+    "vite.fsAllow.ts",
+    "vite.workers.ts",
+    "vite.workers.test.ts"
+  ]
 }

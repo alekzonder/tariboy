@@ -113,9 +113,9 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   or npm configuration, which the fingerprint does not track.
   They do not rewrite tracked files or dirty `git status`. On a shared host
   they wait for one host-wide check slot, run agent checks with two Go
-  packages and two vitest workers, and keep temporary files in a run directory
+  packages and two vitest workers (never fewer), and keep temporary files in a run directory
   that is removed afterwards. Before `ui-test` they wait up to 600 seconds
-  until `MemAvailable` is at least 3000 MB, then run the step with a warning
+  until `MemAvailable` is at least 1700 MB, then run the step with a warning
   if memory is still low; `TARIBOY_UI_TEST_MIN_MEM_MB` changes the threshold
   and `0` turns the wait off; see "Checks on a shared host" in
   `docs/docs/development.mdx`. Run `make check` in the background when a tool

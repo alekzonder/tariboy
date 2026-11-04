@@ -265,18 +265,24 @@ they can use all memory and disk. The fast checks therefore limit themselves:
   `GOFLAGS`, unless `GOFLAGS` already sets `-p`, sets the vitest worker count
   through `TARIBOY_VITEST_MAX_WORKERS`, and passes `--jobs N` to
   `desktop-rust-check`. Without `TARIBOY_AGENT` or `CHECK_JOBS`, nothing
-  changes. Set `CHECK_JOBS=N` yourself to override the default.
-- **Memory gate.** With two workers, `ui-test` uses about 1.5 GB of memory at
+  changes. Set `CHECK_JOBS=N` yourself to override the default. Vitest uses
+  at least two workers. If `TARIBOY_VITEST_MAX_WORKERS` is a number below 2,
+  Vitest uses two workers and prints
+  `ui-test: TARIBOY_VITEST_MAX_WORKERS=N is below 2; using 2 workers, ...` on
+  stderr. One `vmThreads` worker runs all test files in one VM context, and
+  the run fails. An empty value or a value that is not a number gives four
+  workers.
+- **Memory gate.** With two workers, `ui-test` uses about 1.4 GB of memory at
   its peak. Before
   that step, `frontend-check` runs `scripts/ui-test-memory-gate.sh`. The
-  script reads `MemAvailable` from `/proc/meminfo`. If the value is 3000 MB
+  script reads `MemAvailable` from `/proc/meminfo`. If the value is 1700 MB
   or more, the script prints nothing and `ui-test` starts at once. If the
   value is lower, the script prints
-  `memory gate: waiting for MemAvailable >= 3000 MB before ui-test (now N MB, limit 600s)`
+  `memory gate: waiting for MemAvailable >= 1700 MB before ui-test (now N MB, limit 600s)`
   and reads the value again every 5 seconds. It prints a progress line once
   a minute. When the value reaches the threshold, it prints a line with the
   wait time and `ui-test` starts. After 600 seconds the script stops waiting.
-  It prints `... is still below 3000 MB after 600s; running ui-test anyway`
+  It prints `... is still below 1700 MB after 600s; running ui-test anyway`
   and `ui-test` runs. The step is never skipped: if memory then runs out,
   `ui-test` fails with its diagnostics, and the warning line above it gives
   the cause. `TARIBOY_UI_TEST_MIN_MEM_MB` changes the threshold in MB, and
@@ -717,7 +723,11 @@ sets `vmMemoryLimit` to 336 MiB. Vitest then restarts a `vmThreads` worker
 before its heap is full. The limit is absolute and does not depend on the heap
 limit of Node.js. A share of the heap limit let each worker keep more than
 1 GB of test files on a host with a large heap. With 336 MiB, the peak of
-`npm test` is about the number of workers × 336 MiB + 0.6 to 0.9 GB. `npm run test:watch`
+`npm test` is about the number of workers × 336 MiB + 0.6 to 0.9 GB. Each
+restart loads `jsdom`, the setup files and the shared modules again and takes
+about 0.8 s. With 336 MiB, a run with 4 workers restarts them 19 times and
+takes about 16 s longer than a run without restarts. A larger limit restarts
+fewer workers, but uses more memory. `npm run test:watch`
 runs Vitest without the wrapper and without the check.
 
 `npm run knip` runs [Knip](https://knip.dev) from `ui/knip.json`. The

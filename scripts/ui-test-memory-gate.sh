@@ -1,16 +1,20 @@
 #!/bin/sh
 # Waits before ui-test until the kernel reports enough available memory, so
-# vitest (about 4.1 GB at peak) does not start on a shared host that is
-# already short of memory. frontend-check calls it right before ui-test and
-# runs ui-test whatever this script returns: the step is never skipped.
+# vitest does not start on a shared host that is already short of memory.
+# frontend-check calls it right before ui-test and runs ui-test whatever this
+# script returns: the step is never skipped.
 #
-#   TARIBOY_UI_TEST_MIN_MEM_MB       threshold in MB (default 3000; 0 = off)
+# The default threshold is the measured peak of `npm test` with two workers
+# and vmMemoryLimit 336 MiB, 1415 MB, plus 20 %, rounded up to 100 MB:
+# docs/superpowers/specs/2026-11-04-ui-test-vm-memory-limit-tuning.md.
+#
+#   TARIBOY_UI_TEST_MIN_MEM_MB       threshold in MB (default 1700; 0 = off)
 #   TARIBOY_UI_TEST_MEM_WAIT_TIMEOUT wait limit in seconds (default 600)
 #   TARIBOY_UI_TEST_MEM_POLL         seconds between reads (default 5)
 #   TARIBOY_MEMINFO                  meminfo file (default /proc/meminfo; for tests)
 set -u
 
-min_mb="${TARIBOY_UI_TEST_MIN_MEM_MB:-3000}"
+min_mb="${TARIBOY_UI_TEST_MIN_MEM_MB:-1700}"
 timeout="${TARIBOY_UI_TEST_MEM_WAIT_TIMEOUT:-600}"
 poll="${TARIBOY_UI_TEST_MEM_POLL:-5}"
 meminfo="${TARIBOY_MEMINFO:-/proc/meminfo}"
