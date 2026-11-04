@@ -3,7 +3,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
-import v8 from "node:v8";
 import { fsAllow } from "./vite.fsAllow";
 
 // Shared dev/test config: `npm run dev` in a browser and the vitest suite. It no
@@ -30,7 +29,12 @@ export default defineConfig({
     // restarts it once the heap passes vmMemoryLimit, checked after each file.
     // The default, total memory / maxWorkers, can be above the worker's heap
     // limit, so the worker ran out of heap first and the run ended early.
-    vmMemoryLimit: Math.floor(v8.getHeapStatistics().heap_size_limit * 0.6),
+    // The limit is absolute, not a share of the heap limit: a share grows with
+    // the heap limit of the host (1344 MiB per worker on a 2240 MiB heap), and
+    // each worker held that much, so the run peaked at 3.4 to 3.7 GB with two
+    // workers. 336 MiB keeps every file running and bounds the peak at about
+    // workers × 336 MiB + 0.6 to 0.9 GB on every host and Node.js version.
+    vmMemoryLimit: 336 * 1024 * 1024,
     // Workspace tests render whole pages and pass 5 s when agents share a host.
     testTimeout: 20_000,
     // vitest-file-ledger lets `npm test` (scripts/vitest-run.mjs) fail a run
