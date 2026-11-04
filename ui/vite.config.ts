@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 import { fsAllow } from "./vite.fsAllow";
+import { vitestMaxWorkers } from "./vite.workers";
 
 // Shared dev/test config: `npm run dev` in a browser and the vitest suite. It no
 // longer emits the shipped bundle — the desktop target (vite.desktop.config.ts)
@@ -22,8 +23,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    // make check lowers this for agents that share one host.
-    maxWorkers: Number(process.env.TARIBOY_VITEST_MAX_WORKERS) || 4,
+    // make check lowers this for agents that share one host. The minimum is 2:
+    // one vmThreads worker runs every file in one VM context, and the run fails.
+    maxWorkers: vitestMaxWorkers(process.env.TARIBOY_VITEST_MAX_WORKERS, console.warn),
     pool: "vmThreads",
     // A vmThreads worker keeps every test file it ran in its heap. Vitest
     // restarts it once the heap passes vmMemoryLimit, checked after each file.
