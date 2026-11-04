@@ -33,7 +33,8 @@ TAURI_BUNDLE_VERBOSITY = $(if $(filter 1,$(DESKTOP_BUNDLE_VERBOSE)),--verbose,)
 export CGO_ENABLED=0
 
 # Agents share one host, so their runs default to two Go packages and two
-# vitest workers at a time. CHECK_JOBS=N overrides it for anyone.
+# vitest workers at a time. CHECK_JOBS=N overrides it for anyone. Vitest uses
+# at least two workers, so CHECK_JOBS=1 still runs two (ui/vite.workers.ts).
 ifdef TARIBOY_AGENT
 CHECK_JOBS ?= 2
 endif
