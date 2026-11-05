@@ -100,6 +100,50 @@
         "max-lines": "off",
         "max-lines-per-function": "off"
       }
+    },
+    {
+      "files": [
+        "src/**/*.view.tsx",
+        "src/**/*.stories.tsx",
+        "src/mockups/**",
+        "src/fixtures/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@tanstack/react-query",
+                "message": "view layer: no data fetching"
+              }
+            ],
+            "patterns": [
+              {
+                "group": [
+                  "**/lib/api",
+                  "**/lib/api/*",
+                  "@tanstack/react-query/*"
+                ],
+                "message": "view layer: props in, JSX out; types from @/types"
+              }
+            ]
+          }
+        ],
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "fetch",
+            "message": "view layer: no network calls"
+          }
+        ],
+        "no-restricted-properties": [
+          "error",
+          { "object": "window", "property": "fetch" },
+          { "object": "globalThis", "property": "fetch" },
+          { "object": "self", "property": "fetch" }
+        ]
+      }
     }
   ]
 }
