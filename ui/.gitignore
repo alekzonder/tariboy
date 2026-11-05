@@ -1,6 +1,7 @@
 node_modules/
 dist/
 storybook-static/
+.story-shots/
 .ds-sync/
 ds-bundle/
 .design-sync/.cache/

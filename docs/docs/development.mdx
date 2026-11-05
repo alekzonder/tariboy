@@ -606,6 +606,25 @@ npm run storybook        # http://127.0.0.1:6006
 npm run build-storybook  # writes ui/storybook-static (ignored by git)
 ```
 
+`npm run story:shot` writes a PNG of one story in a theme and a width, so that
+you can look at a story without a browser session:
+
+```bash
+cd ui
+npm run story:shot -- components-themetoggle--default dark 360
+npm run story:shot -- components-themetoggle--default light 360 --rebuild
+```
+
+The arguments are the story id, `light` or `dark`, and the width in pixels.
+The supported widths are 360, 390, 820, 1024 and 1180. The command prints the
+path of the PNG, `ui/.story-shots/<id>.<theme>.<width>.png`. The directory is
+ignored by git. The command builds `ui/storybook-static` when it has no
+`index.json`, or when you pass `--rebuild`. It exits with the list of known ids
+when the id does not exist. It serves the build on `127.0.0.1` with a random
+port and opens it in the Playwright Chromium of `ui/node_modules`. It waits
+for one host check slot (`flock` on `/tmp/tariboy-check.lock`), like
+`make check`, and runs without the lock on a host that has no `flock`.
+
 The `ui-storybook` step of `make frontend-check` runs `npm run build-storybook`
 into the run's temporary directory. It fails when a story does not compile or
 does not build. `npx tsc -b` also checks every story against the real
